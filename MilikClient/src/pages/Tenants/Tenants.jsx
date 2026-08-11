@@ -31,7 +31,6 @@ import {
   FaChartLine,
   FaMoneyBillWave,
   FaTrash,
-  FaSpinner,
   FaDownload,
   FaPrint,
   FaSms,
@@ -67,6 +66,7 @@ import { hasCompanyPermission } from "../../utils/permissions";
 import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import Spinner from "../../components/common/Spinner";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
@@ -500,7 +500,7 @@ function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSave
           <button onClick={handleSave} disabled={saving}
             className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0d5442] disabled:opacity-50">
             {saving
-              ? <><FaSpinner size={10} className="animate-spin" /> Saving…</>
+              ? <><Spinner size="sm" /> Saving…</>
               : isMulti ? `Save to ${tenants.length} Tenants` : "Save Utilities"}
           </button>
         </div>
@@ -656,7 +656,7 @@ function RemoveUtilityModal({ tenants, allUnits, dispatch, onClose, onSaved }) {
             <button onClick={handleSave} disabled={saving || selected.size === 0}
               className="flex items-center gap-2 bg-red-600 px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-red-700 disabled:opacity-50">
               {saving
-                ? <><FaSpinner size={10} className="animate-spin" /> Removing…</>
+                ? <><Spinner size="sm" /> Removing…</>
                 : `Remove from ${isMulti ? `${tenants.length} Tenants` : "Tenant"}`}
             </button>
           </div>
@@ -2587,7 +2587,7 @@ const confirmTransferUnit = useCallback(async () => {
                   <td colSpan={isTerminatedView ? 11 : 10} className="px-3 py-8 text-center text-gray-600 font-semibold text-xs">
                     {isFetchingTenants ? (
                       <div className="flex items-center justify-center gap-2 text-gray-400">
-                        <FaSpinner className="animate-spin" size={14} />
+                        <Spinner size="sm" />
                         <span>Loading tenants…</span>
                       </div>
                     ) : (
@@ -3466,7 +3466,7 @@ const confirmTransferUnit = useCallback(async () => {
               >
                 {isDeleting ? (
                   <>
-                    <FaSpinner className="animate-spin" size={10} />
+                    <Spinner size="sm" />
                     Deleting...
                   </>
                 ) : (

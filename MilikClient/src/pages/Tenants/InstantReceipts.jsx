@@ -1,4 +1,6 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { formatMoney } from "../../utils/money";
+import { fmtDate } from "../../utils/dates";
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectCurrentCompany,
@@ -44,13 +46,6 @@ const ensureArray = (value) => {
   return [];
 };
 
-const formatMoney = (value) => `Ksh ${Math.abs(Number(value || 0)).toLocaleString()}`;
-const formatDate = (value) => {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString();
-};
 
 const getTenantName = (tenant) =>
   tenant?.name || tenant?.tenantName || [tenant?.firstName, tenant?.lastName].filter(Boolean).join(" ") || "Unmatched tenant";
@@ -428,7 +423,7 @@ const InstantReceipts = () => {
                           className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}
                         >
                           <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900">{row?.transactionCode || row?.accountReference || "-"}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{formatDate(row?.transactionDate || row?.createdAt)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{fmtDate(row?.transactionDate || row?.createdAt)}</td>
                           <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">
                             <div>{getTenantName(row?.tenant)}</div>
                             <div className="text-[10px] text-slate-500">{row?.payerName || row?.msisdn || "-"}</div>

@@ -8,9 +8,10 @@ import {
 import {
   FaBook, FaCreditCard, FaLayerGroup,
   FaFileInvoice, FaCog, FaUniversity, FaCoins, FaFileContract,
-  FaPlusCircle, FaSpinner, FaExclamationTriangle, FaCheckCircle, FaCircle,
+  FaPlusCircle, FaExclamationTriangle, FaCheckCircle, FaCircle,
   FaCalendarAlt, FaArchive, FaShieldAlt, FaChartPie,
 } from "react-icons/fa";
+import Spinner from "../../components/common/Spinner";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getJournalEntries, getChartOfAccounts, getIncomeMonthlySummary, getCashMonthlySummary, getAccountingPeriods } from "../../redux/apiCalls";
 
@@ -110,7 +111,7 @@ const SidebarStatRow = ({ label, value, loading, alert }) => (
       <span className="text-[10px] font-semibold text-white/55">{label}</span>
     </div>
     <span className={`text-[11px] font-black ${alert && value > 0 ? "text-amber-300" : "text-white"}`}>
-      {loading ? <FaSpinner size={9} className="animate-spin text-white/30" /> : (value ?? "—")}
+      {loading ? <Spinner size="sm" /> : (value ?? "—")}
     </span>
   </div>
 );
@@ -158,7 +159,7 @@ const ChartCard = ({ title, subtitle, children, loading }) => (
         <div className="text-[11px] font-extrabold text-slate-800">{title}</div>
         <div className="text-[10px] text-slate-400">{subtitle}</div>
       </div>
-      {loading && <FaSpinner size={11} className="animate-spin text-slate-300" />}
+      {loading && <Spinner size="sm" />}
     </div>
     <div className="flex-1 px-2 py-3">
       {children}

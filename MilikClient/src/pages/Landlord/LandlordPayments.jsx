@@ -18,6 +18,7 @@ import { toast } from "react-toastify";
 import { getLandlords, getLandlordPayments } from "../../redux/apiCalls";
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectAllTenants } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { fmtDate } from "../../utils/dates";
 import AppSelect from "../../components/common/AppSelect";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { getProperties } from "../../redux/propertyRedux";
@@ -26,10 +27,6 @@ import { getProperties } from "../../redux/propertyRedux";
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const ITEMS_PER_PAGE = 20;
 
-const formatDate = (date) => {
-  if (!date) return "-";
-  return new Date(date).toLocaleDateString();
-};
 
 const LandlordPayments = ({ mode = "payments" }) => {
   const dispatch = useDispatch();
@@ -894,7 +891,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
                           </tr>
                         ) : activeDetailHistory.map((payment, index) => (
                           <tr key={payment._id || index} className={`border-b border-gray-100 ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
-                            <td className="px-3 py-1 border-r border-gray-100">{formatDate(payment.date || payment.createdAt)}</td>
+                            <td className="px-3 py-1 border-r border-gray-100">{fmtDate(payment.date || payment.createdAt)}</td>
                             <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{payment.paymentMethod ? payment.paymentMethod.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '-'}</td>
                             <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{payment.reference || payment.referenceNumber || '-'}</td>
                             <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">Ksh {Number(payment.amount || 0).toLocaleString()}</td>

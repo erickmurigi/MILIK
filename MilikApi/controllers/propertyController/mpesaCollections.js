@@ -8,6 +8,8 @@ import Tenant from "../../models/Tenant.js";
 import User from "../../models/User.js";
 import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig } from "../../utils/companyModules.js";
 import { createAutoReceipt } from "./rentPayment.js";
+import { createError } from "../../utils/error.js";
+import { parsePagination } from "../../utils/pagination.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 const escapeRegExp = (value = "") => String(value || "").replace(/[|\\{}()\[\]^$+*?.]/g, "\\$&");
@@ -437,18 +439,18 @@ const tryRegisterC2BUrls = async (safaricomBase, version, accessToken, shortCode
   return data;
 };
 
-export const registerPmsPaybillUrls = async (req, res) => {
+export const registerPmsPaybillUrls = async (req, res, next) => {
   try {
     const businessId = String(req.body?.business || req.userCompany || req.user?.company?._id || req.user?.company || "");
     if (!isValidObjectId(businessId)) {
-      return res.status(400).json({ success: false, message: "Valid business id is required" });
+      return next(createError(400, "Valid business id is required"));
     }
 
     const shortCode = normalizeText(req.body?.shortCode || "");
-    if (!shortCode) return res.status(400).json({ success: false, message: "shortCode is required" });
+    if (!shortCode) return next(createError(400, "shortCode is required"));
 
     const company = await Company.findById(businessId).lean();
-    if (!company) return res.status(404).json({ success: false, message: "Company not found" });
+    if (!company) return next(createError(404, "Company not found"));
 
     const configs = getRawMpesaPaybillConfigs(company?.paymentIntegration || {});
     const config =
@@ -456,7 +458,7 @@ export const registerPmsPaybillUrls = async (req, res) => {
       getPrimaryMpesaPaybillConfig(configs);
 
     if (!config) {
-      return res.status(404).json({ success: false, message: `No Paybill configuration found for shortcode ${shortCode}` });
+      return next(createError(404, `No Paybill configuration found for shortcode ${shortCode}`));
     }
 
     const consumerKey    = normalizeText(config.consumerKey);
@@ -464,7 +466,7 @@ export const registerPmsPaybillUrls = async (req, res) => {
     const responseType   = config.responseType === "Cancelled" ? "Cancelled" : "Completed";
 
     if (!consumerKey || !consumerSecret) {
-      return res.status(422).json({ success: false, message: "Save the Consumer Key and Consumer Secret before registering URLs with Safaricom." });
+      return next(createError(422, "Save the Consumer Key and Consumer Secret before registering URLs with Safaricom."));
     }
 
     const envBase  = normalizeText(process.env.MPESA_CALLBACK_BASE_URL || "");
@@ -485,14 +487,11 @@ export const registerPmsPaybillUrls = async (req, res) => {
       });
       accessToken = String(tokenRes.data?.access_token || "").trim();
     } catch (tokenErr) {
-      return res.status(502).json({
-        success: false,
-        message: `Failed to authenticate with Safaricom. Verify your Consumer Key and Secret. (${extractSafaricomError(tokenErr)})`,
-      });
+      return next(createError(502, `Failed to authenticate with Safaricom. Verify your Consumer Key and Secret. (${extractSafaricomError(tokenErr)})`));
     }
 
     if (!accessToken) {
-      return res.status(502).json({ success: false, message: "No access token returned by Safaricom. Check your credentials." });
+      return next(createError(502, "No access token returned by Safaricom. Check your credentials."));
     }
 
     const isAlreadyRegistered = (msg = "") => /already.registered|url.*registered|registered.*url/i.test(msg);
@@ -517,13 +516,11 @@ export const registerPmsPaybillUrls = async (req, res) => {
           safaricomResponse = { note: "already_registered" };
           console.warn("[PMS-RegisterURLs] already_registered for %s — manual Daraja update may be needed", shortCode);
         } else {
-          return res.status(502).json({
-            success: false,
-            message:
-              `Safaricom rejected the URL registration. ` +
-              `v1: ${v1Error} | v2: ${v2Error}. ` +
-              `Ensure your Daraja app has the C2B API product enabled and the Consumer Key belongs to shortcode ${shortCode}.`,
-          });
+          return next(createError(502,
+            `Safaricom rejected the URL registration. ` +
+            `v1: ${v1Error} | v2: ${v2Error}. ` +
+            `Ensure your Daraja app has the C2B API product enabled and the Consumer Key belongs to shortcode ${shortCode}.`
+          ));
         }
       }
     }
@@ -540,20 +537,18 @@ export const registerPmsPaybillUrls = async (req, res) => {
       data: { validationURL, confirmationURL, safaricomResponse },
     });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ success: false, message: error.message || "Failed to register Safaricom callback URLs" });
+    next(error);
   }
 };
 
-export const listMpesaCollections = async (req, res) => {
+export const listMpesaCollections = async (req, res, next) => {
   try {
     const businessId = String(req.query.business || req.userCompany || req.user?.company?._id || req.user?.company || "");
     if (!isValidObjectId(businessId)) {
-      return res.status(400).json({ success: false, message: "Valid business id is required" });
+      return next(createError(400, "Valid business id is required"));
     }
 
-    const page     = Math.max(Number(req.query.page  || 1),  1);
-    const limit    = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
-    const skip     = (page - 1) * limit;
+    const { page, limit, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 200 });
 
     const filters = { business: businessId };
     const status    = normalizeText(req.query.status);
@@ -711,28 +706,28 @@ export const listMpesaCollections = async (req, res) => {
       summary: summaryRows,
     });
   } catch (error) {
-    res.status(error.statusCode || 500).json({ success: false, message: error.message || "Failed to load M-Pesa collections" });
+    next(error);
   }
 };
 
-export const importMpesaBatch = async (req, res) => {
+export const importMpesaBatch = async (req, res, next) => {
   try {
     const businessId = String(req.body.business || req.userCompany || req.user?.company?._id || req.user?.company || "");
     const rawText = String(req.body.rawText || "");
     const shortCode = normalizeText(req.body.shortCode || "");
 
     if (!isValidObjectId(businessId)) {
-      return res.status(400).json({ success: false, message: "Valid business id is required" });
+      return next(createError(400, "Valid business id is required"));
     }
 
     if (!rawText.trim()) {
-      return res.status(400).json({ success: false, message: "Paste at least one M-Pesa batch line before importing" });
+      return next(createError(400, "Paste at least one M-Pesa batch line before importing"));
     }
 
     const { company, config } = await resolveCompanyAndConfig({ businessId, shortCode });
     const lines = parseManualBatchLines(rawText);
     if (lines.length === 0) {
-      return res.status(400).json({ success: false, message: "No valid batch rows were detected in the provided text" });
+      return next(createError(400, "No valid batch rows were detected in the provided text"));
     }
 
     const importBatchId = new mongoose.Types.ObjectId();
@@ -774,7 +769,7 @@ export const importMpesaBatch = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(error.statusCode || 500).json({ success: false, message: error.message || "Failed to import M-Pesa batch lines" });
+    next(error);
   }
 };
 
@@ -843,7 +838,7 @@ const attemptAutoReceipt = async ({ stored, config }) => {
   }
 };
 
-export const mpesaValidationCallback = async (req, res) => {
+export const mpesaValidationCallback = async (req, res, next) => {
   const shortCode = normalizeText(req.params.shortCode || req.body?.BusinessShortCode || "");
   let company = null;
   let config = null;
@@ -877,7 +872,7 @@ export const mpesaValidationCallback = async (req, res) => {
   }).catch((err) => console.error("[PMS-Validation] Save error shortCode=%s: %s", shortCode, err.message));
 };
 
-export const mpesaConfirmationCallback = async (req, res) => {
+export const mpesaConfirmationCallback = async (req, res, next) => {
   // Respond to Safaricom immediately to avoid the 5s timeout
   res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
 
@@ -901,11 +896,11 @@ export const mpesaConfirmationCallback = async (req, res) => {
 };
 
 
-export const deleteMpesaCollection = async (req, res) => {
+export const deleteMpesaCollection = async (req, res, next) => {
   try {
     const businessId = String(req.query.business || req.body?.business || req.userCompany || req.user?.company?._id || req.user?.company || "");
     if (!isValidObjectId(businessId)) {
-      return res.status(400).json({ success: false, message: "Valid business id is required" });
+      return next(createError(400, "Valid business id is required"));
     }
 
     const row = await MpesaCollection.findOne({ _id: req.params.id, business: businessId })
@@ -913,40 +908,37 @@ export const deleteMpesaCollection = async (req, res) => {
       .lean();
 
     if (!row) {
-      return res.status(404).json({ success: false, message: "M-Pesa collection row not found" });
+      return next(createError(404, "M-Pesa collection row not found"));
     }
 
     if (row?.matchedReceipt?._id) {
-      return res.status(400).json({
-        success: false,
-        message: "This M-Pesa notification is already linked to a receipt. Delete or reverse the receipt first.",
-      });
+      return next(createError(400, "This M-Pesa notification is already linked to a receipt. Delete or reverse the receipt first."));
     }
 
     await MpesaCollection.deleteOne({ _id: row._id, business: businessId });
     return res.status(200).json({ success: true, message: "M-Pesa notification removed successfully." });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ success: false, message: error.message || "Failed to delete M-Pesa notification" });
+    next(error);
   }
 };
 
-export const assignTenantToCollection = async (req, res) => {
+export const assignTenantToCollection = async (req, res, next) => {
   try {
     const businessId = String(req.query.business || req.body?.business || req.userCompany || req.user?.company?._id || req.user?.company || "");
-    if (!isValidObjectId(businessId)) return res.status(400).json({ success: false, message: "Valid business id is required" });
+    if (!isValidObjectId(businessId)) return next(createError(400, "Valid business id is required"));
 
     const row = await MpesaCollection.findOne({ _id: req.params.id, business: businessId }).lean();
-    if (!row) return res.status(404).json({ success: false, message: "M-Pesa collection not found" });
-    if (row.matchingStatus === "ignored") return res.status(400).json({ success: false, message: "Cannot assign tenant to an ignored collection" });
+    if (!row) return next(createError(404, "M-Pesa collection not found"));
+    if (row.matchingStatus === "ignored") return next(createError(400, "Cannot assign tenant to an ignored collection"));
 
     const tenantId = normalizeText(req.body?.tenantId || "");
-    if (!tenantId || !isValidObjectId(tenantId)) return res.status(400).json({ success: false, message: "Valid tenant id is required" });
+    if (!tenantId || !isValidObjectId(tenantId)) return next(createError(400, "Valid tenant id is required"));
 
     const tenant = await Tenant.findOne({ _id: tenantId, business: businessId })
       .select("name tenantCode phone unit business")
       .populate({ path: "unit", select: "unitNumber property", populate: { path: "property", select: "propertyName" } })
       .lean();
-    if (!tenant) return res.status(404).json({ success: false, message: "Tenant not found in this business" });
+    if (!tenant) return next(createError(404, "Tenant not found in this business"));
 
     const matchedReceipt = await findReceiptMatch({ businessId, transactionCode: row.transactionCode, amount: row.amount });
     const nextStatus = deriveMatchingStatus({ tenant, matchedReceipt });
@@ -986,18 +978,18 @@ export const assignTenantToCollection = async (req, res) => {
     const updated = await populateCollectionQuery(MpesaCollection.findById(row._id)).lean();
     return res.status(200).json({ success: true, message: `Assigned to ${tenant.name}`, data: updated });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ success: false, message: error.message || "Failed to assign tenant" });
+    next(error);
   }
 };
 
-export const ignoreCollection = async (req, res) => {
+export const ignoreCollection = async (req, res, next) => {
   try {
     const businessId = String(req.query.business || req.body?.business || req.userCompany || req.user?.company?._id || req.user?.company || "");
-    if (!isValidObjectId(businessId)) return res.status(400).json({ success: false, message: "Valid business id is required" });
+    if (!isValidObjectId(businessId)) return next(createError(400, "Valid business id is required"));
 
     const row = await MpesaCollection.findOne({ _id: req.params.id, business: businessId }).lean();
-    if (!row) return res.status(404).json({ success: false, message: "M-Pesa collection not found" });
-    if (row.matchedReceipt) return res.status(400).json({ success: false, message: "Cannot ignore a collection already linked to a receipt" });
+    if (!row) return next(createError(404, "M-Pesa collection not found"));
+    if (row.matchedReceipt) return next(createError(400, "Cannot ignore a collection already linked to a receipt"));
 
     const notes = normalizeText(req.body?.notes || "");
     await MpesaCollection.findByIdAndUpdate(row._id, {
@@ -1007,17 +999,17 @@ export const ignoreCollection = async (req, res) => {
     const updated = await populateCollectionQuery(MpesaCollection.findById(row._id)).lean();
     return res.status(200).json({ success: true, message: "Collection marked as ignored", data: updated });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ success: false, message: error.message || "Failed to ignore collection" });
+    next(error);
   }
 };
 
-export const unignoreCollection = async (req, res) => {
+export const unignoreCollection = async (req, res, next) => {
   try {
     const businessId = String(req.query.business || req.body?.business || req.userCompany || req.user?.company?._id || req.user?.company || "");
-    if (!isValidObjectId(businessId)) return res.status(400).json({ success: false, message: "Valid business id is required" });
+    if (!isValidObjectId(businessId)) return next(createError(400, "Valid business id is required"));
 
     const row = await MpesaCollection.findOne({ _id: req.params.id, business: businessId }).lean();
-    if (!row) return res.status(404).json({ success: false, message: "M-Pesa collection not found" });
+    if (!row) return next(createError(404, "M-Pesa collection not found"));
 
     const tenant = row.tenant ? await Tenant.findById(row.tenant).select("_id").lean() : await findTenantMatch({ businessId, accountReference: row.accountReference, msisdn: row.msisdn });
     const matchedReceipt = await findReceiptMatch({ businessId, transactionCode: row.transactionCode, amount: row.amount });
@@ -1030,6 +1022,6 @@ export const unignoreCollection = async (req, res) => {
     const updated = await populateCollectionQuery(MpesaCollection.findById(row._id)).lean();
     return res.status(200).json({ success: true, message: "Collection restored", data: updated });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ success: false, message: error.message || "Failed to restore collection" });
+    next(error);
   }
 };

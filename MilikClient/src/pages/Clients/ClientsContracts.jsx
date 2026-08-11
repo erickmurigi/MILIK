@@ -4,14 +4,13 @@ import { toast } from 'react-toastify';
 import { FaFileContract, FaSearch, FaTimes } from 'react-icons/fa';
 import ClientsShell from './ClientsShell';
 import { clientsApi } from '../../services/clientsApi';
+import { fmtDate } from '../../utils/dates';
+import StatusBadge from '../../components/common/StatusBadge';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const fmtKES = (n) =>
   new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES', minimumFractionDigits: 2 }).format(Number(n) || 0);
-
-const fmtDate = (v) =>
-  v ? new Date(v).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
 const daysUntil = (d) => Math.ceil((new Date(d) - new Date()) / (1000 * 60 * 60 * 24));
 
@@ -24,15 +23,12 @@ const STATUS_TABS = [
   { value: 'terminated',     label: 'Terminated' },
 ];
 
-const statusBadge = (status) => {
-  const map = {
-    active:          'bg-emerald-50 text-emerald-700 border-emerald-200',
-    draft:           'bg-slate-50 text-slate-600 border-slate-200',
-    pending_renewal: 'bg-amber-50 text-amber-700 border-amber-200',
-    renewed:         'bg-blue-50 text-blue-700 border-blue-200',
-    terminated:      'bg-red-50 text-red-600 border-red-200',
-  };
-  return map[status] || 'bg-slate-50 text-slate-500 border-slate-200';
+const CONTRACT_STATUS_MAP = {
+  active:          'border-emerald-200 bg-emerald-50 text-emerald-700',
+  draft:           'border-slate-200 bg-slate-50 text-slate-600',
+  pending_renewal: 'border-amber-200 bg-amber-50 text-amber-700',
+  renewed:         'border-blue-200 bg-blue-50 text-blue-700',
+  terminated:      'border-red-200 bg-red-50 text-red-600',
 };
 
 const daysColor = (days) => {
@@ -254,9 +250,7 @@ const ClientsContracts = () => {
                         )}
                       </td>
                       <td className="px-3 py-2.5">
-                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusBadge(c.status)}`}>
-                          {c.status?.replace('_', ' ') || '—'}
-                        </span>
+                        <StatusBadge status={c.status} map={CONTRACT_STATUS_MAP} />
                       </td>
                       <td className="px-3 py-2.5">
                         <div className="flex flex-wrap items-center gap-1">

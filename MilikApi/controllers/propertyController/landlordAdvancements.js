@@ -9,6 +9,9 @@ import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggr
 import { postEntry, postReversal } from "../../services/ledgerPostingService.js";
 import { resolveLandlordRemittancePayableAccount, resolvePropertyAccountingContext } from "../../services/propertyAccountingService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
+import { createError } from "../../utils/error.js";
+import { resolveBusinessId } from "../../utils/requestContext.js";
+import { parsePagination } from "../../utils/pagination.js";
 import {
   buildRunSchedule,
   comparePeriodOrder,
@@ -39,15 +42,6 @@ const WORKFLOW_STATUSES = [
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 const oid = (value) => new mongoose.Types.ObjectId(String(value));
-
-const resolveBusinessId = (req) =>
-  req?.query?.business ||
-  req?.query?.company ||
-  req?.body?.business ||
-  req?.body?.company ||
-  req?.user?.company?._id ||
-  req?.user?.company ||
-  null;
 
 const normalizePaymentMethod = (value) => {
   const normalized = String(value || "bank_transfer").trim().toLowerCase();
@@ -1076,11 +1070,11 @@ const handleStatusTransition = async ({ row, requestedStatus, req, businessId, a
 export const createLandlordAdvancement = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
 
     const actorUserId = await resolveActorUserId(req, businessId);
-    if (!isValidObjectId(req.body?.landlord)) return res.status(400).json({ success: false, message: "Landlord is required" });
-    if (!isValidObjectId(req.body?.property)) return res.status(400).json({ success: false, message: "Property is required" });
+    if (!isValidObjectId(req.body?.landlord)) return next(createError(400, "Landlord is required"));
+    if (!isValidObjectId(req.body?.property)) return next(createError(400, "Property is required"));
 
     const accountingContext = await resolvePropertyAccountingContext({
       businessId,
@@ -1090,7 +1084,7 @@ export const createLandlordAdvancement = async (req, res, next) => {
 
     const amount = Number(req.body?.amount || 0);
     if (!Number.isFinite(amount) || amount <= 0) {
-      return res.status(400).json({ success: false, message: "Valid advancement amount is required" });
+      return next(createError(400, "Valid advancement amount is required"));
     }
 
     const advanceType = normalizeAdvanceType(req.body?.advanceType);
@@ -1111,8 +1105,8 @@ export const createLandlordAdvancement = async (req, res, next) => {
             endDate: disbursementDate,
           };
     const endDate = parseDate(scheduleWindow.endDate, startDate);
-    if (!startDate) return res.status(400).json({ success: false, message: "Valid recovery start date is required" });
-    if (endDate && endDate < startDate) return res.status(400).json({ success: false, message: "Recovery end date cannot be earlier than start date" });
+    if (!startDate) return next(createError(400, "Valid recovery start date is required"));
+    if (endDate && endDate < startDate) return next(createError(400, "Recovery end date cannot be earlier than start date"));
 
     const referenceNo = String(req.body?.referenceNo || "").trim() || (await generateReferenceNo(businessId));
     const requestedStatus = normalizeRequestedStatus(req.body?.status || "draft");
@@ -1200,7 +1194,7 @@ export const createLandlordAdvancement = async (req, res, next) => {
     await persistAndRespond(res, row, 201);
   } catch (error) {
     if (error?.statusCode) {
-      return res.status(error.statusCode).json({ success: false, message: error.message, payableSnapshotAmount: error.payableSnapshotAmount });
+      return next(createError(error.statusCode, error.message));
     }
     next(error);
   }
@@ -1209,7 +1203,7 @@ export const createLandlordAdvancement = async (req, res, next) => {
 export const getLandlordAdvancements = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
 
     const filter = { business: businessId };
     if (req.query?.landlord && isValidObjectId(req.query.landlord)) filter.landlord = req.query.landlord;
@@ -1233,8 +1227,7 @@ export const getLandlordAdvancements = async (req, res, next) => {
       serialized = serialized.filter((row) => row.status === requested || String(row.legacyStatus || "").toLowerCase() === requested);
     }
 
-    const pageNum = Math.max(parseInt(req.query.page, 10) || 1, 1);
-    const limitNum = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const { page: pageNum, limit: limitNum } = parsePagination(req, { defaultLimit: 50, maxLimit: 200 });
     const total = serialized.length;
     const data = serialized.slice((pageNum - 1) * limitNum, pageNum * limitNum);
 
@@ -1247,11 +1240,11 @@ export const getLandlordAdvancements = async (req, res, next) => {
 export const updateLandlordAdvancement = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
 
     const actorUserId = await resolveActorUserId(req, businessId);
     const row = await LandlordAdvancement.findOne({ _id: req.params.id, business: businessId });
-    if (!row) return res.status(404).json({ success: false, message: "Landlord advancement not found" });
+    if (!row) return next(createError(404, "Landlord advancement not found"));
 
     const hasAccountingHistory = Boolean(row.disbursedAt) || (Array.isArray(row.recoveryHistory) && row.recoveryHistory.length > 0);
     const structuralFields = [
@@ -1268,10 +1261,7 @@ export const updateLandlordAdvancement = async (req, res, next) => {
       "disbursementDate",
     ];
     if (hasAccountingHistory && structuralFields.some((field) => Object.prototype.hasOwnProperty.call(req.body || {}, field))) {
-      return res.status(400).json({
-        success: false,
-        message: "Posted or recovered landlord advances cannot change amount, type, property, landlord, or recovery schedule. Reverse and recreate if a structural correction is required.",
-      });
+      return next(createError(400, "Posted or recovered landlord advances cannot change amount, type, property, landlord, or recovery schedule. Reverse and recreate if a structural correction is required."));
     }
 
     if (!hasAccountingHistory) {
@@ -1279,7 +1269,7 @@ export const updateLandlordAdvancement = async (req, res, next) => {
     } else {
       if (Object.prototype.hasOwnProperty.call(req.body || {}, "title")) {
         const title = String(req.body?.title || "").trim();
-        if (!title) return res.status(400).json({ success: false, message: "Advancement title is required" });
+        if (!title) return next(createError(400, "Advancement title is required"));
         row.title = title;
       }
       if (Object.prototype.hasOwnProperty.call(req.body || {}, "narration")) row.narration = String(req.body?.narration || "").trim();
@@ -1304,7 +1294,7 @@ export const updateLandlordAdvancement = async (req, res, next) => {
     await persistAndRespond(res, row, 200);
   } catch (error) {
     if (error?.statusCode) {
-      return res.status(error.statusCode).json({ success: false, message: error.message, payableSnapshotAmount: error.payableSnapshotAmount });
+      return next(createError(error.statusCode, error.message));
     }
     next(error);
   }
@@ -1313,10 +1303,10 @@ export const updateLandlordAdvancement = async (req, res, next) => {
 export const updateLandlordAdvancementStatus = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
     const actorUserId = await resolveActorUserId(req, businessId);
     const row = await LandlordAdvancement.findOne({ _id: req.params.id, business: businessId });
-    if (!row) return res.status(404).json({ success: false, message: "Landlord advancement not found" });
+    if (!row) return next(createError(404, "Landlord advancement not found"));
 
     await handleStatusTransition({
       row,
@@ -1330,7 +1320,7 @@ export const updateLandlordAdvancementStatus = async (req, res, next) => {
     await persistAndRespond(res, row, 200);
   } catch (error) {
     if (error?.statusCode) {
-      return res.status(error.statusCode).json({ success: false, message: error.message, payableSnapshotAmount: error.payableSnapshotAmount });
+      return next(createError(error.statusCode, error.message));
     }
     next(error);
   }
@@ -1339,38 +1329,35 @@ export const updateLandlordAdvancementStatus = async (req, res, next) => {
 export const processLandlordAdvancementRecovery = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
     const actorUserId = await resolveActorUserId(req, businessId);
     const row = await LandlordAdvancement.findOne({ _id: req.params.id, business: businessId });
-    if (!row) return res.status(404).json({ success: false, message: "Landlord advancement not found" });
+    if (!row) return next(createError(404, "Landlord advancement not found"));
 
     const advanceType = normalizeAdvanceType(row.advanceType, row);
     if (advanceType !== "future_recoverable") {
-      return res.status(400).json({
-        success: false,
-        message: "Against payable advances are already treated as paid to the landlord and do not support statement recoveries.",
-      });
+      return next(createError(400, "Against payable advances are already treated as paid to the landlord and do not support statement recoveries."));
     }
 
     if (!row.disbursedAt) {
-      return res.status(400).json({ success: false, message: "Advance must be disbursed before recoveries can be processed." });
+      return next(createError(400, "Advance must be disbursed before recoveries can be processed."));
     }
 
     const lifecycleStatus = resolveLifecycleStatus(row);
     if (!["recovering", "disbursed", "paused"].includes(lifecycleStatus)) {
-      return res.status(400).json({ success: false, message: "This landlord advance cannot be recovered in its current status." });
+      return next(createError(400, "This landlord advance cannot be recovered in its current status."));
     }
 
     const selectedPeriod = resolveSelectedRecoveryPeriod(row, req.body || {});
     if (!selectedPeriod) {
-      return res.status(400).json({ success: false, message: "No eligible recovery period is available. Future and already processed periods are blocked." });
+      return next(createError(400, "No eligible recovery period is available. Future and already processed periods are blocked."));
     }
 
     const alreadyProcessed = getActiveRecoveryHistory(row).some(
       (item) => String(item?.periodKey || getPeriodKey(item?.dueDate || item?.processedAt, row.frequency)) === selectedPeriod.periodKey
     );
     if (alreadyProcessed) {
-      return res.status(400).json({ success: false, message: `Recovery already processed for ${selectedPeriod.periodLabel}.` });
+      return next(createError(400, `Recovery already processed for ${selectedPeriod.periodLabel}.`));
     }
 
     const closedPeriod = await isPeriodClosedByProcessedStatement({
@@ -1381,16 +1368,13 @@ export const processLandlordAdvancementRecovery = async (req, res, next) => {
       periodEnd: selectedPeriod.periodEnd,
     });
     if (closedPeriod) {
-      return res.status(400).json({
-        success: false,
-        message: `Cannot process ${selectedPeriod.periodLabel} because that statement period has already been processed/closed. Reverse or reopen the affected statement first.`,
-      });
+      return next(createError(400, `Cannot process ${selectedPeriod.periodLabel} because that statement period has already been processed/closed. Reverse or reopen the affected statement first.`));
     }
 
     const amount = Number(req.body?.amount || selectedPeriod.scheduledAmount || 0);
-    if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ success: false, message: "Valid recovery amount is required" });
+    if (!Number.isFinite(amount) || amount <= 0) return next(createError(400, "Valid recovery amount is required"));
     if (round2(amount) > round2(row.balanceOutstanding || 0)) {
-      return res.status(400).json({ success: false, message: "Recovery amount cannot exceed outstanding recoverable advance balance." });
+      return next(createError(400, "Recovery amount cannot exceed outstanding recoverable advance balance."));
     }
 
     const accountingContext = await resolvePropertyAccountingContext({
@@ -1401,7 +1385,7 @@ export const processLandlordAdvancementRecovery = async (req, res, next) => {
     const remittancePayableAccount = await resolveLandlordRemittancePayableAccount(businessId);
     const advanceRecoverableAccount = await resolveAdvanceRecoverableAccount(businessId);
     if (!remittancePayableAccount?._id || !advanceRecoverableAccount?._id) {
-      return res.status(400).json({ success: false, message: "Advancement recovery posting accounts could not be resolved." });
+      return next(createError(400, "Advancement recovery posting accounts could not be resolved."));
     }
 
     const processedAt = normalizeToStartOfDay(req.body?.processedAt || req.body?.runDate || selectedPeriod.dueDate || new Date());
@@ -1519,11 +1503,11 @@ export const processLandlordAdvancementRecovery = async (req, res, next) => {
 export const cancelLandlordAdvancementRecovery = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
 
     const actorUserId = await resolveActorUserId(req, businessId);
     const row = await LandlordAdvancement.findOne({ _id: req.params.id, business: businessId });
-    if (!row) return res.status(404).json({ success: false, message: "Landlord advancement not found" });
+    if (!row) return next(createError(404, "Landlord advancement not found"));
 
     const recoveryId = String(req.params.recoveryId || req.body?.recoveryId || "").trim();
     const periodKey = String(req.body?.periodKey || "").trim();
@@ -1532,11 +1516,11 @@ export const cancelLandlordAdvancementRecovery = async (req, res, next) => {
       : row.recoveryHistory.find((item) => getRecoveryPeriodKey(item, row.frequency) === periodKey);
 
     if (!recoveryRow) {
-      return res.status(404).json({ success: false, message: "Processed recovery period not found on this advancement." });
+      return next(createError(404, "Processed recovery period not found on this advancement."));
     }
 
     if (recoveryRow.cancelledAt) {
-      return res.status(400).json({ success: false, message: "This recovery period has already been cancelled." });
+      return next(createError(400, "This recovery period has already been cancelled."));
     }
 
     const closedPeriod = await isPeriodClosedByProcessedStatement({
@@ -1548,11 +1532,7 @@ export const cancelLandlordAdvancementRecovery = async (req, res, next) => {
     });
 
     if (closedPeriod) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "This recovery period already belongs to a processed landlord statement. Reverse or reopen the affected processed statement first.",
-      });
+      return next(createError(400, "This recovery period already belongs to a processed landlord statement. Reverse or reopen the affected processed statement first."));
     }
 
     const reason =
@@ -1606,9 +1586,9 @@ export const cancelLandlordAdvancementRecovery = async (req, res, next) => {
 export const deleteLandlordAdvancement = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
     const row = await LandlordAdvancement.findOne({ _id: req.params.id, business: businessId });
-    if (!row) return res.status(404).json({ success: false, message: "Landlord advancement not found" });
+    if (!row) return next(createError(404, "Landlord advancement not found"));
 
     ensureSafeDeletion(row);
 
@@ -1616,7 +1596,7 @@ export const deleteLandlordAdvancement = async (req, res, next) => {
     res.status(200).json({ success: true, message: "Landlord advancement deleted" });
   } catch (error) {
     if (error?.statusCode) {
-      return res.status(error.statusCode).json({ success: false, message: error.message });
+      return next(createError(error.statusCode, error.message));
     }
     next(error);
   }

@@ -1,6 +1,8 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useConfirm } from "../../context/ConfirmContext";
+import { fmtDate } from "../../utils/dates";
+import { inputClass, labelClass } from "../../utils/formStyles";
 import {
   FaBolt,
   FaCalendarAlt,
@@ -22,6 +24,7 @@ import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
+import StatusBadge from "../../components/common/StatusBadge";
 import {
   createLatePenaltyRule,
   deleteLatePenalty,
@@ -46,9 +49,6 @@ const pillTabClass = (active, tone = "green") => {
     ? "border-[#0B3B2E] bg-[#E7F5EC] text-[#0B3B2E]"
     : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50";
 };
-const inputClass =
-  "h-8 w-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/10";
-const labelClass = "mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500";
 const ITEMS_PER_PAGE = 50;
 
 const getErrorMessage = (error, fallback) =>
@@ -79,12 +79,6 @@ const formatCurrency = (value) =>
     minimumFractionDigits: 2,
   }).format(Number(value || 0));
 
-const formatDate = (value) => {
-  if (!value) return "-";
-  const dt = new Date(value);
-  if (Number.isNaN(dt.getTime())) return "-";
-  return dt.toLocaleDateString();
-};
 
 const mapRuleToForm = (rule) => ({
   ruleName: rule?.ruleName || "",
@@ -104,15 +98,13 @@ const mapRuleToForm = (rule) => ({
   notes: rule?.notes || "",
 });
 
-const statusBadgeClass = (status = "") => {
-  const normalized = String(status || "").toLowerCase();
-  if (normalized === "processed") return "bg-emerald-50 text-emerald-700 border-emerald-200";
-  if (normalized === "reversed") return "bg-amber-50 text-amber-700 border-amber-200";
-  if (normalized === "deleted") return "bg-rose-50 text-rose-700 border-rose-200";
-  if (normalized === "failed") return "bg-rose-50 text-rose-700 border-rose-200";
-  if (normalized === "partial") return "bg-orange-50 text-orange-700 border-orange-200";
-  if (normalized === "reversed_ready") return "bg-blue-50 text-blue-700 border-blue-200";
-  return "bg-slate-100 text-slate-700 border-slate-200";
+const PENALTY_STATUS_MAP = {
+  processed:      "border-emerald-200 bg-emerald-50 text-emerald-700",
+  reversed:       "border-amber-200 bg-amber-50 text-amber-700",
+  deleted:        "border-rose-200 bg-rose-50 text-rose-700",
+  failed:         "border-rose-200 bg-rose-50 text-rose-700",
+  partial:        "border-orange-200 bg-orange-50 text-orange-700",
+  reversed_ready: "border-blue-200 bg-blue-50 text-blue-700",
 };
 
 const batchDeleteSummary = (batch) => {
@@ -889,11 +881,9 @@ const LatePenalties = () => {
                               <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{row.propertyName}</td>
                               <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.unitNumber}</td>
                               <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">{formatCurrency(row.calculatedPenalty)}</td>
-                              <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">{formatDate(row.batchRunDate)}</td>
+                              <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">{fmtDate(row.batchRunDate)}</td>
                               <td className="px-3 py-1 border-r border-gray-100 text-center">
-                                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusBadgeClass(row.displayStatus)}`}>
-                                  {row.displayStatus}
-                                </span>
+                                <StatusBadge status={row.displayStatus} map={PENALTY_STATUS_MAP} />
                               </td>
                               <td className="px-3 py-1 text-slate-600">{row.reason || "-"}</td>
                             </tr>
@@ -994,13 +984,11 @@ const LatePenalties = () => {
                               </p>
                             </td>
                             <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{batch.ruleName || batch.rule?.ruleName || "-"}</td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">{formatDate(batch.runDate)}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">{fmtDate(batch.runDate)}</td>
                             <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-800">{Number(batch.invoicesCreatedCount || 0)}</td>
                             <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">{formatCurrency(batch.totalPenaltyAmount)}</td>
                             <td className="px-3 py-1 border-r border-gray-100 text-center">
-                              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusBadgeClass(batch.status)}`}>
-                                {batch.status || "processed"}
-                              </span>
+                              <StatusBadge status={batch.status || "processed"} map={PENALTY_STATUS_MAP} />
                             </td>
                             <td className="px-3 py-1 border-r border-gray-100 text-slate-600">
                               {batch?.canDeleteBatch ? (
@@ -1101,7 +1089,7 @@ const LatePenalties = () => {
                                   {rule.postingAccount?.name || "Posting account not loaded"}
                                 </p>
                               </div>
-                              <span className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold ${statusBadgeClass(rule.active ? "processed" : "failed")}`}>
+                              <span className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold ${PENALTY_STATUS_MAP[rule.active ? "processed" : "failed"] || "border-slate-200 bg-slate-100 text-slate-700"}`}>
                                 {rule.active ? "Active" : "Inactive"}
                               </span>
                             </div>
@@ -1282,7 +1270,7 @@ const LatePenalties = () => {
                 <div>
                   <p className="text-sm font-black uppercase tracking-wide">{batchDetail.batchName}</p>
                   <p className="mt-0.5 text-xs text-white/60">
-                    {batchDetail.ruleName || batchDetail.rule?.ruleName || "-"} · {formatDate(batchDetail.runDate)} · {batchDetail.status}
+                    {batchDetail.ruleName || batchDetail.rule?.ruleName || "-"} · {fmtDate(batchDetail.runDate)} · {batchDetail.status}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -1416,9 +1404,7 @@ const LatePenalties = () => {
                           <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{item?.penaltyInvoice?.invoiceNumber || "-"}</td>
                           <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">{formatCurrency(item.calculatedPenalty)}</td>
                           <td className="px-3 py-1 border-r border-gray-100 text-center">
-                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusBadgeClass(normalizedStatus)}`}>
-                              {normalizedStatus}
-                            </span>
+                            <StatusBadge status={normalizedStatus} map={PENALTY_STATUS_MAP} />
                           </td>
                           <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{item.reason || "-"}</td>
                           <td className="px-3 py-1 text-right">

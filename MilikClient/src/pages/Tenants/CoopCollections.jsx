@@ -3,8 +3,13 @@ import { useSelector } from "react-redux";
 import {
   FaCheckCircle, FaExclamationTriangle, FaTimesCircle,
   FaSearch, FaRedoAlt, FaTimes, FaLink, FaBan, FaUndo,
-  FaReceipt, FaUser, FaTrash, FaSpinner,
+  FaReceipt, FaUser, FaTrash,
 } from "react-icons/fa";
+import { useConfirm } from "../../context/ConfirmContext";
+import { todayISO, fmtDate } from "../../utils/dates";
+import { formatMoney } from "../../utils/money";
+import StatusBadge from "../../components/common/StatusBadge";
+import Spinner from "../../components/common/Spinner";
 import { toast } from "react-toastify";
 import { adminRequests } from "../../utils/requestMethods";
 import { selectCurrentCompany } from "../../redux/selectors";
@@ -15,26 +20,12 @@ import AppSelect from "../../components/common/AppSelect";
 const PAGE_SIZE   = 50;
 const AUTO_RELOAD = 30;
 
-const todayISO    = () => new Date().toISOString().slice(0, 10);
-const formatMoney = (v) => `Ksh ${Number(v || 0).toLocaleString()}`;
-const fmtDate     = (v) =>
-  v ? new Date(v).toLocaleString("en-KE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
 
-const STATUS_META = {
-  unmatched:      { label: "Unmatched",      bg: "bg-amber-50",   border: "border-amber-200",   text: "text-amber-700",   dot: "bg-amber-400"   },
-  matched_tenant: { label: "Tenant Matched", bg: "bg-blue-50",    border: "border-blue-200",    text: "text-blue-700",    dot: "bg-blue-400"    },
-  captured:       { label: "Captured",       bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-700", dot: "bg-emerald-500" },
-  ignored:        { label: "Ignored",        bg: "bg-red-50",     border: "border-red-200",     text: "text-red-700",     dot: "bg-red-400"     },
-};
-
-const StatusBadge = ({ status }) => {
-  const m = STATUS_META[status] || STATUS_META.unmatched;
-  return (
-    <span className={`inline-flex items-center gap-1 border px-2 py-0.5 text-[10px] font-bold uppercase ${m.bg} ${m.border} ${m.text}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${m.dot}`} />
-      {m.label}
-    </span>
-  );
+const STATUS_MAP = {
+  unmatched:      "border-amber-200 bg-amber-50 text-amber-700",
+  matched_tenant: "border-blue-200 bg-blue-50 text-blue-700",
+  captured:       "border-emerald-200 bg-emerald-50 text-emerald-700",
+  ignored:        "border-red-200 bg-red-50 text-red-700",
 };
 
 // ─── Assign Tenant Modal ──────────────────────────────────────────────────────
@@ -150,6 +141,7 @@ function AssignTenantModal({ collection, businessId, onClose, onAssigned }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function CoopCollections() {
+  const confirm = useConfirm();
   const currentCompany = useSelector(selectCurrentCompany);
   const businessId     = currentCompany?._id || "";
 
@@ -207,7 +199,7 @@ export default function CoopCollections() {
   }, [fetchData, page]);
 
   const handleDelete = async (item) => {
-    if (!window.confirm(`Delete this Co-op collection (${formatMoney(item.amount)})? This cannot be undone.`)) return;
+    if (!await confirm({ message: `Delete this Co-op collection (${formatMoney(item.amount)})? This cannot be undone.`, confirmText: "Delete", isDangerous: true })) return;
     setDeletingId(item._id);
     try {
       await adminRequests.delete(`/coop-collections/${item._id}`, { params: { business: businessId } });
@@ -317,7 +309,7 @@ export default function CoopCollections() {
         <div className="overflow-hidden border border-slate-200 bg-white shadow-sm">
           {loading && items.length === 0 ? (
             <div className="flex items-center justify-center gap-2 py-16 text-xs text-slate-400">
-              <FaSpinner className="animate-spin" /> Loading Co-op collections…
+              <Spinner size="sm" /> Loading Co-op collections…
             </div>
           ) : items.length === 0 ? (
             <div className="py-16 text-center text-xs text-slate-400">
@@ -350,7 +342,7 @@ export default function CoopCollections() {
                           </div>
                         ) : <span className="text-slate-400">—</span>}
                       </td>
-                      <td className="px-3 py-2.5"><StatusBadge status={item.matchingStatus} /></td>
+                      <td className="px-3 py-2.5"><StatusBadge status={item.matchingStatus} map={STATUS_MAP} /></td>
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-1">
                           {item.matchingStatus === "ignored" ? (
@@ -360,7 +352,7 @@ export default function CoopCollections() {
                               className="inline-flex h-6 items-center gap-1 border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                               title="Unignore"
                             >
-                              {unignoringId === item._id ? <FaSpinner size={8} className="animate-spin" /> : <FaUndo size={8} />}
+                              {unignoringId === item._id ? <Spinner size="sm" /> : <FaUndo size={8} />}
                             </button>
                           ) : item.matchingStatus !== "captured" ? (
                             <>
@@ -379,7 +371,7 @@ export default function CoopCollections() {
                               className="inline-flex h-6 items-center gap-1 border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
                               title="Delete"
                             >
-                              {deletingId === item._id ? <FaSpinner size={8} className="animate-spin" /> : <FaTrash size={8} />}
+                              {deletingId === item._id ? <Spinner size="sm" /> : <FaTrash size={8} />}
                             </button>
                           )}
                         </div>

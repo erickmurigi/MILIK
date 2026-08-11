@@ -9,10 +9,12 @@ import { postEntry, postReversal } from "../../services/ledgerPostingService.js"
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { emitToCompany } from "../../utils/socketManager.js";
+import { createError } from "../../utils/error.js";
 import {
   resolvePropertyAccountingContext,
   resolveLandlordRemittancePayableAccount,
 } from "../../services/propertyAccountingService.js";
+import { parsePagination } from "../../utils/pagination.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 const sameId = (left, right) => String(left || "") === String(right || "");
@@ -513,7 +515,7 @@ export const createJournalEntry = async (req, res, next) => {
   try {
     const businessId = await resolveBusinessId(req);
     if (!businessId) {
-      return res.status(400).json({ success: false, message: "User must have a company context" });
+      return next(createError(400, "User must have a company context"));
     }
 
     const normalizedPayload = normalizeJournalPayload(req.body || {});
@@ -559,10 +561,10 @@ export const getJournalEntries = async (req, res, next) => {
   try {
     const business = await resolveBusinessId(req);
     if (!business) {
-      return res.status(400).json({ success: false, message: "User must have a company context" });
+      return next(createError(400, "User must have a company context"));
     }
 
-    const { status, journalType, property, landlord, sourceModule, excludeSourceModules, startDate, endDate, search, page = 1, limit = 5000 } = req.query;
+    const { status, journalType, property, landlord, sourceModule, excludeSourceModules, startDate, endDate, search } = req.query;
     const filter = { business };
 
     if (status && status !== "all") filter.status = status;
@@ -591,14 +593,13 @@ export const getJournalEntries = async (req, res, next) => {
       ];
     }
 
-    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
-    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+    const { page: pageNum, limit: limitNum, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 200 });
 
     const [rows, total] = await Promise.all([
       populateJournalQuery(
         JournalEntry.find(filter)
           .sort({ date: -1, createdAt: -1 })
-          .skip((pageNum - 1) * limitNum)
+          .skip(skip)
           .limit(limitNum)
       ).lean(),
       JournalEntry.countDocuments(filter),
@@ -620,7 +621,7 @@ export const getJournalEntry = async (req, res, next) => {
   try {
     const business = await resolveBusinessId(req);
     if (!business) {
-      return res.status(400).json({ success: false, message: "User must have a company context" });
+      return next(createError(400, "User must have a company context"));
     }
 
     const journal = await populateJournalQuery(
@@ -631,7 +632,7 @@ export const getJournalEntry = async (req, res, next) => {
     ).lean();
 
     if (!journal) {
-      return res.status(404).json({ success: false, message: "Journal not found" });
+      return next(createError(404, "Journal not found"));
     }
 
     return res.status(200).json(journal);
@@ -644,7 +645,7 @@ export const updateJournalEntry = async (req, res, next) => {
   try {
     const businessId = await resolveBusinessId(req);
     if (!businessId) {
-      return res.status(400).json({ success: false, message: "User must have a company context" });
+      return next(createError(400, "User must have a company context"));
     }
 
     const existing = await JournalEntry.findOne({
@@ -653,14 +654,11 @@ export const updateJournalEntry = async (req, res, next) => {
     });
 
     if (!existing) {
-      return res.status(404).json({ success: false, message: "Journal not found" });
+      return next(createError(404, "Journal not found"));
     }
 
     if (existing.status !== "draft") {
-      return res.status(400).json({
-        success: false,
-        message: "Only draft journals can be edited",
-      });
+      return next(createError(400, "Only draft journals can be edited"));
     }
 
     const normalizedPayload = normalizeJournalPayload({
@@ -699,7 +697,7 @@ export const postJournalEntry = async (req, res, next) => {
   try {
     const businessId = await resolveBusinessId(req);
     if (!businessId) {
-      return res.status(400).json({ success: false, message: "User must have a company context" });
+      return next(createError(400, "User must have a company context"));
     }
 
     const journal = await JournalEntry.findOne({
@@ -708,11 +706,11 @@ export const postJournalEntry = async (req, res, next) => {
     });
 
     if (!journal) {
-      return res.status(404).json({ success: false, message: "Journal not found" });
+      return next(createError(404, "Journal not found"));
     }
 
     if (journal.status !== "draft") {
-      return res.status(400).json({ success: false, message: "Only draft journals can be posted" });
+      return next(createError(400, "Only draft journals can be posted"));
     }
 
     const actorUserId = await resolveActorUserId(req, businessId);
@@ -732,7 +730,7 @@ export const reverseJournalEntry = async (req, res, next) => {
   try {
     const businessId = await resolveBusinessId(req);
     if (!businessId) {
-      return res.status(400).json({ success: false, message: "User must have a company context" });
+      return next(createError(400, "User must have a company context"));
     }
 
     const journal = await JournalEntry.findOne({
@@ -741,15 +739,15 @@ export const reverseJournalEntry = async (req, res, next) => {
     });
 
     if (!journal) {
-      return res.status(404).json({ success: false, message: "Journal not found" });
+      return next(createError(404, "Journal not found"));
     }
 
     if (journal.status !== "posted") {
-      return res.status(400).json({ success: false, message: "Only posted journals can be reversed" });
+      return next(createError(400, "Only posted journals can be reversed"));
     }
 
     if (journal.reversedAt) {
-      return res.status(400).json({ success: false, message: "Journal is already reversed" });
+      return next(createError(400, "Journal is already reversed"));
     }
 
     const actorUserId = await resolveActorUserId(req, businessId);
@@ -780,7 +778,7 @@ export const deleteJournalEntry = async (req, res, next) => {
   try {
     const businessId = await resolveBusinessId(req);
     if (!businessId) {
-      return res.status(400).json({ success: false, message: "User must have a company context" });
+      return next(createError(400, "User must have a company context"));
     }
 
     const journal = await JournalEntry.findOne({
@@ -789,11 +787,11 @@ export const deleteJournalEntry = async (req, res, next) => {
     });
 
     if (!journal) {
-      return res.status(404).json({ success: false, message: "Journal not found" });
+      return next(createError(404, "Journal not found"));
     }
 
     if (journal.status !== "draft") {
-      return res.status(400).json({ success: false, message: "Only draft journals can be deleted" });
+      return next(createError(400, "Only draft journals can be deleted"));
     }
 
     await JournalEntry.deleteOne({ _id: journal._id });
@@ -810,7 +808,7 @@ export const getJournalPostingPreview = async (req, res, next) => {
   try {
     const businessId = await resolveBusinessId(req);
     if (!businessId) {
-      return res.status(400).json({ success: false, message: "User must have a company context" });
+      return next(createError(400, "User must have a company context"));
     }
 
     await validateJournalPayload({
@@ -857,7 +855,7 @@ export const createJournalFromVoucher = async (req, res, next) => {
   try {
     const businessId = await resolveBusinessId(req);
     if (!businessId) {
-      return res.status(400).json({ success: false, message: "User must have a company context" });
+      return next(createError(400, "User must have a company context"));
     }
 
     const voucher = await PaymentVoucher.findOne({
@@ -866,7 +864,7 @@ export const createJournalFromVoucher = async (req, res, next) => {
     }).lean();
 
     if (!voucher) {
-      return res.status(404).json({ success: false, message: "Voucher not found" });
+      return next(createError(404, "Voucher not found"));
     }
 
     const actorUserId = await resolveActorUserId(req, businessId);
@@ -907,11 +905,11 @@ export const submitJournalForReview = async (req, res, next) => {
   try {
     const businessId = await resolveBusinessId(req);
     const journal = await JournalEntry.findOne({ _id: req.params.id, business: businessId });
-    if (!journal) return res.status(404).json({ message: "Journal not found" });
+    if (!journal) return next(createError(404, "Journal not found"));
     if (journal.status !== "draft")
-      return res.status(400).json({ message: "Only draft journals can be submitted for review" });
+      return next(createError(400, "Only draft journals can be submitted for review"));
     if (journal.approvalStatus === "approved")
-      return res.status(400).json({ message: "Journal is already approved" });
+      return next(createError(400, "Journal is already approved"));
 
     journal.approvalStatus = "pending_review";
     await journal.save();
@@ -930,9 +928,9 @@ export const reviewJournalEntry = async (req, res, next) => {
     const businessId = await resolveBusinessId(req);
     const actorUserId = await resolveActorUserId(req, businessId);
     const journal = await JournalEntry.findOne({ _id: req.params.id, business: businessId });
-    if (!journal) return res.status(404).json({ message: "Journal not found" });
+    if (!journal) return next(createError(404, "Journal not found"));
     if (journal.approvalStatus !== "pending_review")
-      return res.status(400).json({ message: "Journal is not pending review" });
+      return next(createError(400, "Journal is not pending review"));
 
     journal.approvalStatus = "reviewed";
     journal.reviewedBy = actorUserId;
@@ -953,11 +951,11 @@ export const approveJournalEntry = async (req, res, next) => {
     const businessId = await resolveBusinessId(req);
     const actorUserId = await resolveActorUserId(req, businessId);
     const journal = await JournalEntry.findOne({ _id: req.params.id, business: businessId });
-    if (!journal) return res.status(404).json({ message: "Journal not found" });
+    if (!journal) return next(createError(404, "Journal not found"));
     if (!["pending_review", "reviewed"].includes(journal.approvalStatus))
-      return res.status(400).json({ message: "Journal must be pending review or reviewed before approval" });
+      return next(createError(400, "Journal must be pending review or reviewed before approval"));
     if (journal.status !== "draft")
-      return res.status(400).json({ message: "Only draft journals can be approved" });
+      return next(createError(400, "Only draft journals can be approved"));
 
     journal.approvalStatus = "approved";
     journal.approvedByUser = actorUserId;
@@ -977,14 +975,14 @@ export const rejectJournalEntry = async (req, res, next) => {
   try {
     const { reason } = req.body || {};
     if (!reason || !String(reason).trim())
-      return res.status(400).json({ message: "A rejection reason is required" });
+      return next(createError(400, "A rejection reason is required"));
 
     const businessId = await resolveBusinessId(req);
     const actorUserId = await resolveActorUserId(req, businessId);
     const journal = await JournalEntry.findOne({ _id: req.params.id, business: businessId });
-    if (!journal) return res.status(404).json({ message: "Journal not found" });
+    if (!journal) return next(createError(404, "Journal not found"));
     if (!["pending_review", "reviewed"].includes(journal.approvalStatus))
-      return res.status(400).json({ message: "Only journals under review can be rejected" });
+      return next(createError(400, "Only journals under review can be rejected"));
 
     journal.approvalStatus = "rejected";
     journal.rejectedBy = actorUserId;

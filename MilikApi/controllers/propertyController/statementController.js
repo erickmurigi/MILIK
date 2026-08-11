@@ -14,6 +14,8 @@ import {
 import { generateStatementPdf } from "../../services/statementPdfService.js";
 import { emitToCompany } from "../../utils/socketManager.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
+import { createError } from "../../utils/error.js";
+import { parsePagination } from "../../utils/pagination.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
@@ -115,17 +117,11 @@ export const createDraft = async (req, res, next) => {
     const userId = await resolveActorUserId(req, businessId);
 
     if (!propertyId || !periodStart || !periodEnd) {
-      return res.status(400).json({
-        success: false,
-        message: "propertyId, periodStart, and periodEnd are required",
-      });
+      return next(createError(400, "propertyId, periodStart, and periodEnd are required"));
     }
 
     if (!landlordId) {
-      return res.status(400).json({
-        success: false,
-        message: "The selected property has no linked landlord. Link a landlord to the property before generating a statement.",
-      });
+      return next(createError(400, "The selected property has no linked landlord. Link a landlord to the property before generating a statement."));
     }
 
     const refreshRequested = req.body?.refresh === true || String(req.query?.refresh || "").toLowerCase() === "true";
@@ -317,33 +313,21 @@ export const approve = async (req, res, next) => {
     const businessId = statement?.business ? String(statement.business) : await resolveBusinessId(req);
 
     if (!statementId) {
-      return res.status(400).json({
-        success: false,
-        message: "statementId is required",
-      });
+      return next(createError(400, "statementId is required"));
     }
 
     if (!statement) {
-      return res.status(404).json({
-        success: false,
-        message: "Statement not found or access denied",
-      });
+      return next(createError(404, "Statement not found or access denied"));
     }
 
     const userId = await resolveActorUserId(req, businessId);
 
     if (statement.status === "approved" || statement.status === "sent") {
-      return res.status(400).json({
-        success: false,
-        message: "Statement is already approved or sent",
-      });
+      return next(createError(400, "Statement is already approved or sent"));
     }
 
     if (statement.status === "revised") {
-      return res.status(400).json({
-        success: false,
-        message: "Revised statements cannot be approved. Use the superseding statement instead.",
-      });
+      return next(createError(400, "Revised statements cannot be approved. Use the superseding statement instead."));
     }
 
     // Safeguard: Prevent approval of empty statements + check for duplicate approved period in parallel
@@ -360,10 +344,7 @@ export const approve = async (req, res, next) => {
       }).select("_id statementNumber").lean(),
     ]);
     if (lineCount === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Statement has no lines. Generate the statement first.",
-      });
+      return next(createError(400, "Statement has no lines. Generate the statement first."));
     }
 
     if (existingApproved) {
@@ -438,11 +419,11 @@ export const getStatement = async (req, res, next) => {
     const { includeLines = "true", populateRefs = "true" } = req.query;
     const businessId = await resolveBusinessId(req);
     if (!businessId) {
-      return res.status(403).json({ success: false, message: "Access denied" });
+      return next(createError(403, "Access denied"));
     }
     const exists = await LandlordStatement.exists({ _id: statementId, business: businessId });
     if (!exists) {
-      return res.status(404).json({ success: false, message: "Statement not found or access denied" });
+      return next(createError(404, "Statement not found or access denied"));
     }
 
     const result = await getStatementById(statementId, {
@@ -475,8 +456,6 @@ export const listStatementsForLandlord = async (req, res, next) => {
       periodStart,
       periodEnd,
       status,
-      page = 1,
-      limit = 20,
     } = req.query;
 
     const propertyContext = propertyId ? await resolvePropertyLandlord(propertyId) : {};
@@ -484,17 +463,11 @@ export const listStatementsForLandlord = async (req, res, next) => {
     const landlordId = landlordIdFromQuery || propertyContext.landlordId;
 
     if (!businessId) {
-      return res.status(400).json({
-        success: false,
-        message: "Business context could not be resolved for statements listing",
-      });
+      return next(createError(400, "Business context could not be resolved for statements listing"));
     }
 
     if (!propertyId && !landlordId) {
-      return res.status(400).json({
-        success: false,
-        message: "Provide propertyId or landlordId to list statements",
-      });
+      return next(createError(400, "Provide propertyId or landlordId to list statements"));
     }
 
     const filter = {
@@ -512,9 +485,7 @@ export const listStatementsForLandlord = async (req, res, next) => {
       if (periodEnd) filter.periodStart.$lte = new Date(periodEnd);
     }
 
-    const pageInt = parseInt(page, 10) || 1;
-    const limitInt = Math.min(parseInt(limit, 10) || 20, 200);
-    const skip = (pageInt - 1) * limitInt;
+    const { page: pageInt, limit: limitInt, skip } = parsePagination(req, { defaultLimit: 20, maxLimit: 200 });
     const [statements, total] = await Promise.all([
       LandlordStatement.find(filter)
         .sort({ periodStart: -1, version: -1 })
@@ -557,17 +528,11 @@ export const createStatementRevision = async (req, res, next) => {
     const userId = await resolveActorUserId(req, businessId);
 
     if (!statementId || !revisionReason) {
-      return res.status(400).json({
-        success: false,
-        message: "statementId and revisionReason are required",
-      });
+      return next(createError(400, "statementId and revisionReason are required"));
     }
 
     if (!statementCheck) {
-      return res.status(404).json({
-        success: false,
-        message: "Statement not found or access denied",
-      });
+      return next(createError(404, "Statement not found or access denied"));
     }
 
     const result = await createRevision(statementId, userId, revisionReason);
@@ -604,24 +569,15 @@ export const markAsSent = async (req, res, next) => {
     const userId = await resolveActorUserId(req, businessId);
 
     if (!statementId) {
-      return res.status(400).json({
-        success: false,
-        message: "statementId is required",
-      });
+      return next(createError(400, "statementId is required"));
     }
 
     if (!statement) {
-      return res.status(404).json({
-        success: false,
-        message: "Statement not found or access denied",
-      });
+      return next(createError(404, "Statement not found or access denied"));
     }
 
     if (statement.status !== "approved") {
-      return res.status(400).json({
-        success: false,
-        message: "Only approved statements can be marked as sent",
-      });
+      return next(createError(400, "Only approved statements can be marked as sent"));
     }
 
     statement.status = "sent";
@@ -656,7 +612,7 @@ export const adminMarkRevised = async (req, res, next) => {
     const { replacementStatementId, reason } = req.body || {};
 
     if (!isValidObjectId(statementId)) {
-      return res.status(400).json({ success: false, message: "Invalid statementId" });
+      return next(createError(400, "Invalid statementId"));
     }
 
     const statement = await LandlordStatement.findById(statementId)
@@ -664,7 +620,7 @@ export const adminMarkRevised = async (req, res, next) => {
       .lean();
 
     if (!statement) {
-      return res.status(404).json({ success: false, message: "Statement not found" });
+      return next(createError(404, "Statement not found"));
     }
 
     if (statement.status === "revised") {
@@ -672,7 +628,7 @@ export const adminMarkRevised = async (req, res, next) => {
     }
 
     if (!["approved", "sent", "draft"].includes(statement.status)) {
-      return res.status(400).json({ success: false, message: `Cannot mark a ${statement.status} statement as revised` });
+      return next(createError(400, `Cannot mark a ${statement.status} statement as revised`));
     }
 
     const $set = {
@@ -706,24 +662,15 @@ export const deleteDraft = async (req, res, next) => {
     const businessId = statement?.business ? String(statement.business) : await resolveBusinessId(req);
 
     if (!statementId) {
-      return res.status(400).json({
-        success: false,
-        message: "statementId is required",
-      });
+      return next(createError(400, "statementId is required"));
     }
 
     if (!statement) {
-      return res.status(404).json({
-        success: false,
-        message: "Statement not found or access denied",
-      });
+      return next(createError(404, "Statement not found or access denied"));
     }
 
     if (statement.status !== "draft") {
-      return res.status(400).json({
-        success: false,
-        message: "Only draft statements can be deleted",
-      });
+      return next(createError(400, "Only draft statements can be deleted"));
     }
 
     // Safeguard: Protect draft deletion in revision chains
@@ -792,17 +739,11 @@ export const validateAudit = async (req, res, next) => {
     const businessId = statementCheck?.business ? String(statementCheck.business) : await resolveBusinessId(req);
 
     if (!statementId) {
-      return res.status(400).json({
-        success: false,
-        message: "statementId is required",
-      });
+      return next(createError(400, "statementId is required"));
     }
 
     if (!statementCheck) {
-      return res.status(404).json({
-        success: false,
-        message: "Statement not found or access denied",
-      });
+      return next(createError(404, "Statement not found or access denied"));
     }
 
     const result = await validateStatementAudit(statementId);
@@ -824,12 +765,12 @@ export const generatePdf = async (req, res, next) => {
   try {
     const { statementId } = req.params;
     if (!statementId) {
-      return res.status(400).json({ success: false, message: "statementId is required" });
+      return next(createError(400, "statementId is required"));
     }
 
     const businessId = await resolveBusinessId(req);
     if (!businessId) {
-      return res.status(403).json({ success: false, message: "Access denied" });
+      return next(createError(403, "Access denied"));
     }
 
     const statement = await LandlordStatement.findOne({ _id: statementId, business: businessId })
@@ -839,7 +780,7 @@ export const generatePdf = async (req, res, next) => {
       .lean();
 
     if (!statement) {
-      return res.status(404).json({ success: false, message: "Statement not found or access denied" });
+      return next(createError(404, "Statement not found or access denied"));
     }
 
     const pdfBuffer = await generateStatementPdf(statementId, businessId, { statement });
@@ -866,17 +807,11 @@ export const getStatementSummary = async (req, res, next) => {
     const landlordId = landlordIdFromQuery || propertyContext.landlordId;
 
     if (!businessId) {
-      return res.status(400).json({
-        success: false,
-        message: "Business context could not be resolved for statement summary",
-      });
+      return next(createError(400, "Business context could not be resolved for statement summary"));
     }
 
     if (!propertyId && !landlordId) {
-      return res.status(400).json({
-        success: false,
-        message: "Provide propertyId or landlordId to get statement summary",
-      });
+      return next(createError(400, "Provide propertyId or landlordId to get statement summary"));
     }
 
     const filter = {
@@ -951,11 +886,11 @@ export const updateStatementNotes = async (req, res, next) => {
       fields: "_id status business notes",
     });
     if (!statement) {
-      return res.status(404).json({ success: false, message: "Statement not found or access denied" });
+      return next(createError(404, "Statement not found or access denied"));
     }
     const TERMINAL = ["revised", "processed", "cancelled"];
     if (TERMINAL.includes(statement.status)) {
-      return res.status(400).json({ success: false, message: `Cannot update notes on a ${statement.status} statement` });
+      return next(createError(400, `Cannot update notes on a ${statement.status} statement`));
     }
     statement.notes = typeof notes === "string" ? notes.trim() : "";
     await statement.save();

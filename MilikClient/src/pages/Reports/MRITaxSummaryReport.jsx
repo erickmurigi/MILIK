@@ -10,10 +10,10 @@ import { FaFileDownload, FaPrint, FaSyncAlt } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { hasCompanyPermission } from '../../utils/permissions';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
+import { fmtDate } from '../../utils/dates';
+import { formatMoney } from '../../utils/money';
 
-const formatMoney = (value) => `KES ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 const toDateInputValue = (value) => new Date(value).toISOString().split('T')[0];
-const formatDate = (value) => (value ? new Date(value).toLocaleDateString() : '—');
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -150,7 +150,7 @@ const MRITaxSummaryReport = () => {
       .note{margin-top:14px;border-left:4px solid #f59e0b;background:#fffbeb;border-radius:8px;padding:8px 10px;font-size:8.5px;color:#78350f}
       *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
     </style></head><body>
-    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">${printTitle}</div><div class="sub">Residential Rental Income — ${mriRatePercent}% flat rate · Period: ${formatDate(filters.startDate)} to ${formatDate(filters.endDate)}</div></div>
+    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">${printTitle}</div><div class="sub">Residential Rental Income — ${mriRatePercent}% flat rate · Period: ${fmtDate(filters.startDate)} to ${fmtDate(filters.endDate)}</div></div>
     <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div><div>Prepared by: ${by}</div></div></div>
     <div class="cards">
       <div class="card"><div class="cl">Total Gross Rent</div><div class="cv">${fmt(summary.totalGrossRent)}</div></div>
@@ -205,7 +205,7 @@ const MRITaxSummaryReport = () => {
               <h1 className="mri-print-title">{isLandlordMode ? 'Rental Income Tax (MRI)' : 'MRI Tax Summary'}</h1>
               <p className="mri-print-subtitle">
                 Residential Rental Income (MRI) tax summary — {mriRatePercent}% flat rate on gross rent collected.
-                Period: {formatDate(filters.startDate)} to {formatDate(filters.endDate)}.
+                Period: {fmtDate(filters.startDate)} to {fmtDate(filters.endDate)}.
               </p>
             </div>
             <div className="mri-print-meta">

@@ -2,17 +2,8 @@ import mongoose from "mongoose";
 import Inspection from "../../models/Inspection.js";
 import { emitToCompany } from "../../utils/socketManager.js";
 import { getFieldOfficerPropertyIds } from "../../utils/fieldOfficerScope.js";
-
-const resolveBusinessId = (req) => {
-  const requested = req.query?.business || req.body?.business || null;
-  const authenticated = req.user?.company?._id || req.user?.company || null;
-
-  if (req.user?.isSystemAdmin || req.user?.superAdminAccess) {
-    return requested || authenticated || null;
-  }
-
-  return authenticated || requested || null;
-};
+import { resolveBusinessId } from "../../utils/requestContext.js";
+import { createError } from "../../utils/error.js";
 
 const scopedInspectionQuery = (req, id) => {
   const business = resolveBusinessId(req);
@@ -26,7 +17,7 @@ export const createInspection = async (req, res, next) => {
   try {
     const business = resolveBusinessId(req);
     if (!business) {
-      return res.status(400).json({ message: "Business context is required" });
+      return next(createError(400, "Business context is required"));
     }
 
     const safeCreate = {};
@@ -56,7 +47,7 @@ export const getInspections = async (req, res, next) => {
   try {
     const business = resolveBusinessId(req);
     if (!business) {
-      return res.status(400).json({ message: "Business context is required" });
+      return next(createError(400, "Business context is required"));
     }
 
     const { status, type, property, unit, tenant, search, page = 1, limit = 50 } = req.query;
@@ -123,7 +114,7 @@ export const getInspection = async (req, res, next) => {
       .populate("tenant", "name phone email");
 
     if (!inspection) {
-      return res.status(404).json({ message: "Inspection not found" });
+      return next(createError(404, "Inspection not found"));
     }
 
     const foPropertyIds = await getFieldOfficerPropertyIds(req);
@@ -131,7 +122,7 @@ export const getInspection = async (req, res, next) => {
       const foSet = new Set(foPropertyIds.map(String));
       const propId = inspection.property?._id || inspection.property;
       if (!propId || !foSet.has(String(propId))) {
-        return res.status(403).json({ success: false, message: "Not authorized to access this inspection" });
+        return next(createError(403, "Not authorized to access this inspection"));
       }
     }
 
@@ -160,7 +151,7 @@ export const updateInspection = async (req, res, next) => {
       .populate("tenant", "name phone");
 
     if (!updated) {
-      return res.status(404).json({ message: "Inspection not found" });
+      return next(createError(404, "Inspection not found"));
     }
 
     emitToCompany(String(updated.business), "inspection:updated", updated);
@@ -176,7 +167,7 @@ export const deleteInspection = async (req, res, next) => {
     const deleted = await Inspection.findOneAndDelete(query);
 
     if (!deleted) {
-      return res.status(404).json({ message: "Inspection not found" });
+      return next(createError(404, "Inspection not found"));
     }
 
     emitToCompany(String(deleted.business), "inspection:deleted", { _id: deleted._id });
@@ -190,11 +181,11 @@ export const getInspectionStats = async (req, res, next) => {
   try {
     const business = resolveBusinessId(req);
     if (!business) {
-      return res.status(400).json({ message: "Business context is required" });
+      return next(createError(400, "Business context is required"));
     }
 
     if (!mongoose.Types.ObjectId.isValid(String(business))) {
-      return res.status(400).json({ message: "Invalid business ID" });
+      return next(createError(400, "Invalid business ID"));
     }
     const businessObjectId = new mongoose.Types.ObjectId(String(business));
     const [summary] = await Inspection.aggregate([

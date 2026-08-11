@@ -21,17 +21,12 @@ import { getChartOfAccounts, getJournalEntries } from "../../redux/apiCalls";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { GL_ACCESS_MODULES, hasCompanyModule } from "../../utils/companyModules";
 import useDebounce from "../../hooks/useDebounce";
+import { fmtDate, todayISO } from '../../utils/dates';
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 const fmt = (n) =>
   Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const fmtDate = (d) =>
-  d
-    ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })
-    : "—";
-
-const todayISO = () => new Date().toISOString().split("T")[0];
 const firstOfMonthISO = () => {
   const d = new Date();
   d.setDate(1);

@@ -8,6 +8,9 @@ import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../serv
 import { postEntry, postReversal } from "../../services/ledgerPostingService.js";
 import { resolveLandlordRemittancePayableAccount, resolvePropertyAccountingContext } from "../../services/propertyAccountingService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
+import { resolveBusinessId } from "../../utils/requestContext.js";
+import { parsePagination } from "../../utils/pagination.js";
+import { createError } from "../../utils/error.js";
 import {
   addFrequency,
   buildRunSchedule,
@@ -23,15 +26,6 @@ import {
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 const oid = (value) => new mongoose.Types.ObjectId(String(value));
-
-const resolveBusinessId = (req) =>
-  req?.query?.business ||
-  req?.query?.company ||
-  req?.body?.business ||
-  req?.body?.company ||
-  req?.user?.company?._id ||
-  req?.user?.company ||
-  null;
 
 const normalizePaymentMethod = (value) => {
   const normalized = String(value || "bank_transfer").trim().toLowerCase();
@@ -319,11 +313,11 @@ const syncNextRunDate = (row, { preserveStopped = false } = {}) => {
 export const createLandlordStandingOrder = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
 
     const actorUserId = await resolveActorUserId(req, businessId);
-    if (!isValidObjectId(req.body?.landlord)) return res.status(400).json({ success: false, message: "Landlord is required" });
-    if (!isValidObjectId(req.body?.property)) return res.status(400).json({ success: false, message: "Property is required" });
+    if (!isValidObjectId(req.body?.landlord)) return next(createError(400, "Landlord is required"));
+    if (!isValidObjectId(req.body?.property)) return next(createError(400, "Property is required"));
 
     const accountingContext = await resolvePropertyAccountingContext({
       businessId,
@@ -333,18 +327,18 @@ export const createLandlordStandingOrder = async (req, res, next) => {
 
     const amount = Number(req.body?.amount || 0);
     if (!Number.isFinite(amount) || amount <= 0) {
-      return res.status(400).json({ success: false, message: "Valid standing order amount is required" });
+      return next(createError(400, "Valid standing order amount is required"));
     }
 
     const title = String(req.body?.title || "").trim();
-    if (!title) return res.status(400).json({ success: false, message: "Standing order title is required" });
+    if (!title) return next(createError(400, "Standing order title is required"));
 
     const startDate = parseDate(req.body?.startDate, new Date());
-    if (!startDate) return res.status(400).json({ success: false, message: "Valid start date is required" });
+    if (!startDate) return next(createError(400, "Valid start date is required"));
 
     const endDate = parseDate(req.body?.endDate, null);
     if (endDate && endDate < startDate) {
-      return res.status(400).json({ success: false, message: "End date cannot be earlier than start date" });
+      return next(createError(400, "End date cannot be earlier than start date"));
     }
 
     const frequency = normalizeFrequency(req.body?.frequency);
@@ -357,7 +351,7 @@ export const createLandlordStandingOrder = async (req, res, next) => {
     const destination = buildDestination(req.body?.destination || req.body);
     const destinationError = validateDestination({ paymentMethod, destination });
     if (destinationError) {
-      return res.status(400).json({ success: false, message: destinationError });
+      return next(createError(400, destinationError));
     }
 
     const doc = await LandlordStandingOrder.create({
@@ -398,7 +392,7 @@ export const createLandlordStandingOrder = async (req, res, next) => {
 export const getLandlordStandingOrders = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
 
     const filter = { business: businessId };
     if (req.query?.status && req.query.status !== "all") filter.status = req.query.status;
@@ -415,11 +409,10 @@ export const getLandlordStandingOrders = async (req, res, next) => {
       ];
     }
 
-    const pageNum = Math.max(parseInt(req.query.page, 10) || 1, 1);
-    const limitNum = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const { page: pageNum, limit: limitNum, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 200 });
     const [total, rows] = await Promise.all([
       LandlordStandingOrder.countDocuments(filter),
-      populateQuery(LandlordStandingOrder.find(filter).sort({ createdAt: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum)).lean(),
+      populateQuery(LandlordStandingOrder.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limitNum)).lean(),
     ]);
     res.status(200).json({ data: serializeRows(rows), total, page: pageNum, pages: Math.ceil(total / limitNum) });
   } catch (error) {
@@ -430,17 +423,17 @@ export const getLandlordStandingOrders = async (req, res, next) => {
 export const updateLandlordStandingOrder = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
 
     const actorUserId = await resolveActorUserId(req, businessId);
     const row = await LandlordStandingOrder.findOne({ _id: req.params.id, business: businessId });
-    if (!row) return res.status(404).json({ success: false, message: "Standing order not found" });
+    if (!row) return next(createError(404, "Standing order not found"));
 
     const hasProcessedRuns = getActiveRunHistory(row.runHistory, row.frequency).length > 0;
 
     if (Object.prototype.hasOwnProperty.call(req.body || {}, "title")) {
       const title = String(req.body?.title || "").trim();
-      if (!title) return res.status(400).json({ success: false, message: "Standing order title is required" });
+      if (!title) return next(createError(400, "Standing order title is required"));
       row.title = title;
     }
 
@@ -450,14 +443,14 @@ export const updateLandlordStandingOrder = async (req, res, next) => {
     if (Object.prototype.hasOwnProperty.call(req.body || {}, "amount")) {
       const amount = Number(req.body?.amount || 0);
       if (!Number.isFinite(amount) || amount <= 0) {
-        return res.status(400).json({ success: false, message: "Valid standing order amount is required" });
+        return next(createError(400, "Valid standing order amount is required"));
       }
       row.amount = round2(amount);
     }
 
     if (Object.prototype.hasOwnProperty.call(req.body || {}, "frequency")) {
       if (hasProcessedRuns && normalizeFrequency(req.body?.frequency) !== normalizeFrequency(row.frequency)) {
-        return res.status(400).json({ success: false, message: "Frequency cannot be changed after processed runs exist. Create a new standing order for the new schedule." });
+        return next(createError(400, "Frequency cannot be changed after processed runs exist. Create a new standing order for the new schedule."));
       }
       row.frequency = normalizeFrequency(req.body?.frequency);
     }
@@ -472,9 +465,9 @@ export const updateLandlordStandingOrder = async (req, res, next) => {
 
     if (Object.prototype.hasOwnProperty.call(req.body || {}, "startDate")) {
       const startDate = parseDate(req.body?.startDate, null);
-      if (!startDate) return res.status(400).json({ success: false, message: "Valid start date is required" });
+      if (!startDate) return next(createError(400, "Valid start date is required"));
       if (hasProcessedRuns && normalizeToStartOfDay(startDate)?.getTime() !== normalizeToStartOfDay(row.startDate)?.getTime()) {
-        return res.status(400).json({ success: false, message: "Start date cannot be changed after processed runs exist. Create a new standing order for the new start date." });
+        return next(createError(400, "Start date cannot be changed after processed runs exist. Create a new standing order for the new start date."));
       }
       row.startDate = startDate;
       if (!row.nextRunDate) row.nextRunDate = startDate;
@@ -483,7 +476,7 @@ export const updateLandlordStandingOrder = async (req, res, next) => {
     if (Object.prototype.hasOwnProperty.call(req.body || {}, "endDate")) {
       const endDate = parseDate(req.body?.endDate, null);
       if (endDate && row.startDate && endDate < row.startDate) {
-        return res.status(400).json({ success: false, message: "End date cannot be earlier than start date" });
+        return next(createError(400, "End date cannot be earlier than start date"));
       }
       row.endDate = endDate;
     }
@@ -492,7 +485,7 @@ export const updateLandlordStandingOrder = async (req, res, next) => {
       const dayOfMonth = Number(req.body?.dayOfMonth || 0);
       const normalizedDay = Math.max(1, Math.min(31, dayOfMonth || row.dayOfMonth || 5));
       if (hasProcessedRuns && normalizedDay !== Number(row.dayOfMonth || 5)) {
-        return res.status(400).json({ success: false, message: "Run day cannot be changed after processed runs exist. Create a new standing order for the new schedule." });
+        return next(createError(400, "Run day cannot be changed after processed runs exist. Create a new standing order for the new schedule."));
       }
       row.dayOfMonth = normalizedDay;
     }
@@ -500,10 +493,10 @@ export const updateLandlordStandingOrder = async (req, res, next) => {
     if (Object.prototype.hasOwnProperty.call(req.body || {}, "landlord") || Object.prototype.hasOwnProperty.call(req.body || {}, "property")) {
       const targetLandlord = Object.prototype.hasOwnProperty.call(req.body || {}, "landlord") ? req.body?.landlord : row.landlord;
       const targetProperty = Object.prototype.hasOwnProperty.call(req.body || {}, "property") ? req.body?.property : row.property;
-      if (!isValidObjectId(targetLandlord)) return res.status(400).json({ success: false, message: "Landlord is required" });
-      if (!isValidObjectId(targetProperty)) return res.status(400).json({ success: false, message: "Property is required" });
+      if (!isValidObjectId(targetLandlord)) return next(createError(400, "Landlord is required"));
+      if (!isValidObjectId(targetProperty)) return next(createError(400, "Property is required"));
       if (hasProcessedRuns && (String(targetLandlord) !== String(row.landlord) || String(targetProperty) !== String(row.property))) {
-        return res.status(400).json({ success: false, message: "Property or landlord cannot be changed after processed runs exist. Create a new standing order instead." });
+        return next(createError(400, "Property or landlord cannot be changed after processed runs exist. Create a new standing order instead."));
       }
 
       const accountingContext = await resolvePropertyAccountingContext({
@@ -526,7 +519,7 @@ export const updateLandlordStandingOrder = async (req, res, next) => {
 
     const destinationError = validateDestination({ paymentMethod: row.paymentMethod, destination: row.destination || {} });
     if (destinationError) {
-      return res.status(400).json({ success: false, message: destinationError });
+      return next(createError(400, destinationError));
     }
 
     row.updatedBy = actorUserId;
@@ -548,16 +541,16 @@ export const updateLandlordStandingOrder = async (req, res, next) => {
 export const updateLandlordStandingOrderStatus = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
 
     const status = String(req.body?.status || "").toLowerCase();
     if (!["draft", "active", "paused", "stopped"].includes(status)) {
-      return res.status(400).json({ success: false, message: "Invalid standing order status" });
+      return next(createError(400, "Invalid standing order status"));
     }
 
     const actorUserId = await resolveActorUserId(req, businessId);
     const row = await LandlordStandingOrder.findOne({ _id: req.params.id, business: businessId });
-    if (!row) return res.status(404).json({ success: false, message: "Standing order not found" });
+    if (!row) return next(createError(404, "Standing order not found"));
 
     row.status = status;
     row.updatedBy = actorUserId;
@@ -565,7 +558,7 @@ export const updateLandlordStandingOrderStatus = async (req, res, next) => {
     if (status === "active") {
       const destinationError = validateDestination({ paymentMethod: row.paymentMethod, destination: row.destination || {} });
       if (destinationError) {
-        return res.status(400).json({ success: false, message: destinationError });
+        return next(createError(400, destinationError));
       }
       row.nextRunDate = serializeStandingOrder(row).nextEligiblePeriod?.dueDate || row.startDate || new Date();
     }
@@ -587,40 +580,37 @@ export const updateLandlordStandingOrderStatus = async (req, res, next) => {
 export const runLandlordStandingOrder = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
 
     const actorUserId = await resolveActorUserId(req, businessId);
     const row = await LandlordStandingOrder.findOne({ _id: req.params.id, business: businessId });
-    if (!row) return res.status(404).json({ success: false, message: "Standing order not found" });
+    if (!row) return next(createError(404, "Standing order not found"));
 
     if (String(row.status || "").toLowerCase() !== "active") {
-      return res.status(400).json({ success: false, message: "Only active standing orders can be processed. Activate this standing order first." });
+      return next(createError(400, "Only active standing orders can be processed. Activate this standing order first."));
     }
 
     if (!isValidObjectId(row.property) || !isValidObjectId(row.landlord)) {
-      return res.status(400).json({ success: false, message: "Standing order must have a valid property and landlord before it can run." });
+      return next(createError(400, "Standing order must have a valid property and landlord before it can run."));
     }
 
     const selectedPeriod = resolveSelectedScheduleItem(row, req.body || {});
     if (!selectedPeriod) {
-      return res.status(400).json({
-        success: false,
-        message: "No eligible standing order period is available to run. Future periods and already processed periods are blocked.",
-      });
+      return next(createError(400, "No eligible standing order period is available to run. Future periods and already processed periods are blocked."));
     }
 
     const alreadyProcessed = getActiveRunHistory(row.runHistory, row.frequency).some(
       (item) => String(item?.periodKey || getPeriodKey(item?.dueDate || item?.runDate, row.frequency)) === selectedPeriod.periodKey
     );
     if (alreadyProcessed) {
-      return res.status(400).json({ success: false, message: `Standing order already processed for ${selectedPeriod.periodLabel}.` });
+      return next(createError(400, `Standing order already processed for ${selectedPeriod.periodLabel}.`));
     }
 
     if (row.endDate && normalizeToStartOfDay(selectedPeriod.periodStart) > normalizeToEndOfDay(row.endDate)) {
       row.status = "stopped";
       row.nextRunDate = null;
       await row.save();
-      return res.status(400).json({ success: false, message: "This standing order is already past its end date." });
+      return next(createError(400, "This standing order is already past its end date."));
     }
 
     const closedPeriod = await isPeriodClosedByProcessedStatement({
@@ -632,15 +622,12 @@ export const runLandlordStandingOrder = async (req, res, next) => {
     });
 
     if (closedPeriod) {
-      return res.status(400).json({
-        success: false,
-        message: `Cannot process ${selectedPeriod.periodLabel} because that statement period has already been processed/closed. Reverse or reopen the affected statement first.`,
-      });
+      return next(createError(400, `Cannot process ${selectedPeriod.periodLabel} because that statement period has already been processed/closed. Reverse or reopen the affected statement first.`));
     }
 
     const amount = Number(req.body?.amount || row.amount || 0);
     if (!Number.isFinite(amount) || amount <= 0) {
-      return res.status(400).json({ success: false, message: "Valid run amount is required" });
+      return next(createError(400, "Valid run amount is required"));
     }
 
     const accountingContext = await resolvePropertyAccountingContext({
@@ -656,7 +643,7 @@ export const runLandlordStandingOrder = async (req, res, next) => {
     });
 
     if (!remittancePayableAccount?._id || !cashbookAccount?._id) {
-      return res.status(400).json({ success: false, message: "Standing order posting accounts could not be resolved." });
+      return next(createError(400, "Standing order posting accounts could not be resolved."));
     }
 
     const destinationError = validateDestination({
@@ -664,7 +651,7 @@ export const runLandlordStandingOrder = async (req, res, next) => {
       destination: row.destination || {},
     });
     if (destinationError) {
-      return res.status(400).json({ success: false, message: destinationError });
+      return next(createError(400, destinationError));
     }
 
     const runDate = normalizeToStartOfDay(req.body?.runDate || selectedPeriod.dueDate || new Date());
@@ -786,11 +773,11 @@ export const runLandlordStandingOrder = async (req, res, next) => {
 export const reverseLandlordStandingOrderRun = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
 
     const actorUserId = await resolveActorUserId(req, businessId);
     const row = await LandlordStandingOrder.findOne({ _id: req.params.id, business: businessId });
-    if (!row) return res.status(404).json({ success: false, message: "Standing order not found" });
+    if (!row) return next(createError(404, "Standing order not found"));
 
     const runId = String(req.params.runId || req.body?.runId || "").trim();
     const periodKey = String(req.body?.periodKey || "").trim();
@@ -799,11 +786,11 @@ export const reverseLandlordStandingOrderRun = async (req, res, next) => {
       : row.runHistory.find((item) => String(item?.periodKey || getPeriodKey(item?.dueDate || item?.runDate, row.frequency) || "") === periodKey);
 
     if (!runRow) {
-      return res.status(404).json({ success: false, message: "Processed standing order run not found." });
+      return next(createError(404, "Processed standing order run not found."));
     }
 
     if (runRow.cancelledAt) {
-      return res.status(400).json({ success: false, message: "This standing order run has already been reversed." });
+      return next(createError(400, "This standing order run has already been reversed."));
     }
 
     const closedPeriod = await isPeriodClosedByProcessedStatement({
@@ -815,11 +802,7 @@ export const reverseLandlordStandingOrderRun = async (req, res, next) => {
     });
 
     if (closedPeriod) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "This run already belongs to a processed landlord statement. Reverse or reopen the affected processed statement first.",
-      });
+      return next(createError(400, "This run already belongs to a processed landlord statement. Reverse or reopen the affected processed statement first."));
     }
 
     const reason =
@@ -880,13 +863,13 @@ export const reverseLandlordStandingOrderRun = async (req, res, next) => {
 export const deleteLandlordStandingOrder = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
 
     const row = await LandlordStandingOrder.findOne({ _id: req.params.id, business: businessId });
-    if (!row) return res.status(404).json({ success: false, message: "Standing order not found" });
+    if (!row) return next(createError(404, "Standing order not found"));
 
     if (Array.isArray(row.runHistory) && row.runHistory.length > 0) {
-      return res.status(400).json({ success: false, message: "Standing order with processed runs cannot be deleted. Stop it instead to preserve audit history." });
+      return next(createError(400, "Standing order with processed runs cannot be deleted. Stop it instead to preserve audit history."));
     }
 
     await LandlordStandingOrder.deleteOne({ _id: row._id, business: businessId });

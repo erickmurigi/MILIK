@@ -5,7 +5,7 @@ import { toast } from "react-toastify";
 import {
   FaBan, FaBook, FaBuilding, FaCalendarAlt, FaCheckCircle,
   FaExclamationTriangle, FaMoneyBillWave, FaPlus,
-  FaReceipt, FaRedoAlt, FaTimes,
+  FaReceipt, FaRedoAlt,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
@@ -19,6 +19,10 @@ import {
 } from "../../redux/apiCalls";
 import { useConfirm } from "../../context/ConfirmContext";
 import AppSelect from "../../components/common/AppSelect";
+import { fmtDate } from "../../utils/dates";
+import Modal from "../../components/common/Modal";
+import { inputClass, labelClass } from "../../utils/formStyles";
+import SharedStatusBadge from "../../components/common/StatusBadge";
 
 const GRN    = "#0B3B2E";
 const MONTHS = [
@@ -28,7 +32,6 @@ const MONTHS = [
 
 const round2  = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const fmtKES  = (n) => `KES ${round2(n).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
 const EMPTY_FORM = {
   amountRemitted:    "",
@@ -38,8 +41,6 @@ const EMPTY_FORM = {
   notes:             "",
 };
 
-const inputCls = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
-const labelCls = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 
 const KpiCard = ({ icon: Icon, label, value, sub, warn = false, ok = false, iconBg = GRN }) => (
   <div className={`flex items-center gap-3 border bg-white px-4 py-3 shadow-sm ${
@@ -80,37 +81,14 @@ const EmptyRows = ({ colSpan, text }) => (
   </tr>
 );
 
-const StatusBadge = ({ voided }) => (
-  <span className={`inline-block border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide ${
-    voided ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"
-  }`}>
-    {voided ? "Voided" : "Remitted"}
-  </span>
-);
-
-const Modal = ({ title, subtitle, onClose, children, footer }) => (
-  <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
-    <div className="w-full max-w-lg border border-slate-200 bg-white shadow-2xl">
-      <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 text-white" style={{ background: GRN }}>
-        <div>
-          <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
-          {subtitle && <p className="mt-0.5 text-xs font-semibold text-emerald-200">{subtitle}</p>}
-        </div>
-        <button type="button" onClick={onClose} className="p-1 text-white/70 hover:bg-white/10"><FaTimes /></button>
-      </div>
-      <div className="p-4">{children}</div>
-      {footer && (
-        <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-          {footer}
-        </div>
-      )}
-    </div>
-  </div>
-);
+const WHT_STATUS_MAP = {
+  voided:   "border-red-200 bg-red-50 text-red-700",
+  remitted: "border-emerald-200 bg-emerald-50 text-emerald-700",
+};
 
 const Field = ({ label, required, children }) => (
   <div>
-    <label className={labelCls}>{label}{required && <span className="ml-0.5 text-red-500">*</span>}</label>
+    <label className={labelClass}>{label}{required && <span className="ml-0.5 text-red-500">*</span>}</label>
     {children}
   </div>
 );
@@ -145,7 +123,7 @@ const RemittanceTable = ({ rows, showPeriod, voidingId, onVoid, canVoid }) => {
               <td className="px-2 py-1.5 text-slate-600">{fmtDate(r.paymentDate)}</td>
               <td className="px-2 py-1.5 font-mono text-[10px] text-slate-500">{r.paymentReference || "—"}</td>
               <td className="px-2 py-1.5 text-right font-extrabold text-slate-800">{fmtKES(r.amountRemitted)}</td>
-              <td className="px-2 py-1.5"><StatusBadge voided={isVoided} /></td>
+              <td className="px-2 py-1.5"><SharedStatusBadge status={isVoided ? "voided" : "remitted"} map={WHT_STATUS_MAP} /></td>
               <td className="px-2 py-1.5 text-right">
                 {!isVoided && canVoid && (
                   <button type="button" onClick={() => onVoid(r)} disabled={voidingId === r._id}
@@ -454,8 +432,7 @@ export default function WhtRemittance() {
       {/* ── Record remittance modal ───────────────────────────────────────── */}
       {showForm && (
         <Modal
-          title="Record WHT Remittance"
-          subtitle={`Filing for ${periodLabel}`}
+          title={`Record WHT Remittance — ${periodLabel}`}
           onClose={() => setShowForm(false)}
           footer={
             <>
@@ -487,13 +464,13 @@ export default function WhtRemittance() {
                 <input type="number" min="0.01" step="0.01" required
                   value={form.amountRemitted}
                   onChange={(e) => setForm((f) => ({ ...f, amountRemitted: e.target.value }))}
-                  className={inputCls} placeholder="0.00" />
+                  className={inputClass} placeholder="0.00" />
               </Field>
               <Field label="Payment Date" required>
                 <input type="date" required
                   value={form.paymentDate}
                   onChange={(e) => setForm((f) => ({ ...f, paymentDate: e.target.value }))}
-                  className={inputCls} />
+                  className={inputClass} />
               </Field>
             </div>
 
@@ -501,7 +478,7 @@ export default function WhtRemittance() {
               <input type="text"
                 value={form.paymentReference}
                 onChange={(e) => setForm((f) => ({ ...f, paymentReference: e.target.value }))}
-                className={inputCls} placeholder="e.g. PRN2026060012345" />
+                className={inputClass} placeholder="e.g. PRN2026060012345" />
             </Field>
 
             <Field label="Cashbook / Bank Account" required>

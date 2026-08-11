@@ -1,13 +1,12 @@
 import PaymentVoucher from "../../models/PaymentVoucher.js";
 import Company from "../../models/Company.js";
 import { htmlToPdf } from "../../services/pdfService.js";
+import { resolveBusinessId } from "../../utils/requestContext.js";
+import { createError } from "../../utils/error.js";
 
 const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const fmt = (n) => Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" }) : "—";
-
-const resolveBusinessId = (req) =>
-  req?.query?.business || req?.query?.company || req?.user?.company?._id || req?.user?.company || null;
 
 const CATEGORY_LABELS = {
   landlord_maintenance: "Accounts Payable – Maintenance",
@@ -22,7 +21,7 @@ const CATEGORY_LABELS = {
 export const downloadPaymentVoucherPdf = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context required" });
+    if (!businessId) return next(createError(400, "Company context required"));
 
     const [voucher, company] = await Promise.all([
       PaymentVoucher.findOne({ _id: req.params.id, business: businessId })
@@ -35,7 +34,7 @@ export const downloadPaymentVoucherPdf = async (req, res, next) => {
       Company.findById(businessId).select("companyName name logo address town phone email kraPin").lean(),
     ]);
 
-    if (!voucher) return res.status(404).json({ success: false, message: "Voucher not found" });
+    if (!voucher) return next(createError(404, "Voucher not found"));
 
     const coName = company?.companyName || company?.name || "MILIK";
     const coAddr = [company?.address || "", company?.town || ""].filter(Boolean).join(", ");

@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FaArrowDown, FaArrowUp, FaClipboardCheck, FaPlus, FaRedoAlt, FaTimes } from "react-icons/fa";
+import { FaArrowDown, FaArrowUp, FaClipboardCheck, FaPlus, FaRedoAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
 import { inventoryApi, formatMoney } from "../../services/inventoryApi";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from "../../components/PaginationBar";
+import Modal from "../../components/common/Modal";
+import { inputClass, labelClass } from "../../utils/formStyles";
 
 const ADJ_TYPES = {
   adjustment: {
@@ -32,9 +34,6 @@ const ADJ_TYPES = {
 };
 
 const MANUAL_TYPE_CSV = Object.keys(ADJ_TYPES).join(",");
-
-const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
-const inputClass = "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
 
 const TypePill = ({ type }) => {
   const info = ADJ_TYPES[type] || { label: type, color: "border-slate-200 bg-slate-50 text-slate-600" };
@@ -200,92 +199,89 @@ const InvStockAdjustments = () => {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
-          <div className="w-full max-w-md border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
-              <h2 className="text-sm font-extrabold uppercase tracking-wide">New Stock Adjustment</h2>
-              <button type="button" onClick={closeModal} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
-            </div>
-
-            <form id="adj-form" onSubmit={handleSave} className="p-4 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <AppSelect label="Location" required value={form.location} onChange={(v) => setForm((f) => ({ ...f, location: v ?? "" }))} options={locations.map((l) => ({ value: l._id, label: l.name }))} placeholder="— Select —" size="md" searchable />
-                </div>
-                <div>
-                  <AppSelect label="Product" required value={form.product} onChange={(v) => setForm((f) => ({ ...f, product: v ?? "" }))} options={products.map((p) => ({ value: p._id, label: p.name }))} placeholder="— Select —" size="md" searchable />
-                </div>
-              </div>
-
-              {form.product && form.location && (
-                <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs">
-                  {loadingBal ? (
-                    <span className="text-slate-400">Checking balance…</span>
-                  ) : (
-                    <span className="text-slate-700">
-                      Current balance:{" "}
-                      <strong className="text-[#0B3B2E]">
-                        {balance ?? 0} {selectedProduct?.unitOfMeasure || "units"}
-                      </strong>
-                    </span>
-                  )}
-                </div>
-              )}
-
-              <div>
-                <AppSelect label="Adjustment Type" required value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v ?? "" }))} options={Object.entries(ADJ_TYPES).map(([k, v]) => ({ value: k, label: v.label }))} size="md" />
-                {typeInfo && <p className="mt-1 text-[10px] text-slate-500">{typeInfo.desc}</p>}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelClass}>
-                    Quantity *
-                    <span className="ml-1 normal-case font-normal text-slate-400">(+ in / − out)</span>
-                  </label>
-                  <input
-                    type="number" step="0.001" required
-                    value={form.qty} onChange={set("qty")} placeholder="e.g. 10 or -5"
-                    className={`${inputClass} ${qtyNum > 0 ? "border-emerald-400" : qtyNum < 0 ? "border-red-400" : ""}`}
-                  />
-                  {qtyNum !== 0 && (
-                    <p className={`mt-0.5 text-[10px] font-bold ${qtyNum > 0 ? "text-emerald-600" : "text-red-600"}`}>
-                      {qtyNum > 0 ? "↑ Adding to stock" : "↓ Removing from stock"}
-                      {balance !== null && (
-                        <> → new balance:{" "}
-                          <strong>{Math.round((balance + qtyNum) * 1000) / 1000}{" "}{selectedProduct?.unitOfMeasure || ""}</strong>
-                        </>
-                      )}
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label className={labelClass}>Unit Cost (KES)</label>
-                  <input type="number" min="0" step="0.01" value={form.unitCost} onChange={set("unitCost")} placeholder="0.00" className={inputClass} />
-                </div>
-              </div>
-
-              <div>
-                <label className={labelClass}>Reason *</label>
-                <input
-                  required value={form.notes} onChange={set("notes")}
-                  placeholder="Be specific — e.g. 'Shelf count: 47 vs system 50, 3 missing'"
-                  className={inputClass}
-                />
-                <p className="mt-0.5 text-[10px] text-slate-400">
-                  Required for audit trail. Specific reasons (date, count, cause) make reconciliation easier.
-                </p>
-              </div>
-            </form>
-
-            <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+        <Modal
+          title="New Stock Adjustment"
+          onClose={closeModal}
+          footer={
+            <>
               <button type="button" onClick={closeModal} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
               <button type="submit" form="adj-form" disabled={saving} className="rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
                 {saving ? "Posting…" : "Post Adjustment"}
               </button>
+            </>
+          }
+        >
+          <form id="adj-form" onSubmit={handleSave} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <AppSelect label="Location" required value={form.location} onChange={(v) => setForm((f) => ({ ...f, location: v ?? "" }))} options={locations.map((l) => ({ value: l._id, label: l.name }))} placeholder="— Select —" size="md" searchable />
+              </div>
+              <div>
+                <AppSelect label="Product" required value={form.product} onChange={(v) => setForm((f) => ({ ...f, product: v ?? "" }))} options={products.map((p) => ({ value: p._id, label: p.name }))} placeholder="— Select —" size="md" searchable />
+              </div>
             </div>
-          </div>
-        </div>
+
+            {form.product && form.location && (
+              <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs">
+                {loadingBal ? (
+                  <span className="text-slate-400">Checking balance…</span>
+                ) : (
+                  <span className="text-slate-700">
+                    Current balance:{" "}
+                    <strong className="text-[#0B3B2E]">
+                      {balance ?? 0} {selectedProduct?.unitOfMeasure || "units"}
+                    </strong>
+                  </span>
+                )}
+              </div>
+            )}
+
+            <div>
+              <AppSelect label="Adjustment Type" required value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v ?? "" }))} options={Object.entries(ADJ_TYPES).map(([k, v]) => ({ value: k, label: v.label }))} size="md" />
+              {typeInfo && <p className="mt-1 text-[10px] text-slate-500">{typeInfo.desc}</p>}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelClass}>
+                  Quantity *
+                  <span className="ml-1 normal-case font-normal text-slate-400">(+ in / − out)</span>
+                </label>
+                <input
+                  type="number" step="0.001" required
+                  value={form.qty} onChange={set("qty")} placeholder="e.g. 10 or -5"
+                  className={`${inputClass} ${qtyNum > 0 ? "border-emerald-400" : qtyNum < 0 ? "border-red-400" : ""}`}
+                />
+                {qtyNum !== 0 && (
+                  <p className={`mt-0.5 text-[10px] font-bold ${qtyNum > 0 ? "text-emerald-600" : "text-red-600"}`}>
+                    {qtyNum > 0 ? "↑ Adding to stock" : "↓ Removing from stock"}
+                    {balance !== null && (
+                      <> → new balance:{" "}
+                        <strong>{Math.round((balance + qtyNum) * 1000) / 1000}{" "}{selectedProduct?.unitOfMeasure || ""}</strong>
+                      </>
+                    )}
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className={labelClass}>Unit Cost (KES)</label>
+                <input type="number" min="0" step="0.01" value={form.unitCost} onChange={set("unitCost")} placeholder="0.00" className={inputClass} />
+              </div>
+            </div>
+
+            <div>
+              <label className={labelClass}>Reason *</label>
+              <input
+                required value={form.notes} onChange={set("notes")}
+                placeholder="Be specific — e.g. 'Shelf count: 47 vs system 50, 3 missing'"
+                className={inputClass}
+              />
+              <p className="mt-0.5 text-[10px] text-slate-400">
+                Required for audit trail. Specific reasons (date, count, cause) make reconciliation easier.
+              </p>
+            </div>
+          </form>
+        </Modal>
       )}
     </InventoryShell>
   );

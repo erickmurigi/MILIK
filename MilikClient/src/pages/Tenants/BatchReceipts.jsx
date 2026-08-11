@@ -9,10 +9,11 @@ import {
   FaListAlt,
   FaMobileAlt,
   FaReceipt,
-  FaSpinner,
   FaSquare,
   FaTimesCircle,
 } from "react-icons/fa";
+import Spinner from "../../components/common/Spinner";
+import { fmtDate } from "../../utils/dates";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { adminRequests } from "../../utils/requestMethods";
@@ -37,8 +38,6 @@ const METHODS = [
 
 const fmt = (v) =>
   Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("en-GB") : "—");
 
 const today = new Date();
 const DEFAULT_SHARED = {
@@ -474,7 +473,7 @@ const BatchReceipts = () => {
                   disabled={colLoading}
                   className="flex h-[20px] items-center gap-0.5 border border-slate-200 bg-white px-1.5 text-[9px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition"
                 >
-                  {colLoading && <FaSpinner className="animate-spin" size={7} />}
+                  {colLoading && <Spinner size="sm" />}
                   {colLoading ? "Loading…" : "Refresh"}
                 </button>
                 <span className="ml-auto text-[11px] text-slate-400">
@@ -535,7 +534,7 @@ const BatchReceipts = () => {
                     {colLoading ? (
                       <tr>
                         <td colSpan={8} className="py-14 text-center text-slate-400">
-                          <FaSpinner className="inline animate-spin mr-2" size={14} /> Loading M-Pesa collections…
+                          <Spinner /> Loading M-Pesa collections…
                         </td>
                       </tr>
                     ) : filteredCollections.length === 0 ? (
@@ -869,7 +868,7 @@ const BatchReceipts = () => {
             className="flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-6 py-2 text-[13px] font-black text-white shadow hover:bg-[#0d4a38] disabled:cursor-not-allowed disabled:opacity-40 transition"
           >
             {submitting
-              ? <><FaSpinner className="animate-spin" size={11} /> Posting…</>
+              ? <><Spinner size="sm" /> Posting…</>
               : <><FaReceipt size={11} /> Post {selectedCount > 0 ? selectedCount : ""} Receipt{selectedCount !== 1 ? "s" : ""}</>
             }
           </button>

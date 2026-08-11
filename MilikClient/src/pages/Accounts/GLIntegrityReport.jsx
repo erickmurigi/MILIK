@@ -25,11 +25,9 @@ import {
 } from "../../redux/apiCalls";
 import { useConfirm } from "../../context/ConfirmContext";
 import AppSelect from "../../components/common/AppSelect";
+import { fmtDate } from "../../utils/dates";
 
 const GRN = "#0B3B2E";
-
-const fmtDate = (d) =>
-  d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 const fmtTs = (d) =>
   d ? new Date(d).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
 const fmtNum = (n) =>

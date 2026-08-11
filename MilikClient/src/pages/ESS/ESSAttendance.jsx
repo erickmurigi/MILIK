@@ -2,10 +2,10 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { essRequests } from '../../utils/essRequests';
 import { useTabState } from '../../hooks/useTabState';
 import AppSelect from '../../components/common/AppSelect';
+import { fmtDate } from '../../utils/dates';
 import './ESS.css';
 
 const fmtTime  = (d) => d ? new Date(d).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' }) : '—';
-const fmtDate  = (d) => d ? new Date(d).toLocaleDateString('en-KE', { weekday: 'short', day: '2-digit', month: 'short' }) : '—';
 const fmtDuration = (mins) => {
   if (!mins) return '—';
   const h = Math.floor(mins / 60);

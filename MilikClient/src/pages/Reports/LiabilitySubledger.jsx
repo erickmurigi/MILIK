@@ -7,6 +7,7 @@ import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "..
 import { getLiabilitySubledger } from "../../redux/apiCalls";
 import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { fmtDate } from "../../utils/dates";
 import {
   FaBuilding, FaChevronDown, FaChevronRight, FaFileDownload, FaSyncAlt,
   FaLayerGroup, FaUser, FaCalendarAlt, FaExclamationTriangle,
@@ -28,10 +29,6 @@ const today = () => new Date().toISOString().split("T")[0];
 const fmt = (v) =>
   Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const fmtDate = (d) => {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" });
-};
 
 // ─── CSV ──────────────────────────────────────────────────────────────────────
 const exportCSV = ({ tab, groups, total, accountCode, accountName, asOf }) => {

@@ -9,9 +9,7 @@ import PrintLetterhead from '../../components/HR/PrintLetterhead';
 import { selectCurrentCompany } from '../../redux/selectors';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
-
-const fmtDate = (d) =>
-  d ? new Date(d).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+import { fmtDate } from '../../utils/dates';
 
 const STATUS_COLORS = {
   Active:     'text-emerald-700 bg-emerald-50 border-emerald-200',

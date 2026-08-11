@@ -50,6 +50,8 @@ import {
 } from "../../utils/companyModules";
 import { selectCurrentUser } from "../../redux/selectors";
 import AppSelect from "../../components/common/AppSelect";
+import StatusBadge from "../../components/common/StatusBadge";
+import { fmtDate } from "../../utils/dates";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const DEFAULT_PAGE_SIZE = 25;
@@ -66,11 +68,6 @@ const normalizeId = (value) => {
 const initialsFromName = (value = "") =>
   String(value || "").split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p.charAt(0).toUpperCase()).join("") || "M";
 
-const formatDate = (value, opts = { year: "numeric", month: "short", day: "numeric" }) => {
-  if (!value) return "-";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "-" : d.toLocaleDateString("en-KE", opts);
-};
 
 const normalizeText = (value) => String(value ?? "").trim().toLowerCase();
 
@@ -217,9 +214,6 @@ const ReadinessBar = ({ score, showLabel = false }) => (
   </div>
 );
 
-const StatusBadge = ({ label }) => (
-  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black ${getStatusTone(label)}`}>{label}</span>
-);
 
 const STAT_ACCENTS = {
   emerald: { dot: "bg-[#0B3B2E]",   icon: "text-white", border: "border-slate-200", val: "text-[#0B3B2E]"  },
@@ -403,10 +397,10 @@ const OverviewPanel = ({ companies, users, companyReadiness, companyUserCounts, 
                 <CompanyAvatar company={company} />
                 <div className="flex-1 min-w-0">
                   <div className="truncate text-xs font-black text-slate-900">{company.companyName}</div>
-                  <div className="text-[11px] text-slate-400">{formatDate(company.createdAt)}</div>
+                  <div className="text-[11px] text-slate-400">{fmtDate(company.createdAt)}</div>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <StatusBadge label={getCompanyStatusLabel(company)} />
+                  <StatusBadge status={getCompanyStatusLabel(company)} />
                   <button onClick={() => onOpenWorkspace(company)} className="text-[11px] font-bold text-[#FF8C00] hover:underline">Open →</button>
                 </div>
               </div>
@@ -431,7 +425,7 @@ const OverviewPanel = ({ companies, users, companyReadiness, companyUserCounts, 
                   <UserAvatar user={user} />
                   <div className="flex-1 min-w-0">
                     <div className="truncate text-xs font-black text-slate-900">{name}</div>
-                    <div className="text-[11px] text-slate-400">{formatDate(user?.createdAt)}</div>
+                    <div className="text-[11px] text-slate-400">{fmtDate(user?.createdAt)}</div>
                   </div>
                   <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${getRoleBadgeColors(user)}`}>{getUserRoleLabel(user)}</span>
                 </div>
@@ -571,7 +565,7 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, pendin
                     </div>
                   </td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-600">{getCompanyOperatingModeLabel(company?.companyMode)}</td>
-                  <td className="px-3 py-1.5 border-r border-gray-100"><StatusBadge label={statusLabel} /></td>
+                  <td className="px-3 py-1.5 border-r border-gray-100"><StatusBadge status={statusLabel} /></td>
                   <td className="px-3 py-1.5 border-r border-gray-100">
                     <ReadinessBar score={readiness.score} />
                     {readiness.missing.length > 0 && (
@@ -594,7 +588,7 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, pendin
                       <span>{[company.town, company.country].filter(Boolean).join(", ") || "—"}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-400 whitespace-nowrap">{formatDate(company.updatedAt || company.createdAt)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-400 whitespace-nowrap">{fmtDate(company.updatedAt || company.createdAt)}</td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-right">
                     {isPending ? (
                       <FaRedoAlt className="ml-auto animate-spin text-[11px] text-slate-400" />
@@ -730,8 +724,8 @@ const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelecte
                   <td className="px-3 py-1.5 border-r border-gray-100 text-center">
                     <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-black text-slate-700">{assignedCompanyIds.length}</span>
                   </td>
-                  <td className="px-3 py-1.5 border-r border-gray-100"><StatusBadge label={lockState} /></td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-400 whitespace-nowrap">{formatDate(user?.createdAt)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100"><StatusBadge status={lockState} /></td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-400 whitespace-nowrap">{fmtDate(user?.createdAt)}</td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-right">
                     <ActionMenu items={[
                       { label: "Edit", icon: FaEdit, onClick: () => onEditUser(user) },
@@ -816,7 +810,7 @@ const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWor
                       <div className="font-black text-slate-900 leading-tight">{company.companyName}</div>
                     </div>
                   </td>
-                  <td className="px-3 py-1.5 border-r border-gray-100"><StatusBadge label={spotlightLabel} /></td>
+                  <td className="px-3 py-1.5 border-r border-gray-100"><StatusBadge status={spotlightLabel} /></td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-600">{getCompanyOperatingModeLabel(company.companyMode)}</td>
                   <td className="px-3 py-1.5 border-r border-gray-100"><ReadinessBar score={readiness.score} showLabel /></td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-center">
@@ -825,7 +819,7 @@ const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWor
                   <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-500">
                     {readiness.missing.length ? readiness.missing.slice(0, 3).join(", ") + (readiness.missing.length > 3 ? ` +${readiness.missing.length - 3}` : "") : <span className="text-emerald-600 font-semibold">No gaps</span>}
                   </td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-400 whitespace-nowrap">{formatDate(company.updatedAt || company.createdAt)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-400 whitespace-nowrap">{fmtDate(company.updatedAt || company.createdAt)}</td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-right">
                     <div className="flex justify-end gap-1.5">
                       <button onClick={() => onOpenWorkspace(company)} className="inline-flex items-center gap-1 rounded-lg border border-[#0B3B2E]/30 bg-[#EDF5F1] px-2.5 py-1 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#EDF5F1]/80 transition">
@@ -922,7 +916,7 @@ const AuditPanel = ({ companies, users, companyMap }) => {
               <tr><td colSpan={4}><EmptyState icon={FaHistory} title="No platform activity found" body="Events will appear here as the system is used" /></td></tr>
             ) : pageRows.map((event) => (
               <tr key={event.id} className="group border-b border-slate-100 odd:bg-white even:bg-slate-50/50 hover:bg-[#EDF5F1]/70 transition">
-                <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-400 whitespace-nowrap">{formatDate(event.timestamp)}</td>
+                <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-400 whitespace-nowrap">{fmtDate(event.timestamp)}</td>
                 <td className="px-3 py-1.5 border-r border-gray-100 font-black text-slate-900">{event.title}</td>
                 <td className="px-3 py-1.5 border-r border-gray-100">
                   <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${event.type === "Company" ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-orange-100 text-orange-700 border-orange-200"}`}>

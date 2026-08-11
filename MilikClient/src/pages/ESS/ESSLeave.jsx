@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { essRequests } from '../../utils/essRequests';
 import { useTabState } from '../../hooks/useTabState';
 import AppSelect from '../../components/common/AppSelect';
+import { useConfirm } from '../../context/ConfirmContext';
+import { fmtDate } from '../../utils/dates';
 import './ESS.css';
-
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
 const STATUS_BADGE = {
   Pending:   'ess-badge-yellow',
@@ -16,6 +16,7 @@ const STATUS_BADGE = {
 const today = new Date().toISOString().slice(0, 10);
 
 export default function ESSLeave() {
+  const confirm = useConfirm();
   const [applications, setApplications] = useState([]);
   const [balances,     setBalances]     = useState([]);
   const [leaveTypes,   setLeaveTypes]   = useState([]);
@@ -106,7 +107,7 @@ export default function ESSLeave() {
   };
 
   const handleCancel = useCallback(async (id) => {
-    if (!window.confirm('Cancel this leave application?')) return;
+    if (!(await confirm({ title: 'Cancel Leave', message: 'Cancel this leave application?', confirmText: 'Cancel Leave', isDangerous: true }))) return;
     try {
       await essRequests.patch(`hr/ess/my/leave-applications/${id}/cancel`);
       load();

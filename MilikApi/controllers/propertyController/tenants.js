@@ -20,6 +20,8 @@ import MeterReading from "../../models/MeterReading.js";
 import { createTenantInvoiceRecord, resolveLeaseAgreementFeeIncomeAccount } from "./tenantInvoices.js";
 import { isAgreementNumberDuplicateError, saveLeaseWithUniqueAgreementNumber } from "../../services/agreementNumberService.js";
 import { logAuditEvent } from "../../utils/auditLogger.js";
+import { resolveBusinessId } from "../../utils/requestContext.js";
+import { createError } from "../../utils/error.js";
 
 
 const ACTIVE_TENANT_STATUSES = ["active", "overdue"];
@@ -186,14 +188,6 @@ const syncTenantAssignedUnitOccupancy = async ({
 };
 
 
-const resolveBusinessId = (req) => {
-  return (
-    (req.user?.isSystemAdmin && (req.body?.business || req.query?.business)) ||
-    req.user?.company ||
-    req.user?.business ||
-    null
-  );
-};
 
 const normalizeString = (value) => (typeof value === "string" ? value.trim() : value);
 
@@ -701,18 +695,12 @@ export const createTenant = async (req, res, next) => {
     const leaseType = normalizeLower(req.body.leaseType || "at_will");
 
     if (!["at_will", "fixed"].includes(leaseType)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid lease type. Use at_will or fixed",
-      });
+      return next(createError(400, "Invalid lease type. Use at_will or fixed"));
     }
 
     if (leaseType === "fixed") {
       if (!req.body.moveOutDate) {
-        return res.status(400).json({
-          success: false,
-          message: "Move-out date is required for fixed leases",
-        });
+        return next(createError(400, "Move-out date is required for fixed leases"));
       }
 
       const moveInDate = new Date(req.body.moveInDate);
@@ -723,28 +711,18 @@ export const createTenant = async (req, res, next) => {
         Number.isNaN(moveOutDate.getTime()) ||
         moveOutDate <= moveInDate
       ) {
-        return res.status(400).json({
-          success: false,
-          message: "Move-out date must be after move-in date for fixed leases",
-        });
+        return next(createError(400, "Move-out date must be after move-in date for fixed leases"));
       }
     }
 
     const businessId = resolveBusinessId(req);
 
     if (!businessId) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Business context is required to create a tenant. Please ensure you are logged in with a company account.",
-      });
+      return next(createError(400, "Business context is required to create a tenant. Please ensure you are logged in with a company account."));
     }
 
     if (!req.body.unit || !mongoose.Types.ObjectId.isValid(req.body.unit)) {
-      return res.status(400).json({
-        success: false,
-        message: "A valid unit is required",
-      });
+      return next(createError(400, "A valid unit is required"));
     }
 
     const requestedUnits = buildRequestedTenantUnits({
@@ -780,10 +758,7 @@ export const createTenant = async (req, res, next) => {
     const normalizedTenantCode = normalizeString(req.body.tenantCode);
 
     if (!normalizedName) {
-      return res.status(400).json({
-        success: false,
-        message: "Tenant name is required",
-      });
+      return next(createError(400, "Tenant name is required"));
     }
 
     const tenantDuplicateOr = [
@@ -796,17 +771,11 @@ export const createTenant = async (req, res, next) => {
 
     if (duplicateTenant) {
       if (duplicateTenant.idNumber === normalizedIdNumber) {
-        return res.status(400).json({
-          success: false,
-          message: "Tenant ID number already exists in this company",
-        });
+        return next(createError(400, "Tenant ID number already exists in this company"));
       }
 
       if (normalizedTenantCode && duplicateTenant.tenantCode === normalizedTenantCode) {
-        return res.status(400).json({
-          success: false,
-          message: "Tenant code already exists in this company",
-        });
+        return next(createError(400, "Tenant code already exists in this company"));
       }
     }
 
@@ -821,10 +790,7 @@ export const createTenant = async (req, res, next) => {
     if (createLeaseFeeInvoice && leaseFeeAmount > 0) {
       const landlordId = getPrimaryLandlordIdFromProperty(unit?.property);
       if (!landlordId) {
-        return res.status(400).json({
-          success: false,
-          message: "Cannot create lease/agreement fee because the property has no assigned landlord.",
-        });
+        return next(createError(400, "Cannot create lease/agreement fee because the property has no assigned landlord."));
       }
 
       const requestedChartAccountValue =
@@ -840,10 +806,7 @@ export const createTenant = async (req, res, next) => {
           chartAccountValue: requestedChartAccountValue,
         });
       } catch (accountError) {
-        return res.status(accountError?.statusCode || 400).json({
-          success: false,
-          message: accountError?.message || "Lease/agreement fee income account not found. Configure Lease / Agreement Fee Income Account under Accounting Defaults.",
-        });
+        return next(createError(accountError?.statusCode || 400, accountError?.message || "Lease/agreement fee income account not found. Configure Lease / Agreement Fee Income Account under Accounting Defaults."));
       }
     }
 
@@ -977,23 +940,27 @@ export const createTenant = async (req, res, next) => {
       });
     }
 
-    logAuditEvent({
-      req,
-      company: businessId,
-      action: "tenants.create",
-      category: "property",
-      severity: "important",
-      targetType: "Tenant",
-      targetId: savedTenant._id,
-      targetName: tenantLabel(savedTenant),
-      message: `Created tenant ${tenantLabel(savedTenant)}`,
-      metadata: {
-        tenantCode: savedTenant.tenantCode,
-        unit: savedTenant.unit,
-        additionalUnits: savedTenant.additionalUnits,
-        rent: savedTenant.rent,
-      },
-    }).catch(err => console.error("Audit log failed:", err));
+    try {
+      await logAuditEvent({
+        req,
+        company: businessId,
+        action: "tenants.create",
+        category: "property",
+        severity: "important",
+        targetType: "Tenant",
+        targetId: savedTenant._id,
+        targetName: tenantLabel(savedTenant),
+        message: `Created tenant ${tenantLabel(savedTenant)}`,
+        metadata: {
+          tenantCode: savedTenant.tenantCode,
+          unit: savedTenant.unit,
+          additionalUnits: savedTenant.additionalUnits,
+          rent: savedTenant.rent,
+        },
+      });
+    } catch (err) {
+      console.error("Audit log failed:", err);
+    }
 
     return res.status(201).json({
       success: true,
@@ -1006,43 +973,25 @@ export const createTenant = async (req, res, next) => {
 
     if (err?.code === 11000) {
       if (isAgreementNumberDuplicateError(err)) {
-        return res.status(409).json({
-          success: false,
-          message: "Tenant could not be created because the lease agreement number already exists. Please try again.",
-        });
+        return next(createError(409, "Tenant could not be created because the lease agreement number already exists. Please try again."));
       }
 
       const duplicateField = Object.keys(err.keyPattern || {})[0] || "field";
 
       if (duplicateField === "idNumber") {
-        return res.status(400).json({
-          success: false,
-          message: "Tenant ID number already exists in this company",
-        });
+        return next(createError(400, "Tenant ID number already exists in this company"));
       }
 
       if (duplicateField === "tenantCode") {
-        return res.status(400).json({
-          success: false,
-          message: "Tenant code already exists in this company",
-        });
+        return next(createError(400, "Tenant code already exists in this company"));
       }
     }
 
     if (err?.name === "ValidationError") {
-      return res.status(400).json({
-        success: false,
-        message: Object.values(err.errors || {})
-          .map((error) => error?.message)
-          .filter(Boolean)
-          .join("; ") || "Tenant validation failed",
-      });
+      return next(createError(400, Object.values(err.errors || {}).map((error) => error?.message).filter(Boolean).join("; ") || "Tenant validation failed"));
     }
 
-    return res.status(500).json({
-      success: false,
-      message: err.message || "Failed to create tenant",
-    });
+    next(err);
   }
 };
 
@@ -1053,10 +1002,7 @@ export const getTenants = async (req, res, next) => {
     const businessId = resolveBusinessId(req);
 
     if (!businessId) {
-      return res.status(400).json({
-        success: false,
-        message: "Business context is required to fetch tenants",
-      });
+      return next(createError(400, "Business context is required to fetch tenants"));
     }
 
     const filter = { business: businessId };
@@ -1075,10 +1021,7 @@ export const getTenants = async (req, res, next) => {
     if (unit) {
       const unitDoc = await Unit.findOne({ _id: unit, business: businessId }).select("_id").lean();
       if (!unitDoc) {
-        return res.status(404).json({
-          success: false,
-          message: "Selected unit was not found",
-        });
+        return next(createError(404, "Selected unit was not found"));
       }
       filter.unit = unit;
     } else if (propertyId && mongoose.Types.ObjectId.isValid(String(propertyId))) {
@@ -1212,7 +1155,7 @@ export const getTenant = async (req, res, next) => {
       .lean();
 
     if (!tenant) {
-      return res.status(404).json({ success: false, message: "Tenant not found" });
+      return next(createError(404, "Tenant not found"));
     }
 
     const foPropertyIds = await getFieldOfficerPropertyIds(req);
@@ -1221,7 +1164,7 @@ export const getTenant = async (req, res, next) => {
       const unitId = tenant.unit?._id || tenant.unit;
       const unitDoc = unitId ? await Unit.findById(unitId, { property: 1 }).lean() : null;
       if (!unitDoc || !foSet.has(String(unitDoc.property))) {
-        return res.status(403).json({ success: false, message: "Not authorized to access this tenant" });
+        return next(createError(403, "Not authorized to access this tenant"));
       }
     }
 
@@ -1238,10 +1181,7 @@ export const updateTenant = async (req, res, next) => {
 
     const access = authorizeTenantAccess(req, tenant);
     if (!access.allowed) {
-      return res.status(access.status).json({
-        success: false,
-        message: access.message.replace("access", "update"),
-      });
+      return next(createError(access.status, access.message.replace("access", "update")));
     }
 
     const normalizedPayload = { ...req.body };
@@ -1286,7 +1226,7 @@ export const updateTenant = async (req, res, next) => {
     if (normalizedPayload.depositAmount !== undefined) {
       const depositAmount = Number(normalizedPayload.depositAmount || 0);
       if (depositAmount < 0) {
-        return res.status(400).json({ success: false, message: "Deposit amount cannot be negative" });
+        return next(createError(400, "Deposit amount cannot be negative"));
       }
       normalizedPayload.depositAmount = depositAmount;
     }
@@ -1330,10 +1270,7 @@ export const updateTenant = async (req, res, next) => {
 
     if (normalizedPayload.unit !== undefined || normalizedPayload.additionalUnits !== undefined) {
       if (!mongoose.Types.ObjectId.isValid(requestedUnitId)) {
-        return res.status(400).json({
-          success: false,
-          message: "A valid unit is required",
-        });
+        return next(createError(400, "A valid unit is required"));
       }
 
       const requestedUnitDocs = await ensureUnitsBelongToBusiness({
@@ -1434,20 +1371,14 @@ export const updateTenant = async (req, res, next) => {
           normalizedPayload.idNumber &&
           duplicateTenant.idNumber === normalizedPayload.idNumber
         ) {
-          return res.status(400).json({
-            success: false,
-            message: "Tenant ID number already exists in this company",
-          });
+          return next(createError(400, "Tenant ID number already exists in this company"));
         }
 
         if (
           normalizedPayload.tenantCode &&
           duplicateTenant.tenantCode === normalizedPayload.tenantCode
         ) {
-          return res.status(400).json({
-            success: false,
-            message: "Tenant code already exists in this company",
-          });
+          return next(createError(400, "Tenant code already exists in this company"));
         }
       }
     }
@@ -1517,31 +1448,22 @@ export const updateTenant = async (req, res, next) => {
   } catch (err) {
     if (err?.code === 11000) {
       if (isAgreementNumberDuplicateError(err)) {
-        return res.status(409).json({
-          success: false,
-          message: "Tenant could not be updated because a lease agreement number conflict was detected. Please try again.",
-        });
+        return next(createError(409, "Tenant could not be updated because a lease agreement number conflict was detected. Please try again."));
       }
 
       const duplicateField = Object.keys(err.keyPattern || {})[0] || "field";
 
       if (duplicateField === "idNumber") {
-        return res.status(400).json({
-          success: false,
-          message: "Tenant ID number already exists in this company",
-        });
+        return next(createError(400, "Tenant ID number already exists in this company"));
       }
 
       if (duplicateField === "tenantCode") {
-        return res.status(400).json({
-          success: false,
-          message: "Tenant code already exists in this company",
-        });
+        return next(createError(400, "Tenant code already exists in this company"));
       }
     }
 
     if (err?.statusCode === 409 && String(err?.message || "").includes("agreement number")) {
-      return res.status(409).json({ success: false, message: err.message });
+      return next(createError(409, err.message));
     }
 
     next(err);
@@ -1555,10 +1477,7 @@ export const deleteTenant = async (req, res, next) => {
 
     const access = authorizeTenantAccess(req, tenant);
     if (!access.allowed) {
-      return res.status(access.status).json({
-        success: false,
-        message: access.message.replace("access", "delete"),
-      });
+      return next(createError(access.status, access.message.replace("access", "delete")));
     }
 
     const { summary, hasDependencies } = await getTenantDependencySummary(tenant);
@@ -1617,10 +1536,7 @@ export const updateTenantStatus = async (req, res, next) => {
 
     const access = authorizeTenantAccess(req, tenant);
     if (!access.allowed) {
-      return res.status(access.status).json({
-        success: false,
-        message: access.message,
-      });
+      return next(createError(access.status, access.message));
     }
 
     const requestedStatus = String(req.body?.status || "").toLowerCase();
@@ -1635,10 +1551,7 @@ export const updateTenantStatus = async (req, res, next) => {
     ).trim();
 
     if (!status) {
-      return res.status(400).json({
-        success: false,
-        message: "Tenant status is required",
-      });
+      return next(createError(400, "Tenant status is required"));
     }
 
     const currentAssignedUnitIds = getTenantAssignedUnitIds(tenant);
@@ -1649,19 +1562,13 @@ export const updateTenantStatus = async (req, res, next) => {
     if (status === "terminated") {
       const effectiveTerminationDate = terminationDate ? new Date(terminationDate) : new Date();
       if (Number.isNaN(effectiveTerminationDate.getTime())) {
-        return res.status(400).json({
-          success: false,
-          message: "A valid termination date is required",
-        });
+        return next(createError(400, "A valid termination date is required"));
       }
 
       const today = new Date();
       today.setHours(23, 59, 59, 999);
       if (effectiveTerminationDate.getTime() > today.getTime()) {
-        return res.status(400).json({
-          success: false,
-          message: "Future-dated termination is not supported. Use today or an earlier date.",
-        });
+        return next(createError(400, "Future-dated termination is not supported. Use today or an earlier date."));
       }
 
       updateData.moveOutDate = effectiveTerminationDate;
@@ -1676,10 +1583,7 @@ export const updateTenantStatus = async (req, res, next) => {
       !shouldTenantOccupyUnits(tenant)
     ) {
       if (!currentAssignedUnitIds.length) {
-        return res.status(400).json({
-          success: false,
-          message: "Cannot activate tenant because no unit is assigned",
-        });
+        return next(createError(400, "Cannot activate tenant because no unit is assigned"));
       }
 
       const requestedUnitDocs = await ensureUnitsBelongToBusiness({
@@ -1768,10 +1672,7 @@ export const getTenantPayments = async (req, res, next) => {
 
     const access = authorizeTenantAccess(req, tenant);
     if (!access.allowed) {
-      return res.status(access.status).json({
-        success: false,
-        message: access.message,
-      });
+      return next(createError(access.status, access.message));
     }
 
     const foPropertyIds = await getFieldOfficerPropertyIds(req);
@@ -1779,7 +1680,7 @@ export const getTenantPayments = async (req, res, next) => {
       const foSet = new Set(foPropertyIds.map(String));
       const unitDoc = tenant.unit ? await Unit.findById(tenant.unit, { property: 1 }).lean() : null;
       if (!unitDoc || !foSet.has(String(unitDoc.property))) {
-        return res.status(403).json({ success: false, message: "Not authorized to access this tenant" });
+        return next(createError(403, "Not authorized to access this tenant"));
       }
     }
 
@@ -1815,10 +1716,7 @@ export const getTenantBalance = async (req, res, next) => {
 
     const access = authorizeTenantAccess(req, tenant);
     if (!access.allowed) {
-      return res.status(access.status).json({
-        success: false,
-        message: access.message,
-      });
+      return next(createError(access.status, access.message));
     }
 
     const foPropertyIds = await getFieldOfficerPropertyIds(req);
@@ -1826,7 +1724,7 @@ export const getTenantBalance = async (req, res, next) => {
       const foSet = new Set(foPropertyIds.map(String));
       const unitDoc = tenant.unit ? await Unit.findById(tenant.unit, { property: 1 }).lean() : null;
       if (!unitDoc || !foSet.has(String(unitDoc.property))) {
-        return res.status(403).json({ success: false, message: "Not authorized to access this tenant" });
+        return next(createError(403, "Not authorized to access this tenant"));
       }
     }
 
@@ -1928,18 +1826,12 @@ export const transferTenantUnit = async (req, res, next) => {
 
     const access = authorizeTenantAccess(req, tenant);
     if (!access.allowed) {
-      return res.status(access.status).json({
-        success: false,
-        message: access.message.replace("access", "transfer"),
-      });
+      return next(createError(access.status, access.message.replace("access", "transfer")));
     }
 
     const nextPrimaryUnitId = toObjectIdString(req.body?.newUnit || req.body?.unit);
     if (!isValidObjectIdString(nextPrimaryUnitId)) {
-      return res.status(400).json({
-        success: false,
-        message: "A valid destination unit is required",
-      });
+      return next(createError(400, "A valid destination unit is required"));
     }
 
     const keepPreviousUnitAssigned = Boolean(req.body?.keepPreviousUnitAssigned);
@@ -2063,24 +1955,15 @@ export const bulkImportTenants = async (req, res, next) => {
     const businessId = resolveBusinessId(req);
 
     if (!businessId) {
-      return res.status(400).json({
-        success: false,
-        message: "Business context is required",
-      });
+      return next(createError(400, "Business context is required"));
     }
 
     if (!Array.isArray(tenantsData) || tenantsData.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "No tenant data provided",
-      });
+      return next(createError(400, "No tenant data provided"));
     }
 
     if (tenantsData.length > 1000) {
-      return res.status(400).json({
-        success: false,
-        message: "Maximum 1000 tenants per import",
-      });
+      return next(createError(400, "Maximum 1000 tenants per import"));
     }
 
     const units = await Unit.find({ business: businessId }).lean().limit(10000).select("_id unitNumber property status isVacant rent deposit utilities").populate("property", "propertyCode landlords depositHeldBy letManage lettingFeeMode lettingFeeValue");
@@ -2419,10 +2302,7 @@ export const bulkImportTenants = async (req, res, next) => {
     });
   } catch (error) {
     console.error("Bulk import error:", error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || "Failed to process bulk import",
-    });
+    next(error);
   }
 };
 
@@ -2431,7 +2311,7 @@ export const backfillMissingLeases = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     if (!businessId) {
-      return res.status(400).json({ success: false, message: "Business context is required" });
+      return next(createError(400, "Business context is required"));
     }
 
     // Find tenants with no active/pending lease
@@ -2499,10 +2379,7 @@ export const migrateTenantCodes = async (req, res, next) => {
     const business = resolveBusinessId(req);
 
     if (!business) {
-      return res.status(400).json({
-        success: false,
-        message: "Business context is required",
-      });
+      return next(createError(400, "Business context is required"));
     }
 
     const [tenantsWithoutCodes, tenantsWithCodes] = await Promise.all([

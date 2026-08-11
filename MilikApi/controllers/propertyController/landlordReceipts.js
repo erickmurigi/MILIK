@@ -10,23 +10,11 @@ import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../serv
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { postEntry, postReversal } from "../../services/ledgerPostingService.js";
 import SequenceCounter from "../../models/SequenceCounter.js";
+import { resolveBusinessId } from "../../utils/requestContext.js";
+import { escapeRegex } from "../../utils/escapeRegex.js";
+import { parsePagination } from "../../utils/pagination.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
-const escapeRegExp = (value = "") => String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-const resolveBusinessId = (req) => {
-  const direct =
-    req?.body?.business ||
-    req?.body?.businessId ||
-    req?.body?.company ||
-    req?.query?.business ||
-    req?.query?.businessId ||
-    req?.query?.company ||
-    req?.user?.company?._id ||
-    req?.user?.company ||
-    null;
-  return isValidObjectId(direct) ? String(direct) : null;
-};
 
 const normalizePaymentMethod = (value = "") => {
   const raw = String(value || "").trim().toLowerCase();
@@ -83,7 +71,7 @@ const resolveCashbookAccount = async ({ businessId, cashbook, paymentMethod }) =
 
   const rawCashbook = String(cashbook || "").trim();
   if (rawCashbook) {
-    const safePattern = escapeRegExp(rawCashbook);
+    const safePattern = escapeRegex(rawCashbook);
     const byText = await ChartOfAccount.findOne({
       ...baseQuery,
       $and: [
@@ -203,7 +191,7 @@ const buildListFilter = (req, businessId) => {
   if (status && ["draft", "posted", "reversed"].includes(String(status))) filter.status = status;
   if (category && RECEIPT_CATEGORIES.includes(String(category))) filter.category = category;
   if (search) {
-    const pattern = escapeRegExp(String(search).trim());
+    const pattern = escapeRegex(String(search).trim());
     filter.$or = [
       { receiptNumber: { $regex: pattern, $options: "i" } },
       { referenceNumber: { $regex: pattern, $options: "i" } },
@@ -333,11 +321,10 @@ export const getLandlordReceipts = async (req, res, next) => {
     }
 
     const filter = buildListFilter(req, businessId);
-    const pageNum = Math.max(parseInt(req.query.page, 10) || 1, 1);
-    const limitNum = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const { page: pageNum, limit: limitNum, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 200 });
 
     const [receipts, total] = await Promise.all([
-      populateQuery(LandlordReceipt.find(filter).sort({ receiptDate: -1, createdAt: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum)),
+      populateQuery(LandlordReceipt.find(filter).sort({ receiptDate: -1, createdAt: -1 }).skip(skip).limit(limitNum)),
       LandlordReceipt.countDocuments(filter),
     ]);
     return res.status(200).json({ success: true, data: receipts, total, page: pageNum, pages: Math.max(1, Math.ceil(total / limitNum)) });

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { fmtDate } from "../../utils/dates";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTabState } from "../../hooks/useTabState";
 import { useDispatch, useSelector } from "react-redux";
@@ -22,9 +23,6 @@ const GRN = "#0B3B2E";
 
 const fmt = (v) =>
   Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-const fmtDate = (d) =>
-  d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
 const today     = () => new Date().toISOString().split("T")[0];
 const firstOfMonth = () =>

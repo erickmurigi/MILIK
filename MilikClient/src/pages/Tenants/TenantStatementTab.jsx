@@ -17,6 +17,7 @@
 import React, { useState, useMemo } from "react";
 import AppSelect from "../../components/common/AppSelect";
 import { FaLink } from "react-icons/fa";
+import { fmtDate } from "../../utils/dates";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const formatInputDate = (d) => {
@@ -26,10 +27,6 @@ const formatInputDate = (d) => {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
 };
 
-const fmtDate = (d) =>
-  d
-    ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })
-    : "—";
 
 const fmtMoney = (n) =>
   `KES ${Math.abs(Number(n || 0)).toLocaleString("en-KE", {

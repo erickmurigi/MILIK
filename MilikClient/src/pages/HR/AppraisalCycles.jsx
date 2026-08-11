@@ -9,6 +9,8 @@ import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 import AppSelect from "../../components/common/AppSelect";
+import { fmtDate } from '../../utils/dates';
+import { useConfirm } from '../../context/ConfirmContext';
 
 const DEFAULT_PAGE_SIZE = 25;
 const PERIOD_TYPES = ['Annual', 'Semi-Annual', 'Quarterly', 'Custom'];
@@ -20,7 +22,6 @@ const STATUS_PILL = {
 const currentYear = new Date().getFullYear();
 const YEARS = Array.from({ length: 7 }, (_, i) => currentYear - 2 + i);
 const EMPTY = { name: '', year: currentYear, periodType: 'Annual', startDate: '', endDate: '', notes: '', kpis: [] };
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
 const F  = 'h-7 rounded border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]';
 const FW = `${F} w-full`;
@@ -42,6 +43,7 @@ function WeightBar({ total }) {
 
 export default function AppraisalCycles() {
   const queryClient = useQueryClient();
+  const confirm     = useConfirm();
   const [yearFilter, setYearFilter] = useTabState('/hr/appraisals/cycles:yearFilter', '');
   const [statusFilter, setStatus]   = useTabState('/hr/appraisals/cycles:statusFilter', '');
   const [pageSize, setPageSize]      = useTabState('/hr/appraisals/cycles:pageSize', DEFAULT_PAGE_SIZE);
@@ -107,21 +109,21 @@ export default function AppraisalCycles() {
   };
 
   const doOpen = async (c) => {
-    if (!window.confirm(`Open "${c.name}"? Appraisals will be generated for all active employees.`)) return;
+    if (!(await confirm({ title: 'Open Cycle', message: `Open "${c.name}"? Appraisals will be generated for all active employees.`, confirmText: 'Open', isDangerous: false }))) return;
     setActing(c._id);
     try { const r = await adminRequests.post(`/hr/appraisal-cycles/${c._id}/open`); toast.success(r.data.message); queryClient.invalidateQueries({ queryKey: ['hr-appraisal-cycles'] }); }
     catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
     finally { setActing(null); }
   };
   const doClose = async (c) => {
-    if (!window.confirm(`Close "${c.name}"? Further scoring will be locked.`)) return;
+    if (!(await confirm({ title: 'Close Cycle', message: `Close "${c.name}"? Further scoring will be locked.`, confirmText: 'Close', isDangerous: true }))) return;
     setActing(c._id);
     try { await adminRequests.post(`/hr/appraisal-cycles/${c._id}/close`); toast.success('Cycle closed'); queryClient.invalidateQueries({ queryKey: ['hr-appraisal-cycles'] }); }
     catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
     finally { setActing(null); }
   };
   const doDelete = async (c) => {
-    if (!window.confirm(`Delete "${c.name}"? All related appraisals will be removed.`)) return;
+    if (!(await confirm({ title: 'Delete Cycle', message: `Delete "${c.name}"? All related appraisals will be removed.`, confirmText: 'Delete', isDangerous: true }))) return;
     setActing(c._id);
     try { await adminRequests.delete(`/hr/appraisal-cycles/${c._id}`); toast.success('Cycle deleted'); queryClient.invalidateQueries({ queryKey: ['hr-appraisal-cycles'] }); }
     catch (err) { toast.error(err.response?.data?.message || 'Delete failed'); }

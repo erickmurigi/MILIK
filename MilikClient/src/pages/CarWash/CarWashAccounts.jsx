@@ -14,9 +14,9 @@ import CwSmsModal from "./CwSmsModal";
 import AppSelect from "../../components/common/AppSelect";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useTabState } from "../../hooks/useTabState";
+import { fmtDate } from "../../utils/dates";
 
 const fmt = formatMoney;
-const fmtDate  = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 const fmtMonth = (v) => v ? new Date(v).toLocaleString("en-KE", { month: "long", year: "numeric" }) : "—";
 
 const daysSince = (d) => d ? Math.floor((Date.now() - new Date(d).getTime()) / 86_400_000) : null;

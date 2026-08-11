@@ -26,6 +26,8 @@ import { getProperties } from "../../redux/propertyRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { isCashbookAccount } from "../../utils/cashbookUtils";
 import { useConfirm } from "../../context/ConfirmContext";
+import { fmtDate } from "../../utils/dates";
+import { formatMoney } from "../../utils/money";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -68,14 +70,6 @@ const ensureArray = (value) => {
 
 const todayInput = () => new Date().toISOString().split("T")[0];
 
-const formatDate = (value) => {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString();
-};
-
-const formatMoney = (value) => `Ksh ${Number(value || 0).toLocaleString()}`;
 
 const actorName = (user) => {
   if (!user) return "-";
@@ -452,7 +446,7 @@ const LandlordReceipts = () => {
     <div>
       <div class="sec-label">Receipt Details</div>
       <div class="fk">Receipt Date</div>
-      <div class="fv">${esc(formatDate(receipt?.receiptDate))}</div>
+      <div class="fv">${esc(fmtDate(receipt?.receiptDate))}</div>
       <div class="fk">Payment Method</div>
       <div class="fv">${esc(String(receipt?.paymentMethod || "-").replace(/_/g," "))}</div>
       <div class="fk">Reference</div>
@@ -576,7 +570,7 @@ const LandlordReceipts = () => {
                 <tbody>
                   {receipts.map((row, index) => (
                     <tr key={row._id} className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
-                      <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-700">{formatDate(row.receiptDate)}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-700">{fmtDate(row.receiptDate)}</td>
                       <td className="px-3 py-1 border-r border-gray-100 font-bold text-blue-700">{row.receiptNumber || "-"}</td>
                       <td className="px-3 py-1 border-r border-gray-100 text-slate-700">
                         <div className="font-bold text-slate-900">{row?.landlord?.landlordName || "-"}</div>
@@ -805,7 +799,7 @@ const LandlordReceipts = () => {
                 <div className="rounded-2xl border border-slate-200 p-4">
                   <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Receipt status</p>
                   <p className="mt-2 text-xl font-black text-slate-900">{String(activeReceipt?.status || "draft").toUpperCase()}</p>
-                  <p className="mt-1 text-sm text-slate-500">Date: {formatDate(activeReceipt?.receiptDate)}</p>
+                  <p className="mt-1 text-sm text-slate-500">Date: {fmtDate(activeReceipt?.receiptDate)}</p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 p-4">
                   <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Amount</p>

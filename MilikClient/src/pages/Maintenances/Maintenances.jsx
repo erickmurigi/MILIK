@@ -31,6 +31,7 @@ import { adminRequests } from "../../utils/requestMethods";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { buildTenantOptions } from "../../utils/tenantUtils";
 import { useConfirm } from "../../context/ConfirmContext";
+import { fmtDate } from "../../utils/dates";
 
 const DEFAULT_PAGE_SIZE = 25;
 
@@ -81,12 +82,6 @@ const money = (value) =>
     maximumFractionDigits: 0,
   }).format(Number(value || 0));
 
-const formatDate = (value) => {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-};
 
 const toInputDate = (value) => {
   if (!value) return "";
@@ -375,7 +370,7 @@ const Maintenances = () => {
     const rows = filteredRequests.map((item) => [
       item?.title || "", getRequestPropertyName(item), item?.unit?.unitNumber || "",
       item?.tenant?.name || "", item?.priority || "", item?.status || "",
-      item?.assignedTo || "", item?.scheduledDate ? formatDate(item.scheduledDate) : "",
+      item?.assignedTo || "", item?.scheduledDate ? fmtDate(item.scheduledDate) : "",
       item?.estimatedCost || 0, item?.actualCost || 0, item?.description || "",
     ]);
     const csv = [["Title", "Property", "Unit", "Tenant", "Priority", "Status", "Assigned To", "Scheduled Date", "Estimated Cost", "Actual Cost", "Description"], ...rows]
@@ -491,15 +486,15 @@ const Maintenances = () => {
                           </td>
                           <td className="px-3 py-1 border-r border-gray-100">
                             <p className="font-semibold text-slate-900">{item?.assignedTo || <span className="text-slate-400 italic">Unassigned</span>}</p>
-                            <p className="text-[10px] text-slate-500 mt-0.5">Created {formatDate(item?.createdAt)}</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">Created {fmtDate(item?.createdAt)}</p>
                           </td>
                           <td className="px-3 py-1 border-r border-gray-100">
                             <p className="font-semibold text-slate-900">Est {money(item?.estimatedCost)}</p>
                             <p className="text-[10px] text-slate-500 mt-0.5">Actual {money(item?.actualCost)}</p>
                           </td>
                           <td className="px-3 py-1 border-r border-gray-100">
-                            <p className="font-semibold text-slate-900">Sched. {formatDate(item?.scheduledDate)}</p>
-                            <p className="text-[10px] text-slate-500 mt-0.5">Done {formatDate(item?.completedDate)}</p>
+                            <p className="font-semibold text-slate-900">Sched. {fmtDate(item?.scheduledDate)}</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">Done {fmtDate(item?.completedDate)}</p>
                           </td>
                           <td className="px-3 py-1 border-r border-gray-100 text-right">
                             <div className="inline-flex flex-wrap justify-end gap-1.5">

@@ -28,6 +28,7 @@ import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "..
 import { hasCompanyPermission } from "../../utils/permissions";
 import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
 import { useConfirm } from "../../context/ConfirmContext";
+import { fmtDate } from "../../utils/dates";
 import {
   createPaymentVoucher,
   deletePaymentVoucher,
@@ -445,7 +446,6 @@ const PaymentVouchers = () => {
 
     const esc = (v) => String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
     const fmtAmt = (n) => `KES ${Number(n||0).toLocaleString("en-KE",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
-    const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-KE",{day:"2-digit",month:"long",year:"numeric"}) : "—";
 
     const catLabel = categories.find(c => c.value === voucher.category)?.label || voucher.category || "—";
     const statusColor = { draft:"#92400e", approved:"#1e40af", paid:"#166534", reversed:"#92400e" }[voucher.status] || "#334155";

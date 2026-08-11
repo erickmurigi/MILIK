@@ -14,10 +14,10 @@ import { carWashApi, formatMoney } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import AppSelect from "../../components/common/AppSelect";
+import { fmtDate } from "../../utils/dates";
+import { useConfirm } from "../../context/ConfirmContext";
 
 const fmt = formatMoney;
-const fmtDate = (v) =>
-  v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
 const daysSince = (date) => {
   if (!date) return 0;
@@ -363,6 +363,7 @@ const GroupedCredits = ({ credits, canManage, onApply, onWriteOff, onUndo, onRef
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function CarWashCreditBalances() {
   const queryClient = useQueryClient();
+  const confirm     = useConfirm();
   const businessId  = useSelector((s) => s.company?.currentCompany?._id);
   const canManage   = useCarWashPermission("carwash-loyalty", "manage");
 
@@ -482,11 +483,11 @@ export default function CarWashCreditBalances() {
     onError: (err) => toast.error(err?.response?.data?.message || "Refund failed"),
   });
 
-  const handleWriteOff = useCallback((ids, amount, name) => {
+  const handleWriteOff = useCallback(async (ids, amount, name) => {
     const label = ids.length === 1 ? (name ? `for ${name}` : "") : `(${ids.length} credits)`;
-    if (!window.confirm(`Write off KES ${fmt(amount)} credit ${label} to Other Income?\n\nThis can be undone if the customer ever asks.`)) return;
+    if (!(await confirm(`Write off KES ${fmt(amount)} credit ${label} to Other Income?\n\nThis can be undone if the customer ever asks.`))) return;
     writeOffMutation.mutate(ids);
-  }, [writeOffMutation]);
+  }, [writeOffMutation, confirm]);
 
   const handleBulkWriteOff = () => {
     const ids = [...selected];
@@ -497,9 +498,9 @@ export default function CarWashCreditBalances() {
 
   const handleApply = useCallback((credit) => setApplyTarget(credit), []);
   const handleRefund = useCallback((credit) => setRefundTarget(credit), []);
-  const handleUndo   = useCallback((id) => {
-    if (window.confirm("Reverse write-off? The credit will become active again.")) undoMutation.mutate(id);
-  }, [undoMutation]);
+  const handleUndo   = useCallback(async (id) => {
+    if (await confirm("Reverse write-off? The credit will become active again.")) undoMutation.mutate(id);
+  }, [undoMutation, confirm]);
 
   return (
     <CarWashShell title="Credit Balances">

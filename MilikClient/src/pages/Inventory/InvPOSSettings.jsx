@@ -4,9 +4,7 @@ import { FaCog, FaRedoAlt, FaSave } from "react-icons/fa";
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
 import { inventoryApi } from "../../services/inventoryApi";
-
-const inputClass = "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
-const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
+import { inputClass, labelClass } from "../../utils/formStyles";
 
 const Toggle = ({ checked, onChange, label, hint }) => (
   <label className="flex cursor-pointer items-start gap-3">

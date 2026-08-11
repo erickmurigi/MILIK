@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
-import { FaEye, FaEyeSlash, FaEnvelope, FaLock, FaSpinner } from 'react-icons/fa';
+import { FaEye, FaEyeSlash, FaEnvelope, FaLock } from 'react-icons/fa';
+import Spinner from '../../components/common/Spinner';
 import { toast } from 'react-toastify';
 import { loginUser } from '../../redux/apiCalls';
 import './login.css';
@@ -299,7 +300,7 @@ function Login() {
               >
                 {loading ? (
                   <>
-                    <FaSpinner className="animate-spin" />
+                    <Spinner size="sm" />
                     Signing in...
                   </>
                 ) : (

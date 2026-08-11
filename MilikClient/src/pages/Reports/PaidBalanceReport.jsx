@@ -9,10 +9,10 @@ import { getProperties } from '../../redux/propertyRedux';
 import { FaBalanceScale, FaFileDownload, FaFilter, FaPrint, FaSyncAlt } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { hasCompanyPermission } from '../../utils/permissions';
+import { fmtDate } from '../../utils/dates';
+import { formatMoney } from '../../utils/money';
 
-const formatMoney = (value) => `KES ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 const toDateInputValue = (value) => new Date(value).toISOString().split('T')[0];
-const formatDate = (value) => (value ? new Date(value).toLocaleDateString() : '—');
 const formatPercent = (value) => (value === null || value === undefined ? '—' : `${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}%`);
 const ITEMS_PER_PAGE = 50;
 
@@ -152,7 +152,7 @@ const PaidBalanceReport = () => {
   }, [report.rows, summary.tenantCount, summary.totalOutstanding]);
 
   const filterSummary = useMemo(() => ([
-    { label: 'As At', value: formatDate(filters.asOfDate) },
+    { label: 'As At', value: fmtDate(filters.asOfDate) },
     { label: 'Property', value: filters.propertyId ? propertyNameMap.get(String(filters.propertyId)) || 'Selected property' : 'All properties' },
     { label: 'Position Filter', value: filters.status === 'all' ? 'All tenant positions' : filters.status },
     { label: 'Search', value: filters.search || 'No free-text filter' },
@@ -228,7 +228,7 @@ const PaidBalanceReport = () => {
       .owing{background:#fee2e2;color:#b91c1c}.credit{background:#d1fae5;color:#065f46}.settled{background:#f1f5f9;color:#475569}
       *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
     </style></head><body>
-    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">Paid &amp; Balance Report</div><div class="sub">As at ${formatDate(filters.asOfDate)}</div></div>
+    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">Paid &amp; Balance Report</div><div class="sub">As at ${fmtDate(filters.asOfDate)}</div></div>
     <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div><div>Prepared by: ${by}</div><div>Tenants: ${rows.length}</div></div></div>
     <div class="cards">
       <div class="card"><div class="cl">Tenants</div><div class="cv">${Number(summ.tenantCount || rows.length)}</div></div>
@@ -285,7 +285,7 @@ const PaidBalanceReport = () => {
               </p>
             </div>
             <div className="report-print-meta">
-              <div><strong>As At:</strong> {formatDate(filters.asOfDate)}</div>
+              <div><strong>As At:</strong> {fmtDate(filters.asOfDate)}</div>
               <div><strong>Generated:</strong> {printGeneratedAt}</div>
               <div><strong>Prepared by:</strong> {[currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || 'Milik Admin'}</div>
             </div>
@@ -359,8 +359,8 @@ const PaidBalanceReport = () => {
                     <td className="text-right">{formatMoney(row.penaltyBalance)}</td>
                     <td className="text-right">{formatMoney(row.depositBalance)}</td>
                     <td className="text-right">{formatMoney(row.otherBalance)}</td>
-                    <td>{formatDate(row.oldestDueDate)}</td>
-                    <td>{formatDate(row.lastPaymentDate)}</td>
+                    <td>{fmtDate(row.oldestDueDate)}</td>
+                    <td>{fmtDate(row.lastPaymentDate)}</td>
                     <td>{row.status}</td>
                   </tr>
                 ))}
@@ -438,7 +438,7 @@ const PaidBalanceReport = () => {
                 <span>Owing: {summary.owingCount || 0}</span>
                 <span>Credit: {summary.creditCount || 0}</span>
                 <span>Settled: {summary.settledCount || 0}</span>
-                {balanceInsights.earliestArrear?.tenantName && <span>Oldest due: {balanceInsights.earliestArrear.tenantName} ({formatDate(balanceInsights.earliestArrear.oldestDueDate)})</span>}
+                {balanceInsights.earliestArrear?.tenantName && <span>Oldest due: {balanceInsights.earliestArrear.tenantName} ({fmtDate(balanceInsights.earliestArrear.oldestDueDate)})</span>}
               </div>
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200">
                 <div className="min-h-0 flex-1 overflow-auto">
@@ -466,8 +466,8 @@ const PaidBalanceReport = () => {
                         <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.penaltyBalance)}</td>
                         <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.depositBalance)}</td>
                         <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.otherBalance)}</td>
-                        <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatDate(row.oldestDueDate)}</td>
-                        <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatDate(row.lastPaymentDate)}</td>
+                        <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{fmtDate(row.oldestDueDate)}</td>
+                        <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{fmtDate(row.lastPaymentDate)}</td>
                         <td className="px-2 py-1">
                           <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${row.status === 'owing' ? 'border-red-200 bg-red-100 text-red-700' : row.status === 'credit' ? 'border-emerald-200 bg-emerald-100 text-emerald-700' : 'border-slate-200 bg-slate-100 text-slate-700'}`}>
                             {row.status}

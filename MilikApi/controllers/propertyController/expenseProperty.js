@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import ExpenseProperty from "../../models/ExpenseProperty.js";
+import { createError } from "../../utils/error.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
@@ -23,17 +24,11 @@ export const createExpense = async (req, res, next) => {
     const business = resolveBusinessContext(req);
 
     if (!business) {
-      return res.status(400).json({
-        success: false,
-        message: "Business/company context is required",
-      });
+      return next(createError(400, "Business/company context is required"));
     }
 
     if (!isValidObjectId(business)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid business/company id",
-      });
+      return next(createError(400, "Invalid business/company id"));
     }
 
     const newExpense = new ExpenseProperty({
@@ -61,17 +56,11 @@ export const getExpenses = async (req, res, next) => {
     const business = resolveBusinessContext(req);
 
     if (!business) {
-      return res.status(400).json({
-        success: false,
-        message: "Business/company context is required",
-      });
+      return next(createError(400, "Business/company context is required"));
     }
 
     if (!isValidObjectId(business)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid business/company id",
-      });
+      return next(createError(400, "Invalid business/company id"));
     }
 
     const filter = { business };
@@ -100,10 +89,7 @@ export const getExpense = async (req, res, next) => {
     const business = resolveBusinessContext(req);
 
     if (!business) {
-      return res.status(400).json({
-        success: false,
-        message: "Business/company context is required",
-      });
+      return next(createError(400, "Business/company context is required"));
     }
 
     const expense = await ExpenseProperty.findOne({
@@ -114,7 +100,7 @@ export const getExpense = async (req, res, next) => {
       .populate("unit", "unitNumber");
 
     if (!expense) {
-      return res.status(404).json({ message: "Expense not found" });
+      return next(createError(404, "Expense not found"));
     }
 
     return res.status(200).json(expense);
@@ -129,10 +115,7 @@ export const updateExpense = async (req, res, next) => {
     const business = resolveBusinessContext(req);
 
     if (!business) {
-      return res.status(400).json({
-        success: false,
-        message: "Business/company context is required",
-      });
+      return next(createError(400, "Business/company context is required"));
     }
 
     const existingExpense = await ExpenseProperty.findOne({
@@ -141,7 +124,7 @@ export const updateExpense = async (req, res, next) => {
     });
 
     if (!existingExpense) {
-      return res.status(404).json({ message: "Expense not found" });
+      return next(createError(404, "Expense not found"));
     }
 
     const updatedExpense = await ExpenseProperty.findOneAndUpdate(
@@ -169,10 +152,7 @@ export const deleteExpense = async (req, res, next) => {
     const business = resolveBusinessContext(req);
 
     if (!business) {
-      return res.status(400).json({
-        success: false,
-        message: "Business/company context is required",
-      });
+      return next(createError(400, "Business/company context is required"));
     }
 
     const deleted = await ExpenseProperty.findOneAndDelete({
@@ -181,7 +161,7 @@ export const deleteExpense = async (req, res, next) => {
     });
 
     if (!deleted) {
-      return res.status(404).json({ message: "Expense not found" });
+      return next(createError(404, "Expense not found"));
     }
 
     return res.status(200).json({ message: "Expense deleted successfully" });
@@ -198,17 +178,11 @@ export const getExpenseSummary = async (req, res, next) => {
     const business = resolveBusinessContext(req);
 
     if (!business) {
-      return res.status(400).json({
-        success: false,
-        message: "Business/company context is required",
-      });
+      return next(createError(400, "Business/company context is required"));
     }
 
     if (!isValidObjectId(business)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid business/company id",
-      });
+      return next(createError(400, "Invalid business/company id"));
     }
 
     const match = { business: new mongoose.Types.ObjectId(String(business)) };
@@ -258,24 +232,15 @@ export const getPropertyExpenses = async (req, res, next) => {
     const business = resolveBusinessContext(req);
 
     if (!business) {
-      return res.status(400).json({
-        success: false,
-        message: "Business/company context is required",
-      });
+      return next(createError(400, "Business/company context is required"));
     }
 
     if (!isValidObjectId(business)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid business/company id",
-      });
+      return next(createError(400, "Invalid business/company id"));
     }
 
     if (!isValidObjectId(propertyId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid property id",
-      });
+      return next(createError(400, "Invalid property id"));
     }
 
     const filter = {

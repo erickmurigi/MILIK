@@ -174,7 +174,7 @@ export const carWashApi = {
   sendStatementEmail: async (id, statementId, payload) => unwrap(await adminRequests.post(`/carwash/accounts/${id}/statements/${statementId}/email`, payload)),
 };
 
-export const todayISO = () => new Date().toISOString().slice(0, 10);
+export { todayISO } from "../utils/dates.js";
 
 // Converts a stored relative photo path (/uploads/carwash/carpets/x.jpg)
 // to a full URL using the configured API server origin.
@@ -185,12 +185,7 @@ const _apiOrigin = (() => {
 export const photoUrl = (relativePath) =>
   relativePath ? `${_apiOrigin}${relativePath}` : "";
 
-export const formatMoney = (value) =>
-  new Intl.NumberFormat("en-KE", {
-    style: "currency",
-    currency: "KES",
-    maximumFractionDigits: 0,
-  }).format(Number(value || 0));
+export { formatMoney } from "../utils/money.js";
 
 export const normalizeListPayload = (payload, key) => {
   if (Array.isArray(payload)) return payload;

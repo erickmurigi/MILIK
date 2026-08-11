@@ -13,10 +13,7 @@ import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
 import { selectCurrentCompany } from '../../redux/selectors';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
-
-
-const fmtDate = (d) =>
-  d ? new Date(d).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+import { fmtDate } from '../../utils/dates';
 
 const fmtCurrency = (n) =>
   n != null && n !== '' && n !== 0

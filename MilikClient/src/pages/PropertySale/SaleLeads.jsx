@@ -13,6 +13,7 @@ import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import { inputClass, labelClass } from "../../utils/formStyles";
 
 const LEAD_STATUSES  = ["new", "contacted", "qualified", "site_visited", "proposal_sent", "negotiating", "converted", "lost"];
 const LEAD_SOURCES   = ["walk_in", "referral", "online", "social_media", "agent", "cold_call", "other"];
@@ -51,9 +52,7 @@ const fmt   = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit
 const isOld = (date, status) => date && !["converted", "lost"].includes(status) && new Date(date) < new Date();
 const LIMIT = 50;
 
-const inputCls  = "h-7 w-full border border-slate-200 bg-white px-2 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none";
 const selectCls = "h-7 border border-slate-200 bg-white px-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none";
-const labelCls  = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 const modalInputCls = "w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none";
 
 export default function SaleLeads() {
@@ -569,19 +568,19 @@ export default function SaleLeads() {
             </div>
             <div className="flex-1 overflow-y-auto bg-white px-5 py-4 grid grid-cols-2 gap-3">
               <div className="col-span-2">
-                <label className={labelCls}>Full Name *</label>
+                <label className={labelClass}>Full Name *</label>
                 <input value={form.fullName} onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))} className={`${modalInputCls} h-8`} />
               </div>
               <div>
-                <label className={labelCls}>Phone</label>
+                <label className={labelClass}>Phone</label>
                 <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} className={`${modalInputCls} h-8`} />
               </div>
               <div>
-                <label className={labelCls}>Email</label>
+                <label className={labelClass}>Email</label>
                 <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className={`${modalInputCls} h-8`} />
               </div>
               <div>
-                <label className={labelCls}>Source</label>
+                <label className={labelClass}>Source</label>
                 <AppSelect
                   value={form.source}
                   onChange={(v) => setForm((f) => ({ ...f, source: v ?? "" }))}
@@ -590,7 +589,7 @@ export default function SaleLeads() {
                 />
               </div>
               <div>
-                <label className={labelCls}>Status</label>
+                <label className={labelClass}>Status</label>
                 <AppSelect
                   value={form.status}
                   onChange={(v) => setForm((f) => ({ ...f, status: v ?? "" }))}
@@ -599,7 +598,7 @@ export default function SaleLeads() {
                 />
               </div>
               <div>
-                <label className={labelCls}>Assigned Agent</label>
+                <label className={labelClass}>Assigned Agent</label>
                 <AppSelect
                   value={form.assignedAgent}
                   onChange={(v) => setForm((f) => ({ ...f, assignedAgent: v ?? "" }))}
@@ -611,25 +610,25 @@ export default function SaleLeads() {
                 />
               </div>
               <div>
-                <label className={labelCls}>Next Follow-up</label>
+                <label className={labelClass}>Next Follow-up</label>
                 <input type="date" value={form.nextFollowUpDate} onChange={(e) => setForm((f) => ({ ...f, nextFollowUpDate: e.target.value }))} className={`${modalInputCls} h-8`} />
               </div>
               <div>
-                <label className={labelCls}>Budget Min (KES)</label>
+                <label className={labelClass}>Budget Min (KES)</label>
                 <input type="number" value={form.budgetMin} onChange={(e) => setForm((f) => ({ ...f, budgetMin: e.target.value }))} className={`${modalInputCls} h-8`} />
               </div>
               <div>
-                <label className={labelCls}>Budget Max (KES)</label>
+                <label className={labelClass}>Budget Max (KES)</label>
                 <input type="number" value={form.budgetMax} onChange={(e) => setForm((f) => ({ ...f, budgetMax: e.target.value }))} className={`${modalInputCls} h-8`} />
               </div>
               {form.status === "lost" && (
                 <div className="col-span-2">
-                  <label className={labelCls}>Lost Reason</label>
+                  <label className={labelClass}>Lost Reason</label>
                   <input value={form.lostReason} onChange={(e) => setForm((f) => ({ ...f, lostReason: e.target.value }))} className={`${modalInputCls} h-8`} />
                 </div>
               )}
               <div className="col-span-2">
-                <label className={labelCls}>Notes</label>
+                <label className={labelClass}>Notes</label>
                 <textarea rows={3} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className={`${modalInputCls} resize-none`} />
               </div>
             </div>
@@ -658,7 +657,7 @@ export default function SaleLeads() {
             </div>
             <div className="flex-1 overflow-y-auto bg-white px-5 py-4 grid grid-cols-2 gap-3">
               <div>
-                <label className={labelCls}>Type *</label>
+                <label className={labelClass}>Type *</label>
                 <AppSelect
                   value={actForm.type}
                   onChange={(v) => setActForm((f) => ({ ...f, type: v ?? "" }))}
@@ -667,19 +666,19 @@ export default function SaleLeads() {
                 />
               </div>
               <div>
-                <label className={labelCls}>Date & Time</label>
+                <label className={labelClass}>Date & Time</label>
                 <input type="datetime-local" value={actForm.date} onChange={(e) => setActForm((f) => ({ ...f, date: e.target.value }))} className={`${modalInputCls} h-8`} />
               </div>
               <div className="col-span-2">
-                <label className={labelCls}>Subject</label>
+                <label className={labelClass}>Subject</label>
                 <input value={actForm.subject} onChange={(e) => setActForm((f) => ({ ...f, subject: e.target.value }))} placeholder="e.g. Site visit — Westlands plot" className={`${modalInputCls} h-8`} />
               </div>
               <div>
-                <label className={labelCls}>Duration (min)</label>
+                <label className={labelClass}>Duration (min)</label>
                 <input type="number" value={actForm.durationMinutes} onChange={(e) => setActForm((f) => ({ ...f, durationMinutes: e.target.value }))} className={`${modalInputCls} h-8`} />
               </div>
               <div>
-                <label className={labelCls}>Outcome</label>
+                <label className={labelClass}>Outcome</label>
                 <AppSelect
                   value={actForm.outcome}
                   onChange={(v) => setActForm((f) => ({ ...f, outcome: v ?? "" }))}
@@ -688,15 +687,15 @@ export default function SaleLeads() {
                 />
               </div>
               <div className="col-span-2">
-                <label className={labelCls}>Notes</label>
+                <label className={labelClass}>Notes</label>
                 <textarea rows={3} value={actForm.notes} onChange={(e) => setActForm((f) => ({ ...f, notes: e.target.value }))} className={`${modalInputCls} resize-none`} />
               </div>
               <div className="col-span-2">
-                <label className={labelCls}>Next Action</label>
+                <label className={labelClass}>Next Action</label>
                 <input value={actForm.nextAction} onChange={(e) => setActForm((f) => ({ ...f, nextAction: e.target.value }))} placeholder="e.g. Send site plan brochure" className={`${modalInputCls} h-8`} />
               </div>
               <div>
-                <label className={labelCls}>Next Action Date</label>
+                <label className={labelClass}>Next Action Date</label>
                 <input type="date" value={actForm.nextActionDate} onChange={(e) => setActForm((f) => ({ ...f, nextActionDate: e.target.value }))} className={`${modalInputCls} h-8`} />
               </div>
             </div>
@@ -725,7 +724,7 @@ export default function SaleLeads() {
                 Convert <strong>{selected.fullName}</strong> to a registered buyer. A buyer profile will be created automatically.
               </p>
               <div>
-                <label className={labelCls}>ID / Passport Number</label>
+                <label className={labelClass}>ID / Passport Number</label>
                 <input value={convertId} onChange={(e) => setConvertId(e.target.value)} placeholder="National ID or Passport No." className={`${modalInputCls} h-8`} />
               </div>
             </div>

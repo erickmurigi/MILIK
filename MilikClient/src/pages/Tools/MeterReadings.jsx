@@ -26,11 +26,14 @@ import {
   FaTrash,
 } from "react-icons/fa";
 import AppSelect from "../../components/common/AppSelect";
+import StatusBadge from "../../components/common/StatusBadge";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { adminRequests } from "../../utils/requestMethods";
 import { useConfirm } from "../../context/ConfirmContext";
+import { formatMoney } from "../../utils/money";
+import { fmtDate } from "../../utils/dates";
 import {
   billMeterReading,
   createMeterReading,
@@ -81,30 +84,18 @@ const emptyFilters = {
 
 const ACTIVE_TENANT_STATUSES = new Set(["active", "overdue"]);
 
-const statusBadgeClass = {
-  draft: "bg-orange-100 text-orange-700",
-  billed: "bg-green-100 text-green-700",
-  void: "bg-slate-100 text-slate-700",
-  deleted: "bg-red-100 text-red-700",
+const METER_STATUS_MAP = {
+  draft:   "border-orange-200 bg-orange-100 text-orange-700",
+  billed:  "border-green-200 bg-green-100 text-green-700",
+  void:    "border-slate-200 bg-slate-100 text-slate-700",
+  deleted: "border-red-200 bg-red-100 text-red-700",
 };
-
-const formatMoney = (value) =>
-  new Intl.NumberFormat("en-KE", {
-    style: "currency",
-    currency: "KES",
-    maximumFractionDigits: 2,
-  }).format(Number(value || 0));
 
 const formatNumber = (value) => {
   const num = Number(value || 0);
   return Number.isFinite(num) ? num.toLocaleString() : "0";
 };
 
-const formatDate = (value) => {
-  if (!value) return "-";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString("en-GB");
-};
 
 const sanitizeDecimalInput = (value) => {
   const raw = String(value ?? "")
@@ -165,7 +156,7 @@ const buildRegisterPrintHtml = ({ company, companyName, rows, totalAmount, filte
           <td style="text-align:right;font-family:monospace">${formatNumber(row.rate)}</td>
           <td style="text-align:right;font-family:monospace;font-weight:700">${formatMoney(row.amount)}</td>
           <td>${escapeHtml(getStatusLabel(row.status))}</td>
-          <td>${escapeHtml(formatDate(row.readingDate))}</td>
+          <td>${escapeHtml(fmtDate(row.readingDate))}</td>
         </tr>
       `
     )
@@ -1328,7 +1319,7 @@ const MeterReadings = () => {
                           </td>
                           <td className="px-3 py-1 border-r border-gray-100">
                             <div className="font-bold text-blue-700">{reading.billingPeriod || "-"}</div>
-                            <div className="text-[10px] text-slate-500">{formatDate(reading.readingDate)}</div>
+                            <div className="text-[10px] text-slate-500">{fmtDate(reading.readingDate)}</div>
                           </td>
                           <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900">
                             {reading?.tenant?.name || "Auto / Not linked"}
@@ -1369,17 +1360,13 @@ const MeterReadings = () => {
                             )}
                           </td>
                           <td className="px-3 py-1 border-r border-gray-100 text-center">
-                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${
-                                statusBadgeClass[reading.status] || statusBadgeClass.draft
-                              }`}>
-                              {getStatusLabel(reading.status)}
-                            </span>
+                            <StatusBadge status={reading.status || "draft"} map={METER_STATUS_MAP} />
                             {reading.isMeterReset && (
                               <div className="mt-0.5 text-[10px] font-semibold text-purple-700">Reset</div>
                             )}
                           </td>
                           <td className="px-3 py-2 text-center text-gray-600">
-                            {formatDate(reading.createdAt || reading.readingDate)}
+                            {fmtDate(reading.createdAt || reading.readingDate)}
                           </td>
                           <td className="px-3 py-2 text-right">
                             <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>

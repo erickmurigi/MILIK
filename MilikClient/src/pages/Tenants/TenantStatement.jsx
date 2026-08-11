@@ -1,4 +1,5 @@
 import React, { useCallback, useState, useEffect, useMemo } from "react";
+import { fmtDate } from "../../utils/dates";
 import TenantStatementTab from "./TenantStatementTab";
 import { useTabState } from "../../hooks/useTabState";
 import { useEntityCache } from "../../hooks/useEntityCache";
@@ -89,7 +90,6 @@ const formatFrequency = (frequency) => {
   return "Yearly";
 };
 
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 const fmtMoney = (n) => `KES ${Number(n || 0).toLocaleString()}`;
 
 const reviewInputCls = "h-8 w-full border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-800 focus:border-[#0B3B2E] focus:outline-none";

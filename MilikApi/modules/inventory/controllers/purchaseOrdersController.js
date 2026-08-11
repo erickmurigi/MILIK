@@ -9,7 +9,7 @@ import {
 } from "../services/inventoryScope.js";
 import InvStockEntry from "../models/InvStockEntry.js";
 import { postStockEntry } from "../services/stockLedger.js";
-import { nextSequenceNumber } from "../services/sequenceService.js";
+import { nextSequenceNumber } from "../../../utils/sequenceService.js";
 import { postPurchaseReceiptLedger, reversePurchaseReceiptLedger } from "../services/inventoryAccountingService.js";
 import User from "../../../models/User.js";
 

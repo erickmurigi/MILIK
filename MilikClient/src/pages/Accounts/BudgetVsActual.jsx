@@ -12,10 +12,11 @@ import {
   deleteBudget, getChartOfAccounts,
 } from "../../redux/apiCalls";
 import AppSelect from "../../components/common/AppSelect";
+import { fmtDate } from "../../utils/dates";
+import { useConfirm } from "../../context/ConfirmContext";
 
 const GRN = "#0B3B2E";
 const fmt  = (n) => Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 const localDate = (d) => { const dt = new Date(d); return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`; };
 
 const VIEW = { LIST: "list", DETAIL: "detail" };
@@ -41,6 +42,7 @@ const varianceColor = (accountType, variance) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 const BudgetVsActual = () => {
+  const confirm     = useConfirm();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const businessId  = currentCompany?._id;
   const companyName = String(currentCompany?.companyName || currentCompany?.name || "").trim();
@@ -152,7 +154,7 @@ const BudgetVsActual = () => {
   // ── Delete budget ────────────────────────────────────────────────────────────
   const handleDelete = useCallback(async (id, e) => {
     e.stopPropagation();
-    if (!window.confirm("Delete this draft budget?")) return;
+    if (!(await confirm({ title: 'Delete Budget', message: 'Delete this draft budget?', confirmText: 'Delete', isDangerous: true }))) return;
     try {
       await deleteBudget(id, { business: businessId });
       setBudgets((p) => p.filter((b) => b._id !== id));

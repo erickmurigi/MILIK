@@ -21,6 +21,7 @@ import {
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { fmtDate } from "../../utils/dates";
 import JournalEntriesDrawer from "../../components/Accounting/JournalEntriesDrawer";
 import { useConfirm } from "../../context/ConfirmContext";
 import {
@@ -89,7 +90,6 @@ const frequencyOptions = [
 ];
 
 const money = (value) => `KES ${Number(value || 0).toLocaleString()}`;
-const formatDate = (value) => (value ? new Date(value).toLocaleDateString() : "-");
 const normalizePaymentMethod = (value) => {
   const normalized = String(value || "").toLowerCase();
   if (normalized === "mobile_money") return "mpesa";
@@ -811,11 +811,11 @@ const LandlordStandingOrders = () => {
                                 <div className="rounded-xl border border-slate-200 bg-white p-3">
                                   <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Current schedule</p>
                                   <div className="mt-3 space-y-2 text-sm text-slate-700">
-                                    <div><span className="font-bold text-slate-900">Start:</span> {formatDate(row.startDate)}</div>
-                                    <div><span className="font-bold text-slate-900">End:</span> {formatDate(row.endDate)}</div>
+                                    <div><span className="font-bold text-slate-900">Start:</span> {fmtDate(row.startDate)}</div>
+                                    <div><span className="font-bold text-slate-900">End:</span> {fmtDate(row.endDate)}</div>
                                     <div><span className="font-bold text-slate-900">Frequency:</span> {frequencyLabel(row.frequency)}</div>
                                     <div><span className="font-bold text-slate-900">Run rule:</span> {canUseDayOfMonth(row.frequency) ? `Day ${row.dayOfMonth || new Date(row.startDate || Date.now()).getDate()}` : "Weekly cycle"}</div>
-                                    <div><span className="font-bold text-slate-900">Last processed:</span> {formatDate(row.lastRunDate || row.lastRunAt)}</div>
+                                    <div><span className="font-bold text-slate-900">Last processed:</span> {fmtDate(row.lastRunDate || row.lastRunAt)}</div>
                                   </div>
                                 </div>
                                 <div className="rounded-xl border border-slate-200 bg-white p-3">
@@ -840,7 +840,7 @@ const LandlordStandingOrders = () => {
                                       <div key={item.periodKey} className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-sm">
                                         <div>
                                           <div className="font-bold text-slate-800">{item.periodLabel}</div>
-                                          <div className="text-xs text-slate-500">Due {formatDate(item.dueDate)}</div>
+                                          <div className="text-xs text-slate-500">Due {fmtDate(item.dueDate)}</div>
                                         </div>
                                         <button
                                           onClick={() =>
@@ -878,11 +878,11 @@ const LandlordStandingOrders = () => {
                                               {item.periodLabel || item.periodKey}
                                             </div>
                                             <div className={`mt-1 text-xs ${item.isCancelled ? "text-slate-500" : "text-emerald-700"}`}>
-                                              Processed {formatDate(item.runDate)} • Ref {item.referenceNo || "-"}
+                                              Processed {fmtDate(item.runDate)} • Ref {item.referenceNo || "-"}
                                             </div>
                                             {item.isCancelled && (
                                               <div className="mt-1 text-xs text-rose-600">
-                                                Reversed {formatDate(item.cancelledAt)} • {item.cancellationReason || "No reason recorded"}
+                                                Reversed {fmtDate(item.cancelledAt)} • {item.cancellationReason || "No reason recorded"}
                                               </div>
                                             )}
                                           </div>
@@ -1205,7 +1205,7 @@ const LandlordStandingOrders = () => {
                   onChange={(v) => setRunModal((prev) => ({ ...prev, periodKey: v ?? "" }))}
                   options={(runModal.row?.eligiblePeriods || []).map((item) => ({
                     value: item.periodKey,
-                    label: `${item.periodLabel} • Due ${formatDate(item.dueDate)}`,
+                    label: `${item.periodLabel} • Due ${fmtDate(item.dueDate)}`,
                   }))}
                   size="sm"
                 />
@@ -1224,7 +1224,7 @@ const LandlordStandingOrders = () => {
                   <div className="font-black text-slate-900">Selected period</div>
                   <div className="mt-2">{selectedRunPeriod?.periodLabel || "-"}</div>
                   <div className="text-xs text-slate-500">
-                    Statement window: {formatDate(selectedRunPeriod?.periodStart)} - {formatDate(selectedRunPeriod?.periodEnd)}
+                    Statement window: {fmtDate(selectedRunPeriod?.periodStart)} - {fmtDate(selectedRunPeriod?.periodEnd)}
                   </div>
                 </div>
               </div>

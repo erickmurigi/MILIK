@@ -1,4 +1,7 @@
 ﻿import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
+import { useConfirm } from "../../context/ConfirmContext";
+import { formatMoney } from "../../utils/money";
+import { fmtDate } from "../../utils/dates";
 import { buildTenantOption } from "../../utils/tenantUtils";
 import { safeId } from "../../utils/idUtils";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
@@ -108,12 +111,6 @@ const toInputDate = (date) => {
   return `${year}-${month}-${day}`;
 };
 
-const formatDate = (value) => {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString();
-};
 
 
 const getInvoiceChargeType = (invoice = {}) => {
@@ -128,7 +125,6 @@ const getInvoiceChargeType = (invoice = {}) => {
   return "rent";
 };
 
-const formatMoney = (value) => `Ksh ${Math.abs(Number(value || 0)).toLocaleString()}`;
 
 const getAllocationGroupLabel = (value = "") => {
   const normalized = String(value || "").toLowerCase();
@@ -302,6 +298,7 @@ const buildJournalEntriesForReceipt = (receipt) => {
 };
 
 const Receipts = ({ viewMode = "tenant" }) => {
+  const confirm = useConfirm();
   const { id: tenantId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -818,9 +815,11 @@ const Receipts = ({ viewMode = "tenant" }) => {
     }
     // Reversed receipts carry a full GL chain — warn before purging
     if (receipt?.isReversed) {
-      const ok = window.confirm(
-        `Receipt ${receipt.receiptNumber || receiptId} is reversed.\n\nDeleting it will permanently void both the original and reversal ledger entries. This cannot be undone.\n\nContinue?`
-      );
+      const ok = await confirm({
+        message: `Receipt ${receipt.receiptNumber || receiptId} is reversed.\n\nDeleting it will permanently void both the original and reversal ledger entries. This cannot be undone.\n\nContinue?`,
+        confirmText: "Delete",
+        isDangerous: true,
+      });
       if (!ok) return;
     }
     try {
@@ -1080,7 +1079,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const openJournalDrawer = (receipt) => {
     const context = {
       transactionNumber: receipt?.receiptNumber || receipt?.referenceNumber || "-",
-      date: formatDate(receipt?.paymentDate),
+      date: fmtDate(receipt?.paymentDate),
       tenant: getTenantName(receipt, tenants),
       property: getPropertyName(receipt, tenants),
       unit: getUnitName(receipt, tenants),
@@ -1240,7 +1239,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
     <div>
       <div class="sec-label">Receipt Details</div>
       <div class="fk">Receipt Date</div>
-      <div class="fv">${escapeHtml(formatDate(receipt.paymentDate))}</div>
+      <div class="fv">${escapeHtml(fmtDate(receipt.paymentDate))}</div>
       <div class="fk">Payment Method</div>
       <div class="fv">${escapeHtml(String(receipt.paymentMethod || '-').replaceAll('_', ' '))}</div>
       <div class="fk">Reference</div>
@@ -1709,7 +1708,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
       columns: [
         { label: "#", key: "_idx", value: (_, i) => i + 1 },
         { label: "Receipt #", key: "receiptNumber" },
-        { label: "Date", key: "paymentDate", value: (r) => formatDate(r.paymentDate) },
+        { label: "Date", key: "paymentDate", value: (r) => fmtDate(r.paymentDate) },
         { label: "Tenant", key: "_tenant", value: (r) => getTenantName(r, tenants) },
         { label: "Property", key: "_property", value: (r) => getPropertyName(r, tenants) },
         { label: "Unit", key: "_unit", value: (r) => getUnitName(r, tenants) },
@@ -1939,7 +1938,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                               {receipt.receiptNumber || "-"}
                             </button>
                           </td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{formatDate(receipt.paymentDate)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{fmtDate(receipt.paymentDate)}</td>
                           <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getTenantName(receipt, tenants)}</td>
                           <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getPropertyName(receipt, tenants)}</td>
                           <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getUnitName(receipt, tenants)}</td>
@@ -2480,7 +2479,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                     </div>
                     <div className="px-3 py-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-emerald-300/60">Date</p>
-                      <p className="mt-0.5 font-semibold text-white">{formatDate(activeReceipt.paymentDate) || "—"}</p>
+                      <p className="mt-0.5 font-semibold text-white">{fmtDate(activeReceipt.paymentDate) || "—"}</p>
                     </div>
                   </div>
                 </div>
@@ -2959,7 +2958,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                                                           </div>
                                                           <div className="mt-0.5 flex items-center gap-1 text-[10px] text-slate-400">
                                                             {invoice?.period ? <span>{invoice.period}</span> : null}
-                                                            {invoice?.dueDate ? <><span>·</span><span>Due {formatDate(invoice.dueDate)}</span></> : null}
+                                                            {invoice?.dueDate ? <><span>·</span><span>Due {fmtDate(invoice.dueDate)}</span></> : null}
                                                             {invoice?.status ? <><span>·</span><span className={isPaid ? "font-semibold text-emerald-600" : ""}>{String(invoice.status).replace(/_/g, " ")}</span></> : null}
                                                           </div>
                                                         </div>
@@ -3009,7 +3008,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                                     {(option || option?.period) ? (
                                       <div className="space-y-0.5">
                                         {option?.period ? <div className="font-semibold text-slate-700">{option.period}</div> : null}
-                                        {option?.dueDate ? <div>Due {formatDate(option.dueDate)}</div> : null}
+                                        {option?.dueDate ? <div>Due {fmtDate(option.dueDate)}</div> : null}
                                         {option?.status ? (
                                           <span className={`rounded px-1.5 py-px text-[9px] font-bold uppercase tracking-wide ${String(option.status).toLowerCase() === "paid" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
                                             {String(option.status).replace(/_/g, " ")}

@@ -116,15 +116,8 @@ export const inventoryApi = {
   updatePOSSettings: (b) => adminRequests.put("/inventory/pos-settings", b).then(unwrap),
 };
 
-export const formatMoney = (value) =>
-  new Intl.NumberFormat("en-KE", {
-    style: "currency",
-    currency: "KES",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number(value || 0));
-
-export const todayISO = () => new Date().toISOString().slice(0, 10);
+export { formatMoney } from "../utils/money.js";
+export { todayISO } from "../utils/dates.js";
 
 export const normalizeList = (raw, key) => {
   if (Array.isArray(raw)) return raw;

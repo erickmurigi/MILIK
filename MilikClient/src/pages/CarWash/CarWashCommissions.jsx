@@ -8,6 +8,7 @@ import { carWashApi, formatMoney, normalizeListPayload } from "../../services/ca
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import CarWashShell from "./CarWashShell";
 import AppSelect from "../../components/common/AppSelect";
+import StatusBadge from "../../components/common/StatusBadge";
 
 const fmtSvc = (svc, fallback = "—") => svc ? (svc.category ? `${svc.category} — ${svc.name}` : svc.name) : fallback;
 const statuses     = ["earned", "payable", "paid", "cancelled"];
@@ -20,11 +21,11 @@ const getMonthBounds = () => {
   return { from: first.toISOString().slice(0, 10), to: now.toISOString().slice(0, 10) };
 };
 
-const statusBadge = (s) => {
-  if (s === "paid")      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (s === "payable")   return "border-blue-200   bg-blue-50   text-blue-700";
-  if (s === "cancelled") return "border-red-200    bg-red-50    text-red-700";
-  return "border-orange-200 bg-orange-50 text-orange-700";
+const STATUS_MAP = {
+  earned:    "border-orange-200 bg-orange-50 text-orange-700",
+  payable:   "border-blue-200 bg-blue-50 text-blue-700",
+  paid:      "border-emerald-200 bg-emerald-50 text-emerald-700",
+  cancelled: "border-red-200 bg-red-50 text-red-700",
 };
 
 const emptyFilters = () => {
@@ -171,7 +172,7 @@ const CarWashCommissions = () => {
           <span>Page <strong className="text-[#0B3B2E]">{pagination.page}</strong>/{pagination.pages}</span>
           <span>Page Total <strong className="text-[#0B3B2E]">{formatMoney(pageTotal)}</strong></span>
           {statuses.map((s) => summary?.[s]?.count > 0 && (
-            <span key={s} className={`border px-1.5 py-0 text-[9px] font-bold uppercase ${statusBadge(s)}`}>
+            <span key={s} className={`border px-1.5 py-0 text-[9px] font-bold uppercase ${STATUS_MAP[s] || "border-orange-200 bg-orange-50 text-orange-700"}`}>
               {statusLabels[s]} {summary[s].count}
               {summary[s].amount > 0 && ` · ${formatMoney(summary[s].amount)}`}
             </span>
@@ -208,9 +209,7 @@ const CarWashCommissions = () => {
                     </td>
                     <td className={`px-3 py-2 text-right font-extrabold tabular-nums text-slate-900 ${isCancelled ? "line-through" : ""}`}>{formatMoney(row.commissionAmount)}</td>
                     <td className="px-3 py-2">
-                      <span className={`border px-2 py-0.5 text-[9px] font-bold uppercase ${statusBadge(row.status)}`}>
-                        {statusLabels[row.status] || row.status}
-                      </span>
+                      <StatusBadge status={row.status} map={STATUS_MAP} />
                     </td>
                     <td className="px-3 py-2 text-slate-500">
                       {row.earnedAt ? new Date(row.earnedAt).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—"}

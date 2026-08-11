@@ -7,6 +7,8 @@ import ChartOfAccount from "../../models/ChartOfAccount.js";
 import SequenceCounter from "../../models/SequenceCounter.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
+import { createError } from "../../utils/error.js";
+import { parsePagination } from "../../utils/pagination.js";
 
 const numberOrZero = (v) => {
   const n = Number(v);
@@ -197,13 +199,13 @@ async function postReplenishmentLedger({ replenishment, account, userId }) {
 export const createPettyCashAccount = async (req, res, next) => {
   try {
     const businessId = getBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Business ID required" });
+    if (!businessId) return next(createError(400, "Business ID required"));
 
     const { name, custodianName, custodianUserId, floatAmount, glAccountId, voucherPrefix, notes } = req.body;
 
-    if (!name?.trim()) return res.status(400).json({ message: "Account name is required" });
+    if (!name?.trim()) return next(createError(400, "Account name is required"));
     if (!floatAmount || numberOrZero(floatAmount) <= 0)
-      return res.status(400).json({ message: "Float amount must be greater than zero" });
+      return next(createError(400, "Float amount must be greater than zero"));
 
     const userId = await resolveAuditActorUserId({ req, businessId });
 
@@ -230,7 +232,7 @@ export const createPettyCashAccount = async (req, res, next) => {
 export const getPettyCashAccounts = async (req, res, next) => {
   try {
     const businessId = getBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Business ID required" });
+    if (!businessId) return next(createError(400, "Business ID required"));
 
     const filter = { business: businessId };
     if (req.query.status) filter.status = req.query.status;
@@ -251,14 +253,14 @@ export const getPettyCashAccount = async (req, res, next) => {
   try {
     const businessId = getBusinessId(req);
     const { id } = req.params;
-    if (!businessId) return res.status(400).json({ message: "Business ID required" });
+    if (!businessId) return next(createError(400, "Business ID required"));
 
     const account = await PettyCashAccount.findOne({ _id: id, business: businessId })
       .populate("glAccountId", "code name type")
       .populate("custodianUserId", "name email")
       .lean();
 
-    if (!account) return res.status(404).json({ message: "Petty cash account not found" });
+    if (!account) return next(createError(404, "Petty cash account not found"));
 
     return res.status(200).json({ success: true, data: account });
   } catch (err) {
@@ -270,10 +272,10 @@ export const updatePettyCashAccount = async (req, res, next) => {
   try {
     const businessId = getBusinessId(req);
     const { id } = req.params;
-    if (!businessId) return res.status(400).json({ message: "Business ID required" });
+    if (!businessId) return next(createError(400, "Business ID required"));
 
     const account = await PettyCashAccount.findOne({ _id: id, business: businessId });
-    if (!account) return res.status(404).json({ message: "Petty cash account not found" });
+    if (!account) return next(createError(404, "Petty cash account not found"));
 
     const allowedFields = ["name", "custodianName", "custodianUserId", "floatAmount", "glAccountId", "voucherPrefix", "notes", "status"];
     allowedFields.forEach((field) => {
@@ -297,23 +299,23 @@ export const updatePettyCashAccount = async (req, res, next) => {
 export const createDisbursement = async (req, res, next) => {
   try {
     const businessId = getBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Business ID required" });
+    if (!businessId) return next(createError(400, "Business ID required"));
 
     const { pettyCashAccountId, date, amount, description, category, propertyId, unitId, expenseAccountId, receiptAttached, receiptNote } = req.body;
 
-    if (!pettyCashAccountId) return res.status(400).json({ message: "Petty cash account is required" });
-    if (!date) return res.status(400).json({ message: "Date is required" });
-    if (!amount || numberOrZero(amount) <= 0) return res.status(400).json({ message: "Amount must be greater than zero" });
-    if (!description?.trim()) return res.status(400).json({ message: "Description is required" });
-    if (!category || !PETTY_CASH_CATEGORIES.includes(category)) return res.status(400).json({ message: "Valid category is required" });
+    if (!pettyCashAccountId) return next(createError(400, "Petty cash account is required"));
+    if (!date) return next(createError(400, "Date is required"));
+    if (!amount || numberOrZero(amount) <= 0) return next(createError(400, "Amount must be greater than zero"));
+    if (!description?.trim()) return next(createError(400, "Description is required"));
+    if (!category || !PETTY_CASH_CATEGORIES.includes(category)) return next(createError(400, "Valid category is required"));
 
     const account = await PettyCashAccount.findOne({ _id: pettyCashAccountId, business: businessId });
-    if (!account) return res.status(404).json({ message: "Petty cash account not found" });
-    if (account.status === "closed") return res.status(400).json({ message: "Cannot disburse from a closed petty cash account" });
+    if (!account) return next(createError(404, "Petty cash account not found"));
+    if (account.status === "closed") return next(createError(400, "Cannot disburse from a closed petty cash account"));
 
     const disbursementAmount = numberOrZero(amount);
     if (disbursementAmount > account.currentBalance) {
-      return res.status(400).json({ message: `Insufficient petty cash balance. Available: ${account.currentBalance.toFixed(2)}` });
+      return next(createError(400, `Insufficient petty cash balance. Available: ${account.currentBalance.toFixed(2)}`));
     }
 
     const userId = await resolveAuditActorUserId({ req, businessId });
@@ -359,7 +361,7 @@ export const createDisbursement = async (req, res, next) => {
     if (!updatedAccount) {
       // Concurrent disbursement depleted the balance between our check and this write
       await PettyCashDisbursement.deleteOne({ _id: disbursement._id });
-      return res.status(409).json({ message: "Insufficient petty cash balance — another disbursement was processed concurrently. Please retry." });
+      return next(createError(409, "Insufficient petty cash balance — another disbursement was processed concurrently. Please retry."));
     }
 
     return res.status(201).json({ success: true, data: disbursement, account: { currentBalance: updatedAccount.currentBalance } });
@@ -371,7 +373,7 @@ export const createDisbursement = async (req, res, next) => {
 export const getDisbursements = async (req, res, next) => {
   try {
     const businessId = getBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Business ID required" });
+    if (!businessId) return next(createError(400, "Business ID required"));
 
     const filter = { business: businessId };
     if (req.query.pettyCashAccountId) filter.pettyCashAccount = req.query.pettyCashAccountId;
@@ -384,8 +386,7 @@ export const getDisbursements = async (req, res, next) => {
       if (req.query.endDate) filter.date.$lte = new Date(req.query.endDate);
     }
 
-    const pageNum = Math.max(parseInt(req.query.page, 10) || 1, 1);
-    const limitNum = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const { page: pageNum, limit: limitNum, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 200 });
 
     if (req.query.search) {
       const term = req.query.search.trim();
@@ -403,7 +404,7 @@ export const getDisbursements = async (req, res, next) => {
         .populate("expenseAccountId", "code name")
         .populate("createdBy", "name email")
         .sort({ date: -1, createdAt: -1 })
-        .skip((pageNum - 1) * limitNum)
+        .skip(skip)
         .limit(limitNum)
         .lean(),
       PettyCashDisbursement.countDocuments(filter),
@@ -421,11 +422,11 @@ export const voidDisbursement = async (req, res, next) => {
     const { id } = req.params;
     const { voidReason } = req.body;
 
-    if (!businessId) return res.status(400).json({ message: "Business ID required" });
+    if (!businessId) return next(createError(400, "Business ID required"));
 
     const disbursement = await PettyCashDisbursement.findOne({ _id: id, business: businessId });
-    if (!disbursement) return res.status(404).json({ message: "Disbursement not found" });
-    if (disbursement.status === "void") return res.status(400).json({ message: "Disbursement is already voided" });
+    if (!disbursement) return next(createError(404, "Disbursement not found"));
+    if (disbursement.status === "void") return next(createError(400, "Disbursement is already voided"));
 
     const userId = await resolveAuditActorUserId({ req, businessId });
 
@@ -459,16 +460,16 @@ export const voidDisbursement = async (req, res, next) => {
 export const requestReplenishment = async (req, res, next) => {
   try {
     const businessId = getBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Business ID required" });
+    if (!businessId) return next(createError(400, "Business ID required"));
 
     const { pettyCashAccountId, amount, bankAccountId, notes, requestDate } = req.body;
 
-    if (!pettyCashAccountId) return res.status(400).json({ message: "Petty cash account is required" });
-    if (!amount || numberOrZero(amount) <= 0) return res.status(400).json({ message: "Amount must be greater than zero" });
+    if (!pettyCashAccountId) return next(createError(400, "Petty cash account is required"));
+    if (!amount || numberOrZero(amount) <= 0) return next(createError(400, "Amount must be greater than zero"));
 
     const account = await PettyCashAccount.findOne({ _id: pettyCashAccountId, business: businessId });
-    if (!account) return res.status(404).json({ message: "Petty cash account not found" });
-    if (account.status === "closed") return res.status(400).json({ message: "Cannot replenish a closed account" });
+    if (!account) return next(createError(404, "Petty cash account not found"));
+    if (account.status === "closed") return next(createError(400, "Cannot replenish a closed account"));
 
     const userId = await resolveAuditActorUserId({ req, businessId });
     const seq = await nextSequence(businessId, `rep:${String(account._id)}`);
@@ -499,11 +500,11 @@ export const approveReplenishment = async (req, res, next) => {
   try {
     const businessId = getBusinessId(req);
     const { id } = req.params;
-    if (!businessId) return res.status(400).json({ message: "Business ID required" });
+    if (!businessId) return next(createError(400, "Business ID required"));
 
     const replenishment = await PettyCashReplenishment.findOne({ _id: id, business: businessId });
-    if (!replenishment) return res.status(404).json({ message: "Replenishment not found" });
-    if (replenishment.status !== "pending") return res.status(400).json({ message: `Cannot approve a replenishment with status: ${replenishment.status}` });
+    if (!replenishment) return next(createError(404, "Replenishment not found"));
+    if (replenishment.status !== "pending") return next(createError(400, `Cannot approve a replenishment with status: ${replenishment.status}`));
 
     const userId = await resolveAuditActorUserId({ req, businessId });
 
@@ -522,15 +523,15 @@ export const postReplenishment = async (req, res, next) => {
   try {
     const businessId = getBusinessId(req);
     const { id } = req.params;
-    if (!businessId) return res.status(400).json({ message: "Business ID required" });
+    if (!businessId) return next(createError(400, "Business ID required"));
 
     const replenishment = await PettyCashReplenishment.findOne({ _id: id, business: businessId });
-    if (!replenishment) return res.status(404).json({ message: "Replenishment not found" });
+    if (!replenishment) return next(createError(404, "Replenishment not found"));
     if (!["approved", "pending"].includes(replenishment.status))
-      return res.status(400).json({ message: `Cannot post a replenishment with status: ${replenishment.status}` });
+      return next(createError(400, `Cannot post a replenishment with status: ${replenishment.status}`));
 
     const account = await PettyCashAccount.findOne({ _id: replenishment.pettyCashAccount, business: businessId });
-    if (!account) return res.status(404).json({ message: "Petty cash account not found" });
+    if (!account) return next(createError(404, "Petty cash account not found"));
 
     const userId = await resolveAuditActorUserId({ req, businessId });
 
@@ -572,11 +573,11 @@ export const rejectReplenishment = async (req, res, next) => {
     const { id } = req.params;
     const { rejectionReason } = req.body;
 
-    if (!businessId) return res.status(400).json({ message: "Business ID required" });
+    if (!businessId) return next(createError(400, "Business ID required"));
 
     const replenishment = await PettyCashReplenishment.findOne({ _id: id, business: businessId });
-    if (!replenishment) return res.status(404).json({ message: "Replenishment not found" });
-    if (replenishment.status !== "pending") return res.status(400).json({ message: "Only pending replenishments can be rejected" });
+    if (!replenishment) return next(createError(404, "Replenishment not found"));
+    if (replenishment.status !== "pending") return next(createError(400, "Only pending replenishments can be rejected"));
 
     const userId = await resolveAuditActorUserId({ req, businessId });
 
@@ -595,7 +596,7 @@ export const rejectReplenishment = async (req, res, next) => {
 export const getReplenishments = async (req, res, next) => {
   try {
     const businessId = getBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Business ID required" });
+    if (!businessId) return next(createError(400, "Business ID required"));
 
     const filter = { business: businessId };
     if (req.query.pettyCashAccountId) filter.pettyCashAccount = req.query.pettyCashAccountId;
@@ -606,8 +607,7 @@ export const getReplenishments = async (req, res, next) => {
       if (req.query.endDate) filter.requestDate.$lte = new Date(req.query.endDate);
     }
 
-    const pageNum = Math.max(parseInt(req.query.page, 10) || 1, 1);
-    const limitNum = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const { page: pageNum, limit: limitNum, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 200 });
 
     const [replenishments, total] = await Promise.all([
       PettyCashReplenishment.find(filter)
@@ -616,7 +616,7 @@ export const getReplenishments = async (req, res, next) => {
         .populate("requestedBy", "name email")
         .populate("approvedBy", "name email")
         .sort({ requestDate: -1, createdAt: -1 })
-        .skip((pageNum - 1) * limitNum)
+        .skip(skip)
         .limit(limitNum)
         .lean(),
       PettyCashReplenishment.countDocuments(filter),

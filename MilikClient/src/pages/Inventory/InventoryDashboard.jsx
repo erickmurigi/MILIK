@@ -10,6 +10,7 @@ import {
 } from "react-icons/fa";
 import InventoryShell from "./InventoryShell";
 import { inventoryApi, formatMoney, todayISO } from "../../services/inventoryApi";
+import { fmtDate } from "../../utils/dates";
 import DashboardCard, { DashboardStatCard } from "../../components/Dashboard/DashboardCard";
 
 const StatCard = DashboardStatCard;
@@ -54,9 +55,6 @@ const QUICK_LINKS = [
 
 const fmtTime = (iso) =>
   iso ? new Date(iso).toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" }) : "—";
-
-const fmtDate = (iso) =>
-  iso ? new Date(iso).toLocaleDateString("en-KE", { day: "2-digit", month: "short" }) : "—";
 
 const normalise = (raw) => (Array.isArray(raw) ? raw : raw?.data ?? []);
 

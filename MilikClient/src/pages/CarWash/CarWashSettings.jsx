@@ -9,9 +9,7 @@ import { carWashApi, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import AppSelect from "../../components/common/AppSelect";
-
-const labelCls = "mb-1 block text-[10px] font-extrabold uppercase tracking-widest text-slate-500";
-const inputCls = "h-9 w-full border border-slate-300 bg-white px-2.5 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20 transition";
+import { inputClass, labelClass } from "../../utils/formStyles";
 
 const METHOD_LABELS = { cash: "Cash", mpesa: "M-Pesa (manual)", bank: "Bank Transfer", card: "Card / POS", other: "Other" };
 const METHODS = ["cash", "mpesa", "bank", "card", "other"];
@@ -178,9 +176,9 @@ export default function CarWashSettings() {
               />
               <div className="p-5 space-y-4">
                 <div>
-                  <label className={labelCls}>Display name (max 60 chars)</label>
+                  <label className={labelClass}>Display name (max 60 chars)</label>
                   <input
-                    className={inputCls}
+                    className={inputClass}
                     value={queueDisplayName}
                     onChange={(e) => { setQueueDisplayName(e.target.value.slice(0, 60)); setDirty(true); }}
                     placeholder="e.g. ABC CAR WASH"
@@ -193,7 +191,7 @@ export default function CarWashSettings() {
                 </div>
 
                 <div>
-                  <label className={labelCls}>Queue screen background image</label>
+                  <label className={labelClass}>Queue screen background image</label>
 
                   {queueBgImage ? (
                     /* ── Preview ── */
@@ -274,9 +272,9 @@ export default function CarWashSettings() {
               />
               <div className="p-5 space-y-4">
                 <div>
-                  <label className={labelCls}>Minimum job price for discount (KES)</label>
+                  <label className={labelClass}>Minimum job price for discount (KES)</label>
                   <input
-                    className={inputCls}
+                    className={inputClass}
                     type="number"
                     min="0"
                     step="1"
@@ -290,9 +288,9 @@ export default function CarWashSettings() {
                   </p>
                 </div>
                 <div>
-                  <label className={labelCls}>Maximum discount allowed (%)</label>
+                  <label className={labelClass}>Maximum discount allowed (%)</label>
                   <input
-                    className={inputCls}
+                    className={inputClass}
                     type="number"
                     min="0"
                     max="100"
@@ -367,9 +365,9 @@ export default function CarWashSettings() {
                 </div>
                 {dmgDeductionMode === "percent" && (
                   <div>
-                    <label className={labelCls}>Default deduction rate (%)</label>
+                    <label className={labelClass}>Default deduction rate (%)</label>
                     <input
-                      className={inputCls}
+                      className={inputClass}
                       type="number"
                       min="1"
                       max="100"
@@ -386,9 +384,9 @@ export default function CarWashSettings() {
                 )}
                 {dmgDeductionMode === "fixed" && (
                   <div>
-                    <label className={labelCls}>Default deduction amount (Ksh)</label>
+                    <label className={labelClass}>Default deduction amount (Ksh)</label>
                     <input
-                      className={inputCls}
+                      className={inputClass}
                       type="number"
                       min="1"
                       step="1"
@@ -440,8 +438,8 @@ export default function CarWashSettings() {
                 {/* Deduction amount (only shown when enabled) */}
                 {savingsEnabled && (
                   <div>
-                    <label className={labelCls}>Deduction per day (Ksh)</label>
-                    <input type="number" min="0" step="10" className={inputCls}
+                    <label className={labelClass}>Deduction per day (Ksh)</label>
+                    <input type="number" min="0" step="10" className={inputClass}
                       value={savingsAmount}
                       onChange={(e) => { setSavingsAmount(e.target.value); setDirty(true); }}
                       disabled={!canManage}

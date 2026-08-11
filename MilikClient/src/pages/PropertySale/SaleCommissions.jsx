@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
-import { FaCheck, FaMoneyBillWave, FaPrint, FaRedoAlt, FaTimes, FaUndo } from "react-icons/fa";
+import { FaCheck, FaMoneyBillWave, FaPrint, FaRedoAlt, FaUndo } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterSearch, FilterDateRange } from "./SaleFilterBar";
 import PaginationBar from "../../components/PaginationBar";
@@ -10,6 +10,7 @@ import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import Modal from "../../components/common/Modal";
 
 const STATUS_BADGE = {
   pending:   "border-amber-200 bg-amber-50 text-amber-700",
@@ -25,21 +26,6 @@ const PAGE_SIZE       = 50;
 
 const fmtLabel = (s) => (s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
-const Modal = ({ title, subtitle, headerCls = "bg-[#0B3B2E]", children, footer, onClose }) => (
-  <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-    <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-md sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
-      <div className={`flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 ${headerCls} px-4 py-3 text-white rounded-t-2xl sm:rounded-none`}>
-        <div>
-          <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
-          {subtitle && <p className="mt-0.5 text-xs font-semibold text-white/70">{subtitle}</p>}
-        </div>
-        <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
-      </div>
-      <div className="flex-1 overflow-y-auto p-4">{children}</div>
-      {footer && <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>}
-    </div>
-  </div>
-);
 
 const SaleCommissions = () => {
   const confirm        = useConfirm();
@@ -296,7 +282,6 @@ const SaleCommissions = () => {
       {showPayout && (
         <Modal
           title={`Payout — ${showPayout.commissionNumber}`}
-          subtitle={`${showPayout.agent?.fullName || ""} · ${fmtKES(showPayout.commissionAmount)}`}
           onClose={() => setShowPayout(null)}
           footer={
             <>

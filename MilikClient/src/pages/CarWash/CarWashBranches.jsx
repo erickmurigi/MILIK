@@ -1,11 +1,14 @@
 import React, { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FaEdit, FaPlus, FaRedoAlt, FaTimes } from "react-icons/fa";
+import { FaEdit, FaPlus, FaRedoAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import AppSelect from "../../components/common/AppSelect";
+import Modal from "../../components/common/Modal";
+import { inputClass, labelClass } from "../../utils/formStyles";
+import { useConfirm } from "../../context/ConfirmContext";
 
 const METHODS = ["cash", "mpesa", "bank", "card", "other"];
 const METHOD_LABELS = { cash: "Cash", mpesa: "M-Pesa", bank: "Bank Transfer", card: "Card / POS", other: "Other" };
@@ -23,25 +26,11 @@ const emptyForm = {
   active: true, isDefault: false,
 };
 
-const inputClass  = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
-const labelClass  = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 const selectClass = "h-9 w-full border border-slate-300 bg-white px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
-
-const Modal = ({ title, children, footer, onClose }) => (
-  <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
-    <div className="w-full max-w-2xl border border-slate-200 bg-white shadow-2xl">
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
-        <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
-        <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10 hover:text-white"><FaTimes /></button>
-      </div>
-      <div className="max-h-[80vh] overflow-y-auto p-4">{children}</div>
-      <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>
-    </div>
-  </div>
-);
 
 const CarWashBranches = () => {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [form, setForm]         = useState(emptyForm);
   const [editingId, setEditingId] = useState("");
   const [showModal, setShowModal] = useState(false);
@@ -104,7 +93,7 @@ const CarWashBranches = () => {
   };
 
   const handleDelete = async (row) => {
-    if (!window.confirm(`Delete branch "${row.name}"? This cannot be undone.`)) return;
+    if (!(await confirm(`Delete branch "${row.name}"? This cannot be undone.`))) return;
     try {
       await carWashApi.deleteBranch(row._id);
       queryClient.invalidateQueries({ queryKey: ["cw-branches"] });

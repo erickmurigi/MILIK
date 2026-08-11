@@ -3,6 +3,8 @@ import Company from "../../models/Company.js";
 import CoopCollection from "../../models/CoopCollection.js";
 import RentPayment from "../../models/RentPayment.js";
 import Tenant from "../../models/Tenant.js";
+import { createError } from "../../utils/error.js";
+import { parsePagination } from "../../utils/pagination.js";
 
 const isValidObjectId = (v)  => mongoose.Types.ObjectId.isValid(String(v || ""));
 const normalizeText  = (v)   => String(v  || "").trim();
@@ -72,7 +74,7 @@ const findTenantByCode = (businessId, tenantCode) => {
 
 // ─── Public callbacks (Co-op Bank calls these) ───────────────────────────────
 
-export const handleCoopValidation = async (req, res) => {
+export const handleCoopValidation = async (req, res, next) => {
   const { institutionCode } = req.params;
   const { header = {}, request = {} } = req.body || {};
   const messageID = normalizeText(header.messageID);
@@ -121,7 +123,7 @@ export const handleCoopValidation = async (req, res) => {
   }
 };
 
-export const handleCoopAdvise = async (req, res) => {
+export const handleCoopAdvise = async (req, res, next) => {
   const { institutionCode } = req.params;
   const { header = {}, request = {} } = req.body || {};
   const messageID = normalizeText(header.messageID);
@@ -219,16 +221,14 @@ export const handleCoopAdvise = async (req, res) => {
 
 // ─── Management (authenticated) ──────────────────────────────────────────────
 
-export const listCoopCollections = async (req, res) => {
+export const listCoopCollections = async (req, res, next) => {
   try {
     const businessId = normalizeText(req.query.business || req.userCompany || req.user?.company?._id || req.user?.company || "");
     if (!isValidObjectId(businessId)) {
-      return res.status(400).json({ success: false, message: "Valid business id is required" });
+      return next(createError(400, "Valid business id is required"));
     }
 
-    const page  = Math.max(Number(req.query.page  || 1), 1);
-    const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
-    const skip  = (page - 1) * limit;
+    const { page, limit, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 200 });
 
     const filters = { business: businessId };
 
@@ -284,27 +284,26 @@ export const listCoopCollections = async (req, res) => {
       pages:   Math.ceil(total / limit),
     });
   } catch (err) {
-    console.error("listCoopCollections error:", err);
-    return res.status(500).json({ success: false, message: "Failed to fetch Co-op collections" });
+    next(err);
   }
 };
 
-export const assignTenantToCoopCollection = async (req, res) => {
+export const assignTenantToCoopCollection = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { tenantId } = req.body || {};
-    if (!isValidObjectId(id)) return res.status(400).json({ success: false, message: "Invalid collection id" });
+    if (!isValidObjectId(id)) return next(createError(400, "Invalid collection id"));
 
     const businessId = normalizeText(req.userCompany || req.user?.company?._id || req.user?.company || "");
     const collection = await CoopCollection.findOne({ _id: id, business: businessId });
-    if (!collection) return res.status(404).json({ success: false, message: "Collection not found" });
+    if (!collection) return next(createError(404, "Collection not found"));
 
     if (collection.matchingStatus === "captured") {
-      return res.status(400).json({ success: false, message: "Collection already captured" });
+      return next(createError(400, "Collection already captured"));
     }
 
     if (tenantId && !isValidObjectId(tenantId)) {
-      return res.status(400).json({ success: false, message: "Invalid tenant id" });
+      return next(createError(400, "Invalid tenant id"));
     }
 
     const tenant = tenantId
@@ -318,35 +317,33 @@ export const assignTenantToCoopCollection = async (req, res) => {
     const updated = await populateQuery(CoopCollection.findById(collection._id)).lean();
     return res.json({ success: true, data: updated });
   } catch (err) {
-    console.error("assignTenantToCoopCollection error:", err);
-    return res.status(500).json({ success: false, message: "Failed to assign tenant" });
+    next(err);
   }
 };
 
-export const ignoreCoopCollection = async (req, res) => {
+export const ignoreCoopCollection = async (req, res, next) => {
   try {
     const { id } = req.params;
     const businessId = normalizeText(req.userCompany || req.user?.company?._id || req.user?.company || "");
     const collection = await CoopCollection.findOne({ _id: id, business: businessId });
-    if (!collection) return res.status(404).json({ success: false, message: "Collection not found" });
+    if (!collection) return next(createError(404, "Collection not found"));
     if (collection.matchingStatus === "captured") {
-      return res.status(400).json({ success: false, message: "Cannot ignore a captured collection" });
+      return next(createError(400, "Cannot ignore a captured collection"));
     }
     collection.matchingStatus = "ignored";
     await collection.save();
     return res.json({ success: true, data: collection });
   } catch (err) {
-    console.error("ignoreCoopCollection error:", err);
-    return res.status(500).json({ success: false, message: "Failed to ignore collection" });
+    next(err);
   }
 };
 
-export const unignoreCoopCollection = async (req, res) => {
+export const unignoreCoopCollection = async (req, res, next) => {
   try {
     const { id } = req.params;
     const businessId = normalizeText(req.userCompany || req.user?.company?._id || req.user?.company || "");
     const collection = await CoopCollection.findOne({ _id: id, business: businessId });
-    if (!collection) return res.status(404).json({ success: false, message: "Collection not found" });
+    if (!collection) return next(createError(404, "Collection not found"));
 
     const tenant = collection.tenant
       ? await Tenant.findById(collection.tenant).select("_id").lean()
@@ -356,24 +353,22 @@ export const unignoreCoopCollection = async (req, res) => {
     await collection.save();
     return res.json({ success: true, data: collection });
   } catch (err) {
-    console.error("unignoreCoopCollection error:", err);
-    return res.status(500).json({ success: false, message: "Failed to unignore collection" });
+    next(err);
   }
 };
 
-export const deleteCoopCollection = async (req, res) => {
+export const deleteCoopCollection = async (req, res, next) => {
   try {
     const { id } = req.params;
     const businessId = normalizeText(req.userCompany || req.user?.company?._id || req.user?.company || "");
     const collection = await CoopCollection.findOne({ _id: id, business: businessId });
-    if (!collection) return res.status(404).json({ success: false, message: "Collection not found" });
+    if (!collection) return next(createError(404, "Collection not found"));
     if (collection.matchingStatus === "captured") {
-      return res.status(400).json({ success: false, message: "Cannot delete a captured collection" });
+      return next(createError(400, "Cannot delete a captured collection"));
     }
     await collection.deleteOne();
     return res.json({ success: true, message: "Collection deleted" });
   } catch (err) {
-    console.error("deleteCoopCollection error:", err);
-    return res.status(500).json({ success: false, message: "Failed to delete collection" });
+    next(err);
   }
 };

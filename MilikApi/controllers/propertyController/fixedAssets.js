@@ -3,11 +3,8 @@ import FixedAsset from "../../models/FixedAsset.js";
 import { postEntry, postReversal } from "../../services/ledgerPostingService.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { toObjectId } from "../../utils/db.js";
-
-const resolveBusinessId = (req) => {
-  const id = req.query?.business || req.query?.company || req.body?.business || req.body?.company;
-  return toObjectId(id);
-};
+import { resolveBusinessId } from "../../utils/requestContext.js";
+import { createError } from "../../utils/error.js";
 
 const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
 
@@ -43,7 +40,7 @@ const calcMonthlyDepreciation = (asset) => {
 export const getFixedAssets = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Missing business" });
+    if (!businessId) return next(createError(400, "Missing business"));
 
     const filter = { business: businessId };
     if (req.query.status) filter.status = req.query.status;
@@ -72,7 +69,7 @@ export const getFixedAssets = async (req, res, next) => {
 export const getFixedAsset = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Missing business" });
+    if (!businessId) return next(createError(400, "Missing business"));
 
     const asset = await FixedAsset.findOne({ _id: req.params.id, business: businessId })
       .populate("assetAccount", "code name")
@@ -80,7 +77,7 @@ export const getFixedAsset = async (req, res, next) => {
       .populate("accumulatedDepreciationAccount", "code name")
       .lean();
 
-    if (!asset) return res.status(404).json({ message: "Asset not found" });
+    if (!asset) return next(createError(404, "Asset not found"));
 
     return res.status(200).json({
       ...asset,
@@ -96,7 +93,7 @@ export const getFixedAsset = async (req, res, next) => {
 export const createFixedAsset = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Missing business" });
+    if (!businessId) return next(createError(400, "Missing business"));
 
     const {
       name, code, category, description,
@@ -105,12 +102,12 @@ export const createFixedAsset = async (req, res, next) => {
       assetAccount, depreciationExpenseAccount, accumulatedDepreciationAccount,
     } = req.body;
 
-    if (!name) return res.status(400).json({ message: "Asset name is required" });
-    if (!purchaseDate) return res.status(400).json({ message: "Purchase date is required" });
-    if (Number(purchaseCost) <= 0) return res.status(400).json({ message: "Purchase cost must be greater than zero" });
-    if (!assetAccount) return res.status(400).json({ message: "Asset GL account is required" });
-    if (!depreciationExpenseAccount) return res.status(400).json({ message: "Depreciation expense account is required" });
-    if (!accumulatedDepreciationAccount) return res.status(400).json({ message: "Accumulated depreciation account is required" });
+    if (!name) return next(createError(400, "Asset name is required"));
+    if (!purchaseDate) return next(createError(400, "Purchase date is required"));
+    if (Number(purchaseCost) <= 0) return next(createError(400, "Purchase cost must be greater than zero"));
+    if (!assetAccount) return next(createError(400, "Asset GL account is required"));
+    if (!depreciationExpenseAccount) return next(createError(400, "Depreciation expense account is required"));
+    if (!accumulatedDepreciationAccount) return next(createError(400, "Accumulated depreciation account is required"));
 
     const asset = await FixedAsset.create({
       business: businessId,
@@ -142,11 +139,11 @@ export const createFixedAsset = async (req, res, next) => {
 export const updateFixedAsset = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Missing business" });
+    if (!businessId) return next(createError(400, "Missing business"));
 
     const asset = await FixedAsset.findOne({ _id: req.params.id, business: businessId });
-    if (!asset) return res.status(404).json({ message: "Asset not found" });
-    if (asset.status === "disposed") return res.status(400).json({ message: "Disposed assets cannot be edited" });
+    if (!asset) return next(createError(404, "Asset not found"));
+    if (asset.status === "disposed") return next(createError(400, "Disposed assets cannot be edited"));
 
     const allowed = [
       "name", "code", "category", "description",
@@ -180,7 +177,7 @@ export const updateFixedAsset = async (req, res, next) => {
 export const previewDepreciation = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Missing business" });
+    if (!businessId) return next(createError(400, "Missing business"));
 
     const assets = await FixedAsset.find({ business: businessId, status: "active" }).lean();
 
@@ -212,12 +209,12 @@ export const previewDepreciation = async (req, res, next) => {
 export const runDepreciation = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Missing business" });
+    if (!businessId) return next(createError(400, "Missing business"));
 
     const userId = req.user?._id || req.user?.id;
     const { periodStart, periodEnd, assetIds } = req.body;
 
-    if (!periodStart || !periodEnd) return res.status(400).json({ message: "periodStart and periodEnd are required" });
+    if (!periodStart || !periodEnd) return next(createError(400, "periodStart and periodEnd are required"));
 
     const start = new Date(periodStart);
     const end = new Date(periodEnd);
@@ -321,7 +318,7 @@ export const runDepreciation = async (req, res, next) => {
 export const disposeFixedAsset = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Missing business" });
+    if (!businessId) return next(createError(400, "Missing business"));
 
     const userId = req.user?._id || req.user?.id;
     const asset = await FixedAsset.findOne({ _id: req.params.id, business: businessId })
@@ -329,8 +326,8 @@ export const disposeFixedAsset = async (req, res, next) => {
       .populate("accumulatedDepreciationAccount", "_id code name")
       .populate("depreciationExpenseAccount", "_id code name");
 
-    if (!asset) return res.status(404).json({ message: "Asset not found" });
-    if (asset.status === "disposed") return res.status(400).json({ message: "Asset already disposed" });
+    if (!asset) return next(createError(404, "Asset not found"));
+    if (asset.status === "disposed") return next(createError(400, "Asset already disposed"));
 
     const { disposalDate, disposalProceeds = 0, disposalNotes = "", proceedsAccount } = req.body;
     const disposalAt = disposalDate ? new Date(disposalDate) : new Date();

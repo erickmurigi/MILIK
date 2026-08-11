@@ -3,14 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { selectCurrentCompany } from '../../redux/selectors';
 import { clientsApi } from '../../services/clientsApi';
+import { fmtDate } from '../../utils/dates';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const fmtKES = (n) =>
   new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES', minimumFractionDigits: 2 }).format(Number(n) || 0);
-
-const fmtDate = (v) =>
-  v ? new Date(v).toLocaleDateString('en-KE', { day: '2-digit', month: 'long', year: 'numeric' }) : '—';
 
 const STATUS_COLORS = {
   paid:      { bg: '#d1fae5', border: '#6ee7b7', text: '#065f46' },

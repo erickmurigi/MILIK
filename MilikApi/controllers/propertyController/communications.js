@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import { createError } from '../../utils/error.js';
 import { hasCompanyActionPermission } from '../../utils/permissionControl.js';
-import { normalizeCompanyId } from '../verifyToken.js';
+import { resolveBusinessId } from '../../utils/requestContext.js';
 import {
   getAvailableTemplates,
   getCommunicationPermissionTarget,
@@ -13,18 +13,8 @@ import {
   sendTestEmail,
 } from '../../services/communicationService.js';
 import SmsLog from '../../models/SmsLog.js';
+import { parsePagination } from '../../utils/pagination.js';
 
-const resolveBusinessId = (req) =>
-  normalizeCompanyId(
-    req.body?.business ||
-      req.body?.businessId ||
-      req.query?.business ||
-      req.query?.businessId ||
-      req.user?.company?._id ||
-      req.user?.company ||
-      req.user?.businessId ||
-      ''
-  );
 
 const ensurePermission = ({ req, businessId, contextType, action = 'view' }) => {
   const target = getCommunicationPermissionTarget(contextType);
@@ -155,8 +145,7 @@ export const getSmsLogsController = async (req, res, next) => {
     const businessId = resolveBusinessId(req);
     if (!businessId) return next(createError(400, 'Business is required.'));
 
-    const limit       = Math.min(Math.max(Number(req.query?.limit || 25), 1), 100);
-    const page        = Math.max(Number(req.query?.page || 1), 1);
+    const { page, limit } = parsePagination(req, { defaultLimit: 25, maxLimit: 100 });
     const channel     = String(req.query?.channel     || '').trim() || undefined;
     const contextType = String(req.query?.contextType || '').trim() || undefined;
     const status      = String(req.query?.status      || '').trim() || undefined;
@@ -248,8 +237,7 @@ export const getEmailLogsController = async (req, res, next) => {
     const businessId = resolveBusinessId(req);
     if (!businessId) return next(createError(400, 'Business is required.'));
 
-    const limit       = Math.min(Math.max(Number(req.query?.limit || 25), 1), 100);
-    const page        = Math.max(Number(req.query?.page || 1), 1);
+    const { page, limit } = parsePagination(req, { defaultLimit: 25, maxLimit: 100 });
     const status      = String(req.query?.status || '').trim() || undefined;
     const search      = String(req.query?.search || '').trim() || undefined;
 

@@ -11,6 +11,7 @@ import AmountInput from "./AmountInput";
 import { useConfirm } from "../../context/ConfirmContext";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import Modal from "../../components/common/Modal";
 
 const STATUS_BADGE = {
   paid:      "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -47,21 +48,6 @@ const EMPTY_FORM = {
   reference: "", paymentDate: todayISO(), notes: "",
 };
 
-const Modal = ({ title, subtitle, headerCls = "bg-[#0B3B2E]", children, footer, onClose }) => (
-  <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-    <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-xl sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
-      <div className={`flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 ${headerCls} px-4 py-3 text-white rounded-t-2xl sm:rounded-none`}>
-        <div>
-          <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
-          {subtitle && <p className="mt-0.5 text-xs font-semibold text-white/70">{subtitle}</p>}
-        </div>
-        <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
-      </div>
-      <div className="flex-1 overflow-y-auto p-4">{children}</div>
-      {footer && <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>}
-    </div>
-  </div>
-);
 
 const SalePayments = () => {
   const confirm        = useConfirm();
@@ -358,7 +344,6 @@ const SalePayments = () => {
       {editTarget && (
         <Modal
           title="Edit Payment"
-          subtitle={`Editing ${editTarget.paymentNumber}`}
           onClose={() => setEditTarget(null)}
           footer={
             <>
@@ -411,7 +396,7 @@ const SalePayments = () => {
       {showCreate && (
         <Modal
           title="Record Payment"
-          subtitle="Post a payment against a deal"
+          wide
           onClose={() => setShowCreate(false)}
           footer={
             <>

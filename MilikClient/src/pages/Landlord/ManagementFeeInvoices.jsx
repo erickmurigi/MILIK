@@ -1,4 +1,5 @@
 import { LISTING_UI } from "../../utils/listingPageUtils";
+import { fmtDate } from "../../utils/dates";
 import AppSelect from "../../components/common/AppSelect";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -19,7 +20,6 @@ const ITEMS_PER_PAGE = 50;
 
 const fmtMoney = (v) =>
   `KSh ${Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const fmtDate = (v) => (v ? new Date(v).toLocaleDateString("en-GB") : "—");
 const fmtPeriod = (s, e) => `${fmtDate(s)} – ${fmtDate(e)}`;
 
 const MONTH_OPTIONS = [

@@ -14,6 +14,8 @@ import { getCompanyTaxConfiguration, resolveOutputVatAccount } from "../../servi
 import { generateLandlordStatement } from "../../services/landlordStatementService.js";
 import { generateManagementFeeInvoicePdf } from "../../services/managementFeeInvoicePdfService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
+import { createError } from "../../utils/error.js";
+import { parsePagination } from "../../utils/pagination.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 const toObjectId = (value) => (isValidObjectId(value) ? new mongoose.Types.ObjectId(String(value)) : null);
@@ -759,7 +761,7 @@ const normalizeProcessedStatementSnapshot = (snapshot = {}) => {
   };
 };
 
-export const closeStatement = async (req, res) => {
+export const closeStatement = async (req, res, next) => {
   try {
     const payload = req.body || {};
     const statementId = payload.statementId || payload.sourceStatement || payload.sourceStatementId || null;
@@ -789,10 +791,10 @@ export const closeStatement = async (req, res) => {
 
       approvedStatement = await LandlordStatement.findOne(scopedStatementQuery).lean();
       if (!approvedStatement) {
-        return res.status(404).json({ message: "Approved statement snapshot not found" });
+        return next(createError(404, "Approved statement snapshot not found"));
       }
       if (!["approved", "sent"].includes(String(approvedStatement.status || ""))) {
-        return res.status(400).json({ message: "Only approved or sent statements can be processed" });
+        return next(createError(400, "Only approved or sent statements can be processed"));
       }
 
       business = business || approvedStatement.business;
@@ -803,7 +805,7 @@ export const closeStatement = async (req, res) => {
           business = verifiedBusinessId;
         }
       } catch (scopeError) {
-        return res.status(scopeError.statusCode || 403).json({ message: scopeError.message });
+        return next(createError(scopeError.statusCode || 403, scopeError.message));
       }
 
       landlord = landlord || approvedStatement.landlord;
@@ -823,17 +825,17 @@ export const closeStatement = async (req, res) => {
     const userId = await resolveActorUserId(req, business);
 
     if (!business || !landlord || !property || !periodStart || !periodEnd || !userId) {
-      return res.status(400).json({ message: "Missing required fields" });
+      return next(createError(400, "Missing required fields"));
     }
 
     const start = startOfDay(periodStart);
     const end = endOfDay(periodEnd);
     if (!start || !end) {
-      return res.status(400).json({ message: "Invalid periodStart or periodEnd" });
+      return next(createError(400, "Invalid periodStart or periodEnd"));
     }
 
     if (start.getTime() > end.getTime()) {
-      return res.status(400).json({ message: "periodStart cannot be after periodEnd" });
+      return next(createError(400, "periodStart cannot be after periodEnd"));
     }
 
     // Fetch property mode check and last processed statement in parallel.
@@ -852,10 +854,7 @@ export const closeStatement = async (req, res) => {
 
     // Block processed statement creation for pure Letting-mode properties only.
     if (propertyForModeCheck && String(propertyForModeCheck.letManage || "").trim().toLowerCase() === "letting") {
-      return res.status(400).json({
-        success: false,
-        message: `Processed statements are not available for Letting-only properties (${propertyForModeCheck.propertyName || property}). Switch the property to Managing or Both mode to generate landlord disbursements.`,
-      });
+      return next(createError(400, `Processed statements are not available for Letting-only properties (${propertyForModeCheck.propertyName || property}). Switch the property to Managing or Both mode to generate landlord disbursements.`));
     }
 
     if (lastProcessed) {
@@ -881,14 +880,12 @@ export const closeStatement = async (req, res) => {
     );
 
     if (!processingCutoffAt) {
-      return res.status(400).json({ message: "Unable to resolve a valid statement cut-off time." });
+      return next(createError(400, "Unable to resolve a valid statement cut-off time."));
     }
 
     const now = new Date();
     if (processingCutoffAt.getTime() > now.getTime()) {
-      return res.status(400).json({
-        message: "Statement dates cannot be in the future. Process statements only up to the current moment.",
-      });
+      return next(createError(400, "Statement dates cannot be in the future. Process statements only up to the current moment."));
     }
 
     if (approvedStatement?._id) {
@@ -954,7 +951,7 @@ export const closeStatement = async (req, res) => {
       Number.isNaN(new Date(actualPeriodStart).getTime()) ||
       Number.isNaN(new Date(actualPeriodEnd).getTime())
     ) {
-      return res.status(400).json({ message: "Resolved processed statement period is invalid." });
+      return next(createError(400, "Resolved processed statement period is invalid."));
     }
 
     const requestedWindow = {
@@ -963,7 +960,7 @@ export const closeStatement = async (req, res) => {
     };
 
     if (requestedWindow.startAt.getTime() > requestedWindow.endAt.getTime()) {
-      return res.status(400).json({ message: "Resolved processed statement period is invalid." });
+      return next(createError(400, "Resolved processed statement period is invalid."));
     }
 
     const candidateStatements = await ProcessedStatement.find({
@@ -1153,10 +1150,10 @@ export const closeStatement = async (req, res) => {
   }
 };
 
-export const getStatementsByBusiness = async (req, res) => {
+export const getStatementsByBusiness = async (req, res, next) => {
   try {
     const { businessId } = req.params;
-    const { status, landlord, property, month, tab, search, sortBy, page = 1, limit = 50 } = req.query;
+    const { status, landlord, property, month, tab, search, sortBy } = req.query;
     const scopedBusinessId = resolveScopedBusinessId(req, businessId);
     const query = { business: scopedBusinessId };
 
@@ -1188,8 +1185,7 @@ export const getStatementsByBusiness = async (req, res) => {
       query.status = { $ne: "reversed" };
     }
 
-    const pageNum = Math.max(1, parseInt(page, 10) || 1);
-    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
+    const { page: pageNum, limit: limitNum, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 500 });
     const sortOrder = sortBy === "date-asc" ? { closedAt: 1 } : { closedAt: -1 };
 
     const [statements, total] = await Promise.all([
@@ -1203,7 +1199,7 @@ export const getStatementsByBusiness = async (req, res) => {
           { path: "reversedBy", select: "username email surname otherNames" },
         ])
         .sort(sortOrder)
-        .skip((pageNum - 1) * limitNum)
+        .skip(skip)
         .limit(limitNum)
         .lean(),
       ProcessedStatement.countDocuments(query),
@@ -1254,12 +1250,11 @@ export const getStatementsByBusiness = async (req, res) => {
       limit: limitNum,
     });
   } catch (error) {
-    console.error("Get statements error:", error);
-    res.status(500).json({ message: "Error fetching statements", error: error.message });
+    next(error);
   }
 };
 
-export const getStatementById = async (req, res) => {
+export const getStatementById = async (req, res, next) => {
   try {
     const { statementId } = req.params;
     const statement = await findScopedProcessedStatementById(req, statementId, [
@@ -1271,23 +1266,22 @@ export const getStatementById = async (req, res) => {
       { path: "sourceStatement", select: "statementNumber status periodStart periodEnd approvedAt" },
       { path: "reversedSourceStatement", select: "statementNumber status periodStart periodEnd approvedAt" },
     ]);
-    if (!statement) return res.status(404).json({ message: "Statement not found" });
+    if (!statement) return next(createError(404, "Statement not found"));
     res.status(200).json({ success: true, statement });
   } catch (error) {
-    console.error("Get statement error:", error);
-    res.status(500).json({ message: "Error fetching statement", error: error.message });
+    next(error);
   }
 };
 
-export const updateStatement = async (req, res) => {
+export const updateStatement = async (req, res, next) => {
   try {
     const { statementId } = req.params;
     const { status, amountPaid, paidDate, paymentMethod, paymentReference, notes } = req.body;
     const statement = await findScopedProcessedStatementById(req, statementId);
-    if (!statement) return res.status(404).json({ message: "Statement not found" });
+    if (!statement) return next(createError(404, "Statement not found"));
 
     if (statement.status === "reversed") {
-      return res.status(400).json({ message: "Reversed statements cannot be edited" });
+      return next(createError(400, "Reversed statements cannot be edited"));
     }
 
     const nextAmountPaid = amountPaid !== undefined ? numberOrZero(amountPaid) : numberOrZero(statement.amountPaid);
@@ -1297,10 +1291,7 @@ export const updateStatement = async (req, res) => {
       Boolean(statement.isNegativeStatement) || numberOrZero(statement.amountPayableByLandlordToManager) > 0;
 
     if (isNegativeStatement && (amountPaid !== undefined || ["paid", "unpaid", "part_paid"].includes(status))) {
-      return res.status(400).json({
-        message:
-          "This processed statement is negative. The landlord owes the manager, so landlord payment status updates are not allowed here.",
-      });
+      return next(createError(400, "This processed statement is negative. The landlord owes the manager, so landlord payment status updates are not allowed here."));
     }
 
     if (status && ["paid", "unpaid", "processed", "part_paid"].includes(status)) {
@@ -1353,39 +1344,34 @@ export const updateStatement = async (req, res) => {
     ]);
     res.status(200).json({ success: true, message: "Statement updated successfully", statement: updatedStatement });
   } catch (error) {
-    console.error("Update statement error:", error);
-    res.status(500).json({ message: "Error updating statement", error: error.message });
+    next(error);
   }
 };
 
-export const reverseStatement = async (req, res) => {
+export const reverseStatement = async (req, res, next) => {
   try {
     const { statementId } = req.params;
     const reason = String(req.body?.reason || "Processed statement reversed").trim();
     const statement = await findScopedProcessedStatementById(req, statementId);
 
-    if (!statement) return res.status(404).json({ message: "Statement not found" });
+    if (!statement) return next(createError(404, "Statement not found"));
     if (statement.status === "reversed") {
-      return res.status(400).json({ message: "Statement is already reversed" });
+      return next(createError(400, "Statement is already reversed"));
     }
 
     const { blocked, hasRecoveryActivity } = await hasActiveDownstreamPayments(statement);
     if (blocked) {
-      return res.status(400).json({
-        message: hasRecoveryActivity
-          ? "This processed statement already has landlord recovery activity. Reverse the related recovery posting(s) first."
-          : "This processed statement already has landlord payment activity. Reverse the related payment voucher(s) first.",
-      });
+      return next(createError(400, hasRecoveryActivity
+        ? "This processed statement already has landlord recovery activity. Reverse the related recovery posting(s) first."
+        : "This processed statement already has landlord payment activity. Reverse the related payment voucher(s) first."));
     }
 
     const laterProcessedContext = await hasLaterProcessedStatements(statement);
     if (laterProcessedContext.blocked) {
       const laterStatement = laterProcessedContext.latestStatement;
-      return res.status(400).json({
-        message: laterStatement
-          ? `A newer processed statement already exists for this property/landlord window (${laterStatement.sourceStatementNumber || laterStatement._id}). Reverse the newer processed statement first to keep settlement cut-offs consistent.`
-          : "A newer processed statement already exists for this property/landlord window. Reverse the newer processed statement first to keep settlement cut-offs consistent.",
-      });
+      return next(createError(400, laterStatement
+        ? `A newer processed statement already exists for this property/landlord window (${laterStatement.sourceStatementNumber || laterStatement._id}). Reverse the newer processed statement first to keep settlement cut-offs consistent.`
+        : "A newer processed statement already exists for this property/landlord window. Reverse the newer processed statement first to keep settlement cut-offs consistent."));
     }
 
     const actorUserId = await resolveActorUserId(req, String(statement.business || ""));
@@ -1438,8 +1424,7 @@ export const reverseStatement = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Reverse statement error:", error);
-    res.status(500).json({ message: "Error reversing statement", error: error.message });
+    next(error);
   }
 };
 
@@ -1448,24 +1433,22 @@ export const reverseStatement = async (req, res) => {
  * reverse an out-of-order PS (e.g. triple-posted commission cleanup). Still blocks on
  * active downstream payments/recoveries.
  */
-export const adminForceReverseStatement = async (req, res) => {
+export const adminForceReverseStatement = async (req, res, next) => {
   try {
     const { statementId } = req.params;
     const reason = String(req.body?.reason || "Admin force-reverse: correcting data error").trim();
     const statement = await findScopedProcessedStatementById(req, statementId);
 
-    if (!statement) return res.status(404).json({ message: "Statement not found" });
+    if (!statement) return next(createError(404, "Statement not found"));
     if (statement.status === "reversed") {
-      return res.status(400).json({ message: "Statement is already reversed" });
+      return next(createError(400, "Statement is already reversed"));
     }
 
     const { blocked, hasRecoveryActivity } = await hasActiveDownstreamPayments(statement);
     if (blocked) {
-      return res.status(400).json({
-        message: hasRecoveryActivity
-          ? "This processed statement already has landlord recovery activity. Reverse the related recovery posting(s) first."
-          : "This processed statement already has landlord payment activity. Reverse the related payment voucher(s) first.",
-      });
+      return next(createError(400, hasRecoveryActivity
+        ? "This processed statement already has landlord recovery activity. Reverse the related recovery posting(s) first."
+        : "This processed statement already has landlord payment activity. Reverse the related payment voucher(s) first."));
     }
 
     const actorUserId = await resolveActorUserId(req, String(statement.business || ""));
@@ -1506,8 +1489,7 @@ export const adminForceReverseStatement = async (req, res) => {
     });
   } catch (error) {
     console.error("Admin force-reverse error:", error);
-    const statusCode = error?.statusCode || error?.status || 500;
-    res.status(statusCode).json({ message: error?.statusCode ? error.message : "Error force-reversing statement", error: error.message });
+    next(error);
   }
 };
 
@@ -1516,7 +1498,7 @@ export const adminForceReverseStatement = async (req, res) => {
  * exists (orphaned by a failed processing attempt). Scoped to a single business.
  * Returns the count and account IDs so balances can be recalculated.
  */
-export const adminCleanupOrphanedGLEntries = async (req, res) => {
+export const adminCleanupOrphanedGLEntries = async (req, res, next) => {
   try {
     const { businessId } = req.params;
     const scopedBusinessId = resolveScopedBusinessId(req, businessId);
@@ -1572,7 +1554,7 @@ export const adminCleanupOrphanedGLEntries = async (req, res) => {
   }
 };
 
-export const getManagementFeeInvoicePdf = async (req, res) => {
+export const getManagementFeeInvoicePdf = async (req, res, next) => {
   try {
     const { statementId } = req.params;
     const statement = await findScopedProcessedStatementById(req, statementId, [
@@ -1581,9 +1563,9 @@ export const getManagementFeeInvoicePdf = async (req, res) => {
       { path: "business", select: "companyName name address phone email" },
     ]);
 
-    if (!statement) return res.status(404).json({ message: "Statement not found" });
+    if (!statement) return next(createError(404, "Statement not found"));
     if (!(numberOrZero(statement.commissionAmount) > 0)) {
-      return res.status(400).json({ message: "No management fee on this statement." });
+      return next(createError(400, "No management fee on this statement."));
     }
 
     const pdfBuffer = await generateManagementFeeInvoicePdf(statement);
@@ -1594,24 +1576,19 @@ export const getManagementFeeInvoicePdf = async (req, res) => {
     });
     res.send(pdfBuffer);
   } catch (error) {
-    console.error("Management fee invoice PDF error:", error?.message || error);
-    res.status(error?.statusCode || 500).json({ message: error?.message || "Error generating management fee invoice" });
+    next(error);
   }
 };
 
-export const deleteStatement = async (req, res) => {
+export const deleteStatement = async (req, res, next) => {
   try {
-    return res.status(400).json({
-      success: false,
-      message: "Processed statements cannot be deleted. Reverse the statement instead to preserve the audit trail.",
-    });
+    return next(createError(400, "Processed statements cannot be deleted. Reverse the statement instead to preserve the audit trail."));
   } catch (error) {
-    console.error("Delete statement error:", error);
-    res.status(500).json({ message: "Error deleting statement", error: error.message });
+    next(error);
   }
 };
 
-export const getStatementStats = async (req, res) => {
+export const getStatementStats = async (req, res, next) => {
   try {
     const { businessId } = req.params;
     const scopedBusinessId = resolveScopedBusinessId(req, businessId);
@@ -1630,6 +1607,6 @@ export const getStatementStats = async (req, res) => {
     res.status(200).json({ success: true, stats });
   } catch (error) {
     console.error("Get stats error:", error);
-    res.status(500).json({ message: "Error fetching stats", error: error.message });
+    next(error);
   }
 };

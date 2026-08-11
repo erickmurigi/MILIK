@@ -11,6 +11,10 @@ import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, today
 import CarWashShell from "./CarWashShell";
 import PaginationBar from "../../components/PaginationBar";
 import AppSelect from "../../components/common/AppSelect";
+import { fmtDate } from "../../utils/dates";
+import { useConfirm } from "../../context/ConfirmContext";
+import Modal from "../../components/common/Modal";
+import StatusBadge from "../../components/common/StatusBadge";
 
 const METHODS             = ["cash", "mpesa", "bank", "card", "other"];
 const STATUSES            = ["draft", "approved", "paid", "cancelled"];
@@ -29,7 +33,7 @@ const emptyForm  = {
 const ic = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const lc = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 
-const statusBadge = {
+const STATUS_MAP = {
   draft:     "border-slate-200 bg-slate-50 text-slate-700",
   approved:  "border-cyan-200 bg-cyan-50 text-cyan-700",
   paid:      "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -50,25 +54,8 @@ const statusOptionsFor = (current) => {
   return STATUSES;
 };
 
-const fmtDate = (v) => v ? new Date(v).toLocaleDateString("en-GB") : "—";
 const userName = (u) => u?.name || u?.username || u?.email || "—";
 
-// ── Modal shell ───────────────────────────────────────────────────────────────
-const Modal = ({ title, onClose, onSubmit, submitLabel, children }) => (
-  <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-    <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-3xl sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
-      <div className="flex-shrink-0 flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
-        <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
-        <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
-      </div>
-      <div className="flex-1 overflow-y-auto p-4">{children}</div>
-      <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-        <button type="button" onClick={onClose} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
-        <button type="button" onClick={onSubmit} className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127]">{submitLabel}</button>
-      </div>
-    </div>
-  </div>
-);
 
 // ── Expense form body (shared create / edit) ──────────────────────────────────
 const ExpenseForm = ({ form, setForm, cashbooks, categories, isEditing, branches = [], isConsolidated = false }) => {
@@ -244,6 +231,7 @@ const ExpenseForm = ({ form, setForm, cashbooks, categories, isEditing, branches
 const CarWashExpenses = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const isConsolidated = !getActiveBranchId();
   const canCreate = useCarWashPermission("carwash-expenses", "create");
   const canUpdate = useCarWashPermission("carwash-expenses", "update");
@@ -437,7 +425,7 @@ const CarWashExpenses = () => {
   };
 
   const handleDelete = async (row) => {
-    if (!window.confirm(`Delete draft expense ${row.expenseNumber}? This cannot be undone.`)) return;
+    if (!(await confirm(`Delete draft expense ${row.expenseNumber}? This cannot be undone.`))) return;
     try {
       await carWashApi.deleteExpense(row._id);
       toast.success("Expense deleted");
@@ -539,7 +527,7 @@ const CarWashExpenses = () => {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="font-extrabold text-slate-900">{row.expenseNumber || "—"}</span>
-                      <span className={`border px-1.5 py-0.5 text-[10px] font-bold uppercase ${statusBadge[row.status] || statusBadge.draft}`}>{row.status}</span>
+                      <StatusBadge status={row.status} map={STATUS_MAP} />
                     </div>
                     <div className="mt-0.5 font-semibold text-slate-800">{row.payee || "—"}</div>
                     <div className="text-[11px] text-slate-500">{row.category} · {row.method?.toUpperCase()}</div>
@@ -718,8 +706,13 @@ const CarWashExpenses = () => {
         <Modal
           title={editingRow ? `Edit — ${editingRow.expenseNumber}` : "Record Expense"}
           onClose={closeModal}
-          onSubmit={handleSubmit}
-          submitLabel={editingRow ? "Save Changes" : "Save Expense"}
+          footer={
+            <>
+              <button type="button" onClick={closeModal} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
+              <button type="button" onClick={handleSubmit} className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127]">{editingRow ? "Save Changes" : "Save Expense"}</button>
+            </>
+          }
+          wide
         >
           <ExpenseForm form={form} setForm={setForm} cashbooks={cashbooks} categories={categories} isEditing={!!editingRow} branches={branches} isConsolidated={isConsolidated} />
         </Modal>

@@ -9,13 +9,8 @@ import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getTenantInvoices } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
-
-const formatMoney = (value) => `KES ${Number(value || 0).toLocaleString()}`;
-const formatDate = (value) => {
-  if (!value) return "-";
-  const dt = new Date(value);
-  return Number.isNaN(dt.getTime()) ? "-" : dt.toLocaleDateString();
-};
+import { fmtDate } from "../../utils/dates";
+import { formatMoney } from "../../utils/money";
 
 const ITEMS_PER_PAGE = 50;
 
@@ -127,8 +122,8 @@ const RentalInvoiceVATReport = () => {
       row?.property?.propertyName || "",
       row?.unit?.unitNumber || "",
       row?.category || "",
-      formatDate(row?.invoiceDate),
-      formatDate(row?.dueDate),
+      fmtDate(row?.invoiceDate),
+      fmtDate(row?.dueDate),
       row?.taxSnapshot?.taxCodeName || "",
       Number(row?.taxSnapshot?.taxRate || 0),
       Number(row?.taxSnapshot?.netAmount || 0),
@@ -184,7 +179,7 @@ const RentalInvoiceVATReport = () => {
       <div class="card"><div class="cl">Gross</div><div class="cv">${fmt(totals.gross)}</div></div>
     </div>
     <table><thead><tr><th>Invoice</th><th>Tenant</th><th>Property</th><th>Unit</th><th>Category</th><th>Invoice Date</th><th>Tax Code</th><th class="r">Rate</th><th class="r">Net</th><th class="r">VAT</th><th class="r">Gross</th><th>Status</th></tr></thead>
-    <tbody>${filteredRows.map((row) => `<tr><td>${row?.invoiceNumber || '—'}</td><td>${row?.tenant?.tenantName || row?.tenant?.name || '—'}</td><td>${row?.property?.propertyName || '—'}</td><td>${row?.unit?.unitNumber || '—'}</td><td>${row?.category || '—'}</td><td>${formatDate(row?.invoiceDate)}</td><td>${row?.taxSnapshot?.taxCodeName || '—'}</td><td class="r">${Number(row?.taxSnapshot?.taxRate || 0)}%</td><td class="r">${fmt(row?.taxSnapshot?.netAmount || row?.amount)}</td><td class="r">${fmt(row?.taxSnapshot?.taxAmount)}</td><td class="r"><strong>${fmt(row?.taxSnapshot?.grossAmount || row?.amount)}</strong></td><td>${row?.status || '—'}</td></tr>`).join('')}</tbody>
+    <tbody>${filteredRows.map((row) => `<tr><td>${row?.invoiceNumber || '—'}</td><td>${row?.tenant?.tenantName || row?.tenant?.name || '—'}</td><td>${row?.property?.propertyName || '—'}</td><td>${row?.unit?.unitNumber || '—'}</td><td>${row?.category || '—'}</td><td>${fmtDate(row?.invoiceDate)}</td><td>${row?.taxSnapshot?.taxCodeName || '—'}</td><td class="r">${Number(row?.taxSnapshot?.taxRate || 0)}%</td><td class="r">${fmt(row?.taxSnapshot?.netAmount || row?.amount)}</td><td class="r">${fmt(row?.taxSnapshot?.taxAmount)}</td><td class="r"><strong>${fmt(row?.taxSnapshot?.grossAmount || row?.amount)}</strong></td><td>${row?.status || '—'}</td></tr>`).join('')}</tbody>
     <tfoot><tr><td colspan="8"><strong>TOTALS</strong></td><td class="r">${fmt(totals.net)}</td><td class="r">${fmt(totals.tax)}</td><td class="r"><strong>${fmt(totals.gross)}</strong></td><td></td></tr></tfoot>
     </table></body></html>`);
     win.document.close();
@@ -254,8 +249,8 @@ const RentalInvoiceVATReport = () => {
                   <td>{row?.property?.propertyName || "—"}</td>
                   <td>{row?.unit?.unitNumber || "—"}</td>
                   <td>{String(row?.category || "").replace(/_/g, " ")}</td>
-                  <td>{formatDate(row?.invoiceDate)}</td>
-                  <td>{formatDate(row?.dueDate)}</td>
+                  <td>{fmtDate(row?.invoiceDate)}</td>
+                  <td>{fmtDate(row?.dueDate)}</td>
                   <td>{row?.taxSnapshot?.taxCodeName || "—"}</td>
                   <td className="tr">{Number(row?.taxSnapshot?.taxRate || 0)}%</td>
                   <td className="tr">{formatMoney(row?.taxSnapshot?.netAmount || 0)}</td>
@@ -344,8 +339,8 @@ const RentalInvoiceVATReport = () => {
                         <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row?.property?.propertyName || '-'}</td>
                         <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row?.unit?.unitNumber || '-'}</td>
                         <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{String(row?.category || '').replace(/_/g, ' ')}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{formatDate(row?.invoiceDate)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{formatDate(row?.dueDate)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{fmtDate(row?.invoiceDate)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{fmtDate(row?.dueDate)}</td>
                         <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row?.taxSnapshot?.taxCodeName || '-'} ({Number(row?.taxSnapshot?.taxRate || 0)}%)</td>
                         <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">{formatMoney(row?.taxSnapshot?.netAmount || 0)}</td>
                         <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-amber-700">{formatMoney(row?.taxSnapshot?.taxAmount || 0)}</td>

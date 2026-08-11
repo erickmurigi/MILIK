@@ -13,6 +13,7 @@ import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
 import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { fmtDate } from "../../utils/dates";
 import { adminRequests } from "../../utils/requestMethods";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
@@ -41,15 +42,6 @@ const toMonthLabel = (monthKey = "") => {
   return date.toLocaleDateString("en-KE", { month: "long", year: "numeric" });
 };
 
-const formatDate = (value) => {
-  const date = value ? new Date(value) : null;
-  if (!date || Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("en-KE", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-};
 
 const normalizeBasisLabel = (value = "") => {
   const raw = String(value || "").trim().toLowerCase();
@@ -283,7 +275,7 @@ const CommissionReports = () => {
       <div class="card"><div class="cl">Reversed Statements</div><div class="cv" style="color:#FF8C00">${totals.reversedStatements}</div></div>
     </div>
     <table><thead><tr><th>Recognition Date</th><th>Statement No.</th><th>Property</th><th>Landlord</th><th>Basis</th><th>Structure</th><th class="r">Recognized</th><th class="r">Reversed</th><th>Status</th></tr></thead>
-    <tbody>${filteredRows.map((row) => `<tr><td>${formatDate(row.recognitionDate)}</td><td>${row.statementNumber}</td><td>${row.propertyName}</td><td>${row.landlordName}</td><td>${row.recognitionBasis}</td><td>${row.structureLabel}</td><td class="r"><strong>${fmt(row.recognizedAmount)}</strong></td><td class="r" style="color:#b91c1c">${fmt(row.reversedAmount)}</td><td><span class="${row.status === 'Reversed' ? 'badge-r' : 'badge-g'}">${row.status}</span></td></tr>`).join('')}</tbody>
+    <tbody>${filteredRows.map((row) => `<tr><td>${fmtDate(row.recognitionDate)}</td><td>${row.statementNumber}</td><td>${row.propertyName}</td><td>${row.landlordName}</td><td>${row.recognitionBasis}</td><td>${row.structureLabel}</td><td class="r"><strong>${fmt(row.recognizedAmount)}</strong></td><td class="r" style="color:#b91c1c">${fmt(row.reversedAmount)}</td><td><span class="${row.status === 'Reversed' ? 'badge-r' : 'badge-g'}">${row.status}</span></td></tr>`).join('')}</tbody>
     <tfoot><tr><td colspan="6"><strong>TOTALS</strong></td><td class="r"><strong>${fmt(totals.recognizedCommission)}</strong></td><td class="r" style="color:#b91c1c"><strong>${fmt(totals.reversedCommission)}</strong></td><td></td></tr></tfoot>
     </table></body></html>`);
     win.document.close();
@@ -322,7 +314,7 @@ const CommissionReports = () => {
         "Status",
       ].join(","),
       ...filteredRows.map((row) => [
-        formatDate(row.recognitionDate),
+        fmtDate(row.recognitionDate),
         toMonthLabel(row.monthKey),
         `"${row.statementNumber}"`,
         `"${row.propertyName}"`,
@@ -403,7 +395,7 @@ const CommissionReports = () => {
                 <tr><td colSpan={9} style={{ textAlign: "center", padding: "12px" }}>No commission data found for the selected filters.</td></tr>
               ) : filteredRows.map((row) => (
                 <tr key={row.id}>
-                  <td>{formatDate(row.recognitionDate)}</td>
+                  <td>{fmtDate(row.recognitionDate)}</td>
                   <td>{row.statementNumber}</td>
                   <td>{row.propertyName}</td>
                   <td>{row.landlordName}</td>
@@ -491,7 +483,7 @@ const CommissionReports = () => {
                     <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-400">No commission data found for the selected filter range.</td></tr>
                   ) : paginatedRows.map((row, idx) => (
                     <tr key={row.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'} hover:bg-emerald-50/30`}>
-                      <td className="px-3 py-1.5 border-r border-slate-100 font-semibold text-slate-900">{formatDate(row.recognitionDate)}</td>
+                      <td className="px-3 py-1.5 border-r border-slate-100 font-semibold text-slate-900">{fmtDate(row.recognitionDate)}</td>
                       <td className="px-3 py-1.5 border-r border-slate-100 text-slate-700">{row.statementNumber}</td>
                       <td className="px-3 py-1.5 border-r border-slate-100 text-slate-700">{row.propertyName}</td>
                       <td className="px-3 py-1.5 border-r border-slate-100 text-slate-700">{row.landlordName}</td>

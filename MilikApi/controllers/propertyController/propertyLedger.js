@@ -12,23 +12,22 @@ import {
   getPropertyBalanceSheet,
   getPropertyLedgerJournals,
 } from "../../services/propertyLedgerService.js";
+import { resolveBusinessId } from "../../utils/requestContext.js";
+import { createError } from "../../utils/error.js";
 
 const isValidObjectId = (v) => mongoose.isValidObjectId(v);
 
-const resolveBusinessId = (req) =>
-  req.user?.company || req.user?.business || req.query.business || null;
-
 // Guard: ensure the property exists, belongs to this business, and has Property GL.
-const resolvePropertyLedgerGuard = async (req, res) => {
+const resolvePropertyLedgerGuard = async (req, next) => {
   const businessId = resolveBusinessId(req);
   const { propertyId } = req.params;
 
   if (!businessId) {
-    res.status(400).json({ success: false, error: "Business context required." });
+    next(createError(400, "Business context required."));
     return null;
   }
   if (!isValidObjectId(propertyId)) {
-    res.status(400).json({ success: false, error: "Invalid propertyId." });
+    next(createError(400, "Invalid propertyId."));
     return null;
   }
 
@@ -37,17 +36,14 @@ const resolvePropertyLedgerGuard = async (req, res) => {
     .lean();
 
   if (!property) {
-    res.status(404).json({ success: false, error: "Property not found." });
+    next(createError(404, "Property not found."));
     return null;
   }
 
   const v = String(property.accountLedgerType || "").toLowerCase().trim();
   const isPropertyGL = v.startsWith("off") || v === "property-gl";
   if (!isPropertyGL) {
-    res.status(400).json({
-      success: false,
-      error: "Property Ledger is only available for Property GL properties.",
-    });
+    next(createError(400, "Property Ledger is only available for Property GL properties."));
     return null;
   }
 
@@ -57,7 +53,7 @@ const resolvePropertyLedgerGuard = async (req, res) => {
 // GET /property-ledger/:propertyId/trial-balance
 export const getPropertyLedgerTrialBalance = async (req, res, next) => {
   try {
-    const ctx = await resolvePropertyLedgerGuard(req, res);
+    const ctx = await resolvePropertyLedgerGuard(req, next);
     if (!ctx) return;
 
     const { asOfDate, includeZeroBalances } = req.query;
@@ -81,7 +77,7 @@ export const getPropertyLedgerTrialBalance = async (req, res, next) => {
 // GET /property-ledger/:propertyId/income-statement
 export const getPropertyLedgerIncomeStatement = async (req, res, next) => {
   try {
-    const ctx = await resolvePropertyLedgerGuard(req, res);
+    const ctx = await resolvePropertyLedgerGuard(req, next);
     if (!ctx) return;
 
     const { startDate, endDate } = req.query;
@@ -105,7 +101,7 @@ export const getPropertyLedgerIncomeStatement = async (req, res, next) => {
 // GET /property-ledger/:propertyId/balance-sheet
 export const getPropertyLedgerBalanceSheet = async (req, res, next) => {
   try {
-    const ctx = await resolvePropertyLedgerGuard(req, res);
+    const ctx = await resolvePropertyLedgerGuard(req, next);
     if (!ctx) return;
 
     const { asOfDate, includeZeroBalances } = req.query;
@@ -129,7 +125,7 @@ export const getPropertyLedgerBalanceSheet = async (req, res, next) => {
 // GET /property-ledger/:propertyId/journals
 export const getPropertyLedgerJournalEntries = async (req, res, next) => {
   try {
-    const ctx = await resolvePropertyLedgerGuard(req, res);
+    const ctx = await resolvePropertyLedgerGuard(req, next);
     if (!ctx) return;
 
     const { startDate, endDate, page = 1, limit = 50 } = req.query;

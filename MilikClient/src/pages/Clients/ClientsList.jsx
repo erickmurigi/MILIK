@@ -5,13 +5,9 @@ import { FaPlus, FaSearch, FaTimes, FaUser } from 'react-icons/fa';
 import ClientsShell from './ClientsShell';
 import { clientsApi } from '../../services/clientsApi';
 import AppSelect from '../../components/common/AppSelect';
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const inputCls =
-  'w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20 focus:border-[#0B3B2E]';
-
-const labelCls = 'block mb-1 text-[11px] font-semibold text-slate-500 uppercase tracking-wide';
+import Modal from '../../components/common/Modal';
+import { inputClass, labelClass } from '../../utils/formStyles';
+import StatusBadge from '../../components/common/StatusBadge';
 
 const STATUS_TABS = [
   { value: 'all',      label: 'All' },
@@ -24,39 +20,12 @@ const CATEGORIES = ['enterprise', 'sme', 'individual'];
 
 const SOURCES = ['referral', 'direct', 'online', 'other'];
 
-const statusBadge = (status) => {
-  const map = {
-    active:   'bg-emerald-50 text-emerald-700 border-emerald-200',
-    inactive: 'bg-amber-50 text-amber-700 border-amber-200',
-    churned:  'bg-red-50 text-red-600 border-red-200',
-  };
-  return map[status] || 'bg-slate-50 text-slate-500 border-slate-200';
+const CLIENT_STATUS_MAP = {
+  active:   'border-emerald-200 bg-emerald-50 text-emerald-700',
+  inactive: 'border-amber-200 bg-amber-50 text-amber-700',
+  churned:  'border-red-200 bg-red-50 text-red-600',
 };
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
-
-const Modal = ({ title, children, footer, onClose }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-    <div className="max-w-xl w-full rounded-xl bg-white shadow-2xl flex flex-col max-h-[90vh]">
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-xl">
-        <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
-        <button
-          type="button"
-          onClick={onClose}
-          className="p-1 text-white/80 hover:bg-white/10 hover:text-white rounded"
-        >
-          <FaTimes />
-        </button>
-      </div>
-      <div className="flex-1 overflow-y-auto p-4">{children}</div>
-      {footer && (
-        <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-          {footer}
-        </div>
-      )}
-    </div>
-  </div>
-);
 
 // ─── Add Client Modal ─────────────────────────────────────────────────────────
 
@@ -136,16 +105,16 @@ const AddClientModal = ({ onClose, onCreated }) => {
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
-            <label className={labelCls}>Name *</label>
+            <label className={labelClass}>Name *</label>
             <input
-              className={inputCls}
+              className={inputClass}
               value={form.name}
               onChange={(e) => set('name', e.target.value)}
               placeholder="Client / company name"
             />
           </div>
           <div>
-            <label className={labelCls}>Category</label>
+            <label className={labelClass}>Category</label>
             <AppSelect
               size="md"
               clearable
@@ -156,7 +125,7 @@ const AddClientModal = ({ onClose, onCreated }) => {
             />
           </div>
           <div>
-            <label className={labelCls}>Source</label>
+            <label className={labelClass}>Source</label>
             <AppSelect
               size="md"
               clearable
@@ -167,33 +136,33 @@ const AddClientModal = ({ onClose, onCreated }) => {
             />
           </div>
           <div>
-            <label className={labelCls}>Email</label>
-            <input type="email" className={inputCls} value={form.email} onChange={(e) => set('email', e.target.value)} placeholder="email@example.com" />
+            <label className={labelClass}>Email</label>
+            <input type="email" className={inputClass} value={form.email} onChange={(e) => set('email', e.target.value)} placeholder="email@example.com" />
           </div>
           <div>
-            <label className={labelCls}>Phone</label>
-            <input className={inputCls} value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="+254 7XX XXX XXX" />
+            <label className={labelClass}>Phone</label>
+            <input className={inputClass} value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="+254 7XX XXX XXX" />
           </div>
           <div>
-            <label className={labelCls}>Tax PIN</label>
-            <input className={inputCls} value={form.taxPin} onChange={(e) => set('taxPin', e.target.value)} placeholder="P0000000000A" />
+            <label className={labelClass}>Tax PIN</label>
+            <input className={inputClass} value={form.taxPin} onChange={(e) => set('taxPin', e.target.value)} placeholder="P0000000000A" />
           </div>
           <div>
-            <label className={labelCls}>Company Reg #</label>
-            <input className={inputCls} value={form.companyRegistration} onChange={(e) => set('companyRegistration', e.target.value)} placeholder="CPR/2024/000000" />
+            <label className={labelClass}>Company Reg #</label>
+            <input className={inputClass} value={form.companyRegistration} onChange={(e) => set('companyRegistration', e.target.value)} placeholder="CPR/2024/000000" />
           </div>
           <div>
-            <label className={labelCls}>Address Line 1</label>
-            <input className={inputCls} value={form['address.line1']} onChange={(e) => set('address.line1', e.target.value)} placeholder="Street / P.O. Box" />
+            <label className={labelClass}>Address Line 1</label>
+            <input className={inputClass} value={form['address.line1']} onChange={(e) => set('address.line1', e.target.value)} placeholder="Street / P.O. Box" />
           </div>
           <div>
-            <label className={labelCls}>City</label>
-            <input className={inputCls} value={form['address.city']} onChange={(e) => set('address.city', e.target.value)} placeholder="Nairobi" />
+            <label className={labelClass}>City</label>
+            <input className={inputClass} value={form['address.city']} onChange={(e) => set('address.city', e.target.value)} placeholder="Nairobi" />
           </div>
           <div className="col-span-2">
-            <label className={labelCls}>Notes</label>
+            <label className={labelClass}>Notes</label>
             <textarea
-              className={`${inputCls} resize-none`}
+              className={`${inputClass} resize-none`}
               rows={3}
               value={form.notes}
               onChange={(e) => set('notes', e.target.value)}
@@ -380,11 +349,7 @@ const ClientsList = () => {
                     <td className="px-3 py-2.5 text-slate-600">{cl.email || '—'}</td>
                     <td className="px-3 py-2.5 text-slate-600">{cl.phone || '—'}</td>
                     <td className="px-3 py-2.5">
-                      <span
-                        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusBadge(cl.status)}`}
-                      >
-                        {cl.status || '—'}
-                      </span>
+                      <StatusBadge status={cl.status} map={CLIENT_STATUS_MAP} />
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <button

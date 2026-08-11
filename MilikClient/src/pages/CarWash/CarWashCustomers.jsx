@@ -12,6 +12,9 @@ import { useNavigate } from "react-router-dom";
 import { FaBalanceScale } from "react-icons/fa";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import { fmtDate } from "../../utils/dates";
+import { inputClass, labelClass } from "../../utils/formStyles";
+import Modal from "../../components/common/Modal";
 import CwSmsModal from "./CwSmsModal";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useTabState } from "../../hooks/useTabState";
@@ -19,16 +22,11 @@ import AppSelect from "../../components/common/AppSelect";
 
 const GRN = "#0B3B2E";
 const fmt = formatMoney;
-const fmtDate = (v) =>
-  v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
 const acctTypePill = {
   credit:  "bg-purple-100 text-purple-700 border-purple-200",
   monthly: "bg-blue-100 text-blue-700 border-blue-200",
 };
-
-const inputCls = "h-9 w-full border border-slate-300 bg-white px-2.5 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20";
-const labelCls = "mb-1 block text-[10px] font-extrabold uppercase tracking-widest text-slate-500";
 
 // ── Last visit recency colour ──────────────────────────────────────────────────
 const lastVisitClass = (lastVisit) => {
@@ -45,24 +43,6 @@ const lastVisitDot = (lastVisit) => {
   if (days < 60)  return "bg-amber-400";
   return "bg-red-400";
 };
-
-// ─── Inline modal ──────────────────────────────────────────────────────────────
-const Modal = ({ title, children, footer, onClose, wide = false }) => (
-  <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-    <div className={`flex w-full flex-col bg-white shadow-2xl sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[88vh] rounded-t-2xl sm:rounded-none ${wide ? "sm:max-w-2xl" : "sm:max-w-lg"}`}>
-      <div className="flex-shrink-0 flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
-        <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
-        <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10 hover:text-white rounded">
-          <FaTimes />
-        </button>
-      </div>
-      <div className="flex-1 overflow-y-auto p-4">{children}</div>
-      {footer && (
-        <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>
-      )}
-    </div>
-  </div>
-);
 
 // ─── Compact stamp dots ────────────────────────────────────────────────────────
 const StampBar = React.memo(({ card, program }) => {
@@ -1143,7 +1123,7 @@ export default function CarWashCustomers() {
               This will send an SMS to {selectedIds.size} selected customer{selectedIds.size !== 1 ? "s" : ""} who have a phone number. Customers without a phone are skipped automatically.
             </div>
             <div>
-              <label className={labelCls}>Message</label>
+              <label className={labelClass}>Message</label>
               <textarea value={bulkSmsBody} onChange={(e) => setBulkSmsBody(e.target.value)} rows={4}
                 placeholder="Type your message here…"
                 className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20 resize-none" />
@@ -1221,13 +1201,13 @@ export default function CarWashCustomers() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <div className="mb-1 flex items-center justify-between">
-                      <label className={labelCls} style={{ marginBottom: 0 }}>Amount *</label>
+                      <label className={labelClass} style={{ marginBottom: 0 }}>Amount *</label>
                       {outstanding > 0 && (
                         <button type="button" onClick={() => setPayForm((f) => ({ ...f, amount: String(outstanding) }))}
                           className="text-[9px] font-black text-[#0B3B2E] underline hover:text-orange-500">Pay in full</button>
                       )}
                     </div>
-                    <input className={inputCls} type="number" min="1" step="1" value={payForm.amount}
+                    <input className={inputClass} type="number" min="1" step="1" value={payForm.amount}
                       onChange={(e) => setPayForm((f) => ({ ...f, amount: e.target.value }))} required />
                     {selectedJob && paying_amt > 0 && (
                       overPay
@@ -1259,21 +1239,21 @@ export default function CarWashCustomers() {
                     />
                   </div>
                   <div>
-                    <label className={labelCls}>Payment Date *</label>
-                    <input className={inputCls} type="date" value={payForm.paymentDate} onChange={(e) => setPayForm((f) => ({ ...f, paymentDate: e.target.value }))} required />
+                    <label className={labelClass}>Payment Date *</label>
+                    <input className={inputClass} type="date" value={payForm.paymentDate} onChange={(e) => setPayForm((f) => ({ ...f, paymentDate: e.target.value }))} required />
                   </div>
                 </div>
                 {payForm.method === "mpesa" ? (
                   <div className="space-y-3">
                     <div>
                       <div className="mb-1 flex items-center justify-between">
-                        <label className={labelCls} style={{ marginBottom: 0 }}>Customer Phone <span className="ml-1 font-normal normal-case text-emerald-700">(STK push)</span></label>
+                        <label className={labelClass} style={{ marginBottom: 0 }}>Customer Phone <span className="ml-1 font-normal normal-case text-emerald-700">(STK push)</span></label>
                         {payTarget?.phone && payForm.phone === payTarget.phone && (
                           <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">From customer</span>
                         )}
                       </div>
                       <div className="flex gap-2">
-                        <input className={`${inputCls} flex-1`} type="tel" value={payForm.phone}
+                        <input className={`${inputClass} flex-1`} type="tel" value={payForm.phone}
                           onChange={(e) => setPayForm((f) => ({ ...f, phone: e.target.value }))} placeholder="e.g. 0712345678" />
                         <button type="button" onClick={sendStkPush}
                           disabled={stkPushing || !payForm.phone?.trim() || !Number(payForm.amount) || !payForm.job}
@@ -1288,14 +1268,14 @@ export default function CarWashCustomers() {
                       </p>
                     </div>
                     <div>
-                      <label className={labelCls}>M-Pesa Transaction Code</label>
-                      <input className={inputCls} value={payForm.reference} onChange={(e) => setPayForm((f) => ({ ...f, reference: e.target.value }))} placeholder="e.g. QJK1234ABC — enter after customer pays" />
+                      <label className={labelClass}>M-Pesa Transaction Code</label>
+                      <input className={inputClass} value={payForm.reference} onChange={(e) => setPayForm((f) => ({ ...f, reference: e.target.value }))} placeholder="e.g. QJK1234ABC — enter after customer pays" />
                     </div>
                   </div>
                 ) : (
                   <div>
-                    <label className={labelCls}>Reference</label>
-                    <input className={inputCls} value={payForm.reference} onChange={(e) => setPayForm((f) => ({ ...f, reference: e.target.value }))}
+                    <label className={labelClass}>Reference</label>
+                    <input className={inputClass} value={payForm.reference} onChange={(e) => setPayForm((f) => ({ ...f, reference: e.target.value }))}
                       placeholder={payForm.method === "cash" ? "Receipt note (optional)" : "Bank / card reference"} />
                   </div>
                 )}
@@ -1326,12 +1306,12 @@ export default function CarWashCustomers() {
               </div>
             )}
             <div>
-              <label className={labelCls}>Full Name</label>
-              <input className={inputCls} value={editForm.name} onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))} placeholder="e.g. John Kamau" autoFocus />
+              <label className={labelClass}>Full Name</label>
+              <input className={inputClass} value={editForm.name} onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))} placeholder="e.g. John Kamau" autoFocus />
             </div>
             <div>
-              <label className={labelCls}>Phone Number</label>
-              <input className={inputCls} value={editForm.phone} onChange={(e) => setEditForm((p) => ({ ...p, phone: e.target.value }))} placeholder="e.g. 0712345678" type="tel" />
+              <label className={labelClass}>Phone Number</label>
+              <input className={inputClass} value={editForm.phone} onChange={(e) => setEditForm((p) => ({ ...p, phone: e.target.value }))} placeholder="e.g. 0712345678" type="tel" />
               <p className="mt-1 text-[10px] text-slate-400">Used for SMS notifications and customer lookup</p>
             </div>
           </form>

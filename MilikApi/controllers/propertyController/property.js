@@ -30,6 +30,7 @@ import { ensureSystemChartOfAccounts } from "../../services/chartOfAccountsServi
 import {
   ensurePropertyControlAccount,
 } from "../../services/propertyAccountingService.js";
+import { createError } from "../../utils/error.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules.js";
 
@@ -968,7 +969,7 @@ export const getProperty = async (req, res, next) => {
     if (foPropertyIds !== null) {
       const foSet = new Set(foPropertyIds.map(String));
       if (!foSet.has(String(property._id))) {
-        return res.status(403).json({ success: false, message: "Not authorized to access this property" });
+        return next(createError(403, "Not authorized to access this property"));
       }
     }
 
@@ -1785,7 +1786,7 @@ export const backfillPropertyAccounts = async (req, res, next) => {
       null;
 
     if (!businessId) {
-      return res.status(400).json({ success: false, message: "Company context is required." });
+      return next(createError(400, "Company context is required."));
     }
 
     const properties = await Property.find({ business: businessId })

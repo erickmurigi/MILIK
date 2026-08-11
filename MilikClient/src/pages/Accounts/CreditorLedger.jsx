@@ -5,11 +5,10 @@ import { FaArrowLeft, FaBook, FaSync, FaAddressCard } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getCreditorsSummary, getCreditorStatement } from "../../redux/apiCalls";
+import { fmtDate } from "../../utils/dates";
 
 const fmt = (n) =>
   Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("en-GB") : "—");
 
 const TYPE_STYLE = {
   invoice: "bg-blue-50 text-blue-700",

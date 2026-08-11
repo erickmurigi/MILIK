@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { FaEye, FaEyeSlash, FaEnvelope, FaLock, FaSpinner, FaArrowLeft, FaUser, FaPhone } from 'react-icons/fa';
+import { FaEye, FaEyeSlash, FaEnvelope, FaLock, FaArrowLeft, FaUser, FaPhone } from 'react-icons/fa';
+import Spinner from '../../components/common/Spinner';
 import { toast } from 'react-toastify';
 import { createSuperAdmin } from '../../redux/apiCalls';
 import '../Login/login.css';
@@ -302,7 +303,7 @@ function SetupAdmin() {
               >
                 {loading ? (
                   <>
-                    <FaSpinner className="animate-spin" />
+                    <Spinner size="sm" />
                     Creating Admin...
                   </>
                 ) : (

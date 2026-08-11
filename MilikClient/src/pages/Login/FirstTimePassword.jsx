@@ -1,6 +1,7 @@
 
 import React, { useState } from "react";
-import { FaEye, FaEyeSlash, FaKey, FaLock, FaSpinner } from "react-icons/fa";
+import { FaEye, FaEyeSlash, FaKey, FaLock } from "react-icons/fa";
+import Spinner from "../../components/common/Spinner";
 import { useDispatch, useSelector } from "react-redux";
 import { selectCurrentUser } from "../../redux/selectors";
 import { useNavigate } from "react-router-dom";

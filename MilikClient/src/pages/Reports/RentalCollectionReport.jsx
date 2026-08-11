@@ -14,12 +14,12 @@ import { buildTenantOption } from '../../utils/tenantUtils';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 import AppSelect from '../../components/common/AppSelect';
 import { adminRequests } from '../../utils/requestMethods';
+import { fmtDate } from '../../utils/dates';
+import { formatMoney } from '../../utils/money';
 
 const MILIK_GREEN = '#0B3B2E';
-const formatMoney = (value) => `KES ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 const formatPercent = (value) => (value === null || value === undefined ? '—' : `${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}%`);
 const toDateInputValue = (value) => new Date(value).toISOString().split('T')[0];
-const formatDate = (value) => (value ? new Date(value).toLocaleDateString() : '—');
 const formatMethod = (value) => (value ? String(value).replace(/_/g, ' ') : 'All methods');
 const ITEMS_PER_PAGE = 50;
 
@@ -129,7 +129,7 @@ const RentalCollectionReport = () => {
 
   const filterSummary = useMemo(() => {
     const base = [
-      { label: 'Period', value: `${formatDate(filters.startDate)} to ${formatDate(filters.endDate)}` },
+      { label: 'Period', value: `${fmtDate(filters.startDate)} to ${fmtDate(filters.endDate)}` },
       { label: 'Zone', value: filters.zone || 'All zones' },
       { label: 'Property', value: filters.propertyId ? propertyNameMap.get(String(filters.propertyId)) || 'Selected property' : 'All properties' },
       { label: 'Tenant', value: filters.tenantId ? tenantNameMap.get(String(filters.tenantId)) || 'Selected tenant' : 'All tenants' },
@@ -258,7 +258,7 @@ const RentalCollectionReport = () => {
       tbody td.r{text-align:right}tbody tr:nth-child(even){background:#f8fafc}
       *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
     </style></head><body>
-    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">Rental Collection Report</div><div class="sub">Period: ${formatDate(filters.startDate)} to ${formatDate(filters.endDate)}</div></div>
+    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">Rental Collection Report</div><div class="sub">Period: ${fmtDate(filters.startDate)} to ${fmtDate(filters.endDate)}</div></div>
     <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div><div>Prepared by: ${by}</div><div>Receipts: ${rows.length}</div></div></div>
     <div class="cards">
       <div class="card"><div class="cl">Operational Income</div><div class="cv" style="color:#0B3B2E">${fmt(summary.operationalCollected ?? summary.totalCollected)}</div></div>
@@ -316,7 +316,7 @@ const RentalCollectionReport = () => {
               </p>
             </div>
             <div className="report-print-meta">
-              <div><strong>Period:</strong> {formatDate(filters.startDate)} to {formatDate(filters.endDate)}</div>
+              <div><strong>Period:</strong> {fmtDate(filters.startDate)} to {fmtDate(filters.endDate)}</div>
               <div><strong>Generated:</strong> {printGeneratedAt}</div>
               <div><strong>Prepared by:</strong> {[currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || 'Milik Admin'}</div>
             </div>
@@ -397,7 +397,7 @@ const RentalCollectionReport = () => {
                   <tr><td colSpan={12}>No receipts found for the current filters.</td></tr>
                 ) : (report.rows || []).map((row) => (
                   <tr key={row.receiptId}>
-                    <td>{formatDate(row.paymentDate)}</td>
+                    <td>{fmtDate(row.paymentDate)}</td>
                     <td>{row.receiptNumber || '—'}</td>
                     <td>{row.propertyName || '—'}</td>
                     <td>{row.tenantName || '—'}</td>
@@ -600,7 +600,7 @@ const RentalCollectionReport = () => {
                         <tr><td colSpan={13} className="px-2 py-4 text-center text-slate-500">No receipts found for the current filters.</td></tr>
                       ) : paginatedRows.map((row, idx) => (
                         <tr key={row.receiptId} className={`border-b border-gray-100 ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
-                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatDate(row.paymentDate)}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{fmtDate(row.paymentDate)}</td>
                           <td className="px-2 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.receiptNumber || '—'}</td>
                           <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{row.propertyName}</td>
                           <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{row.tenantName}</td>

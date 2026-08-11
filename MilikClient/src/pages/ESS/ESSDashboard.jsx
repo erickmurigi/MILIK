@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { essRequests } from '../../utils/essRequests';
 import { useESS } from '../../context/ESSContext';
 import './ESS.css';
-
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+import { fmtDate } from '../../utils/dates';
 const fmtTime = (d) => d ? new Date(d).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' }) : '—';
 
 export default function ESSDashboard() {

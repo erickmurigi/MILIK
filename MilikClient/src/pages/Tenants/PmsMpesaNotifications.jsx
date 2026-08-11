@@ -4,9 +4,14 @@ import { useNavigate } from "react-router-dom";
 import {
   FaExclamationTriangle,
   FaSearch, FaRedoAlt, FaTimes, FaLink, FaBan, FaUndo, FaUpload,
-  FaFileAlt, FaReceipt, FaUser, FaTrash, FaSpinner,
+  FaFileAlt, FaReceipt, FaUser, FaTrash,
   FaChevronDown, FaChevronUp, FaChevronLeft, FaChevronRight, FaPaste,
 } from "react-icons/fa";
+import { useConfirm } from "../../context/ConfirmContext";
+import { todayISO, fmtDate } from "../../utils/dates";
+import { formatMoney } from "../../utils/money";
+import StatusBadge from "../../components/common/StatusBadge";
+import Spinner from "../../components/common/Spinner";
 import { toast } from "react-toastify";
 import { adminRequests } from "../../utils/requestMethods";
 import { selectCurrentCompany } from "../../redux/selectors";
@@ -17,34 +22,17 @@ import AppSelect from "../../components/common/AppSelect";
 const PAGE_SIZE   = 50;
 const AUTO_RELOAD = 30; // seconds
 
-const todayISO          = () => new Date().toISOString().slice(0, 10);
 const threeMonthsAgoISO = () => { const d = new Date(); d.setMonth(d.getMonth() - 3); return d.toISOString().slice(0, 10); };
-const formatMoney = (v) => `Ksh ${Number(v || 0).toLocaleString()}`;
-const fmtDate     = (v) =>
-  v ? new Date(v).toLocaleString("en-KE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
 
 const getTenantLabel = (t) => t?.name || "—";
 const getUnitLabel   = (t) => [t?.unit?.unitNumber, t?.unit?.property?.propertyName].filter(Boolean).join(" · ") || "";
 
-const STATUS_META = {
-  unmatched:  { label: "Unmatched", pill: "bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-300",      chip: { dot: "bg-amber-400",   text: "text-amber-700",   bg: "bg-amber-50",   border: "border-amber-300",   accent: "border-l-amber-400"   }, sub: "pending action"    },
-  captured:   { label: "Captured",  pill: "bg-emerald-100 text-emerald-800 ring-1 ring-inset ring-emerald-300", chip: { dot: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-300", accent: "border-l-emerald-500" }, sub: ""                  },
-  duplicate:  { label: "Duplicate", pill: "bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-300",      chip: { dot: "bg-slate-400",   text: "text-slate-600",   bg: "bg-white",      border: "border-slate-300",   accent: "border-l-slate-400"   }, sub: "already processed" },
-  ignored:    { label: "Ignored",   pill: "bg-red-100 text-red-800 ring-1 ring-inset ring-red-300",            chip: { dot: "bg-red-400",     text: "text-red-700",     bg: "bg-red-50",     border: "border-red-300",     accent: "border-l-red-400"     }, sub: "excluded"          },
-  // legacy — old DB records; treated as unmatched
-  matched_tenant: { label: "Unmatched", pill: "bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-300", chip: { dot: "bg-amber-400", text: "text-amber-700", bg: "bg-amber-50", border: "border-amber-300", accent: "border-l-amber-400" }, sub: "pending action" },
-};
-
-const StatusBadge = ({ status }) => {
-  const m = STATUS_META[status] || STATUS_META.unmatched;
-  return (
-    <div className="flex flex-col gap-px">
-      <span className={`inline-flex items-center rounded px-1.5 py-px text-[9px] font-black uppercase tracking-wide ${m.pill}`}>
-        {m.label}
-      </span>
-      {m.sub && <span className="text-[8px] italic text-slate-400 leading-tight">{m.sub}</span>}
-    </div>
-  );
+const STATUS_MAP = {
+  unmatched:      "border-amber-300 bg-amber-50 text-amber-700",
+  captured:       "border-emerald-300 bg-emerald-50 text-emerald-700",
+  duplicate:      "border-slate-300 bg-slate-100 text-slate-600",
+  ignored:        "border-red-300 bg-red-50 text-red-700",
+  matched_tenant: "border-amber-300 bg-amber-50 text-amber-700",
 };
 
 // ─── Countdown refresh button — isolated so per-second ticks don't re-render the page ──
@@ -64,7 +52,7 @@ const CountdownButton = React.memo(function CountdownButton({ onRefresh, loading
     <button type="button" onClick={() => onRefresh()}
       className="inline-flex h-[20px] items-center gap-0.5 border border-slate-300 bg-white px-1.5 text-[9px] font-bold text-slate-700 hover:bg-slate-50"
       title={`Auto-refreshes in ${countdown}s`}>
-      {loading ? <FaSpinner size={7} className="animate-spin" /> : <FaRedoAlt size={7} />}
+      {loading ? <Spinner size="sm" /> : <FaRedoAlt size={7} />}
       <span>{loading ? "Loading" : `${countdown}s`}</span>
     </button>
   );
@@ -151,7 +139,7 @@ function AssignTenantModal({ notif, businessId, onClose, onAssigned }) {
               onKeyDown={e => e.key === "Enter" && doSearch()} />
             <button type="button" onClick={() => doSearch()} disabled={searching}
               className="inline-flex h-9 items-center gap-1.5 bg-[#FF8C00] px-4 text-xs font-bold text-white hover:bg-[#E67E00] disabled:opacity-50">
-              {searching ? <FaSpinner size={10} className="animate-spin" /> : <FaSearch size={10} />}
+              {searching ? <Spinner size="sm" /> : <FaSearch size={10} />}
               Search
             </button>
           </div>
@@ -174,7 +162,7 @@ function AssignTenantModal({ notif, businessId, onClose, onAssigned }) {
                 className={`flex w-full items-center gap-3 border-b border-slate-100 px-4 py-2.5 text-left transition-colors disabled:cursor-wait ${isAssigning ? "bg-emerald-50" : "hover:bg-blue-50/60"}`}>
                 <span className="shrink-0">
                   {isAssigning
-                    ? <FaSpinner size={12} className="animate-spin text-emerald-600" />
+                    ? <Spinner size="sm" />
                     : <FaUser size={12} className="text-slate-400" />}
                 </span>
                 <div className="min-w-0 flex-1">
@@ -560,14 +548,14 @@ function UploadModal({ businessId, paybills = [], onClose, onUploaded }) {
                   {tab === "csv" && preview && (
                     <button onClick={handleProcessCsv} disabled={processing}
                       className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
-                      {processing ? <FaSpinner size={10} className="animate-spin" /> : <FaUpload size={10} />}
+                      {processing ? <Spinner size="sm" /> : <FaUpload size={10} />}
                       {processing ? "Processing…" : `Process ${preview.total} row${preview.total !== 1 ? "s" : ""}`}
                     </button>
                   )}
                   {tab === "paste" && pasteText.trim() && (
                     <button onClick={handleProcessPaste} disabled={processing}
                       className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
-                      {processing ? <FaSpinner size={10} className="animate-spin" /> : <FaPaste size={10} />}
+                      {processing ? <Spinner size="sm" /> : <FaPaste size={10} />}
                       {processing ? "Processing…" : `Import ${pasteText.trim().split("\n").filter(Boolean).length} line${pasteText.trim().split("\n").filter(Boolean).length !== 1 ? "s" : ""}`}
                     </button>
                   )}
@@ -581,6 +569,7 @@ function UploadModal({ businessId, paybills = [], onClose, onUploaded }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function PmsMpesaNotifications() {
+  const confirm = useConfirm();
   const navigate       = useNavigate();
   const currentCompany = useSelector(selectCurrentCompany);
   const businessId     = String(currentCompany?._id || currentCompany?.id || "");
@@ -645,7 +634,7 @@ export default function PmsMpesaNotifications() {
   }, [load]);
 
   const handleDelete = useCallback(async (id) => {
-    if (!window.confirm("Delete this M-Pesa collection record? This cannot be undone.")) return;
+    if (!await confirm({ message: "Delete this M-Pesa collection record? This cannot be undone.", confirmText: "Delete", isDangerous: true })) return;
     setDeletingId(id);
     try {
       await adminRequests.delete(`/mpesa-collections/${id}`, { params: { business: businessId } });
@@ -846,7 +835,7 @@ export default function PmsMpesaNotifications() {
                       onClick={() => setExpanded(isOpen ? null : n._id)}
                       className={`cursor-pointer border-b border-gray-100 transition-colors ${isIgnored ? "opacity-60 bg-red-50/20 hover:bg-red-50/40" : index % 2 === 0 ? "bg-white hover:bg-blue-50/30" : "bg-slate-50/40 hover:bg-blue-50/30"}`}>
                       <td className="px-2 py-1 border-r border-gray-100 text-[10px] text-slate-400 whitespace-nowrap tabular-nums">{fmtDate(n.transactionDate || n.createdAt)}</td>
-                      <td className="px-2 py-1 border-r border-gray-100"><StatusBadge status={n.matchingStatus} /></td>
+                      <td className="px-2 py-1 border-r border-gray-100"><StatusBadge status={n.matchingStatus} map={STATUS_MAP} /></td>
                       <td className="px-2 py-1 border-r border-gray-100">
                         <div className="font-extrabold tracking-wider text-slate-900 leading-tight">{n.accountReference || "—"}</div>
                         {n.billRefNumber && n.billRefNumber !== n.accountReference && (
@@ -987,7 +976,7 @@ export default function PmsMpesaNotifications() {
                             <div className="mt-3 flex justify-end">
                               <button onClick={() => handleDelete(n._id)} disabled={deletingId === n._id}
                                 className="inline-flex items-center gap-1.5 border border-rose-300 bg-rose-50 px-3 py-1.5 text-[10px] font-bold text-rose-600 hover:bg-rose-100 disabled:opacity-50">
-                                {deletingId === n._id ? <FaSpinner size={9} className="animate-spin" /> : <FaTrash size={9} />}
+                                {deletingId === n._id ? <Spinner size="sm" /> : <FaTrash size={9} />}
                                 {deletingId === n._id ? "Deleting…" : "Delete Record"}
                               </button>
                             </div>

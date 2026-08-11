@@ -37,6 +37,7 @@ import { adminRequests } from "../../utils/requestMethods";
 import { printTabularList } from "../../utils/printList";
 import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 import { useTabState } from "../../hooks/useTabState";
+import { fmtDate } from "../../utils/dates";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -55,15 +56,6 @@ const emptyFilters = {
   lr: "",
   landlord: "",
   location: "",
-};
-
-const formatDate = (dateString) => {
-  if (!dateString) return "N/A";
-  return new Date(dateString).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
 };
 
 const getPrimaryLandlord = (landlords) => {
@@ -808,7 +800,7 @@ const Properties = () => {
                                       </div>
                                       <div>
                                         <span className="text-xs font-semibold text-gray-700">Date Acquired:</span>
-                                        <p className="text-sm font-bold text-gray-900 mt-1">{formatDate(property.dateAcquired)}</p>
+                                        <p className="text-sm font-bold text-gray-900 mt-1">{fmtDate(property.dateAcquired)}</p>
                                       </div>
                                     </div>
 

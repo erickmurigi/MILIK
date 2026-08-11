@@ -3,15 +3,19 @@ import { useTabState } from "../../hooks/useTabState";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
-  FaEnvelope, FaSpinner, FaSearch, FaSyncAlt, FaPaperPlane,
+  FaEnvelope, FaSearch, FaSyncAlt, FaPaperPlane,
   FaTimesCircle, FaPlus, FaTimes, FaUsers, FaCheckCircle,
   FaChevronDown, FaChevronRight, FaExclamationTriangle, FaInbox,
   FaTrash, FaAt, FaSms,
 } from "react-icons/fa";
+import StatusBadge from "../../components/common/StatusBadge";
+import Spinner from "../../components/common/Spinner";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { adminRequests } from "../../utils/requestMethods";
+import { useConfirm } from "../../context/ConfirmContext";
 import { getTenants } from "../../redux/tenantsRedux";
+import { fmtDateTime } from "../../utils/dates";
 
 const PAGE_SIZE = 50;
 
@@ -22,21 +26,14 @@ const TABS = [
   { key: "pending", label: "PENDING", countKey: "pending" },
 ];
 
-const STATUS_META = {
-  sent:      { label: "Sent",      cls: "border-emerald-300 bg-emerald-50 text-emerald-700" },
-  delivered: { label: "Delivered", cls: "border-teal-300 bg-teal-50 text-teal-700" },
-  opened:    { label: "Opened",    cls: "border-sky-300 bg-sky-50 text-sky-700" },
-  failed:    { label: "Failed",    cls: "border-rose-300 bg-rose-50 text-rose-700" },
-  error:     { label: "Error",     cls: "border-rose-300 bg-rose-50 text-rose-700" },
-  pending:   { label: "Pending",   cls: "border-amber-300 bg-amber-50 text-amber-700" },
-  bounced:   { label: "Bounced",   cls: "border-orange-300 bg-orange-50 text-orange-700" },
-};
-
-const fmtDateTime = (v) => {
-  if (!v) return "—";
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+const STATUS_MAP = {
+  sent:      "border-emerald-300 bg-emerald-50 text-emerald-700",
+  delivered: "border-teal-300 bg-teal-50 text-teal-700",
+  opened:    "border-sky-300 bg-sky-50 text-sky-700",
+  failed:    "border-rose-300 bg-rose-50 text-rose-700",
+  error:     "border-rose-300 bg-rose-50 text-rose-700",
+  pending:   "border-amber-300 bg-amber-50 text-amber-700",
+  bounced:   "border-orange-300 bg-orange-50 text-orange-700",
 };
 
 const fmtRel = (v) => {
@@ -52,14 +49,6 @@ const fmtRel = (v) => {
   return `${Math.floor(h / 24)}d ago`;
 };
 
-const StatusChip = ({ status }) => {
-  const meta = STATUS_META[status] || { label: status || "Pending", cls: "border-slate-300 bg-slate-50 text-slate-600" };
-  return (
-    <span className={`inline-flex items-center border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${meta.cls}`}>
-      {meta.label}
-    </span>
-  );
-};
 
 // ── Compose slide panel ────────────────────────────────────────────────────────
 const ComposePanel = ({ open, onClose, businessId, tenants, onSent }) => {
@@ -228,7 +217,7 @@ const ComposePanel = ({ open, onClose, businessId, tenants, onSent }) => {
           <button onClick={handleClose} className="border border-slate-300 bg-white px-4 py-2 text-[11px] font-bold text-slate-600 transition hover:bg-slate-100">Cancel</button>
           <button onClick={handleSend} disabled={sending || !subject.trim() || !body.trim()}
             className="inline-flex items-center gap-2 bg-[#FF8C00] px-5 py-2 text-[11px] font-bold text-white transition hover:bg-[#E67E00] disabled:opacity-40">
-            {sending ? <FaSpinner className="animate-spin" size={11} /> : <FaPaperPlane size={11} />}
+            {sending ? <Spinner size="sm" /> : <FaPaperPlane size={11} />}
             {sending ? "Sending…" : recipientMode === "select" && selectedIds.length > 0 ? `Send to ${selectedIds.length}` : "Send Email"}
           </button>
         </div>
@@ -241,6 +230,7 @@ const ComposePanel = ({ open, onClose, businessId, tenants, onSent }) => {
 const EmailManager = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const confirm  = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const { currentUser }    = useSelector(s => s.auth || {});
@@ -307,7 +297,7 @@ const EmailManager = () => {
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
   const handleDeleteLog = async (logId) => {
-    if (!window.confirm("Delete this log entry? This cannot be undone.")) return;
+    if (!(await confirm({ title: 'Delete Log Entry', message: 'Delete this log entry? This cannot be undone.', confirmText: 'Delete', isDangerous: true }))) return;
     setDeletingId(logId);
     try {
       await adminRequests.delete(`/communications/sms-logs/${logId}`);
@@ -403,7 +393,7 @@ const EmailManager = () => {
         <div className="flex-1 overflow-auto">
           {loading ? (
             <div className="flex flex-col items-center justify-center gap-3 py-24 text-slate-400">
-              <FaSpinner className="animate-spin" size={20} />
+              <Spinner size="lg" />
               <p className="text-xs font-semibold">Loading email logs…</p>
             </div>
           ) : logs.length === 0 ? (
@@ -462,7 +452,7 @@ const EmailManager = () => {
                           </span>
                         </td>
                         <td className="px-3 py-2 text-center">
-                          <StatusChip status={log.status} />
+                          <StatusBadge status={log.status} map={STATUS_MAP} />
                         </td>
                         <td className="px-3 py-2 text-right">
                           <p className="font-semibold text-slate-700">{fmtRel(log.sentAt || log.createdAt)}</p>
@@ -509,7 +499,7 @@ const EmailManager = () => {
                                     disabled={deletingId === log._id}
                                     className="inline-flex items-center gap-1.5 border border-rose-300 bg-rose-50 px-3 py-1.5 text-[10px] font-bold text-rose-600 transition hover:bg-rose-100 disabled:opacity-50"
                                   >
-                                    {deletingId === log._id ? <FaSpinner size={9} className="animate-spin" /> : <FaTrash size={9} />}
+                                    {deletingId === log._id ? <Spinner size="sm" /> : <FaTrash size={9} />}
                                     {deletingId === log._id ? "Deleting…" : "Delete Entry"}
                                   </button>
                                 </div>

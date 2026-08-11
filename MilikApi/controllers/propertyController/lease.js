@@ -11,6 +11,8 @@ import RentPayment from "../../models/RentPayment.js";
 import { emitToCompany } from "../../utils/socketManager.js";
 import { canonicalizeBillingPeriodKey } from "../../services/billingPeriodService.js";
 import { generateLeasePdf } from "../../services/leasePdfService.js";
+import { createError } from "../../utils/error.js";
+import { resolveBusinessId } from "../../utils/requestContext.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,13 +20,6 @@ const LEASE_UPLOADS_DIR = path.join(__dirname, "../../uploads/leases");
 
 const ACTIVE_LEASE_STATUSES = ["draft", "pending_signature", "active"];
 const TERMINAL_LEASE_STATUSES = ["expired", "terminated", "renewed", "cancelled"];
-
-const resolveBusinessId = (req, fallback = null) =>
-  (req.user?.isSystemAdmin && (req.body?.business || req.query?.business)) ||
-  fallback ||
-  req.user?.company ||
-  req.user?.business ||
-  null;
 
 const normalizeObjectId = (value) => {
   if (!value) return null;
@@ -206,7 +201,7 @@ const ensureNoConflictingAgreement = async ({
 };
 
 const sanitizeLeasePayload = async ({ req, payload = {}, existingLease = null } = {}) => {
-  const businessId = resolveBusinessId(req, existingLease?.business);
+  const businessId = resolveBusinessId(req);
   if (!businessId) {
     const error = new Error("Business context is required to manage agreements.");
     error.statusCode = 400;
@@ -371,7 +366,7 @@ export const getLease = async (req, res, next) => {
     const filter = business ? { _id: req.params.id, business } : { _id: req.params.id };
     const lease = await populateLeaseQuery(Lease.findOne(filter)).lean();
 
-    if (!lease) return res.status(404).json({ message: "Lease not found" });
+    if (!lease) return next(createError(404, "Lease not found"));
     return res.status(200).json(lease);
   } catch (err) {
     next(err);
@@ -384,7 +379,7 @@ export const updateLease = async (req, res, next) => {
     const existingLease = await Lease.findOne(business ? { _id: req.params.id, business } : { _id: req.params.id }).lean();
 
     if (!existingLease) {
-      return res.status(404).json({ message: "Lease not found" });
+      return next(createError(404, "Lease not found"));
     }
 
     const updateData = await sanitizeLeasePayload({ req, payload: req.body || {}, existingLease });
@@ -403,7 +398,7 @@ export const updateLeaseReviews = async (req, res, next) => {
   try {
     const business = resolveBusinessId(req);
     const lease = await Lease.findOne(business ? { _id: req.params.id, business } : { _id: req.params.id }).lean();
-    if (!lease) return res.status(404).json({ message: "Lease not found" });
+    if (!lease) return next(createError(404, "Lease not found"));
 
     const updates = {};
     if (req.body.rentReviewRecords !== undefined) {
@@ -413,7 +408,7 @@ export const updateLeaseReviews = async (req, res, next) => {
       updates.billingScheduleAdjustments = sanitizeBillingScheduleAdjustments(req.body.billingScheduleAdjustments);
     }
     if (Object.keys(updates).length === 0) {
-      return res.status(400).json({ message: "No review fields provided" });
+      return next(createError(400, "No review fields provided"));
     }
 
     const updated = await populateLeaseQuery(
@@ -433,7 +428,7 @@ export const deleteLease = async (req, res, next) => {
 
     const lease = await Lease.findOne(filter).lean();
     if (!lease) {
-      return res.status(404).json({ message: "Lease not found" });
+      return next(createError(404, "Lease not found"));
     }
 
     // Auto-created agreements (generated when a tenant is added) may be deleted to
@@ -444,9 +439,7 @@ export const deleteLease = async (req, res, next) => {
         RentPayment.countDocuments({ tenant: lease.tenant, business: lease.business }),
       ]);
       if (receiptsCount > 0 || rentPaymentsCount > 0) {
-        return res.status(400).json({
-          message: "This agreement cannot be deleted because the tenant already has payment history. Use Terminate to close the agreement while preserving financial records.",
-        });
+        return next(createError(400, "This agreement cannot be deleted because the tenant already has payment history. Use Terminate to close the agreement while preserving financial records."));
       }
       await Lease.findByIdAndDelete(lease._id);
       emitToCompany(lease.business, "lease:deleted", { _id: lease._id });
@@ -454,15 +447,15 @@ export const deleteLease = async (req, res, next) => {
     }
 
     if (!["draft", "cancelled"].includes(String(lease.status || "").toLowerCase())) {
-      return res.status(400).json({ message: "Only draft or cancelled agreements can be deleted. Use terminate or renew to preserve agreement history." });
+      return next(createError(400, "Only draft or cancelled agreements can be deleted. Use terminate or renew to preserve agreement history."));
     }
 
     if (lease.signedByTenant || lease.signedByLandlord) {
-      return res.status(400).json({ message: "Signed agreements cannot be deleted. Cancel the agreement instead to preserve audit history." });
+      return next(createError(400, "Signed agreements cannot be deleted. Cancel the agreement instead to preserve audit history."));
     }
 
     if (lease.billingScheduleAdjustments?.some((item) => String(item?.status || "") === "active")) {
-      return res.status(400).json({ message: "Delete or freeze billing adjustments before deleting the agreement." });
+      return next(createError(400, "Delete or freeze billing adjustments before deleting the agreement."));
     }
 
     await Lease.findByIdAndDelete(lease._id);
@@ -478,12 +471,12 @@ export const signLease = async (req, res, next) => {
     const business = resolveBusinessId(req);
     const lease = await Lease.findOne(business ? { _id: req.params.id, business } : { _id: req.params.id }).lean();
 
-    if (!lease) return res.status(404).json({ message: "Lease not found" });
+    if (!lease) return next(createError(404, "Lease not found"));
 
     const signedBy = String(req.body?.signedBy || "").trim().toLowerCase();
     const currentStatus = String(lease.status || "").toLowerCase();
     if (["renewed", "terminated", "cancelled"].includes(currentStatus)) {
-      return res.status(400).json({ message: "This agreement can no longer be signed in its current status." });
+      return next(createError(400, "This agreement can no longer be signed in its current status."));
     }
     const updateData = {};
 
@@ -492,7 +485,7 @@ export const signLease = async (req, res, next) => {
     } else if (signedBy === "landlord") {
       updateData.signedByLandlord = true;
     } else {
-      return res.status(400).json({ message: "signedBy must be tenant or landlord" });
+      return next(createError(400, "signedBy must be tenant or landlord"));
     }
 
     const tenantSigned = signedBy === "tenant" ? true : lease.signedByTenant;
@@ -554,7 +547,7 @@ export const generateLeaseDocument = async (req, res, next) => {
       .populate("business", "companyName name logo phoneNo phone email postalAddress POBOX roadStreet Street town City country slogan")
       .lean();
 
-    if (!lease) return res.status(404).json({ message: "Lease not found" });
+    if (!lease) return next(createError(404, "Lease not found"));
 
     const pdfBuffer = await generateLeasePdf(lease);
 
@@ -590,10 +583,10 @@ export const renewLease = async (req, res, next) => {
     const business = resolveBusinessId(req);
     const lease = await Lease.findOne(business ? { _id: req.params.id, business } : { _id: req.params.id }).lean();
 
-    if (!lease) return res.status(404).json({ message: "Lease not found" });
+    if (!lease) return next(createError(404, "Lease not found"));
 
     if (["renewed", "terminated", "cancelled"].includes(String(lease.status || "").toLowerCase())) {
-      return res.status(400).json({ message: "Only active or expired agreements can be renewed." });
+      return next(createError(400, "Only active or expired agreements can be renewed."));
     }
 
     const previousEnd = lease.endDate ? new Date(lease.endDate) : new Date();

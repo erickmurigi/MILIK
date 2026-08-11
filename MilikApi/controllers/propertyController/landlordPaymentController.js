@@ -10,6 +10,7 @@ import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../serv
 import { resolveConfiguredAccountingDefaultAccount } from "../../services/companyAccountingDefaultsService.js";
 import { getCompanyTaxConfiguration, resolveOutputVatAccount } from "../../services/taxCalculationService.js";
 import { ensurePropertyControlAccount, resolveLandlordRemittancePayableAccount } from "../../services/propertyAccountingService.js";
+import { parsePagination } from "../../utils/pagination.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
@@ -264,9 +265,8 @@ const postPayableCreationIfMissing = async ({ statement, actorUserId, transactio
 export const listLandlordPayments = async (req, res, next) => {
   try {
     const businessId = await resolveBusinessId(req);
-    const { landlordId, landlord: landlordQ, page: pageQ, limit: limitQ } = req.query;
-    const page = Math.max(Number(pageQ || 1), 1);
-    const limit = Math.min(Math.max(Number(limitQ || 50), 1), 200);
+    const { landlordId, landlord: landlordQ } = req.query;
+    const { page, limit, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 200 });
 
     const PaymentVoucher = (await import("../../models/PaymentVoucher.js")).default;
     const query = { category: "landlord_other" };
@@ -280,7 +280,7 @@ export const listLandlordPayments = async (req, res, next) => {
         .populate("property", "propertyName propertyCode")
         .populate("debitAccount", "name code")
         .sort({ paidDate: -1, createdAt: -1 })
-        .skip((page - 1) * limit)
+        .skip(skip)
         .limit(limit)
         .lean(),
       PaymentVoucher.countDocuments(query),

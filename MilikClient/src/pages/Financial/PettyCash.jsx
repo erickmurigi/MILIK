@@ -11,7 +11,6 @@ import {
   FaPlus,
   FaRedoAlt,
   FaSearch,
-  FaTimes,
   FaWallet,
 } from "react-icons/fa";
 import { printPettyCashVoucher, printReplenishmentSummary } from "../../utils/printPettyCash";
@@ -22,6 +21,9 @@ import { getProperties } from "../../redux/propertyRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import { fmtDate } from "../../utils/dates";
+import Modal from "../../components/common/Modal";
+import { inputClass, labelClass } from "../../utils/formStyles";
 import {
   approvePettyCashReplenishment,
   createPettyCashAccount,
@@ -79,31 +81,12 @@ const STATUS_COLORS = {
 const fmt = (n) =>
   Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const fmtDate = (d) => {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" });
-};
 
-const inputCls =
-  "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
-const labelCls = "mb-0.5 block text-xs font-semibold text-slate-700";
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
-const Modal = ({ open, title, onClose, children, wide }) => {
+// ─── Modal wrapper (preserves open prop) ─────────────────────────────────────
+const PettyCashModal = ({ open, ...props }) => {
   if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className={`w-full ${wide ? "max-w-2xl" : "max-w-lg"} rounded-2xl bg-white shadow-2xl`}>
-        <div className="flex items-center justify-between bg-[#0B3B2E] px-4 py-3 text-white">
-          <h2 className="text-sm font-black">{title}</h2>
-          <button onClick={onClose} className="rounded-full border border-white/30 p-1.5 hover:bg-white/10">
-            <FaTimes size={12} />
-          </button>
-        </div>
-        <div className="max-h-[78vh] overflow-y-auto px-6 py-5">{children}</div>
-      </div>
-    </div>
-  );
+  return <Modal {...props} />;
 };
 
 // ─── Balance pill ─────────────────────────────────────────────────────────────
@@ -857,28 +840,28 @@ const PettyCash = () => {
       {/* ═══ Modals ═══════════════════════════════════════════════════════════ */}
 
       {/* New Account */}
-      <Modal open={showNewAccount} title="New Petty Cash Account" onClose={() => closeAccountModal()}>
+      <PettyCashModal open={showNewAccount} title="New Petty Cash Account" onClose={() => closeAccountModal()}>
         <form onSubmit={handleCreateAccount} className="space-y-3">
           <div>
-            <label className={labelCls}>Account Name <span className="text-red-500">*</span></label>
-            <input className={inputCls} value={accountForm.name} onChange={(e) => setAccountForm((p) => ({ ...p, name: e.target.value }))} placeholder="e.g. Head Office Petty Cash" />
+            <label className={labelClass}>Account Name <span className="text-red-500">*</span></label>
+            <input className={inputClass} value={accountForm.name} onChange={(e) => setAccountForm((p) => ({ ...p, name: e.target.value }))} placeholder="e.g. Head Office Petty Cash" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelCls}>Custodian Name</label>
-              <input className={inputCls} value={accountForm.custodianName} onChange={(e) => setAccountForm((p) => ({ ...p, custodianName: e.target.value }))} placeholder="Person responsible" />
+              <label className={labelClass}>Custodian Name</label>
+              <input className={inputClass} value={accountForm.custodianName} onChange={(e) => setAccountForm((p) => ({ ...p, custodianName: e.target.value }))} placeholder="Person responsible" />
             </div>
             <div>
-              <label className={labelCls}>Voucher Prefix</label>
-              <input className={inputCls} value={accountForm.voucherPrefix} onChange={(e) => setAccountForm((p) => ({ ...p, voucherPrefix: e.target.value.toUpperCase().slice(0, 10) }))} placeholder="PCV" maxLength={10} />
+              <label className={labelClass}>Voucher Prefix</label>
+              <input className={inputClass} value={accountForm.voucherPrefix} onChange={(e) => setAccountForm((p) => ({ ...p, voucherPrefix: e.target.value.toUpperCase().slice(0, 10) }))} placeholder="PCV" maxLength={10} />
             </div>
           </div>
           <div>
-            <label className={labelCls}>Float Amount (KES) <span className="text-red-500">*</span></label>
-            <input type="number" min="0" step="1" className={inputCls} value={accountForm.floatAmount} onChange={(e) => setAccountForm((p) => ({ ...p, floatAmount: e.target.value }))} placeholder="e.g. 10000" />
+            <label className={labelClass}>Float Amount (KES) <span className="text-red-500">*</span></label>
+            <input type="number" min="0" step="1" className={inputClass} value={accountForm.floatAmount} onChange={(e) => setAccountForm((p) => ({ ...p, floatAmount: e.target.value }))} placeholder="e.g. 10000" />
           </div>
           <div>
-            <label className={labelCls}>Petty Cash Asset Account (GL)</label>
+            <label className={labelClass}>Petty Cash Asset Account (GL)</label>
             <AppSelect
               value={accountForm.glAccountId}
               onChange={(v) => setAccountForm((p) => ({ ...p, glAccountId: v ?? "" }))}
@@ -891,8 +874,8 @@ const PettyCash = () => {
             />
           </div>
           <div>
-            <label className={labelCls}>Notes</label>
-            <textarea className={inputCls} rows={2} value={accountForm.notes} onChange={(e) => setAccountForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Optional notes" />
+            <label className={labelClass}>Notes</label>
+            <textarea className={inputClass} rows={2} value={accountForm.notes} onChange={(e) => setAccountForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Optional notes" />
           </div>
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" onClick={() => closeAccountModal()} className="rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
@@ -901,27 +884,27 @@ const PettyCash = () => {
             </button>
           </div>
         </form>
-      </Modal>
+      </PettyCashModal>
 
       {/* New Disbursement */}
-      <Modal open={showNewDisbursement} title="Record Disbursement" onClose={() => closeDisbModal()}>
+      <PettyCashModal open={showNewDisbursement} title="Record Disbursement" onClose={() => closeDisbModal()}>
         <form onSubmit={handleCreateDisbursement} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelCls}>Date <span className="text-red-500">*</span></label>
-              <input type="date" className={inputCls} value={disbForm.date} onChange={(e) => setDisbForm((p) => ({ ...p, date: e.target.value }))} />
+              <label className={labelClass}>Date <span className="text-red-500">*</span></label>
+              <input type="date" className={inputClass} value={disbForm.date} onChange={(e) => setDisbForm((p) => ({ ...p, date: e.target.value }))} />
             </div>
             <div>
-              <label className={labelCls}>Amount (KES) <span className="text-red-500">*</span></label>
-              <input type="number" min="0.01" step="0.01" className={inputCls} value={disbForm.amount} onChange={(e) => setDisbForm((p) => ({ ...p, amount: e.target.value }))} placeholder="0.00" />
+              <label className={labelClass}>Amount (KES) <span className="text-red-500">*</span></label>
+              <input type="number" min="0.01" step="0.01" className={inputClass} value={disbForm.amount} onChange={(e) => setDisbForm((p) => ({ ...p, amount: e.target.value }))} placeholder="0.00" />
             </div>
           </div>
           <div>
-            <label className={labelCls}>Description <span className="text-red-500">*</span></label>
-            <input className={inputCls} value={disbForm.description} onChange={(e) => setDisbForm((p) => ({ ...p, description: e.target.value }))} placeholder="What was this expense for?" />
+            <label className={labelClass}>Description <span className="text-red-500">*</span></label>
+            <input className={inputClass} value={disbForm.description} onChange={(e) => setDisbForm((p) => ({ ...p, description: e.target.value }))} placeholder="What was this expense for?" />
           </div>
           <div>
-            <label className={labelCls}>Category <span className="text-red-500">*</span></label>
+            <label className={labelClass}>Category <span className="text-red-500">*</span></label>
             <AppSelect
               value={disbForm.category}
               onChange={(v) => setDisbForm((p) => ({ ...p, category: v ?? "maintenance" }))}
@@ -933,7 +916,7 @@ const PettyCash = () => {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelCls}>Property (optional)</label>
+              <label className={labelClass}>Property (optional)</label>
               <AppSelect
                 value={disbForm.propertyId}
                 onChange={(v) => setDisbForm((p) => ({ ...p, propertyId: v ?? "" }))}
@@ -946,7 +929,7 @@ const PettyCash = () => {
               />
             </div>
             <div>
-              <label className={labelCls}>Expense Account (GL)</label>
+              <label className={labelClass}>Expense Account (GL)</label>
               <AppSelect
                 value={disbForm.expenseAccountId}
                 onChange={(v) => setDisbForm((p) => ({ ...p, expenseAccountId: v ?? "" }))}
@@ -965,8 +948,8 @@ const PettyCash = () => {
           </div>
           {!disbForm.receiptAttached && (
             <div>
-              <label className={labelCls}>Reason (no receipt)</label>
-              <input className={inputCls} value={disbForm.receiptNote} onChange={(e) => setDisbForm((p) => ({ ...p, receiptNote: e.target.value }))} placeholder="e.g. Receipt lost, purchase below KES 200" />
+              <label className={labelClass}>Reason (no receipt)</label>
+              <input className={inputClass} value={disbForm.receiptNote} onChange={(e) => setDisbForm((p) => ({ ...p, receiptNote: e.target.value }))} placeholder="e.g. Receipt lost, purchase below KES 200" />
             </div>
           )}
           <div className="flex justify-end gap-2 pt-1">
@@ -976,10 +959,10 @@ const PettyCash = () => {
             </button>
           </div>
         </form>
-      </Modal>
+      </PettyCashModal>
 
       {/* Replenishment Request */}
-      <Modal open={showReplenishment} title="Request Replenishment" onClose={() => closeRepModal()}>
+      <PettyCashModal open={showReplenishment} title="Request Replenishment" onClose={() => closeRepModal()}>
         <form onSubmit={handleRequestReplenishment} className="space-y-3">
           {selectedAccount && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs">
@@ -989,11 +972,11 @@ const PettyCash = () => {
             </div>
           )}
           <div>
-            <label className={labelCls}>Amount to Top Up (KES) <span className="text-red-500">*</span></label>
-            <input type="number" min="0.01" step="0.01" className={inputCls} value={repForm.amount} onChange={(e) => setRepForm((p) => ({ ...p, amount: e.target.value }))} placeholder="0.00" />
+            <label className={labelClass}>Amount to Top Up (KES) <span className="text-red-500">*</span></label>
+            <input type="number" min="0.01" step="0.01" className={inputClass} value={repForm.amount} onChange={(e) => setRepForm((p) => ({ ...p, amount: e.target.value }))} placeholder="0.00" />
           </div>
           <div>
-            <label className={labelCls}>Draw From (Bank Account)</label>
+            <label className={labelClass}>Draw From (Bank Account)</label>
             <AppSelect
               value={repForm.bankAccountId}
               onChange={(v) => setRepForm((p) => ({ ...p, bankAccountId: v ?? "" }))}
@@ -1006,8 +989,8 @@ const PettyCash = () => {
             />
           </div>
           <div>
-            <label className={labelCls}>Notes</label>
-            <textarea className={inputCls} rows={2} value={repForm.notes} onChange={(e) => setRepForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Optional notes for approver" />
+            <label className={labelClass}>Notes</label>
+            <textarea className={inputClass} rows={2} value={repForm.notes} onChange={(e) => setRepForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Optional notes for approver" />
           </div>
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" onClick={() => closeRepModal()} className="rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
@@ -1016,10 +999,10 @@ const PettyCash = () => {
             </button>
           </div>
         </form>
-      </Modal>
+      </PettyCashModal>
 
       {/* Void Disbursement */}
-      <Modal open={!!showVoidModal} title="Void Disbursement" onClose={() => { setShowVoidModal(null); setVoidReason(""); }}>
+      <PettyCashModal open={!!showVoidModal} title="Void Disbursement" onClose={() => { setShowVoidModal(null); setVoidReason(""); }}>
         {showVoidModal && (
           <div className="space-y-3">
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs">
@@ -1028,8 +1011,8 @@ const PettyCash = () => {
               <p className="mt-2 text-red-600">This reverses the ledger entry and restores the balance. Cannot be undone.</p>
             </div>
             <div>
-              <label className={labelCls}>Void Reason</label>
-              <input className={inputCls} value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="Reason for voiding" />
+              <label className={labelClass}>Void Reason</label>
+              <input className={inputClass} value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="Reason for voiding" />
             </div>
             <div className="flex justify-end gap-2">
               <button onClick={() => { setShowVoidModal(null); setVoidReason(""); }} className="rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
@@ -1039,18 +1022,18 @@ const PettyCash = () => {
             </div>
           </div>
         )}
-      </Modal>
+      </PettyCashModal>
 
       {/* Reject Replenishment */}
-      <Modal open={!!showRejectModal} title="Reject Replenishment" onClose={() => { setShowRejectModal(null); setRejectReason(""); }}>
+      <PettyCashModal open={!!showRejectModal} title="Reject Replenishment" onClose={() => { setShowRejectModal(null); setRejectReason(""); }}>
         {showRejectModal && (
           <div className="space-y-3">
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs">
               <p className="font-semibold text-red-900">{showRejectModal.replenishmentNumber} — KES {fmt(showRejectModal.amount)}</p>
             </div>
             <div>
-              <label className={labelCls}>Rejection Reason</label>
-              <input className={inputCls} value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Why is this being rejected?" />
+              <label className={labelClass}>Rejection Reason</label>
+              <input className={inputClass} value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Why is this being rejected?" />
             </div>
             <div className="flex justify-end gap-2">
               <button onClick={() => { setShowRejectModal(null); setRejectReason(""); }} className="rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
@@ -1060,7 +1043,7 @@ const PettyCash = () => {
             </div>
           </div>
         )}
-      </Modal>
+      </PettyCashModal>
 
       <JournalEntriesDrawer
         open={!!glEntry}

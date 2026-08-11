@@ -4,6 +4,7 @@ import DashboardLayout from '../../components/Layout/DashboardLayout';
 import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
+import { inputClass } from '../../utils/formStyles';
 
 const pct = (v) => `${(Number(v) * 100).toFixed(2)}%`;
 const fmtKES = (n) => `KES ${Number(n || 0).toLocaleString('en-KE')}`;
@@ -46,7 +47,6 @@ const DEFAULTS = {
   ahlRate: 0.015,
 };
 
-const inputCls = 'h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] text-right w-full';
 
 export default function StatutoryDeductions() {
   const [cfg, setCfg]         = useState(null);
@@ -220,7 +220,7 @@ export default function StatutoryDeductions() {
                             onChange={(e) => setBand(i, 'upTo', e.target.value)}
                             placeholder={isLast ? '∞ (top band)' : ''}
                             disabled={isLast}
-                            className={`${inputCls} ${isLast ? 'bg-slate-50 text-slate-400' : ''}`}
+                            className={`${inputClass} ${isLast ? 'bg-slate-50 text-slate-400' : ''}`}
                           />
                           <input
                             type="number"
@@ -229,7 +229,7 @@ export default function StatutoryDeductions() {
                             max="100"
                             value={Number(band.rate * 100).toFixed(2)}
                             onChange={(e) => setBand(i, 'rate', Number(e.target.value) / 100)}
-                            className={inputCls}
+                            className={inputClass}
                           />
                           <button
                             onClick={() => removeBand(i)}
@@ -261,7 +261,7 @@ export default function StatutoryDeductions() {
                           type="number"
                           value={cfg.personalRelief}
                           onChange={(e) => set('personalRelief', e.target.value)}
-                          className={`mt-1 ${inputCls}`}
+                          className={`mt-1 ${inputClass}`}
                         />
                       </div>
                       <div className="text-xs text-slate-500 max-w-xs">
@@ -279,14 +279,14 @@ export default function StatutoryDeductions() {
                       <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Rate (% of gross)</label>
                       <input type="number" step="0.01" value={Number(cfg.shaRate * 100).toFixed(2)}
                         onChange={(e) => set('shaRate', Number(e.target.value) / 100)}
-                        className={`mt-1 ${inputCls}`} />
+                        className={`mt-1 ${inputClass}`} />
                       <div className="mt-0.5 text-[10px] text-slate-400">{pct(cfg.shaRate)} of gross</div>
                     </div>
                     <div>
                       <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Minimum (KES)</label>
                       <input type="number" value={cfg.shaMin}
                         onChange={(e) => set('shaMin', e.target.value)}
-                        className={`mt-1 ${inputCls}`} />
+                        className={`mt-1 ${inputClass}`} />
                     </div>
                   </div>
                 </div>
@@ -299,19 +299,19 @@ export default function StatutoryDeductions() {
                       <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Lower Earnings Limit (KES)</label>
                       <input type="number" value={cfg.nssfLower}
                         onChange={(e) => set('nssfLower', e.target.value)}
-                        className={`mt-1 ${inputCls}`} />
+                        className={`mt-1 ${inputClass}`} />
                     </div>
                     <div>
                       <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Upper Earnings Limit (KES)</label>
                       <input type="number" value={cfg.nssfUpper}
                         onChange={(e) => set('nssfUpper', e.target.value)}
-                        className={`mt-1 ${inputCls}`} />
+                        className={`mt-1 ${inputClass}`} />
                     </div>
                     <div>
                       <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Rate (% of earnings)</label>
                       <input type="number" step="0.01" value={Number(cfg.nssfRate * 100).toFixed(2)}
                         onChange={(e) => set('nssfRate', Number(e.target.value) / 100)}
-                        className={`mt-1 ${inputCls}`} />
+                        className={`mt-1 ${inputClass}`} />
                       <div className="mt-0.5 text-[10px] text-slate-400">{pct(cfg.nssfRate)} on Tier 1 + Tier 2</div>
                     </div>
                   </div>
@@ -325,7 +325,7 @@ export default function StatutoryDeductions() {
                       <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Rate (% of gross)</label>
                       <input type="number" step="0.01" value={Number(cfg.ahlRate * 100).toFixed(2)}
                         onChange={(e) => set('ahlRate', Number(e.target.value) / 100)}
-                        className={`mt-1 ${inputCls}`} />
+                        className={`mt-1 ${inputClass}`} />
                       <div className="mt-0.5 text-[10px] text-slate-400">{pct(cfg.ahlRate)} of gross</div>
                     </div>
                     <div className="text-xs text-slate-500">
@@ -348,7 +348,7 @@ export default function StatutoryDeductions() {
                         type="number"
                         value={preview}
                         onChange={(e) => setPreview(Number(e.target.value))}
-                        className={`mt-1 ${inputCls}`}
+                        className={`mt-1 ${inputClass}`}
                       />
                     </div>
                     {calc && (

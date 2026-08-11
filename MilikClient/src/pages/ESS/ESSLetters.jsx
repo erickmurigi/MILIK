@@ -3,8 +3,7 @@ import DOMPurify from 'dompurify';
 import { essRequests } from '../../utils/essRequests';
 import { useTabState } from '../../hooks/useTabState';
 import './ESS.css';
-
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+import { fmtDate } from '../../utils/dates';
 
 export default function ESSLetters() {
   const [letters,    setLetters]    = useState([]);

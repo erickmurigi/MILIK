@@ -28,6 +28,7 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import JournalEntriesDrawer from "../../components/Accounting/JournalEntriesDrawer";
 import AppSelect from "../../components/common/AppSelect";
 import { useConfirm } from "../../context/ConfirmContext";
+import { fmtDate } from "../../utils/dates";
 import {
   cancelLandlordAdvancementRecovery,
   createLandlordAdvancement,
@@ -54,7 +55,6 @@ const money = (value) =>
     maximumFractionDigits: 2,
   }).format(Number(value || 0));
 
-const formatDate = (value) => (value ? new Date(value).toLocaleDateString("en-KE") : "—");
 
 const addMonths = (dateValue, months = 0) => {
   if (!dateValue) return null;
@@ -177,7 +177,7 @@ const RecoveryHistoryRow = ({ item, onCancel }) => (
     <div>
       <div className="font-bold text-slate-900">{item.periodLabel || item.periodKey}</div>
       <div className="text-xs text-slate-500">
-        Processed {formatDate(item.processedAt)} • Amount {money(item.amount)}
+        Processed {fmtDate(item.processedAt)} • Amount {money(item.amount)}
       </div>
       {item.note ? <div className="mt-0.5 text-xs text-slate-600">{item.note}</div> : null}
     </div>
@@ -190,7 +190,7 @@ const RecoveryHistoryRow = ({ item, onCancel }) => (
       </button>
     ) : (
       <div className="rounded-xl bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-600">
-        Cancelled {formatDate(item.cancelledAt)}
+        Cancelled {fmtDate(item.cancelledAt)}
       </div>
     )}
   </div>
@@ -724,7 +724,7 @@ const LandlordAdvancements = () => {
                           <td className="px-3 py-1 border-r border-gray-100"><div className="font-semibold text-slate-900">{landlordLabel}</div><div className="text-[10px] text-slate-500">{propertyLabel}</div></td>
                           <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{TYPE_OPTIONS.find((item) => item.value === row.advanceType)?.label || statusLabel(row.advanceType)}</td>
                           <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">{money(row.amount)}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{formatDate(row.disbursementDate)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{fmtDate(row.disbursementDate)}</td>
                           <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${STATUS_STYLES[row.status] || STATUS_STYLES.draft}`}>{statusLabel(row.status)}</span></td>
                           <td className="px-3 py-1 text-right"><div className="inline-flex flex-wrap justify-end gap-1">{renderActions(row)}</div></td>
                         </tr>
@@ -1064,7 +1064,7 @@ const LandlordAdvancements = () => {
                 </label>
                 <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
                   <div className="font-black text-slate-900">{selectedRecoveryPeriod?.periodLabel || "No period selected"}</div>
-                  <div className="mt-2">Window: {formatDate(selectedRecoveryPeriod?.periodStart)} to {formatDate(selectedRecoveryPeriod?.periodEnd)}</div>
+                  <div className="mt-2">Window: {fmtDate(selectedRecoveryPeriod?.periodStart)} to {fmtDate(selectedRecoveryPeriod?.periodEnd)}</div>
                   <div className="mt-1">Outstanding balance: {money(recoveryModal.row?.outstandingRecoverableAmount)}</div>
                 </div>
               </div>

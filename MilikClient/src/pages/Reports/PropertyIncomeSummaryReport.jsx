@@ -10,12 +10,12 @@ import { FaFileDownload, FaFilter, FaPrint, FaSyncAlt } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { hasCompanyPermission } from '../../utils/permissions';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
+import { fmtDate } from '../../utils/dates';
+import { formatMoney } from '../../utils/money';
 
 const MILIK_GREEN = '#0B3B2E';
-const formatMoney = (value) => `KES ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 const formatPercent = (value) => (value === null || value === undefined ? '—' : `${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}%`);
 const toDateInputValue = (value) => new Date(value).toISOString().split('T')[0];
-const formatDate = (value) => (value ? new Date(value).toLocaleDateString() : '—');
 const formatCategory = (value) => (value ? String(value).replace(/_/g, ' ') : '—');
 
 const EXPENSE_CATEGORIES = ['maintenance', 'repair', 'utility', 'tax', 'insurance', 'supplies', 'other'];
@@ -88,7 +88,7 @@ const PropertyIncomeSummaryReport = () => {
 
   const filterSummary = useMemo(() => {
     const rows = [
-      { label: 'Period', value: `${formatDate(filters.startDate)} to ${formatDate(filters.endDate)}` },
+      { label: 'Period', value: `${fmtDate(filters.startDate)} to ${fmtDate(filters.endDate)}` },
       { label: 'Property', value: filters.propertyId ? propertyNameMap.get(String(filters.propertyId)) || 'Selected property' : 'All properties' },
     ];
     if (!isLandlordMode) {
@@ -187,7 +187,7 @@ const PropertyIncomeSummaryReport = () => {
       tfoot td{border-top:2px solid #0B3B2E;padding:4px 6px;font-weight:900;background:#EDF5F1}tfoot td.r{text-align:right}
       *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
     </style></head><body>
-    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">Property Income Summary</div><div class="sub">Period: ${formatDate(filters.startDate)} to ${formatDate(filters.endDate)}</div></div>
+    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">Property Income Summary</div><div class="sub">Period: ${fmtDate(filters.startDate)} to ${fmtDate(filters.endDate)}</div></div>
     <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div><div>Prepared by: ${by}</div></div></div>
     <div class="cards">
       <div class="card"><div class="cl">Total Invoiced</div><div class="cv">${fmt(summary.totalInvoiced)}</div></div>
@@ -247,7 +247,7 @@ const PropertyIncomeSummaryReport = () => {
               </p>
             </div>
             <div className="report-print-meta">
-              <div><strong>Period:</strong> {formatDate(filters.startDate)} to {formatDate(filters.endDate)}</div>
+              <div><strong>Period:</strong> {fmtDate(filters.startDate)} to {fmtDate(filters.endDate)}</div>
               <div><strong>Generated:</strong> {printGeneratedAt}</div>
               <div><strong>Prepared by:</strong> {[currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || 'Milik Admin'}</div>
             </div>

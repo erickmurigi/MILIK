@@ -5,8 +5,7 @@ import { FaArrowLeft, FaRedoAlt } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getLandlordPayments } from "../../redux/apiCalls";
 import { selectCurrentCompany } from "../../redux/selectors";
-
-const formatDate = (value) => (value ? new Date(value).toLocaleDateString() : "-");
+import { fmtDate } from "../../utils/dates";
 const money = (value) => `Ksh ${Number(value || 0).toLocaleString()}`;
 
 const LandlordPaymentHistory = () => {
@@ -71,7 +70,7 @@ const LandlordPaymentHistory = () => {
               ) : (
                 filteredPayments.map((payment, index) => (
                   <tr key={payment._id || index} className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
-                    <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{formatDate(payment.date || payment.paymentDate || payment.paidDate || payment.createdAt)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{fmtDate(payment.date || payment.paymentDate || payment.paidDate || payment.createdAt)}</td>
                     <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{payment?.landlord?.landlordName || payment?.landlordName || "-"}</td>
                     <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{money(payment.amount)}</td>
                     <td className="px-3 py-1 border-r border-gray-100 uppercase text-slate-700">{payment.paymentMethod || "-"}</td>

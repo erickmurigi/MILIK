@@ -8,7 +8,7 @@ import {
   escapeRegex,
 } from "../services/inventoryScope.js";
 import { postStockEntry, getMultiProductBalances } from "../services/stockLedger.js";
-import { nextSequenceNumber } from "../services/sequenceService.js";
+import { nextSequenceNumber } from "../../../utils/sequenceService.js";
 
 const populateTransfer = (q) =>
   q

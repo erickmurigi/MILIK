@@ -9,11 +9,12 @@ import {
 } from "../../redux/selectors";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import Spinner from "../../components/common/Spinner";
+import { inputClass, labelClass } from "../../utils/formStyles";
 import {
   FaSave,
   FaTimes,
   FaChevronDown,
-  FaSpinner,
   FaCalculator,
   FaPlus,
   FaTrash,
@@ -1062,10 +1063,6 @@ useEffect(() => {
     };
   };
 
-  const inputClass =
-    "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
-
-  const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
 
   const uppercaseTenantFields = DUPLICATE_CHECK_FIELDS;
 
@@ -1458,7 +1455,7 @@ await Promise.all(invoiceRequests.map((req) => createTenantInvoice(req)));
 
           {isEditMode && tenantLoading ? (
             <div className="rounded-lg border border-slate-200 bg-white px-6 py-10 flex items-center justify-center gap-3 text-slate-700">
-              <FaSpinner className="animate-spin text-[#0B3B2E]" />
+              <Spinner size="sm" />
               <span className="text-xs font-semibold">Loading tenant details...</span>
             </div>
           ) : (
@@ -2183,7 +2180,7 @@ await Promise.all(invoiceRequests.map((req) => createTenantInvoice(req)));
               disabled={loading || tenantLoading}
               className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-black text-white transition ${loading || tenantLoading ? "bg-slate-400 cursor-not-allowed" : "bg-[#0B3B2E] hover:bg-[#0A3127]"}`}
             >
-              {loading ? <FaSpinner className="animate-spin" /> : <FaSave />}
+              {loading ? <Spinner size="sm" /> : <FaSave />}
               {loading ? (isEditMode ? "Updating…" : "Saving…") : (isEditMode ? "Update Tenant" : "Save Tenant")}
             </button>
           </div>
@@ -2304,7 +2301,7 @@ await Promise.all(invoiceRequests.map((req) => createTenantInvoice(req)));
               >
                 {isCreatingInitialInvoices ? (
                   <>
-                    <FaSpinner className="animate-spin" /> Creating invoice(s)...
+                    <Spinner size="sm" /> Creating invoice(s)...
                   </>
                 ) : (
                   <>

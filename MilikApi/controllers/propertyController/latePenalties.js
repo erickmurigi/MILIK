@@ -10,6 +10,8 @@ import { ensureSystemChartOfAccounts } from "../../services/chartOfAccountsServi
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { getAccessibleCompanyIds } from "../../utils/permissionControl.js";
 import { postReversal } from "../../services/ledgerPostingService.js";
+import { createError } from "../../utils/error.js";
+import { resolveBusinessId } from "../../utils/requestContext.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
@@ -23,29 +25,6 @@ const startOfDay = (value) => {
   const d = normalizeDate(value);
   d.setHours(0, 0, 0, 0);
   return d;
-};
-
-const resolveBusinessId = (req) => {
-  const requested = req.params?.businessId || req.body?.business || req.query?.business || null;
-  const authenticated = req.user?.company?._id || req.user?.company || req.user?.businessId || null;
-
-  if (req.user?.isSystemAdmin || req.user?.superAdminAccess) {
-    return requested || authenticated || null;
-  }
-
-  const accessibleCompanies = getAccessibleCompanyIds(req.user || {});
-
-  if (!requested) {
-    return authenticated || accessibleCompanies[0] || null;
-  }
-
-  if (String(requested) === String(authenticated) || accessibleCompanies.includes(String(requested))) {
-    return requested;
-  }
-
-  const error = new Error("Not authorized to access records for this company.");
-  error.statusCode = 403;
-  throw error;
 };
 
 const buildPeriodKey = (rule, runDate) => {
@@ -536,7 +515,7 @@ const hydrateBatchDeleteReadiness = async (businessId, batch) => {
   };
 };
 
-export const getLatePenaltyPostingAccounts = async (req, res) => {
+export const getLatePenaltyPostingAccounts = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     await ensureSystemChartOfAccounts(businessId);
@@ -552,11 +531,11 @@ export const getLatePenaltyPostingAccounts = async (req, res) => {
 
     return res.status(200).json({ accounts: rows });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ message: error.message || "Failed to load late penalty posting accounts." });
+    next(error);
   }
 };
 
-export const getLatePenaltyRules = async (req, res) => {
+export const getLatePenaltyRules = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     const rows = await LatePenaltyRule.find({ business: businessId })
@@ -566,18 +545,18 @@ export const getLatePenaltyRules = async (req, res) => {
 
     return res.status(200).json({ rules: rows });
   } catch (error) {
-    return res.status(500).json({ message: error.message || "Failed to load late penalty rules." });
+    next(error);
   }
 };
 
-export const createLatePenaltyRule = async (req, res) => {
+export const createLatePenaltyRule = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     const actorUserId = await resolveActorUserId({ req, business: businessId, bodyCreatedBy: req.body.createdBy });
     const trimmedRuleName = String(req.body.ruleName || "").trim();
 
     if (!trimmedRuleName) {
-      return res.status(400).json({ message: "Rule name is required." });
+      return next(createError(400, "Rule name is required."));
     }
 
     const postingAccount = await ChartOfAccount.findOne({
@@ -587,7 +566,7 @@ export const createLatePenaltyRule = async (req, res) => {
     }).lean();
 
     if (!postingAccount) {
-      return res.status(400).json({ message: "Select a valid income posting account for the penalty rule." });
+      return next(createError(400, "Select a valid income posting account for the penalty rule."));
     }
 
     const automationFields = normalizeRuleAutomationFields(req.body || {});
@@ -620,24 +599,24 @@ export const createLatePenaltyRule = async (req, res) => {
     return res.status(201).json({ message: "Late penalty rule created successfully.", rule: saved });
   } catch (error) {
     if (error?.code === 11000) {
-      return res.status(400).json({ message: "A late penalty rule with that name already exists for this company." });
+      return next(createError(400, "A late penalty rule with that name already exists for this company."));
     }
-    return res.status(error.statusCode || 500).json({ message: error.message || "Failed to create late penalty rule." });
+    next(error);
   }
 };
 
-export const updateLatePenaltyRule = async (req, res) => {
+export const updateLatePenaltyRule = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     const actorUserId = await resolveActorUserId({ req, business: businessId, bodyCreatedBy: req.user?.id || req.user?._id });
     const rule = await LatePenaltyRule.findOne({ _id: req.params.id, business: businessId });
 
     if (!rule) {
-      return res.status(404).json({ message: "Late penalty rule not found." });
+      return next(createError(404, "Late penalty rule not found."));
     }
 
     if (req.body.ruleName !== undefined && !String(req.body.ruleName || "").trim()) {
-      return res.status(400).json({ message: "Rule name is required." });
+      return next(createError(400, "Rule name is required."));
     }
 
     if (req.body.postingAccount) {
@@ -647,7 +626,7 @@ export const updateLatePenaltyRule = async (req, res) => {
         type: "income",
       }).lean();
       if (!postingAccount) {
-        return res.status(400).json({ message: "Select a valid income posting account for the penalty rule." });
+        return next(createError(400, "Select a valid income posting account for the penalty rule."));
       }
       rule.postingAccount = postingAccount._id;
     }
@@ -686,13 +665,13 @@ export const updateLatePenaltyRule = async (req, res) => {
     return res.status(200).json({ message: "Late penalty rule updated successfully.", rule: saved });
   } catch (error) {
     if (error?.code === 11000) {
-      return res.status(400).json({ message: "A late penalty rule with that name already exists for this company." });
+      return next(createError(400, "A late penalty rule with that name already exists for this company."));
     }
-    return res.status(error.statusCode || 500).json({ message: error.message || "Failed to update late penalty rule." });
+    next(error);
   }
 };
 
-export const previewLatePenalties = async (req, res) => {
+export const previewLatePenalties = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     const rule = await loadRuleOrThrow(businessId, req.body.ruleId);
@@ -716,11 +695,11 @@ export const previewLatePenalties = async (req, res) => {
       rows,
     });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ message: error.message || "Failed to preview late penalties." });
+    next(error);
   }
 };
 
-export const processLatePenalties = async (req, res) => {
+export const processLatePenalties = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     const rule = await loadRuleOrThrow(businessId, req.body.ruleId);
@@ -740,7 +719,7 @@ export const processLatePenalties = async (req, res) => {
     });
 
     if (rowsToProcess.length === 0) {
-      return res.status(400).json({ message: "No eligible late penalty rows were selected for processing." });
+      return next(createError(400, "No eligible late penalty rows were selected for processing."));
     }
 
     const batch = await LatePenaltyBatch.create({
@@ -863,11 +842,11 @@ export const processLatePenalties = async (req, res) => {
       },
     });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ message: error.message || "Failed to process late penalties." });
+    next(error);
   }
 };
 
-export const getLatePenaltyBatches = async (req, res) => {
+export const getLatePenaltyBatches = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     const rows = await LatePenaltyBatch.find({ business: businessId })
@@ -922,11 +901,11 @@ export const getLatePenaltyBatches = async (req, res) => {
 
     return res.status(200).json({ batches: hydratedRows });
   } catch (error) {
-    return res.status(500).json({ message: error.message || "Failed to load late penalty batches." });
+    next(error);
   }
 };
 
-export const getLatePenaltyBatch = async (req, res) => {
+export const getLatePenaltyBatch = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     const batch = await LatePenaltyBatch.findOne({ _id: req.params.id, business: businessId })
@@ -940,27 +919,27 @@ export const getLatePenaltyBatch = async (req, res) => {
       .lean();
 
     if (!batch) {
-      return res.status(404).json({ message: "Late penalty batch not found." });
+      return next(createError(404, "Late penalty batch not found."));
     }
 
     return res.status(200).json({ batch: await hydrateBatchDeleteReadiness(businessId, batch) });
   } catch (error) {
-    return res.status(500).json({ message: error.message || "Failed to load late penalty batch." });
+    next(error);
   }
 };
 
-export const deleteLatePenaltyBatch = async (req, res) => {
+export const deleteLatePenaltyBatch = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     const batchId = req.params?.id;
 
     if (!isValidObjectId(batchId)) {
-      return res.status(400).json({ message: "A valid late penalty batch is required." });
+      return next(createError(400, "A valid late penalty batch is required."));
     }
 
     const batch = await LatePenaltyBatch.findOne({ _id: batchId, business: businessId }).lean();
     if (!batch) {
-      return res.status(404).json({ message: "Late penalty batch not found." });
+      return next(createError(404, "Late penalty batch not found."));
     }
 
     const readiness = await buildBatchDeleteReadiness({ businessId, batch });
@@ -974,18 +953,18 @@ export const deleteLatePenaltyBatch = async (req, res) => {
     await LatePenaltyBatch.deleteOne({ _id: batch._id, business: businessId });
     return res.status(200).json({ success: true, message: "Late penalty batch deleted successfully." });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ message: error.message || "Failed to delete late penalty batch." });
+    next(error);
   }
 };
 
-export const reverseLatePenalty = async (req, res) => {
+export const reverseLatePenalty = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     const itemIds = Array.isArray(req.body?.itemIds) ? req.body.itemIds.filter(Boolean) : [];
     const requestedItemIds = itemIds.length > 0 ? itemIds : [req.body?.itemId].filter(Boolean);
 
     if (!requestedItemIds.length) {
-      return res.status(400).json({ message: "Select at least one late penalty row to reverse." });
+      return next(createError(400, "Select at least one late penalty row to reverse."));
     }
 
     const actorUserId = await resolveActorUserId({
@@ -1148,11 +1127,11 @@ export const reverseLatePenalty = async (req, res) => {
       results,
     });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ message: error.message || "Failed to reverse late penalty." });
+    next(error);
   }
 };
 
-export const deleteLatePenalty = async (req, res) => {
+export const deleteLatePenalty = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     const itemId = req.params?.id;
@@ -1166,11 +1145,11 @@ export const deleteLatePenalty = async (req, res) => {
     const { batch, item } = await findBatchAndItemOrThrow({ businessId, itemId });
 
     if (item?.reversedAt || String(item?.status || "").toLowerCase() === "reversed") {
-      return res.status(400).json({ message: "Reversed penalties cannot be deleted." });
+      return next(createError(400, "Reversed penalties cannot be deleted."));
     }
 
     if (item?.isDeleted || String(item?.status || "").toLowerCase() === "deleted") {
-      return res.status(400).json({ message: "Penalty already deleted." });
+      return next(createError(400, "Penalty already deleted."));
     }
 
     const penaltyInvoice = await findPenaltyInvoice({ businessId, item });
@@ -1182,9 +1161,7 @@ export const deleteLatePenalty = async (req, res) => {
         : originalEntries.length > 0;
 
       if (hasJournalEntries) {
-        return res.status(400).json({
-          message: "Cannot delete penalty with journal entry. Reverse instead.",
-        });
+        return next(createError(400, "Cannot delete penalty with journal entry. Reverse instead."));
       }
 
       if (!["cancelled", "reversed"].includes(String(penaltyInvoice.status || "").toLowerCase())) {
@@ -1209,6 +1186,6 @@ export const deleteLatePenalty = async (req, res) => {
 
     return res.status(200).json({ message: "Penalty deleted successfully." });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ message: error.message || "Failed to delete late penalty." });
+    next(error);
   }
 };

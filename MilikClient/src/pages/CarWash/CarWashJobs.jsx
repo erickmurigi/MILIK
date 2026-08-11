@@ -15,6 +15,9 @@ import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
 import { useTabState } from "../../hooks/useTabState";
 import PaginationBar from "../../components/PaginationBar";
 import AppSelect from "../../components/common/AppSelect";
+import { inputClass, labelClass } from "../../utils/formStyles";
+import { fmtDateTime } from "../../utils/dates";
+import EmptyTableRow from "../../components/common/EmptyTableRow";
 
 const Lightbox = ({ src, onClose }) => (
   <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 p-4" onClick={onClose}>
@@ -100,9 +103,6 @@ const paymentBadgeClass = {
   unpaid: "border-slate-200 bg-slate-50 text-slate-700",
 };
 
-const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
-const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
-
 // Returns the configured default cashbook for the given method.
 // Falls back to regex guessing if no default is configured.
 const preferredCashbookForMethod = (cashbooks = [], method = "cash", defaults = {}) => {
@@ -130,14 +130,6 @@ const Modal = ({ title, subtitle, children, footer, onClose }) => (
       {footer && <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>}
     </div>
   </div>
-);
-
-const EmptyRow = ({ colSpan, text }) => (
-  <tr>
-    <td colSpan={colSpan} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">
-      {text}
-    </td>
-  </tr>
 );
 
 // ─── Service / staff display helpers ─────────────────────────────────────────
@@ -1041,7 +1033,6 @@ const CarWashJobs = () => {
 
   const printJobReceipt = useCallback((job) => {
     const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const fmtDate = (d) => d ? new Date(d).toLocaleString("en-KE", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
     const fmtAmt = (n) => Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     const co = currentCompany?.name || "";
@@ -1080,7 +1071,7 @@ td{padding:3px 4px}.amt{text-align:right}
 <div class="c"><div class="h1">${esc(co)}</div>${branch ? `<div class="sub">${esc(branch)}</div>` : ""}</div>
 <hr class="s"/><div class="title">Car Wash Receipt</div><hr class="s"/>
 <div class="row"><span class="lbl">Job No.:</span><span><strong>${esc(job.jobNumber)}</strong></span></div>
-<div class="row"><span class="lbl">Date:</span><span>${fmtDate(job.createdAt)}</span></div>
+<div class="row"><span class="lbl">Date:</span><span>${fmtDateTime(job.createdAt)}</span></div>
 <div class="row"><span class="lbl">${isCarpet ? "Item:" : "Plate No.:"}</span><span>${esc(isCarpet ? (job.itemDescription || "—") : (job.plateNumber || "—"))}</span></div>
 ${job.customerName ? `<div class="row"><span class="lbl">Customer:</span><span>${esc(job.customerName)}</span></div>` : ""}
 ${job.phone ? `<div class="row"><span class="lbl">Phone:</span><span>${esc(job.phone)}</span></div>` : ""}
@@ -1399,7 +1390,7 @@ ${taxAmt > 0 ? `<tr class="vat"><td>VAT (incl.)</td><td class="amt">${fmtAmt(tax
                 />
               ))
             ) : (
-              <EmptyRow colSpan={isConsolidated ? 12 : 11} text="No Car Wash jobs recorded for this date." />
+              <EmptyTableRow colSpan={isConsolidated ? 12 : 11} message="No Car Wash jobs recorded for this date." />
             )}
           </tbody>
         </table>

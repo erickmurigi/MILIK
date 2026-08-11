@@ -2,17 +2,9 @@
 import mongoose from "mongoose";
 import Notification from "../../models/Notification.js";
 import { emitToCompany } from "../../utils/socketManager.js";
-
-const resolveBusinessId = (req) => {
-  const requested = req.query?.business || req.body?.business || null;
-  const authenticated = req.user?.company?._id || req.user?.company || null;
-
-  if (req.user?.isSystemAdmin || req.user?.superAdminAccess) {
-    return requested || authenticated || null;
-  }
-
-  return authenticated || requested || null;
-};
+import { resolveBusinessId } from "../../utils/requestContext.js";
+import { parsePagination } from "../../utils/pagination.js";
+import { createError } from "../../utils/error.js";
 
 const scopedNotificationQuery = (req, id) => {
   const business = resolveBusinessId(req);
@@ -36,7 +28,7 @@ export const createNotification = async (req, res, next) => {
 
 // Get all notifications
 export const getNotifications = async (req, res, next) => {
-  const { recipient, isRead, type, page, limit } = req.query;
+  const { recipient, isRead, type } = req.query;
   try {
     const business = resolveBusinessId(req);
     const filter = { business };
@@ -44,15 +36,14 @@ export const getNotifications = async (req, res, next) => {
     if (isRead !== undefined) filter.isRead = isRead === "true";
     if (type) filter.type = type;
 
-    const pageNum = Math.max(1, parseInt(page) || 1);
-    const limitNum = Math.min(200, Math.max(1, parseInt(limit) || 50));
+    const { page: pageNum, limit: limitNum, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 200 });
 
     const [notifications, total] = await Promise.all([
       Notification.find(filter)
         .select("type title message isRead priority recipient relatedId relatedType business createdAt")
         .populate("recipient", "name email")
         .sort({ createdAt: -1 })
-        .skip((pageNum - 1) * limitNum)
+        .skip(skip)
         .limit(limitNum)
         .lean(),
       Notification.countDocuments(filter),
@@ -71,8 +62,9 @@ export const getNotifications = async (req, res, next) => {
 export const getNotification = async (req, res, next) => {
   try {
     const notification = await Notification.findOne(scopedNotificationQuery(req, req.params.id))
-      .populate("recipient", "name email");
-    if (!notification) return res.status(404).json({ message: "Notification not found" });
+      .populate("recipient", "name email")
+      .lean();
+    if (!notification) return next(createError(404, "Notification not found"));
     res.status(200).json(notification);
   } catch (err) {
     next(err);
@@ -87,7 +79,7 @@ export const markAsRead = async (req, res, next) => {
       { $set: { isRead: true } },
       { new: true }
     );
-    if (!updatedNotification) return res.status(404).json({ message: "Notification not found" });
+    if (!updatedNotification) return next(createError(404, "Notification not found"));
     res.status(200).json(updatedNotification);
   } catch (err) {
     next(err);
@@ -99,7 +91,7 @@ export const markAsRead = async (req, res, next) => {
 export const markAllAsRead = async (req, res, next) => {
   try {
     const business = resolveBusinessId(req);
-    if (!business) return res.status(400).json({ message: "Business context required" });
+    if (!business) return next(createError(400, "Business context required"));
     await Notification.updateMany({ business, isRead: false }, { $set: { isRead: true } });
     res.status(200).json({ message: "All notifications marked as read" });
   } catch (err) {
@@ -111,7 +103,7 @@ export const markAllAsRead = async (req, res, next) => {
 export const deleteNotification = async (req, res, next) => {
   try {
     const deleted = await Notification.findOneAndDelete(scopedNotificationQuery(req, req.params.id));
-    if (!deleted) return res.status(404).json({ message: "Notification not found" });
+    if (!deleted) return next(createError(404, "Notification not found"));
     res.status(200).json({ message: "Notification deleted successfully" });
   } catch (err) {
     next(err);
@@ -122,7 +114,7 @@ export const deleteNotification = async (req, res, next) => {
 export const getNotificationStats = async (req, res, next) => {
   const { recipient } = req.query;
   if (!recipient || !mongoose.Types.ObjectId.isValid(recipient)) {
-    return res.status(400).json({ message: "Valid recipient ID is required" });
+    return next(createError(400, "Valid recipient ID is required"));
   }
   try {
     const business = resolveBusinessId(req);

@@ -5,12 +5,15 @@ import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useTabState } from "../../hooks/useTabState";
-import { FaChevronDown, FaChevronRight, FaPlus, FaRedoAlt, FaSearch, FaTimes } from "react-icons/fa";
+import { FaChevronDown, FaChevronRight, FaPlus, FaRedoAlt, FaSearch } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import PaginationBar from "../../components/PaginationBar";
 import AppSelect from "../../components/common/AppSelect";
+import { inputClass, labelClass } from "../../utils/formStyles";
+import Modal from "../../components/common/Modal";
+import StatusBadge from "../../components/common/StatusBadge";
 
 const DEFAULT_PAGE_SIZE = 25;
 const destinations = ["bank", "mpesa", "safe", "other"];
@@ -23,29 +26,12 @@ const nextStatuses = {
 };
 const defaultFilters = { date: todayISO(), status: "", destination: "", cashbookAccount: "", reference: "" };
 const emptyForm = { depositDate: todayISO(), amount: "", destination: "bank", cashbookAccount: "", reference: "", notes: "", branch: "" };
-const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
-const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 
 const statusBadgeClass = {
   pending: "border-orange-200 bg-orange-50 text-orange-700",
   confirmed: "border-emerald-200 bg-emerald-50 text-emerald-700",
   cancelled: "border-red-200 bg-red-50 text-red-700",
 };
-
-const Modal = ({ title, children, footer, onClose }) => (
-  <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-    <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-2xl sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
-      <div className="flex-shrink-0 flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
-        <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
-        <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10 hover:text-white" title="Close">
-          <FaTimes />
-        </button>
-      </div>
-      <div className="flex-1 overflow-y-auto p-4">{children}</div>
-      <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>
-    </div>
-  </div>
-);
 
 const CarWashDeposits = () => {
   const queryClient = useQueryClient();
@@ -243,7 +229,7 @@ const CarWashDeposits = () => {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="font-extrabold text-slate-900">{row.depositNumber || "-"}</span>
-                        <span className={`inline-flex border px-1.5 py-0.5 text-[10px] font-bold uppercase ${statusBadgeClass[row.status || "pending"] || statusBadgeClass.pending}`}>{row.status || "pending"}</span>
+                        <StatusBadge status={row.status || "pending"} map={statusBadgeClass} />
                       </div>
                       <div className="mt-0.5 font-bold uppercase text-slate-700">{row.destination || "-"}</div>
                       {row.depositDate && <div className="text-[10px] text-slate-400">{new Date(row.depositDate).toLocaleDateString("en-GB")}</div>}
@@ -259,7 +245,7 @@ const CarWashDeposits = () => {
                           options={(nextStatuses[row.status || "pending"] || ["pending"]).map((s) => ({ value: s, label: s.toUpperCase() }))}
                         />
                       ) : (
-                        <span className={`mt-1 inline-flex border px-1.5 py-0.5 text-[10px] font-bold uppercase ${statusBadgeClass[row.status || "pending"] || statusBadgeClass.pending}`}>{(row.status || "pending").toUpperCase()}</span>
+                        <span className="mt-1"><StatusBadge status={row.status || "pending"} map={statusBadgeClass} /></span>
                       )}
                     </div>
                   </div>
@@ -322,7 +308,7 @@ const CarWashDeposits = () => {
                           options={statuses.map((status) => ({ value: status, label: status.toUpperCase() }))}
                         />
                       ) : (
-                        <span className={`inline-flex border px-2 py-0.5 text-[11px] font-bold uppercase ${statusBadgeClass[row.status || "pending"] || statusBadgeClass.pending}`}>{(row.status || "pending").toUpperCase()}</span>
+                        <StatusBadge status={row.status || "pending"} map={statusBadgeClass} />
                       )}
                     </td>
                     <td className="px-2 py-1 text-right font-extrabold text-slate-900">{formatMoney(row.amount)}</td>

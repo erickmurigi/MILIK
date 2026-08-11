@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { essRequests } from '../../utils/essRequests';
 import { useTabState } from '../../hooks/useTabState';
 import './ESS.css';
-
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+import { fmtDate } from '../../utils/dates';
 
 const STATUS_BADGE = {
   Pending:    { cls: 'ess-badge ess-badge-yellow', label: 'Pending' },

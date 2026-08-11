@@ -4,17 +4,8 @@ import Maintenance from "../../models/Maintenance.js";
 import Unit from "../../models/Unit.js";
 import { emitToCompany } from "../../utils/socketManager.js";
 import { getFieldOfficerPropertyIds } from "../../utils/fieldOfficerScope.js";
-
-const resolveBusinessId = (req) => {
-  const requested = req.query?.business || req.body?.business || null;
-  const authenticated = req.user?.company?._id || req.user?.company || null;
-
-  if (req.user?.isSystemAdmin || req.user?.superAdminAccess) {
-    return requested || authenticated || null;
-  }
-
-  return authenticated || requested || null;
-};
+import { resolveBusinessId } from "../../utils/requestContext.js";
+import { createError } from "../../utils/error.js";
 
 const scopedMaintenanceQuery = (req, id) => {
   const business = resolveBusinessId(req);
@@ -108,15 +99,16 @@ export const getMaintenance = async (req, res, next) => {
     const query = scopedMaintenanceQuery(req, req.params.id);
     const maintenance = await Maintenance.findOne(query)
       .populate({ path: "unit", select: "unitNumber property", populate: { path: "property", select: "propertyName name address" } })
-      .populate("tenant", "name phone email");
-    if (!maintenance) return res.status(404).json({ message: "Maintenance request not found" });
+      .populate("tenant", "name phone email")
+      .lean();
+    if (!maintenance) return next(createError(404, "Maintenance request not found"));
 
     const foPropertyIds = await getFieldOfficerPropertyIds(req);
     if (foPropertyIds !== null) {
       const foSet = new Set(foPropertyIds.map(String));
       const propId = maintenance.unit?.property?._id || maintenance.unit?.property;
       if (!propId || !foSet.has(String(propId))) {
-        return res.status(403).json({ success: false, message: "Not authorized to access this maintenance request" });
+        return next(createError(403, "Not authorized to access this maintenance request"));
       }
     }
 
@@ -140,7 +132,7 @@ export const updateMaintenance = async (req, res, next) => {
     }
     const query = scopedMaintenanceQuery(req, req.params.id);
     const updatedMaintenance = await Maintenance.findOneAndUpdate(query, { $set: safeUpdate }, { new: true });
-    if (!updatedMaintenance) return res.status(404).json({ message: "Maintenance request not found" });
+    if (!updatedMaintenance) return next(createError(404, "Maintenance request not found"));
     res.status(200).json(updatedMaintenance);
   } catch (err) {
     next(err);
@@ -154,7 +146,7 @@ export const updateMaintenanceStatus = async (req, res, next) => {
   try {
     const { status, completedDate, actualCost } = req.body;
     if (!VALID_STATUSES.includes(status)) {
-      return res.status(400).json({ message: `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}` });
+      return next(createError(400, `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}`));
     }
     const updateData = { status };
 
@@ -165,7 +157,7 @@ export const updateMaintenanceStatus = async (req, res, next) => {
 
     const query = scopedMaintenanceQuery(req, req.params.id);
     const updatedMaintenance = await Maintenance.findOneAndUpdate(query, { $set: updateData }, { new: true });
-    if (!updatedMaintenance) return res.status(404).json({ message: "Maintenance request not found" });
+    if (!updatedMaintenance) return next(createError(404, "Maintenance request not found"));
     res.status(200).json(updatedMaintenance);
   } catch (err) {
     next(err);
@@ -177,7 +169,7 @@ export const deleteMaintenance = async (req, res, next) => {
   try {
     const query = scopedMaintenanceQuery(req, req.params.id);
     const deleted = await Maintenance.findOneAndDelete(query);
-    if (!deleted) return res.status(404).json({ message: "Maintenance request not found" });
+    if (!deleted) return next(createError(404, "Maintenance request not found"));
     res.status(200).json({ message: "Maintenance request deleted successfully" });
   } catch (err) {
     next(err);
@@ -189,7 +181,7 @@ export const getMaintenanceStats = async (req, res, next) => {
   try {
     const business = resolveBusinessId(req);
     if (!business || !mongoose.Types.ObjectId.isValid(String(business))) {
-      return res.status(400).json({ success: false, message: "Missing business" });
+      return next(createError(400, "Missing business"));
     }
 
     const [result] = await Maintenance.aggregate([

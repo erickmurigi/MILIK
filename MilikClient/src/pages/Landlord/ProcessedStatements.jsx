@@ -24,6 +24,7 @@ import {
   updateStatement,
 } from "../../redux/processedStatementsRedux";
 import PayLandlordModal from "../../components/Modals/PayLandlordModal";
+import { fmtDate } from "../../utils/dates";
 import RecordLandlordRecoveryModal from "../../components/Modals/RecordLandlordRecoveryModal";
 import PostCommissionModal from "../../components/Modals/PostCommissionModal";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
@@ -41,12 +42,8 @@ const ITEMS_PER_PAGE = 50;
 const money = (value) => Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const displayMoney = (value) => `KSh ${money(value)}`;
 const formatPaymentMethod = (method) => method ? method.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '—';
-const formatDate = (dateString) => {
-  if (!dateString) return "N/A";
-  return new Date(dateString).toLocaleDateString("en-GB");
-};
 const formatPeriodRange = (statement) =>
-  `${formatDate(statement?.periodStart)} - ${formatDate(statement?.periodEnd)}`;
+  `${fmtDate(statement?.periodStart)} - ${fmtDate(statement?.periodEnd)}`;
 const getCommissionBasisLabel = (basis) =>
   basis === "invoiced"
     ? "Rent Expected (Accrual)"
@@ -455,10 +452,10 @@ const ProcessedStatements = () => {
     </div>
     <div style="text-align: right;">
       <p><strong>STATUS:</strong> ${String(statement.status || "processed").toUpperCase()}</p>
-      <p><strong>PROCESSED:</strong> ${formatDate(statement.closedAt)}</p>
-      ${statement.reversedAt ? `<p><strong>REVERSED:</strong> ${formatDate(statement.reversedAt)}</p>` : ""}
-      ${statement.paidDate ? `<p><strong>PAID DATE:</strong> ${formatDate(statement.paidDate)}</p>` : ""}
-      ${statement.recoveryDate ? `<p><strong>RECOVERY DATE:</strong> ${formatDate(statement.recoveryDate)}</p>` : ""}
+      <p><strong>PROCESSED:</strong> ${fmtDate(statement.closedAt)}</p>
+      ${statement.reversedAt ? `<p><strong>REVERSED:</strong> ${fmtDate(statement.reversedAt)}</p>` : ""}
+      ${statement.paidDate ? `<p><strong>PAID DATE:</strong> ${fmtDate(statement.paidDate)}</p>` : ""}
+      ${statement.recoveryDate ? `<p><strong>RECOVERY DATE:</strong> ${fmtDate(statement.recoveryDate)}</p>` : ""}
     </div>
   </div>
   <table class="statement-table">
@@ -677,7 +674,7 @@ const ProcessedStatements = () => {
                                       </div>
                                       <div>
                                         <p className="text-sm text-gray-600">Processed Date</p>
-                                        <p className="font-semibold">{formatDate(statement.closedAt)}</p>
+                                        <p className="font-semibold">{fmtDate(statement.closedAt)}</p>
                                       </div>
                                       <div>
                                         <p className="text-sm text-gray-600">Statement Period</p>
@@ -756,7 +753,7 @@ const ProcessedStatements = () => {
                                             <tbody>
                                               {statement.paymentHistory.map((ph, i) => (
                                                 <tr key={ph._id || ph.entryId || i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
-                                                  <td className="px-3 py-1 border-r border-gray-100">{formatDate(ph.paymentDate)}</td>
+                                                  <td className="px-3 py-1 border-r border-gray-100">{fmtDate(ph.paymentDate)}</td>
                                                   <td className="px-3 py-1 border-r border-gray-100">{formatPaymentMethod(ph.paymentMethod)}</td>
                                                   <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-500">{ph.paymentReference || '—'}</td>
                                                   <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-emerald-700">{displayMoney(ph.amount)}</td>
@@ -786,7 +783,7 @@ const ProcessedStatements = () => {
                                             <tbody>
                                               {statement.recoveryHistory.map((rh, i) => (
                                                 <tr key={rh._id || rh.entryId || i} className={`border-b border-red-100 ${i % 2 === 0 ? 'bg-white' : 'bg-red-50/40'}`}>
-                                                  <td className="px-3 py-1 border-r border-red-100">{formatDate(rh.paymentDate)}</td>
+                                                  <td className="px-3 py-1 border-r border-red-100">{fmtDate(rh.paymentDate)}</td>
                                                   <td className="px-3 py-1 border-r border-red-100">{formatPaymentMethod(rh.paymentMethod)}</td>
                                                   <td className="px-3 py-1 border-r border-red-100 font-mono text-slate-500">{rh.paymentReference || '—'}</td>
                                                   <td className="px-3 py-1 border-r border-red-100 text-right font-semibold text-red-700">{displayMoney(rh.amount)}</td>
@@ -802,7 +799,7 @@ const ProcessedStatements = () => {
                                     {statement.status === "reversed" && (
                                       <div className="rounded-lg border border-gray-300 bg-gray-100 p-3 text-sm text-gray-700">
                                         <p className="font-semibold">Reversed Processed Statement</p>
-                                        <p>Reversed on {formatDate(statement.reversedAt)}.</p>
+                                        <p>Reversed on {fmtDate(statement.reversedAt)}.</p>
                                         {statement.reversalReason ? <p>Reason: {statement.reversalReason}</p> : null}
                                         <p>Any ledger entries linked directly to this processed statement were reversed by the backend reversal flow.</p>
                                       </div>

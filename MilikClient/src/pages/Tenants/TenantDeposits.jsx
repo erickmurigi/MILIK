@@ -23,11 +23,11 @@ import {
   FaRedoAlt,
   FaSearch,
   FaSms,
-  FaSpinner,
   FaTimes,
   FaTrash,
   FaUndo,
 } from "react-icons/fa";
+import Spinner from "../../components/common/Spinner";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { useConfirm } from "../../context/ConfirmContext";
@@ -802,7 +802,7 @@ const TenantDeposits = () => {
                 <input type="date" value={draftFilters.toDate} onChange={setFilter("toDate")} className="h-[20px] w-[5.5rem] shrink-0 border border-slate-200 bg-white px-1 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 <button onClick={applySearch} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSearch size={7} /> Search</button>
                 <button onClick={resetFilters} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={7} /> Reset</button>
-                <button onClick={loadDepositInvoices} disabled={loading} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-gray-300 bg-white px-1.5 text-[9px] text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-60">{loading ? <FaSpinner className="animate-spin" size={7} /> : <FaRedoAlt size={7} />} Refresh</button>
+                <button onClick={loadDepositInvoices} disabled={loading} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-gray-300 bg-white px-1.5 text-[9px] text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-60">{loading ? <Spinner size="sm" /> : <FaRedoAlt size={7} />} Refresh</button>
                 <button onClick={handleDeleteSelected} disabled={!canDeleteInvoice || selectedCount === 0 || deleting} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white shadow-sm ${selectedCount > 0 ? "bg-red-600 hover:bg-red-700" : "cursor-not-allowed bg-gray-400"}`}><FaTrash size={7} /> Delete</button>
                 <button
                   onClick={() => setCommunicationModal({ contextType: "invoice", recordIds: selectedInvoices, title: `Notify ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, subtitle: "Send deposit invoice notification via SMS.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })}
@@ -848,7 +848,7 @@ const TenantDeposits = () => {
                   {loading && currentPageRows.length === 0 ? (
                     <tr>
                       <td colSpan="15" className="px-4 py-8 text-center text-gray-500">
-                        <FaSpinner className="mb-2 inline-block animate-spin text-2xl text-gray-300" />
+                        <Spinner className="mb-2 text-2xl" />
                         <p className="mt-1 text-sm font-semibold">Loading deposit invoices...</p>
                       </td>
                     </tr>
@@ -1124,7 +1124,7 @@ const TenantDeposits = () => {
                 disabled={saving}
                 className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-black uppercase text-white hover:bg-[#0A3127] disabled:opacity-60 ${MILIK_GREEN}`}
               >
-                {saving ? <FaSpinner className="animate-spin" /> : <FaMoneyBillWave />}
+                {saving ? <Spinner size="sm" /> : <FaMoneyBillWave />}
                 {saving ? "Saving..." : "Create Deposit Invoice"}
               </button>
             </div>

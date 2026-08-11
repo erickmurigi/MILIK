@@ -10,6 +10,7 @@ import DashboardLayout from '../../components/Layout/DashboardLayout';
 import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
+import { fmtDate } from '../../utils/dates';
 
 const STATUS_PILL = {
   Pending:    'border-slate-300 bg-slate-50 text-slate-500',
@@ -17,7 +18,6 @@ const STATUS_PILL = {
   Submitted:  'border-emerald-300 bg-emerald-50 text-emerald-700',
 };
 const PAGE_SIZE = 25;
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
 const F  = 'h-7 rounded border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]';
 const FW = `${F} w-full`;
 

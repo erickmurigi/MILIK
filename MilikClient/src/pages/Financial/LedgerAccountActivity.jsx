@@ -13,18 +13,10 @@ import { adminRequests } from "../../utils/requestMethods";
 import { deleteTenantInvoice, getChartOfAccounts } from "../../redux/apiCalls";
 import { hasCompanyPermission } from "../../utils/permissions";
 import AppSelect from "../../components/common/AppSelect";
+import { fmtDate } from "../../utils/dates";
+import { formatMoney } from "../../utils/money";
 
 const DEFAULT_PAGE_SIZE = 50;
-
-const formatMoney = (value) =>
-  new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", maximumFractionDigits: 2 }).format(Number(value || 0));
-
-const formatDate = (value) => {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" });
-};
 
 const inputDate = (value) => {
   const d = value ? new Date(value) : new Date();
@@ -449,7 +441,7 @@ const LedgerAccountActivity = () => {
                       >
                         {/* Date */}
                         <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap text-slate-700 font-medium">
-                          {formatDate(entry.transactionDate)}
+                          {fmtDate(entry.transactionDate)}
                         </td>
 
                         {/* Ref */}

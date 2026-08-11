@@ -11,6 +11,8 @@ import { createTenantInvoiceRecord } from "./tenantInvoices.js";
 import { resolvePropertyAccountingContext } from "../../services/propertyAccountingService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { getAccessibleCompanyIds } from "../../utils/permissionControl.js";
+import { createError } from "../../utils/error.js";
+import { resolveBusinessId } from "../../utils/requestContext.js";
 
 const PREVIOUS_READING_STATUSES = ["draft", "billed"];
 const DUPLICATE_BLOCKING_STATUSES = ["draft", "billed"];
@@ -35,13 +37,6 @@ const toPeriodKey = (value, fallbackDate = new Date()) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   return `${year}-${month}`;
-};
-
-const resolveBusinessId = (req) => {
-  if (req.user?.isSystemAdmin && req.query.business) return String(req.query.business);
-  if (req.user?.company) return String(req.user.company);
-  if (req.body?.business) return String(req.body.business);
-  return null;
 };
 
 const ensureBusinessAccess = (req, businessId) => {
@@ -523,7 +518,7 @@ export const createMeterReading = async (req, res, next) => {
       err.message?.includes("cannot be less") ||
       err.message?.includes("cannot be negative")
     ) {
-      return res.status(400).json({ message: err.message });
+      return next(createError(400, err.message));
     }
     next(err);
   }
@@ -533,13 +528,13 @@ export const updateMeterReading = async (req, res, next) => {
   try {
     const reading = await MeterReading.findById(req.params.id);
     if (!reading) {
-      return res.status(404).json({ message: "Meter reading not found." });
+      return next(createError(404, "Meter reading not found."));
     }
 
     ensureReadingAccess(req, reading);
 
     if (reading.status !== "draft") {
-      return res.status(400).json({ message: "Only draft meter readings can be edited." });
+      return next(createError(400, "Only draft meter readings can be edited."));
     }
 
     const payload = await buildReadingPayload({ req, existingReading: reading });
@@ -566,7 +561,7 @@ export const updateMeterReading = async (req, res, next) => {
       err.message?.includes("cannot be less") ||
       err.message?.includes("cannot be negative")
     ) {
-      return res.status(400).json({ message: err.message });
+      return next(createError(400, err.message));
     }
     next(err);
   }
@@ -576,13 +571,13 @@ export const deleteMeterReading = async (req, res, next) => {
   try {
     const reading = await MeterReading.findById(req.params.id);
     if (!reading) {
-      return res.status(404).json({ message: "Meter reading not found." });
+      return next(createError(404, "Meter reading not found."));
     }
 
     ensureReadingAccess(req, reading);
 
     if (reading.status === "deleted") {
-      return res.status(400).json({ message: "This meter reading has already been deleted." });
+      return next(createError(400, "This meter reading has already been deleted."));
     }
 
     const actorUserId = await resolveActorUserId(req, { businessId: String(reading.business || "") }).catch(() => null);
@@ -651,24 +646,21 @@ export const voidMeterReading = async (req, res, next) => {
   try {
     const reading = await MeterReading.findById(req.params.id);
     if (!reading) {
-      return res.status(404).json({ message: "Meter reading not found." });
+      return next(createError(404, "Meter reading not found."));
     }
 
     ensureReadingAccess(req, reading);
 
     if (reading.status === "deleted") {
-      return res.status(400).json({ message: "Deleted meter readings cannot be voided." });
+      return next(createError(400, "Deleted meter readings cannot be voided."));
     }
 
     if (reading.status === "billed") {
-      return res.status(400).json({
-        message:
-          "Billed meter readings cannot be voided here because they are already linked to an invoice. Delete the meter reading to reverse the linked invoice correctly.",
-      });
+      return next(createError(400, "Billed meter readings cannot be voided here because they are already linked to an invoice. Delete the meter reading to reverse the linked invoice correctly."));
     }
 
     if (reading.status === "void") {
-      return res.status(400).json({ message: "This meter reading is already voided." });
+      return next(createError(400, "This meter reading is already voided."));
     }
 
     const actorUserId = await resolveActorUserId(req, { businessId: String(reading.business || "") });
@@ -692,21 +684,21 @@ export const billMeterReading = async (req, res, next) => {
   try {
     const reading = await MeterReading.findById(req.params.id);
     if (!reading) {
-      return res.status(404).json({ message: "Meter reading not found." });
+      return next(createError(404, "Meter reading not found."));
     }
 
     ensureReadingAccess(req, reading);
 
     if (reading.status === "void") {
-      return res.status(400).json({ message: "Voided meter readings cannot be billed." });
+      return next(createError(400, "Voided meter readings cannot be billed."));
     }
 
     if (reading.status === "deleted") {
-      return res.status(400).json({ message: "Deleted meter readings cannot be billed." });
+      return next(createError(400, "Deleted meter readings cannot be billed."));
     }
 
     if (reading.status === "billed" || reading.billedInvoice) {
-      return res.status(400).json({ message: "This meter reading has already been billed." });
+      return next(createError(400, "This meter reading has already been billed."));
     }
 
     const accountingContext = await resolvePropertyAccountingContext({
@@ -765,9 +757,6 @@ export const billMeterReading = async (req, res, next) => {
       invoice,
     });
   } catch (err) {
-    if (err.message) {
-      return res.status(400).json({ message: err.message });
-    }
     next(err);
   }
 };

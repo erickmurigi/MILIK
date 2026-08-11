@@ -4,16 +4,11 @@ import ServiceProvider from "../../models/ServiceProvider.js";
 import ExpenseRequisition from "../../models/ExpenseRequisition.js";
 import PaymentVoucher from "../../models/PaymentVoucher.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
+import { resolveBusinessId } from "../../utils/requestContext.js";
+import { parsePagination } from "../../utils/pagination.js";
+import { createError } from "../../utils/error.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
-const resolveBusinessId = (req) =>
-  req?.query?.business ||
-  req?.query?.company ||
-  req?.body?.business ||
-  req?.body?.company ||
-  req?.user?.company?._id ||
-  req?.user?.company ||
-  null;
 
 const generateProviderCode = async (businessId) => {
   const prefix = "SP";
@@ -30,9 +25,9 @@ const generateProviderCode = async (businessId) => {
 export const createServiceProvider = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
     const name = String(req.body?.name || "").trim();
-    if (!name) return res.status(400).json({ success: false, message: "Service provider name is required" });
+    if (!name) return next(createError(400, "Service provider name is required"));
 
     const whtRate = Math.min(30, Math.max(0, Number(req.body?.whtRate || 0)));
     const doc = await ServiceProvider.create({
@@ -64,7 +59,7 @@ export const createServiceProvider = async (req, res, next) => {
 export const getServiceProviders = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
 
     const filter = { business: businessId };
     if (req.query?.active === "true") filter.isActive = true;
@@ -92,11 +87,10 @@ export const getServiceProviders = async (req, res, next) => {
       ];
     }
 
-    const pageNum = Math.max(parseInt(req.query.page, 10) || 1, 1);
-    const limitNum = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const { page: pageNum, limit: limitNum, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 200 });
 
     const [rows, total] = await Promise.all([
-      ServiceProvider.find(filter).sort({ createdAt: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum).lean(),
+      ServiceProvider.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limitNum).lean(),
       ServiceProvider.countDocuments(filter),
     ]);
     res.status(200).json({ success: true, data: rows, total, page: pageNum, pages: Math.max(1, Math.ceil(total / limitNum)) });
@@ -108,10 +102,10 @@ export const getServiceProviders = async (req, res, next) => {
 export const updateServiceProvider = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
 
     const row = await ServiceProvider.findOne({ _id: req.params.id, business: businessId });
-    if (!row) return res.status(404).json({ success: false, message: "Service provider not found" });
+    if (!row) return next(createError(404, "Service provider not found"));
 
     const allowed = ["name", "contactPerson", "email", "phone", "category", "kraPin", "accountNumber", "paybillNumber", "bankName", "accountName", "subjectToWht", "whtRate", "whtCategory", "isActive", "notes"];
     allowed.forEach((field) => {
@@ -121,7 +115,7 @@ export const updateServiceProvider = async (req, res, next) => {
     });
 
     if (!String(row.name || "").trim()) {
-      return res.status(400).json({ success: false, message: "Service provider name is required" });
+      return next(createError(400, "Service provider name is required"));
     }
     // Normalize WHT fields: clamp rate, clear subjectToWht if rate is effectively zero
     row.whtRate = Math.min(30, Math.max(0, Number(row.whtRate || 0)));
@@ -137,10 +131,10 @@ export const updateServiceProvider = async (req, res, next) => {
 export const deleteServiceProvider = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
 
     const row = await ServiceProvider.findOne({ _id: req.params.id, business: businessId });
-    if (!row) return res.status(404).json({ success: false, message: "Service provider not found" });
+    if (!row) return next(createError(404, "Service provider not found"));
     await ServiceProvider.deleteOne({ _id: row._id, business: businessId });
     res.status(200).json({ success: true, message: "Service provider deleted" });
   } catch (error) {
@@ -151,7 +145,7 @@ export const deleteServiceProvider = async (req, res, next) => {
 export const getCreditorsSummary = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
 
     const businessIdObj = new mongoose.Types.ObjectId(String(businessId));
     const providers = await ServiceProvider.find({ business: businessId }).sort({ name: 1 }).lean();
@@ -202,10 +196,10 @@ export const getCreditorsSummary = async (req, res, next) => {
 export const getCreditorStatement = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
 
     const providerId = req.params.id;
-    if (!isValidObjectId(providerId)) return res.status(400).json({ success: false, message: "Invalid provider ID" });
+    if (!isValidObjectId(providerId)) return next(createError(400, "Invalid provider ID"));
 
     const [provider, glEntries] = await Promise.all([
       ServiceProvider.findOne({ _id: providerId, business: businessId }).lean(),
@@ -219,7 +213,7 @@ export const getCreditorStatement = async (req, res, next) => {
         .lean(),
     ]);
 
-    if (!provider) return res.status(404).json({ success: false, message: "Service provider not found" });
+    if (!provider) return next(createError(404, "Service provider not found"));
 
     let balance = 0;
     const lines = glEntries.map((e) => {

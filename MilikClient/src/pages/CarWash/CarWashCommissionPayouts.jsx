@@ -9,11 +9,11 @@ import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import Modal from "../../components/common/Modal";
+import { inputClass, labelClass } from "../../utils/formStyles";
+import { fmtDate } from "../../utils/dates";
 
-const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
-const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 const fmtSvc  = (svc, fallback = "—") => svc ? (svc.category ? `${svc.category} — ${svc.name}` : svc.name) : fallback;
-const fmtDate = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 const ic         = "h-7 border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const methods    = ["cash", "mpesa", "bank", "card", "other"];
 const PAGE_SIZE  = 30;
@@ -50,22 +50,6 @@ const preferredCashbook = (cashbooks = [], method = "cash") => {
   if (method === "bank" || method === "card") return cashbooks.find((cb) => /bank/.test(h(cb)))?._id || "";
   return cashbooks[0]?._id || "";
 };
-
-const Modal = ({ title, subtitle, children, footer, onClose }) => (
-  <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
-    <div className="w-full max-w-3xl border border-slate-200 bg-white shadow-2xl">
-      <div className="flex items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
-        <div>
-          <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
-          {subtitle && <p className="mt-0.5 text-xs font-semibold text-emerald-50">{subtitle}</p>}
-        </div>
-        <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
-      </div>
-      <div className="p-4">{children}</div>
-      {footer && <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>}
-    </div>
-  </div>
-);
 
 const CarWashCommissionPayouts = () => {
   const currentCompany = useSelector(selectCurrentCompany);

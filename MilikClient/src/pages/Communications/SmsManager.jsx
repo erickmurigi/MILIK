@@ -3,11 +3,13 @@ import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
-  FaSms, FaSpinner, FaSearch, FaSyncAlt, FaPaperPlane,
+  FaSms, FaSearch, FaSyncAlt, FaPaperPlane,
   FaTimesCircle, FaPlus, FaTimes, FaUsers, FaCheckCircle,
   FaChevronDown, FaChevronRight, FaEnvelope, FaExclamationTriangle,
   FaInbox, FaTrash, FaRedo,
 } from "react-icons/fa";
+import StatusBadge from "../../components/common/StatusBadge";
+import Spinner from "../../components/common/Spinner";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { adminRequests } from "../../utils/requestMethods";
@@ -16,6 +18,8 @@ import { carWashApi } from "../../services/carWashApi";
 import { saleApi } from "../../services/propertySaleApi";
 import { inventoryApi } from "../../services/inventoryApi";
 import AppSelect from "../../components/common/AppSelect";
+import { useConfirm } from "../../context/ConfirmContext";
+import { fmtDateTime } from "../../utils/dates";
 
 const PAGE_SIZE = 50;
 
@@ -26,10 +30,10 @@ const TABS = [
   { key: "pending", label: "Pending", countKey: "pending" },
 ];
 
-const STATUS_META = {
-  sent:    { label: "Sent",    cls: "border-emerald-200 bg-emerald-50 text-emerald-700" },
-  failed:  { label: "Failed",  cls: "border-rose-200 bg-rose-50 text-rose-700" },
-  pending: { label: "Pending", cls: "border-amber-200 bg-amber-50 text-amber-700" },
+const STATUS_MAP = {
+  sent:    "border-emerald-200 bg-emerald-50 text-emerald-700",
+  failed:  "border-rose-200 bg-rose-50 text-rose-700",
+  pending: "border-amber-200 bg-amber-50 text-amber-700",
 };
 
 const TEMPLATE_LABELS = {
@@ -52,13 +56,6 @@ const ic  = "h-9 w-full border border-slate-300 bg-white px-2.5 text-sm text-sla
 
 const fmtTemplate = (key) => TEMPLATE_LABELS[key] || (key ? key.replace(/_/g, " ") : "—");
 
-const fmtDateTime = (v) => {
-  if (!v) return "—";
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-};
-
 const fmtRel = (v) => {
   if (!v) return "";
   const d = new Date(v);
@@ -72,14 +69,6 @@ const fmtRel = (v) => {
   return `${Math.floor(h / 24)}d ago`;
 };
 
-const StatusChip = ({ status }) => {
-  const meta = STATUS_META[status] || { label: status || "Unknown", cls: "border-slate-200 bg-slate-50 text-slate-500" };
-  return (
-    <span className={`inline-flex items-center border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${meta.cls}`}>
-      {meta.label}
-    </span>
-  );
-};
 
 // Registry of all selectable contact types — built per-company based on enabled modules
 const buildContactTypes = ({ hasPM, hasCarWash, hasHR, hasPropertySale, hasInventory }) => {
@@ -336,7 +325,7 @@ const ComposePanel = ({ open, onClose, businessId, hasPM, hasCarWash, hasHR, has
                     <FaTimesCircle size={10} />
                   </button>
                 )}
-                {contactsLoading && <FaSpinner size={10} className="animate-spin text-slate-400 shrink-0" />}
+                {contactsLoading && <Spinner size="sm" />}
               </div>
 
               {/* Contact list */}
@@ -401,7 +390,7 @@ const ComposePanel = ({ open, onClose, businessId, hasPM, hasCarWash, hasHR, has
           </button>
           <button onClick={handleSend} disabled={sending || !body.trim()}
             className="inline-flex items-center gap-2 bg-[#FF8C00] px-5 py-2 text-[11px] font-bold text-white transition hover:bg-[#E67E00] disabled:opacity-40">
-            {sending ? <FaSpinner className="animate-spin" size={11} /> : <FaPaperPlane size={11} />}
+            {sending ? <Spinner size="sm" /> : <FaPaperPlane size={11} />}
             {sending ? "Sending…" : selectedIds.length > 0 ? `Send to ${selectedIds.length}` : "Send SMS"}
           </button>
         </div>
@@ -413,6 +402,7 @@ const ComposePanel = ({ open, onClose, businessId, hasPM, hasCarWash, hasHR, has
 // ── Main page ─────────────────────────────────────────────────────────────────
 const SmsManager = () => {
   const navigate    = useNavigate();
+  const confirm     = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const { currentUser }    = useSelector(s => s.auth || {});
@@ -497,7 +487,7 @@ const SmsManager = () => {
   };
 
   const handleDeleteLog = async (logId) => {
-    if (!window.confirm("Delete this log entry? This cannot be undone.")) return;
+    if (!(await confirm({ title: 'Delete Log Entry', message: 'Delete this log entry? This cannot be undone.', confirmText: 'Delete', isDangerous: true }))) return;
     setDeletingId(logId);
     try {
       await adminRequests.delete(`/communications/sms-logs/${logId}`);
@@ -591,7 +581,7 @@ const SmsManager = () => {
         <div className="flex-1 overflow-auto">
           {loading ? (
             <div className="flex flex-col items-center justify-center gap-3 py-24 text-slate-400">
-              <FaSpinner className="animate-spin" size={20} />
+              <Spinner size="lg" />
               <p className="text-xs font-semibold">Loading SMS logs…</p>
             </div>
           ) : logs.length === 0 ? (
@@ -650,7 +640,7 @@ const SmsManager = () => {
                           <p className="truncate text-slate-600">{log.body || log.message || "—"}</p>
                         </td>
                         <td className="px-3 py-2 text-center">
-                          <StatusChip status={log.status} />
+                          <StatusBadge status={log.status} map={STATUS_MAP} />
                         </td>
                         <td className="px-3 py-2 text-right">
                           <p className="font-semibold text-slate-700">{fmtRel(log.sentAt || log.createdAt)}</p>
@@ -704,7 +694,7 @@ const SmsManager = () => {
                                       className="inline-flex items-center gap-1.5 border border-[#31694E] bg-[#ECF6F1] px-3 py-1.5 text-[10px] font-bold text-[#1f4a35] transition hover:bg-[#d4ede2] disabled:opacity-50"
                                     >
                                       {resendingId === log._id
-                                        ? <FaSpinner size={9} className="animate-spin" />
+                                        ? <Spinner size="sm" />
                                         : <FaRedo size={9} />}
                                       {resendingId === log._id ? "Resending…" : "Resend"}
                                     </button>
@@ -716,7 +706,7 @@ const SmsManager = () => {
                                       className="inline-flex items-center gap-1.5 border border-rose-300 bg-rose-50 px-3 py-1.5 text-[10px] font-bold text-rose-600 transition hover:bg-rose-100 disabled:opacity-50"
                                     >
                                       {deletingId === log._id
-                                        ? <FaSpinner size={9} className="animate-spin" />
+                                        ? <Spinner size="sm" />
                                         : <FaTrash size={9} />}
                                       {deletingId === log._id ? "Deleting…" : "Delete Entry"}
                                     </button>

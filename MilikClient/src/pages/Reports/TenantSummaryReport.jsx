@@ -7,8 +7,7 @@ import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getTenantInvoices, getTenants } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
-
-const formatMoney = (v) => `KES ${Number(v || 0).toLocaleString()}`;
+import { formatMoney } from "../../utils/money";
 
 const ITEMS_PER_PAGE = 50;
 

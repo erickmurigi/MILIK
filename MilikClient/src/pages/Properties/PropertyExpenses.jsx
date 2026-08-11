@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useConfirm } from '../../context/ConfirmContext';
+import { formatMoney } from '../../utils/money';
 import { useTabState } from '../../hooks/useTabState';
 import { useEntityCache } from '../../hooks/useEntityCache';
 import { useDispatch, useSelector } from 'react-redux';
@@ -43,7 +45,6 @@ const CATEGORY_DOT = {
   maintenance: 'bg-orange-400', repair: 'bg-red-400', utility: 'bg-blue-400',
   tax: 'bg-purple-400', insurance: 'bg-teal-400', supplies: 'bg-yellow-400', other: 'bg-slate-400',
 };
-const formatMoney = (v, currency = 'KES') => `${currency} ${Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const toInput = (d) => { try { return new Date(d).toISOString().split('T')[0]; } catch { return ''; } };
 const today = () => toInput(new Date());
 const normalizeId = (v) => (typeof v === 'string' ? v : v?._id || v?.id || '');
@@ -261,6 +262,7 @@ const ExpenseModal = ({ open, editing, properties, units, businessId, onClose, o
 const PAGE_SIZE = 20;
 
 const PropertyExpenses = () => {
+  const confirm = useConfirm();
   const dispatch = useDispatch();
   const currentUser    = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
@@ -356,7 +358,7 @@ const PropertyExpenses = () => {
   };
 
   const handleDelete = async (exp) => {
-    if (!window.confirm(`Delete expense "${exp.description}" (${formatMoney(exp.amount, currency)})? This cannot be undone.`)) return;
+    if (!await confirm({ message: `Delete expense "${exp.description}" (${formatMoney(exp.amount)})? This cannot be undone.`, confirmText: "Delete", isDangerous: true })) return;
     setDeleting(exp._id);
     try {
       await deleteExpenseProperty(dispatch, exp._id);
@@ -413,13 +415,13 @@ const PropertyExpenses = () => {
           <div className="inline-flex items-center gap-2 border border-slate-200 bg-slate-50 px-3 py-1.5">
             <FaMoneyBillWave size={9} className="text-slate-500 shrink-0" />
             <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Total</span>
-            <span className="text-sm font-black text-[#0B3B2E]">{formatMoney(summary.total, currency)}</span>
+            <span className="text-sm font-black text-[#0B3B2E]">{formatMoney(summary.total)}</span>
           </div>
           {summary.byCat.slice(0, 4).map(({ cat, total, count }) => (
             <div key={cat} className="inline-flex items-center gap-2 border border-slate-200 bg-white px-3 py-1.5">
               <span className={`h-2 w-2 shrink-0 rounded-full ${CATEGORY_DOT[cat] || 'bg-slate-400'}`} />
               <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">{humanize(cat)}</span>
-              <span className="text-xs font-black text-slate-700">{formatMoney(total, currency)}</span>
+              <span className="text-xs font-black text-slate-700">{formatMoney(total)}</span>
               <span className="text-[10px] text-slate-400">{count}</span>
             </div>
           ))}
@@ -522,7 +524,7 @@ const PropertyExpenses = () => {
                           <div className="truncate font-medium text-slate-700" title={exp.description}>{exp.description}</div>
                         </td>
                         <td className="px-3 py-1.5 border-r border-gray-100 font-bold text-slate-900 whitespace-nowrap">
-                          {formatMoney(exp.amount, currency)}
+                          {formatMoney(exp.amount)}
                         </td>
                         <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">{humanize(exp.paymentMethod)}</td>
                         <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500 whitespace-nowrap">{exp.cashbook || '—'}</td>
@@ -556,7 +558,7 @@ const PropertyExpenses = () => {
                       Total ({filtered.length} expense{filtered.length !== 1 ? 's' : ''})
                     </td>
                     <td className="px-3 py-2 font-extrabold text-[#0B3B2E]" colSpan={5}>
-                      {formatMoney(summary.total, currency)}
+                      {formatMoney(summary.total)}
                     </td>
                   </tr>
                 </tfoot>

@@ -5,6 +5,7 @@ import { FaPrint, FaRedoAlt, FaSearch } from "react-icons/fa";
 import { carWashApi, formatMoney, getActiveBranchId } from "../../services/carWashApi";
 import { selectCurrentCompany } from "../../redux/selectors";
 import CarWashShell from "./CarWashShell";
+import { fmtDate, todayISO } from "../../utils/dates";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -15,7 +16,6 @@ const localISO = (d) => {
   return `${y}-${m}-${dd}`;
 };
 const monthStart = () => { const n = new Date(); return localISO(new Date(n.getFullYear(), n.getMonth(), 1)); };
-const todayISO   = () => localISO(new Date());
 
 const pct      = (val, total) => (total > 0 ? `${((val / total) * 100).toFixed(1)}%` : "0%");
 const pctWidth = (val, total) => (total > 0 ? Math.max((val / total) * 100, 0) : 0);
@@ -70,7 +70,6 @@ const CarWashExpensesReport = () => {
     const fmtV   = (v) => `KES ${Number(v || 0).toLocaleString()}`;
     const tot    = Number(data?.total || 0);
     const pctStr = (v) => (tot > 0 ? `${((v / tot) * 100).toFixed(1)}%` : "0%");
-    const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-KE", { dateStyle: "short" }) : "—";
 
     win.document.write(`<!DOCTYPE html><html><head><title>Car Wash Expenses Report</title><style>
       @page{size:A4 portrait;margin:14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
@@ -113,7 +112,6 @@ const CarWashExpensesReport = () => {
     win.onload = () => { win.focus(); win.print(); };
   }, [currentCompany, data, applied, isConsolidated]);
 
-  const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-KE", { dateStyle: "short" }) : "—";
   const fmtPeriod = (iso) => new Date(iso).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" });
 
   return (

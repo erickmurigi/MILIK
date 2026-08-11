@@ -8,7 +8,7 @@ import {
   resolveActiveBusinessId,
   currentUserId,
 } from "../services/inventoryScope.js";
-import { nextSequenceNumber } from "../services/sequenceService.js";
+import { nextSequenceNumber } from "../../../utils/sequenceService.js";
 
 export const listSessions = async (req, res, next) => {
   try {

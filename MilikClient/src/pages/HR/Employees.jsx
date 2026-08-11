@@ -13,6 +13,7 @@ import { selectCurrentCompany } from '../../redux/selectors';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 import AppSelect from "../../components/common/AppSelect";
+import { fmtDate } from '../../utils/dates';
 
 const STATUS_BADGE = {
   Active:     'border-emerald-200 bg-emerald-50 text-emerald-700',
@@ -32,7 +33,6 @@ const initials = (s = '', o = '') => `${s.charAt(0)}${o.charAt(0)}`.toUpperCase(
 
 const STATUS_OPTIONS = ["Active", "Probation", "Suspended", "Terminated"].map((s) => ({ value: s, label: s }));
 const TYPE_OPTIONS   = ["Permanent", "Contract", "Casual", "Intern"].map((t) => ({ value: t, label: t }));
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
 const Pagination = ({ page, totalPages, total, onPage }) => (
   <div className="flex-shrink-0 flex items-center justify-between border-t border-slate-200 bg-white px-4 py-2">

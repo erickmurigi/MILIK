@@ -9,6 +9,7 @@ import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 import AppSelect from "../../components/common/AppSelect";
+import { useConfirm } from '../../context/ConfirmContext';
 
 const CATEGORIES = ['Performance', 'Attendance', 'Skills', 'Leadership', 'Financial', 'Customer', 'Other'];
 const UNITS      = ['Percentage', 'Score', 'Count', 'KES', 'Custom'];
@@ -31,6 +32,7 @@ const FW = `${F} w-full`;
 
 export default function KpiLibrary() {
   const queryClient = useQueryClient();
+  const confirm     = useConfirm();
   const [search, setSearch]         = useTabState('/hr/appraisals/kpis:search', '');
   const [catFilter, setCatFilter]   = useTabState('/hr/appraisals/kpis:catFilter', '');
   const [activeOnly, setActiveOnly] = useTabState('/hr/appraisals/kpis:activeOnly', false);
@@ -201,7 +203,7 @@ export default function KpiLibrary() {
                   <td className="px-3 py-1 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <button onClick={() => openEdit(kpi)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Edit"><FaEdit size={11} /></button>
-                      <button onClick={() => { if (window.confirm(`Delete "${kpi.name}"?`)) handleDelete(kpi); }}
+                      <button onClick={async () => { if (await confirm({ title: 'Delete KPI', message: `Delete "${kpi.name}"?`, confirmText: 'Delete', isDangerous: true })) handleDelete(kpi); }}
                         disabled={deleting === kpi._id}
                         className="rounded p-1 text-rose-300 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40" title="Delete">
                         <FaTrash size={11} />

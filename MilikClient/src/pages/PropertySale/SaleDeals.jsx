@@ -12,18 +12,22 @@ import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterSearch, FilterDateRange } from "./SaleFilterBar";
 import PaginationBar from "../../components/PaginationBar";
 import { saleApi, fmtKES, todayISO } from "../../services/propertySaleApi";
+import { fmtDate } from "../../utils/dates";
 import AmountInput from "./AmountInput";
 import { useConfirm } from "../../context/ConfirmContext";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import Modal from "../../components/common/Modal";
+import { inputClass, labelClass } from "../../utils/formStyles";
+import StatusBadge from "../../components/common/StatusBadge";
 
 const PAGE_SIZE = 25;
 
-const statusBadge = (status) => ({
+const DEAL_STATUS_MAP = {
   active:    "border-[#B7C9C0] bg-[#F1F6F3] text-[#0B3B2E]",
   closed:    "border-emerald-200 bg-emerald-50 text-emerald-700",
   cancelled: "border-slate-200 bg-slate-50 text-slate-500",
-}[status] || "border-slate-200 bg-slate-50 text-slate-500");
+};
 
 const blankDealForm = {
   listing: "", buyer: "", agent: "", agreedPrice: "",
@@ -40,24 +44,6 @@ const PAYMENT_METHOD_OPTIONS = PAYMENT_METHODS.map((m) => ({ value: m, label: fm
 const DEAL_STATUS_OPTIONS    = [{ value: "active", label: "Active" }, { value: "closed", label: "Closed" }, { value: "cancelled", label: "Cancelled" }];
 const blankPayForm    = { amount: "", paymentType: "installment", paymentMethod: "bank_transfer", reference: "", paymentDate: todayISO(), notes: "" };
 
-const Modal = ({ title, subtitle, headerCls = "bg-[#0B3B2E]", children, footer, onClose }) => (
-  <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-    <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-2xl sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
-      <div className={`flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 ${headerCls} px-4 py-3 text-white rounded-t-2xl sm:rounded-none`}>
-        <div>
-          <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
-          {subtitle && <p className="mt-0.5 text-xs font-semibold text-white/70">{subtitle}</p>}
-        </div>
-        <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
-      </div>
-      <div className="flex-1 overflow-y-auto p-4">{children}</div>
-      {footer && <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>}
-    </div>
-  </div>
-);
-
-const inputCls = "h-8 w-full border border-slate-200 bg-white px-3 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none";
-const labelCls = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 
 const SaleDeals = () => {
   const confirm        = useConfirm();
@@ -168,7 +154,6 @@ const SaleDeals = () => {
   const dealPmts    = (dealPmtsData?.data ?? []).filter((p) => p.status === "paid");
   const dealComm    = (dealCommData?.data ?? [])[0] ?? null;
   const dealSchedule= dealScheduleData?.data ?? [];
-  const fmtDate    = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] });
@@ -458,9 +443,7 @@ const SaleDeals = () => {
                     <td className="px-3 py-2 text-right font-bold text-emerald-700">{fmtKES(row.totalPaid || 0)}</td>
                     <td className={`px-3 py-2 text-right font-black ${balance > 0 ? "text-rose-700" : "text-emerald-700"}`}>{fmtKES(balance)}</td>
                     <td className="px-3 py-2">
-                      <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${statusBadge(row.status)}`}>
-                        {row.status}
-                      </span>
+                      <StatusBadge status={row.status} map={DEAL_STATUS_MAP} />
                     </td>
                     <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="inline-flex items-center gap-1">
@@ -532,7 +515,7 @@ const SaleDeals = () => {
             <div className="min-w-0">
               <div className="font-black text-sm leading-tight font-mono">{selected.dealNumber}</div>
               <div className="flex items-center gap-2 mt-1">
-                <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${statusBadge(selected.status)}`}>{selected.status}</span>
+                <StatusBadge status={selected.status} map={DEAL_STATUS_MAP} />
                 <span className="text-[10px] text-white/60">{fmtDate(selected.dealDate)}</span>
               </div>
             </div>
@@ -754,7 +737,7 @@ const SaleDeals = () => {
       {showModal && (
         <Modal
           title={editingId ? "Edit Deal" : "New Sale Deal"}
-          subtitle="Property Sale Module"
+          wide
           onClose={() => setShowModal(false)}
           footer={
             <>
@@ -794,12 +777,12 @@ const SaleDeals = () => {
                         <AppSelect label="Commission Type" value={form.commissionTypeOverride || selAgent?.commissionType || "percentage"} onChange={(v) => setForm((p) => ({ ...p, commissionTypeOverride: v ?? "", commissionAmountOverride: "" }))} options={[{ value: "percentage", label: "Percentage (%)" }, { value: "fixed", label: "Fixed Amount (KES)" }]} size="md" />
                       </div>
                       <div>
-                        <label className={labelCls}>{(form.commissionTypeOverride || selAgent?.commissionType) === "fixed" ? "Commission Amount (KES)" : "Commission Rate (%)"}</label>
-                        <input type="number" min="0" step="0.01" value={form.commissionRateOverride} onChange={(e) => setForm((p) => ({ ...p, commissionRateOverride: e.target.value, commissionAmountOverride: "" }))} className={inputCls} placeholder={selAgent ? String(selAgent.commissionRate) : ""} />
+                        <label className={labelClass}>{(form.commissionTypeOverride || selAgent?.commissionType) === "fixed" ? "Commission Amount (KES)" : "Commission Rate (%)"}</label>
+                        <input type="number" min="0" step="0.01" value={form.commissionRateOverride} onChange={(e) => setForm((p) => ({ ...p, commissionRateOverride: e.target.value, commissionAmountOverride: "" }))} className={inputClass} placeholder={selAgent ? String(selAgent.commissionRate) : ""} />
                       </div>
                       <div>
-                        <label className={labelCls}>Direct Amount Override (KES)</label>
-                        <input type="number" min="0" step="0.01" value={form.commissionAmountOverride} onChange={(e) => setForm((p) => ({ ...p, commissionAmountOverride: e.target.value }))} className={inputCls} placeholder="Skip rate — set exact amount" />
+                        <label className={labelClass}>Direct Amount Override (KES)</label>
+                        <input type="number" min="0" step="0.01" value={form.commissionAmountOverride} onChange={(e) => setForm((p) => ({ ...p, commissionAmountOverride: e.target.value }))} className={inputClass} placeholder="Skip rate — set exact amount" />
                       </div>
                     </div>
                   )}
@@ -807,19 +790,19 @@ const SaleDeals = () => {
               );
             })()}
             <div>
-              <label className={labelCls}>Agreed Price (KES)</label>
-              <AmountInput value={form.agreedPrice} onChange={(v) => setForm((p) => ({ ...p, agreedPrice: v }))} className={inputCls} placeholder="e.g. 8,500,000" />
+              <label className={labelClass}>Agreed Price (KES)</label>
+              <AmountInput value={form.agreedPrice} onChange={(v) => setForm((p) => ({ ...p, agreedPrice: v }))} className={inputClass} placeholder="e.g. 8,500,000" />
             </div>
             <div>
-              <label className={labelCls}>Deal Date</label>
-              <input type="date" value={form.dealDate} onChange={(e) => setForm((p) => ({ ...p, dealDate: e.target.value }))} className={inputCls} />
+              <label className={labelClass}>Deal Date</label>
+              <input type="date" value={form.dealDate} onChange={(e) => setForm((p) => ({ ...p, dealDate: e.target.value }))} className={inputClass} />
             </div>
             <div>
-              <label className={labelCls}>Expected Closing Date</label>
-              <input type="date" value={form.expectedClosingDate} onChange={(e) => setForm((p) => ({ ...p, expectedClosingDate: e.target.value }))} className={inputCls} />
+              <label className={labelClass}>Expected Closing Date</label>
+              <input type="date" value={form.expectedClosingDate} onChange={(e) => setForm((p) => ({ ...p, expectedClosingDate: e.target.value }))} className={inputClass} />
             </div>
             <div className="md:col-span-2">
-              <label className={labelCls}>Notes</label>
+              <label className={labelClass}>Notes</label>
               <textarea rows={2} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
             </div>
           </div>
@@ -830,8 +813,6 @@ const SaleDeals = () => {
       {showCancelModal && cancellingDeal && (
         <Modal
           title={`Cancel Deal — ${cancellingDeal.dealNumber}`}
-          subtitle="This will revert the listing to Available"
-          headerCls="bg-rose-700"
           onClose={() => setShowCancelModal(false)}
           footer={
             <>
@@ -845,7 +826,7 @@ const SaleDeals = () => {
           <div className="mb-3 border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
             Cancelling will revert the listing to <strong>Available</strong> and cancel any pending commissions.
           </div>
-          <label className={labelCls}>Reason for Cancellation</label>
+          <label className={labelClass}>Reason for Cancellation</label>
           <textarea rows={3} value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder="Optional — e.g. buyer withdrew, financing fell through…" className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-rose-500 focus:outline-none" />
         </Modal>
       )}
@@ -885,7 +866,6 @@ const SaleDeals = () => {
       {showCloseModal && closingDeal && (
         <Modal
           title={`Close Deal — ${closingDeal.dealNumber}`}
-          subtitle={`Balance: ${fmtKES(closingDeal.agreedPrice - (closingDeal.totalPaid || 0))}`}
           onClose={() => setShowCloseModal(false)}
           footer={
             <>
@@ -898,15 +878,15 @@ const SaleDeals = () => {
         >
           <div className="grid gap-3">
             <div>
-              <label className={labelCls}>Actual Closing Date</label>
-              <input type="date" value={closeForm.actualClosingDate} onChange={(e) => setCloseForm((p) => ({ ...p, actualClosingDate: e.target.value }))} className={inputCls} />
+              <label className={labelClass}>Actual Closing Date</label>
+              <input type="date" value={closeForm.actualClosingDate} onChange={(e) => setCloseForm((p) => ({ ...p, actualClosingDate: e.target.value }))} className={inputClass} />
             </div>
             <div>
-              <label className={labelCls}>Title Transfer Date</label>
-              <input type="date" value={closeForm.titleTransferDate} onChange={(e) => setCloseForm((p) => ({ ...p, titleTransferDate: e.target.value }))} className={inputCls} />
+              <label className={labelClass}>Title Transfer Date</label>
+              <input type="date" value={closeForm.titleTransferDate} onChange={(e) => setCloseForm((p) => ({ ...p, titleTransferDate: e.target.value }))} className={inputClass} />
             </div>
             <div>
-              <label className={labelCls}>Handover Notes</label>
+              <label className={labelClass}>Handover Notes</label>
               <textarea rows={3} value={closeForm.handoverNotes} onChange={(e) => setCloseForm((p) => ({ ...p, handoverNotes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
             </div>
           </div>
@@ -916,7 +896,7 @@ const SaleDeals = () => {
       {showPayModal && payingDeal && (
         <Modal
           title={`Record Payment — ${payingDeal.dealNumber}`}
-          subtitle={`${payingDeal.buyer?.fullName || ""} • Balance: KES ${((payingDeal.agreedPrice || 0) - (payingDeal.totalPaid || 0)).toLocaleString("en-KE", { minimumFractionDigits: 2 })}`}
+          wide
           onClose={() => setShowPayModal(false)}
           footer={
             <>
@@ -962,22 +942,22 @@ const SaleDeals = () => {
               <AppSelect label="Method" value={payForm.paymentMethod} onChange={(v) => setPayForm((f) => ({ ...f, paymentMethod: v ?? "" }))} options={PAYMENT_METHOD_OPTIONS} size="md" />
             </div>
             <div>
-              <label className={labelCls}>Amount (KES)</label>
-              <AmountInput value={payForm.amount} onChange={(v) => setPayForm((f) => ({ ...f, amount: v }))} className={inputCls} placeholder="e.g. 500,000" />
+              <label className={labelClass}>Amount (KES)</label>
+              <AmountInput value={payForm.amount} onChange={(v) => setPayForm((f) => ({ ...f, amount: v }))} className={inputClass} placeholder="e.g. 500,000" />
             </div>
             <div>
-              <label className={labelCls}>Payment Date</label>
-              <input type="date" value={payForm.paymentDate} onChange={(e) => setPayForm((f) => ({ ...f, paymentDate: e.target.value }))} className={inputCls} />
+              <label className={labelClass}>Payment Date</label>
+              <input type="date" value={payForm.paymentDate} onChange={(e) => setPayForm((f) => ({ ...f, paymentDate: e.target.value }))} className={inputClass} />
             </div>
             <div className="md:col-span-2">
-              <label className={labelCls}>
+              <label className={labelClass}>
                 {payForm.paymentMethod === "mpesa" ? "M-Pesa Code" : payForm.paymentMethod === "cheque" ? "Cheque No." : payForm.paymentMethod === "bank_transfer" ? "EFT / Ref No." : "Reference (Optional)"}
               </label>
               <input
                 type="text"
                 value={payForm.reference}
                 onChange={(e) => setPayForm((f) => ({ ...f, reference: e.target.value }))}
-                className={`${inputCls} font-mono ${["mpesa", "cheque", "bank_transfer"].includes(payForm.paymentMethod) ? "border-amber-300 bg-amber-50 focus:border-amber-500" : ""}`}
+                className={`${inputClass} font-mono ${["mpesa", "cheque", "bank_transfer"].includes(payForm.paymentMethod) ? "border-amber-300 bg-amber-50 focus:border-amber-500" : ""}`}
                 placeholder={payForm.paymentMethod === "mpesa" ? "e.g. QJ1X23ABC4D" : "Optional…"}
               />
               {["mpesa", "cheque", "bank_transfer"].includes(payForm.paymentMethod) && (
@@ -985,7 +965,7 @@ const SaleDeals = () => {
               )}
             </div>
             <div className="md:col-span-2">
-              <label className={labelCls}>Notes</label>
+              <label className={labelClass}>Notes</label>
               <textarea rows={2} value={payForm.notes} onChange={(e) => setPayForm((f) => ({ ...f, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
             </div>
           </div>
@@ -996,7 +976,7 @@ const SaleDeals = () => {
       {showScheduleBuilder && selected && (
         <Modal
           title="Payment Schedule"
-          subtitle={`${selected.dealNumber} — ${fmtKES(selected.agreedPrice)} total`}
+          wide
           onClose={() => setShowScheduleBuilder(false)}
           footer={
             <>
@@ -1011,16 +991,16 @@ const SaleDeals = () => {
             {scheduleItems.map((item, idx) => (
               <div key={idx} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end border border-slate-200 bg-slate-50 px-3 py-2">
                 <div>
-                  <label className={labelCls}>Due Date</label>
-                  <input type="date" value={item.dueDate} onChange={(e) => setScheduleItems((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: e.target.value } : x))} className={inputCls} />
+                  <label className={labelClass}>Due Date</label>
+                  <input type="date" value={item.dueDate} onChange={(e) => setScheduleItems((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: e.target.value } : x))} className={inputClass} />
                 </div>
                 <div>
-                  <label className={labelCls}>Amount (KES)</label>
-                  <input type="number" min="0" value={item.expectedAmount} onChange={(e) => setScheduleItems((prev) => prev.map((x, i) => i === idx ? { ...x, expectedAmount: e.target.value } : x))} className={inputCls} placeholder="0.00" />
+                  <label className={labelClass}>Amount (KES)</label>
+                  <input type="number" min="0" value={item.expectedAmount} onChange={(e) => setScheduleItems((prev) => prev.map((x, i) => i === idx ? { ...x, expectedAmount: e.target.value } : x))} className={inputClass} placeholder="0.00" />
                 </div>
                 <div>
-                  <label className={labelCls}>Description</label>
-                  <input type="text" value={item.description} onChange={(e) => setScheduleItems((prev) => prev.map((x, i) => i === idx ? { ...x, description: e.target.value } : x))} className={inputCls} placeholder={`Installment ${idx + 1}`} />
+                  <label className={labelClass}>Description</label>
+                  <input type="text" value={item.description} onChange={(e) => setScheduleItems((prev) => prev.map((x, i) => i === idx ? { ...x, description: e.target.value } : x))} className={inputClass} placeholder={`Installment ${idx + 1}`} />
                 </div>
                 <div>
                   <button type="button" onClick={() => setScheduleItems((prev) => prev.filter((_, i) => i !== idx))} className="h-8 w-8 border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center">
@@ -1049,7 +1029,6 @@ const SaleDeals = () => {
       {linkingInstallment && selected && (
         <Modal
           title="Link Payment to Installment"
-          subtitle={`#${linkingInstallment.installmentNumber} · ${fmtKES(linkingInstallment.expectedAmount)}`}
           onClose={() => setLinkingInstallment(null)}
         >
           {dealPmts.length === 0 ? (

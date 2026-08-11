@@ -2,7 +2,7 @@ import InvSupplierPayment from "../models/InvSupplierPayment.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import { createError } from "../../../utils/error.js";
 import { resolveActiveBusinessId, currentUserId } from "../services/inventoryScope.js";
-import { nextSequenceNumber } from "../services/sequenceService.js";
+import { nextSequenceNumber } from "../../../utils/sequenceService.js";
 import { postSupplierPaymentLedger, reverseSupplierPaymentLedger } from "../services/inventoryAccountingService.js";
 
 const populatePayment = (q) =>

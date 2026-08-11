@@ -26,6 +26,7 @@ import { adminRequests } from "../../utils/requestMethods";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { buildTenantOptions } from "../../utils/tenantUtils";
 import { useConfirm } from "../../context/ConfirmContext";
+import { fmtDate } from "../../utils/dates";
 
 const DEFAULT_PAGE_SIZE = 25;
 
@@ -73,12 +74,6 @@ const toList = (payload) => {
   return [];
 };
 
-const formatDate = (value) => {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-};
 
 const toInputDate = (value) => {
   if (!value) return "";
@@ -364,8 +359,8 @@ const Inspections = () => {
     const rows = filteredInspections.map((item) => [
       item?.inspectionNumber || "", formatTypeLabel(item?.type), item?.status || "",
       getInspectionPropertyName(item), item?.unit?.unitNumber || "", item?.tenant?.name || "",
-      item?.inspectorName || "", item?.scheduledDate ? formatDate(item.scheduledDate) : "",
-      item?.completedDate ? formatDate(item.completedDate) : "",
+      item?.inspectorName || "", item?.scheduledDate ? fmtDate(item.scheduledDate) : "",
+      item?.completedDate ? fmtDate(item.completedDate) : "",
       Number.isFinite(Number(item?.score)) ? Number(item.score) : "",
       Number(item?.issuesFound || 0), item?.recommendations || "", item?.notes || "",
     ]);
@@ -485,8 +480,8 @@ const Inspections = () => {
                             <p className="text-[10px] text-slate-500 mt-0.5">{item?.tenant?.name || "No tenant"}</p>
                           </td>
                           <td className="px-3 py-1 border-r border-gray-100">
-                            <p className="font-semibold text-slate-900">{formatDate(item?.scheduledDate)}</p>
-                            <p className="text-[10px] text-slate-500 mt-0.5">Completed {formatDate(item?.completedDate)}</p>
+                            <p className="font-semibold text-slate-900">{fmtDate(item?.scheduledDate)}</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">Completed {fmtDate(item?.completedDate)}</p>
                           </td>
                           <td className="px-3 py-1 border-r border-gray-100">
                             <div className="flex items-center gap-2">
@@ -500,7 +495,7 @@ const Inspections = () => {
                             )}
                           </td>
                           <td className="px-3 py-1 border-r border-gray-100">
-                            <p className="font-semibold text-slate-900">{formatDate(item?.nextInspectionDate)}</p>
+                            <p className="font-semibold text-slate-900">{fmtDate(item?.nextInspectionDate)}</p>
                             <p className="text-[10px] text-slate-500 mt-0.5">Tenant present: {item?.tenantPresent ? "Yes" : "No"}</p>
                           </td>
                           <td className="px-3 py-1 border-r border-gray-100 text-right">

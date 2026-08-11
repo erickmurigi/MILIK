@@ -8,6 +8,9 @@ import InventoryShell from "./InventoryShell";
 import { inventoryApi, formatMoney, todayISO } from "../../services/inventoryApi";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from "../../components/PaginationBar";
+import Modal from "../../components/common/Modal";
+import StatusBadge from "../../components/common/StatusBadge";
+import { inputClass, labelClass } from "../../utils/formStyles";
 
 const STATUSES = ["draft", "sent", "partially_received", "received", "cancelled"];
 
@@ -23,29 +26,7 @@ const PAYMENT_BADGE = {
   voided:    "border-red-200    bg-red-50    text-red-700",
 };
 
-const StatusPill = ({ status, map = STATUS_BADGE }) => (
-  <span className={`inline-flex border px-2 py-0.5 text-[9px] font-bold uppercase ${map[status] || "border-slate-200 bg-slate-50 text-slate-500"}`}>
-    {String(status || "").replace(/_/g, " ")}
-  </span>
-);
-
-const inputClass = "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
-const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
-
 const emptyLine = () => ({ product: "", qtyOrdered: "", unitCost: "", costAutoFilled: false });
-
-const Modal = ({ title, onClose, children, footer, wide }) => (
-  <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
-    <div className={`w-full border border-slate-200 bg-white shadow-2xl ${wide ? "max-w-3xl" : "max-w-xl"}`}>
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
-        <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
-        <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10 hover:text-white"><FaTimes /></button>
-      </div>
-      <div className="max-h-[78vh] overflow-y-auto p-4">{children}</div>
-      {footer && <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>}
-    </div>
-  </div>
-);
 
 const InvPurchaseOrders = () => {
   const queryClient = useQueryClient();
@@ -469,7 +450,7 @@ const InvPurchaseOrders = () => {
                     <td className="px-3 py-2 text-slate-700">{po.supplier?.name || "—"}</td>
                     <td className="px-3 py-2 text-slate-600">{po.location?.name || "—"}</td>
                     <td className="px-3 py-2 text-right font-bold text-slate-800">{formatMoney(po.totalAmount)}</td>
-                    <td className="px-3 py-2"><StatusPill status={po.status} /></td>
+                    <td className="px-3 py-2"><StatusBadge status={po.status} map={STATUS_BADGE} /></td>
                     <td className="px-3 py-2 text-slate-400">{po.orderDate ? new Date(po.orderDate).toLocaleDateString("en-KE") : "—"}</td>
                     <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
@@ -680,7 +661,7 @@ const InvPurchaseOrders = () => {
                 <div key={r._id} className={`rounded border ${r.status === "cancelled" ? "border-red-200 bg-red-50/40" : "border-emerald-200 bg-emerald-50/30"}`}>
                   <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
                     <div className="flex items-center gap-3">
-                      <StatusPill status={r.status} map={{ active: "border-emerald-200 bg-emerald-50 text-emerald-700", cancelled: "border-red-200 bg-red-50 text-red-700" }} />
+                      <StatusBadge status={r.status} map={{ active: "border-emerald-200 bg-emerald-50 text-emerald-700", cancelled: "border-red-200 bg-red-50 text-red-700" }} />
                       <span className="text-[11px] text-slate-600">
                         {new Date(r.receivedAt).toLocaleString("en-KE", { dateStyle: "medium", timeStyle: "short" })}
                       </span>
@@ -789,7 +770,7 @@ const InvPurchaseOrders = () => {
                       <td className="px-2 py-1 text-slate-500">{new Date(p.paymentDate).toLocaleDateString("en-KE")}</td>
                       <td className="px-2 py-1 font-bold text-slate-800">{formatMoney(p.amount)}</td>
                       <td className="px-2 py-1 text-slate-500">{p.cashbookAccountId?.name || p.cashbookAccountName || "—"}</td>
-                      <td className="px-2 py-1"><StatusPill status={p.status} map={PAYMENT_BADGE} /></td>
+                      <td className="px-2 py-1"><StatusBadge status={p.status} map={PAYMENT_BADGE} /></td>
                       <td className="px-2 py-1 text-right">
                         {p.status === "confirmed" && (
                           <button type="button" disabled={voidingPaymentId === p._id}

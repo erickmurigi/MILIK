@@ -1,4 +1,6 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
+import { formatMoney } from "../../utils/money";
+import { fmtDate } from "../../utils/dates";
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectCurrentCompany,
@@ -29,13 +31,6 @@ const ensureArray = (value) => {
 
 
 
-const formatMoney = (value) => `KES ${Math.abs(Number(value || 0)).toLocaleString()}`;
-const formatDate = (value) => {
-  if (!value) return "-";
-  const dt = new Date(value);
-  if (Number.isNaN(dt.getTime())) return "-";
-  return dt.toLocaleDateString();
-};
 
 
 const getPropertyName = (payment) =>
@@ -309,7 +304,7 @@ const TenantPrepayments = () => {
                         className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}
                       >
                         <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900">{row.referenceNumber}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{formatDate(row.paymentDate)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{fmtDate(row.paymentDate)}</td>
                         <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.tenantName}</td>
                         <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.propertyName}</td>
                         <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.unitName}</td>

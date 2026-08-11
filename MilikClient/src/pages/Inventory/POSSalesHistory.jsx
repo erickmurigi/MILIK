@@ -7,33 +7,14 @@ import InventoryShell from "./InventoryShell";
 import { inventoryApi, formatMoney, todayISO } from "../../services/inventoryApi";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from "../../components/PaginationBar";
+import Modal from "../../components/common/Modal";
+import StatusBadge from "../../components/common/StatusBadge";
+import { inputClass, labelClass } from "../../utils/formStyles";
 
 const STATUS_BADGE = {
   completed: "border-emerald-200 bg-emerald-50 text-emerald-700",
   voided:    "border-red-200    bg-red-50    text-red-700",
 };
-
-const StatusPill = ({ status }) => (
-  <span className={`inline-flex border px-1.5 py-0.5 text-[9px] font-bold uppercase ${STATUS_BADGE[status] || "border-slate-200 bg-slate-50 text-slate-600"}`}>
-    {status}
-  </span>
-);
-
-const Modal = ({ title, onClose, children, footer, accent }) => (
-  <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
-    <div className="w-full max-w-md border border-slate-200 bg-white shadow-2xl">
-      <div className={`flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-white ${accent || "bg-[#0B3B2E]"}`}>
-        <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
-        <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10 hover:text-white"><FaTimes /></button>
-      </div>
-      <div className="p-4">{children}</div>
-      {footer && <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>}
-    </div>
-  </div>
-);
-
-const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
-const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 
 const POSSalesHistory = () => {
   const queryClient = useQueryClient();
@@ -283,7 +264,7 @@ const POSSalesHistory = () => {
                     <td className="px-3 py-2 text-slate-600 capitalize">
                       {s.payments?.map((p) => p.method).join(", ") || "—"}
                     </td>
-                    <td className="px-3 py-2"><StatusPill status={s.status} /></td>
+                    <td className="px-3 py-2"><StatusBadge status={s.status} map={STATUS_BADGE} /></td>
                     <td className="px-3 py-2 text-slate-500">{s.cashier?.name || "—"}</td>
                     <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
                       {s.status === "completed" && (
@@ -315,7 +296,7 @@ const POSSalesHistory = () => {
         <Modal
           title={`Void Sale — ${selected.receiptNumber}`}
           onClose={() => setShowVoid(false)}
-          accent="bg-red-700"
+
           footer={
             <>
               <button type="button" onClick={() => setShowVoid(false)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>

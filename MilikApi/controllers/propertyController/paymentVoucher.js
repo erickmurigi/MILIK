@@ -18,6 +18,8 @@ import {
   ensurePropertyControlAccount,
 } from "../../services/propertyAccountingService.js";
 import { syncProcessedStatementSettlementState } from "../../services/processedStatementSettlementService.js";
+import { createError } from "../../utils/error.js";
+import { parsePagination } from "../../utils/pagination.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
@@ -1010,33 +1012,33 @@ export const createPaymentVoucher = async (req, res, next) => {
   try {
     const businessId = await resolveBusinessId(req);
     if (!businessId) {
-      return res.status(400).json({ success: false, message: "User must have a company context" });
+      return next(createError(400, "User must have a company context"));
     }
 
     const voucherCategory = String(req.body?.category || "").trim();
     if (!voucherCategory) {
-      return res.status(400).json({ success: false, message: "Voucher category is required" });
+      return next(createError(400, "Voucher category is required"));
     }
 
     if (voucherRequiresProperty(voucherCategory) && (!req.body?.property || !isValidObjectId(req.body.property))) {
-      return res.status(400).json({ success: false, message: "Property is required for this voucher category" });
+      return next(createError(400, "Property is required for this voucher category"));
     }
 
     if (!voucherRequiresProperty(voucherCategory) && req.body?.property && !isValidObjectId(req.body.property)) {
-      return res.status(400).json({ success: false, message: "Invalid property supplied" });
+      return next(createError(400, "Invalid property supplied"));
     }
 
     if (voucherRequiresExplicitDebitAccount(voucherCategory) && (!req.body?.debitAccount || !isValidObjectId(req.body.debitAccount))) {
-      return res.status(400).json({ success: false, message: "Debit posting account is required for this voucher category" });
+      return next(createError(400, "Debit posting account is required for this voucher category"));
     }
 
     if (!req.body?.liabilityAccount || !isValidObjectId(req.body.liabilityAccount)) {
-      return res.status(400).json({ success: false, message: "Liability posting account is required" });
+      return next(createError(400, "Liability posting account is required"));
     }
 
     const amount = Number(req.body?.amount || 0);
     if (!Number.isFinite(amount) || amount <= 0) {
-      return res.status(400).json({ success: false, message: "Valid voucher amount is required" });
+      return next(createError(400, "Valid voucher amount is required"));
     }
 
     const sourceRequisition = await resolveVoucherSourceRequisition({
@@ -1124,10 +1126,10 @@ export const getPaymentVouchers = async (req, res, next) => {
   try {
     const business = await resolveBusinessId(req);
     if (!business) {
-      return res.status(400).json({ success: false, message: "User must have a company context" });
+      return next(createError(400, "User must have a company context"));
     }
 
-    const { category, status, property, landlord, search, page = 1, limit = 50 } = req.query;
+    const { category, status, property, landlord, search } = req.query;
     const filter = { business };
 
     if (category) filter.category = category;
@@ -1144,12 +1146,11 @@ export const getPaymentVouchers = async (req, res, next) => {
       ];
     }
 
-    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
-    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+    const { page: pageNum, limit: limitNum, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 200 });
 
     const [rows, total] = await Promise.all([
       populateVoucherQuery(
-        PaymentVoucher.find(filter).sort({ createdAt: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum)
+        PaymentVoucher.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limitNum)
       ).lean(),
       PaymentVoucher.countDocuments(filter),
     ]);
@@ -1164,14 +1165,14 @@ export const getPaymentVoucher = async (req, res, next) => {
   try {
     const business = await resolveBusinessId(req);
     if (!business) {
-      return res.status(400).json({ success: false, message: "User must have a company context" });
+      return next(createError(400, "User must have a company context"));
     }
 
     const row = await populateVoucherQuery(
       PaymentVoucher.findOne({ _id: req.params.id, business })
     ).lean();
 
-    if (!row) return res.status(404).json({ message: "Payment voucher not found" });
+    if (!row) return next(createError(404, "Payment voucher not found"));
     res.status(200).json(row);
   } catch (err) {
     next(err);
@@ -1182,7 +1183,7 @@ export const updatePaymentVoucher = async (req, res, next) => {
   try {
     const business = await resolveBusinessId(req);
     if (!business) {
-      return res.status(400).json({ success: false, message: "User must have a company context" });
+      return next(createError(400, "User must have a company context"));
     }
 
     const allowedFields = [
@@ -1209,13 +1210,10 @@ export const updatePaymentVoucher = async (req, res, next) => {
     }
 
     const existing = await PaymentVoucher.findOne({ _id: req.params.id, business }).lean();
-    if (!existing) return res.status(404).json({ message: "Payment voucher not found" });
+    if (!existing) return next(createError(404, "Payment voucher not found"));
 
     if (existing.status !== "draft") {
-      return res.status(400).json({
-        success: false,
-        message: "Only draft vouchers can be edited.",
-      });
+      return next(createError(400, "Only draft vouchers can be edited."));
     }
 
     const requestedSourceRequisitionId = Object.prototype.hasOwnProperty.call(payload, "sourceRequisition")
@@ -1232,17 +1230,11 @@ export const updatePaymentVoucher = async (req, res, next) => {
       : existing.property || null;
 
     if (voucherRequiresProperty(effectiveCategory) && !isValidObjectId(propertyId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Property is required for this voucher category.",
-      });
+      return next(createError(400, "Property is required for this voucher category."));
     }
 
     if (voucherRequiresExplicitDebitAccount(effectiveCategory) && !isValidObjectId(payload.debitAccount || existing.debitAccount || null)) {
-      return res.status(400).json({
-        success: false,
-        message: "Debit posting account is required for this voucher category.",
-      });
+      return next(createError(400, "Debit posting account is required for this voucher category."));
     }
     const sourceRequisition = await resolveVoucherSourceRequisition({
       businessId: business,
@@ -1289,41 +1281,32 @@ export const updatePaymentVoucherStatus = async (req, res, next) => {
   try {
     const business = await resolveBusinessId(req);
     if (!business) {
-      return res.status(400).json({ success: false, message: "User must have a company context" });
+      return next(createError(400, "User must have a company context"));
     }
 
     const { status, reason } = req.body || {};
     if (!["draft", "approved", "paid", "reversed"].includes(status)) {
-      return res.status(400).json({ success: false, message: "Invalid status" });
+      return next(createError(400, "Invalid status"));
     }
 
     const voucher = await PaymentVoucher.findOne({ _id: req.params.id, business });
-    if (!voucher) return res.status(404).json({ message: "Payment voucher not found" });
+    if (!voucher) return next(createError(404, "Payment voucher not found"));
 
     const actorUserId = await resolveActorUserId(req, business);
 
     if (status === "draft") {
       if (voucher.status !== "draft") {
-        return res.status(400).json({
-          success: false,
-          message: "Approved, paid, or reversed vouchers cannot be moved back to draft.",
-        });
+        return next(createError(400, "Approved, paid, or reversed vouchers cannot be moved back to draft."));
       }
       voucher.status = "draft";
     }
 
     if (status === "approved") {
       if (voucher.status === "reversed") {
-        return res.status(400).json({
-          success: false,
-          message: "Reversed vouchers cannot be approved again.",
-        });
+        return next(createError(400, "Reversed vouchers cannot be approved again."));
       }
       if (voucher.status === "paid") {
-        return res.status(400).json({
-          success: false,
-          message: "Paid vouchers are already fully processed.",
-        });
+        return next(createError(400, "Paid vouchers are already fully processed."));
       }
 
       const approvalDate = new Date();
@@ -1335,10 +1318,7 @@ export const updatePaymentVoucherStatus = async (req, res, next) => {
 
     if (status === "paid") {
       if (voucher.status === "reversed") {
-        return res.status(400).json({
-          success: false,
-          message: "Reversed vouchers cannot be marked as paid.",
-        });
+        return next(createError(400, "Reversed vouchers cannot be marked as paid."));
       }
 
       // Allow settlement account to be provided inline (e.g. from the "Mark Paid" quick modal)
@@ -1348,10 +1328,7 @@ export const updatePaymentVoucherStatus = async (req, res, next) => {
       }
 
       if (!voucher.settlementAccount || !isValidObjectId(voucher.settlementAccount)) {
-        return res.status(400).json({
-          success: false,
-          message: "Select a settlement cashbook account on the voucher before marking it as paid.",
-        });
+        return next(createError(400, "Select a settlement cashbook account on the voucher before marking it as paid."));
       }
 
       const paidDate = normalizeDate(req.body?.paidDate || new Date());
@@ -1367,7 +1344,7 @@ export const updatePaymentVoucherStatus = async (req, res, next) => {
 
     if (status === "reversed") {
       if (voucher.status === "reversed") {
-        return res.status(400).json({ success: false, message: "Voucher already reversed" });
+        return next(createError(400, "Voucher already reversed"));
       }
 
       await reverseVoucherLedgerEntries({
@@ -1407,11 +1384,11 @@ export const deletePaymentVoucher = async (req, res, next) => {
   try {
     const business = await resolveBusinessId(req);
     if (!business) {
-      return res.status(400).json({ success: false, message: "User must have a company context" });
+      return next(createError(400, "User must have a company context"));
     }
 
     const row = await PaymentVoucher.findOne({ _id: req.params.id, business });
-    if (!row) return res.status(404).json({ message: "Payment voucher not found" });
+    if (!row) return next(createError(404, "Payment voucher not found"));
 
     if (row.status !== "draft") {
       const actorUserId = await resolveActorUserId(req, business);

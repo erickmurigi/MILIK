@@ -7,21 +7,15 @@ import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { postEntry, postReversal } from "../../services/ledgerPostingService.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { resolveConfiguredAccountingDefaultAccount } from "../../services/companyAccountingDefaultsService.js";
+import { resolveBusinessId } from "../../utils/requestContext.js";
+import { parsePagination } from "../../utils/pagination.js";
+import { createError } from "../../utils/error.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
 const VALID_CATEGORIES = ["maintenance", "repair", "utility", "tax", "insurance", "supplies", "other", "general"];
 const VALID_PRIORITIES = ["low", "normal", "high", "urgent"];
 const VALID_STATUSES = ["draft", "submitted", "approved", "rejected", "converted", "cancelled"];
-
-const resolveBusinessId = (req) =>
-  req?.query?.business ||
-  req?.query?.company ||
-  req?.body?.business ||
-  req?.body?.company ||
-  req?.user?.company?._id ||
-  req?.user?.company ||
-  null;
 
 const resolveActorUserId = async (req, businessId) =>
   resolveAuditActorUserId({
@@ -363,25 +357,25 @@ export const createExpenseRequisition = async (req, res, next) => {
     const businessId = resolveBusinessId(req);
     const actorUserId = await resolveActorUserId(req, businessId);
 
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
-    if (!actorUserId) return res.status(400).json({ success: false, message: "Authenticated user is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
+    if (!actorUserId) return next(createError(400, "Authenticated user is required"));
     if (!isValidObjectId(req.body?.property)) {
-      return res.status(400).json({ success: false, message: "Property is required" });
+      return next(createError(400, "Property is required"));
     }
 
     const amount = Number(req.body?.amount || 0);
     if (!Number.isFinite(amount) || amount <= 0) {
-      return res.status(400).json({ success: false, message: "Valid requisition amount is required" });
+      return next(createError(400, "Valid requisition amount is required"));
     }
 
     const title = String(req.body?.title || "").trim();
     if (!title) {
-      return res.status(400).json({ success: false, message: "Requisition title is required" });
+      return next(createError(400, "Requisition title is required"));
     }
 
     const requestedStatus = normalizeStatus(req.body?.status, "draft");
     if (!["draft", "submitted"].includes(requestedStatus)) {
-      return res.status(400).json({ success: false, message: "New expense requisitions can only be saved as draft or submitted for approval." });
+      return next(createError(400, "New expense requisitions can only be saved as draft or submitted for approval."));
     }
 
     const requisitionNo =
@@ -432,7 +426,7 @@ export const createExpenseRequisition = async (req, res, next) => {
 export const getExpenseRequisitions = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
 
     const filter = { business: businessId };
     if (req.query?.status && req.query.status !== "all") filter.status = req.query.status;
@@ -452,14 +446,13 @@ export const getExpenseRequisitions = async (req, res, next) => {
       ];
     }
 
-    const pageNum  = Math.max(parseInt(req.query.page  || "1",  10) || 1, 1);
-    const limitNum = Math.min(Math.max(parseInt(req.query.limit || "50", 10) || 50, 1), 200);
+    const { page: pageNum, limit: limitNum, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 200 });
 
     const [rows, total] = await Promise.all([
       populateQuery(
         ExpenseRequisition.find(filter)
           .sort({ createdAt: -1 })
-          .skip((pageNum - 1) * limitNum)
+          .skip(skip)
           .limit(limitNum)
       ).lean(),
       ExpenseRequisition.countDocuments(filter),
@@ -474,10 +467,10 @@ export const getExpenseRequisitions = async (req, res, next) => {
 export const updateExpenseRequisition = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
 
     const row = await ExpenseRequisition.findOne({ _id: req.params.id, business: businessId });
-    if (!row) return res.status(404).json({ success: false, message: "Expense requisition not found" });
+    if (!row) return next(createError(404, "Expense requisition not found"));
 
     ensureEditableDraft(row);
 
@@ -488,10 +481,7 @@ export const updateExpenseRequisition = async (req, res, next) => {
       : row.status;
 
     if (!["draft", "submitted"].includes(requestedStatus)) {
-      return res.status(400).json({
-        success: false,
-        message: "Draft edits can only remain as draft or be submitted for approval.",
-      });
+      return next(createError(400, "Draft edits can only remain as draft or be submitted for approval."));
     }
 
     row.status = requestedStatus;
@@ -513,22 +503,19 @@ export const updateExpenseRequisition = async (req, res, next) => {
 export const updateExpenseRequisitionStatus = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
 
     const status = normalizeStatus(req.body?.status, "");
     if (!status) {
-      return res.status(400).json({ success: false, message: "Invalid requisition status" });
+      return next(createError(400, "Invalid requisition status"));
     }
 
     if (status === "converted") {
-      return res.status(400).json({
-        success: false,
-        message: "Expense requisitions become converted only when a payment voucher is created from them.",
-      });
+      return next(createError(400, "Expense requisitions become converted only when a payment voucher is created from them."));
     }
 
     const row = await ExpenseRequisition.findOne({ _id: req.params.id, business: businessId });
-    if (!row) return res.status(404).json({ success: false, message: "Expense requisition not found" });
+    if (!row) return next(createError(404, "Expense requisition not found"));
 
     ensureAllowedTransition(row, status);
 
@@ -561,7 +548,7 @@ export const updateExpenseRequisitionStatus = async (req, res, next) => {
     } else if (status === "rejected") {
       const reason = sanitizeReason(req.body?.reason || req.body?.rejectionReason || "");
       if (!reason) {
-        return res.status(400).json({ success: false, message: "Rejection reason is required." });
+        return next(createError(400, "Rejection reason is required."));
       }
       setRejectedAudit(row, actorUserId, reason);
     } else if (status === "cancelled") {
@@ -594,16 +581,13 @@ export const updateExpenseRequisitionStatus = async (req, res, next) => {
 export const deleteExpenseRequisition = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!businessId) return next(createError(400, "Company context is required"));
 
     const row = await ExpenseRequisition.findOne({ _id: req.params.id, business: businessId });
-    if (!row) return res.status(404).json({ success: false, message: "Expense requisition not found" });
+    if (!row) return next(createError(404, "Expense requisition not found"));
 
     if (!["draft", "rejected", "cancelled"].includes(String(row.status))) {
-      return res.status(400).json({
-        success: false,
-        message: "Only draft, rejected, or cancelled requisitions can be deleted.",
-      });
+      return next(createError(400, "Only draft, rejected, or cancelled requisitions can be deleted."));
     }
 
     ensureNoLinkedVoucher(row, "This requisition is linked to a payment voucher and cannot be deleted.");

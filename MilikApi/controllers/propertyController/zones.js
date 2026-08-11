@@ -7,19 +7,16 @@ import Tenant from '../../models/Tenant.js';
 import TenantInvoice from '../../models/TenantInvoice.js';
 import RentPayment from '../../models/RentPayment.js';
 import { getFieldOfficerPropertyIds } from '../../utils/fieldOfficerScope.js';
+import { resolveBusinessId } from '../../utils/requestContext.js';
+import { createError } from '../../utils/error.js';
 
-const requireAdmin = (req, res) => {
+const requireAdmin = (req, next) => {
   if (req.user?.isSystemAdmin || req.user?.superAdminAccess || req.user?.adminAccess) return false;
-  res.status(403).json({ message: 'Admin access required' });
+  next(createError(403, 'Admin access required'));
   return true;
 };
 
 const toId = (v) => new mongoose.Types.ObjectId(String(v));
-
-const resolveCompanyId = (req) =>
-  req.user?.isSystemAdmin && req.query.company
-    ? req.query.company
-    : req.user?.company;
 
 const generateZoneCode = async (companyId) => {
   const result = await Zone.aggregate([
@@ -27,15 +24,15 @@ const generateZoneCode = async (companyId) => {
     { $addFields: { num: { $toInt: { $substr: ['$code', 3, -1] } } } },
     { $group: { _id: null, max: { $max: '$num' } } },
   ]);
-  const next = (result[0]?.max ?? 0) + 1;
-  return `ZN-${String(next).padStart(3, '0')}`;
+  const seq = (result[0]?.max ?? 0) + 1;
+  return `ZN-${String(seq).padStart(3, '0')}`;
 };
 
 // GET /api/zones
-export const getZones = async (req, res) => {
+export const getZones = async (req, res, next) => {
   try {
-    const companyId = resolveCompanyId(req);
-    if (!companyId) return res.status(400).json({ message: 'Company context required' });
+    const companyId = resolveBusinessId(req);
+    if (!companyId) return next(createError(400, 'Company context required'));
 
     const { search, type, isActive, page = 1, limit = 100 } = req.query;
 
@@ -81,48 +78,48 @@ export const getZones = async (req, res) => {
 
     return res.json({ zones: enriched, total, page: pageNum, pages: Math.ceil(total / limitNum) });
   } catch (err) {
-    return res.status(500).json({ message: err.message || 'Failed to fetch zones' });
+    next(err);
   }
 };
 
 // GET /api/zones/:id
-export const getZone = async (req, res) => {
+export const getZone = async (req, res, next) => {
   try {
-    const companyId = resolveCompanyId(req);
+    const companyId = resolveBusinessId(req);
     const zone = await Zone.findOne({ _id: req.params.id, company: toId(companyId) })
       .populate('fieldOfficers', 'surname otherNames email profile')
       .populate('supervisors',   'surname otherNames email profile')
       .lean();
-    if (!zone) return res.status(404).json({ message: 'Zone not found' });
+    if (!zone) return next(createError(404, 'Zone not found'));
     return res.json(zone);
   } catch (err) {
-    return res.status(500).json({ message: err.message || 'Failed to fetch zone' });
+    next(err);
   }
 };
 
 // POST /api/zones
-export const createZone = async (req, res) => {
-  if (requireAdmin(req, res)) return;
+export const createZone = async (req, res, next) => {
+  if (requireAdmin(req, next)) return;
   try {
-    const companyId = resolveCompanyId(req);
-    if (!companyId) return res.status(400).json({ message: 'Company context required' });
+    const companyId = resolveBusinessId(req);
+    if (!companyId) return next(createError(400, 'Company context required'));
 
     const { name, code, description, type, color, fieldOfficers = [], supervisors = [] } = req.body;
 
-    if (!name?.trim()) return res.status(400).json({ message: 'Zone name is required' });
+    if (!name?.trim()) return next(createError(400, 'Zone name is required'));
 
     const duplicate = await Zone.findOne({
       company: toId(companyId),
       name: { $regex: `^${name.trim()}$`, $options: 'i' },
     });
-    if (duplicate) return res.status(409).json({ message: `A zone named "${name.trim()}" already exists` });
+    if (duplicate) return next(createError(409, `A zone named "${name.trim()}" already exists`));
 
     const resolvedCode = code?.trim()
       ? code.trim().toUpperCase()
       : await generateZoneCode(companyId);
 
     const codeConflict = await Zone.findOne({ company: toId(companyId), code: resolvedCode });
-    if (codeConflict) return res.status(409).json({ message: `Zone code "${resolvedCode}" is already in use` });
+    if (codeConflict) return next(createError(409, `Zone code "${resolvedCode}" is already in use`));
 
     const zone = await Zone.create({
       company:       toId(companyId),
@@ -143,17 +140,17 @@ export const createZone = async (req, res) => {
 
     return res.status(201).json(populated);
   } catch (err) {
-    return res.status(500).json({ message: err.message || 'Failed to create zone' });
+    next(err);
   }
 };
 
 // PUT /api/zones/:id
-export const updateZone = async (req, res) => {
-  if (requireAdmin(req, res)) return;
+export const updateZone = async (req, res, next) => {
+  if (requireAdmin(req, next)) return;
   try {
-    const companyId = resolveCompanyId(req);
+    const companyId = resolveBusinessId(req);
     const zone = await Zone.findOne({ _id: req.params.id, company: toId(companyId) });
-    if (!zone) return res.status(404).json({ message: 'Zone not found' });
+    if (!zone) return next(createError(404, 'Zone not found'));
 
     const { name, code, description, type, color, fieldOfficers, supervisors, isActive } = req.body;
 
@@ -164,7 +161,7 @@ export const updateZone = async (req, res) => {
         name: { $regex: `^${trimmed}$`, $options: 'i' },
         _id: { $ne: zone._id },
       });
-      if (duplicate) return res.status(409).json({ message: `A zone named "${trimmed}" already exists` });
+      if (duplicate) return next(createError(409, `A zone named "${trimmed}" already exists`));
       zone.name = trimmed;
     }
 
@@ -175,7 +172,7 @@ export const updateZone = async (req, res) => {
         code: upper,
         _id: { $ne: zone._id },
       });
-      if (codeConflict) return res.status(409).json({ message: `Zone code "${upper}" is already in use` });
+      if (codeConflict) return next(createError(409, `Zone code "${upper}" is already in use`));
       zone.code = upper;
     }
 
@@ -197,17 +194,17 @@ export const updateZone = async (req, res) => {
 
     return res.json(populated);
   } catch (err) {
-    return res.status(500).json({ message: err.message || 'Failed to update zone' });
+    next(err);
   }
 };
 
 // DELETE /api/zones/:id
-export const deleteZone = async (req, res) => {
-  if (requireAdmin(req, res)) return;
+export const deleteZone = async (req, res, next) => {
+  if (requireAdmin(req, next)) return;
   try {
-    const companyId = resolveCompanyId(req);
+    const companyId = resolveBusinessId(req);
     const zone = await Zone.findOne({ _id: req.params.id, company: toId(companyId) });
-    if (!zone) return res.status(404).json({ message: 'Zone not found' });
+    if (!zone) return next(createError(404, 'Zone not found'));
 
     const propCount = await Property.countDocuments({
       business: toId(companyId),
@@ -215,24 +212,22 @@ export const deleteZone = async (req, res) => {
     });
 
     if (propCount > 0) {
-      return res.status(409).json({
-        message: `Cannot delete zone "${zone.name}" — it has ${propCount} propert${propCount === 1 ? 'y' : 'ies'} assigned. Reassign them first.`,
-      });
+      return next(createError(409, `Cannot delete zone "${zone.name}" — it has ${propCount} propert${propCount === 1 ? 'y' : 'ies'} assigned. Reassign them first.`));
     }
 
     await zone.deleteOne();
     return res.json({ message: 'Zone deleted successfully' });
   } catch (err) {
-    return res.status(500).json({ message: err.message || 'Failed to delete zone' });
+    next(err);
   }
 };
 
 // GET /api/zones/officers — users in this company eligible as field officers
-export const getEligibleOfficers = async (req, res) => {
-  if (requireAdmin(req, res)) return;
+export const getEligibleOfficers = async (req, res, next) => {
+  if (requireAdmin(req, next)) return;
   try {
-    const companyId = resolveCompanyId(req);
-    if (!companyId) return res.status(400).json({ message: 'Company context required' });
+    const companyId = resolveBusinessId(req);
+    if (!companyId) return next(createError(400, 'Company context required'));
 
     const users = await User.find({
       $or: [
@@ -249,7 +244,7 @@ export const getEligibleOfficers = async (req, res) => {
 
     return res.json({ users });
   } catch (err) {
-    return res.status(500).json({ message: err.message || 'Failed to fetch officers' });
+    next(err);
   }
 };
 
@@ -262,10 +257,10 @@ const parseReportDate = (value, endOfDay = false) => {
 };
 
 // GET /api/zones/reports/collection?startDate=&endDate=
-export const getZoneCollectionReport = async (req, res) => {
+export const getZoneCollectionReport = async (req, res, next) => {
   try {
-    const companyId = resolveCompanyId(req);
-    if (!companyId) return res.status(400).json({ message: 'Company context required' });
+    const companyId = resolveBusinessId(req);
+    if (!companyId) return next(createError(400, 'Company context required'));
 
     const start = parseReportDate(req.query.startDate || new Date(new Date().getFullYear(), new Date().getMonth(), 1));
     const end   = parseReportDate(req.query.endDate, true);
@@ -342,15 +337,15 @@ export const getZoneCollectionReport = async (req, res) => {
 
     return res.json({ rows, totals, period: { startDate: start, endDate: end } });
   } catch (err) {
-    return res.status(500).json({ message: err.message || 'Failed to generate zone collection report' });
+    next(err);
   }
 };
 
 // GET /api/zones/reports/arrears
-export const getZoneArrearsReport = async (req, res) => {
+export const getZoneArrearsReport = async (req, res, next) => {
   try {
-    const companyId = resolveCompanyId(req);
-    if (!companyId) return res.status(400).json({ message: 'Company context required' });
+    const companyId = resolveBusinessId(req);
+    if (!companyId) return next(createError(400, 'Company context required'));
 
     const [zones, properties, units, tenants] = await Promise.all([
       Zone.find({ company: toId(companyId), isActive: true }).sort({ name: 1 }).lean(),
@@ -401,15 +396,15 @@ export const getZoneArrearsReport = async (req, res) => {
 
     return res.json({ rows, zoneSummary, totalArrears, tenantCount: rows.length });
   } catch (err) {
-    return res.status(500).json({ message: err.message || 'Failed to generate zone arrears report' });
+    next(err);
   }
 };
 
 // GET /api/zones/reports/vacancy
-export const getZoneVacancyReport = async (req, res) => {
+export const getZoneVacancyReport = async (req, res, next) => {
   try {
-    const companyId = resolveCompanyId(req);
-    if (!companyId) return res.status(400).json({ message: 'Company context required' });
+    const companyId = resolveBusinessId(req);
+    if (!companyId) return next(createError(400, 'Company context required'));
 
     const foPropertyIds = await getFieldOfficerPropertyIds(req);
     const foSet = foPropertyIds !== null ? new Set(foPropertyIds.map(String)) : null;
@@ -489,6 +484,6 @@ export const getZoneVacancyReport = async (req, res) => {
       totalPotentialRent,
     });
   } catch (err) {
-    return res.status(500).json({ message: err.message || 'Failed to generate zone vacancy report' });
+    next(err);
   }
 };

@@ -7,6 +7,7 @@ import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, today
 import { selectCurrentCompany } from "../../redux/selectors";
 import CarWashShell from "./CarWashShell";
 import AppSelect from "../../components/common/AppSelect";
+import EmptyTableRow from "../../components/common/EmptyTableRow";
 
 // ── module-level constants ──────────────────────────────────────────────────
 const statusLabels = { waiting: "Waiting", washing: "Washing", done: "Done", paid: "Paid", cancelled: "Cancelled" };
@@ -74,12 +75,6 @@ const ReportTable = ({ title, right, children, minWidth = "100%", className = ""
 
 const Th = ({ children, right }) => (
   <th className={`px-2 py-1.5 font-bold uppercase tracking-wide ${right ? "text-right" : "text-left"}`}>{children}</th>
-);
-
-const EmptyRow = ({ colSpan, text }) => (
-  <tr>
-    <td colSpan={colSpan} className="px-3 py-8 text-center text-xs font-semibold text-slate-500">{text}</td>
-  </tr>
 );
 
 const NavBtn = ({ onClick, children }) => (
@@ -535,7 +530,7 @@ const CarWashReports = () => {
                   <td className="px-2 py-1 text-right font-extrabold text-slate-900">{row.payments}</td>
                   <td className="px-2 py-1 text-right font-extrabold text-slate-900">{formatMoney(row.revenue)}</td>
                 </tr>
-              )) : <EmptyRow colSpan={4} text="No trend data for this period." />}
+              )) : <EmptyTableRow colSpan={4} message="No trend data for this period." />}
             </tbody>
           </ReportTable>
 
@@ -550,7 +545,7 @@ const CarWashReports = () => {
                   <td className="px-2 py-1 text-right font-extrabold text-slate-900">{row.jobs}</td>
                   <td className="px-2 py-1 text-right font-extrabold text-slate-900">{formatMoney(row.value)}</td>
                 </tr>
-              )) : <EmptyRow colSpan={3} text="No staff activity for this period." />}
+              )) : <EmptyTableRow colSpan={3} message="No staff activity for this period." />}
             </tbody>
           </ReportTable>
 
@@ -565,7 +560,7 @@ const CarWashReports = () => {
                   <td className="px-2 py-1 text-right font-extrabold text-slate-900">{row.jobs}</td>
                   <td className="px-2 py-1 text-right font-extrabold text-slate-900">{formatMoney(row.value)}</td>
                 </tr>
-              )) : <EmptyRow colSpan={3} text="No service activity for this period." />}
+              )) : <EmptyTableRow colSpan={3} message="No service activity for this period." />}
             </tbody>
           </ReportTable>
         </div>
@@ -597,7 +592,7 @@ const CarWashReports = () => {
                   <td className="px-2 py-1 text-right text-slate-700">{formatMoney(row.avgPrice)}</td>
                   <td className="px-2 py-1 text-right font-semibold text-[#0B3B2E]">{row.revenueShare != null ? `${Math.round(row.revenueShare)}%` : "-"}</td>
                 </tr>
-              )) : <EmptyRow colSpan={10} text="No service data for this range." />}
+              )) : <EmptyTableRow colSpan={10} message="No service data for this range." />}
             </tbody>
           </ReportTable>
 
@@ -623,7 +618,7 @@ const CarWashReports = () => {
                   <td className="px-2 py-1 text-right font-semibold text-[#0B3B2E]">{formatMoney(row.netRevenue)}</td>
                   <td className="px-2 py-1 text-right text-slate-500">{row.jobShare != null ? `${Math.round(row.jobShare)}%` : "-"}</td>
                 </tr>
-              )) : <EmptyRow colSpan={9} text="No staff data for this range." />}
+              )) : <EmptyTableRow colSpan={9} message="No staff data for this range." />}
             </tbody>
           </ReportTable>
         </div>
@@ -669,7 +664,7 @@ const CarWashReports = () => {
                   <td className="px-2 py-1 text-right font-extrabold text-slate-900">{formatMoney(row.amount)}</td>
                   <td className="px-2 py-1 text-right font-semibold text-[#0B3B2E]">{pct(row.amount, expTotalAmt)}</td>
                 </tr>
-              )) : <EmptyRow colSpan={4} text="No expense data for this period." />}
+              )) : <EmptyTableRow colSpan={4} message="No expense data for this period." />}
             </tbody>
           </ReportTable>
 
@@ -687,7 +682,7 @@ const CarWashReports = () => {
                     <td className="px-2 py-1 text-right font-extrabold text-slate-900">{formatMoney(row.amount)}</td>
                     <td className="px-2 py-1 text-right font-semibold text-[#0B3B2E]">{pct(row.amount, expTotalAmt)}</td>
                   </tr>
-                )) : <EmptyRow colSpan={4} text="No expense data." />}
+                )) : <EmptyTableRow colSpan={4} message="No expense data." />}
               </tbody>
             </ReportTable>
 
@@ -768,7 +763,7 @@ const CarWashReports = () => {
                   <td className="px-2 py-1 font-bold uppercase text-slate-700">{job.paymentStatus || "unpaid"}</td>
                   <td className="px-2 py-1 text-right font-extrabold text-slate-900">{formatMoney(job.price)}</td>
                 </tr>
-              )) : <EmptyRow colSpan={8} text="No Car Wash jobs recorded for this date." />}
+              )) : <EmptyTableRow colSpan={8} message="No Car Wash jobs recorded for this date." />}
             </tbody>
           </ReportTable>
 
@@ -788,7 +783,7 @@ const CarWashReports = () => {
                   <td className="px-2 py-1 text-slate-700">{payment.reference || payment.job?.jobNumber || "-"}</td>
                   <td className="px-2 py-1 text-right font-extrabold text-slate-900">{formatMoney(payment.amount)}</td>
                 </tr>
-              )) : <EmptyRow colSpan={4} text="No Car Wash payments recorded for this date." />}
+              )) : <EmptyTableRow colSpan={4} message="No Car Wash payments recorded for this date." />}
             </tbody>
           </ReportTable>
 
@@ -814,7 +809,7 @@ const CarWashReports = () => {
                   <td className="px-2 py-1 font-bold uppercase text-slate-700">{expense.status || "-"}</td>
                   <td className="px-2 py-1 text-right font-extrabold text-slate-900">{formatMoney(expense.amount)}</td>
                 </tr>
-              )) : <EmptyRow colSpan={7} text="No Car Wash expenses recorded for this date." />}
+              )) : <EmptyTableRow colSpan={7} message="No Car Wash expenses recorded for this date." />}
             </tbody>
           </ReportTable>
         </div>

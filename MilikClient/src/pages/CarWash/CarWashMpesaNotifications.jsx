@@ -8,6 +8,8 @@ import {
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import StatusBadge from "../../components/common/StatusBadge";
+import { fmtDateTime } from "../../utils/dates";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { selectCurrentCompany } from "../../redux/selectors";
 import { useTabState } from "../../hooks/useTabState";
@@ -23,24 +25,19 @@ const STATUS_META = {
   error:     { label: "Error",     bg: "bg-slate-50",    border: "border-slate-200",   text: "text-slate-500",  dot: "bg-slate-400",  icon: FaExclamationTriangle },
 };
 
+const MPESA_STATUS_MAP = {
+  matched:   "border-emerald-200 bg-emerald-50 text-emerald-700",
+  unmatched: "border-amber-200 bg-amber-50 text-amber-700",
+  duplicate: "border-blue-200 bg-blue-50 text-blue-700",
+  rejected:  "border-red-200 bg-red-50 text-red-700",
+  error:     "border-slate-200 bg-slate-50 text-slate-500",
+};
+
 const ReversedBadge = () => (
   <span className="inline-flex items-center gap-1 border border-red-300 bg-red-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-red-600">
     <FaUndo size={7} /> Reversed
   </span>
 );
-
-const StatusBadge = ({ status }) => {
-  const m = STATUS_META[status] || STATUS_META.error;
-  return (
-    <span className={`inline-flex items-center gap-1 border px-2 py-0.5 text-[10px] font-bold uppercase ${m.bg} ${m.border} ${m.text}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${m.dot}`} />
-      {m.label}
-    </span>
-  );
-};
-
-const fmtDate = (v) =>
-  v ? new Date(v).toLocaleString("en-KE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
 
 const extractActor = (text) => {
   if (!text) return null;
@@ -57,7 +54,7 @@ const JobAllocRow = React.memo(({ job, value, available, onSet, onFill }) => (
         <span className="font-mono text-[10px] text-slate-400">{job.jobNumber}</span>
       </div>
       <div className="mt-0.5 text-[10px] text-slate-500">
-        {job.customerName || "—"} · {job.serviceName || "—"} · {fmtDate(job.createdAt)}
+        {job.customerName || "—"} · {job.serviceName || "—"} · {fmtDateTime(job.createdAt)}
       </div>
     </div>
     <div className="flex-shrink-0 text-right">
@@ -346,10 +343,10 @@ function AssignModal({ notif, onClose, onAssigned }) {
                   <div className="flex items-center gap-2">
                     <span className="font-extrabold text-slate-900 tracking-wider text-xs">{j.plateNumber}</span>
                     <span className="text-[10px] text-slate-500 font-mono">{j.jobNumber}</span>
-                    <StatusBadge status={j.paymentStatus === "paid" ? "matched" : j.paymentStatus === "partial" ? "unmatched" : "unmatched"} />
+                    <StatusBadge status={j.paymentStatus === "paid" ? "matched" : j.paymentStatus === "partial" ? "unmatched" : "unmatched"} map={MPESA_STATUS_MAP} />
                   </div>
                   <div className="text-[10px] text-slate-500 mt-0.5">
-                    {j.customerName || "—"} · Ksh {formatMoney(Math.max(0, (j.price || 0) - (j.discountAmount || 0)))} · {fmtDate(j.createdAt)}
+                    {j.customerName || "—"} · Ksh {formatMoney(Math.max(0, (j.price || 0) - (j.discountAmount || 0)))} · {fmtDateTime(j.createdAt)}
                   </div>
                 </div>
                 {isPaid && <span className="text-[9px] font-bold uppercase text-slate-400">Fully Paid</span>}
@@ -1083,10 +1080,10 @@ export default function CarWashMpesaNotifications() {
               return (
                 <React.Fragment key={n._id}>
                   <tr className={`border-b border-slate-100 hover:bg-slate-50 ${rowBg}`}>
-                    <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{fmtDate(n.createdAt)}</td>
+                    <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{fmtDateTime(n.createdAt)}</td>
                     <td className="px-3 py-2">
                       <div className="flex flex-col gap-0.5">
-                        <StatusBadge status={n.status} />
+                        <StatusBadge status={n.status} map={MPESA_STATUS_MAP} />
                         {n.isReversed && <ReversedBadge />}
                         {n.shortCode && paybills.length > 1 && (
                           <span className="inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-500 tracking-wide">

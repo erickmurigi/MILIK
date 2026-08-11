@@ -10,7 +10,7 @@ import {
   parseDateRange,
 } from "../services/inventoryScope.js";
 import { postStockEntry, getMultiProductBalances } from "../services/stockLedger.js";
-import { nextSequenceNumber } from "../services/sequenceService.js";
+import { nextSequenceNumber } from "../../../utils/sequenceService.js";
 import { postPosSaleLedger, reversePosSaleLedger } from "../services/inventoryAccountingService.js";
 import InvPaymentMethod from "../models/InvPaymentMethod.js";
 

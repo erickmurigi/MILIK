@@ -2,11 +2,8 @@ import Budget from "../../models/Budget.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import { toObjectId } from "../../utils/db.js";
-
-const resolveBusinessId = (req) => {
-  const id = req.query?.business || req.query?.company || req.body?.business || req.body?.company;
-  return toObjectId(id);
-};
+import { resolveBusinessId } from "../../utils/requestContext.js";
+import { createError } from "../../utils/error.js";
 
 const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
 
@@ -54,7 +51,7 @@ const netActual = (accountType, debit, credit) => {
 export const getBudgets = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Missing business" });
+    if (!businessId) return next(createError(400, "Missing business"));
 
     const filter = { business: businessId };
     if (req.query.status) filter.status = req.query.status;
@@ -80,10 +77,10 @@ export const getBudgets = async (req, res, next) => {
 export const getBudget = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Missing business" });
+    if (!businessId) return next(createError(400, "Missing business"));
 
     const budget = await Budget.findOne({ _id: req.params.id, business: businessId }).lean();
-    if (!budget) return res.status(404).json({ message: "Budget not found" });
+    if (!budget) return next(createError(404, "Budget not found"));
 
     const accountIds = budget.lines.map((l) => toObjectId(l.account)).filter(Boolean);
     const actualsMap = await computeActuals(businessId, accountIds, budget.periodStart, budget.periodEnd);
@@ -108,11 +105,11 @@ export const getBudget = async (req, res, next) => {
 export const createBudget = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Missing business" });
+    if (!businessId) return next(createError(400, "Missing business"));
 
     const { name, periodStart, periodEnd, notes, lines = [] } = req.body;
-    if (!name?.trim()) return res.status(400).json({ message: "Budget name is required" });
-    if (!periodStart || !periodEnd) return res.status(400).json({ message: "Period start and end are required" });
+    if (!name?.trim()) return next(createError(400, "Budget name is required"));
+    if (!periodStart || !periodEnd) return next(createError(400, "Period start and end are required"));
 
     const sanitizedLines = await buildLines(lines, businessId);
 
@@ -137,11 +134,11 @@ export const createBudget = async (req, res, next) => {
 export const updateBudget = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Missing business" });
+    if (!businessId) return next(createError(400, "Missing business"));
 
     const budget = await Budget.findOne({ _id: req.params.id, business: businessId });
-    if (!budget) return res.status(404).json({ message: "Budget not found" });
-    if (budget.status === "closed") return res.status(400).json({ message: "Closed budgets cannot be edited" });
+    if (!budget) return next(createError(404, "Budget not found"));
+    if (budget.status === "closed") return next(createError(400, "Closed budgets cannot be edited"));
 
     const { name, periodStart, periodEnd, notes, status, lines } = req.body;
     if (name !== undefined) budget.name = String(name).trim();
@@ -162,11 +159,11 @@ export const updateBudget = async (req, res, next) => {
 export const deleteBudget = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Missing business" });
+    if (!businessId) return next(createError(400, "Missing business"));
 
     const budget = await Budget.findOne({ _id: req.params.id, business: businessId });
-    if (!budget) return res.status(404).json({ message: "Budget not found" });
-    if (budget.status !== "draft") return res.status(400).json({ message: "Only draft budgets can be deleted" });
+    if (!budget) return next(createError(404, "Budget not found"));
+    if (budget.status !== "draft") return next(createError(400, "Only draft budgets can be deleted"));
 
     await budget.deleteOne();
     return res.status(200).json({ success: true });

@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import { FaPrint } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
 import { fmtKES, saleApi } from "../../services/propertySaleApi";
+import { fmtDate } from "../../utils/dates";
 
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const fmtLabel = (s) => (s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -93,7 +94,6 @@ const SaleMonthlyDetail = () => {
     const win = window.open('', '_blank', 'width=1120,height=800');
     if (!win) return;
     const fmt = (v) => `KES ${Number(v || 0).toLocaleString()}`;
-    const fmtDate = (v) => (v ? new Date(v).toLocaleDateString() : '—');
     win.document.write(`<!DOCTYPE html><html><head><title>${monthName} ${year} Report</title><style>
       @page{size:A4 landscape;margin:12mm 14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
       .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}

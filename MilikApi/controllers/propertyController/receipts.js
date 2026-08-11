@@ -1,17 +1,7 @@
 import RentPayment from "../../models/RentPayment.js";
 import ledgerPostingService from "../../services/ledgerPostingService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
-
-const resolveBusinessId = (req) => {
-  const requested = req.body?.business || req.query?.business || null;
-  const authenticated = req.user?.company?._id || req.user?.company || null;
-
-  if (req.user?.isSystemAdmin || req.user?.superAdminAccess) {
-    return requested || authenticated || null;
-  }
-
-  return authenticated || requested || null;
-};
+import { resolveBusinessId } from "../../utils/requestContext.js";
 
 export async function createReceipt(req, res) {
   try {

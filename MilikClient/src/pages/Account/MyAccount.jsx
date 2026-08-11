@@ -7,13 +7,13 @@ import {
   FaHistory,
   FaBuilding,
   FaSave,
-  FaSpinner,
   FaEye,
   FaEyeSlash,
   FaCheck,
   FaShieldAlt,
   FaSyncAlt,
 } from "react-icons/fa";
+import Spinner from "../../components/common/Spinner";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { adminRequests } from "../../utils/requestMethods";
@@ -205,7 +205,7 @@ const MyAccount = () => {
             disabled={!profileDirty || savingProfile}
             className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-5 py-2 text-xs font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {savingProfile ? <FaSpinner className="animate-spin" size={11} /> : <FaSave size={11} />}
+            {savingProfile ? <Spinner size="sm" /> : <FaSave size={11} />}
             {savingProfile ? "Saving…" : "Save Changes"}
           </button>
         </div>
@@ -277,7 +277,7 @@ const MyAccount = () => {
             disabled={!pw.newPass || !pw.confirm || savingPw}
             className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-5 py-2 text-xs font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {savingPw ? <FaSpinner className="animate-spin" size={11} /> : <FaKey size={11} />}
+            {savingPw ? <Spinner size="sm" /> : <FaKey size={11} />}
             {savingPw ? "Saving…" : "Update Password"}
           </button>
         </div>

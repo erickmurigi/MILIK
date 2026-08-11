@@ -13,10 +13,11 @@ import {
   getReconciliations, createReconciliation, saveReconciliation,
   finalizeReconciliation, deleteReconciliation,
 } from "../../redux/apiCalls";
+import { fmtDate } from "../../utils/dates";
+import { useConfirm } from "../../context/ConfirmContext";
 
 const GRN = "#0B3B2E";
 const fmt = (v) => Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 const localDate = (d) => { const dt = new Date(d); const y = dt.getFullYear(); const m = String(dt.getMonth()+1).padStart(2,"0"); const day = String(dt.getDate()).padStart(2,"0"); return `${y}-${m}-${day}`; };
 const todayStr  = () => localDate(new Date());
 const firstOfMonth = () => { const d = new Date(); return localDate(new Date(d.getFullYear(), d.getMonth(), 1)); };
@@ -25,6 +26,7 @@ const firstOfMonth = () => { const d = new Date(); return localDate(new Date(d.g
 const VIEW = { LIST: "list", RECONCILE: "reconcile" };
 
 const BankReconciliation = () => {
+  const confirm     = useConfirm();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const businessId     = currentCompany?._id;
   const companyName    = String(currentCompany?.companyName || currentCompany?.name || "").trim();
@@ -274,7 +276,7 @@ const BankReconciliation = () => {
   // ── Delete ────────────────────────────────────────────────────────────────
   const handleDelete = useCallback(async (reconId, e) => {
     e.stopPropagation();
-    if (!window.confirm("Delete this draft reconciliation?")) return;
+    if (!(await confirm({ title: 'Delete Reconciliation', message: 'Delete this draft reconciliation?', confirmText: 'Delete', isDangerous: true }))) return;
     try {
       await deleteReconciliation(reconId, { business: businessId });
       setHistory((prev) => prev.filter((r) => r._id !== reconId));

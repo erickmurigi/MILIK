@@ -11,6 +11,7 @@ import AppSelect from '../../components/common/AppSelect';
 import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
+import { fmtDate } from '../../utils/dates';
 
 const STATUS_BADGE = {
   Pending:   'border-amber-200 bg-amber-50 text-amber-700',
@@ -19,9 +20,6 @@ const STATUS_BADGE = {
   Cancelled: 'border-slate-200 bg-slate-50 text-slate-500',
   Draft:     'border-indigo-200 bg-indigo-50 text-indigo-600',
 };
-
-const fmtDate = (d) =>
-  d ? new Date(d).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
 const Pagination = ({ page, totalPages, total, onPage }) => (
   <div className="flex-shrink-0 flex items-center justify-between border-t border-slate-200 bg-white px-4 py-2">

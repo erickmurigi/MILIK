@@ -9,6 +9,7 @@ import { saleApi } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import { inputClass, labelClass } from "../../utils/formStyles";
 
 const ACTIVITY_TYPES = ["call", "email", "meeting", "site_visit", "whatsapp", "note", "follow_up"];
 const OUTCOMES       = ["positive", "neutral", "negative", "no_answer", "not_applicable"];
@@ -28,9 +29,7 @@ const fmtDay = (v) => v ? new Date(v).toLocaleDateString("en-KE", { weekday: "lo
 const fmtShort = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short" }) : "";
 const LIMIT  = 50;
 
-const inputCls  = "h-7 w-full border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none";
 const selectCls = "h-7 border border-slate-200 bg-white px-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none";
-const labelCls  = "mb-1 block text-[10px] font-black uppercase tracking-wide text-slate-500";
 const modalInputCls = "w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none";
 
 function groupByDay(activities) {
@@ -165,11 +164,11 @@ export default function SaleActivities() {
           <AppSelect value={outcomeFilter} onChange={(v) => setOutcome(v ?? "")} options={OUTCOME_OPTIONS} placeholder="All Outcomes" size="sm" clearable />
           <div className="flex items-center gap-1">
             <span className="text-[10px] font-semibold text-slate-500">From</span>
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={`${inputCls} w-[130px]`} />
+            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={`${inputClass} w-[130px]`} />
           </div>
           <div className="flex items-center gap-1">
             <span className="text-[10px] font-semibold text-slate-500">To</span>
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={`${inputCls} w-[130px]`} />
+            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={`${inputClass} w-[130px]`} />
           </div>
           {hasFilters && (
             <button
@@ -265,18 +264,18 @@ export default function SaleActivities() {
                 <AppSelect label="Type *" value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v ?? "" }))} options={ACTIVITY_TYPE_OPTIONS} size="md" />
               </div>
               <div>
-                <label className={labelCls}>Date & Time *</label>
+                <label className={labelClass}>Date & Time *</label>
                 <input type="datetime-local" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className={`${modalInputCls} h-8`} />
               </div>
               <div className="col-span-2">
-                <label className={labelCls}>Subject</label>
+                <label className={labelClass}>Subject</label>
                 <input value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} className={`${modalInputCls} h-8`} />
               </div>
               <div>
                 <AppSelect label="Outcome" value={form.outcome} onChange={(v) => setForm((f) => ({ ...f, outcome: v ?? "" }))} options={OUTCOME_OPTIONS} size="md" />
               </div>
               <div>
-                <label className={labelCls}>Duration (min)</label>
+                <label className={labelClass}>Duration (min)</label>
                 <input type="number" value={form.durationMinutes} onChange={(e) => setForm((f) => ({ ...f, durationMinutes: e.target.value }))} className={`${modalInputCls} h-8`} />
               </div>
 
@@ -291,15 +290,15 @@ export default function SaleActivities() {
               </div>
 
               <div className="col-span-2">
-                <label className={labelCls}>Notes</label>
+                <label className={labelClass}>Notes</label>
                 <textarea rows={3} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className={`${modalInputCls} resize-none`} />
               </div>
               <div className="col-span-2">
-                <label className={labelCls}>Next Action</label>
+                <label className={labelClass}>Next Action</label>
                 <input value={form.nextAction} onChange={(e) => setForm((f) => ({ ...f, nextAction: e.target.value }))} className={`${modalInputCls} h-8`} />
               </div>
               <div>
-                <label className={labelCls}>Next Action Date</label>
+                <label className={labelClass}>Next Action Date</label>
                 <input type="date" value={form.nextActionDate} onChange={(e) => setForm((f) => ({ ...f, nextActionDate: e.target.value }))} className={`${modalInputCls} h-8`} />
               </div>
             </div>

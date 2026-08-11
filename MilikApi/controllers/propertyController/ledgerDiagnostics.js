@@ -14,6 +14,7 @@ import { postInvoiceJournal } from "./tenantInvoices.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../services/chartOfAccountsService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
+import { createError } from "../../utils/error.js";
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const toOid  = (id) => new mongoose.Types.ObjectId(String(id));
@@ -81,14 +82,14 @@ const appendRepairLog = async (healthRunId, repairEntry) => {
   await GLHealthRun.findByIdAndUpdate(healthRunId, { $push: { repairs: repairEntry } }).catch(() => {});
 };
 
-export const checkInvoiceLedgerEntries = async (req, res) => {
+export const checkInvoiceLedgerEntries = async (req, res, next) => {
   try {
     const { propertyId } = req.params;
     const { period } = req.query;
     const businessId = req.user?.company;
 
     if (!businessId) {
-      return res.status(400).json({ error: "Business context required" });
+      return next(createError(400, "Business context required"));
     }
 
     let periodStart;
@@ -154,7 +155,7 @@ export const checkInvoiceLedgerEntries = async (req, res) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({ error: error.message });
+    return next(error);
   }
 };
 
@@ -181,14 +182,14 @@ const resolveTenantReceivableAccount = async (businessId) => {
   return fallback;
 };
 
-export const repostInvoicesToLedger = async (req, res) => {
+export const repostInvoicesToLedger = async (req, res, next) => {
   try {
     const { propertyId, period } = req.body;
     const businessId = req.user?.company;
     const userId = req.user?._id || req.user?.id;
 
     if (!businessId || !userId) {
-      return res.status(400).json({ error: "Authentication required" });
+      return next(createError(400, "Authentication required"));
     }
 
     let periodStart;
@@ -273,15 +274,15 @@ export const repostInvoicesToLedger = async (req, res) => {
       message: `Rebuilt ledger for ${posted} invoice(s); skipped ${skipped} invoice(s) that already had ledger entries.`,
     });
   } catch (error) {
-    return res.status(500).json({ error: error.message || "Repost failed" });
+    return next(error);
   }
 };
 
-export const recomputeChartBalances = async (req, res) => {
+export const recomputeChartBalances = async (req, res, next) => {
   try {
     const businessId = req.user?.company;
     if (!businessId) {
-      return res.status(400).json({ error: "Business context required" });
+      return next(createError(400, "Business context required"));
     }
 
     const accounts = await ChartOfAccount.find({ business: businessId }).select("_id").lean();
@@ -296,15 +297,15 @@ export const recomputeChartBalances = async (req, res) => {
       message: "Chart of account balances were recomputed from immutable ledger entries.",
     });
   } catch (error) {
-    return res.status(500).json({ error: error.message || "Balance recompute failed" });
+    return next(error);
   }
 };
 
-export const checkLedgerBalance = async (req, res) => {
+export const checkLedgerBalance = async (req, res, next) => {
   try {
     const businessId = req.user?.company;
     if (!businessId) {
-      return res.status(400).json({ error: "Business context required" });
+      return next(createError(400, "Business context required"));
     }
 
     const STATUSES = ["approved", "reversed"];
@@ -396,11 +397,11 @@ export const checkLedgerBalance = async (req, res) => {
       })),
     });
   } catch (error) {
-    return res.status(500).json({ error: error.message || "Ledger balance check failed" });
+    return next(error);
   }
 };
 
-export const checkUtilityReceiptLedgerEntries = async (req, res) => {
+export const checkUtilityReceiptLedgerEntries = async (req, res, next) => {
   try {
     const businessId = req.query?.businessId || req.user?.company;
     const { propertyId, landlordId, periodStart, periodEnd } = req.query;
@@ -421,21 +422,21 @@ export const checkUtilityReceiptLedgerEntries = async (req, res) => {
     const entries = await FinancialLedgerEntry.find(match).limit(2000).lean();
     return res.json({ count: entries.length, entries });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return next(err);
   }
 };
 
 // ─── GL INTEGRITY REPORT ────────────────────────────────────────────────────
 // Comprehensive check: unbalanced groups, orphaned entries, inactive account
 // usage, negative normal-side balances, and missing critical system accounts.
-export const runIntegrityReport = async (req, res) => {
+export const runIntegrityReport = async (req, res, next) => {
   try {
     const businessId =
       req.query?.business || req.query?.company ||
       req.body?.business || req.body?.company ||
       req.user?.company;
 
-    if (!businessId) return res.status(400).json({ error: "Business context required" });
+    if (!businessId) return next(createError(400, "Business context required"));
 
     const bizId = new mongoose.Types.ObjectId(String(businessId));
     // ACTIVE_STATUSES: used for totals and account-orphan checks (approved entries only)
@@ -632,15 +633,15 @@ export const runIntegrityReport = async (req, res) => {
       },
     });
   } catch (err) {
-    return res.status(500).json({ error: err.message || "Integrity report failed" });
+    return next(err);
   }
 };
 
 // ─── HEALTH HISTORY ──────────────────────────────────────────────────────────
-export const getHealthHistory = async (req, res) => {
+export const getHealthHistory = async (req, res, next) => {
   try {
     const businessId = req.query.business || req.query.company || req.user?.company;
-    if (!businessId) return res.status(400).json({ error: "Business context required" });
+    if (!businessId) return next(createError(400, "Business context required"));
 
     const runs = await GLHealthRun.find({ business: businessId })
       .sort({ runAt: -1 })
@@ -650,24 +651,24 @@ export const getHealthHistory = async (req, res) => {
 
     return res.status(200).json(runs);
   } catch (err) {
-    return res.status(500).json({ error: err.message || "Failed to load health history" });
+    return next(err);
   }
 };
 
 // ─── REPAIR: BALANCE A JOURNAL GROUP ────────────────────────────────────────
 // Posts a single correcting entry to the caller-selected account so the
 // journal group's debits equal its credits.
-export const repairBalanceGroup = async (req, res) => {
+export const repairBalanceGroup = async (req, res, next) => {
   try {
     const { groupId } = req.params;
     const { business: businessId, accountId, notes, healthRunId } = req.body;
 
     if (!groupId || !mongoose.Types.ObjectId.isValid(groupId))
-      return res.status(400).json({ error: "Valid journal group ID required" });
+      return next(createError(400, "Valid journal group ID required"));
     if (!businessId)
-      return res.status(400).json({ error: "Business context required" });
+      return next(createError(400, "Business context required"));
     if (!accountId || !mongoose.Types.ObjectId.isValid(accountId))
-      return res.status(400).json({ error: "Select a correcting account" });
+      return next(createError(400, "Select a correcting account"));
 
     const bizId   = new mongoose.Types.ObjectId(String(businessId));
     const groupOid = new mongoose.Types.ObjectId(String(groupId));
@@ -686,14 +687,14 @@ export const repairBalanceGroup = async (req, res) => {
     }).lean();
 
     if (!allEntries.length)
-      return res.status(404).json({ error: "No entries found for this journal group" });
+      return next(createError(404, "No entries found for this journal group"));
 
     const debitSum  = round2(allEntries.reduce((s, e) => s + (Number(e.debit)  || 0), 0));
     const creditSum = round2(allEntries.reduce((s, e) => s + (Number(e.credit) || 0), 0));
     const diff      = round2(debitSum - creditSum);
 
     if (Math.abs(diff) < 0.005)
-      return res.status(400).json({ error: "This journal group is already balanced" });
+      return next(createError(400, "This journal group is already balanced"));
 
     // Prevent double-correcting: if an active manual_adjustment already exists, reject
     const existingCorrection = await FinancialLedgerEntry.exists({
@@ -703,7 +704,7 @@ export const repairBalanceGroup = async (req, res) => {
       status:                "approved",
     });
     if (existingCorrection)
-      return res.status(409).json({ error: "A correction entry already exists for this group. Undo it first before posting a new one." });
+      return next(createError(409, "A correction entry already exists for this group. Undo it first before posting a new one."));
 
     // Derive context (property, landlord, source label) from the first non-correction entry
     const sample = allEntries.find((e) => e.sourceTransactionType !== "manual_adjustment") || allEntries[0];
@@ -776,25 +777,25 @@ export const repairBalanceGroup = async (req, res) => {
       amount:            correctionAmount,
     });
   } catch (err) {
-    return res.status(500).json({ error: err.message || "Repair failed" });
+    return next(err);
   }
 };
 
 // ─── REPAIR: CLEAR ABNORMAL ACCOUNT BALANCE ──────────────────────────────────
 // Posts a balanced 2-leg correcting journal to bring an account's net balance
 // back to zero when it sits on its abnormal side.
-export const repairClearAbnormalBalance = async (req, res) => {
+export const repairClearAbnormalBalance = async (req, res, next) => {
   try {
     const { business: businessId, accountId, offsetAccountId, notes, healthRunId } = req.body;
 
     if (!businessId)
-      return res.status(400).json({ error: "Business context required" });
+      return next(createError(400, "Business context required"));
     if (!accountId || !mongoose.Types.ObjectId.isValid(accountId))
-      return res.status(400).json({ error: "Valid account ID required" });
+      return next(createError(400, "Valid account ID required"));
     if (!offsetAccountId || !mongoose.Types.ObjectId.isValid(offsetAccountId))
-      return res.status(400).json({ error: "Select an offset account" });
+      return next(createError(400, "Select an offset account"));
     if (String(accountId) === String(offsetAccountId))
-      return res.status(400).json({ error: "Offset account must differ from the account being corrected" });
+      return next(createError(400, "Offset account must differ from the account being corrected"));
 
     const bizId     = new mongoose.Types.ObjectId(String(businessId));
     const accOid    = new mongoose.Types.ObjectId(String(accountId));
@@ -809,7 +810,7 @@ export const repairClearAbnormalBalance = async (req, res) => {
     const netBalance = round2((balanceRow?.debit || 0) - (balanceRow?.credit || 0));
 
     if (Math.abs(netBalance) < 0.005)
-      return res.status(400).json({ error: "Account balance is already at zero — no correction needed" });
+      return next(createError(400, "Account balance is already at zero — no correction needed"));
 
     // Positive netBalance = net debit. Clearing it means posting a CR to the account.
     const corrAmount   = Math.abs(netBalance);
@@ -870,14 +871,14 @@ export const repairClearAbnormalBalance = async (req, res) => {
 
     return res.status(200).json({ success: true, amount: corrAmount, direction: accDirection });
   } catch (err) {
-    return res.status(500).json({ error: err.message || "Repair failed" });
+    return next(err);
   }
 };
 
 // ─── REPAIR: RECOMPUTE ALL COA BALANCES ─────────────────────────────────────
-export const repairRecomputeBalances = async (req, res) => {
+export const repairRecomputeBalances = async (req, res, next) => {
   const businessId = req.body?.business || req.query?.business || req.user?.company;
-  if (!businessId) return res.status(400).json({ error: "Business context required" });
+  if (!businessId) return next(createError(400, "Business context required"));
   const healthRunId = req.body?.healthRunId;
 
   try {
@@ -901,13 +902,13 @@ export const repairRecomputeBalances = async (req, res) => {
       description: "Recompute balances failed", outcome: "failed",
       recordsAffected: 0, errorMessage: err.message,
     });
-    return res.status(500).json({ error: err.message || "Recompute failed" });
+    return next(err);
   }
 };
 
 // ─── REPAIR: REPOST INVOICES WITH NO LEDGER ──────────────────────────────────
 // Delegates to the existing repostInvoicesToLedger and appends a repair log entry.
-export const repairRepostInvoices = async (req, res) => {
+export const repairRepostInvoices = async (req, res, next) => {
   const healthRunId = req.body?.healthRunId;
   const userId      = req.user?._id || req.user?.id;
 
@@ -937,9 +938,9 @@ export const repairRepostInvoices = async (req, res) => {
 
 // ─── LIST ALL ACTIVE MANUAL GL CORRECTION ENTRIES ────────────────────────────
 // GET /api/ledger/repair/active-corrections
-export const getActiveCorrections = async (req, res) => {
+export const getActiveCorrections = async (req, res, next) => {
   const businessId = req.query?.business || req.user?.company;
-  if (!businessId) return res.status(400).json({ error: "Business context required" });
+  if (!businessId) return next(createError(400, "Business context required"));
 
   try {
     const entries = await FinancialLedgerEntry.find({
@@ -971,7 +972,7 @@ export const getActiveCorrections = async (req, res) => {
     return res.status(200).json({ corrections: Object.values(grouped) });
   } catch (err) {
     console.error("[getActiveCorrections]", err);
-    return res.status(500).json({ message: "Failed to load GL corrections" });
+    return next(createError(500, "Failed to load GL corrections"));
   }
 };
 
@@ -979,18 +980,18 @@ export const getActiveCorrections = async (req, res) => {
 // POST /api/ledger/repair/reverse-correction/:groupId
 // Finds manual_adjustment entries in the group with status "approved" and sets
 // them to "reversed", then recomputes affected account balances.
-export const reverseGlCorrectionEntry = async (req, res) => {
+export const reverseGlCorrectionEntry = async (req, res, next) => {
   const { groupId } = req.params;
   const { business, healthRunId, entryIds } = req.body;
   const businessId = business || req.query?.business || req.user?.company;
 
-  if (!businessId) return res.status(400).json({ error: "Business context required" });
+  if (!businessId) return next(createError(400, "Business context required"));
   const isUngrouped = groupId === "ungrouped";
   if (!isUngrouped && !mongoose.Types.ObjectId.isValid(groupId)) {
-    return res.status(400).json({ error: "Invalid groupId" });
+    return next(createError(400, "Invalid groupId"));
   }
   if (isUngrouped && !(entryIds?.length)) {
-    return res.status(400).json({ error: "entryIds required for ungrouped corrections" });
+    return next(createError(400, "entryIds required for ungrouped corrections"));
   }
 
   try {
@@ -1006,7 +1007,7 @@ export const reverseGlCorrectionEntry = async (req, res) => {
     const corrections = await FinancialLedgerEntry.find(query).select("_id accountId").lean();
 
     if (!corrections.length) {
-      return res.status(404).json({ error: "No active correction entries found for this journal group" });
+      return next(createError(404, "No active correction entries found for this journal group"));
     }
 
     const ids        = corrections.map((e) => e._id);
@@ -1028,7 +1029,7 @@ export const reverseGlCorrectionEntry = async (req, res) => {
 
     return res.status(200).json({ success: true, reversedCount: corrections.length });
   } catch (err) {
-    return res.status(500).json({ error: err.message || "Reverse failed" });
+    return next(err);
   }
 };
 
@@ -1036,9 +1037,9 @@ export const reverseGlCorrectionEntry = async (req, res) => {
 // POST /api/ledger/repair/void-reversed
 // Changes status of any manual_adjustment entries that are still "reversed"
 // (from older Undo runs) to "void" so they are excluded from COA/Trial Balance.
-export const voidReversedCorrections = async (req, res) => {
+export const voidReversedCorrections = async (req, res, next) => {
   const businessId = req.body?.business || req.user?.company;
-  if (!businessId) return res.status(400).json({ error: "Business context required" });
+  if (!businessId) return next(createError(400, "Business context required"));
 
   try {
     const bizId = new mongoose.Types.ObjectId(String(businessId));
@@ -1060,7 +1061,7 @@ export const voidReversedCorrections = async (req, res) => {
 
     return res.status(200).json({ success: true, voidedCount: entries.length });
   } catch (err) {
-    return res.status(500).json({ error: err.message || "Void failed" });
+    return next(err);
   }
 };
 
@@ -1068,12 +1069,12 @@ export const voidReversedCorrections = async (req, res) => {
 // GET /api/ledger/repair/group-entries/:groupId
 // Returns all ledger entries in a journal group so the user can see exactly
 // which legs exist and which is missing before deciding how to correct.
-export const getGroupEntries = async (req, res) => {
+export const getGroupEntries = async (req, res, next) => {
   const { groupId } = req.params;
   const businessId  = req.query?.business || req.user?.company;
 
-  if (!businessId) return res.status(400).json({ error: "Business context required" });
-  if (!mongoose.Types.ObjectId.isValid(groupId)) return res.status(400).json({ error: "Invalid groupId" });
+  if (!businessId) return next(createError(400, "Business context required"));
+  if (!mongoose.Types.ObjectId.isValid(groupId)) return next(createError(400, "Invalid groupId"));
 
   try {
     const entries = await FinancialLedgerEntry.find({
@@ -1101,7 +1102,7 @@ export const getGroupEntries = async (req, res) => {
       })),
     });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return next(err);
   }
 };
 
@@ -1110,12 +1111,12 @@ export const getGroupEntries = async (req, res) => {
 // Voids all approved entries in a journal group whose source document has been
 // deleted. Cleaner than posting a correcting entry — removes them from the
 // trial balance entirely without adding more ledger noise.
-export const voidOrphanedJournalGroup = async (req, res) => {
+export const voidOrphanedJournalGroup = async (req, res, next) => {
   const { groupId }   = req.params;
   const { business: businessId } = req.body;
 
-  if (!businessId) return res.status(400).json({ error: "Business context required" });
-  if (!mongoose.Types.ObjectId.isValid(groupId)) return res.status(400).json({ error: "Invalid groupId" });
+  if (!businessId) return next(createError(400, "Business context required"));
+  if (!mongoose.Types.ObjectId.isValid(groupId)) return next(createError(400, "Invalid groupId"));
 
   try {
     const bizId    = new mongoose.Types.ObjectId(String(businessId));
@@ -1138,16 +1139,16 @@ export const voidOrphanedJournalGroup = async (req, res) => {
 
     return res.status(200).json({ success: true, voidedCount: entries.length });
   } catch (err) {
-    return res.status(500).json({ error: err.message || "Void failed" });
+    return next(err);
   }
 };
 
 // ─── GL ENTRIES BY SOURCE TRANSACTION ────────────────────────────────────────
 // GET /api/ledger/entries?businessId=X&sourceType=Y&sourceId=Z
-export const getEntriesBySource = async (req, res) => {
+export const getEntriesBySource = async (req, res, next) => {
   const { businessId, sourceType, sourceId } = req.query;
   if (!businessId || !sourceType || !sourceId) {
-    return res.status(400).json({ error: "businessId, sourceType, and sourceId are required" });
+    return next(createError(400, "businessId, sourceType, and sourceId are required"));
   }
   try {
     const entries = await FinancialLedgerEntry.find({
@@ -1181,6 +1182,6 @@ export const getEntriesBySource = async (req, res) => {
 
     return res.status(200).json({ entries: formatted, totalDebit, totalCredit });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return next(err);
   }
 };

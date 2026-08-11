@@ -12,9 +12,8 @@ import CwSmsModal from "./CwSmsModal";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
-
-const inputCls = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
-const labelCls = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
+import Modal from "../../components/common/Modal";
+import { inputClass, labelClass } from "../../utils/formStyles";
 
 // ─── Stamp dots ───────────────────────────────────────────────────────────────
 const StampDots = React.memo(({ current, required }) => {
@@ -62,20 +61,6 @@ const StatsBadge = React.memo(({ label, value, color = "slate" }) => {
   );
 });
 
-// ─── Generic modal ────────────────────────────────────────────────────────────
-const Modal = ({ title, children, footer, onClose }) => (
-  <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
-    <div className="w-full max-w-xl border border-slate-200 bg-white shadow-2xl">
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
-        <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
-        <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10 hover:text-white"><FaTimes /></button>
-      </div>
-      <div className="p-4">{children}</div>
-      {footer && <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>}
-    </div>
-  </div>
-);
-
 // ─── Manual stamp modal ───────────────────────────────────────────────────────
 const ManualStampModal = React.memo(({ customer, stampsRequired, mutation, onClose }) => {
   const [count, setCount] = useState(1);
@@ -114,9 +99,9 @@ const ManualStampModal = React.memo(({ customer, stampsRequired, mutation, onClo
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={labelCls}>Stamps to award</label>
+            <label className={labelClass}>Stamps to award</label>
             <input
-              className={inputCls}
+              className={inputClass}
               type="number"
               min={1}
               max={stampsRequired}
@@ -129,8 +114,8 @@ const ManualStampModal = React.memo(({ customer, stampsRequired, mutation, onClo
           </div>
         </div>
         <div>
-          <label className={labelCls}>Reason / note</label>
-          <input className={inputCls} value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. Correcting missed stamp from Jan 5" />
+          <label className={labelClass}>Reason / note</label>
+          <input className={inputClass} value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. Correcting missed stamp from Jan 5" />
         </div>
       </div>
     </Modal>
@@ -154,7 +139,7 @@ const BulkSmsModal = React.memo(({ count, onSend, onClose, sending }) => {
       }
     >
       <div>
-        <label className={labelCls}>Message</label>
+        <label className={labelClass}>Message</label>
         <textarea
           className="h-28 w-full resize-none border border-slate-300 px-2 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
           value={body}
@@ -412,12 +397,12 @@ const ProgramPanel = React.memo(({ program, onSaved, canManage }) => {
       </div>
       <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
         <div>
-          <label className={labelCls}>Program name</label>
-          <input className={inputCls} value={form.name} onChange={e => set("name", e.target.value)} />
+          <label className={labelClass}>Program name</label>
+          <input className={inputClass} value={form.name} onChange={e => set("name", e.target.value)} />
         </div>
         <div>
-          <label className={labelCls}>Washes required for reward</label>
-          <input className={inputCls} type="number" min={2} value={form.stampsRequired} onChange={e => set("stampsRequired", Number(e.target.value))} />
+          <label className={labelClass}>Washes required for reward</label>
+          <input className={inputClass} type="number" min={2} value={form.stampsRequired} onChange={e => set("stampsRequired", Number(e.target.value))} />
         </div>
         <div>
           <AppSelect
@@ -448,13 +433,13 @@ const ProgramPanel = React.memo(({ program, onSaved, canManage }) => {
         )}
         {(form.rewardType === "discount_percent" || form.rewardType === "discount_fixed") && (
           <div>
-            <label className={labelCls}>{form.rewardType === "discount_percent" ? "Discount %" : "Discount KES"}</label>
-            <input className={inputCls} type="number" min={0} value={form.rewardValue} onChange={e => set("rewardValue", Number(e.target.value))} />
+            <label className={labelClass}>{form.rewardType === "discount_percent" ? "Discount %" : "Discount KES"}</label>
+            <input className={inputClass} type="number" min={0} value={form.rewardValue} onChange={e => set("rewardValue", Number(e.target.value))} />
           </div>
         )}
         <div>
-          <label className={labelCls}>Stamp expiry (days, 0 = never)</label>
-          <input className={inputCls} type="number" min={0} value={form.stampExpiryDays} onChange={e => set("stampExpiryDays", Number(e.target.value))} />
+          <label className={labelClass}>Stamp expiry (days, 0 = never)</label>
+          <input className={inputClass} type="number" min={0} value={form.stampExpiryDays} onChange={e => set("stampExpiryDays", Number(e.target.value))} />
         </div>
       </div>
       <div className="border-t border-slate-100 px-4 py-3">
@@ -985,17 +970,17 @@ const CarWashLoyalty = () => {
           <div className="space-y-3">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <label className={labelCls}>Full name *</label>
-                <input className={inputCls} value={customerForm.name} onChange={e => setField("name", e.target.value)} placeholder="e.g. John Kamau" />
+                <label className={labelClass}>Full name *</label>
+                <input className={inputClass} value={customerForm.name} onChange={e => setField("name", e.target.value)} placeholder="e.g. John Kamau" />
               </div>
               <div>
-                <label className={labelCls}>Phone *</label>
-                <input className={inputCls} value={customerForm.phone} onChange={e => setField("phone", e.target.value)} placeholder="e.g. 0722000000" />
+                <label className={labelClass}>Phone *</label>
+                <input className={inputClass} value={customerForm.phone} onChange={e => setField("phone", e.target.value)} placeholder="e.g. 0722000000" />
               </div>
             </div>
             <div>
               <div className="mb-1 flex items-center justify-between">
-                <label className={labelCls}>Vehicle plates</label>
+                <label className={labelClass}>Vehicle plates</label>
                 <button
                   type="button"
                   onClick={() => setCustomerForm(f => ({ ...f, plates: [...f.plates, ""] }))}
@@ -1007,7 +992,7 @@ const CarWashLoyalty = () => {
               <div className="space-y-1.5">
                 {customerForm.plates.map((p, i) => (
                   <div key={i} className="flex items-center gap-1.5">
-                    <input className={`${inputCls} flex-1`} value={p} onChange={e => setPlate(i, e.target.value)} placeholder="e.g. KAA 123X" />
+                    <input className={`${inputClass} flex-1`} value={p} onChange={e => setPlate(i, e.target.value)} placeholder="e.g. KAA 123X" />
                     {customerForm.plates.length > 1 && (
                       <button
                         type="button"
@@ -1022,8 +1007,8 @@ const CarWashLoyalty = () => {
               </div>
             </div>
             <div>
-              <label className={labelCls}>Notes</label>
-              <input className={inputCls} value={customerForm.notes} onChange={e => setField("notes", e.target.value)} placeholder="Optional" />
+              <label className={labelClass}>Notes</label>
+              <input className={inputClass} value={customerForm.notes} onChange={e => setField("notes", e.target.value)} placeholder="Optional" />
             </div>
           </div>
         </Modal>

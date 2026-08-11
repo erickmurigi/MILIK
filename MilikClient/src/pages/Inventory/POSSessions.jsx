@@ -8,20 +8,14 @@ import InventoryShell from "./InventoryShell";
 import { inventoryApi, formatMoney } from "../../services/inventoryApi";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from "../../components/PaginationBar";
+import Modal from "../../components/common/Modal";
+import StatusBadge from "../../components/common/StatusBadge";
+import { fmtDateTime } from "../../utils/dates";
 
 const STATUS_BADGE = {
   open:   "border-emerald-200 bg-emerald-50 text-emerald-700",
   closed: "border-slate-200   bg-slate-50   text-slate-600",
 };
-
-const StatusPill = ({ status }) => (
-  <span className={`inline-flex border px-1.5 py-0.5 text-[9px] font-bold uppercase ${STATUS_BADGE[status] || "border-slate-200 bg-slate-50 text-slate-500"}`}>
-    {status}
-  </span>
-);
-
-const fmtDateTime = (iso) =>
-  iso ? new Date(iso).toLocaleString("en-KE", { dateStyle: "short", timeStyle: "short" }) : "—";
 
 const POSSessions = () => {
   const confirm     = useConfirm();
@@ -223,7 +217,7 @@ const POSSessions = () => {
                         <span className="text-slate-300">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-2"><StatusPill status={s.status} /></td>
+                    <td className="px-3 py-2"><StatusBadge status={s.status} map={STATUS_BADGE} /></td>
                     <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
                       {s.status === "open" && (
                         <button
@@ -251,36 +245,35 @@ const POSSessions = () => {
       </div>
 
       {showClose && closing && (
-        <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
-          <div className="w-full max-w-sm border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-red-700 px-4 py-3 text-white">
-              <h2 className="text-sm font-extrabold uppercase tracking-wide">Close Session — {closing.sessionNumber}</h2>
-              <button type="button" onClick={() => setShowClose(false)} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
-            </div>
-            <div className="p-4 space-y-3">
-              <p className="text-xs text-slate-600">
-                Location: <strong>{closing.location?.name}</strong> · Cashier: <strong>{closing.openedBy?.name}</strong>
-              </p>
-              <p className="text-xs text-slate-600">
-                Sales: <strong>{closing.salesCount ?? 0}</strong> · Total: <strong>{formatMoney(closing.totalSales)}</strong>
-              </p>
-              <div>
-                <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Closing Float (KES)</label>
-                <input
-                  type="number" min="0" step="0.01" value={closingFloat}
-                  onChange={(e) => setClosingFloat(e.target.value)} placeholder="0.00"
-                  className="h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+        <Modal
+          title={`Close Session — ${closing.sessionNumber}`}
+          onClose={() => setShowClose(false)}
+          footer={
+            <>
               <button type="button" onClick={() => setShowClose(false)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
               <button type="button" onClick={handleClose} className="bg-red-700 px-4 py-2 text-xs font-bold text-white hover:bg-red-800">
                 Close Session
               </button>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            <p className="text-xs text-slate-600">
+              Location: <strong>{closing.location?.name}</strong> · Cashier: <strong>{closing.openedBy?.name}</strong>
+            </p>
+            <p className="text-xs text-slate-600">
+              Sales: <strong>{closing.salesCount ?? 0}</strong> · Total: <strong>{formatMoney(closing.totalSales)}</strong>
+            </p>
+            <div>
+              <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Closing Float (KES)</label>
+              <input
+                type="number" min="0" step="0.01" value={closingFloat}
+                onChange={(e) => setClosingFloat(e.target.value)} placeholder="0.00"
+                className="h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
+              />
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </InventoryShell>
   );

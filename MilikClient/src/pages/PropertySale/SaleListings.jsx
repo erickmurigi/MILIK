@@ -16,6 +16,9 @@ import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import AmountInput from "./AmountInput";
 import AppSelect from "../../components/common/AppSelect";
+import Modal from "../../components/common/Modal";
+import { inputClass, labelClass } from "../../utils/formStyles";
+import StatusBadge from "../../components/common/StatusBadge";
 
 // Normalise image URLs — strips absolute origin from legacy URLs so relative
 // path proxy (/uploads/...) works in both dev and production.
@@ -33,13 +36,13 @@ const PROPERTY_TYPE_OPTIONS = PROPERTY_TYPES.map((t) => ({ value: t, label: t })
 const SIZE_UNIT_OPTIONS     = SIZE_UNITS.map((u) => ({ value: u, label: u }));
 const STATUS_OPTIONS        = STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }));
 
-const statusBadge = (status) => ({
+const LISTING_STATUS_MAP = {
   available:      "border-emerald-200 bg-emerald-50 text-emerald-700",
   reserved:       "border-amber-200 bg-amber-50 text-amber-700",
   under_contract: "border-[#B7C9C0] bg-[#F1F6F3] text-[#0B3B2E]",
   sold:           "border-slate-600 bg-slate-800 text-white",
   withdrawn:      "border-rose-200 bg-rose-50 text-rose-700",
-}[status] || "border-slate-200 bg-slate-50 text-slate-500");
+};
 
 const blankForm = {
   title: "", propertyType: "plot", description: "", size: "", sizeUnit: "sqm",
@@ -48,26 +51,6 @@ const blankForm = {
   assignedAgent: "", listedDate: todayISO(), amenities: "", notes: "",
 };
 
-const Modal = ({ title, subtitle, children, footer, onClose }) => (
-  <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-    <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-3xl sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
-      <div className="flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
-        <div>
-          <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
-          {subtitle && <p className="mt-0.5 text-xs font-semibold text-emerald-100">{subtitle}</p>}
-        </div>
-        <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10 hover:text-white">
-          <FaTimes />
-        </button>
-      </div>
-      <div className="flex-1 overflow-y-auto p-4">{children}</div>
-      {footer && <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>}
-    </div>
-  </div>
-);
-
-const inputCls = "h-8 w-full border border-slate-200 bg-white px-3 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none";
-const labelCls = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 
 const SaleListings = () => {
   const confirm        = useConfirm();
@@ -386,9 +369,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
                         {row.assignedAgent?.fullName || <span className="italic text-slate-400">Unassigned</span>}
                       </td>
                       <td className="px-3 py-2">
-                        <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${statusBadge(row.status)}`}>
-                          {String(row.status || "").replace(/_/g, " ")}
-                        </span>
+                        <StatusBadge status={row.status} map={LISTING_STATUS_MAP} />
                       </td>
                       <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="inline-flex items-center gap-1">
@@ -461,9 +442,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
                 <button type="button" onClick={() => setSelected(null)} className="flex-shrink-0 p-1 text-white/70 hover:bg-white/10"><FaTimes size={12} /></button>
               </div>
               <div className="mt-2">
-                <span className={`border px-1.5 py-0.5 text-[9px] font-black uppercase ${statusBadge(selected.status)}`}>
-                  {String(selected.status || "").replace(/_/g, " ")}
-                </span>
+                <StatusBadge status={selected.status} map={LISTING_STATUS_MAP} />
               </div>
             </div>
 
@@ -637,7 +616,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
       {showModal && (
         <Modal
           title={editingId ? "Edit Sale Listing" : "New Sale Listing"}
-          subtitle="Property Sale Module"
+          extraWide
           onClose={() => setShowModal(false)}
           footer={
             <>
@@ -650,18 +629,18 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
         >
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             <div className="md:col-span-2 xl:col-span-2">
-              <label className={labelCls}>Title / Property Name</label>
-              <input value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} className={inputCls} />
+              <label className={labelClass}>Title / Property Name</label>
+              <input value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} className={inputClass} />
             </div>
             <div>
               <AppSelect label="Property Type" value={form.propertyType} onChange={(v) => setForm((p) => ({ ...p, propertyType: v ?? "" }))} options={PROPERTY_TYPE_OPTIONS} size="md" />
             </div>
             <div>
-              <label className={labelCls}>Asking Price (KES)</label>
-              <AmountInput value={form.askingPrice} onChange={(v) => setForm((p) => ({ ...p, askingPrice: v }))} className={inputCls} placeholder="e.g. 8,500,000" />
+              <label className={labelClass}>Asking Price (KES)</label>
+              <AmountInput value={form.askingPrice} onChange={(v) => setForm((p) => ({ ...p, askingPrice: v }))} className={inputClass} placeholder="e.g. 8,500,000" />
             </div>
             <div>
-              <label className={labelCls}>Size</label>
+              <label className={labelClass}>Size</label>
               <div className="flex gap-1.5">
                 <input type="number" value={form.size} onChange={(e) => setForm((p) => ({ ...p, size: e.target.value }))} className="h-8 flex-1 border border-slate-200 bg-white px-3 text-xs focus:border-[#0B3B2E] focus:outline-none" placeholder="e.g. 50" />
                 <AppSelect value={form.sizeUnit} onChange={(v) => setForm((p) => ({ ...p, sizeUnit: v ?? "" }))} options={SIZE_UNIT_OPTIONS} size="md" />
@@ -671,24 +650,24 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
               <AppSelect label="Assigned Agent" value={form.assignedAgent} onChange={(v) => setForm((p) => ({ ...p, assignedAgent: v ?? "" }))} options={agents.map((a) => ({ value: a._id, label: `${a.fullName} (${a.agentNumber})` }))} placeholder="Unassigned" size="md" searchable clearable />
             </div>
             <div>
-              <label className={labelCls}>Location / Address</label>
-              <input value={form.location} onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))} className={inputCls} />
+              <label className={labelClass}>Location / Address</label>
+              <input value={form.location} onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))} className={inputClass} />
             </div>
             <div>
-              <label className={labelCls}>Town / City</label>
-              <input value={form.town} onChange={(e) => setForm((p) => ({ ...p, town: e.target.value }))} className={inputCls} />
+              <label className={labelClass}>Town / City</label>
+              <input value={form.town} onChange={(e) => setForm((p) => ({ ...p, town: e.target.value }))} className={inputClass} />
             </div>
             <div>
-              <label className={labelCls}>County</label>
-              <input value={form.county} onChange={(e) => setForm((p) => ({ ...p, county: e.target.value }))} className={inputCls} />
+              <label className={labelClass}>County</label>
+              <input value={form.county} onChange={(e) => setForm((p) => ({ ...p, county: e.target.value }))} className={inputClass} />
             </div>
             <div>
-              <label className={labelCls}>Listed Date</label>
-              <input type="date" value={form.listedDate} onChange={(e) => setForm((p) => ({ ...p, listedDate: e.target.value }))} className={inputCls} />
+              <label className={labelClass}>Listed Date</label>
+              <input type="date" value={form.listedDate} onChange={(e) => setForm((p) => ({ ...p, listedDate: e.target.value }))} className={inputClass} />
             </div>
             <div>
-              <label className={labelCls}>Title Deed No.</label>
-              <input value={form.titleDeedNumber} onChange={(e) => setForm((p) => ({ ...p, titleDeedNumber: e.target.value }))} className={inputCls} />
+              <label className={labelClass}>Title Deed No.</label>
+              <input value={form.titleDeedNumber} onChange={(e) => setForm((p) => ({ ...p, titleDeedNumber: e.target.value }))} className={inputClass} />
             </div>
             <div className="flex items-center gap-4 pt-4">
               <label className="flex cursor-pointer items-center gap-2">
@@ -701,15 +680,15 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
               </label>
             </div>
             <div className="md:col-span-2 xl:col-span-3">
-              <label className={labelCls}>Amenities (comma-separated)</label>
-              <input value={form.amenities} onChange={(e) => setForm((p) => ({ ...p, amenities: e.target.value }))} className={inputCls} placeholder="Borehole, Power, Road access…" />
+              <label className={labelClass}>Amenities (comma-separated)</label>
+              <input value={form.amenities} onChange={(e) => setForm((p) => ({ ...p, amenities: e.target.value }))} className={inputClass} placeholder="Borehole, Power, Road access…" />
             </div>
             <div className="md:col-span-2 xl:col-span-3">
-              <label className={labelCls}>Description</label>
+              <label className={labelClass}>Description</label>
               <textarea rows={3} value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
             </div>
             <div className="md:col-span-2 xl:col-span-3">
-              <label className={labelCls}>Internal Notes</label>
+              <label className={labelClass}>Internal Notes</label>
               <textarea rows={2} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
             </div>
             {editingId && (

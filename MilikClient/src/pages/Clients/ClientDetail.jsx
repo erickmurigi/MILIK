@@ -2,6 +2,10 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import AppSelect from '../../components/common/AppSelect';
+import Modal from '../../components/common/Modal';
+import { fmtDate, todayISO } from '../../utils/dates';
+import { useConfirm } from '../../context/ConfirmContext';
+import { inputClass, labelClass } from '../../utils/formStyles';
 import {
   FaBuilding,
   FaCalendar,
@@ -30,27 +34,9 @@ const fmtKES = (n) =>
     minimumFractionDigits: 2,
   }).format(Number(n) || 0);
 
-const fmtDate = (v) =>
-  v
-    ? new Date(v).toLocaleDateString('en-KE', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      })
-    : '—';
-
 const daysUntil = (d) =>
   Math.ceil((new Date(d) - new Date()) / (1000 * 60 * 60 * 24));
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
-
-// ─── Style constants ──────────────────────────────────────────────────────────
-
-const inputCls =
-  'w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20 focus:border-[#0B3B2E]';
-
-const labelCls =
-  'block mb-1 text-[11px] font-semibold text-slate-500 uppercase tracking-wide';
 
 const btnPrimary =
   'bg-[#0B3B2E] text-white hover:bg-[#027333] px-4 py-2 rounded-md text-sm font-semibold disabled:opacity-50';
@@ -106,31 +92,6 @@ const RENEWAL_STAGES  = ['due', 'contacted', 'negotiating', 'renewed', 'lost'];
 const INTERACTION_TYPES = ['note', 'email', 'call', 'meeting'];
 
 // ─── Shared sub-components ────────────────────────────────────────────────────
-
-const Modal = ({ title, onClose, children, footer, wide = false }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-    <div
-      className={`flex flex-col rounded-xl bg-white shadow-2xl max-h-[90vh] w-full ${wide ? 'max-w-2xl' : 'max-w-xl'}`}
-    >
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-xl">
-        <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
-        <button
-          type="button"
-          onClick={onClose}
-          className="p-1 text-white/80 hover:bg-white/10 hover:text-white rounded"
-        >
-          <FaTimes />
-        </button>
-      </div>
-      <div className="flex-1 overflow-y-auto p-4">{children}</div>
-      {footer && (
-        <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-          {footer}
-        </div>
-      )}
-    </div>
-  </div>
-);
 
 const Card = ({ title, right, children, className = '' }) => (
   <div className={`border border-slate-200 bg-white shadow-sm ${className}`}>
@@ -240,7 +201,7 @@ const ProfileTab = ({ client, summary, onRefresh }) => {
 
   const FieldView = ({ label, value }) => (
     <div>
-      <p className={labelCls}>{label}</p>
+      <p className={labelClass}>{label}</p>
       <p className="text-sm text-slate-800 py-2 px-3 bg-slate-50 rounded-md">
         {value || <span className="italic text-slate-400">—</span>}
       </p>
@@ -249,7 +210,7 @@ const ProfileTab = ({ client, summary, onRefresh }) => {
 
   const FieldEdit = ({ label, field, type = 'text', options }) => (
     <div>
-      <label className={labelCls}>{label}</label>
+      <label className={labelClass}>{label}</label>
       {options ? (
         <AppSelect
           size="md"
@@ -261,7 +222,7 @@ const ProfileTab = ({ client, summary, onRefresh }) => {
         />
       ) : type === 'textarea' ? (
         <textarea
-          className={`${inputCls} resize-none`}
+          className={`${inputClass} resize-none`}
           rows={3}
           value={form[field] || ''}
           onChange={(e) => set(field, e.target.value)}
@@ -269,7 +230,7 @@ const ProfileTab = ({ client, summary, onRefresh }) => {
       ) : (
         <input
           type={type}
-          className={inputCls}
+          className={inputClass}
           value={form[field] || ''}
           onChange={(e) => set(field, e.target.value)}
         />
@@ -423,17 +384,17 @@ const ProfileTab = ({ client, summary, onRefresh }) => {
         >
           <div className="space-y-3">
             <div>
-              <label className={labelCls}>Name *</label>
+              <label className={labelClass}>Name *</label>
               <input
-                className={inputCls}
+                className={inputClass}
                 value={contactForm.name}
                 onChange={(e) => setContactForm((f) => ({ ...f, name: e.target.value }))}
               />
             </div>
             <div>
-              <label className={labelCls}>Role / Title</label>
+              <label className={labelClass}>Role / Title</label>
               <input
-                className={inputCls}
+                className={inputClass}
                 placeholder="e.g. Procurement Manager"
                 value={contactForm.role}
                 onChange={(e) => setContactForm((f) => ({ ...f, role: e.target.value }))}
@@ -441,18 +402,18 @@ const ProfileTab = ({ client, summary, onRefresh }) => {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={labelCls}>Phone</label>
+                <label className={labelClass}>Phone</label>
                 <input
-                  className={inputCls}
+                  className={inputClass}
                   value={contactForm.phone}
                   onChange={(e) => setContactForm((f) => ({ ...f, phone: e.target.value }))}
                 />
               </div>
               <div>
-                <label className={labelCls}>Email</label>
+                <label className={labelClass}>Email</label>
                 <input
                   type="email"
-                  className={inputCls}
+                  className={inputClass}
                   value={contactForm.email}
                   onChange={(e) => setContactForm((f) => ({ ...f, email: e.target.value }))}
                 />
@@ -533,21 +494,21 @@ const AddContractModal = ({ clientId, onClose, onCreated }) => {
     >
       <div className="grid grid-cols-2 gap-3">
         <div className="col-span-2">
-          <label className={labelCls}>Description *</label>
+          <label className={labelClass}>Description *</label>
           <input
-            className={inputCls}
+            className={inputClass}
             value={form.description}
             onChange={(e) => set('description', e.target.value)}
             placeholder="Contract scope / title"
           />
         </div>
         <div>
-          <label className={labelCls}>Start Date *</label>
-          <input type="date" className={inputCls} value={form.startDate} onChange={(e) => set('startDate', e.target.value)} />
+          <label className={labelClass}>Start Date *</label>
+          <input type="date" className={inputClass} value={form.startDate} onChange={(e) => set('startDate', e.target.value)} />
         </div>
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className={labelCls} style={{ marginBottom: 0 }}>End Date {form.openEnded ? '' : '*'}</label>
+            <label className={labelClass} style={{ marginBottom: 0 }}>End Date {form.openEnded ? '' : '*'}</label>
             <label className="flex items-center gap-1.5 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -560,18 +521,18 @@ const AddContractModal = ({ clientId, onClose, onCreated }) => {
           </div>
           <input
             type="date"
-            className={`${inputCls} ${form.openEnded ? 'opacity-40 pointer-events-none' : ''}`}
+            className={`${inputClass} ${form.openEnded ? 'opacity-40 pointer-events-none' : ''}`}
             value={form.openEnded ? '' : form.endDate}
             onChange={(e) => set('endDate', e.target.value)}
             disabled={form.openEnded}
           />
         </div>
         <div>
-          <label className={labelCls}>Base Value (KES) *</label>
-          <input type="number" className={inputCls} value={form.baseValue} onChange={(e) => set('baseValue', e.target.value)} min="0" placeholder="0.00" />
+          <label className={labelClass}>Base Value (KES) *</label>
+          <input type="number" className={inputClass} value={form.baseValue} onChange={(e) => set('baseValue', e.target.value)} min="0" placeholder="0.00" />
         </div>
         <div>
-          <label className={labelCls}>Billing Cycle</label>
+          <label className={labelClass}>Billing Cycle</label>
           <AppSelect
             size="md"
             value={form.billingCycle}
@@ -580,24 +541,24 @@ const AddContractModal = ({ clientId, onClose, onCreated }) => {
           />
         </div>
         <div>
-          <label className={labelCls}>Escalation % (default 10)</label>
-          <input type="number" className={inputCls} value={form.escalationPercent} onChange={(e) => set('escalationPercent', e.target.value)} min="0" />
+          <label className={labelClass}>Escalation % (default 10)</label>
+          <input type="number" className={inputClass} value={form.escalationPercent} onChange={(e) => set('escalationPercent', e.target.value)} min="0" />
         </div>
         <div>
-          <label className={labelCls}>Escalation Period (years, default 2)</label>
-          <input type="number" className={inputCls} value={form.escalationPeriodYears} onChange={(e) => set('escalationPeriodYears', e.target.value)} min="1" />
+          <label className={labelClass}>Escalation Period (years, default 2)</label>
+          <input type="number" className={inputClass} value={form.escalationPeriodYears} onChange={(e) => set('escalationPeriodYears', e.target.value)} min="1" />
         </div>
         <div>
-          <label className={labelCls}>Notice Period (days)</label>
-          <input type="number" className={inputCls} value={form.noticePeriodDays} onChange={(e) => set('noticePeriodDays', e.target.value)} min="0" />
+          <label className={labelClass}>Notice Period (days)</label>
+          <input type="number" className={inputClass} value={form.noticePeriodDays} onChange={(e) => set('noticePeriodDays', e.target.value)} min="0" />
         </div>
         <div>
-          <label className={labelCls}>Payment Terms (days)</label>
-          <input type="number" className={inputCls} value={form.paymentTermsDays} onChange={(e) => set('paymentTermsDays', e.target.value)} min="0" />
+          <label className={labelClass}>Payment Terms (days)</label>
+          <input type="number" className={inputClass} value={form.paymentTermsDays} onChange={(e) => set('paymentTermsDays', e.target.value)} min="0" />
         </div>
         <div className="col-span-2">
-          <label className={labelCls}>Notes</label>
-          <textarea className={`${inputCls} resize-none`} rows={3} value={form.notes} onChange={(e) => set('notes', e.target.value)} />
+          <label className={labelClass}>Notes</label>
+          <textarea className={`${inputClass} resize-none`} rows={3} value={form.notes} onChange={(e) => set('notes', e.target.value)} />
         </div>
       </div>
     </Modal>
@@ -659,12 +620,12 @@ const RenewContractModal = ({ contract, onClose, onRenewed }) => {
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={labelCls}>New Start Date</label>
-            <input type="date" className={inputCls} value={form.startDate} onChange={(e) => set('startDate', e.target.value)} />
+            <label className={labelClass}>New Start Date</label>
+            <input type="date" className={inputClass} value={form.startDate} onChange={(e) => set('startDate', e.target.value)} />
           </div>
           <div>
-            <label className={labelCls}>New End Date</label>
-            <input type="date" className={inputCls} value={form.endDate} onChange={(e) => set('endDate', e.target.value)} />
+            <label className={labelClass}>New End Date</label>
+            <input type="date" className={inputClass} value={form.endDate} onChange={(e) => set('endDate', e.target.value)} />
           </div>
         </div>
       </div>
@@ -709,9 +670,9 @@ const TerminateContractModal = ({ contract, onClose, onTerminated }) => {
           <strong>{contract.contractNumber || contract._id?.slice(-6).toUpperCase()}</strong>. This cannot be undone.
         </p>
         <div>
-          <label className={labelCls}>Reason for Termination</label>
+          <label className={labelClass}>Reason for Termination</label>
           <textarea
-            className={`${inputCls} resize-none`}
+            className={`${inputClass} resize-none`}
             rows={4}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
@@ -986,7 +947,7 @@ const CreateInvoiceModal = ({ clientId, contracts, onClose, onCreated }) => {
         <div className="grid grid-cols-2 gap-3">
           {contracts.length > 0 && (
             <div className="col-span-2">
-              <label className={labelCls}>Contract (optional)</label>
+              <label className={labelClass}>Contract (optional)</label>
               <AppSelect
                 size="md"
                 clearable
@@ -1001,27 +962,27 @@ const CreateInvoiceModal = ({ clientId, contracts, onClose, onCreated }) => {
             </div>
           )}
           <div>
-            <label className={labelCls}>Period Start</label>
-            <input type="date" className={inputCls} value={form.periodStart} onChange={(e) => set('periodStart', e.target.value)} />
+            <label className={labelClass}>Period Start</label>
+            <input type="date" className={inputClass} value={form.periodStart} onChange={(e) => set('periodStart', e.target.value)} />
           </div>
           <div>
-            <label className={labelCls}>Period End</label>
-            <input type="date" className={inputCls} value={form.periodEnd} onChange={(e) => set('periodEnd', e.target.value)} />
+            <label className={labelClass}>Period End</label>
+            <input type="date" className={inputClass} value={form.periodEnd} onChange={(e) => set('periodEnd', e.target.value)} />
           </div>
           <div>
-            <label className={labelCls}>Issue Date *</label>
-            <input type="date" className={inputCls} value={form.issueDate} onChange={(e) => set('issueDate', e.target.value)} />
+            <label className={labelClass}>Issue Date *</label>
+            <input type="date" className={inputClass} value={form.issueDate} onChange={(e) => set('issueDate', e.target.value)} />
           </div>
           <div>
-            <label className={labelCls}>Due Date *</label>
-            <input type="date" className={inputCls} value={form.dueDate} onChange={(e) => set('dueDate', e.target.value)} />
+            <label className={labelClass}>Due Date *</label>
+            <input type="date" className={inputClass} value={form.dueDate} onChange={(e) => set('dueDate', e.target.value)} />
           </div>
         </div>
 
         {/* Line items */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className={labelCls}>Line Items</span>
+            <span className={labelClass}>Line Items</span>
             <button
               type="button"
               onClick={addLine}
@@ -1116,9 +1077,9 @@ const CreateInvoiceModal = ({ clientId, contracts, onClose, onCreated }) => {
         </div>
 
         <div>
-          <label className={labelCls}>Notes</label>
+          <label className={labelClass}>Notes</label>
           <textarea
-            className={`${inputCls} resize-none`}
+            className={`${inputClass} resize-none`}
             rows={2}
             value={form.notes}
             onChange={(e) => set('notes', e.target.value)}
@@ -1180,15 +1141,15 @@ const MarkPaidModal = ({ invoice, onClose, onPaid }) => {
           </div>
         )}
         <div>
-          <label className={labelCls}>Amount Paying Now (KES) *</label>
-          <input type="number" className={inputCls} value={form.paidAmount} onChange={(e) => set('paidAmount', e.target.value)} min="0.01" step="0.01" />
+          <label className={labelClass}>Amount Paying Now (KES) *</label>
+          <input type="number" className={inputClass} value={form.paidAmount} onChange={(e) => set('paidAmount', e.target.value)} min="0.01" step="0.01" />
         </div>
         <div>
-          <label className={labelCls}>Payment Date</label>
-          <input type="date" className={inputCls} value={form.paidAt} onChange={(e) => set('paidAt', e.target.value)} />
+          <label className={labelClass}>Payment Date</label>
+          <input type="date" className={inputClass} value={form.paidAt} onChange={(e) => set('paidAt', e.target.value)} />
         </div>
         <div>
-          <label className={labelCls}>Payment Method</label>
+          <label className={labelClass}>Payment Method</label>
           <AppSelect
             size="md"
             value={form.paymentMethod}
@@ -1197,9 +1158,9 @@ const MarkPaidModal = ({ invoice, onClose, onPaid }) => {
           />
         </div>
         <div>
-          <label className={labelCls}>Payment Reference</label>
+          <label className={labelClass}>Payment Reference</label>
           <input
-            className={inputCls}
+            className={inputClass}
             value={form.paymentReference}
             onChange={(e) => set('paymentReference', e.target.value)}
             placeholder="Transaction ID / cheque no…"
@@ -1212,6 +1173,7 @@ const MarkPaidModal = ({ invoice, onClose, onPaid }) => {
 
 const InvoicesTab = ({ clientId, contracts }) => {
   const navigate = useNavigate();
+  const confirm  = useConfirm();
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading]   = useState(true);
   const loadedRef               = useRef(false);
@@ -1249,7 +1211,7 @@ const InvoicesTab = ({ clientId, contracts }) => {
   };
 
   const handleCancel = async (inv) => {
-    if (!window.confirm('Cancel this invoice? This cannot be undone.')) return;
+    if (!(await confirm({ title: 'Cancel Invoice', message: 'Cancel this invoice? This cannot be undone.', confirmText: 'Cancel Invoice', isDangerous: true }))) return;
     setCancelling((p) => ({ ...p, [inv._id]: true }));
     try {
       await clientsApi.cancelInvoice(inv._id);
@@ -1457,7 +1419,7 @@ const LogInteractionModal = ({ clientId, defaultType, onClose, onCreated }) => {
     >
       <div className="space-y-3">
         <div>
-          <label className={labelCls}>Type</label>
+          <label className={labelClass}>Type</label>
           <div className="flex flex-wrap gap-1.5">
             {INTERACTION_TYPES.map((t) => {
               const Icon = typeIcon(t);
@@ -1479,18 +1441,18 @@ const LogInteractionModal = ({ clientId, defaultType, onClose, onCreated }) => {
           </div>
         </div>
         <div>
-          <label className={labelCls}>Subject</label>
+          <label className={labelClass}>Subject</label>
           <input
-            className={inputCls}
+            className={inputClass}
             value={form.subject}
             onChange={(e) => set('subject', e.target.value)}
             placeholder="Brief subject / title"
           />
         </div>
         <div>
-          <label className={labelCls}>Content *</label>
+          <label className={labelClass}>Content *</label>
           <textarea
-            className={`${inputCls} resize-none`}
+            className={`${inputClass} resize-none`}
             rows={5}
             value={form.body}
             onChange={(e) => set('body', e.target.value)}
@@ -1503,6 +1465,7 @@ const LogInteractionModal = ({ clientId, defaultType, onClose, onCreated }) => {
 };
 
 const CommunicationsTab = ({ clientId }) => {
+  const confirm = useConfirm();
   const [interactions, setInteractions] = useState([]);
   const [loading, setLoading]           = useState(true);
   const [expanded, setExpanded]         = useState({});
@@ -1528,7 +1491,7 @@ const CommunicationsTab = ({ clientId }) => {
   const toggleExpand = (id) => setExpanded((p) => ({ ...p, [id]: !p[id] }));
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this interaction?')) return;
+    if (!(await confirm({ title: 'Delete Interaction', message: 'Delete this interaction?', confirmText: 'Delete', isDangerous: true }))) return;
     setDeleting((p) => ({ ...p, [id]: true }));
     try {
       await clientsApi.deleteInteraction(id);

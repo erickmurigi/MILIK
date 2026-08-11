@@ -17,12 +17,13 @@ import {
   FaPhone,
   FaSave,
   FaShieldAlt,
-  FaSpinner,
   FaStore,
   FaUsers,
 } from "react-icons/fa";
+import Spinner from "../../components/common/Spinner";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
+import { inputClass, selectClass } from "../../utils/formStyles";
 import { createCompany, getCompany, updateCompany } from "../../redux/apiCalls";
 import {
   applyCompanyModeBaseModules,
@@ -159,8 +160,6 @@ const Field = ({ label, required, children, span2 }) => (
   </label>
 );
 
-const inputCls = "mt-0.5 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
-const selectCls = "mt-0.5 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
 
 // ─── Card header strip ────────────────────────────────────────────────────────
 
@@ -339,7 +338,7 @@ const AddCompanyWizard = () => {
 
         {loading ? (
           <div className="flex flex-1 items-center justify-center">
-            <FaSpinner className="animate-spin text-2xl text-[#0B3B2E]" />
+            <Spinner size="lg" />
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden" noValidate>
@@ -355,20 +354,20 @@ const AddCompanyWizard = () => {
                   <CardHeader icon={FaBuilding} title="Company Profile" />
                   <div className="p-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     <Field label="Company name" required span2>
-                      <input value={formData.companyName} onChange={(e) => setField("companyName", e.target.value)} className={`${inputCls} ${errors.companyName ? "border-red-400" : ""}`} placeholder="Acme Property Management Ltd" maxLength={120} />
+                      <input value={formData.companyName} onChange={(e) => setField("companyName", e.target.value)} className={`${inputClass} ${errors.companyName ? "border-red-400" : ""}`} placeholder="Acme Property Management Ltd" maxLength={120} />
                       {errors.companyName && <p className="mt-1 text-[11px] text-red-500">{errors.companyName}</p>}
                     </Field>
                     <Field label="Slogan">
-                      <input value={formData.slogan} onChange={(e) => setField("slogan", e.target.value)} className={inputCls} placeholder="Professional operations." maxLength={120} />
+                      <input value={formData.slogan} onChange={(e) => setField("slogan", e.target.value)} className={inputClass} placeholder="Professional operations." maxLength={120} />
                     </Field>
                     <Field label="Registration No.">
-                      <input value={formData.registrationNo} onChange={(e) => setField("registrationNo", e.target.value)} className={inputCls} placeholder="CPR/2026/001" maxLength={50} />
+                      <input value={formData.registrationNo} onChange={(e) => setField("registrationNo", e.target.value)} className={inputClass} placeholder="CPR/2026/001" maxLength={50} />
                     </Field>
                     <Field label="Tax PIN (KRA)">
-                      <input value={formData.taxPIN} onChange={(e) => setField("taxPIN", e.target.value)} className={inputCls} placeholder="A123456789X" maxLength={20} />
+                      <input value={formData.taxPIN} onChange={(e) => setField("taxPIN", e.target.value)} className={inputClass} placeholder="A123456789X" maxLength={20} />
                     </Field>
                     <Field label="Tax Exempt Code">
-                      <input value={formData.taxExemptCode} onChange={(e) => setField("taxExemptCode", e.target.value)} className={inputCls} placeholder="Optional" maxLength={30} />
+                      <input value={formData.taxExemptCode} onChange={(e) => setField("taxExemptCode", e.target.value)} className={inputClass} placeholder="Optional" maxLength={30} />
                     </Field>
                     <Field label="Email">
                       <div className="relative mt-0.5">
@@ -438,17 +437,17 @@ const AddCompanyWizard = () => {
                   <CardHeader icon={FaMapMarkerAlt} title="Location & Statutory" />
                   <div className="p-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     <Field label="Postal address" required span2>
-                      <input value={formData.postalAddress} onChange={(e) => setField("postalAddress", e.target.value)} className={`${inputCls} ${errors.postalAddress ? "border-red-400" : ""}`} placeholder="P.O. Box 12345 – 00100 Nairobi" maxLength={120} />
+                      <input value={formData.postalAddress} onChange={(e) => setField("postalAddress", e.target.value)} className={`${inputClass} ${errors.postalAddress ? "border-red-400" : ""}`} placeholder="P.O. Box 12345 – 00100 Nairobi" maxLength={120} />
                       {errors.postalAddress && <p className="mt-1 text-[11px] text-red-500">{errors.postalAddress}</p>}
                     </Field>
                     <Field label="Country">
-                      <input value={formData.country} onChange={(e) => setField("country", e.target.value)} className={inputCls} placeholder="Kenya" maxLength={60} />
+                      <input value={formData.country} onChange={(e) => setField("country", e.target.value)} className={inputClass} placeholder="Kenya" maxLength={60} />
                     </Field>
                     <Field label="Town / City">
-                      <input value={formData.town} onChange={(e) => setField("town", e.target.value)} className={inputCls} placeholder="Nairobi" maxLength={60} />
+                      <input value={formData.town} onChange={(e) => setField("town", e.target.value)} className={inputClass} placeholder="Nairobi" maxLength={60} />
                     </Field>
                     <Field label="Road / Street">
-                      <input value={formData.roadStreet} onChange={(e) => setField("roadStreet", e.target.value)} className={inputCls} placeholder="Westlands Road" maxLength={80} />
+                      <input value={formData.roadStreet} onChange={(e) => setField("roadStreet", e.target.value)} className={inputClass} placeholder="Westlands Road" maxLength={80} />
                     </Field>
                     <AppSelect
                       label="Base currency"
@@ -567,7 +566,7 @@ const AddCompanyWizard = () => {
                     Cancel
                   </button>
                   <button type="submit" disabled={saving} className="inline-flex items-center gap-1.5 rounded-lg bg-[#FF8C00] px-5 py-2 text-xs font-bold text-white hover:bg-[#E67E00] disabled:cursor-not-allowed disabled:opacity-60">
-                    {saving ? <FaSpinner className="animate-spin" /> : <FaSave />}
+                    {saving ? <Spinner size="sm" /> : <FaSave />}
                     {saving ? "Saving..." : isEditMode ? "Save changes" : "Register company"}
                   </button>
                 </div>

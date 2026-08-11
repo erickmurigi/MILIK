@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { essRequests } from '../../utils/essRequests';
 import { useESS } from '../../context/ESSContext';
 import './ESS.css';
-
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'long', year: 'numeric' }) : '—';
+import { fmtDate } from '../../utils/dates';
 
 function Row({ label, value }) {
   return (

@@ -105,10 +105,8 @@ export const saleApi = {
   deleteActivity:   async (id)          => unwrap(await adminRequests.delete(`/sale/activities/${id}`)),
 };
 
-export const todayISO = () => new Date().toISOString().slice(0, 10);
-
-export const fmtKES = (value) =>
-  `KES ${Number(value || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+export { todayISO } from "../utils/dates.js";
+export { formatMoney as fmtKES } from "../utils/money.js";
 
 export const normalizeList = (payload, key) => {
   if (Array.isArray(payload)) return payload;

@@ -6,10 +6,9 @@ import {
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import { fmtDate } from "../../utils/dates";
 
 const fmt = formatMoney;
-const fmtDate = (v) =>
-  v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
 let _key = 0;
 const makeRow = () => ({

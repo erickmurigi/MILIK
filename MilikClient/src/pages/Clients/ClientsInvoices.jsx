@@ -4,16 +4,14 @@ import { toast } from 'react-toastify';
 import { FaFileInvoice, FaSearch, FaTimes } from 'react-icons/fa';
 import ClientsShell from './ClientsShell';
 import { clientsApi } from '../../services/clientsApi';
+import { fmtDate, todayISO } from '../../utils/dates';
+import { useConfirm } from '../../context/ConfirmContext';
+import { inputClass, labelClass } from '../../utils/formStyles';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const fmtKES = (n) =>
   new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES', minimumFractionDigits: 2 }).format(Number(n) || 0);
-
-const fmtDate = (v) =>
-  v ? new Date(v).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
-
-const todayISO = () => new Date().toISOString().slice(0, 10);
 
 const STATUS_TABS = [
   { value: '',          label: 'All' },
@@ -37,8 +35,6 @@ const invoiceStatusBadge = (status) => {
   return map[status] || 'bg-slate-50 text-slate-500 border-slate-200';
 };
 
-const inputCls = 'w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20 focus:border-[#0B3B2E]';
-const labelCls = 'block mb-1 text-[11px] font-semibold text-slate-500 uppercase tracking-wide';
 
 // ─── Mark Paid Modal ──────────────────────────────────────────────────────────
 
@@ -90,17 +86,17 @@ const MarkPaidModal = ({ invoice, onClose, onPaid }) => {
             </div>
           )}
           <div>
-            <label className={labelCls}>Amount Paying Now (KES) *</label>
-            <input type="number" className={inputCls} value={form.paidAmount} onChange={(e) => set('paidAmount', e.target.value)} min="0.01" step="0.01" />
+            <label className={labelClass}>Amount Paying Now (KES) *</label>
+            <input type="number" className={inputClass} value={form.paidAmount} onChange={(e) => set('paidAmount', e.target.value)} min="0.01" step="0.01" />
           </div>
           <div>
-            <label className={labelCls}>Payment Date</label>
-            <input type="date" className={inputCls} value={form.paidAt} onChange={(e) => set('paidAt', e.target.value)} />
+            <label className={labelClass}>Payment Date</label>
+            <input type="date" className={inputClass} value={form.paidAt} onChange={(e) => set('paidAt', e.target.value)} />
           </div>
           <div>
-            <label className={labelCls}>Payment Method</label>
+            <label className={labelClass}>Payment Method</label>
             <select
-              className={inputCls}
+              className={inputClass}
               value={form.paymentMethod}
               onChange={(e) => set('paymentMethod', e.target.value)}
             >
@@ -110,9 +106,9 @@ const MarkPaidModal = ({ invoice, onClose, onPaid }) => {
             </select>
           </div>
           <div>
-            <label className={labelCls}>Payment Reference</label>
+            <label className={labelClass}>Payment Reference</label>
             <input
-              className={inputCls}
+              className={inputClass}
               value={form.paymentReference}
               onChange={(e) => set('paymentReference', e.target.value)}
               placeholder="Transaction ID / cheque no…"
@@ -133,7 +129,8 @@ const MarkPaidModal = ({ invoice, onClose, onPaid }) => {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 const ClientsInvoices = () => {
-  const navigate   = useNavigate();
+  const navigate  = useNavigate();
+  const confirm   = useConfirm();
   const [invoices, setInvoices]         = useState([]);
   const [pagination, setPagination]     = useState({ total: 0, page: 1, pages: 1 });
   const [loading, setLoading]           = useState(true);
@@ -194,7 +191,7 @@ const ClientsInvoices = () => {
   };
 
   const handleCancel = async (inv) => {
-    if (!window.confirm('Cancel this invoice? This cannot be undone.')) return;
+    if (!(await confirm({ title: 'Cancel Invoice', message: 'Cancel this invoice? This cannot be undone.', confirmText: 'Cancel Invoice', isDangerous: true }))) return;
     setCancelling((p) => ({ ...p, [inv._id]: true }));
     try {
       await clientsApi.cancelInvoice(inv._id);

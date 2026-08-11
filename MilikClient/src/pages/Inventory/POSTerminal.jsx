@@ -12,6 +12,7 @@ import {
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { inventoryApi, formatMoney } from "../../services/inventoryApi";
+import { fmtDateTime } from "../../utils/dates";
 import AppSelect from "../../components/common/AppSelect";
 
 const round2 = (n) => Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
@@ -121,9 +122,6 @@ const XReadRow = ({ label, value, neg, bold }) => (
     <span className={neg ? "text-red-600" : bold ? "text-[#0B3B2E]" : ""}>{neg ? "−" : ""}{formatMoney(value)}</span>
   </div>
 );
-
-const fmtDateTime = (iso) =>
-  iso ? new Date(iso).toLocaleString("en-KE", { dateStyle: "short", timeStyle: "short" }) : "—";
 
 /* ─── Main POS Terminal ─────────────────────────────────────────── */
 

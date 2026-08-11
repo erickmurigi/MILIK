@@ -10,14 +10,12 @@ import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { getProperties } from '../../redux/propertyRedux';
 import { fetchCompanySettings, selectCompanySettings } from '../../redux/companySettingsRedux';
 import { adminRequests } from '../../utils/requestMethods';
+import { formatMoney } from '../../utils/money';
 
 const GREEN_BG = 'bg-[#0B3B2E]';
 const ORANGE = '#F97316';
 const DEFAULT_RATE = 16;
 const ITEMS_PER_PAGE = 50;
-
-const formatMoney = (value) =>
-  `KES ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 0 })}`;
 
 const parseDate = (value) => {
   const date = value ? new Date(value) : null;

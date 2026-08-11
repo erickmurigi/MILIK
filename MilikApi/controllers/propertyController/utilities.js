@@ -1,16 +1,7 @@
 // controllers/utilityController.js
 import Utility from "../../models/Utility.js";
-
-const resolveBusinessId = (req) => {
-  const requested = req.query?.business || req.body?.business || null;
-  const authenticated = req.user?.company?._id || req.user?.company || null;
-
-  if (req.user?.isSystemAdmin || req.user?.superAdminAccess) {
-    return requested || authenticated || null;
-  }
-
-  return authenticated || requested || null;
-};
+import { resolveBusinessId } from "../../utils/requestContext.js";
+import { createError } from "../../utils/error.js";
 
 const scopedUtilityQuery = (req, id) => {
   const business = resolveBusinessId(req);
@@ -46,7 +37,7 @@ export const getUtilities = async (req, res, next) => {
 export const getUtility = async (req, res, next) => {
   try {
     const utility = await Utility.findOne(scopedUtilityQuery(req, req.params.id));
-    if (!utility) return res.status(404).json({ message: "Utility not found" });
+    if (!utility) return next(createError(404, "Utility not found"));
     res.status(200).json(utility);
   } catch (err) {
     next(err);
@@ -61,7 +52,7 @@ export const updateUtility = async (req, res, next) => {
       { $set: req.body },
       { new: true }
     );
-    if (!updatedUtility) return res.status(404).json({ message: "Utility not found" });
+    if (!updatedUtility) return next(createError(404, "Utility not found"));
     res.status(200).json(updatedUtility);
   } catch (err) {
     next(err);
@@ -72,7 +63,7 @@ export const updateUtility = async (req, res, next) => {
 export const deleteUtility = async (req, res, next) => {
   try {
     const deleted = await Utility.findOneAndDelete(scopedUtilityQuery(req, req.params.id));
-    if (!deleted) return res.status(404).json({ message: "Utility not found" });
+    if (!deleted) return next(createError(404, "Utility not found"));
     res.status(200).json({ message: "Utility deleted successfully" });
   } catch (err) {
     next(err);

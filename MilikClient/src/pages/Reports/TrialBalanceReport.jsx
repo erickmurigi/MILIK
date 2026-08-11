@@ -7,16 +7,11 @@ import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "..
 import { FaExclamationCircle, FaExclamationTriangle, FaFileDownload, FaFilePdf, FaInfoCircle, FaSyncAlt, FaTimes } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getTrialBalanceExceptions, getTrialBalanceReport } from "../../redux/apiCalls";
+import { formatMoney } from "../../utils/money";
 
 const MILIK_GREEN = "#0B3B2E";
 const MILIK_ORANGE = "#FF8C00";
 const MILIK_RED = "#DC2626";
-
-const formatMoney = (value) =>
-  Number(value || 0).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
 
 const todayString = () => new Date().toISOString().split("T")[0];
 

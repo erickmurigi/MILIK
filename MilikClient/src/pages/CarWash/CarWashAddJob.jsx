@@ -12,9 +12,7 @@ import useCarWashPermission from "../../hooks/useCarWashPermission";
 import CarWashShell from "./CarWashShell";
 import CarpetCameraModal from "../../components/common/CarpetCameraModal";
 import AppSelect from "../../components/common/AppSelect";
-
-const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
-const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
+import { inputClass, labelClass } from "../../utils/formStyles";
 
 // ─── Plate lookup ─────────────────────────────────────────────────────────────
 const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound, onCustomerCleared, onRewardData, readOnly }) => {

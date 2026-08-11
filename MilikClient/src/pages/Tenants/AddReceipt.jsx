@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useEntityCache } from "../../hooks/useEntityCache";
-import { FaArrowLeft, FaSave, FaSpinner } from "react-icons/fa";
+import { FaArrowLeft, FaSave } from "react-icons/fa";
+import Spinner from "../../components/common/Spinner";
+import { inputClass, labelClass } from "../../utils/formStyles";
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectCurrentUser,
@@ -623,8 +625,6 @@ const AddReceipt = () => {
   };
 
 
-  const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
-  const inputClass = "w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
   const preventWheelValueChange = (event) => {
     event.currentTarget.blur();
   };
@@ -1409,7 +1409,7 @@ const AddReceipt = () => {
                 canSaveReceipt && !isSaving ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"
               }`}
             >
-              {isSaving ? <FaSpinner className="animate-spin" /> : <FaSave />}
+              {isSaving ? <Spinner size="sm" /> : <FaSave />}
               {isSaving ? "Saving…" : "Save Receipt"}
             </button>
           </div>

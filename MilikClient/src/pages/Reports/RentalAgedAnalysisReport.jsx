@@ -9,9 +9,8 @@ import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getTenantInvoices } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
-
-const formatMoney = (value) => `KES ${Number(value || 0).toLocaleString()}`;
-const formatDate = (value) => (value ? new Date(value).toLocaleDateString() : "—");
+import { fmtDate } from "../../utils/dates";
+import { formatMoney } from "../../utils/money";
 const ITEMS_PER_PAGE = 50;
 const normalizeArray = (value) => (Array.isArray(value) ? value : Array.isArray(value?.data) ? value.data : []);
 
@@ -332,7 +331,7 @@ const RentalAgedAnalysisReport = () => {
                   <td className="text-right text-red">{formatMoney(row.days90)}</td>
                   <td className="text-right text-red">{formatMoney(row.days90Plus)}</td>
                   <td className="text-right"><strong>{formatMoney(row.total)}</strong></td>
-                  <td>{formatDate(row.oldestDueDate)}</td>
+                  <td>{fmtDate(row.oldestDueDate)}</td>
                 </tr>
               ))}
             </tbody>

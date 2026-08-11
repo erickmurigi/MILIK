@@ -6,10 +6,10 @@ import DashboardLayout from '../../components/Layout/DashboardLayout';
 import AppSelect from '../../components/common/AppSelect';
 import { adminRequests } from '../../utils/requestMethods';
 import { selectCurrentCompany, selectCurrentUser } from '../../redux/selectors';
+import { fmtDate } from '../../utils/dates';
 
-const fmt     = (v) => `KES ${Number(v || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
-const pct     = (v) => `${Number(v || 0).toFixed(1)}%`;
-const fmtDate = (v) => v ? new Date(v).toLocaleDateString('en-GB') : '—';
+const fmt = (v) => `KES ${Number(v || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
+const pct = (v) => `${Number(v || 0).toFixed(1)}%`;
 
 const vacancyColor = (rate) => {
   if (rate >= 30) return 'text-red-600 font-bold';

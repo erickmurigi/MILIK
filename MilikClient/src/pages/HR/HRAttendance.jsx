@@ -9,9 +9,9 @@ import AppSelect from '../../components/common/AppSelect';
 import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
+import { fmtDate } from '../../utils/dates';
 
 const fmtTime = (d) => d ? new Date(d).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—';
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 const fmtDur  = (min) => {
   if (!min) return '—';
   const h = Math.floor(min / 60);

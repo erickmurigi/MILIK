@@ -15,6 +15,7 @@ import { getChartOfAccounts } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { useConfirm } from "../../context/ConfirmContext";
+import { formatMoney } from "../../utils/money";
 
 const ACCOUNT_GROUPS = [
   { key: "assets",      label: "Assets",      bg: "bg-[#0B3B2E]",  badge: "bg-emerald-100 text-emerald-800" },
@@ -89,8 +90,6 @@ const classLabel = (account) => {
   return "Other";
 };
 
-const formatMoney = (value) =>
-  new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", maximumFractionDigits: 0 }).format(Number(value || 0));
 
 // ─────────────────────────────────────────────
 const ChartOfAccounts = () => {

@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
 import {
   FaChevronDown, FaChevronRight, FaEdit, FaPiggyBank, FaPlus,
-  FaRedoAlt, FaSearch, FaTimes, FaWallet,
+  FaRedoAlt, FaSearch, FaWallet,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload } from "../../services/carWashApi";
@@ -12,28 +12,15 @@ import PaginationBar from "../../components/PaginationBar";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import { inputClass, labelClass } from "../../utils/formStyles";
+import { fmtDate } from "../../utils/dates";
+
+import Modal from "../../components/common/Modal";
 
 const GRN = "#0B3B2E";
 const emptyForm = { name: "", phone: "", role: "", active: true, branch: "" };
-const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
-const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 const DEFAULT_PAGE_SIZE = 25;
 const fmt = formatMoney;
-const fmtDate = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
-
-// ─── Shared Modal ─────────────────────────────────────────────────────────────
-const Modal = ({ title, children, footer, onClose }) => (
-  <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-    <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-2xl sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
-      <div className="flex-shrink-0 flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
-        <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
-        <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10 hover:text-white"><FaTimes /></button>
-      </div>
-      <div className="flex-1 overflow-y-auto p-4">{children}</div>
-      <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>
-    </div>
-  </div>
-);
 
 // ─── Stat tile ────────────────────────────────────────────────────────────────
 const StatTile = ({ label, value, sub, color = "slate" }) => {

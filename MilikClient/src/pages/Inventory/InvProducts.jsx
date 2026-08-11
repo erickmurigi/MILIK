@@ -12,6 +12,9 @@ import InventoryShell from "./InventoryShell";
 import { inventoryApi, formatMoney } from "../../services/inventoryApi";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from "../../components/PaginationBar";
+import Modal from "../../components/common/Modal";
+import StatusBadge from "../../components/common/StatusBadge";
+import { inputClass, labelClass } from "../../utils/formStyles";
 
 const UOM_OPTIONS = ["pcs", "units", "kg", "g", "ltr", "ml", "m", "cm", "box", "pack", "dozen", "bag", "roll", "sheet", "pair", "set"];
 const VAT_OPTIONS = [{ label: "0% (Exempt)", value: "0" }, { label: "8% (Reduced)", value: "8" }, { label: "16% (Standard)", value: "16" }];
@@ -23,19 +26,10 @@ const emptyForm = () => ({
   reorderLevel: "0", description: "",
 });
 
-const inputClass = "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
-const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
-
 const SectionHead = ({ children }) => (
   <div className="col-span-2 border-b border-slate-100 pb-1 pt-1">
     <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#0B3B2E]">{children}</span>
   </div>
-);
-
-const StatusBadge = ({ active }) => (
-  <span className={`inline-flex border px-2 py-0.5 text-[10px] font-bold uppercase ${active !== false ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-orange-200 bg-orange-50 text-orange-700"}`}>
-    {active !== false ? "Active" : "Inactive"}
-  </span>
 );
 
 const TYPE_LABELS = {
@@ -43,21 +37,6 @@ const TYPE_LABELS = {
   transfer_out: "Transfer Out", transfer_in: "Transfer In",
   adjustment: "Adjustment", writeoff: "Write-off", opening: "Opening",
 };
-
-const Modal = ({ title, onClose, children, footer, wide }) => (
-  <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
-    <div className={`w-full border border-slate-200 bg-white shadow-2xl ${wide ? "max-w-4xl" : "max-w-xl"}`}>
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
-        <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
-        <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10 hover:text-white">
-          <FaTimes />
-        </button>
-      </div>
-      <div className="max-h-[78vh] overflow-y-auto p-4">{children}</div>
-      {footer && <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>}
-    </div>
-  </div>
-);
 
 const STOCK_CARD_LIMIT = 50;
 
@@ -580,7 +559,7 @@ const InvProducts = () => {
                         </div>
                       ) : <span className="text-slate-300">—</span>}
                     </td>
-                    <td className="px-3 py-1.5"><StatusBadge active={p.active} /></td>
+                    <td className="px-3 py-1.5"><StatusBadge status={p.active !== false ? "active" : "inactive"} /></td>
                     <td className="px-3 py-1.5 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
                         {p.trackStock && (

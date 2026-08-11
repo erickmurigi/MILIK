@@ -6,6 +6,7 @@ import { selectCurrentCompany } from "../../redux/selectors";
 import toast from "react-hot-toast";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
+import SharedModal from "../../components/common/Modal";
 import {
   FaBuilding,
   FaSitemap,
@@ -100,21 +101,11 @@ const Card = ({ title, subtitle, children, action = null }) => (
 
 const Modal = ({ open, title, subtitle, onClose, children, footer = null }) => {
   if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/50 px-4 py-6">
-      <div className="w-full max-w-3xl overflow-hidden border border-slate-200 bg-white shadow-2xl">
-        <div className="flex items-center justify-between gap-4 bg-[#0B3B2E] px-4 py-3">
-          <div>
-            <div className="text-[12px] font-bold uppercase tracking-wide text-white">{title}</div>
-            {subtitle ? <div className="mt-0.5 text-[10px] text-[#B7C9C0]">{subtitle}</div> : null}
-          </div>
-          <button onClick={onClose} className="border border-[#2A5C4A] px-3 py-1 text-[11px] font-bold text-white hover:bg-[#0A3127]">Close</button>
-        </div>
-        <div className="max-h-[75vh] overflow-y-auto px-4 py-4">{children}</div>
-        {footer ? <div className="border-t border-slate-200 bg-[#F6FAF8] px-4 py-3">{footer}</div> : null}
-      </div>
-    </div>
+    <SharedModal title={title} onClose={onClose} wide footer={footer}>
+      {subtitle && <p className="mb-3 text-xs text-slate-500">{subtitle}</p>}
+      {children}
+    </SharedModal>
   );
 };
 

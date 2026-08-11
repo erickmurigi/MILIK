@@ -12,13 +12,11 @@ import {
   FaReceipt, FaFileAlt, FaChevronLeft, FaChevronRight, FaRedoAlt,
   FaUser, FaPlus, FaChevronDown, FaChevronUp, FaWrench,
 } from "react-icons/fa";
-
+import { fmtDate } from "../../utils/dates";
 
 // Cache Intl instances — creating them on every render/call is expensive
 const _numFmt  = new Intl.NumberFormat("en-KE");
-const _dateFmt = new Intl.DateTimeFormat("en-KE", { day: "2-digit", month: "short", year: "numeric" });
 const fmtKES  = (n) => _numFmt.format(Number(n || 0));
-const fmtDate = (d) => d ? _dateFmt.format(new Date(d)) : "-";
 const toInput  = (d) => d ? new Date(d).toISOString().slice(0, 10) : "";
 // "Water meter reading for 2026-06 (...)" → "Water Rdg"
 // "Electricity meter reading…"           → "Electricity Rdg"

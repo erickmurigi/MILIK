@@ -6,6 +6,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { FaCheckCircle, FaDownload, FaFileAlt, FaPrint, FaSyncAlt, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { fmtDate } from "../../utils/dates";
 import {
   approveStatement,
   createDraftStatement,
@@ -46,16 +47,6 @@ const ROW_STATUS = {
   vacant:  { border: "border-l-[3px] border-l-slate-200",   badge: "",                               label: "",       textMuted: true  },
 };
 
-const formatDate = (value) => {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-};
 
 const formatDateTime = (value) => {
   if (!value) return "-";
@@ -82,8 +73,8 @@ const buildStatementPeriodLabel = (workspace = {}, statement = {}) => {
 
   const start = workspace?.statementPeriodStart || statement?.periodStart || null;
   const end = workspace?.statementPeriodEnd || statement?.periodEnd || null;
-  const startLabel = formatDate(start);
-  const endLabel = formatDate(end);
+  const startLabel = fmtDate(start);
+  const endLabel = fmtDate(end);
 
   if (startLabel && endLabel) return `${startLabel} - ${endLabel}`;
   return startLabel || endLabel || "-";

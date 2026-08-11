@@ -8,6 +8,9 @@ import InventoryShell from "./InventoryShell";
 import { inventoryApi } from "../../services/inventoryApi";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from "../../components/PaginationBar";
+import Modal from "../../components/common/Modal";
+import StatusBadge from "../../components/common/StatusBadge";
+import { inputClass, labelClass } from "../../utils/formStyles";
 
 const STATUSES = ["draft", "in_transit", "partially_received", "received", "cancelled"];
 
@@ -19,29 +22,7 @@ const STATUS_BADGE = {
   cancelled:          "border-red-200    bg-red-50    text-red-700",
 };
 
-const StatusPill = ({ status }) => (
-  <span className={`inline-flex border px-2 py-0.5 text-[9px] font-bold uppercase ${STATUS_BADGE[status] || "border-slate-200 bg-slate-50 text-slate-500"}`}>
-    {String(status || "").replace(/_/g, " ")}
-  </span>
-);
-
-const inputClass = "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
-const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
-
 const emptyLine = () => ({ product: "", qtyDispatched: "", unitCost: "" });
-
-const Modal = ({ title, onClose, children, footer, wide }) => (
-  <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
-    <div className={`w-full border border-slate-200 bg-white shadow-2xl ${wide ? "max-w-2xl" : "max-w-lg"}`}>
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
-        <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
-        <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10 hover:text-white"><FaTimes /></button>
-      </div>
-      <div className="max-h-[78vh] overflow-y-auto p-4">{children}</div>
-      <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>
-    </div>
-  </div>
-);
 
 const InvStockTransfers = () => {
   const queryClient = useQueryClient();
@@ -322,7 +303,7 @@ const InvStockTransfers = () => {
                     </td>
                     <td className="px-3 py-2 text-slate-700">{t.fromLocation?.name || "—"}</td>
                     <td className="px-3 py-2 text-slate-700">{t.toLocation?.name || "—"}</td>
-                    <td className="px-3 py-2"><StatusPill status={t.status} /></td>
+                    <td className="px-3 py-2"><StatusBadge status={t.status} map={STATUS_BADGE} /></td>
                     <td className="px-3 py-2 text-slate-400">{t.dispatchedAt ? new Date(t.dispatchedAt).toLocaleDateString("en-KE") : "—"}</td>
                     <td className="px-3 py-2 text-slate-400">{t.receivedBy?.name || "—"}</td>
                     <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>

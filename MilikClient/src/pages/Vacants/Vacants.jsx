@@ -5,6 +5,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { fmtDate } from "../../utils/dates";
 import {
   FaSearch,
   FaRedoAlt,
@@ -63,12 +64,6 @@ const isFutureDate = (value) => {
   return date.getTime() >= today.getTime();
 };
 
-const formatDate = (value) => {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString();
-};
 
 const getDaysBetween = (fromValue, toValue = new Date()) => {
   if (!fromValue) return null;
@@ -361,7 +356,7 @@ const Vacants = () => {
 
       const notes = [];
       if (availabilityStatus === "notice_given" && currentTenant?.moveOutDate) {
-        notes.push(`Move-out scheduled for ${formatDate(currentTenant.moveOutDate)}`);
+        notes.push(`Move-out scheduled for ${fmtDate(currentTenant.moveOutDate)}`);
       }
       if (availabilityStatus === "under_maintenance" && maintenanceItems.length > 0) {
         notes.push(`${maintenanceItems.length} open maintenance request${maintenanceItems.length === 1 ? "" : "s"}`);
@@ -397,7 +392,7 @@ const Vacants = () => {
         tenantName,
         moveOutDate: currentTenant?.moveOutDate || null,
         availableFrom,
-        availableFromLabel: formatDate(availableFrom),
+        availableFromLabel: fmtDate(availableFrom),
         daysVacant,
         daysVacantLabel: daysVacant === null ? "-" : `${daysVacant}`,
         rent: Number(unit?.rent || 0),
@@ -1051,7 +1046,7 @@ const Vacants = () => {
                                     </div>
                                     <div>
                                       <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Move-out Date</span>
-                                      <p className="mt-2 text-sm font-black text-gray-900">{formatDate(row.moveOutDate)}</p>
+                                      <p className="mt-2 text-sm font-black text-gray-900">{fmtDate(row.moveOutDate)}</p>
                                     </div>
                                     <div>
                                       <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Operational Notes</span>

@@ -9,10 +9,13 @@ import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterSearch } from "./SaleFilterBar";
 import PaginationBar from "../../components/PaginationBar";
 import { saleApi } from "../../services/propertySaleApi";
+import { fmtDate } from "../../utils/dates";
 import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import Modal from "../../components/common/Modal";
+import { inputClass, labelClass } from "../../utils/formStyles";
 
 const SOURCES      = ["walk_in", "referral", "online", "agent", "other"];
 const KYC_STATUSES = ["pending", "verified", "rejected"];
@@ -30,24 +33,6 @@ const blankForm = {
   kycStatus: "pending", kycDocuments: [], notes: "",
 };
 
-const Modal = ({ title, subtitle, children, footer, onClose }) => (
-  <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-    <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-2xl sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
-      <div className="flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
-        <div>
-          <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
-          {subtitle && <p className="mt-0.5 text-xs font-semibold text-white/70">{subtitle}</p>}
-        </div>
-        <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
-      </div>
-      <div className="flex-1 overflow-y-auto p-4">{children}</div>
-      {footer && <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>}
-    </div>
-  </div>
-);
-
-const inputCls = "h-8 w-full border border-slate-200 bg-white px-3 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none";
-const labelCls = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 
 const SaleBuyers = () => {
   const confirm        = useConfirm();
@@ -106,7 +91,6 @@ const SaleBuyers = () => {
   const buyerActivities = buyerActivitiesData?.data ?? [];
 
   const fmtKES  = (n) => Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 0 });
-  const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
   // sync panel with fresh data after mutations; reset tab when buyer changes
   useEffect(() => {
@@ -739,7 +723,7 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
       {showModal && (
         <Modal
           title={editingId ? "Edit Buyer" : "Register Buyer"}
-          subtitle="Property Sale Module"
+          wide
           onClose={() => setShowModal(false)}
           footer={
             <>
@@ -752,24 +736,24 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
         >
           <div className="grid gap-3 md:grid-cols-2">
             <div className="md:col-span-2">
-              <label className={labelCls}>Full Name</label>
-              <input value={form.fullName} onChange={f("fullName")} className={inputCls} />
+              <label className={labelClass}>Full Name</label>
+              <input value={form.fullName} onChange={f("fullName")} className={inputClass} />
             </div>
             <div>
-              <label className={labelCls}>National ID / Passport</label>
-              <input value={form.idNumber} onChange={f("idNumber")} className={inputCls} />
+              <label className={labelClass}>National ID / Passport</label>
+              <input value={form.idNumber} onChange={f("idNumber")} className={inputClass} />
             </div>
             <div>
-              <label className={labelCls}>Phone</label>
-              <input value={form.phone} onChange={f("phone")} className={inputCls} />
+              <label className={labelClass}>Phone</label>
+              <input value={form.phone} onChange={f("phone")} className={inputClass} />
             </div>
             <div>
-              <label className={labelCls}>Email</label>
-              <input type="email" value={form.email} onChange={f("email")} className={inputCls} />
+              <label className={labelClass}>Email</label>
+              <input type="email" value={form.email} onChange={f("email")} className={inputClass} />
             </div>
             <div>
-              <label className={labelCls}>Nationality</label>
-              <input value={form.nationality} onChange={f("nationality")} className={inputCls} />
+              <label className={labelClass}>Nationality</label>
+              <input value={form.nationality} onChange={f("nationality")} className={inputClass} />
             </div>
             <div>
               <AppSelect label="Source" value={form.source} onChange={(v) => setForm((p) => ({ ...p, source: v ?? "" }))} options={SOURCES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))} size="md" />
@@ -778,11 +762,11 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
               <AppSelect label="KYC Status" value={form.kycStatus} onChange={(v) => setForm((p) => ({ ...p, kycStatus: v ?? "" }))} options={KYC_STATUSES.map((s) => ({ value: s, label: s }))} size="md" />
             </div>
             <div className="md:col-span-2">
-              <label className={labelCls}>Address</label>
-              <input value={form.address} onChange={f("address")} className={inputCls} />
+              <label className={labelClass}>Address</label>
+              <input value={form.address} onChange={f("address")} className={inputClass} />
             </div>
             <div className="md:col-span-2">
-              <label className={labelCls}>KYC Documents</label>
+              <label className={labelClass}>KYC Documents</label>
               {form.kycDocuments.length > 0 && (
                 <div className="mb-1 space-y-1">
                   {form.kycDocuments.map((doc, idx) => (
@@ -806,7 +790,7 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
                   onChange={(e) => setDocModalInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && addDocToForm()}
                   placeholder="Document reference, e.g. National ID copy"
-                  className={inputCls}
+                  className={inputClass}
                 />
                 <button
                   type="button"
@@ -818,7 +802,7 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
               </div>
             </div>
             <div className="md:col-span-2">
-              <label className={labelCls}>Notes</label>
+              <label className={labelClass}>Notes</label>
               <textarea rows={2} value={form.notes} onChange={f("notes")} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
             </div>
           </div>

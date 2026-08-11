@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useConfirm } from '../../context/ConfirmContext';
 import {
   FaLayerGroup, FaPlus, FaEdit, FaTrash, FaSearch, FaRedoAlt,
   FaTimes, FaSave, FaToggleOn, FaToggleOff,
@@ -256,6 +257,7 @@ const ZoneFormModal = ({ zone, officers, onClose, onSaved }) => {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function Zones() {
+  const confirm = useConfirm();
   const [zones,    setZones]    = useState([]);
   const [total,    setTotal]    = useState(0);
   const [pages,    setPages]    = useState(1);
@@ -331,7 +333,7 @@ export default function Zones() {
   };
 
   const handleDelete = async (zone) => {
-    if (!window.confirm(`Delete zone "${zone.name}"? This cannot be undone.`)) return;
+    if (!await confirm({ message: `Delete zone "${zone.name}"? This cannot be undone.`, confirmText: "Delete", isDangerous: true })) return;
     setDeleting(zone._id);
     try {
       await adminRequests.delete(`/zones/${zone._id}`);

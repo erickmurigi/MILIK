@@ -12,18 +12,11 @@ import Maintenance from "../../models/Maintenance.js";
 import Inspection from "../../models/Inspection.js";
 import MeterReading from "../../models/MeterReading.js";
 import LandlordStatementLine from "../../models/LandlordStatementLine.js";
+import { resolveBusinessId } from "../../utils/requestContext.js";
+import { createError } from "../../utils/error.js";
 
 const OCCUPYING_TENANT_STATUSES = ["active", "overdue"];
 const NON_OCCUPIABLE_UNIT_STATUSES = ["vacant", "maintenance", "reserved", "archived"];
-
-const resolveBusinessId = (req) => {
-  return (
-    (req.user?.isSystemAdmin && (req.body?.business || req.query?.business)) ||
-    req.user?.company ||
-    req.user?.business ||
-    null
-  );
-};
 
 const normalizePropertyId = (propertyValue) => {
   if (!propertyValue) return null;
@@ -408,18 +401,11 @@ export const createUnit = async (req, res, next) => {
     const businessId = resolveBusinessId(req);
 
     if (!businessId) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Business context is required to create a unit. Please ensure you are logged in with a company account.",
-      });
+      return next(createError(400, "Business context is required to create a unit. Please ensure you are logged in with a company account."));
     }
 
     if (!req.body.property) {
-      return res.status(400).json({
-        success: false,
-        message: "Property is required.",
-      });
+      return next(createError(400, "Property is required."));
     }
 
     const property = await Property.findOne({
@@ -428,20 +414,14 @@ export const createUnit = async (req, res, next) => {
     }).lean();
 
     if (!property) {
-      return res.status(404).json({
-        success: false,
-        message: "Selected property was not found.",
-      });
+      return next(createError(404, "Selected property was not found."));
     }
 
     const normalizedUnitNumber =
       typeof req.body.unitNumber === "string" ? req.body.unitNumber.trim() : "";
 
     if (!normalizedUnitNumber) {
-      return res.status(400).json({
-        success: false,
-        message: "Unit number is required.",
-      });
+      return next(createError(400, "Unit number is required."));
     }
 
     // New units must always start as vacant. Occupancy is controlled by tenant assignment,
@@ -490,25 +470,13 @@ export const createUnit = async (req, res, next) => {
 
     return res.status(201).json(responsePayload);
   } catch (err) {
-    console.error("Create unit error:", err);
-
-    let errorMessage = err.message || "Failed to create unit";
-    let statusCode = 400;
-
     if (err.name === "ValidationError") {
-      errorMessage = Object.values(err.errors)
-        .map((e) => e.message)
-        .join("; ");
-    } else if (err.code === 11000) {
-      errorMessage = "A unit with this number already exists for this property";
-    } else if (err.statusCode) {
-      statusCode = err.statusCode;
+      return next(createError(400, Object.values(err.errors).map((e) => e.message).join("; ")));
     }
-
-    return res.status(statusCode).json({
-      success: false,
-      message: errorMessage,
-    });
+    if (err.code === 11000) {
+      return next(createError(400, "A unit with this number already exists for this property"));
+    }
+    next(err);
   }
 };
 
@@ -519,10 +487,7 @@ export const getUnits = async (req, res, next) => {
     const businessId = resolveBusinessId(req);
 
     if (!businessId) {
-      return res.status(400).json({
-        success: false,
-        message: "Business context is required to fetch units",
-      });
+      return next(createError(400, "Business context is required to fetch units"));
     }
 
     const filter = { business: businessId };
@@ -533,10 +498,7 @@ export const getUnits = async (req, res, next) => {
       ).lean();
 
       if (!propertyDoc) {
-        return res.status(404).json({
-          success: false,
-          message: "Selected property was not found.",
-        });
+        return next(createError(404, "Selected property was not found."));
       }
 
       filter.property = property;
@@ -685,13 +647,13 @@ export const getUnit = async (req, res, next) => {
       .lean();
 
     if (!unit) {
-      return res.status(404).json({ success: false, message: "Unit not found" });
+      return next(createError(404, "Unit not found"));
     }
 
     if (!req.user?.isSystemAdmin) {
       const businessId = resolveBusinessId(req);
       if (!businessId || String(unit.business) !== String(businessId)) {
-        return res.status(403).json({ success: false, message: "Not authorized to access this unit" });
+        return next(createError(403, "Not authorized to access this unit"));
       }
     }
 
@@ -700,7 +662,7 @@ export const getUnit = async (req, res, next) => {
       const foSet = new Set(foPropertyIds.map(String));
       const propId = unit.property?._id || unit.property;
       if (!propId || !foSet.has(String(propId))) {
-        return res.status(403).json({ success: false, message: "Not authorized to access this unit" });
+        return next(createError(403, "Not authorized to access this unit"));
       }
     }
 
@@ -716,10 +678,7 @@ export const updateUnit = async (req, res, next) => {
   try {
     const result = await loadUnitWithAccessCheck(req, req.params.id);
     if (result.error) {
-      return res.status(result.error.status).json({
-        success: false,
-        message: result.error.message,
-      });
+      return next(createError(result.error.status, result.error.message));
     }
 
     const unit = result.unit;
@@ -737,20 +696,14 @@ export const updateUnit = async (req, res, next) => {
       }).lean();
 
       if (!nextProperty) {
-        return res.status(404).json({
-          success: false,
-          message: "Selected property was not found.",
-        });
+        return next(createError(404, "Selected property was not found."));
       }
 
       const { summary, hasDependencies } = await getUnitDependencySummary(unit);
       if (hasDependencies) {
-        return res.status(400).json({
-          success: false,
-          message: `Cannot move this unit to another property because it already has historical records (${formatUnitDependencySummary(
-            summary
-          )}). Create a new unit under the target property instead.`,
-        });
+        return next(createError(400, `Cannot move this unit to another property because it already has historical records (${formatUnitDependencySummary(
+          summary
+        )}). Create a new unit under the target property instead.`));
       }
 
       resolvedProperty = nextProperty;
@@ -769,10 +722,7 @@ export const updateUnit = async (req, res, next) => {
     });
 
     if (!statusValidation.ok) {
-      return res.status(400).json({
-        success: false,
-        message: statusValidation.message,
-      });
+      return next(createError(400, statusValidation.message));
     }
 
     const protectedFields = ["business", "_id", "createdAt", "updatedAt"];
@@ -886,29 +836,20 @@ export const deleteUnit = async (req, res, next) => {
   try {
     const result = await loadUnitWithAccessCheck(req, req.params.id);
     if (result.error) {
-      return res.status(result.error.status).json({
-        success: false,
-        message: result.error.message,
-      });
+      return next(createError(result.error.status, result.error.message));
     }
 
     const unit = result.unit;
     const occupyingTenants = await getUnitOccupants(unit._id);
     if (occupyingTenants.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Cannot delete a unit that is still assigned to an active or overdue tenant.",
-      });
+      return next(createError(400, "Cannot delete a unit that is still assigned to an active or overdue tenant."));
     }
 
     const { summary, hasDependencies } = await getUnitDependencySummary(unit);
     if (hasDependencies) {
-      return res.status(400).json({
-        success: false,
-        message: `Cannot delete this unit because it already has historical records (${formatUnitDependencySummary(
-          summary
-        )}). Archive the unit instead of deleting it.`,
-      });
+      return next(createError(400, `Cannot delete this unit because it already has historical records (${formatUnitDependencySummary(
+        summary
+      )}). Archive the unit instead of deleting it.`));
     }
 
     const propertyId = normalizePropertyId(unit.property);
@@ -935,10 +876,7 @@ export const updateUnitStatus = async (req, res, next) => {
 
     const result = await loadUnitWithAccessCheck(req, req.params.id);
     if (result.error) {
-      return res.status(result.error.status).json({
-        success: false,
-        message: result.error.message,
-      });
+      return next(createError(result.error.status, result.error.message));
     }
 
     const unit = result.unit;
@@ -950,10 +888,7 @@ export const updateUnitStatus = async (req, res, next) => {
     });
 
     if (!statusValidation.ok) {
-      return res.status(400).json({
-        success: false,
-        message: statusValidation.message,
-      });
+      return next(createError(400, statusValidation.message));
     }
 
     unit.status = requestedStatus;
@@ -984,10 +919,7 @@ export const getAvailableUnits = async (req, res, next) => {
     const businessId = resolveBusinessId(req);
 
     if (!businessId) {
-      return res.status(400).json({
-        success: false,
-        message: "Business context is required to fetch available units",
-      });
+      return next(createError(400, "Business context is required to fetch available units"));
     }
 
     const filter = {
@@ -1002,10 +934,7 @@ export const getAvailableUnits = async (req, res, next) => {
       ).lean();
 
       if (!propertyDoc) {
-        return res.status(404).json({
-          success: false,
-          message: "Selected property was not found.",
-        });
+        return next(createError(404, "Selected property was not found."));
       }
 
       filter.property = property;
@@ -1030,10 +959,7 @@ export const getUnitUtilities = async (req, res, next) => {
   try {
     const result = await loadUnitWithAccessCheck(req, req.params.id);
     if (result.error) {
-      return res.status(result.error.status).json({
-        success: false,
-        message: result.error.message,
-      });
+      return next(createError(result.error.status, result.error.message));
     }
 
     const unit = result.unit;
@@ -1055,20 +981,14 @@ export const addUtilityToUnit = async (req, res, next) => {
 
     const result = await loadUnitWithAccessCheck(req, req.params.id);
     if (result.error) {
-      return res.status(result.error.status).json({
-        success: false,
-        message: result.error.message,
-      });
+      return next(createError(result.error.status, result.error.message));
     }
 
     const unit = result.unit;
     const normalizedUtility = typeof utility === "string" ? utility.trim() : "";
 
     if (!normalizedUtility) {
-      return res.status(400).json({
-        success: false,
-        message: "Utility is required",
-      });
+      return next(createError(400, "Utility is required"));
     }
 
     const existingIndex = (unit.utilities || []).findIndex(
@@ -1103,10 +1023,7 @@ export const removeUtilityFromUnit = async (req, res, next) => {
 
     const result = await loadUnitWithAccessCheck(req, unitId);
     if (result.error) {
-      return res.status(result.error.status).json({
-        success: false,
-        message: result.error.message,
-      });
+      return next(createError(result.error.status, result.error.message));
     }
 
     const unit = result.unit;
@@ -1131,10 +1048,10 @@ export const bulkImportUnits = async (req, res, next) => {
     const businessId = resolveBusinessId(req);
 
     if (!businessId) {
-      return res.status(400).json({ success: false, message: "Business context is required" });
+      return next(createError(400, "Business context is required"));
     }
     if (!Array.isArray(unitsData) || unitsData.length === 0) {
-      return res.status(400).json({ success: false, message: "No units data provided" });
+      return next(createError(400, "No units data provided"));
     }
 
     const properties = await Property.find({ business: businessId }).select("_id propertyCode rentPerMeasure securityDeposits").limit(500).lean();

@@ -5,14 +5,9 @@ import Property from "../../models/Property.js";
 import ProcessedStatement from "../../models/ProcessedStatement.js";
 import Unit from "../../models/Unit.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
-
-// Resolve company context safely
-const resolveCompanyId = (req) => {
-  if (req.user?.isSystemAdmin && (req.body?.company || req.query?.company)) {
-    return req.body?.company || req.query?.company;
-  }
-  return req.user?.company || null;
-};
+import { resolveBusinessId } from "../../utils/requestContext.js";
+import { parsePagination } from "../../utils/pagination.js";
+import { createError } from "../../utils/error.js";
 
 // Generate unique landlord code within a company
 const generateLandlordCode = async (companyId) => {
@@ -61,7 +56,7 @@ const authorizeLandlordAccess = (req, landlord) => {
     return { allowed: true };
   }
 
-  const companyId = resolveCompanyId(req);
+  const companyId = resolveBusinessId(req);
   if (!companyId || String(landlord.company) !== String(companyId)) {
     return {
       allowed: false,
@@ -108,14 +103,10 @@ const syncLinkedPropertyLandlordSnapshots = async ({
 // Create landlord
 export const createLandlord = async (req, res, next) => {
   try {
-    const companyId = resolveCompanyId(req);
+    const companyId = resolveBusinessId(req);
 
     if (!companyId) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Company context is required. Please ensure you are logged in with a company account.",
-      });
+      return next(createError(400, "Company context is required. Please ensure you are logged in with a company account."));
     }
 
     const regIdValue = isPlaceholder(req.body.regId) ? null : normalizeString(req.body.regId);
@@ -131,10 +122,7 @@ export const createLandlord = async (req, res, next) => {
     const portalAccessValue = normalizeString(req.body.portalAccess) || "Disabled";
 
     if (!landlordNameValue) {
-      return res.status(400).json({
-        success: false,
-        message: "Landlord name is required",
-      });
+      return next(createError(400, "Landlord name is required"));
     }
 
     let landlordCode = normalizeString(req.body.landlordCode);
@@ -163,27 +151,18 @@ export const createLandlord = async (req, res, next) => {
 
     if (existingLandlord) {
       if (existingLandlord.landlordCode === landlordCode) {
-        return res.status(400).json({
-          success: false,
-          message: "Landlord code already exists. Please use a different code.",
-        });
+        return next(createError(400, "Landlord code already exists. Please use a different code."));
       }
 
       if (
         existingLandlord.regId === regIdValue ||
         existingLandlord.idNumber === idNumberValue
       ) {
-        return res.status(400).json({
-          success: false,
-          message: "Reg/ID number already exists. Please use a different Reg/ID number.",
-        });
+        return next(createError(400, "Reg/ID number already exists. Please use a different Reg/ID number."));
       }
 
       if (existingLandlord.email === emailValue) {
-        return res.status(400).json({
-          success: false,
-          message: "Email already exists. Please use a different email.",
-        });
+        return next(createError(400, "Email already exists. Please use a different email."));
       }
     }
 
@@ -212,61 +191,38 @@ export const createLandlord = async (req, res, next) => {
       message: "Landlord created successfully",
     });
   } catch (err) {
-    console.error("Create landlord error:", err);
-
     if (err?.code === 11000) {
       const duplicateField = Object.keys(err.keyPattern || {})[0] || "field";
 
       if (duplicateField === "landlordCode") {
-        return res.status(400).json({
-          success: false,
-          message: "Landlord code already exists. Please use a different code.",
-        });
+        return next(createError(400, "Landlord code already exists. Please use a different code."));
       }
 
       if (duplicateField === "idNumber" || duplicateField === "regId") {
-        return res.status(400).json({
-          success: false,
-          message: "Reg/ID number already exists. Please use a different Reg/ID number.",
-        });
+        return next(createError(400, "Reg/ID number already exists. Please use a different Reg/ID number."));
       }
 
       if (duplicateField === "email") {
-        return res.status(400).json({
-          success: false,
-          message: "Email already exists. Please use a different email.",
-        });
+        return next(createError(400, "Email already exists. Please use a different email."));
       }
 
-      return res.status(400).json({
-        success: false,
-        message: `Duplicate value for ${duplicateField}. Please use a different value.`,
-      });
+      return next(createError(400, `Duplicate value for ${duplicateField}. Please use a different value.`));
     }
 
     if (err?.name === "ValidationError") {
-      return res.status(400).json({
-        success: false,
-        message: Object.values(err.errors)
-          .map((e) => e.message)
-          .join("; "),
-      });
+      return next(createError(400, Object.values(err.errors).map((e) => e.message).join("; ")));
     }
 
-    res.status(500).json({
-      success: false,
-      message: err.message || "Error creating landlord",
-      error: err,
-    });
+    next(err);
   }
 };
 
 // Get all landlords
 export const getLandlords = async (req, res, next) => {
   try {
-    const { search: rawSearch, status, portal, location, page = 1, limit = 100 } = req.query;
+    const { search: rawSearch, status, portal, location } = req.query;
     const search = escapeRegex(rawSearch);
-    const companyId = resolveCompanyId(req);
+    const companyId = resolveBusinessId(req);
 
     const query = {};
     if (companyId) query.company = companyId;
@@ -291,14 +247,13 @@ export const getLandlords = async (req, res, next) => {
       ];
     }
 
-    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
-    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 100, 1), 500);
+    const { page: pageNum, limit: limitNum, skip } = parsePagination(req, { defaultLimit: 100, maxLimit: 500 });
 
     const [landlords, total] = await Promise.all([
       Landlord.find(query)
         .populate("company", "companyName")
         .sort({ createdAt: -1 })
-        .skip((pageNum - 1) * limitNum)
+        .skip(skip)
         .limit(limitNum)
         .lean(),
       Landlord.countDocuments(query),
@@ -372,12 +327,7 @@ export const getLandlords = async (req, res, next) => {
       pages: Math.ceil(total / limitNum),
     });
   } catch (err) {
-    console.error("Get landlords error:", err);
-    return res.status(500).json({
-      success: false,
-      message: err.message || "Error fetching landlords",
-      error: err,
-    });
+    next(err);
   }
 };
 
@@ -391,10 +341,7 @@ export const getLandlord = async (req, res, next) => {
 
     const access = authorizeLandlordAccess(req, landlord);
     if (!access.allowed) {
-      return res.status(access.status).json({
-        success: false,
-        message: access.message,
-      });
+      return next(createError(access.status, access.message));
     }
 
     res.status(200).json({
@@ -402,12 +349,7 @@ export const getLandlord = async (req, res, next) => {
       data: landlord,
     });
   } catch (err) {
-    console.error("Get single landlord error:", err);
-    res.status(500).json({
-      success: false,
-      message: err.message || "Error fetching landlord",
-      error: err,
-    });
+    next(err);
   }
 };
 
@@ -418,10 +360,7 @@ export const updateLandlord = async (req, res, next) => {
 
     const access = authorizeLandlordAccess(req, existingLandlord);
     if (!access.allowed) {
-      return res.status(access.status).json({
-        success: false,
-        message: access.message.replace("access", "update"),
-      });
+      return next(createError(access.status, access.message.replace("access", "update")));
     }
 
     const {
@@ -495,17 +434,11 @@ export const updateLandlord = async (req, res, next) => {
           (updateData.regId && duplicate.regId === updateData.regId) ||
           (updateData.idNumber && duplicate.idNumber === updateData.idNumber)
         ) {
-          return res.status(400).json({
-            success: false,
-            message: "Reg/ID number already exists. Please use a different Reg/ID number.",
-          });
+          return next(createError(400, "Reg/ID number already exists. Please use a different Reg/ID number."));
         }
 
         if (updateData.email && duplicate.email === updateData.email) {
-          return res.status(400).json({
-            success: false,
-            message: "Email already exists. Please use a different email.",
-          });
+          return next(createError(400, "Email already exists. Please use a different email."));
         }
       }
     }
@@ -540,45 +473,25 @@ export const updateLandlord = async (req, res, next) => {
       message: "Landlord updated successfully",
     });
   } catch (err) {
-    console.error("Update landlord error:", err);
-
     if (err?.code === 11000) {
       const duplicateField = Object.keys(err.keyPattern || {})[0] || "field";
 
       if (duplicateField === "idNumber" || duplicateField === "regId") {
-        return res.status(400).json({
-          success: false,
-          message: "Reg/ID number already exists. Please use a different Reg/ID number.",
-        });
+        return next(createError(400, "Reg/ID number already exists. Please use a different Reg/ID number."));
       }
 
       if (duplicateField === "email") {
-        return res.status(400).json({
-          success: false,
-          message: "Email already exists. Please use a different email.",
-        });
+        return next(createError(400, "Email already exists. Please use a different email."));
       }
 
-      return res.status(400).json({
-        success: false,
-        message: `Duplicate value for ${duplicateField}. Please use a different value.`,
-      });
+      return next(createError(400, `Duplicate value for ${duplicateField}. Please use a different value.`));
     }
 
     if (err?.name === "ValidationError") {
-      return res.status(400).json({
-        success: false,
-        message: Object.values(err.errors)
-          .map((e) => e.message)
-          .join("; "),
-      });
+      return next(createError(400, Object.values(err.errors).map((e) => e.message).join("; ")));
     }
 
-    res.status(500).json({
-      success: false,
-      message: err.message || "Error updating landlord",
-      error: err,
-    });
+    next(err);
   }
 };
 
@@ -590,10 +503,7 @@ export const deleteLandlord = async (req, res, next) => {
 
     const access = authorizeLandlordAccess(req, landlord);
     if (!access.allowed) {
-      return res.status(access.status).json({
-        success: false,
-        message: access.message.replace("access", "delete"),
-      });
+      return next(createError(access.status, access.message.replace("access", "delete")));
     }
 
     const properties = await Property.countDocuments({
@@ -605,10 +515,7 @@ export const deleteLandlord = async (req, res, next) => {
     });
 
     if (properties > 0) {
-      return res.status(400).json({
-        success: false,
-        message: `Cannot delete landlord with ${properties} existing properties`,
-      });
+      return next(createError(400, `Cannot delete landlord with ${properties} existing properties`));
     }
 
     const deletedLandlord = await Landlord.findOneAndDelete({
@@ -617,10 +524,7 @@ export const deleteLandlord = async (req, res, next) => {
     });
 
     if (!deletedLandlord) {
-      return res.status(404).json({
-        success: false,
-        message: "Landlord not found",
-      });
+      return next(createError(404, "Landlord not found"));
     }
 
     res.status(200).json({
@@ -629,12 +533,7 @@ export const deleteLandlord = async (req, res, next) => {
       data: deletedLandlord,
     });
   } catch (err) {
-    console.error("Delete landlord error:", err);
-    res.status(500).json({
-      success: false,
-      message: err.message || "Error deleting landlord",
-      error: err,
-    });
+    next(err);
   }
 };
 
@@ -646,10 +545,7 @@ export const getLandlordStats = async (req, res, next) => {
 
     const access = authorizeLandlordAccess(req, landlord);
     if (!access.allowed) {
-      return res.status(access.status).json({
-        success: false,
-        message: access.message,
-      });
+      return next(createError(access.status, access.message));
     }
 
     const propertyQuery = buildLandlordPropertyMatch(landlord);
@@ -688,12 +584,7 @@ export const getLandlordStats = async (req, res, next) => {
       },
     });
   } catch (err) {
-    console.error("Get landlord stats error:", err);
-    res.status(500).json({
-      success: false,
-      message: err.message || "Error fetching landlord stats",
-      error: err,
-    });
+    next(err);
   }
 };
 
@@ -701,27 +592,18 @@ export const getLandlordStats = async (req, res, next) => {
 export const bulkImportLandlords = async (req, res, next) => {
   try {
     const { landlords } = req.body;
-    const companyId = resolveCompanyId(req);
+    const companyId = resolveBusinessId(req);
 
     if (!Array.isArray(landlords) || landlords.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "No landlords provided for import",
-      });
+      return next(createError(400, "No landlords provided for import"));
     }
 
     if (landlords.length > 1000) {
-      return res.status(400).json({
-        success: false,
-        message: "Maximum 1000 landlords allowed per import",
-      });
+      return next(createError(400, "Maximum 1000 landlords allowed per import"));
     }
 
     if (!companyId) {
-      return res.status(400).json({
-        success: false,
-        message: "Company context is required",
-      });
+      return next(createError(400, "Company context is required"));
     }
 
     const createdById = await resolveAuditActorUserId({
@@ -867,11 +749,6 @@ export const bulkImportLandlords = async (req, res, next) => {
       data: results,
     });
   } catch (err) {
-    console.error("Bulk import error:", err);
-    res.status(500).json({
-      success: false,
-      message: err.message || "Error importing landlords",
-      error: err,
-    });
+    next(err);
   }
 };
