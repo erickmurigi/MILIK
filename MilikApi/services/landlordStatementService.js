@@ -1381,6 +1381,7 @@ export const generateLandlordStatement = async ({
       business: businessObjectId,
       category: { $in: ["landlord_maintenance", "landlord_other"] },
       status: { $in: ["approved", "paid"] },
+      sourceProcessedStatement: null, // exclude landlord remittance vouchers — they settle prior statements
       $and: [
         { $or: [{ landlord: landlordObjectId }, { landlord: null }, { landlord: { $exists: false } }] },
         {
@@ -1406,6 +1407,8 @@ export const generateLandlordStatement = async ({
       sourceTransactionType: {
         $in: ["manual_adjustment", "other", "processed_statement", "recurring_deduction", "advance", "landlord_receipt"],
       },
+      // Remittance journal entries (settling a prior statement) must not reduce the NEW period's net
+      $nor: [{ category: "ADVANCE_TO_LANDLORD", sourceTransactionType: "processed_statement" }],
       $or: [
         { "metadata.includeInLandlordStatement": true },
         { "metadata.statementBucket": { $in: ["addition", "deduction", "advance_recovery", "advance_payment", "landlord_receipt_addition"] } },
