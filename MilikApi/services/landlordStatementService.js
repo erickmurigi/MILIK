@@ -2475,8 +2475,17 @@ export const generateLandlordStatement = async ({
     }
   }
 
-  // Manager-held deposit opening balance: deposits the manager carried forward from prior
-  // periods and is now remitting to the landlord in this settlement.
+  // Opening deposit balances that have never been settled in a prior statement.
+  //
+  // For the FIRST statement (!snapshotDate): pre-period deposit receipts appear as
+  // "opening" in the memo because they predate the period start, but they have never
+  // flowed through any approved statement's additionRows. Include them in this period's
+  // remittance so the landlord is paid for ALL deposits they hold.
+  //
+  // For SUBSEQUENT statements: the opening balance came from a prior statement's snapshot
+  // and was already settled in that period — do NOT include again (double-count).
+  const isFirstStatement = !snapshotDate;
+
   const managerDepositOpening = round2(depositMemoBuckets.manager.openingBalance || 0);
   if (managerDepositOpening > 0) {
     const carryDesc = "Manager-held deposit carry-forward remittance";
@@ -2486,7 +2495,7 @@ export const generateLandlordStatement = async ({
       description: carryDesc,
       amount: managerDepositOpening,
       category: "deposit_carryforward",
-      sourceId: `deposit-cf-${String(propertyObjectId)}`,
+      sourceId: `deposit-cf-mgr-${String(propertyObjectId)}`,
     });
     pushDepositSettlementRow({
       date: periodStart,
@@ -2495,12 +2504,37 @@ export const generateLandlordStatement = async ({
       effect: "addition",
       holder: "manager",
       paidDirectToLandlord: false,
-      sourceId: `deposit-cf-${String(propertyObjectId)}`,
+      sourceId: `deposit-cf-mgr-${String(propertyObjectId)}`,
     });
-    // Remove opening balance from manager's closing — it has been remitted
     depositMemoBuckets.manager.closingBalance = round2(
       depositMemoBuckets.manager.closingBalance - managerDepositOpening
     );
+  }
+
+  // Landlord-held opening balance on the first statement: deposits collected directly by
+  // the landlord before this statement period — never settled via any statement yet.
+  const landlordDepositOpening = isFirstStatement
+    ? round2(depositMemoBuckets.landlord.openingBalance || 0)
+    : 0;
+  if (landlordDepositOpening > 0) {
+    const carryDesc = "Landlord-held deposit carry-forward (pre-period)";
+    totalAdditions = round2(totalAdditions + landlordDepositOpening);
+    additionRows.push({
+      date: periodStart,
+      description: carryDesc,
+      amount: landlordDepositOpening,
+      category: "deposit_carryforward",
+      sourceId: `deposit-cf-lld-${String(propertyObjectId)}`,
+    });
+    pushDepositSettlementRow({
+      date: periodStart,
+      description: carryDesc,
+      amount: landlordDepositOpening,
+      effect: "addition",
+      holder: "landlord",
+      paidDirectToLandlord: false,
+      sourceId: `deposit-cf-lld-${String(propertyObjectId)}`,
+    });
   }
 
   for (const adjustment of statementAdjustments) {
