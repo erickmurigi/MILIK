@@ -29,12 +29,16 @@ const PaidBalanceReport = () => {
   const [loading, setLoading] = useState(false);
   const [filtersChanged, setFiltersChanged] = useState(false);
   const filtersInitialized = useRef(false);
-  const [filters, setFilters] = useTabState("/reports/paid-balance:filters", () => ({
-    asOfDate: toDateInputValue(new Date()),
-    propertyId: '',
-    status: 'all',
-    search: '',
-  }));
+  const [filters, setFilters] = useTabState("/reports/paid-balance:filters", () => {
+    const now = new Date();
+    return {
+      startDate: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`,
+      asOfDate: toDateInputValue(now),
+      propertyId: '',
+      status: 'all',
+      search: '',
+    };
+  });
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [report, setReport] = useState({ summary: {}, rows: [], allUtilityTypes: [] });
   const [currentPage, setCurrentPage] = useTabState("/reports/paid-balance:currentPage", 1);
@@ -74,7 +78,7 @@ const PaidBalanceReport = () => {
   useEffect(() => {
     if (!filtersInitialized.current) { filtersInitialized.current = true; return; }
     setFiltersChanged(true);
-  }, [filters.asOfDate, filters.propertyId, filters.status]);
+  }, [filters.startDate, filters.asOfDate, filters.propertyId, filters.status]);
 
   const searchFilteredRows = useMemo(() => {
     const rows = Array.isArray(report.rows) ? report.rows : [];
@@ -90,7 +94,7 @@ const PaidBalanceReport = () => {
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(searchFilteredRows.length / ITEMS_PER_PAGE)), [searchFilteredRows]);
 
-  useEffect(() => { setCurrentPage(1); }, [filters.asOfDate, filters.propertyId, filters.status, filters.search]);
+  useEffect(() => { setCurrentPage(1); }, [filters.startDate, filters.asOfDate, filters.propertyId, filters.status, filters.search]);
   useEffect(() => { if (currentPage > totalPages) setCurrentPage(totalPages); }, [currentPage, totalPages]);
 
   const summary = report.summary || {};
@@ -119,18 +123,22 @@ const PaidBalanceReport = () => {
   const { selMonth, selYear } = useMemo(() => {
     const fallbackYear = String(new Date().getFullYear());
     if (!filters.asOfDate) return { selMonth: null, selYear: fallbackYear };
-    const d = new Date(filters.asOfDate + 'T00:00:00');
-    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-    if (d.getDate() === lastDay.getDate()) return { selMonth: String(d.getMonth() + 1), selYear: String(d.getFullYear()) };
-    return { selMonth: null, selYear: String(d.getFullYear()) };
-  }, [filters.asOfDate]);
+    const e = new Date(filters.asOfDate + 'T00:00:00');
+    const lastDay = new Date(e.getFullYear(), e.getMonth() + 1, 0);
+    const expectedStart = `${e.getFullYear()}-${String(e.getMonth() + 1).padStart(2, '0')}-01`;
+    if (e.getDate() === lastDay.getDate() && filters.startDate === expectedStart) {
+      return { selMonth: String(e.getMonth() + 1), selYear: String(e.getFullYear()) };
+    }
+    return { selMonth: null, selYear: String(e.getFullYear()) };
+  }, [filters.asOfDate, filters.startDate]);
   const applyMonthYear = (month, year) => {
     const m = Number(month); const y = Number(year);
     if (!m || !y) return;
     const lastDay = new Date(y, m, 0).getDate();
+    const startDate = `${y}-${String(m).padStart(2,'0')}-01`;
     const asOfDate = `${y}-${String(m).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
-    setFilters(prev => ({ ...prev, asOfDate }));
-    loadReport(undefined, { asOfDate });
+    setFilters(prev => ({ ...prev, startDate, asOfDate }));
+    loadReport(undefined, { startDate, asOfDate });
   };
 
   const handleExportCSV = () => {
@@ -328,7 +336,11 @@ const PaidBalanceReport = () => {
                 >
                   {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
                 </select>
-                <input type="date" value={filters.asOfDate} onChange={setFilter("asOfDate")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <div className="flex items-center gap-1">
+                  <input type="date" value={filters.startDate} onChange={setFilter("startDate")} className="h-7 flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                  <span className="flex-shrink-0 text-[10px] font-semibold text-slate-400">–</span>
+                  <input type="date" value={filters.asOfDate} onChange={setFilter("asOfDate")} className="h-7 flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                </div>
                 <AppSelect
                   value={filters.propertyId}
                   onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))}
