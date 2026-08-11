@@ -1703,6 +1703,8 @@ export const generateLandlordStatement = async ({
 
   const shouldIncludeNoteInLandlordStatement = (note = {}) => {
     const metadata = mergeNoteUtilityMetadata(note);
+    // Lease fee is always manager income — never a landlord addition, regardless of stored flag
+    if (metadata.billItemKey === "lease_fee") return false;
     if (typeof metadata.includeInLandlordStatement === "boolean") {
       return metadata.includeInLandlordStatement;
     }
@@ -1743,10 +1745,7 @@ export const generateLandlordStatement = async ({
       (row) => safeName(row?.priorityGroup || "") === "deposit"
     );
 
-    if (normalizedPaymentType === "deposit" || hasDepositAllocation) {
-      return tenantHolder || allocationHolder || recordHolder || propertyHolder || "manager";
-    }
-
+    // Most-specific wins: allocation row → receipt/invoice field → tenant default → property default
     return allocationHolder || recordHolder || tenantHolder || propertyHolder || "manager";
   };
 
@@ -2123,7 +2122,7 @@ export const generateLandlordStatement = async ({
         totalAdditions = round2(totalAdditions + amount);
         additionRows.push({
           date: getNoteStatementDate(note) || note.noteDate,
-          description: note.description || note.noteNumber || "Standalone tenant debit note",
+          description: note.description || noteMetadata?.billItemLabel || note.noteNumber || "Tenant debit note",
           amount,
           category: String(note.category || "").toLowerCase(),
           sourceId: String(note._id),
@@ -2931,7 +2930,7 @@ export const generateLandlordStatement = async ({
         category: "COMMISSION_CHARGE",
         amount: commissionTaxAmount,
         direction: "debit",
-        description: `VAT on ${commissionDescription.toLowerCase()}`,
+        description: `VAT on management commission (${commissionTaxSnapshot.taxRate}%)`,
         sourceTransactionType: "statement_commission_tax",
         sourceTransactionId: `${propertyObjectId}-${periodStart.toISOString()}-tax`,
         metadata: {
@@ -3055,7 +3054,7 @@ export const generateLandlordStatement = async ({
           ...(commissionTaxAmount > 0
             ? [{
                 date: periodEnd,
-                description: `VAT on ${commissionDescription.toLowerCase()}`,
+                description: `VAT on management commission (${commissionTaxSnapshot.taxRate}%)`,
                 amount: commissionTaxAmount,
                 category: "commission_tax",
                 sourceId: `commission-tax-${propertyObjectId}-${periodStart.toISOString()}`,
@@ -3254,6 +3253,7 @@ export const generateLandlordStatement = async ({
       commissionFixedAmount: round2(commissionFixedAmount),
       commissionAmount,
       commissionTaxAmount,
+      commissionTaxRate: commissionTaxSnapshot.taxRate ?? 0,
       commissionGrossAmount,
       occupiedUnits,
       vacantUnits,

@@ -670,6 +670,7 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
     );
     const commissionAmount = Number(summary.commissionAmount || 0);
     const commissionTaxAmount = Number(summary.commissionTaxAmount || 0);
+    const commissionTaxRate = Number(summary.commissionTaxRate || 0);
     const totalInvoiceVatReceived = Number(
       summary.totalInvoiceVatReceived ?? totals.paidTax ?? 0
     );
@@ -1032,7 +1033,7 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
                   <!-- FEES & DEDUCTIONS -->
                   <tr class="summary-section"><td colspan="2">Management Fees &amp; Deductions</td></tr>
                   <tr><td class="label">Management commission</td><td class="num negative">(${formatCurrency(commissionAmount)})</td></tr>
-                  ${commissionTaxAmount > 0 ? `<tr><td class="label">VAT on commission</td><td class="num negative">(${formatCurrency(commissionTaxAmount)})</td></tr>` : ""}
+                  ${commissionTaxAmount > 0 ? `<tr><td class="label">VAT on management commission${commissionTaxRate > 0 ? ` (${commissionTaxRate}%)` : ""}</td><td class="num negative">(${formatCurrency(commissionTaxAmount)})</td></tr>` : ""}
                   ${nonCommissionDeductions > 0 ? `<tr><td class="label">Other expenses &amp; deductions</td><td class="num negative">(${formatCurrency(nonCommissionDeductions)})</td></tr>` : ""}
 
                   <!-- PRE-PAYOUT SUBTOTAL if there are payouts/recoveries -->
