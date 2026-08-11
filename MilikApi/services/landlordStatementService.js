@@ -2475,6 +2475,34 @@ export const generateLandlordStatement = async ({
     }
   }
 
+  // Manager-held deposit opening balance: deposits the manager carried forward from prior
+  // periods and is now remitting to the landlord in this settlement.
+  const managerDepositOpening = round2(depositMemoBuckets.manager.openingBalance || 0);
+  if (managerDepositOpening > 0) {
+    const carryDesc = "Manager-held deposit carry-forward remittance";
+    totalAdditions = round2(totalAdditions + managerDepositOpening);
+    additionRows.push({
+      date: periodStart,
+      description: carryDesc,
+      amount: managerDepositOpening,
+      category: "deposit_carryforward",
+      sourceId: `deposit-cf-${String(propertyObjectId)}`,
+    });
+    pushDepositSettlementRow({
+      date: periodStart,
+      description: carryDesc,
+      amount: managerDepositOpening,
+      effect: "addition",
+      holder: "manager",
+      paidDirectToLandlord: false,
+      sourceId: `deposit-cf-${String(propertyObjectId)}`,
+    });
+    // Remove opening balance from manager's closing — it has been remitted
+    depositMemoBuckets.manager.closingBalance = round2(
+      depositMemoBuckets.manager.closingBalance - managerDepositOpening
+    );
+  }
+
   for (const adjustment of statementAdjustments) {
     const amount = Number(
       adjustment.amount || adjustment.credit || adjustment.debit || 0
