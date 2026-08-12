@@ -2162,7 +2162,7 @@ const Statements = () => {
                           </th>
                         )}
                         {statementColumns.map((column) => (
-                          <th key={`inv-head-${column.key}`} className="px-3 py-2 text-right" title={column.label}>
+                          <th key={`inv-head-${column.key}`} className="px-2 py-1 text-right" title={column.label}>
                             <div className="max-w-[110px] truncate text-[11px] font-semibold text-white/90">{column.label}</div>
                           </th>
                         ))}
@@ -2176,7 +2176,7 @@ const Statements = () => {
                           </th>
                         )}
                         {statementColumns.map((column) => (
-                          <th key={`paid-head-${column.key}`} className="px-3 py-2 text-right" title={column.label}>
+                          <th key={`paid-head-${column.key}`} className="px-2 py-1 text-right" title={column.label}>
                             <div className="max-w-[110px] truncate text-[11px] font-semibold text-emerald-200/90">{column.label}</div>
                           </th>
                         ))}
@@ -2268,7 +2268,7 @@ const Statements = () => {
                                 {(isVacant || isNoBill) ? "—" : currency(row.invoicedRent)}
                               </td>
                               {hasInvoiceVatColumn && (
-                                <td className={`px-3 py-2.5 text-right text-[11px] ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-500"}`}>
+                                <td className={`px-2 py-1 text-right text-[11px] ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-500"}`}>
                                   {(isVacant || isNoBill) ? "—" : currency(row.invoicedTax ?? 0)}
                                 </td>
                               )}
@@ -2283,7 +2283,7 @@ const Statements = () => {
                               {/* ── PAID block ── */}
                               <td className={`border-l border-slate-100 px-2 py-1 text-right text-[11px] ${paidRentCell.cls}`}>{paidRentCell.text}</td>
                               {hasInvoiceVatColumn && (
-                                <td className={`px-3 py-2.5 text-right text-[11px] ${paidTaxCell.cls}`}>{paidTaxCell.text}</td>
+                                <td className={`px-2 py-1 text-right text-[11px] ${paidTaxCell.cls}`}>{paidTaxCell.text}</td>
                               )}
                               {statementColumns.map((column) => {
                                 const padVal = paidCellDisplay(getPreparedStatementColumnValue(row, column.key, "paid"), isVacant, isNoBill);
