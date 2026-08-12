@@ -2110,10 +2110,10 @@ const Statements = () => {
                     <thead className="sticky top-0 z-20">
                       {/* ── Row 1: Group span headers ── */}
                       <tr className="bg-[#0B3B2E]">
-                        <th rowSpan={2} className="sticky left-0 z-30 w-[60px] min-w-[60px] bg-[#0B3B2E] px-2 py-1 text-left align-bottom border-b border-white/10">
+                        <th rowSpan={2} className="sticky left-0 z-30 w-[56px] min-w-[56px] max-w-[56px] overflow-hidden bg-[#0B3B2E] px-2 py-1 text-left align-bottom border-b border-white/10">
                           <div className="text-[11px] font-semibold text-white">Unit</div>
                         </th>
-                        <th rowSpan={2} className="sticky left-[60px] z-30 w-[150px] min-w-[150px] bg-[#0B3B2E] px-2 py-1 text-left align-bottom border-r border-white/10 border-b border-white/10">
+                        <th rowSpan={2} className="sticky left-[56px] z-30 w-[130px] min-w-[130px] max-w-[130px] overflow-hidden bg-[#0B3B2E] px-2 py-1 text-left align-bottom border-r border-white/10 border-b border-white/10">
                           <div className="text-[11px] font-semibold text-white">Tenant</div>
                         </th>
                         <th rowSpan={2} className="w-[88px] min-w-[88px] max-w-[88px] px-2 py-1 text-right align-bottom border-b border-white/10">
@@ -2228,10 +2228,10 @@ const Statements = () => {
                               key={row.unitId ? `u-${row.unitId}` : row._id ? `d-${row._id}` : `n-${row.unitNumber || index}`}
                               className={`${rowBase} border-b border-slate-100 transition-colors hover:bg-orange-50/70`}
                             >
-                              <td className={`sticky left-0 z-10 w-[60px] min-w-[60px] ${rowBase} ${st.border} px-2 py-1 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
-                                <div className={`text-xs font-semibold ${isVacant ? "text-slate-400" : "text-slate-900"}`}>{row.displayUnitLabel || row.unit || row.unitNumber || "—"}</div>
+                              <td className={`sticky left-0 z-10 w-[56px] min-w-[56px] max-w-[56px] overflow-hidden ${rowBase} ${st.border} px-2 py-1 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
+                                <div className={`truncate text-xs font-semibold ${isVacant ? "text-slate-400" : "text-slate-900"}`} title={row.displayUnitLabel || row.unit || row.unitNumber || ""}>{row.displayUnitLabel || row.unit || row.unitNumber || "—"}</div>
                               </td>
-                              <td className={`sticky left-[60px] z-10 w-[150px] min-w-[150px] ${rowBase} border-r border-slate-100 px-2 py-1 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
+                              <td className={`sticky left-[56px] z-10 w-[130px] min-w-[130px] max-w-[130px] overflow-hidden ${rowBase} border-r border-slate-100 px-2 py-1 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
                                 <div className="flex items-center gap-1.5">
                                   {showBadge && (
                                     <span className={`shrink-0 rounded px-1 py-px text-[8px] font-bold uppercase tracking-wide ${st.badge}`}>
@@ -2293,8 +2293,8 @@ const Statements = () => {
                       {/* Totals row */}
                       {preparedRows.length > 0 && (
                         <tr className="border-t-2 border-[#0B3B2E] bg-[#0B3B2E]">
-                          <td className="sticky left-0 z-10 w-[60px] min-w-[60px] bg-[#0B3B2E] px-2 py-1.5 text-[11px] font-bold text-white">Totals</td>
-                          <td className="sticky left-[60px] z-10 w-[150px] min-w-[150px] border-r border-white/10 bg-[#0B3B2E] px-2 py-1.5"></td>
+                          <td className="sticky left-0 z-10 w-[56px] min-w-[56px] max-w-[56px] overflow-hidden bg-[#0B3B2E] px-2 py-1.5 text-[11px] font-bold text-white">Totals</td>
+                          <td className="sticky left-[56px] z-10 w-[130px] min-w-[130px] max-w-[130px] overflow-hidden border-r border-white/10 bg-[#0B3B2E] px-2 py-1.5"></td>
                           <td className="px-2 py-1.5 text-right text-[11px] font-semibold text-white/80">{currency(totals.openingBalance ?? summary.openingBalance ?? 0)}</td>
                           {/* Invoiced totals */}
                           <td className="border-l border-white/10 px-2 py-1.5 text-right text-[11px] font-semibold text-white">{currency(totals.invoicedRent ?? summary.rentInvoiced ?? 0)}</td>
