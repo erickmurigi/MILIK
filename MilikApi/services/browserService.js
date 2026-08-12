@@ -1,5 +1,6 @@
 // Shared Puppeteer browser — one instance for all PDF services.
 // Uses a launch Promise so concurrent callers share the same init rather than polling.
+// Keeps one pre-warmed page ready so the next PDF render skips newPage() latency.
 import puppeteer from "puppeteer";
 
 const LAUNCH_ARGS = [
@@ -10,6 +11,7 @@ const LAUNCH_ARGS = [
 
 let browser = null;
 let launchPromise = null;
+let warmPagePromise = null; // pre-warmed page for next render
 
 const isBrowserUsable = (b) =>
   b != null && (typeof b.isConnected !== "function" || b.isConnected());
@@ -26,6 +28,7 @@ export const getBrowser = async () => {
       b.on("disconnected", () => {
         browser = null;
         launchPromise = null;
+        warmPagePromise = null;
       });
       return b;
     })
@@ -38,6 +41,7 @@ export const getBrowser = async () => {
 };
 
 export const resetBrowser = async () => {
+  warmPagePromise = null;
   const b = browser;
   browser = null;
   launchPromise = null;
@@ -46,10 +50,32 @@ export const resetBrowser = async () => {
   }
 };
 
+const startWarmingPage = () => {
+  if (warmPagePromise) return;
+  warmPagePromise = getBrowser()
+    .then((b) => openPage(b))
+    .catch(() => null);
+};
+
 export const createPage = async () => {
+  // Use the pre-warmed page if available — skips newPage() round-trip
+  if (warmPagePromise) {
+    const warm = warmPagePromise;
+    warmPagePromise = null;
+    try {
+      const page = await warm;
+      if (page && !page.isClosed()) {
+        startWarmingPage();
+        return page;
+      }
+    } catch { /* fall through to fresh page */ }
+  }
+
   let b = await getBrowser();
   try {
-    return await openPage(b);
+    const page = await openPage(b);
+    startWarmingPage();
+    return page;
   } catch {
     await resetBrowser();
     b = await getBrowser();

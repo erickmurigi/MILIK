@@ -56,6 +56,7 @@ router.get('/headcount', async (req, res) => {
         { $sort: { total: -1 } },
       ]),
       HREmployee.find({ company: oid, dateJoined: { $gte: new Date(Date.now() - 90 * 86400000) } })
+        .select('surname otherNames employeeNumber dateJoined status employmentType department designation')
         .sort({ dateJoined: -1 })
         .limit(20)
         .populate('department', 'name')
@@ -250,6 +251,7 @@ router.get('/employees-list', async (req, res) => {
     const employees = await HREmployee.find({ company: oid })
       .sort({ surname: 1, otherNames: 1 })
       .select('surname otherNames employeeNumber kraPin')
+      .limit(500)
       .lean();
     res.json(employees);
   } catch (e) {
@@ -445,6 +447,7 @@ router.get('/periods', async (req, res) => {
     const periods = await HRPayrollPeriod.find({ company: oid })
       .sort({ year: -1, month: -1 })
       .select('month year label status employeeCount totalBasic totalGross totalPAYE totalNHIF totalNSSF totalAHL totalOtherDeductions totalDeductions totalNet')
+      .limit(240)
       .lean();
     res.json(periods.map((p) => ({
       ...p,

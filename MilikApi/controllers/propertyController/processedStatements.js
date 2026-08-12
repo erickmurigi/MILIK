@@ -1153,7 +1153,7 @@ export const closeStatement = async (req, res, next) => {
 export const getStatementsByBusiness = async (req, res, next) => {
   try {
     const { businessId } = req.params;
-    const { status, landlord, property, month, tab, search, sortBy } = req.query;
+    const { status, landlord, property, month, tab, search, sortBy, monthFrom, monthTo, commissionStatus } = req.query;
     const scopedBusinessId = resolveScopedBusinessId(req, businessId);
     const query = { business: scopedBusinessId };
 
@@ -1170,6 +1170,20 @@ export const getStatementsByBusiness = async (req, res, next) => {
       };
     }
 
+    // Date-range filter on closedAt (used by commission report for monthFrom/monthTo ranges)
+    if (monthFrom || monthTo) {
+      const closedAtRange = {};
+      if (monthFrom) {
+        const [y, m] = String(monthFrom).split("-");
+        closedAtRange.$gte = new Date(Number(y), Number(m) - 1, 1);
+      }
+      if (monthTo) {
+        const [y, m] = String(monthTo).split("-");
+        closedAtRange.$lte = new Date(Number(y), Number(m), 0, 23, 59, 59, 999);
+      }
+      if (Object.keys(closedAtRange).length) query.closedAt = closedAtRange;
+    }
+
     // Tab-based filtering pushed to DB (overrides any status param)
     if (tab === "outstanding") {
       query.status = { $in: ["unpaid", "part_paid"] };
@@ -1183,6 +1197,15 @@ export const getStatementsByBusiness = async (req, res, next) => {
     } else if (tab === "management_fees") {
       query.commissionGrossAmount = { $gt: 0 };
       query.status = { $ne: "reversed" };
+    }
+
+    // Commission-report status semantics (applied only when no tab filter is active)
+    if (!tab && commissionStatus) {
+      if (commissionStatus === "recognized") {
+        query.status = { $ne: "reversed" };
+      } else if (commissionStatus === "reversed") {
+        query.status = "reversed";
+      }
     }
 
     const { page: pageNum, limit: limitNum, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 500 });

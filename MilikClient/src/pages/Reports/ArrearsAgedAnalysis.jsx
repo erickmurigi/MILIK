@@ -64,20 +64,26 @@ const ArrearsAgedAnalysis = () => {
   const [search, setSearch] = useTabState("/accounts/arrears-aged-analysis:search", "");
   const [selectedProperty, setSelectedProperty] = useTabState("/accounts/arrears-aged-analysis:selectedProperty", "");
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (signal) => {
     if (!businessId) return;
     setLoading(true);
     try {
-      const res = await getARAgingReport({ business: businessId, asOf });
+      const res = await getARAgingReport({ business: businessId, asOf }, signal);
+      if (signal?.aborted) return;
       setData(res);
-    } catch {
+    } catch (err) {
+      if (err?.name === 'CanceledError' || err?.name === 'AbortError') return;
       toast.error("Failed to load arrears report");
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }, [businessId, asOf]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchData(controller.signal);
+    return () => controller.abort();
+  }, [fetchData]);
 
   // ── Derived / memoised ────────────────────────────────────────────────────
   const allRows = useMemo(() => data?.rows || [], [data]);
@@ -322,7 +328,7 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
               </thead>
               <tbody>
                 {filteredRows.map((row, i) => (
-                  <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                  <tr key={row.invoiceNumber || row._id || i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
                     <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-500">{row.invoiceNumber}</td>
                     <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{row.tenantName}</td>
                     <td className="px-3 py-1 border-r border-gray-100 text-slate-500">

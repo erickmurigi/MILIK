@@ -8,6 +8,7 @@ import { getLandlords, getRentalCollectionReport } from '../../redux/apiCalls';
 import { getProperties } from '../../redux/propertyRedux';
 import { getTenants } from '../../redux/tenantsRedux';
 import { FaFileDownload, FaPrint, FaSyncAlt } from 'react-icons/fa';
+import ResetFiltersButton from '../../components/common/ResetFiltersButton';
 import { toast } from 'react-toastify';
 import { hasCompanyPermission } from '../../utils/permissions';
 import { buildTenantOption } from '../../utils/tenantUtils';
@@ -21,6 +22,9 @@ const formatPercent = (value) => (value === null || value === undefined ? '—' 
 const toDateInputValue = (value) => new Date(value).toISOString().split('T')[0];
 const formatMethod = (value) => (value ? String(value).replace(/_/g, ' ') : 'All methods');
 const ITEMS_PER_PAGE = 50;
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+  .map((label, i) => ({ value: String(i + 1), label }));
 
 const RentalCollectionReport = () => {
   const dispatch = useDispatch();
@@ -47,6 +51,15 @@ const RentalCollectionReport = () => {
     paymentMethod: '', cashbook: '', zone: '',
   }));
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
+  const resetFilters = () => {
+    setFilters({
+      startDate: toDateInputValue(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
+      endDate: toDateInputValue(new Date()),
+      propertyId: '', tenantId: '', unitId: '', landlordId: '',
+      paymentMethod: '', cashbook: '', zone: '',
+    });
+    setFiltersChanged(true);
+  };
   const [report, setReport] = useState({ summary: {}, byProperty: [], rows: [], allUtilityTypes: [] });
   const [currentPage, setCurrentPage] = useTabState("/reports/rental-collection:currentPage", 1);
 
@@ -63,7 +76,7 @@ const RentalCollectionReport = () => {
       .catch(() => {});
   }, []);
 
-  const loadReport = async (signal, filterOverrides = {}) => {
+  const loadReport = useCallback(async (signal, filterOverrides = {}) => {
     if (!businessId) return;
     setLoading(true);
     setFiltersChanged(false);
@@ -82,7 +95,7 @@ const RentalCollectionReport = () => {
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
-  };
+  }, [businessId, filters]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!businessId) return;
@@ -144,7 +157,6 @@ const RentalCollectionReport = () => {
   }, []);
 
   // ── Month / Year period selector ──────────────────────────────────────────
-  const MONTHS = useMemo(() => ['January','February','March','April','May','June','July','August','September','October','November','December'].map((label, i) => ({ value: String(i + 1), label })), []);
   const yearOptions = useMemo(() => { const y = new Date().getFullYear(); return [y + 1, y, y - 1, y - 2, y - 3].map(String); }, []);
   const { selMonth, selYear } = useMemo(() => {
     const fallbackYear = String(new Date().getFullYear());
@@ -411,6 +423,7 @@ const RentalCollectionReport = () => {
                 <div className="flex items-end gap-1.5">
                   <button onClick={handleExportCSV} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaFileDownload size={10} /> Export</button>
                   <button onClick={handlePrint} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint size={10} /> Print</button>
+                  <ResetFiltersButton onReset={resetFilters} disabled={loading} />
                   <button onClick={() => loadReport()} className={`inline-flex h-7 items-center gap-1.5 rounded px-3 text-[10px] font-bold uppercase tracking-[0.08em] transition ${filtersChanged ? 'bg-[#0B3B2E] text-white hover:bg-[#0A3127]' : 'border border-slate-200 bg-white text-slate-600 hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white'}`}><FaSyncAlt size={10} className={loading ? 'animate-spin' : ''} />{filtersChanged ? 'Apply Filters' : 'Refresh'}</button>
                 </div>
               </div>

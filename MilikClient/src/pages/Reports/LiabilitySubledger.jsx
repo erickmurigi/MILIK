@@ -78,7 +78,7 @@ const exportCSV = ({ tab, groups, total, accountCode, accountName, asOf }) => {
 };
 
 // ─── TenantGroup (2100 / 2130) ───────────────────────────────────────────────
-const TenantGroup = ({ group, tab }) => {
+const TenantGroup = React.memo(({ group, tab }) => {
   const [open, setOpen] = useTabState(`lsl:grp:${group.propertyId}`, true);
   const cols = tab === "deposits"
     ? "1fr 72px 100px 90px 110px"
@@ -160,10 +160,10 @@ const TenantGroup = ({ group, tab }) => {
       )}
     </div>
   );
-};
+});
 
 // ─── LandlordTable (2110) ─────────────────────────────────────────────────────
-const LandlordTable = ({ groups }) => (
+const LandlordTable = React.memo(({ groups }) => (
   <div className="overflow-hidden rounded border border-slate-200 bg-white shadow-sm">
     <div
       className="grid px-4 py-2.5"
@@ -195,10 +195,10 @@ const LandlordTable = ({ groups }) => (
       </div>
     ))}
   </div>
-);
+));
 
 // ─── WHTGroup (2141) ──────────────────────────────────────────────────────────
-const WHTGroup = ({ group }) => {
+const WHTGroup = React.memo(({ group }) => {
   const [open, setOpen] = useTabState(`lsl:wht:${group.month}`, true);
   const cols = "88px 1fr 130px 90px 110px 110px";
   const hdrs = ["Voucher #", "Narration / Vendor", "Property", "Date", "Gross (KES)", "WHT Held"];
@@ -259,10 +259,10 @@ const WHTGroup = ({ group }) => {
       )}
     </div>
   );
-};
+});
 
 // ─── TaxGroup (2140) ─────────────────────────────────────────────────────────
-const TaxGroup = ({ group }) => {
+const TaxGroup = React.memo(({ group }) => {
   const [open, setOpen] = useTabState(`lsl:tax:${group.month}`, true);
   const cols = "100px 1fr 130px 90px 110px";
   const hdrs = ["Reference", "Narration", "Property", "Date", "VAT (KES)"];
@@ -319,7 +319,7 @@ const TaxGroup = ({ group }) => {
       )}
     </div>
   );
-};
+});
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const LiabilitySubledger = () => {

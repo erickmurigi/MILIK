@@ -1077,6 +1077,7 @@ export const getTenants = async (req, res, next) => {
 
     const [tenants, total] = await Promise.all([
       Tenant.find(filter)
+        .select("-unitTransferHistory")
         .populate("unit", "unitNumber property rent status utilities")
         .populate("unit.property", "propertyName propertyCode address name propertyType depositHeldBy")
         .populate("additionalUnits", "unitNumber property rent status utilities")
@@ -1757,7 +1758,7 @@ export const getTenantBalance = async (req, res, next) => {
 
 export const getTenantTotalDue = async (tenantId) => {
   try {
-    const tenant = await Tenant.findById(tenantId).populate("unit additionalUnits").lean();
+    const tenant = await Tenant.findById(tenantId).populate("unit", "_id").populate("additionalUnits", "_id").lean();
     if (!tenant) return { rent: 0, utilities: [], total: 0 };
 
     const assignedUnitIds = getTenantAssignedUnitIds(tenant);

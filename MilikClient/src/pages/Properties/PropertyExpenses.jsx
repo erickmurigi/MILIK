@@ -293,7 +293,7 @@ const PropertyExpenses = () => {
   useEffect(() => {
     if (!businessId) return;
     if (!propertiesLoaded) dispatch(getProperties({ business: businessId }));
-    if (!unitsLoaded) dispatch(getUnits({ business: businessId }));
+    if (!unitsLoaded) dispatch(getUnits({ business: businessId, limit: 1000 }));
   }, [businessId]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = useCallback(() => {

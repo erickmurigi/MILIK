@@ -7,14 +7,43 @@ import { selectCurrentUser, selectCurrentCompany, selectAllProperties } from '..
 import { getTenantPaidBalanceReport } from '../../redux/apiCalls';
 import { getProperties } from '../../redux/propertyRedux';
 import { FaFileDownload, FaPrint, FaSyncAlt } from 'react-icons/fa';
+import ResetFiltersButton from '../../components/common/ResetFiltersButton';
 import { toast } from 'react-toastify';
 import { hasCompanyPermission } from '../../utils/permissions';
 import { fmtDate } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
+import useDebounce from '../../hooks/useDebounce';
 
 const toDateInputValue = (value) => new Date(value).toISOString().split('T')[0];
 const formatPercent = (value) => (value === null || value === undefined ? '—' : `${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}%`);
 const ITEMS_PER_PAGE = 50;
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+  .map((label, i) => ({ value: String(i + 1), label }));
+
+const fmtCompact = (v) => {
+  const n = Number(v || 0);
+  if (n === 0) return '0';
+  if (n >= 1000000) return `${(n / 1000000).toLocaleString(undefined, { maximumFractionDigits: 1 })}M`;
+  if (n >= 1000) return `${(n / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k`;
+  return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+};
+
+const buildInvoicedBreakdownParts = (row) => {
+  const parts = [];
+  if (Number(row.rentInvoiced || 0) > 0) parts.push({ label: 'Rent', value: fmtCompact(row.rentInvoiced) });
+  const utBreakdown = row.utilityInvoicedBreakdown || {};
+  const utKeys = Object.keys(utBreakdown).filter((k) => utBreakdown[k] > 0).sort();
+  if (utKeys.length > 0) {
+    utKeys.forEach((k) => parts.push({ label: k, value: fmtCompact(utBreakdown[k]) }));
+  } else if (Number(row.utilityInvoiced || 0) > 0) {
+    parts.push({ label: 'Utility', value: fmtCompact(row.utilityInvoiced) });
+  }
+  if (Number(row.penaltyInvoiced || 0) > 0) parts.push({ label: 'Penalty', value: fmtCompact(row.penaltyInvoiced) });
+  if (Number(row.depositInvoiced || 0) > 0) parts.push({ label: 'Deposit', value: fmtCompact(row.depositInvoiced) });
+  if (Number(row.otherInvoiced || 0) > 0) parts.push({ label: 'Other', value: fmtCompact(row.otherInvoiced) });
+  return parts;
+};
 
 const PaidBalanceReport = () => {
   const dispatch = useDispatch();
@@ -40,6 +69,17 @@ const PaidBalanceReport = () => {
     };
   });
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
+  const resetFilters = () => {
+    const now = new Date();
+    setFilters({
+      startDate: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`,
+      asOfDate: toDateInputValue(now),
+      propertyId: '',
+      status: 'all',
+      search: '',
+    });
+    setFiltersChanged(true);
+  };
   const [report, setReport] = useState({ summary: {}, rows: [], allUtilityTypes: [] });
   const [currentPage, setCurrentPage] = useTabState("/reports/paid-balance:currentPage", 1);
 
@@ -48,7 +88,7 @@ const PaidBalanceReport = () => {
     dispatch(getProperties({ business: businessId }));
   }, [businessId, dispatch]);
 
-  const loadReport = async (signal, filterOverrides = {}) => {
+  const loadReport = useCallback(async (signal, filterOverrides = {}) => {
     if (!businessId) return;
     setLoading(true);
     setFiltersChanged(false);
@@ -66,7 +106,7 @@ const PaidBalanceReport = () => {
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
-  };
+  }, [businessId, filters]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!businessId) return;
@@ -80,12 +120,15 @@ const PaidBalanceReport = () => {
     setFiltersChanged(true);
   }, [filters.startDate, filters.asOfDate, filters.propertyId, filters.status]);
 
+  // Debounce search so the filter useMemo doesn't fire on every keystroke
+  const debouncedSearch = useDebounce(filters.search, 300);
+
   const searchFilteredRows = useMemo(() => {
     const rows = Array.isArray(report.rows) ? report.rows : [];
-    const term = String(filters.search || '').trim().toLowerCase();
+    const term = String(debouncedSearch || '').trim().toLowerCase();
     if (!term) return rows;
     return rows.filter((row) => [row.tenantName, row.propertyName, row.unitNumber].join(' ').toLowerCase().includes(term));
-  }, [report.rows, filters.search]);
+  }, [report.rows, debouncedSearch]);
 
   const paginatedRows = useMemo(() => {
     const startIndex = (Math.max(currentPage, 1) - 1) * ITEMS_PER_PAGE;
@@ -94,7 +137,7 @@ const PaidBalanceReport = () => {
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(searchFilteredRows.length / ITEMS_PER_PAGE)), [searchFilteredRows]);
 
-  useEffect(() => { setCurrentPage(1); }, [filters.startDate, filters.asOfDate, filters.propertyId, filters.status, filters.search]);
+  useEffect(() => { setCurrentPage(1); }, [filters.startDate, filters.asOfDate, filters.propertyId, filters.status, debouncedSearch]);
   useEffect(() => { if (currentPage > totalPages) setCurrentPage(totalPages); }, [currentPage, totalPages]);
 
   const summary = report.summary || {};
@@ -118,7 +161,6 @@ const PaidBalanceReport = () => {
   }, [report.rows, summary.tenantCount, summary.totalOutstanding]);
 
   // ── Month / Year period selector ──────────────────────────────────────────
-  const MONTHS = useMemo(() => ['January','February','March','April','May','June','July','August','September','October','November','December'].map((label, i) => ({ value: String(i + 1), label })), []);
   const yearOptions = useMemo(() => { const y = new Date().getFullYear(); return [y + 1, y, y - 1, y - 2, y - 3].map(String); }, []);
   const { selMonth, selYear } = useMemo(() => {
     const fallbackYear = String(new Date().getFullYear());
@@ -144,10 +186,15 @@ const PaidBalanceReport = () => {
   const handleExportCSV = () => {
     if (!canExportReports) { toast.error("You do not have permission to export reports"); return; }
     const utilityCols = hasUtilityBreakdown ? allUtilityTypes : ['Utility Balance'];
-    const header = ['Tenant', 'Property', 'Unit', 'Invoiced', 'Paid Applied', 'Outstanding', 'Unapplied Credit', 'Net Balance', 'Rent Balance', ...utilityCols, 'Penalty Balance', 'Deposit Balance', 'Other Balance', 'Oldest Due', 'Last Payment', 'Status'];
+    const utilInvCols = hasUtilityBreakdown ? allUtilityTypes.map((ut) => `${ut} Invoiced`) : ['Utility Invoiced'];
+    const header = ['Tenant', 'Property', 'Unit', 'Invoiced', 'Rent Invoiced', ...utilInvCols, 'Penalty Invoiced', 'Deposit Invoiced', 'Other Invoiced', 'Paid Applied', 'Outstanding', 'Unapplied Credit', 'Net Balance', 'Rent Balance', ...utilityCols, 'Penalty Balance', 'Deposit Balance', 'Other Balance', 'Oldest Due', 'Last Payment', 'Status'];
     const rows = (report.rows || []).map((row) => [
       row.tenantName || '', row.propertyName || '', row.unitNumber || '',
-      row.totalInvoiced || 0, row.totalPaidApplied || 0, row.outstanding || 0,
+      row.totalInvoiced || 0,
+      row.rentInvoiced || 0,
+      ...(hasUtilityBreakdown ? allUtilityTypes.map((ut) => row.utilityInvoicedBreakdown?.[ut] || 0) : [row.utilityInvoiced || 0]),
+      row.penaltyInvoiced || 0, row.depositInvoiced || 0, row.otherInvoiced || 0,
+      row.totalPaidApplied || 0, row.outstanding || 0,
       row.unappliedCredit || 0, row.netBalance || 0, row.rentBalance || 0,
       ...(hasUtilityBreakdown ? allUtilityTypes.map((ut) => row.utilityBreakdown?.[ut] || 0) : [row.utilityBalance || 0]),
       row.penaltyBalance || 0, row.depositBalance || 0, row.otherBalance || 0,
@@ -204,33 +251,33 @@ const PaidBalanceReport = () => {
     win.document.write(`<!DOCTYPE html><html><head><title>Paid &amp; Balance Report — ${name}</title><style>
       @page{size:A4 landscape;margin:10mm 12mm}
       *{box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
-      body{font-family:'Arial Narrow',Arial,sans-serif;color:#0f172a;font-size:8px;margin:0;line-height:1.3}
-      .hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:6px;margin-bottom:8px;border-bottom:2.5px solid #0B3B2E}
-      .hdr-left .co{font-size:10px;font-weight:900;color:#0B3B2E;letter-spacing:.04em;text-transform:uppercase}
-      .hdr-left .ttl{font-size:15px;font-weight:900;color:#0f172a;margin:1px 0 2px}
-      .hdr-left .sub{font-size:8px;color:#64748b}
-      .hdr-right{text-align:right;font-size:7.5px;color:#64748b;line-height:1.7}
+      body{font-family:'Arial Narrow',Arial,sans-serif;color:#0f172a;font-size:9px;margin:0;line-height:1.3}
+      .hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:6px;margin-bottom:4px;border-bottom:2.5px solid #0B3B2E}
+      .hdr-left .co{font-size:11px;font-weight:900;color:#0B3B2E;letter-spacing:.04em;text-transform:uppercase}
+      .hdr-left .ttl{font-size:16px;font-weight:900;color:#0f172a;margin:1px 0 2px}
+      .hdr-left .sub{font-size:8.5px;color:#64748b}
+      .hdr-right{text-align:right;font-size:8px;color:#64748b;line-height:1.7}
       .logo{max-height:36px;max-width:100px;object-fit:contain;margin-bottom:3px;display:block}
-      .cards{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;margin-bottom:8px}
-      .card{border:1px solid #dbe2ea;border-radius:4px;background:#f8fafc;padding:5px 7px}
-      .card.red{border-color:#fee2e2;background:#fff5f5}.card.grn{border-color:#d1fae5;background:#f0fdf4}
-      .cl{font-size:6.5px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:800}
-      .cv{font-size:10.5px;font-weight:900;color:#0f172a;margin-top:2px;white-space:nowrap}
-      .cv.red{color:#b91c1c}.cv.grn{color:#047857}.cv.amb{color:#b45309}
-      table{width:100%;border-collapse:collapse;font-size:7.5px}
-      thead th{background:#0B3B2E;color:#fff;padding:3px 5px;font-size:6.8px;text-transform:uppercase;letter-spacing:.09em;font-weight:800;white-space:nowrap}
+      .summ-line{display:flex;flex-wrap:wrap;align-items:center;gap:0 20px;padding:5px 0 6px;margin-bottom:4px;border-bottom:1px solid #dbe2ea;font-size:8.5px}
+      .si{display:flex;flex-direction:column;line-height:1.25}
+      .sl{font-size:6.5px;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;font-weight:800}
+      .sv{font-weight:900;color:#0f172a;white-space:nowrap}
+      .sv.grn{color:#047857}.sv.red{color:#b91c1c}.sv.amb{color:#b45309}
+      .summ-sep{color:#cbd5e1;font-size:11px;align-self:center}
+      table{width:100%;border-collapse:collapse;font-size:8px}
+      thead th{background:#0B3B2E;color:#fff;padding:3px 5px;font-size:7px;text-transform:uppercase;letter-spacing:.09em;font-weight:800;white-space:nowrap}
       thead th.r{text-align:right}
       tbody td{border-bottom:1px solid #e2e8f0;padding:2.5px 5px;vertical-align:middle}
       tbody td.r{text-align:right}
       tbody td.name{font-weight:700;color:#0f172a}
+      tbody td.bkd{font-size:7px;color:#64748b;white-space:nowrap}
       tbody tr:nth-child(even){background:#f8fafc}
-      tbody tr:hover{background:#edf4f0}
-      tfoot td{border-top:2px solid #0B3B2E;padding:3px 5px;font-weight:900;background:#edf5f1;font-size:7px}
+      tfoot td{border-top:2px solid #0B3B2E;padding:3px 5px;font-weight:900;background:#edf5f1;font-size:8px}
       tfoot td.r{text-align:right}
-      .ba{display:inline-block;padding:1px 5px;border-radius:99px;font-size:6.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+      .ba{display:inline-block;padding:1px 5px;border-radius:99px;font-size:7px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
       .owing{background:#fee2e2;color:#b91c1c}.credit{background:#d1fae5;color:#065f46}.settled{background:#f1f5f9;color:#475569}
-      .sec-title{font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:#0B3B2E;font-weight:900;margin:8px 0 5px;border-bottom:1px solid #dbe2ea;padding-bottom:3px}
-      .filter-row{display:flex;flex-wrap:wrap;gap:4px 16px;margin-bottom:8px;font-size:7.5px;color:#475569}
+      .sec-title{font-size:8.5px;text-transform:uppercase;letter-spacing:.12em;color:#0B3B2E;font-weight:900;margin:4px 0 4px;border-bottom:1px solid #dbe2ea;padding-bottom:3px}
+      .filter-row{display:flex;flex-wrap:wrap;gap:3px 14px;margin-bottom:4px;font-size:8px;color:#475569}
       .filter-item strong{color:#0f172a}
     </style></head><body>
     <div class="hdr">
@@ -247,36 +294,45 @@ const PaidBalanceReport = () => {
         <div><strong>Tenant rows:</strong> ${rows.length}</div>
       </div>
     </div>
+    <div class="summ-line">
+      <div class="si"><span class="sl">Total Invoiced</span><span class="sv">${fmt(summ.totalInvoiced)}</span></div>
+      <span class="summ-sep">|</span>
+      <div class="si"><span class="sl">Paid Applied</span><span class="sv grn">${fmt(summ.totalPaidApplied)}</span></div>
+      <span class="summ-sep">|</span>
+      <div class="si"><span class="sl">Outstanding</span><span class="sv red">${fmt(summ.totalOutstanding)}</span></div>
+      <span class="summ-sep">|</span>
+      <div class="si"><span class="sl">Unapplied Credit</span><span class="sv amb">${fmt(summ.totalUnappliedCredit)}</span></div>
+      <span class="summ-sep">|</span>
+      <div class="si"><span class="sl">Net Balance</span><span class="sv">${fmt(summ.netBalance)}</span></div>
+      <span class="summ-sep">|</span>
+      <div class="si"><span class="sl">Owing / Credit / Settled</span><span class="sv">${summ.owingCount || 0} / ${summ.creditCount || 0} / ${summ.settledCount || 0}</span></div>
+      ${hasUt ? `<span class="summ-sep">|</span><div class="si"><span class="sl">Utilities</span><span class="sv" style="font-size:8px">${utTypes.join(' · ')}</span></div>` : ''}
+    </div>
     <div class="filter-row">
       <span class="filter-item"><strong>Property:</strong> ${filters.propertyId ? (propertyNameMap.get(String(filters.propertyId)) || 'Selected') : 'All properties'}</span>
       <span class="filter-item"><strong>Position:</strong> ${filters.status === 'all' ? 'All' : filters.status}</span>
       ${filters.search ? `<span class="filter-item"><strong>Search:</strong> ${filters.search}</span>` : ''}
     </div>
-    <div class="cards">
-      <div class="card"><div class="cl">Total Invoiced</div><div class="cv">${fmt(summ.totalInvoiced)}</div></div>
-      <div class="card grn"><div class="cl">Paid Applied</div><div class="cv grn">${fmt(summ.totalPaidApplied)}</div></div>
-      <div class="card red"><div class="cl">Outstanding</div><div class="cv red">${fmt(summ.totalOutstanding)}</div></div>
-      <div class="card"><div class="cl">Unapplied Credit</div><div class="cv amb">${fmt(summ.totalUnappliedCredit)}</div></div>
-      <div class="card"><div class="cl">Net Balance</div><div class="cv">${fmt(summ.netBalance)}</div></div>
-      <div class="card"><div class="cl">Owing / Credit / Settled</div><div class="cv">${summ.owingCount || 0} / ${summ.creditCount || 0} / ${summ.settledCount || 0}</div></div>
-    </div>
     <div class="sec-title">Tenant Positions</div>
     <table><thead><tr>
       <th>Tenant</th><th>Property</th><th>Unit</th>
-      <th class="r">Invoiced</th><th class="r">Paid</th><th class="r">Outstanding</th><th class="r">Unapplied</th><th class="r">Net Bal</th>
+      <th class="r">Invoiced</th><th>Inv. Breakdown</th><th class="r">Paid</th><th class="r">Outstanding</th><th class="r">Unapplied</th><th class="r">Net Bal</th>
       <th class="r">Rent Bal</th>${utHeaderCols}<th class="r">Penalty</th><th class="r">Deposit</th><th class="r">Other</th>
-      <th>Oldest Due</th><th>Last Pmt</th><th>Status</th>
+      <th>Oldest Due</th><th>Status</th>
     </tr></thead>
     <tbody>${rows.map((row) => {
       const utCells = hasUt
         ? utTypes.map((ut) => `<td class="r">${fmt(row.utilityBreakdown?.[ut] || 0)}</td>`).join('')
         : `<td class="r">${fmt(row.utilityBalance)}</td>`;
       const nbColor = Number(row.netBalance || 0) > 0 ? '#b91c1c' : Number(row.netBalance || 0) < 0 ? '#047857' : 'inherit';
+      const bkdParts = buildInvoicedBreakdownParts(row);
+      const bkdText = bkdParts.length > 0 ? bkdParts.map(p => `${p.label} ${p.value}`).join(' · ') : '—';
       return `<tr>
         <td class="name">${row.tenantName}</td>
         <td>${row.propertyName}</td>
         <td>${row.unitNumber}</td>
         <td class="r">${fmt(row.totalInvoiced)}</td>
+        <td class="bkd">${bkdText}</td>
         <td class="r" style="color:#047857">${fmt(row.totalPaidApplied)}</td>
         <td class="r" style="color:${Number(row.outstanding || 0) > 0 ? '#b91c1c' : 'inherit'}">${fmt(row.outstanding)}</td>
         <td class="r" style="color:#b45309">${fmt(row.unappliedCredit)}</td>
@@ -287,13 +343,12 @@ const PaidBalanceReport = () => {
         <td class="r">${fmt(row.depositBalance)}</td>
         <td class="r">${fmt(row.otherBalance)}</td>
         <td>${row.oldestDueDate ? new Date(row.oldestDueDate).toLocaleDateString() : '—'}</td>
-        <td>${row.lastPaymentDate ? new Date(row.lastPaymentDate).toLocaleDateString() : '—'}</td>
         <td><span class="ba ${row.status}">${row.status}</span></td>
       </tr>`;
     }).join('')}</tbody>
     <tfoot><tr>
-      <td colspan="3"><strong>TOTALS — ${rows.length} rows</strong></td>
-      <td class="r"><strong>${fmt(totRow.totalInvoiced)}</strong></td>
+      <td colspan="4"><strong>TOTALS — ${rows.length} rows</strong></td>
+      <td></td>
       <td class="r" style="color:#047857"><strong>${fmt(totRow.totalPaidApplied)}</strong></td>
       <td class="r" style="color:#b91c1c"><strong>${fmt(totRow.outstanding)}</strong></td>
       <td class="r"><strong>${fmt(totRow.unappliedCredit)}</strong></td>
@@ -303,7 +358,7 @@ const PaidBalanceReport = () => {
       <td class="r"><strong>${fmt(totRow.penaltyBalance)}</strong></td>
       <td class="r"><strong>${fmt(totRow.depositBalance)}</strong></td>
       <td class="r"><strong>${fmt(totRow.otherBalance)}</strong></td>
-      <td colspan="3"></td>
+      <td colspan="2"></td>
     </tr></tfoot>
     </table></body></html>`);
     win.document.close();
@@ -355,33 +410,38 @@ const PaidBalanceReport = () => {
                 />
                 <input value={filters.search} onChange={setFilter("search")} placeholder="Search tenant, property, unit" className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </div>
-              <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
-                <button onClick={handleExportCSV} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaFileDownload /> Export CSV</button>
-                <button onClick={handlePrint} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint /> Print</button>
-                <button onClick={() => loadReport()} className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] transition ${filtersChanged ? 'border border-[#0B3B2E] bg-[#0B3B2E] text-white hover:bg-[#0A3127]' : 'border border-slate-200 bg-white text-slate-700 hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white'}`}><FaSyncAlt className={loading ? 'animate-spin' : ''} /> {filtersChanged ? 'Apply Filters' : 'Refresh'}</button>
-              </div>
             </div>
 
-            {/* ── Stat strip ── */}
-            <div className="flex-shrink-0 overflow-x-auto border-b border-slate-100 bg-white">
-              <div className="flex min-w-max divide-x divide-slate-100">
-                {[
-                  { label: 'Total Invoiced',   value: formatMoney(summary.totalInvoiced),        accent: 'text-slate-800', sub: null },
-                  { label: 'Paid Applied',      value: formatMoney(summary.totalPaidApplied),     accent: 'text-emerald-700', sub: null },
-                  { label: 'Outstanding',       value: formatMoney(summary.totalOutstanding),     accent: 'text-red-600', sub: Number(summary.totalOutstanding || 0) > 0 ? `${summary.owingCount || 0} owing account(s)` : null },
-                  { label: 'Unapplied Credit',  value: formatMoney(summary.totalUnappliedCredit), accent: 'text-amber-600', sub: Number(summary.totalUnappliedCredit || 0) > 0 ? `${summary.creditCount || 0} credit account(s)` : null },
-                  { label: 'Net Balance',       value: formatMoney(summary.netBalance),           accent: 'text-slate-800', sub: null },
-                  { label: 'Tenant Rows',       value: Number(summary.tenantCount || 0).toLocaleString(), accent: 'text-slate-800', sub: null },
-                  { label: 'Largest Debtor',    value: balanceInsights.largestOwing?.tenantName || '—', accent: 'text-red-600', sub: balanceInsights.largestOwing ? formatMoney(balanceInsights.largestOwing.netBalance) : null },
-                  { label: 'Largest Credit',    value: balanceInsights.largestCredit?.tenantName || '—', accent: 'text-emerald-700', sub: balanceInsights.largestCredit ? formatMoney(Math.abs(Number(balanceInsights.largestCredit.netBalance || 0))) : null },
-                  { label: 'Settlement Rate',   value: formatPercent(balanceInsights.settlementRate), accent: 'text-slate-800', sub: 'Share of fully settled accounts' },
-                ].map((item) => (
-                  <div key={item.label} className="min-w-[115px] flex-1 px-3 py-2">
-                    <p className="whitespace-nowrap text-[9px] font-bold uppercase tracking-widest text-slate-400">{item.label}</p>
-                    <p className={`mt-0.5 whitespace-nowrap text-[12px] font-black ${item.accent}`}>{item.value}</p>
-                    {item.sub && <p className="mt-0.5 whitespace-nowrap text-[9px] leading-tight text-slate-400">{item.sub}</p>}
-                  </div>
-                ))}
+            {/* ── Stats + Actions bar ── */}
+            <div className="flex-shrink-0 flex items-stretch border-b border-slate-200 bg-white">
+              {/* Scrollable stats */}
+              <div className="flex-1 overflow-x-auto">
+                <div className="flex h-full min-w-max divide-x divide-slate-100">
+                  {[
+                    { label: 'Total Invoiced',  value: formatMoney(summary.totalInvoiced),        accent: 'text-slate-800',   sub: null },
+                    { label: 'Paid Applied',     value: formatMoney(summary.totalPaidApplied),     accent: 'text-emerald-700', sub: null },
+                    { label: 'Outstanding',      value: formatMoney(summary.totalOutstanding),     accent: 'text-red-600',     sub: Number(summary.totalOutstanding || 0) > 0 ? `${summary.owingCount || 0} owing` : null },
+                    { label: 'Unapplied',        value: formatMoney(summary.totalUnappliedCredit), accent: 'text-amber-600',   sub: Number(summary.totalUnappliedCredit || 0) > 0 ? `${summary.creditCount || 0} credit` : null },
+                    { label: 'Net Balance',      value: formatMoney(summary.netBalance),           accent: 'text-slate-800',   sub: null },
+                    { label: 'Tenant Rows',      value: Number(summary.tenantCount || 0).toLocaleString(), accent: 'text-slate-800', sub: null },
+                    { label: 'Largest Debtor',   value: balanceInsights.largestOwing?.tenantName || '—',   accent: 'text-red-600',     sub: balanceInsights.largestOwing ? formatMoney(balanceInsights.largestOwing.netBalance) : null },
+                    { label: 'Largest Credit',   value: balanceInsights.largestCredit?.tenantName || '—',  accent: 'text-emerald-700', sub: balanceInsights.largestCredit ? formatMoney(Math.abs(Number(balanceInsights.largestCredit.netBalance || 0))) : null },
+                    { label: 'Settlement Rate',  value: formatPercent(balanceInsights.settlementRate),     accent: 'text-slate-800',   sub: 'Fully settled' },
+                  ].map((item) => (
+                    <div key={item.label} className="flex flex-col justify-center px-3 py-1.5">
+                      <p className="whitespace-nowrap text-[8.5px] font-bold uppercase tracking-widest text-slate-400">{item.label}</p>
+                      <p className={`whitespace-nowrap text-[11px] font-black leading-tight ${item.accent}`}>{item.value}</p>
+                      {item.sub && <p className="whitespace-nowrap text-[8px] leading-tight text-slate-400">{item.sub}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Action buttons */}
+              <div className="flex flex-shrink-0 items-center gap-1.5 border-l border-slate-200 px-2">
+                <button onClick={handleExportCSV} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaFileDownload /> Export CSV</button>
+                <button onClick={handlePrint} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint /> Print</button>
+                <ResetFiltersButton onReset={resetFilters} disabled={loading} />
+                <button onClick={() => loadReport()} className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] transition ${filtersChanged ? 'border border-[#0B3B2E] bg-[#0B3B2E] text-white hover:bg-[#0A3127]' : 'border border-slate-200 bg-white text-slate-700 hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white'}`}><FaSyncAlt className={loading ? 'animate-spin' : ''} /> {filtersChanged ? 'Apply Filters' : 'Refresh'}</button>
               </div>
             </div>
 
@@ -401,9 +461,9 @@ const PaidBalanceReport = () => {
                   <table className="min-w-full text-[10px] border-collapse">
                     <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                       <tr>
-                        {['Tenant', 'Property', 'Unit', 'Invoiced', 'Paid', 'Outstanding', 'Unapplied', 'Net Bal', 'Rent Bal',
+                        {['Tenant', 'Property', 'Unit', 'Invoiced', 'Inv. Breakdown', 'Paid', 'Outstanding', 'Unapplied', 'Net Bal', 'Rent Bal',
                           ...(hasUtilityBreakdown ? allUtilityTypes : ['Utility Bal']),
-                          'Penalty', 'Deposit', 'Other', 'Oldest Due', 'Last Pmt', 'Status'
+                          'Penalty', 'Deposit', 'Other', 'Oldest Due', 'Status'
                         ].map((h, i, arr) => (
                           <th key={h} className={`whitespace-nowrap px-2 py-1 text-left font-bold text-[9px] tracking-wide ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
                         ))}
@@ -411,13 +471,22 @@ const PaidBalanceReport = () => {
                     </thead>
                     <tbody>
                       {paginatedRows.length === 0 ? (
-                        <tr><td colSpan={13 + (hasUtilityBreakdown ? allUtilityTypes.length : 1)} className="px-2 py-4 text-center text-slate-500">No tenants matched the selected filters.</td></tr>
+                        <tr><td colSpan={13 + (hasUtilityBreakdown ? allUtilityTypes.length : 1) + 1} className="px-2 py-4 text-center text-slate-500">No tenants matched the selected filters.</td></tr>
                       ) : paginatedRows.map((row, i) => (
                         <tr key={`${row.tenantId}-${row.unitId || i}`} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-emerald-50/30' : 'bg-slate-50/50 hover:bg-emerald-50/30'}`}>
                           <td className="px-2 py-1 border-r border-gray-100 font-semibold text-slate-900 whitespace-nowrap">{row.tenantName}</td>
                           <td className="px-2 py-1 border-r border-gray-100 text-slate-600 whitespace-nowrap">{row.propertyName}</td>
                           <td className="px-2 py-1 border-r border-gray-100 text-slate-600">{row.unitNumber}</td>
                           <td className="px-2 py-1 border-r border-gray-100 text-right text-slate-700">{formatMoney(row.totalInvoiced)}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 text-[8.5px] text-slate-500 whitespace-nowrap">
+                            {(() => {
+                              const parts = buildInvoicedBreakdownParts(row);
+                              if (parts.length === 0) return <span className="text-slate-300">—</span>;
+                              return parts.map(({ label, value }, idx) => (
+                                <span key={label}>{idx > 0 && <span className="mx-0.5 text-slate-300">·</span>}<span className="font-semibold text-slate-600">{label}</span> {value}</span>
+                              ));
+                            })()}
+                          </td>
                           <td className="px-2 py-1 border-r border-gray-100 text-right text-emerald-700">{formatMoney(row.totalPaidApplied)}</td>
                           <td className="px-2 py-1 border-r border-gray-100 text-right text-red-600">{formatMoney(row.outstanding)}</td>
                           <td className="px-2 py-1 border-r border-gray-100 text-right text-amber-700">{formatMoney(row.unappliedCredit)}</td>
@@ -431,7 +500,6 @@ const PaidBalanceReport = () => {
                           <td className="px-2 py-1 border-r border-gray-100 text-right text-slate-700">{formatMoney(row.depositBalance)}</td>
                           <td className="px-2 py-1 border-r border-gray-100 text-right text-slate-700">{formatMoney(row.otherBalance)}</td>
                           <td className="px-2 py-1 border-r border-gray-100 text-slate-600 whitespace-nowrap">{fmtDate(row.oldestDueDate)}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-slate-600 whitespace-nowrap">{fmtDate(row.lastPaymentDate)}</td>
                           <td className="px-2 py-1">
                             <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[9px] font-black ${row.status === 'owing' ? 'border-red-200 bg-red-50 text-red-700' : row.status === 'credit' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-100 text-slate-600'}`}>
                               {row.status}

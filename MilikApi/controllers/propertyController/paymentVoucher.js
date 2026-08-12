@@ -489,7 +489,7 @@ const populateVoucherQuery = (query) =>
     .populate("liabilityAccount", "code name type accountType nature accountNature")
     .populate("debitAccount", "code name type accountType nature accountNature")
     .populate("settlementAccount", "code name type accountType nature accountNature group subGroup")
-    .populate("expenseRecord")
+    .populate("expenseRecord", "property unit category amount description date receiptNumber receiptImage paidBy paymentMethod cashbook")
     .populate("sourceRequisition", "requisitionNo referenceNo status title amount property linkedVoucher");
 
 const createExpenseRecordForVoucher = async (voucher, { statementDate = null } = {}) => {

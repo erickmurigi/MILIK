@@ -299,7 +299,7 @@ export default function Zones() {
 
   const loadOfficers = useCallback(async () => {
     try {
-      const res = await adminRequests.get('/zones/officers');
+      const res = await adminRequests.get('/zones/officers', { params: { limit: 500 } });
       setOfficers(res.data?.users || []);
     } catch { /* non-fatal */ }
   }, []);

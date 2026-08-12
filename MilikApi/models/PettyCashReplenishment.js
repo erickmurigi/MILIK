@@ -101,5 +101,7 @@ const PettyCashReplenishmentSchema = new mongoose.Schema(
 
 PettyCashReplenishmentSchema.index({ business: 1, pettyCashAccount: 1, requestDate: -1 });
 PettyCashReplenishmentSchema.index({ pettyCashAccount: 1, replenishmentNumber: 1 }, { unique: true });
+// getReplenishments: status filter with requestDate sort
+PettyCashReplenishmentSchema.index({ business: 1, status: 1, requestDate: -1 });
 
 export default mongoose.model("PettyCashReplenishment", PettyCashReplenishmentSchema);

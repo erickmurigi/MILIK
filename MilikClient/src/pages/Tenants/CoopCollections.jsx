@@ -15,6 +15,7 @@ import { adminRequests } from "../../utils/requestMethods";
 import { selectCurrentCompany } from "../../redux/selectors";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { useTabState } from "../../hooks/useTabState";
+import useDebounce from "../../hooks/useDebounce";
 import AppSelect from "../../components/common/AppSelect";
 
 const PAGE_SIZE   = 50;
@@ -153,6 +154,7 @@ export default function CoopCollections() {
   const [loading,  setLoading]  = useState(false);
   const [statusFilter, setStatusFilter] = useTabState("/receipts/coop-collections:statusFilter", "");
   const [search,   setSearch]   = useTabState("/receipts/coop-collections:search", "");
+  const debouncedSearch = useDebounce(search, 400);
   const [dateFrom, setDateFrom] = useTabState("/receipts/coop-collections:dateFrom", "");
   const [dateTo,   setDateTo]   = useTabState("/receipts/coop-collections:dateTo", () => todayISO());
   const [countdown, setCountdown] = useState(AUTO_RELOAD);
@@ -168,7 +170,7 @@ export default function CoopCollections() {
     try {
       const params = { business: businessId, page: pg, limit: PAGE_SIZE };
       if (statusFilter) params.status = statusFilter;
-      if (search.trim()) params.search = search.trim();
+      if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
       if (dateFrom) params.dateFrom = dateFrom;
       if (dateTo)   params.dateTo   = dateTo;
       const res = await adminRequests.get("/coop-collections", { params });
@@ -182,7 +184,7 @@ export default function CoopCollections() {
     } finally {
       setLoading(false);
     }
-  }, [businessId, statusFilter, search, dateFrom, dateTo]);
+  }, [businessId, statusFilter, debouncedSearch, dateFrom, dateTo]);
 
   useEffect(() => { fetchData(1); }, [fetchData]);
 

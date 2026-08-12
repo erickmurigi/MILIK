@@ -31,6 +31,7 @@ export const listSupplierPayments = async (req, res, next) => {
 
     const payments = await populatePayment(InvSupplierPayment.find(filter))
       .sort({ paymentDate: -1, createdAt: -1 })
+      .limit(1000)
       .lean();
 
     res.json({ success: true, data: payments });

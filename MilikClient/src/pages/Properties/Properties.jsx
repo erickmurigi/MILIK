@@ -168,7 +168,7 @@ const Properties = () => {
   // Load landlords and zones on mount
   useEffect(() => {
     if (currentCompany?._id) {
-      dispatch(getLandlords({ company: currentCompany._id }));
+      dispatch(getLandlords({ company: currentCompany._id, limit: 500 }));
     }
   }, [dispatch, currentCompany?._id]);
 

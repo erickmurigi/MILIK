@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
@@ -7,35 +7,14 @@ import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
 import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
-import { getTenantInvoices } from "../../redux/apiCalls";
+import { getRentalAgedAnalysisReport } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
 import { fmtDate } from "../../utils/dates";
 import { formatMoney } from "../../utils/money";
+import useDebounce from "../../hooks/useDebounce";
+
 const ITEMS_PER_PAGE = 50;
 const normalizeArray = (value) => (Array.isArray(value) ? value : Array.isArray(value?.data) ? value.data : []);
-
-const resolveInvoiceDueDateForAging = (invoice = {}) => {
-  if (invoice?.dueDate) return invoice.dueDate;
-  const metadata = invoice?.metadata && typeof invoice.metadata === "object" ? invoice.metadata : {};
-  return metadata?.periodEndDate || metadata?.periodToDate || metadata?.periodStartDate || metadata?.periodFromDate || invoice?.invoiceDate || null;
-};
-
-const daysBetween = (earlier, later = new Date()) => {
-  const start = new Date(earlier);
-  const end = new Date(later);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
-  return Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86400000));
-};
-
-const bucketOutstanding = (dueDate, amount) => {
-  if (!dueDate) return { current: 0, days30: 0, days60: 0, days90: 0, days90Plus: amount };
-  const overdueDays = daysBetween(dueDate);
-  if (overdueDays <= 0) return { current: amount, days30: 0, days60: 0, days90: 0, days90Plus: 0 };
-  if (overdueDays <= 30) return { current: 0, days30: amount, days60: 0, days90: 0, days90Plus: 0 };
-  if (overdueDays <= 60) return { current: 0, days30: 0, days60: amount, days90: 0, days90Plus: 0 };
-  if (overdueDays <= 90) return { current: 0, days30: 0, days60: 0, days90: amount, days90Plus: 0 };
-  return { current: 0, days30: 0, days60: 0, days90: 0, days90Plus: amount };
-};
 
 const RentalAgedAnalysisReport = () => {
   const currentCompany = useSelector(selectCurrentCompany);
@@ -52,104 +31,62 @@ const RentalAgedAnalysisReport = () => {
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [currentPage, setCurrentPage] = useTabState("/reports/rental-aged-analysis:currentPage", 1);
 
-  const loadData = useCallback(async () => {
+  // Fetch properties once for the filter dropdown
+  useEffect(() => {
     if (!businessId) return;
-    setLoading(true);
-    try {
-      const [invoiceRows, paymentRes, propertyRes] = await Promise.all([
-        getTenantInvoices({ business: businessId }),
-        adminRequests.get(`/rent-payments?business=${businessId}`),
-        adminRequests.get(`/properties?business=${businessId}&limit=1000`),
-      ]);
-
-      const payments = normalizeArray(paymentRes?.data || paymentRes).filter(
-        (payment) => !payment?.isReversed && !payment?.isCancelled
-      );
-      const allocationMap = new Map();
-      payments.forEach((payment) => {
-        (payment?.allocations || []).forEach((allocation) => {
-          const invoiceId = allocation?.invoice?._id || allocation?.invoice;
-          if (!invoiceId) return;
-          allocationMap.set(String(invoiceId), (allocationMap.get(String(invoiceId)) || 0) + Number(allocation?.appliedAmount || 0));
-        });
-      });
-
-      const activeInvoices = (Array.isArray(invoiceRows) ? invoiceRows : []).filter((invoice) => {
-        const category = String(invoice?.category || "");
-        return ["RENT_CHARGE", "UTILITY_CHARGE", "LATE_PENALTY_CHARGE"].includes(category) && !["cancelled", "reversed"].includes(String(invoice?.status || "").toLowerCase());
-      });
-
-      const summaryByTenant = new Map();
-      activeInvoices.forEach((invoice) => {
-        const invoiceId = String(invoice?._id || "");
-        const amount = Number(invoice?.amount || 0);
-        const applied = Number(allocationMap.get(invoiceId) || 0);
-        const outstanding = Number((amount - applied).toFixed(2));
-        if (outstanding <= 0) return;
-        const tenantId = String(invoice?.tenant?._id || invoice?.tenant || "unknown");
-        const existing = summaryByTenant.get(tenantId) || {
-          tenantId,
-          tenantName: invoice?.tenant?.tenantName || invoice?.tenant?.name || "Unknown tenant",
-          propertyName: invoice?.property?.propertyName || "N/A",
-          propertyId: invoice?.property?._id || invoice?.property || "",
-          unitNumber: invoice?.unit?.unitNumber || "N/A",
-          categoryBreakdown: { RENT_CHARGE: 0, UTILITY_CHARGE: 0, LATE_PENALTY_CHARGE: 0 },
-          current: 0,
-          days30: 0,
-          days60: 0,
-          days90: 0,
-          days90Plus: 0,
-          total: 0,
-          oldestDueDate: resolveInvoiceDueDateForAging(invoice) || null,
-        };
-        const effectiveDueDate = resolveInvoiceDueDateForAging(invoice);
-        const bucket = bucketOutstanding(effectiveDueDate, outstanding);
-        existing.current += bucket.current;
-        existing.days30 += bucket.days30;
-        existing.days60 += bucket.days60;
-        existing.days90 += bucket.days90;
-        existing.days90Plus += bucket.days90Plus;
-        existing.total += outstanding;
-        existing.categoryBreakdown[invoice?.category] = (existing.categoryBreakdown[invoice?.category] || 0) + outstanding;
-        if (effectiveDueDate && (!existing.oldestDueDate || new Date(effectiveDueDate) < new Date(existing.oldestDueDate))) {
-          existing.oldestDueDate = effectiveDueDate;
-        }
-        summaryByTenant.set(tenantId, existing);
-      });
-
-      setRows(Array.from(summaryByTenant.values()));
-      setProperties(normalizeArray(propertyRes?.data || propertyRes));
-    } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to load rental aged analysis.");
-    } finally {
-      setLoading(false);
-    }
+    adminRequests.get(`/properties?business=${businessId}&limit=1000`)
+      .then((res) => setProperties(normalizeArray(res?.data || res)))
+      .catch(() => {});
   }, [businessId]);
 
-  useEffect(() => { loadData(); }, [loadData]);
-
+  // Fetch zone options once on mount
   useEffect(() => {
     adminRequests.get('/zones', { params: { limit: 500, isActive: 'true' } })
       .then((res) => setZoneOptions((res.data?.zones || []).map((z) => ({ value: z.name, label: z.name }))))
       .catch(() => {});
   }, []);
 
-  const zonePropIds = useMemo(() => {
-    if (!filters.zone) return null;
-    const lower = filters.zone.toLowerCase();
-    return new Set(properties.filter((p) => (p.zoneRegion || '').toLowerCase() === lower).map((p) => String(p._id)));
-  }, [filters.zone, properties]);
+  // Main report data — refetched whenever backend-side filters change
+  const loadData = useCallback(async (signal) => {
+    if (!businessId) return;
+    setLoading(true);
+    try {
+      const data = await getRentalAgedAnalysisReport(
+        {
+          business: businessId,
+          ...(filters.propertyId ? { propertyId: filters.propertyId } : {}),
+          ...(filters.category ? { category: filters.category } : {}),
+          ...(filters.zone ? { zone: filters.zone } : {}),
+        },
+        signal
+      );
+      setRows(data.rows || []);
+    } catch (error) {
+      if (error?.name === "CanceledError" || error?.name === "AbortError" || error?.code === "ERR_CANCELED") return;
+      toast.error(error?.response?.data?.message || "Failed to load rental aged analysis.");
+    } finally {
+      setLoading(false);
+    }
+  }, [businessId, filters.propertyId, filters.category, filters.zone]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    loadData(controller.signal);
+    return () => controller.abort();
+  }, [loadData]);
+
+  // Debounce search so useMemo doesn't fire on every keystroke
+  const debouncedSearch = useDebounce(filters.search, 300);
+
+  // Search filtering is client-side only (operates on already-fetched rows)
   const filteredRows = useMemo(() => {
+    if (!debouncedSearch.trim()) return rows;
+    const lower = debouncedSearch.trim().toLowerCase();
     return rows.filter((row) => {
-      if (zonePropIds && !zonePropIds.has(String(row.propertyId))) return false;
-      if (filters.propertyId && String(row.propertyId) !== String(filters.propertyId)) return false;
-      if (filters.category && Number(row.categoryBreakdown?.[filters.category] || 0) <= 0) return false;
       const haystack = `${row.tenantName} ${row.propertyName} ${row.unitNumber}`.toLowerCase();
-      return !filters.search.trim() || haystack.includes(filters.search.trim().toLowerCase());
+      return haystack.includes(lower);
     });
-  }, [rows, filters, zonePropIds]);
-
+  }, [rows, debouncedSearch]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
@@ -182,8 +119,6 @@ const RentalAgedAnalysisReport = () => {
       ),
     [filteredRows]
   );
-
-
 
   const printGeneratedAt = useMemo(() => new Date().toLocaleString(), []);
 
@@ -389,7 +324,7 @@ const RentalAgedAnalysisReport = () => {
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <button onClick={exportCsv} disabled={!canExportReports} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-orange-50 hover:text-orange-700 disabled:opacity-50"><FaFileDownload size={9} /> CSV</button>
                 <button onClick={handlePrint} disabled={!canExportReports} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-orange-50 hover:text-orange-700 disabled:opacity-50"><FaPrint size={9} /> Print</button>
-                <button onClick={loadData} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-orange-50 hover:text-orange-700"><FaSyncAlt size={9} className={loading ? 'animate-spin' : ''} /> Refresh</button>
+                <button onClick={() => loadData()} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-orange-50 hover:text-orange-700"><FaSyncAlt size={9} className={loading ? 'animate-spin' : ''} /> Refresh</button>
               </div>
             </div>
 

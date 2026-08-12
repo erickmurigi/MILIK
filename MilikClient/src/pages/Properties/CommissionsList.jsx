@@ -48,7 +48,7 @@ const CommissionsList = () => {
     const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company;
     if (businessId) {
       setLoading(true);
-      dispatch(getProperties({ business: businessId }))
+      dispatch(getProperties({ business: businessId, limit: 500 }))
         .finally(() => setLoading(false));
     }
   }, [currentCompany?._id, currentUser?.company, dispatch]);

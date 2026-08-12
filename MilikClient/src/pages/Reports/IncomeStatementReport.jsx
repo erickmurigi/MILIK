@@ -36,7 +36,7 @@ const escapeHtml = (v) =>
     .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 
 // ─── Section row with proportion bar ─────────────────────────────────────────
-const AccountRow = ({ row, sectionTotal, accentColor }) => {
+const AccountRow = React.memo(({ row, sectionTotal, accentColor }) => {
   const share = pctNum(row.amount, sectionTotal);
   const shareStr = pctStr(row.amount, sectionTotal);
 
@@ -61,10 +61,10 @@ const AccountRow = ({ row, sectionTotal, accentColor }) => {
       </div>
     </div>
   );
-};
+});
 
 // ─── Collapsible section ──────────────────────────────────────────────────────
-const Section = ({ label, rows = [], total, categoryTotal, accentColor }) => {
+const Section = React.memo(({ label, rows = [], total, categoryTotal, accentColor }) => {
   const [open, setOpen] = useState(true);
   const share    = pctNum(total, categoryTotal);
   const shareStr = pctStr(total, categoryTotal);
@@ -130,10 +130,10 @@ const Section = ({ label, rows = [], total, categoryTotal, accentColor }) => {
       )}
     </div>
   );
-};
+});
 
 // ─── Waterfall row ────────────────────────────────────────────────────────────
-const WaterfallRow = ({ label, value, color, isTotal, barPct }) => (
+const WaterfallRow = React.memo(({ label, value, color, isTotal, barPct }) => (
   <div className={`flex items-center gap-3 py-2 ${isTotal ? "border-t-2 border-slate-200 mt-1 pt-3" : "border-t border-slate-100"}`}>
     <div className="w-32 shrink-0 text-[10px] font-bold text-slate-600">{label}</div>
     <div className="flex-1">
@@ -151,7 +151,7 @@ const WaterfallRow = ({ label, value, color, isTotal, barPct }) => (
       KES {fmt(value)}
     </div>
   </div>
-);
+));
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const IncomeStatementReport = () => {

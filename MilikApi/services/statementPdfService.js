@@ -1081,11 +1081,6 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
     try {
       page = await createPage();
 
-      await page.setViewport({
-        width: 1600,
-        height: 1000,
-        deviceScaleFactor: 1,
-      });
       page.setDefaultNavigationTimeout(30_000);
       page.setDefaultTimeout(30_000);
 

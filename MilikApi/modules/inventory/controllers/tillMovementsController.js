@@ -21,6 +21,7 @@ export const listMovements = async (req, res, next) => {
       .populate("till", "name")
       .populate("createdBy", "name username")
       .sort({ createdAt: -1 })
+      .limit(500)
       .lean();
 
     res.json({ success: true, data: movements, total: movements.length });

@@ -28,5 +28,7 @@ const BudgetSchema = new Schema(
 );
 
 BudgetSchema.index({ business: 1, periodStart: -1 });
+// getBudgets: optional status filter with periodStart sort
+BudgetSchema.index({ business: 1, status: 1, periodStart: -1 });
 
 export default model("Budget", BudgetSchema);

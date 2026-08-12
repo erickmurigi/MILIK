@@ -632,7 +632,7 @@ export const getStatement = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const statement = await CarWashAccountStatement.findOne({ _id: req.params.statementId, business })
-      .populate("account")
+      .populate("account", "accountNumber accountType contactPerson billingEmail creditLimit billingCycle billingDay status currentBalance accountCredit lastStatementAt notes plates customer branch")
       .lean();
     if (!statement) return next(createError(404, "Statement not found"));
     res.json({ success: true, data: statement });

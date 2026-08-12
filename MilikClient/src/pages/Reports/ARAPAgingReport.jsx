@@ -42,7 +42,7 @@ const escapeHtml = (v) =>
     .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 // ─── Aging Table ─────────────────────────────────────────────────────────────
-const AgingTable = ({ rows, totals, type }) => {
+const AgingTable = React.memo(({ rows, totals, type }) => {
   const isAR = type === "ar";
 
   if (!rows.length) {
@@ -79,7 +79,7 @@ const AgingTable = ({ rows, totals, type }) => {
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+            <tr key={row.invoiceNumber || row.reference || row._id || i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
               {isAR ? (
                 <>
                   <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-700">{row.invoiceNumber}</td>
@@ -133,7 +133,7 @@ const AgingTable = ({ rows, totals, type }) => {
       </table>
     </div>
   );
-};
+});
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 const ARAPAgingReport = () => {

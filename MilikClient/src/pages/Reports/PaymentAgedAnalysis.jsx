@@ -82,20 +82,26 @@ const PaymentAgedAnalysis = () => {
   const [selectedStatus, setSelectedStatus] = useTabState("/accounts/payment-aged-analysis:selectedStatus", "");
   const [selectedCategory, setSelectedCategory] = useTabState("/accounts/payment-aged-analysis:selectedCategory", "");
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (signal) => {
     if (!businessId) return;
     setLoading(true);
     try {
-      const res = await getAPAgingReport({ business: businessId, asOf });
+      const res = await getAPAgingReport({ business: businessId, asOf }, signal);
+      if (signal?.aborted) return;
       setData(res);
-    } catch {
+    } catch (err) {
+      if (err?.name === 'CanceledError' || err?.name === 'AbortError') return;
       toast.error("Failed to load payments report");
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }, [businessId, asOf]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchData(controller.signal);
+    return () => controller.abort();
+  }, [fetchData]);
 
   // ── Derived / memoised ────────────────────────────────────────────────────
   const allRows = useMemo(() => data?.rows || [], [data]);
@@ -382,7 +388,7 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
               </thead>
               <tbody>
                 {filteredRows.map((row, i) => (
-                  <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                  <tr key={row.reference || row._id || i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
                     <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-500">{row.reference}</td>
                     <td className="max-w-[180px] truncate px-3 py-1 border-r border-gray-100 text-slate-700" title={row.narration}>{row.narration}</td>
                     <td className="px-3 py-1 border-r border-gray-100 text-slate-500">

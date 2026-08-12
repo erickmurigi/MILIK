@@ -705,7 +705,7 @@ const TrialBalanceReport = () => {
                     const Icon = ex.severity === "critical" ? FaExclamationCircle : ex.severity === "warning" ? FaExclamationTriangle : FaInfoCircle;
                     const colMap = { critical: "text-red-600", warning: "text-amber-600", info: "text-blue-600" };
                     return (
-                      <div key={i} className="flex items-start gap-3 px-4 py-3">
+                      <div key={ex.account?._id || ex.account?.code || i} className="flex items-start gap-3 px-4 py-3">
                         <Icon className={`mt-0.5 shrink-0 ${colMap[ex.severity] || "text-gray-500"}`} />
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">

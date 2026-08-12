@@ -97,7 +97,7 @@ const PropertyCommissionSettings = () => {
   useEffect(() => {
     if (!businessId) return;
     setLoading(true);
-    dispatch(getProperties({ business: businessId }))
+    dispatch(getProperties({ business: businessId, limit: 500 }))
       .unwrap()
       .catch(() => toast.error('Failed to load properties'))
       .finally(() => setLoading(false));
@@ -276,7 +276,7 @@ const PropertyCommissionSettings = () => {
     try {
       await dispatch(updateProperty({ id: selectedProperty._id, propertyData: payload })).unwrap();
       toast.success('Property commission settings updated successfully');
-      dispatch(getProperties({ business: businessId }));
+      dispatch(getProperties({ business: businessId, limit: 500 }));
     } catch (error) {
       toast.error(error || 'Failed to update property commission settings');
     } finally {

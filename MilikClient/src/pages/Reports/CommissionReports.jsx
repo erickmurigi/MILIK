@@ -118,11 +118,14 @@ const CommissionReports = () => {
 
     setLoading(true);
     try {
-      // Pass month param for single-month views so the server can narrow the query.
-      // For date ranges the server returns all; client filters by monthKey string comparison.
-      const params = {};
-      if (appliedFilters.monthFrom === appliedFilters.monthTo) {
-        params.month = appliedFilters.monthFrom;
+      // Push date range and status filters to the server so only matching records are returned.
+      const params = {
+        monthFrom: appliedFilters.monthFrom,
+        monthTo: appliedFilters.monthTo,
+        limit: 500,
+      };
+      if (appliedFilters.status) {
+        params.commissionStatus = appliedFilters.status; // "recognized" | "reversed"
       }
 
       const response = await adminRequests.get(`/processed-statements/business/${currentCompany._id}`, { params });
@@ -134,7 +137,7 @@ const CommissionReports = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentCompany?._id, appliedFilters.monthFrom, appliedFilters.monthTo]);
+  }, [currentCompany?._id, appliedFilters.monthFrom, appliedFilters.monthTo, appliedFilters.status]);
 
   useEffect(() => {
     loadData();

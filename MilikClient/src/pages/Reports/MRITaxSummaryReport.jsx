@@ -51,7 +51,7 @@ const MRITaxSummaryReport = () => {
     dispatch(getProperties({ business: businessId }));
   }, [businessId, dispatch]);
 
-  const loadReport = async () => {
+  const loadReport = useCallback(async () => {
     if (!businessId) return;
     setLoading(true);
     setFiltersChanged(false);
@@ -68,11 +68,11 @@ const MRITaxSummaryReport = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [businessId, filters.startDate, filters.endDate, filters.propertyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (businessId) loadReport();
-  }, [businessId]);
+  }, [businessId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!filtersInitialized.current) { filtersInitialized.current = true; return; }

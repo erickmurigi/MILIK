@@ -13,6 +13,7 @@ import {
 import { hasCompanyPermission } from "../../utils/permissions";
 import { useConfirm } from "../../context/ConfirmContext";
 import { useTabState } from "../../hooks/useTabState";
+import useDebounce from "../../hooks/useDebounce";
 import AppSelect from "../../components/common/AppSelect";
 
 const blankForm = {
@@ -53,6 +54,7 @@ const ServiceProviders = () => {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useTabState("/accounts/service-providers:search", "");
+  const debouncedSearch = useDebounce(search, 400);
   const [nameFilter, setNameFilter] = useTabState("/accounts/service-providers:nameFilter", "");
   const [categoryFilter, setCategoryFilter] = useTabState("/accounts/service-providers:categoryFilter", "");
   const [showModal, setShowModal] = useState(false);
@@ -100,7 +102,7 @@ const ServiceProviders = () => {
       const { data, total, pages } = await getServiceProviders({
         business: currentCompany._id,
         company: currentCompany._id,
-        search,
+        search: debouncedSearch,
         page: currentPage,
         limit: pageSize,
       });
@@ -112,7 +114,7 @@ const ServiceProviders = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentCompany?._id, search, currentPage, pageSize]);
+  }, [currentCompany?._id, debouncedSearch, currentPage, pageSize]);
 
   useEffect(() => {
     loadRows();

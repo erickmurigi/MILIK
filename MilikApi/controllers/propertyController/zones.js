@@ -240,6 +240,7 @@ export const getEligibleOfficers = async (req, res, next) => {
     })
       .select('surname otherNames email profile')
       .sort({ surname: 1, otherNames: 1 })
+      .limit(500)
       .lean();
 
     return res.json({ users });

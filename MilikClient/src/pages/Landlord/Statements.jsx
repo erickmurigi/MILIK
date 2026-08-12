@@ -419,6 +419,17 @@ const PDF_MODAL_KEYFRAMES = `
   @keyframes mlkPdfOut { from { opacity:1; transform:scale(1)    } to { opacity:0; transform:scale(0.97) } }
 `;
 
+const PdfElapsedTimer = () => {
+  const [secs, setSecs] = React.useState(0);
+  React.useEffect(() => {
+    const t = setInterval(() => setSecs((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <span className="text-[10px] text-white/25">{secs > 0 ? `${secs}s elapsed` : "Starting…"}</span>
+  );
+};
+
 const paidCellDisplay = (val, isVacant, isNoBill) => {
   if (isVacant || isNoBill) return { text: "—", cls: "text-slate-300" };
   const n = Number(val || 0);
@@ -673,12 +684,25 @@ const PdfPreviewModal = React.memo(function PdfPreviewModal({
 
         {/* PDF area */}
         <div className="relative min-h-0 flex-1 bg-slate-900 p-3">
-          {(phase === "loading" || !iframeLoaded) && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3">
-              <div className="h-9 w-9 animate-spin rounded-full border-[3px] border-white/10 border-t-white/50" />
-              <p className="text-[11px] text-white/35">
-                {phase === "loading" ? "Generating PDF…" : "Rendering…"}
-              </p>
+          {(phase === "loading" || (blobUrl && !iframeLoaded)) && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-slate-900">
+              {/* Double-ring Milik loader */}
+              <div className="relative h-10 w-10">
+                <div
+                  className="absolute inset-0 animate-spin"
+                  style={{ border: "3px solid rgba(255,255,255,0.08)", borderTopColor: "#4ade80", borderRightColor: "#86efac", animationDuration: "0.9s" }}
+                />
+                <div
+                  className="absolute inset-[9px] animate-spin"
+                  style={{ border: "2px solid rgba(255,255,255,0.08)", borderBottomColor: "#4ade80", borderLeftColor: "#86efac", animationDuration: "0.6s", animationDirection: "reverse" }}
+                />
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <p className="text-[11px] font-semibold text-white/50">
+                  {phase === "loading" ? "Generating PDF…" : "Loading preview…"}
+                </p>
+                {phase === "loading" && <PdfElapsedTimer />}
+              </div>
             </div>
           )}
           {blobUrl && (

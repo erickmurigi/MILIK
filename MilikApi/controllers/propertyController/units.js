@@ -546,6 +546,7 @@ export const getUnits = async (req, res, next) => {
 
     const [units, total] = await Promise.all([
       Unit.find(filter)
+        .select("-images")
         .populate("property", "propertyName propertyCode address")
         .populate("lastTenant", "name phone status")
         .sort({ createdAt: -1 })

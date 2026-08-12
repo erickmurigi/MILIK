@@ -55,7 +55,7 @@ const PropertyIncomeSummaryReport = () => {
     if (!isLandlordMode) dispatch(getLandlords({ company: businessId }));
   }, [businessId, dispatch, isLandlordMode]);
 
-  const loadReport = async () => {
+  const loadReport = useCallback(async () => {
     if (!businessId) return;
     setLoading(true);
     setFiltersChanged(false);
@@ -71,11 +71,11 @@ const PropertyIncomeSummaryReport = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [businessId, filters.startDate, filters.endDate, filters.propertyId, filters.landlordId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (businessId) loadReport();
-  }, [businessId]);
+  }, [businessId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!filtersInitialized.current) { filtersInitialized.current = true; return; }
@@ -276,8 +276,8 @@ const PropertyIncomeSummaryReport = () => {
           </div>
 
           <div className="report-print-section report-print-insights">
-            {insights.narrative.map((item, index) => (
-              <div key={index} className="report-print-insight">{item}</div>
+            {insights.narrative.map((item) => (
+              <div key={item} className="report-print-insight">{item}</div>
             ))}
           </div>
 

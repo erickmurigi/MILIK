@@ -64,7 +64,7 @@ const populateReceiptQuery = (query) =>
     })
     .populate("confirmedBy", "surname otherNames email")
     .populate("reversedBy", "surname otherNames email")
-    .populate("ledgerEntries")
+    .populate("ledgerEntries", "accountId direction amount debit credit category transactionDate notes status reversalOf reversedByEntry journalGroupId")
     .lean();
 
 const populateReceiptListQuery = (query) =>

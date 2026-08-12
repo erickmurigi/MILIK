@@ -28,7 +28,7 @@ const escapeHtml = (v) =>
     .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 
 // ─── Section block ────────────────────────────────────────────────────────────
-const SectionBlock = ({ section, categoryTotal, accentColor }) => {
+const SectionBlock = React.memo(({ section, categoryTotal, accentColor }) => {
   const [open, setOpen] = useState(true);
   const share = categoryTotal > 0
     ? Math.min(Math.abs(section.total / categoryTotal) * 100, 100)
@@ -92,10 +92,10 @@ const SectionBlock = ({ section, categoryTotal, accentColor }) => {
       )}
     </div>
   );
-};
+});
 
 // ─── Column card ──────────────────────────────────────────────────────────────
-const ColumnCard = ({ title, sections, total, totalColor, accentColor, categoryTotal }) => (
+const ColumnCard = React.memo(({ title, sections, total, totalColor, accentColor, categoryTotal }) => (
   <div className="flex flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
     <div className="flex items-center justify-between px-4 py-2.5" style={{ background: GRN }}>
       <span className="text-[10px] font-black uppercase tracking-[0.12em] text-white">{title}</span>
@@ -127,7 +127,7 @@ const ColumnCard = ({ title, sections, total, totalColor, accentColor, categoryT
       </span>
     </div>
   </div>
-);
+));
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const BalanceSheetReport = () => {

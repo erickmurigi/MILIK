@@ -130,5 +130,7 @@ const PettyCashDisbursementSchema = new mongoose.Schema(
 PettyCashDisbursementSchema.index({ business: 1, pettyCashAccount: 1, date: -1 });
 PettyCashDisbursementSchema.index({ business: 1, status: 1 });
 PettyCashDisbursementSchema.index({ pettyCashAccount: 1, voucherNumber: 1 }, { unique: true });
+// getDisbursements: status filter with date sort (existing {business,status} lacks date)
+PettyCashDisbursementSchema.index({ business: 1, status: 1, date: -1 });
 
 export default mongoose.model("PettyCashDisbursement", PettyCashDisbursementSchema);

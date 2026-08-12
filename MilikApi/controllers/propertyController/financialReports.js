@@ -585,44 +585,27 @@ const extractUtilityInvoiceName = (invoice) => {
   return ((match?.[1] || desc).trim().replace(/\s+/g, " ") || "Other").slice(0, 40);
 };
 
-// Builds a per-utility-type applied amount map from a receipt's allocations array
-const buildReceiptUtilityBreakdown = (receipt) => {
-  const breakdown = {};
-  normalizeArray(receipt?.allocations).forEach((row) => {
-    if (String(row?.category || "").toUpperCase() !== "UTILITY_CHARGE") return;
-    const amount = round2(Number(row?.appliedAmount || 0));
-    if (amount <= 0) return;
-    const uType = String(row?.utilityType || row?.metadata?.utilityType || "").trim() || "Other";
-    breakdown[uType] = round2((breakdown[uType] || 0) + amount);
-  });
-  return breakdown;
-};
-
-const buildReceiptAllocationTotals = (receipt = {}) => {
-  const totals = emptyAllocationTotals();
-  const allocationRows = normalizeArray(receipt?.allocations);
-  let allocatedAmount = 0;
-
-  allocationRows.forEach((row) => {
-    const amount = round2(Number(row?.appliedAmount || 0));
-    if (amount <= 0) return;
-    allocatedAmount += amount;
-    addCategorizedAmount(totals, row?.category, amount);
-  });
-
-  return {
-    ...totals,
-    allocatedAmount: round2(allocatedAmount),
-    unappliedAmount: round2(Math.max(0, Math.abs(Number(receipt?.amount || 0)) - allocatedAmount)),
-  };
-};
-
+// Single-pass receipt processing: computes allocation totals + utility breakdown in one loop
 const buildReceiptRow = (receipt = {}) => {
   const unit = receipt?.unit || {};
   const property = unit?.property || {};
   const tenant = receipt?.tenant || {};
   const landlord = pickPrimaryLandlord(property);
-  const allocationTotals = buildReceiptAllocationTotals(receipt);
+
+  const totals = emptyAllocationTotals();
+  const utilityBreakdown = {};
+  let allocatedAmount = 0;
+
+  for (const row of normalizeArray(receipt?.allocations)) {
+    const amount = round2(Number(row?.appliedAmount || 0));
+    if (amount <= 0) continue;
+    allocatedAmount += amount;
+    addCategorizedAmount(totals, row?.category, amount);
+    if (String(row?.category || "").toUpperCase() === "UTILITY_CHARGE") {
+      const uType = String(row?.utilityType || row?.metadata?.utilityType || "").trim() || "Other";
+      utilityBreakdown[uType] = round2((utilityBreakdown[uType] || 0) + amount);
+    }
+  }
 
   return {
     receiptId: String(receipt?._id || ""),
@@ -631,13 +614,13 @@ const buildReceiptRow = (receipt = {}) => {
     paymentMethod: receipt?.paymentMethod || "",
     cashbook: receipt?.cashbook || "",
     amount: round2(Math.abs(Number(receipt?.amount || 0))),
-    allocatedAmount: allocationTotals.allocatedAmount,
-    unappliedAmount: allocationTotals.unappliedAmount,
-    rentApplied: allocationTotals.rentApplied,
-    utilityApplied: allocationTotals.utilityApplied,
-    penaltyApplied: allocationTotals.penaltyApplied,
-    depositApplied: allocationTotals.depositApplied,
-    otherApplied: allocationTotals.otherApplied,
+    allocatedAmount: round2(allocatedAmount),
+    unappliedAmount: round2(Math.max(0, Math.abs(Number(receipt?.amount || 0)) - allocatedAmount)),
+    rentApplied: totals.rentApplied,
+    utilityApplied: totals.utilityApplied,
+    penaltyApplied: totals.penaltyApplied,
+    depositApplied: totals.depositApplied,
+    otherApplied: totals.otherApplied,
     tenantId: String(tenant?._id || receipt?.tenant || ""),
     tenantName: tenant?.tenantName || tenant?.name || "Unknown Tenant",
     unitId: String(unit?._id || receipt?.unit || ""),
@@ -648,7 +631,7 @@ const buildReceiptRow = (receipt = {}) => {
     landlordName: landlord?.name || "N/A",
     referenceNumber: receipt?.referenceNumber || "",
     description: receipt?.description || "",
-    utilityBreakdown: buildReceiptUtilityBreakdown(receipt),
+    utilityBreakdown,
   };
 };
 
@@ -667,12 +650,7 @@ const buildEffectiveReceiptQuery = ({ businessId, startDate = null, endDate = nu
     isReversed: { $ne: true },
     reversalOf: null,
     isCancellationEntry: { $ne: true },
-    $or: [
-      { postingStatus: { $exists: false } },
-      { postingStatus: null },
-      { postingStatus: "" },
-      { postingStatus: "posted" },
-    ],
+    postingStatus: { $in: [null, "", "posted"] },
   };
 
   if (startDate || endDate) {
@@ -712,8 +690,11 @@ export const getRentalCollectionReport = async (req, res, next) => {
     let zonePropertyIds = null;
     if (req.query.zone && !req.query.propertyId && !req.query.unitId) {
       const zoneLower = req.query.zone.toLowerCase().trim();
-      const zoneProps = await Property.find({ business: businessId }, { _id: 1, zoneRegion: 1 }).lean();
-      zonePropertyIds = zoneProps.filter((p) => (p.zoneRegion || '').toLowerCase() === zoneLower).map((p) => p._id);
+      const zoneProps = await Property.find(
+        { business: businessId, zoneRegion: { $regex: `^${zoneLower}$`, $options: "i" } },
+        { _id: 1 }
+      ).lean();
+      zonePropertyIds = zoneProps.map((p) => p._id);
     }
 
     // RentPayment doesn't reliably carry a direct property field — resolve via unit.
@@ -780,6 +761,7 @@ export const getRentalCollectionReport = async (req, res, next) => {
     const propertySummaryMap = new Map();
     const tenantSet = new Set();
     const propertySet = new Set();
+    const allUtilityTypesSet = new Set();
     const summary = {
       totalCollected: 0,           // ALL receipts including deposits
       operationalCollected: 0,     // Rent + utility + penalty + other (excludes deposits)
@@ -838,6 +820,7 @@ export const getRentalCollectionReport = async (req, res, next) => {
       bucket.utilityApplied += row.utilityApplied;
       Object.entries(row.utilityBreakdown || {}).forEach(([ut, amt]) => {
         bucket.utilityBreakdown[ut] = round2((bucket.utilityBreakdown[ut] || 0) + amt);
+        allUtilityTypesSet.add(ut);
       });
       bucket.penaltyApplied += row.penaltyApplied;
       if (row.tenantId) bucket.tenantIds.add(String(row.tenantId));
@@ -898,7 +881,7 @@ export const getRentalCollectionReport = async (req, res, next) => {
       },
       summary,
       byProperty,
-      allUtilityTypes: [...new Set(filteredRows.flatMap((r) => Object.keys(r.utilityBreakdown || {})))].sort(),
+      allUtilityTypes: [...allUtilityTypesSet].sort(),
       rows: filteredRows,
     });
   } catch (error) {
@@ -964,6 +947,7 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
     // ── Step 3: snapshot computation in chunks of 500 ──
     const REPORT_CHUNK = 500;
     const allRows = [];
+    const allUtilityTypesSet = new Set();
 
     for (let i = 0; i < baseRows.length; i += REPORT_CHUNK) {
       const chunkRows = baseRows.slice(i, i + REPORT_CHUNK);
@@ -998,6 +982,12 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
         let penaltyBalance = 0;
         let depositBalance = 0;
         let otherBalance = 0;
+        let rentInvoiced = 0;
+        let utilityInvoiced = 0;
+        const utilityInvoicedBreakdown = {};
+        let penaltyInvoiced = 0;
+        let depositInvoiced = 0;
+        let otherInvoiced = 0;
         let oldestDueDateMs = null;
 
         for (const invoice of invoices) {
@@ -1008,14 +998,26 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
           totalInvoiced += amount;
           totalPaidApplied += applied;
           outstanding += remaining;
-          if (category === "RENT_CHARGE") rentBalance += remaining;
-          else if (category === "UTILITY_CHARGE") {
+          if (category === "RENT_CHARGE") {
+            rentBalance += remaining;
+            rentInvoiced += amount;
+          } else if (category === "UTILITY_CHARGE") {
             utilityBalance += remaining;
+            utilityInvoiced += amount;
             const uName = extractUtilityInvoiceName(invoice);
             utilityBreakdown[uName] = round2((utilityBreakdown[uName] || 0) + remaining);
-          } else if (category === "LATE_PENALTY_CHARGE") penaltyBalance += remaining;
-          else if (category === "DEPOSIT_CHARGE") depositBalance += remaining;
-          else otherBalance += remaining;
+            utilityInvoicedBreakdown[uName] = round2((utilityInvoicedBreakdown[uName] || 0) + amount);
+            allUtilityTypesSet.add(uName);
+          } else if (category === "LATE_PENALTY_CHARGE") {
+            penaltyBalance += remaining;
+            penaltyInvoiced += amount;
+          } else if (category === "DEPOSIT_CHARGE") {
+            depositBalance += remaining;
+            depositInvoiced += amount;
+          } else {
+            otherBalance += remaining;
+            otherInvoiced += amount;
+          }
           if (remaining > 0) {
             const reportDueDate = resolveInvoiceDueDateForReports(invoice);
             if (reportDueDate) {
@@ -1053,6 +1055,12 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
           penaltyBalance: round2(penaltyBalance),
           depositBalance: round2(depositBalance),
           otherBalance: round2(otherBalance),
+          rentInvoiced: round2(rentInvoiced),
+          utilityInvoiced: round2(utilityInvoiced),
+          utilityInvoicedBreakdown,
+          penaltyInvoiced: round2(penaltyInvoiced),
+          depositInvoiced: round2(depositInvoiced),
+          otherInvoiced: round2(otherInvoiced),
           oldestDueDate: oldestDueDateMs ? new Date(oldestDueDateMs).toISOString() : null,
           lastPaymentDate: lastPaymentDateMs ? new Date(lastPaymentDateMs).toISOString() : null,
           status,
@@ -1110,7 +1118,7 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
         search: req.query.search || "",
       },
       summary,
-      allUtilityTypes: [...new Set(rows.flatMap((r) => Object.keys(r.utilityBreakdown || {})))].sort(),
+      allUtilityTypes: [...allUtilityTypesSet].sort(),
       rows,
     });
   } catch (error) {
@@ -2791,6 +2799,434 @@ export const getIncomeMonthlySummary = async (req, res, next) => {
   }
 };
 
+export const getTenantSummaryReport = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return next(createError(400, "A valid business id is required."));
+
+    const filterPropertyId = req.query.propertyId ? String(req.query.propertyId) : "";
+    const filterStatus = req.query.status && req.query.status !== "all" ? String(req.query.status) : "";
+    const filterSearch = req.query.search ? String(req.query.search).trim() : "";
+
+    // Step 1: If propertyId filter provided, resolve unit IDs for that property up front
+    let scopedUnitIds = null;
+    if (filterPropertyId && mongoose.Types.ObjectId.isValid(filterPropertyId)) {
+      const propertyUnits = await Unit.find({ business: businessId, property: toObjectId(filterPropertyId) })
+        .select("_id")
+        .lean();
+      scopedUnitIds = propertyUnits.map((u) => u._id);
+      if (scopedUnitIds.length === 0) {
+        return res.json({ rows: [], summary: { totalTenants: 0, totalInvoiced: 0, totalPaid: 0, totalBalance: 0 } });
+      }
+    }
+
+    // Step 2: Build and run tenant query
+    const tenantQuery = { business: businessId };
+    if (scopedUnitIds) tenantQuery.unit = { $in: scopedUnitIds };
+    if (filterStatus === "active") {
+      tenantQuery.status = { $in: ["active", "overdue"] };
+    } else if (filterStatus === "inactive") {
+      tenantQuery.status = { $in: ["inactive", "terminated", "moved_out", "evicted"] };
+    }
+    if (filterSearch) tenantQuery.tenantName = { $regex: escapeRegex(filterSearch), $options: "i" };
+
+    const tenants = await Tenant.find(tenantQuery)
+      .select("_id tenantName name email phone unit balance status")
+      .limit(500)
+      .lean();
+
+    if (tenants.length === 0) {
+      return res.json({ rows: [], summary: { totalTenants: 0, totalInvoiced: 0, totalPaid: 0, totalBalance: 0 } });
+    }
+
+    const tenantIds = tenants.map((t) => t._id);
+
+    // Step 3: Fetch units and properties in parallel
+    const unitIds = [...new Set(tenants.map((t) => String(t.unit)).filter(Boolean))]
+      .map((id) => toObjectId(id))
+      .filter(Boolean);
+
+    const [units, properties] = await Promise.all([
+      Unit.find({ _id: { $in: unitIds } }).select("_id unitNumber name property").lean(),
+      filterPropertyId && mongoose.Types.ObjectId.isValid(filterPropertyId)
+        ? Property.find({ _id: toObjectId(filterPropertyId) }).select("_id propertyName name").lean()
+        : Property.find({ business: businessId }).select("_id propertyName name").lean(),
+    ]);
+
+    const unitMap = new Map(units.map((u) => [String(u._id), u]));
+    const propMap = new Map(properties.map((p) => [String(p._id), p]));
+
+    // Step 4: Aggregate TenantInvoice totals per tenant (one DB round-trip for all tenants)
+    const invoiceAgg = await TenantInvoice.aggregate([
+      {
+        $match: {
+          business: new mongoose.Types.ObjectId(String(businessId)),
+          tenant: { $in: tenantIds },
+          status: { $nin: ["cancelled", "reversed"] },
+          postingStatus: { $nin: ["failed", "reversed"] },
+        },
+      },
+      {
+        $group: {
+          _id: "$tenant",
+          totalInvoiced: { $sum: "$amount" },
+          invoiceCount: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const invoiceMap = new Map(invoiceAgg.map((a) => [String(a._id), a]));
+
+    // Step 5: Join tenant data with invoice aggregates and unit/property lookups
+    const rows = tenants.map((tenant) => {
+      const unit = unitMap.get(String(tenant.unit || "")) || {};
+      const propId = String(unit.property || "");
+      const prop = propMap.get(propId) || {};
+
+      const inv = invoiceMap.get(String(tenant._id)) || { totalInvoiced: 0, invoiceCount: 0 };
+      const totalInvoiced = round2(Number(inv.totalInvoiced) || 0);
+      // Tenant.balance is the authoritative maintained outstanding balance
+      const balance = round2(Number(tenant.balance) || 0);
+      const totalPaid = round2(Math.max(0, totalInvoiced - balance));
+
+      return {
+        tenantId: String(tenant._id),
+        tenantName: tenant.tenantName || tenant.name || "Unknown Tenant",
+        email: tenant.email || "—",
+        phone: tenant.phone || "—",
+        propertyName: prop.propertyName || prop.name || "—",
+        propertyId: propId,
+        unitNumber: unit.unitNumber || unit.name || "—",
+        totalInvoiced,
+        totalPaid,
+        balance,
+        invoiceCount: inv.invoiceCount || 0,
+        status: String(tenant.status || "inactive").toLowerCase(),
+      };
+    });
+
+    // Step 6: Compute aggregate summary totals
+    const summary = rows.reduce(
+      (acc, r) => {
+        acc.totalInvoiced = round2(acc.totalInvoiced + r.totalInvoiced);
+        acc.totalPaid = round2(acc.totalPaid + r.totalPaid);
+        acc.totalBalance = round2(acc.totalBalance + r.balance);
+        return acc;
+      },
+      { totalTenants: rows.length, totalInvoiced: 0, totalPaid: 0, totalBalance: 0 }
+    );
+
+    return res.json({ rows, summary });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── Rental Aged Analysis ─────────────────────────────────────────────────────
+// Returns one row per tenant with outstanding receivables bucketed into aging
+// periods (current / 1-30 / 31-60 / 61-90 / 90+ days overdue).  All allocation
+// math runs inside MongoDB — the browser just renders the pre-computed rows.
+export const getRentalAgedAnalysisReport = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return next(createError(400, "Missing business"));
+
+    const now = new Date();
+
+    // ── Build the base invoice match ──────────────────────────────────────────
+    const match = {
+      business: businessId,
+      category: { $in: ["RENT_CHARGE", "UTILITY_CHARGE", "LATE_PENALTY_CHARGE"] },
+      status: { $nin: ["cancelled", "reversed"] },
+    };
+
+    // Optional single-category filter (narrows the $in to one value)
+    if (req.query.category && ["RENT_CHARGE", "UTILITY_CHARGE", "LATE_PENALTY_CHARGE"].includes(req.query.category)) {
+      match.category = req.query.category;
+    }
+
+    // Optional property filter — takes precedence over zone
+    if (req.query.propertyId) {
+      match.property = toObjectId(req.query.propertyId);
+    } else if (req.query.zone) {
+      const zoneLower = req.query.zone.toLowerCase().trim();
+      const zoneProps = await Property.find(
+        { business: businessId, zoneRegion: { $regex: `^${zoneLower}$`, $options: "i" } },
+        { _id: 1 }
+      ).lean();
+      match.property = { $in: zoneProps.map((p) => p._id) };
+    }
+
+    // ── Aggregation pipeline ──────────────────────────────────────────────────
+    const pipeline = [
+      { $match: match },
+
+      // Join matching RentPayments via the index on allocations.invoice.
+      // localField/foreignField syntax lets MongoDB use the existing index.
+      {
+        $lookup: {
+          from: "rentpayments",
+          localField: "_id",
+          foreignField: "allocations.invoice",
+          as: "_payments",
+        },
+      },
+
+      // Sum applied amounts across non-reversed/non-cancelled payments,
+      // counting only allocations that actually reference this invoice's _id.
+      {
+        $addFields: {
+          _totalPaid: {
+            $sum: {
+              $map: {
+                input: {
+                  $filter: {
+                    input: { $ifNull: ["$_payments", []] },
+                    cond: {
+                      $and: [
+                        { $ne: [{ $ifNull: ["$$this.isReversed", false] }, true] },
+                        { $ne: [{ $ifNull: ["$$this.isCancelled", false] }, true] },
+                      ],
+                    },
+                  },
+                },
+                as: "pmt",
+                in: {
+                  $sum: {
+                    $map: {
+                      input: {
+                        $filter: {
+                          input: { $ifNull: ["$$pmt.allocations", []] },
+                          cond: { $eq: ["$$this.invoice", "$_id"] },
+                        },
+                      },
+                      as: "alloc",
+                      in: { $ifNull: ["$$alloc.appliedAmount", 0] },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+
+      // outstanding = max(0, amount - totalPaid).  Drop zero-balance invoices early.
+      {
+        $addFields: {
+          _outstanding: {
+            $max: [0, { $subtract: [{ $ifNull: ["$amount", 0] }, "$_totalPaid"] }],
+          },
+        },
+      },
+      { $match: { _outstanding: { $gt: 0.005 } } },
+
+      // Release the potentially large payments array before subsequent stages.
+      { $project: { _payments: 0 } },
+
+      // Effective due date: dueDate → metadata chain → invoiceDate
+      {
+        $addFields: {
+          _effectiveDueDate: {
+            $ifNull: [
+              "$dueDate",
+              {
+                $ifNull: [
+                  "$metadata.periodEndDate",
+                  {
+                    $ifNull: [
+                      "$metadata.periodToDate",
+                      {
+                        $ifNull: [
+                          "$metadata.periodStartDate",
+                          { $ifNull: ["$metadata.periodFromDate", "$invoiceDate"] },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+
+      // Overdue days (whole days; 0 = not yet due or due today → current bucket)
+      {
+        $addFields: {
+          _overdueDays: {
+            $cond: {
+              if: { $gt: [{ $ifNull: ["$_effectiveDueDate", null] }, null] },
+              then: {
+                $max: [
+                  0,
+                  {
+                    $floor: {
+                      $divide: [{ $subtract: [now, "$_effectiveDueDate"] }, 86400000],
+                    },
+                  },
+                ],
+              },
+              else: 0,
+            },
+          },
+        },
+      },
+
+      // Assign the outstanding balance to exactly one aging bucket
+      {
+        $addFields: {
+          _current: { $cond: [{ $lte: ["$_overdueDays", 0] }, "$_outstanding", 0] },
+          _days30: {
+            $cond: [
+              { $and: [{ $gte: ["$_overdueDays", 1] }, { $lte: ["$_overdueDays", 30] }] },
+              "$_outstanding",
+              0,
+            ],
+          },
+          _days60: {
+            $cond: [
+              { $and: [{ $gte: ["$_overdueDays", 31] }, { $lte: ["$_overdueDays", 60] }] },
+              "$_outstanding",
+              0,
+            ],
+          },
+          _days90: {
+            $cond: [
+              { $and: [{ $gte: ["$_overdueDays", 61] }, { $lte: ["$_overdueDays", 90] }] },
+              "$_outstanding",
+              0,
+            ],
+          },
+          _days90Plus: {
+            $cond: [{ $gte: ["$_overdueDays", 91] }, "$_outstanding", 0],
+          },
+        },
+      },
+
+      // Resolve display names (pipeline-form keeps projections tight)
+      {
+        $lookup: {
+          from: "tenants",
+          localField: "tenant",
+          foreignField: "_id",
+          as: "_tenant",
+          pipeline: [{ $project: { tenantName: 1, name: 1 } }],
+        },
+      },
+      {
+        $lookup: {
+          from: "properties",
+          localField: "property",
+          foreignField: "_id",
+          as: "_property",
+          pipeline: [{ $project: { propertyName: 1, name: 1 } }],
+        },
+      },
+      {
+        $lookup: {
+          from: "units",
+          localField: "unit",
+          foreignField: "_id",
+          as: "_unit",
+          pipeline: [{ $project: { unitNumber: 1, name: 1 } }],
+        },
+      },
+      {
+        $lookup: {
+          from: "landlords",
+          localField: "landlord",
+          foreignField: "_id",
+          as: "_landlord",
+          pipeline: [{ $project: { name: 1 } }],
+        },
+      },
+
+      // Group by tenant — sum each aging bucket, track oldest effective due date
+      {
+        $group: {
+          _id: "$tenant",
+          tenantName: {
+            $first: {
+              $ifNull: [
+                { $arrayElemAt: ["$_tenant.tenantName", 0] },
+                { $arrayElemAt: ["$_tenant.name", 0] },
+              ],
+            },
+          },
+          propertyId: { $first: "$property" },
+          propertyName: {
+            $first: {
+              $ifNull: [
+                { $arrayElemAt: ["$_property.propertyName", 0] },
+                { $arrayElemAt: ["$_property.name", 0] },
+              ],
+            },
+          },
+          unitId: { $first: "$unit" },
+          unitNumber: {
+            $first: {
+              $ifNull: [
+                { $arrayElemAt: ["$_unit.unitNumber", 0] },
+                { $arrayElemAt: ["$_unit.name", 0] },
+              ],
+            },
+          },
+          landlordId: { $first: "$landlord" },
+          landlordName: { $first: { $arrayElemAt: ["$_landlord.name", 0] } },
+          current: { $sum: "$_current" },
+          days30: { $sum: "$_days30" },
+          days60: { $sum: "$_days60" },
+          days90: { $sum: "$_days90" },
+          days90Plus: { $sum: "$_days90Plus" },
+          total: { $sum: "$_outstanding" },
+          oldestDueDate: { $min: "$_effectiveDueDate" },
+        },
+      },
+
+      { $sort: { total: -1 } },
+    ];
+
+    const rawRows = await TenantInvoice.aggregate(pipeline);
+
+    const rows = rawRows.map((r) => ({
+      tenantId: r._id,
+      tenantName: r.tenantName || "Unknown Tenant",
+      propertyId: r.propertyId,
+      propertyName: r.propertyName || "N/A",
+      unitId: r.unitId,
+      unitNumber: r.unitNumber || "N/A",
+      landlordId: r.landlordId,
+      landlordName: r.landlordName || "",
+      current: round2(r.current || 0),
+      days30: round2(r.days30 || 0),
+      days60: round2(r.days60 || 0),
+      days90: round2(r.days90 || 0),
+      days90Plus: round2(r.days90Plus || 0),
+      total: round2(r.total || 0),
+      oldestDueDate: r.oldestDueDate || null,
+    }));
+
+    const summary = rows.reduce(
+      (acc, row) => {
+        acc.current += row.current;
+        acc.days30 += row.days30;
+        acc.days60 += row.days60;
+        acc.days90 += row.days90;
+        acc.days90Plus += row.days90Plus;
+        acc.totalOutstanding += row.total;
+        return acc;
+      },
+      { current: 0, days30: 0, days60: 0, days90: 0, days90Plus: 0, totalOutstanding: 0 }
+    );
+    Object.keys(summary).forEach((k) => { summary[k] = round2(summary[k]); });
+
+    return res.status(200).json({ success: true, rows, summary });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export default {
   getTrialBalanceReport,
   getIncomeStatementReport,
@@ -2808,4 +3244,6 @@ export default {
   getFinancialRatios,
   performYearEndClose,
   getLiabilitySubledger,
+  getTenantSummaryReport,
+  getRentalAgedAnalysisReport,
 };

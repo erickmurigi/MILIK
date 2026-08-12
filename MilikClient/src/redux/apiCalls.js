@@ -2990,6 +2990,16 @@ export const getTenantPaidBalanceReport = async (params = {}, signal) => {
   const res = await adminRequests.get(`/financial-reports/tenant-paid-balance${query ? `?${query}` : ""}`, { timeout: 120_000, signal });
   return res.data;
 };
+
+export const getRentalAgedAnalysisReport = async (params = {}, signal) => {
+  const res = await adminRequests.get("/financial-reports/rental-aged-analysis", { params, signal, timeout: 120_000 });
+  return res.data;
+};
+
+export const getTenantSummaryReport = async (params = {}, signal) => {
+  const res = await adminRequests.get("/financial-reports/tenant-summary", { params, signal, timeout: 60_000 });
+  return res.data;
+};
 export const getVatReturnSummary = async (params = {}) => {
   const query = new URLSearchParams(
     Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== "")
