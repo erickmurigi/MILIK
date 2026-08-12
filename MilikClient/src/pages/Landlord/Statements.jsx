@@ -2364,6 +2364,10 @@ const Statements = () => {
                                     <td className="px-2 py-0.5 text-right font-semibold text-amber-700">{currency(item.amount)}</td>
                                   </tr>
                                 ))}
+                                <tr className="border-t border-slate-200 bg-slate-50">
+                                  <td colSpan={3} className="px-2 py-0.5 text-[10px] font-bold text-slate-700">Total Added to Landlord</td>
+                                  <td className="px-2 py-0.5 text-right text-[11px] font-bold text-emerald-800">{currency(depositSettlementTotals.additions)}</td>
+                                </tr>
                               </tbody>
                             </table>
                           </div>
@@ -2463,6 +2467,10 @@ const Statements = () => {
                                     <td className="px-2 py-0.5 text-right font-semibold text-slate-800">{currency(item.amount)}</td>
                                   </tr>
                                 ))}
+                                <tr className="border-t border-slate-200 bg-slate-50">
+                                  <td colSpan={2} className="px-2 py-0.5 text-[10px] font-bold text-slate-700">Total</td>
+                                  <td className="px-2 py-0.5 text-right text-[11px] font-bold text-slate-900">{currency(nonDepositExpenseRows.reduce((s, r) => s + Number(r.amount || 0), 0))}</td>
+                                </tr>
                               </tbody>
                             </table>
                           </div>
@@ -2489,6 +2497,10 @@ const Statements = () => {
                                     <td className="px-2 py-0.5 text-right font-semibold text-emerald-700">{currency(item.amount)}</td>
                                   </tr>
                                 ))}
+                                <tr className="border-t border-slate-200 bg-emerald-50/40">
+                                  <td colSpan={2} className="px-2 py-0.5 text-[10px] font-bold text-emerald-800">Total</td>
+                                  <td className="px-2 py-0.5 text-right text-[11px] font-bold text-emerald-800">{currency(nonDepositAdditionRows.reduce((s, r) => s + Number(r.amount || 0), 0))}</td>
+                                </tr>
                               </tbody>
                             </table>
                           </div>
