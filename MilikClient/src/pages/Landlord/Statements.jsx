@@ -2324,93 +2324,93 @@ const Statements = () => {
                     <div className="space-y-3 border-t border-slate-200 bg-slate-50 px-4 py-3">
                       {depositSettlementRows.length > 0 && (
                         <div>
-                          <h4 className="mb-3 border-l-2 border-[#0B3B2E] pl-2.5 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">
-                            Deposit Remittance
-                          </h4>
-                          <div className="mb-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                            <div className="rounded-xl bg-emerald-50 px-4 py-3.5">
-                              <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">Added to landlord</p>
-                              <p className="mt-1.5 text-base font-bold text-emerald-900">{currency(depositSettlementTotals.additions)}</p>
-                            </div>
-                            <div className="rounded-xl bg-amber-50 px-4 py-3.5">
-                              <p className="text-[10px] font-bold uppercase tracking-wide text-amber-600">Direct receipt offsets</p>
-                              <p className="mt-1.5 text-base font-bold text-amber-900">{currency(depositSettlementTotals.offsets)}</p>
-                            </div>
-                            <div className="rounded-xl bg-white px-4 py-3.5 border border-slate-200">
-                              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Net settlement impact</p>
-                              <p className="mt-1.5 text-base font-bold text-slate-900">{currency(depositSettlementTotals.netImpact)}</p>
+                          <div className="mb-1.5 flex items-center gap-1">
+                            <h4 className="border-l-2 border-[#0B3B2E] pl-2 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">Deposit Remittance</h4>
+                            <div className="ml-auto flex items-center gap-3 rounded-md bg-white border border-slate-200 px-3 py-1 text-[11px]">
+                              <span className="text-[9px] font-bold uppercase tracking-wide text-emerald-600">Added</span>
+                              <span className="font-bold text-emerald-800">{currency(depositSettlementTotals.additions)}</span>
+                              <span className="text-slate-200">|</span>
+                              <span className="text-[9px] font-bold uppercase tracking-wide text-amber-600">Offsets</span>
+                              <span className="font-bold text-amber-800">{currency(depositSettlementTotals.offsets)}</span>
+                              <span className="text-slate-200">|</span>
+                              <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Net</span>
+                              <span className="font-bold text-slate-900">{currency(depositSettlementTotals.netImpact)}</span>
                             </div>
                           </div>
-                          <div className="space-y-1.5">
-                            {depositSettlementAdditionRows.map((item, index) => (
-                              <div key={item._id || item.id || `deposit-settlement-add-${index}`} className="flex items-center justify-between rounded-lg border border-emerald-100 bg-emerald-50/70 px-3 py-1.5">
-                                <div>
-                                  <p className="text-xs text-slate-700">{item.description || "Deposit remittance"}</p>
-                                  <p className="mt-0.5 text-[10px] text-slate-400">{item.holder === "landlord" ? "Landlord-held deposit" : "Deposit settlement"}</p>
-                                </div>
-                                <span className="text-xs font-semibold text-emerald-800">{currency(item.amount)}</span>
-                              </div>
-                            ))}
-                            {depositSettlementOffsetRows.map((item, index) => (
-                              <div key={item._id || item.id || `deposit-settlement-offset-${index}`} className="flex items-center justify-between rounded-lg border border-amber-100 bg-amber-50/70 px-3 py-1.5">
-                                <div>
-                                  <p className="text-xs text-slate-700">{item.description || "Deposit offset"}</p>
-                                  <p className="mt-0.5 text-[10px] text-slate-400">Shown as both addition and deduction for direct landlord deposit receipts</p>
-                                </div>
-                                <span className="text-xs font-semibold text-amber-800">{currency(item.amount)}</span>
-                              </div>
-                            ))}
+                          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                            <table className="min-w-full text-[11px]">
+                              <thead>
+                                <tr className="border-b border-slate-200 bg-slate-50">
+                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-slate-400">#</th>
+                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-slate-400">Description</th>
+                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-slate-400">Type</th>
+                                  <th className="px-2 py-1 text-right text-[9px] font-bold uppercase tracking-wide text-slate-400">Amount</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {depositSettlementAdditionRows.map((item, index) => (
+                                  <tr key={item._id || item.id || `deposit-settlement-add-${index}`} className="odd:bg-white even:bg-emerald-50/20 hover:bg-orange-50/50 transition-colors">
+                                    <td className="px-2 py-0.5 text-[10px] text-slate-400">{index + 1}</td>
+                                    <td className="px-2 py-0.5 text-slate-700">{item.description || "Deposit remittance"}</td>
+                                    <td className="px-2 py-0.5"><span className="rounded bg-emerald-100 px-1 py-px text-[9px] font-semibold text-emerald-700">{item.holder === "landlord" ? "Landlord-held" : "Settlement"}</span></td>
+                                    <td className="px-2 py-0.5 text-right font-semibold text-emerald-700">{currency(item.amount)}</td>
+                                  </tr>
+                                ))}
+                                {depositSettlementOffsetRows.map((item, index) => (
+                                  <tr key={item._id || item.id || `deposit-settlement-offset-${index}`} className="odd:bg-white even:bg-amber-50/20 hover:bg-orange-50/50 transition-colors">
+                                    <td className="px-2 py-0.5 text-[10px] text-slate-400">{depositSettlementAdditionRows.length + index + 1}</td>
+                                    <td className="px-2 py-0.5 text-slate-700">{item.description || "Deposit offset"}</td>
+                                    <td className="px-2 py-0.5"><span className="rounded bg-amber-100 px-1 py-px text-[9px] font-semibold text-amber-700">Direct offset</span></td>
+                                    <td className="px-2 py-0.5 text-right font-semibold text-amber-700">{currency(item.amount)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           </div>
                         </div>
                       )}
 
                       {broughtForwardCreditApplicationRows.length > 0 && (
                         <div>
-                          <h4 className="mb-3 border-l-2 border-[#0B3B2E] pl-2.5 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">
-                            Brought Forward Credits Applied
-                          </h4>
-                          <div className="mb-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                            <div className="rounded-xl bg-sky-50 px-4 py-3.5">
-                              <p className="text-[10px] font-bold uppercase tracking-wide text-sky-600">Total applied</p>
-                              <p className="mt-1.5 text-base font-bold text-sky-900">{currency(broughtForwardCreditApplicationTotals.totalApplied || 0)}</p>
+                          <div className="mb-1.5 flex items-center gap-1">
+                            <h4 className="border-l-2 border-[#0B3B2E] pl-2 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">Brought Forward Credits</h4>
+                            <div className="ml-auto flex items-center gap-3 rounded-md bg-white border border-slate-200 px-3 py-1 text-[11px]">
+                              <span className="text-[9px] font-bold uppercase tracking-wide text-sky-600">Total</span>
+                              <span className="font-bold text-sky-800">{currency(broughtForwardCreditApplicationTotals.totalApplied || 0)}</span>
+                              {broughtForwardCreditApplicationTotals.rentApplied > 0 && <><span className="text-slate-200">|</span><span className="text-[9px] text-slate-500">Rent <span className="font-semibold text-slate-700">{currency(broughtForwardCreditApplicationTotals.rentApplied)}</span></span></>}
+                              {broughtForwardCreditApplicationTotals.utilityApplied > 0 && <><span className="text-slate-200">|</span><span className="text-[9px] text-slate-500">Utils <span className="font-semibold text-slate-700">{currency(broughtForwardCreditApplicationTotals.utilityApplied)}</span></span></>}
                             </div>
-                            {[
-                              { label: "Rent portion", val: broughtForwardCreditApplicationTotals.rentApplied || 0 },
-                              { label: "Utility portion", val: broughtForwardCreditApplicationTotals.utilityApplied || 0 },
-                              { label: "VAT portion", val: broughtForwardCreditApplicationTotals.taxApplied || 0 },
-                            ].map(({ label, val }) => (
-                              <div key={label} className="rounded-xl border border-slate-200 bg-white px-4 py-3.5">
-                                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
-                                <p className="mt-1.5 text-base font-bold text-slate-900">{currency(val)}</p>
-                              </div>
-                            ))}
                           </div>
-                          <div className="space-y-1.5">
-                            {broughtForwardCreditApplicationRows.map((item, index) => (
-                              <div key={item._id || item.id || `bf-credit-${index}`} className="flex items-start justify-between gap-3 rounded-lg border border-sky-100 bg-sky-50/60 px-3 py-1.5">
-                                <div>
-                                  <p className="text-xs text-slate-700">{item.description || "Brought forward credit applied"}</p>
-                                  <p className="mt-0.5 text-[10px] text-slate-400">
-                                    Receipt {item.receiptReference || "—"}
-                                    {item.chargeReference ? ` · Applied to ${item.chargeReference}` : ""}
-                                    {item.unit ? ` · Unit ${item.unit}` : ""}
-                                  </p>
-                                </div>
-                                <span className="flex-shrink-0 text-xs font-semibold text-sky-800">{currency(item.amount)}</span>
-                              </div>
-                            ))}
+                          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                            <table className="min-w-full text-[11px]">
+                              <thead>
+                                <tr className="border-b border-slate-200 bg-slate-50">
+                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-slate-400">#</th>
+                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-slate-400">Description</th>
+                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-slate-400">Receipt</th>
+                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-slate-400">Unit</th>
+                                  <th className="px-2 py-1 text-right text-[9px] font-bold uppercase tracking-wide text-slate-400">Amount</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {broughtForwardCreditApplicationRows.map((item, index) => (
+                                  <tr key={item._id || item.id || `bf-credit-${index}`} className="odd:bg-white even:bg-sky-50/20 hover:bg-orange-50/50 transition-colors">
+                                    <td className="px-2 py-0.5 text-[10px] text-slate-400">{index + 1}</td>
+                                    <td className="px-2 py-0.5 text-slate-700">{item.description || "B/F credit applied"}</td>
+                                    <td className="px-2 py-0.5 text-slate-500">{item.receiptReference || "—"}</td>
+                                    <td className="px-2 py-0.5 text-slate-500">{item.unit || "—"}</td>
+                                    <td className="px-2 py-0.5 text-right font-semibold text-sky-700">{currency(item.amount)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           </div>
                         </div>
                       )}
 
                       {depositMemoRows.length > 0 && (
                         <div>
-                          <h4 className="mb-1 border-l-2 border-[#0B3B2E] pl-2.5 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">
-                            Deposit Memorandum
-                          </h4>
-                          <p className="mb-3 text-[11px] text-slate-500">
-                            Held deposit positions shown as positive values for readability — excluded from settlement.
-                          </p>
+                          <h4 className="mb-1 border-l-2 border-[#0B3B2E] pl-2 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">Deposit Memorandum <span className="ml-1 text-[9px] font-normal normal-case tracking-normal text-slate-400">held positions — excluded from settlement</span></h4>
                           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
                             <table className="min-w-full divide-y divide-slate-100 text-xs">
                               <thead className="bg-slate-50">
@@ -2445,80 +2445,116 @@ const Statements = () => {
 
                       {nonDepositExpenseRows.length > 0 && (
                         <div>
-                          <h4 className="mb-2 border-l-2 border-[#0B3B2E] pl-2.5 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">
-                            Deductions / Expenses
-                          </h4>
-                          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                            {nonDepositExpenseRows.map((item, index) => (
-                              <div key={item._id || item.id || `expense-${index}`} className="flex items-center justify-between border-b border-slate-100 px-3 py-1.5 last:border-0 odd:bg-white even:bg-slate-50/60">
-                                <span className="text-xs text-slate-700">{item.description || item.name || "Expense"}</span>
-                                <span className="text-xs font-semibold text-slate-900">{currency(item.amount)}</span>
-                              </div>
-                            ))}
+                          <h4 className="mb-1 border-l-2 border-[#0B3B2E] pl-2 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">Deductions / Expenses</h4>
+                          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                            <table className="min-w-full text-[11px]">
+                              <thead>
+                                <tr className="border-b border-slate-200 bg-slate-50">
+                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-slate-400">#</th>
+                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-slate-400">Description</th>
+                                  <th className="px-2 py-1 text-right text-[9px] font-bold uppercase tracking-wide text-slate-400">Amount</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {nonDepositExpenseRows.map((item, index) => (
+                                  <tr key={item._id || item.id || `expense-${index}`} className="odd:bg-white even:bg-slate-50/60 hover:bg-orange-50/50 transition-colors">
+                                    <td className="px-2 py-0.5 text-[10px] text-slate-400">{index + 1}</td>
+                                    <td className="px-2 py-0.5 text-slate-700">{item.description || item.name || "Expense"}</td>
+                                    <td className="px-2 py-0.5 text-right font-semibold text-slate-800">{currency(item.amount)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           </div>
                         </div>
                       )}
 
                       {nonDepositAdditionRows.length > 0 && (
                         <div>
-                          <h4 className="mb-2 border-l-2 border-[#0B3B2E] pl-2.5 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">
-                            Additions
-                          </h4>
-                          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                            {nonDepositAdditionRows.map((item, index) => (
-                              <div key={item._id || item.id || `addition-${index}`} className="flex items-center justify-between border-b border-slate-100 px-3 py-1.5 last:border-0 odd:bg-white even:bg-slate-50/60">
-                                <span className="text-xs text-slate-700">{item.description || item.name || "Addition"}</span>
-                                <span className="text-xs font-semibold text-emerald-700">{currency(item.amount)}</span>
-                              </div>
-                            ))}
+                          <h4 className="mb-1 border-l-2 border-[#0B3B2E] pl-2 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">Additions</h4>
+                          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                            <table className="min-w-full text-[11px]">
+                              <thead>
+                                <tr className="border-b border-slate-200 bg-slate-50">
+                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-slate-400">#</th>
+                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-slate-400">Description</th>
+                                  <th className="px-2 py-1 text-right text-[9px] font-bold uppercase tracking-wide text-slate-400">Amount</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {nonDepositAdditionRows.map((item, index) => (
+                                  <tr key={item._id || item.id || `addition-${index}`} className="odd:bg-white even:bg-emerald-50/20 hover:bg-orange-50/50 transition-colors">
+                                    <td className="px-2 py-0.5 text-[10px] text-slate-400">{index + 1}</td>
+                                    <td className="px-2 py-0.5 text-slate-700">{item.description || item.name || "Addition"}</td>
+                                    <td className="px-2 py-0.5 text-right font-semibold text-emerald-700">{currency(item.amount)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           </div>
                         </div>
                       )}
 
                       {earlyPayoutRows.length > 0 && (
                         <div>
-                          <h4 className="mb-1 border-l-2 border-amber-400 pl-2.5 text-[10px] font-bold uppercase tracking-widest text-amber-700">
-                            Early Payouts to Landlord
-                          </h4>
-                          <p className="mb-2 text-[11px] text-slate-500">Advances already paid against future remittances. Deducted from settlement.</p>
-                          <div className="overflow-hidden rounded-xl border border-amber-200 bg-white">
-                            {earlyPayoutRows.map((item, index) => (
-                              <div key={item._id || item.id || `early-payout-${index}`} className="flex items-center justify-between border-b border-amber-100 px-3 py-1.5 last:border-0 odd:bg-white even:bg-amber-50/40">
-                                <div>
-                                  <span className="text-xs text-slate-700">{item.description || "Early payout"}</span>
-                                  {item.date && <span className="ml-2 text-[10px] text-slate-400">{new Date(item.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</span>}
-                                </div>
-                                <span className="text-xs font-semibold text-amber-700">({currency(item.amount)})</span>
-                              </div>
-                            ))}
-                            <div className="flex items-center justify-between border-t border-amber-200 bg-amber-50 px-3 py-1.5">
-                              <span className="text-xs font-bold text-amber-800">Total early payouts</span>
-                              <span className="text-xs font-bold text-amber-800">({currency(Number(summary?.totalEarlyPayouts || 0))})</span>
-                            </div>
+                          <h4 className="mb-1 border-l-2 border-amber-400 pl-2 text-[10px] font-bold uppercase tracking-widest text-amber-700">Early Payouts to Landlord</h4>
+                          <div className="overflow-hidden rounded-lg border border-amber-200 bg-white">
+                            <table className="min-w-full text-[11px]">
+                              <thead>
+                                <tr className="border-b border-amber-200 bg-amber-50/60">
+                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-amber-600">#</th>
+                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-amber-600">Description</th>
+                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-amber-600">Date</th>
+                                  <th className="px-2 py-1 text-right text-[9px] font-bold uppercase tracking-wide text-amber-600">Amount</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-amber-100">
+                                {earlyPayoutRows.map((item, index) => (
+                                  <tr key={item._id || item.id || `early-payout-${index}`} className="odd:bg-white even:bg-amber-50/30 hover:bg-orange-50/50 transition-colors">
+                                    <td className="px-2 py-0.5 text-[10px] text-slate-400">{index + 1}</td>
+                                    <td className="px-2 py-0.5 text-slate-700">{item.description || "Early payout"}</td>
+                                    <td className="px-2 py-0.5 text-slate-500">{item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</td>
+                                    <td className="px-2 py-0.5 text-right font-semibold text-amber-700">({currency(item.amount)})</td>
+                                  </tr>
+                                ))}
+                                <tr className="border-t border-amber-200 bg-amber-50">
+                                  <td colSpan={3} className="px-2 py-0.5 text-[10px] font-bold text-amber-800">Total</td>
+                                  <td className="px-2 py-0.5 text-right text-[11px] font-bold text-amber-800">({currency(Number(summary?.totalEarlyPayouts || 0))})</td>
+                                </tr>
+                              </tbody>
+                            </table>
                           </div>
                         </div>
                       )}
 
                       {advanceRecoveryRows.length > 0 && (
                         <div>
-                          <h4 className="mb-1 border-l-2 border-red-400 pl-2.5 text-[10px] font-bold uppercase tracking-widest text-red-700">
-                            Advance Recoveries
-                          </h4>
-                          <p className="mb-2 text-[11px] text-slate-500">Landlord advances being recovered through this statement period.</p>
-                          <div className="overflow-hidden rounded-xl border border-red-200 bg-white">
-                            {advanceRecoveryRows.map((item, index) => (
-                              <div key={item._id || item.id || `advance-recovery-${index}`} className="flex items-center justify-between border-b border-red-100 px-3 py-1.5 last:border-0 odd:bg-white even:bg-red-50/40">
-                                <div>
-                                  <span className="text-xs text-slate-700">{item.description || "Advance recovery"}</span>
-                                  {item.date && <span className="ml-2 text-[10px] text-slate-400">{new Date(item.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</span>}
-                                </div>
-                                <span className="text-xs font-semibold text-red-600">({currency(item.amount)})</span>
-                              </div>
-                            ))}
-                            <div className="flex items-center justify-between border-t border-red-200 bg-red-50 px-3 py-1.5">
-                              <span className="text-xs font-bold text-red-800">Total advance recoveries</span>
-                              <span className="text-xs font-bold text-red-800">({currency(Number(summary?.totalAdvanceRecoveries || 0))})</span>
-                            </div>
+                          <h4 className="mb-1 border-l-2 border-red-400 pl-2 text-[10px] font-bold uppercase tracking-widest text-red-700">Advance Recoveries</h4>
+                          <div className="overflow-hidden rounded-lg border border-red-200 bg-white">
+                            <table className="min-w-full text-[11px]">
+                              <thead>
+                                <tr className="border-b border-red-200 bg-red-50/60">
+                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-red-600">#</th>
+                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-red-600">Description</th>
+                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-red-600">Date</th>
+                                  <th className="px-2 py-1 text-right text-[9px] font-bold uppercase tracking-wide text-red-600">Amount</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-red-100">
+                                {advanceRecoveryRows.map((item, index) => (
+                                  <tr key={item._id || item.id || `advance-recovery-${index}`} className="odd:bg-white even:bg-red-50/30 hover:bg-orange-50/50 transition-colors">
+                                    <td className="px-2 py-0.5 text-[10px] text-slate-400">{index + 1}</td>
+                                    <td className="px-2 py-0.5 text-slate-700">{item.description || "Advance recovery"}</td>
+                                    <td className="px-2 py-0.5 text-slate-500">{item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</td>
+                                    <td className="px-2 py-0.5 text-right font-semibold text-red-600">({currency(item.amount)})</td>
+                                  </tr>
+                                ))}
+                                <tr className="border-t border-red-200 bg-red-50">
+                                  <td colSpan={3} className="px-2 py-0.5 text-[10px] font-bold text-red-800">Total</td>
+                                  <td className="px-2 py-0.5 text-right text-[11px] font-bold text-red-800">({currency(Number(summary?.totalAdvanceRecoveries || 0))})</td>
+                                </tr>
+                              </tbody>
+                            </table>
                           </div>
                         </div>
                       )}
