@@ -2116,7 +2116,7 @@ const Statements = () => {
                         <th rowSpan={2} className="sticky left-[88px] z-30 w-[155px] min-w-[155px] bg-[#0B3B2E] px-2 py-1 text-left align-bottom border-r border-white/10 border-b border-white/10">
                           <div className="text-[11px] font-semibold text-white">Tenant</div>
                         </th>
-                        <th rowSpan={2} className="px-2 py-1 text-right align-bottom border-b border-white/10">
+                        <th rowSpan={2} className="w-[88px] min-w-[88px] max-w-[88px] px-2 py-1 text-right align-bottom border-b border-white/10">
                           <div className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">Ledger</div>
                           <div className="text-[11px] font-semibold text-white">Bal B/F</div>
                         </th>
@@ -2145,38 +2145,38 @@ const Statements = () => {
                       {/* ── Row 2: Individual column names ── */}
                       <tr className="bg-[#0B3B2E] border-t border-white/10">
                         {/* Invoiced sub-columns */}
-                        <th className="border-l border-white/10 px-2 py-1 text-right">
+                        <th className="w-[100px] min-w-[100px] max-w-[100px] border-l border-white/10 px-2 py-1 text-right">
                           <div className="text-[11px] font-semibold text-white/90">Rent</div>
                         </th>
                         {hasInvoiceVatColumn && (
-                          <th className="px-2 py-1 text-right">
+                          <th className="w-[80px] min-w-[80px] max-w-[80px] px-2 py-1 text-right">
                             <div className="text-[11px] font-semibold text-white/70">VAT</div>
                           </th>
                         )}
                         {statementColumns.map((column) => (
-                          <th key={`inv-head-${column.key}`} className="px-2 py-1 text-right" title={column.label}>
-                            <div className="max-w-[110px] truncate text-[11px] font-semibold text-white/90">{column.label}</div>
+                          <th key={`inv-head-${column.key}`} className="w-[100px] min-w-[100px] max-w-[100px] px-2 py-1 text-right" title={column.label}>
+                            <div className="truncate text-[11px] font-semibold text-white/90">{column.label}</div>
                           </th>
                         ))}
                         {/* Paid sub-columns */}
-                        <th className="border-l border-white/10 px-2 py-1 text-right">
+                        <th className="w-[100px] min-w-[100px] max-w-[100px] border-l border-white/10 px-2 py-1 text-right">
                           <div className="text-[11px] font-semibold text-emerald-200/90">Rent</div>
                         </th>
                         {hasInvoiceVatColumn && (
-                          <th className="px-2 py-1 text-right">
+                          <th className="w-[80px] min-w-[80px] max-w-[80px] px-2 py-1 text-right">
                             <div className="text-[11px] font-semibold text-emerald-200/70">VAT</div>
                           </th>
                         )}
                         {statementColumns.map((column) => (
-                          <th key={`paid-head-${column.key}`} className="px-2 py-1 text-right" title={column.label}>
-                            <div className="max-w-[110px] truncate text-[11px] font-semibold text-emerald-200/90">{column.label}</div>
+                          <th key={`paid-head-${column.key}`} className="w-[100px] min-w-[100px] max-w-[100px] px-2 py-1 text-right" title={column.label}>
+                            <div className="truncate text-[11px] font-semibold text-emerald-200/90">{column.label}</div>
                           </th>
                         ))}
                         {/* Summary sub-columns */}
-                        <th className="border-l border-white/10 px-2 py-1 text-right">
+                        <th className="w-[100px] min-w-[100px] max-w-[100px] border-l border-white/10 px-2 py-1 text-right">
                           <div className="text-[11px] font-semibold text-white/90">Total Paid</div>
                         </th>
-                        <th className="px-2 py-1 text-right">
+                        <th className="w-[90px] min-w-[90px] max-w-[90px] px-2 py-1 text-right">
                           <div className="text-[11px] font-semibold text-white/90">Bal C/F</div>
                         </th>
                       </tr>
@@ -2234,9 +2234,9 @@ const Statements = () => {
                                   <div className="mt-0.5 truncate max-w-[76px] text-[10px] text-slate-400">{row.allUnitLabels.join(", ")}</div>
                                 )}
                               </td>
-                              <td className={`sticky left-[88px] z-10 w-[155px] min-w-[155px] ${rowBase} border-r border-slate-100 px-2 py-1 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
+                              <td className={`sticky left-[88px] z-10 w-[200px] min-w-[200px] ${rowBase} border-r border-slate-100 px-2 py-1 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
                                 <div className="flex items-center justify-between gap-1">
-                                  <div className={`truncate text-xs font-medium ${isVacant ? "text-slate-400 italic" : "text-slate-800"} ${showBadge ? "max-w-[105px]" : "max-w-[135px]"}`}>
+                                  <div className={`truncate text-xs font-medium ${isVacant ? "text-slate-400 italic" : "text-slate-800"} ${showBadge ? "max-w-[148px]" : "max-w-[184px]"}`}>
                                     {row.tenantName || "—"}
                                   </div>
                                   {showBadge && (
@@ -2297,7 +2297,7 @@ const Statements = () => {
                       {preparedRows.length > 0 && (
                         <tr className="border-t-2 border-[#0B3B2E] bg-[#0B3B2E]">
                           <td className="sticky left-0 z-10 w-[88px] min-w-[88px] bg-[#0B3B2E] px-2 py-1.5 text-[11px] font-bold text-white">Totals</td>
-                          <td className="sticky left-[88px] z-10 w-[155px] min-w-[155px] border-r border-white/10 bg-[#0B3B2E] px-2 py-1.5"></td>
+                          <td className="sticky left-[88px] z-10 w-[200px] min-w-[200px] border-r border-white/10 bg-[#0B3B2E] px-2 py-1.5"></td>
                           <td className="px-2 py-1.5 text-right text-[11px] font-semibold text-white/80">{currency(totals.openingBalance ?? summary.openingBalance ?? 0)}</td>
                           {/* Invoiced totals */}
                           <td className="border-l border-white/10 px-2 py-1.5 text-right text-[11px] font-semibold text-white">{currency(totals.invoicedRent ?? summary.rentInvoiced ?? 0)}</td>
