@@ -1645,14 +1645,10 @@ const Statements = () => {
                   value={periodStart}
                   max={todayIso}
                   onChange={(e) => setPeriodStart(e.target.value)}
+                  title="First statement — pick a start date"
                   className="h-7 w-full rounded-md border border-orange-400 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               )}
-              <p className="mt-0.5 text-[9px] text-slate-400 truncate">
-                {latestProcessedCutoffAt
-                  ? `Continues from ${new Date(latestProcessedCutoffAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}`
-                  : "First statement — pick a start date"}
-              </p>
             </div>
 
             <div>
@@ -1675,12 +1671,8 @@ const Statements = () => {
                   setPeriodEndIsCustom(v !== todayIso && v !== "");
                 }}
                 className="h-7 w-full rounded-md border border-orange-400 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+                title="Defaults to today — change to close the period earlier"
               />
-              <p className="mt-0.5 text-[9px] text-slate-400 truncate">
-                {periodEnd && periodEnd !== todayIso
-                  ? `Custom close — must be ≥ ${periodStart || "period start"}`
-                  : "Defaults to today — change to close earlier"}
-              </p>
             </div>
 
             <div>
