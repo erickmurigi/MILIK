@@ -69,8 +69,10 @@ const resolveInvoiceDueDateForReports = (invoice = {}) => {
 // isOperatingIncomeAccount / isOperatingExpenseAccount imported from accountClassifiers.js
 
 const buildLedgerMap = async ({ businessId, asOfDate = null, startDate = null, endDate = null, propertyId = null }) => {
+  // aggregate() does not auto-cast strings → ObjectId the way find() does.
+  const businessOid = new mongoose.Types.ObjectId(String(businessId));
   const match = {
-    business: businessId,
+    business: businessOid,
     status: { $in: REPORT_LEDGER_STATUSES },
   };
 
@@ -669,6 +671,7 @@ export const getRentalCollectionReport = async (req, res, next) => {
     if (!businessId) {
       return next(createError(400, "A valid business id is required."));
     }
+    const businessOid = new mongoose.Types.ObjectId(String(businessId));
 
     const startDate = normalizeDate(req.query.startDate || req.query.dateFrom || req.query.from);
     const endDate = normalizeDate(req.query.endDate || req.query.dateTo || req.query.to, true);
@@ -715,7 +718,7 @@ export const getRentalCollectionReport = async (req, res, next) => {
     }
 
     const invoiceQuery = {
-      business: businessId,
+      business: businessOid,
       category: { $in: ["RENT_CHARGE", "UTILITY_CHARGE", "LATE_PENALTY_CHARGE"] },
       status: { $nin: ["cancelled", "reversed"] },
       $or: [
@@ -1132,6 +1135,7 @@ export const getPropertyIncomeSummaryReport = async (req, res, next) => {
     if (!businessId) {
       return next(createError(400, "A valid business id is required."));
     }
+    const businessOid = new mongoose.Types.ObjectId(String(businessId));
 
     const startDate = normalizeDate(req.query.startDate || req.query.dateFrom || req.query.from);
     const endDate = normalizeDate(req.query.endDate || req.query.dateTo || req.query.to, true);
@@ -1164,7 +1168,7 @@ export const getPropertyIncomeSummaryReport = async (req, res, next) => {
     }
 
     const invoiceMatch = {
-      business: businessId,
+      business: businessOid,
       category: { $in: ["RENT_CHARGE", "UTILITY_CHARGE"] },
       status: { $nin: ["cancelled", "reversed"] },
       $or: [
@@ -1181,10 +1185,11 @@ export const getPropertyIncomeSummaryReport = async (req, res, next) => {
     // Exclude them from the collected total so net income is not overstated.
     const receiptMatch = {
       ...buildEffectiveReceiptQuery({ businessId, startDate, endDate, dateField: "paymentDate" }),
+      business: businessOid,  // override: aggregate() needs ObjectId, not string
       paymentType: { $ne: "deposit" },
     };
 
-    const expenseMatch = { business: businessId, date: { $gte: startDate, $lte: endDate } };
+    const expenseMatch = { business: businessOid, date: { $gte: startDate, $lte: endDate } };
     if (propertyIds) expenseMatch.property = { $in: propertyIds };
 
     // Pre-fetch unit ids for the requested properties so RentPayment aggregation
@@ -1259,7 +1264,7 @@ export const getPropertyIncomeSummaryReport = async (req, res, next) => {
       const glRows = await FinancialLedgerEntry.aggregate([
         {
           $match: {
-            business: businessId,
+            business: businessOid,
             property: { $in: allPropIds },
             status: { $in: REPORT_LEDGER_STATUSES },
             sourceTransactionType: "manual_adjustment",
@@ -1447,6 +1452,7 @@ export const getCashFlowReport = async (req, res, next) => {
     if (!businessId) {
       return next(createError(400, "A valid business id is required."));
     }
+    const businessOid = new mongoose.Types.ObjectId(String(businessId));
 
     const startDate = normalizeDate(req.query.startDate || new Date(new Date().getFullYear(), new Date().getMonth(), 1));
     const endDate = normalizeDate(req.query.endDate || new Date(), true);
@@ -1503,11 +1509,11 @@ export const getCashFlowReport = async (req, res, next) => {
     const cashOnlyMatch = { status: "approved", category: { $ne: "REVERSAL" } };
     const [openingAgg, periodAgg] = await Promise.all([
       FinancialLedgerEntry.aggregate([
-        { $match: { business: businessId, accountId: { $in: cashAccountIds }, ...cashOnlyMatch, transactionDate: { $lte: openingEndDate } } },
+        { $match: { business: businessOid, accountId: { $in: cashAccountIds }, ...cashOnlyMatch, transactionDate: { $lte: openingEndDate } } },
         { $group: { _id: "$accountId", debit: { $sum: debitExpr }, credit: { $sum: creditExpr } } },
       ]),
       FinancialLedgerEntry.aggregate([
-        { $match: { business: businessId, accountId: { $in: cashAccountIds }, ...cashOnlyMatch, transactionDate: { $gte: startDate, $lte: endDate } } },
+        { $match: { business: businessOid, accountId: { $in: cashAccountIds }, ...cashOnlyMatch, transactionDate: { $gte: startDate, $lte: endDate } } },
         { $group: { _id: "$sourceTransactionType", debit: { $sum: debitExpr }, credit: { $sum: creditExpr } } },
       ]),
     ]);
@@ -1586,6 +1592,7 @@ export const getMRITaxSummaryReport = async (req, res, next) => {
     if (!businessId) {
       return next(createError(400, "A valid business id is required."));
     }
+    const businessOid = new mongoose.Types.ObjectId(String(businessId));
 
     const startDate = normalizeDate(req.query.startDate || req.query.dateFrom || req.query.from);
     const endDate = normalizeDate(req.query.endDate || req.query.dateTo || req.query.to, true);
@@ -1593,7 +1600,7 @@ export const getMRITaxSummaryReport = async (req, res, next) => {
       return next(createError(400, "Valid start and end dates are required."));
     }
 
-    const settingsDoc = await CompanySettings.findOne({ company: new mongoose.Types.ObjectId(String(businessId)) })
+    const settingsDoc = await CompanySettings.findOne({ company: businessOid })
       .select("mriRate")
       .lean();
     const MRI_RATE = Number(settingsDoc?.mriRate ?? 0.075);
@@ -1608,6 +1615,7 @@ export const getMRITaxSummaryReport = async (req, res, next) => {
     // Deposits are liability receipts, not rental income, and must be excluded.
     const receiptMatch = {
       ...buildEffectiveReceiptQuery({ businessId, startDate, endDate, dateField: "paymentDate" }),
+      business: businessOid,  // override: aggregate() needs ObjectId, not string
       paymentType: { $ne: "deposit" },
     };
 
@@ -2359,6 +2367,7 @@ export const getLiabilitySubledger = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     if (!businessId) return next(createError(400, "Business context is required."));
+    const businessOid = new mongoose.Types.ObjectId(String(businessId));
 
     const tab       = String(req.query.tab || "deposits").toLowerCase();
     const asOfDate  = req.query.asOf ? normalizeDate(req.query.asOf, true) : null;
@@ -2378,7 +2387,7 @@ export const getLiabilitySubledger = async (req, res, next) => {
     }
 
     const glMatch = {
-      business:  businessId,
+      business:  businessOid,
       accountId: account._id,
       status:    { $in: REPORT_LEDGER_STATUSES },
       ...(asOfDate    ? { transactionDate: { $lte: asOfDate } } : {}),
@@ -2689,6 +2698,7 @@ export const getIncomeMonthlySummary = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     if (!businessId) return next(createError(400, "Missing business"));
+    const businessOid = new mongoose.Types.ObjectId(String(businessId));
 
     const months = Math.min(Math.max(parseInt(req.query.months || "6", 10), 1), 24);
     const now = new Date();
@@ -2755,7 +2765,7 @@ export const getIncomeMonthlySummary = async (req, res, next) => {
     const agg = await FinancialLedgerEntry.aggregate([
       {
         $match: {
-          business: businessId,
+          business: businessOid,
           accountId: { $in: allIds },
           status: { $in: REPORT_LEDGER_STATUSES },
           transactionDate: { $gte: ranges[0].startDate, $lte: ranges[ranges.length - 1].endDate },
@@ -2930,12 +2940,13 @@ export const getRentalAgedAnalysisReport = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     if (!businessId) return next(createError(400, "Missing business"));
+    const businessOid = new mongoose.Types.ObjectId(String(businessId));
 
     const now = new Date();
 
     // ── Build the base invoice match ──────────────────────────────────────────
     const match = {
-      business: businessId,
+      business: businessOid,
       category: { $in: ["RENT_CHARGE", "UTILITY_CHARGE", "LATE_PENALTY_CHARGE"] },
       status: { $nin: ["cancelled", "reversed"] },
     };
