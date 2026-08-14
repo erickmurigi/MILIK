@@ -261,6 +261,24 @@ const TenantDeposits = () => {
     return units.filter((unit) => safeId(unit?.property) === String(draftFilters.propertyId));
   }, [draftFilters.propertyId, units]);
 
+  const unitFilterOptions = useMemo(
+    () => unitsForFilter.map((unit) => ({ value: unit._id, label: formatUnitName(unit) })),
+    [unitsForFilter]
+  );
+
+  const depositTypeFilterOptions = useMemo(
+    () => activeDepositTypes.map((type) => ({
+      value: type._id || `deposit:${slugify(type.code || type.name)}`,
+      label: type.name,
+    })),
+    [activeDepositTypes]
+  );
+
+  const depositTypeFormOptions = useMemo(
+    () => activeDepositTypes.map((type) => ({ value: type._id || type.code || type.name, label: type.name })),
+    [activeDepositTypes]
+  );
+
   const tenantOptions = useMemo(() => {
     const rows = [];
     tenants.forEach((tenant) => {
@@ -289,6 +307,14 @@ const TenantDeposits = () => {
     });
     return rows.sort((a, b) => a.tenantName.localeCompare(b.tenantName) || a.unitName.localeCompare(b.unitName));
   }, [tenantPropertyFilter, tenants, unitLookup, propertyLookup]);
+
+  const tenantSelectOptions = useMemo(
+    () => tenantOptions.map((o) => ({
+      value: o.compositeKey,
+      label: `${o.tenantName} - ${o.propertyName} / ${o.unitName}`,
+    })),
+    [tenantOptions]
+  );
 
   const resolveTenantContext = useCallback(
     (tenantId, unitIdOverride) => {
@@ -788,7 +814,7 @@ const TenantDeposits = () => {
                   placeholder="Unit"
                   value={draftFilters.unitId}
                   onChange={(v) => setDraftFilters((prev) => ({ ...prev, unitId: v ?? "any" }))}
-                  options={unitsForFilter.map((unit) => ({ value: unit._id, label: formatUnitName(unit) }))}
+                  options={unitFilterOptions}
                 />
                 <AppSelect
                   compact
@@ -796,7 +822,7 @@ const TenantDeposits = () => {
                   placeholder="Deposit Type"
                   value={draftFilters.depositTypeId}
                   onChange={(v) => setDraftFilters((prev) => ({ ...prev, depositTypeId: v ?? "any" }))}
-                  options={activeDepositTypes.map((type) => ({ value: type._id || `deposit:${slugify(type.code || type.name)}`, label: type.name }))}
+                  options={depositTypeFilterOptions}
                 />
                 <AppSelect
                   compact
@@ -989,10 +1015,7 @@ const TenantDeposits = () => {
                     placeholder="Select tenant"
                     value={depositForm.unitId ? `${depositForm.tenantId}__${depositForm.unitId}` : depositForm.tenantId}
                     onChange={(v) => updateDepositTenant(v ?? "")}
-                    options={tenantOptions.map((option) => ({
-                      value: option.compositeKey,
-                      label: `${option.tenantName} - ${option.propertyName} / ${option.unitName}`,
-                    }))}
+                    options={tenantSelectOptions}
                   />
                 </div>
                 <div>
@@ -1001,7 +1024,7 @@ const TenantDeposits = () => {
                     size="md"
                     value={depositForm.depositTypeId}
                     onChange={(v) => updateDepositType(v ?? "")}
-                    options={activeDepositTypes.map((type) => ({ value: type._id || type.code || type.name, label: type.name }))}
+                    options={depositTypeFormOptions}
                   />
                 </div>
                 <div>

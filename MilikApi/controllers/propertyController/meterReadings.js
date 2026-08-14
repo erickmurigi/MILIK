@@ -234,7 +234,11 @@ const ensureReadingContext = async ({ businessId, propertyId, unitId, tenantId =
 
   let tenantDoc = null;
   if (tenantId && mongoose.Types.ObjectId.isValid(String(tenantId))) {
-    tenantDoc = await Tenant.findOne({ _id: tenantId, business: businessId, unit: unitId })
+    tenantDoc = await Tenant.findOne({
+      _id: tenantId,
+      business: businessId,
+      $or: [{ unit: unitId }, { additionalUnits: unitId }],
+    })
       .select("_id name unit business status")
       .lean();
   }
