@@ -49,7 +49,7 @@ const buildHeaderHtml = ({ company, title, subtitle, metaLine }) => {
   `;
 };
 
-const buildTableHtml = ({ columns = [], rows = [] }) => {
+const buildTableHtml = ({ columns = [], rows = [], totalsRow = null }) => {
   const headerCells = columns
     .map((col) => `<th style="text-align:${col.align === "right" ? "right" : "left"}">${escapeHtml(col.label)}</th>`)
     .join("");
@@ -66,10 +66,18 @@ const buildTableHtml = ({ columns = [], rows = [] }) => {
     })
     .join("");
 
+  // totalsRow: array of pre-formatted strings aligned per column; falls back to count row
+  const foot = totalsRow
+    ? `<tfoot><tr>${columns.map((col, i) => `<td style="text-align:${col.align === "right" ? "right" : "left"}">${escapeHtml(totalsRow[i] ?? "")}</td>`).join("")}</tr></tfoot>`
+    : rows.length > 0
+      ? `<tfoot><tr><td colspan="${Math.max(columns.length, 1)}">${rows.length.toLocaleString()} record${rows.length !== 1 ? "s" : ""}</td></tr></tfoot>`
+      : "";
+
   return `
     <table>
       <thead><tr>${headerCells}</tr></thead>
       <tbody>${bodyRows || `<tr><td colspan="${Math.max(columns.length, 1)}" class="empty-cell">No records found</td></tr>`}</tbody>
+      ${foot}
     </table>
   `;
 };
@@ -111,15 +119,11 @@ const BASE_CSS = `
   }
 `;
 
-export const printTabularList = ({ title, subtitle = "", company = {}, columns = [], rows = [], summary = "" }) => {
+export const printTabularList = ({ title, subtitle = "", company = {}, columns = [], rows = [], summary = "", totalsRow = null }) => {
   const win = window.open("", "_blank", "width=1200,height=800");
   if (!win) return null;
 
-  const countRow = rows.length > 0
-    ? `<tfoot><tr><td colspan="${columns.length}">${rows.length.toLocaleString()} record${rows.length !== 1 ? "s" : ""}</td></tr></tfoot>`
-    : "";
-
-  const tableWithFoot = buildTableHtml({ columns, rows }).replace("</table>", `${countRow}</table>`);
+  const tableWithFoot = buildTableHtml({ columns, rows, totalsRow });
 
   const html = `<!DOCTYPE html>
 <html>

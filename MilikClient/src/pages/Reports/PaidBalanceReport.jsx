@@ -7,6 +7,7 @@ import { selectCurrentUser, selectCurrentCompany, selectAllProperties } from '..
 import { getTenantPaidBalanceReport } from '../../redux/apiCalls';
 import { getProperties } from '../../redux/propertyRedux';
 import { FaFileDownload, FaPrint, FaSyncAlt } from 'react-icons/fa';
+import printTabularList from '../../utils/printList';
 import ResetFiltersButton from '../../components/common/ResetFiltersButton';
 import { toast } from 'react-toastify';
 import { hasCompanyPermission } from '../../utils/permissions';
@@ -214,156 +215,83 @@ const PaidBalanceReport = () => {
 
   const handlePrint = useCallback(() => {
     if (!canExportReports) { toast.error("You do not have permission to print reports"); return; }
-    const co = currentCompany || {};
-    const name = co.companyName || co.name || co.businessName || 'Milik';
-    const logo = co.logo || '';
-    const by = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || '';
-    const win = window.open('', '_blank', 'width=1200,height=900');
-    if (!win) { toast.error('Pop-up blocked. Please allow pop-ups to print.'); return; }
-    const fmt = (v) => `KES ${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-    const rows = searchFilteredRows;
-    const summ = report.summary || {};
+
+    const rows   = searchFilteredRows;
+    const summ   = report.summary || {};
     const utTypes = allUtilityTypes;
-    const hasUt = utTypes.length > 0;
+    const hasUt  = utTypes.length > 0;
 
-    const utHeaderCols = hasUt
-      ? utTypes.map((ut) => `<th class="r">${ut}</th>`).join('')
-      : `<th class="r">Utility Bal</th>`;
+    const dateRange = [filters.startDate && fmtDate(filters.startDate), filters.asOfDate && fmtDate(filters.asOfDate)]
+      .filter(Boolean).join(" – ");
+    const propLabel = filters.propertyId ? (propertyNameMap.get(String(filters.propertyId)) || "Selected property") : "All properties";
+    const statusLabel = !filters.status || filters.status === "all" ? "All positions" : filters.status;
 
-    const totRow = {
-      totalInvoiced: rows.reduce((s, r) => s + Number(r.totalInvoiced || 0), 0),
-      totalPaidApplied: rows.reduce((s, r) => s + Number(r.totalPaidApplied || 0), 0),
-      outstanding: rows.reduce((s, r) => s + Number(r.outstanding || 0), 0),
-      unappliedCredit: rows.reduce((s, r) => s + Number(r.unappliedCredit || 0), 0),
-      netBalance: rows.reduce((s, r) => s + Number(r.netBalance || 0), 0),
-      rentBalance: rows.reduce((s, r) => s + Number(r.rentBalance || 0), 0),
-      utilityBalance: rows.reduce((s, r) => s + Number(r.utilityBalance || 0), 0),
-      penaltyBalance: rows.reduce((s, r) => s + Number(r.penaltyBalance || 0), 0),
-      depositBalance: rows.reduce((s, r) => s + Number(r.depositBalance || 0), 0),
-      otherBalance: rows.reduce((s, r) => s + Number(r.otherBalance || 0), 0),
-    };
+    const summaryLine = [
+      `Invoiced: ${formatMoney(summ.totalInvoiced)}`,
+      `Paid: ${formatMoney(summ.totalPaidApplied)}`,
+      `Outstanding: ${formatMoney(summ.totalOutstanding)}`,
+      `Unapplied Credit: ${formatMoney(summ.totalUnappliedCredit)}`,
+      `Net Balance: ${formatMoney(summ.netBalance)}`,
+      `Owing: ${summ.owingCount || 0}  ·  Credit: ${summ.creditCount || 0}  ·  Settled: ${summ.settledCount || 0}`,
+      `${propLabel}  ·  ${statusLabel}`,
+    ].join("     ");
+
+    // Compute column totals
+    const sum = (key) => rows.reduce((s, r) => s + Number(r[key] || 0), 0);
     const utTotals = hasUt
       ? utTypes.reduce((m, ut) => { m[ut] = rows.reduce((s, r) => s + Number(r.utilityBreakdown?.[ut] || 0), 0); return m; }, {})
       : {};
 
-    const colCount = 10 + (hasUt ? utTypes.length : 1) + 3; // tenant/prop/unit + financials + uts + date/date/status
+    const utCols = hasUt
+      ? utTypes.map((ut) => ({ label: ut, align: "right", value: (r) => formatMoney(r.utilityBreakdown?.[ut] || 0) }))
+      : [{ label: "Utility Bal", align: "right", value: (r) => formatMoney(r.utilityBalance || 0) }];
 
-    win.document.write(`<!DOCTYPE html><html><head><title>Paid &amp; Balance Report — ${name}</title><style>
-      @page{size:A4 landscape;margin:10mm 12mm}
-      *{box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
-      body{font-family:'Arial Narrow',Arial,sans-serif;color:#0f172a;font-size:9px;margin:0;line-height:1.3}
-      .hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:6px;margin-bottom:4px;border-bottom:2.5px solid #0B3B2E}
-      .hdr-left .co{font-size:11px;font-weight:900;color:#0B3B2E;letter-spacing:.04em;text-transform:uppercase}
-      .hdr-left .ttl{font-size:16px;font-weight:900;color:#0f172a;margin:1px 0 2px}
-      .hdr-left .sub{font-size:8.5px;color:#64748b}
-      .hdr-right{text-align:right;font-size:8px;color:#64748b;line-height:1.7}
-      .logo{max-height:36px;max-width:100px;object-fit:contain;margin-bottom:3px;display:block}
-      .summ-line{display:flex;flex-wrap:wrap;align-items:center;gap:0 20px;padding:5px 0 6px;margin-bottom:4px;border-bottom:1px solid #dbe2ea;font-size:8.5px}
-      .si{display:flex;flex-direction:column;line-height:1.25}
-      .sl{font-size:6.5px;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;font-weight:800}
-      .sv{font-weight:900;color:#0f172a;white-space:nowrap}
-      .sv.grn{color:#047857}.sv.red{color:#b91c1c}.sv.amb{color:#b45309}
-      .summ-sep{color:#cbd5e1;font-size:11px;align-self:center}
-      table{width:100%;border-collapse:collapse;font-size:8px}
-      thead th{background:#0B3B2E;color:#fff;padding:3px 5px;font-size:7px;text-transform:uppercase;letter-spacing:.09em;font-weight:800;white-space:nowrap}
-      thead th.r{text-align:right}
-      tbody td{border-bottom:1px solid #e2e8f0;padding:2.5px 5px;vertical-align:middle}
-      tbody td.r{text-align:right}
-      tbody td.name{font-weight:700;color:#0f172a}
-      tbody td.bkd{font-size:7px;color:#64748b;white-space:nowrap}
-      tbody tr:nth-child(even){background:#f8fafc}
-      tfoot td{border-top:2px solid #0B3B2E;padding:3px 5px;font-weight:900;background:#edf5f1;font-size:8px}
-      tfoot td.r{text-align:right}
-      .ba{display:inline-block;padding:1px 5px;border-radius:99px;font-size:7px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
-      .owing{background:#fee2e2;color:#b91c1c}.credit{background:#d1fae5;color:#065f46}.settled{background:#f1f5f9;color:#475569}
-      .sec-title{font-size:8.5px;text-transform:uppercase;letter-spacing:.12em;color:#0B3B2E;font-weight:900;margin:4px 0 4px;border-bottom:1px solid #dbe2ea;padding-bottom:3px}
-      .filter-row{display:flex;flex-wrap:wrap;gap:3px 14px;margin-bottom:4px;font-size:8px;color:#475569}
-      .filter-item strong{color:#0f172a}
-    </style></head><body>
-    <div class="hdr">
-      <div class="hdr-left">
-        ${logo ? `<img src="${logo}" class="logo" alt="">` : ''}
-        <div class="co">${name}</div>
-        <div class="ttl">Paid &amp; Balance Report</div>
-        <div class="sub">Tenant receivables control snapshot — outstanding debtor positions as at ${fmtDate(filters.asOfDate)}</div>
-      </div>
-      <div class="hdr-right">
-        <div><strong>As At:</strong> ${fmtDate(filters.asOfDate)}</div>
-        <div><strong>Generated:</strong> ${new Date().toLocaleString()}</div>
-        <div><strong>Prepared by:</strong> ${by}</div>
-        <div><strong>Tenant rows:</strong> ${rows.length}</div>
-      </div>
-    </div>
-    <div class="summ-line">
-      <div class="si"><span class="sl">Total Invoiced</span><span class="sv">${fmt(summ.totalInvoiced)}</span></div>
-      <span class="summ-sep">|</span>
-      <div class="si"><span class="sl">Paid Applied</span><span class="sv grn">${fmt(summ.totalPaidApplied)}</span></div>
-      <span class="summ-sep">|</span>
-      <div class="si"><span class="sl">Outstanding</span><span class="sv red">${fmt(summ.totalOutstanding)}</span></div>
-      <span class="summ-sep">|</span>
-      <div class="si"><span class="sl">Unapplied Credit</span><span class="sv amb">${fmt(summ.totalUnappliedCredit)}</span></div>
-      <span class="summ-sep">|</span>
-      <div class="si"><span class="sl">Net Balance</span><span class="sv">${fmt(summ.netBalance)}</span></div>
-      <span class="summ-sep">|</span>
-      <div class="si"><span class="sl">Owing / Credit / Settled</span><span class="sv">${summ.owingCount || 0} / ${summ.creditCount || 0} / ${summ.settledCount || 0}</span></div>
-      ${hasUt ? `<span class="summ-sep">|</span><div class="si"><span class="sl">Utilities</span><span class="sv" style="font-size:8px">${utTypes.join(' · ')}</span></div>` : ''}
-    </div>
-    <div class="filter-row">
-      <span class="filter-item"><strong>Property:</strong> ${filters.propertyId ? (propertyNameMap.get(String(filters.propertyId)) || 'Selected') : 'All properties'}</span>
-      <span class="filter-item"><strong>Position:</strong> ${filters.status === 'all' ? 'All' : filters.status}</span>
-      ${filters.search ? `<span class="filter-item"><strong>Search:</strong> ${filters.search}</span>` : ''}
-    </div>
-    <div class="sec-title">Tenant Positions</div>
-    <table><thead><tr>
-      <th>Tenant</th><th>Property</th><th>Unit</th>
-      <th class="r">Invoiced</th><th>Inv. Breakdown</th><th class="r">Paid</th><th class="r">Outstanding</th><th class="r">Unapplied</th><th class="r">Net Bal</th>
-      <th class="r">Rent Bal</th>${utHeaderCols}<th class="r">Penalty</th><th class="r">Deposit</th><th class="r">Other</th>
-      <th>Oldest Due</th><th>Status</th>
-    </tr></thead>
-    <tbody>${rows.map((row) => {
-      const utCells = hasUt
-        ? utTypes.map((ut) => `<td class="r">${fmt(row.utilityBreakdown?.[ut] || 0)}</td>`).join('')
-        : `<td class="r">${fmt(row.utilityBalance)}</td>`;
-      const nbColor = Number(row.netBalance || 0) > 0 ? '#b91c1c' : Number(row.netBalance || 0) < 0 ? '#047857' : 'inherit';
-      const bkdParts = buildInvoicedBreakdownParts(row);
-      const bkdText = bkdParts.length > 0 ? bkdParts.map(p => `${p.label} ${p.value}`).join(' · ') : '—';
-      return `<tr>
-        <td class="name">${row.tenantName}</td>
-        <td>${row.propertyName}</td>
-        <td>${row.unitNumber}</td>
-        <td class="r">${fmt(row.totalInvoiced)}</td>
-        <td class="bkd">${bkdText}</td>
-        <td class="r" style="color:#047857">${fmt(row.totalPaidApplied)}</td>
-        <td class="r" style="color:${Number(row.outstanding || 0) > 0 ? '#b91c1c' : 'inherit'}">${fmt(row.outstanding)}</td>
-        <td class="r" style="color:#b45309">${fmt(row.unappliedCredit)}</td>
-        <td class="r" style="color:${nbColor};font-weight:800">${fmt(row.netBalance)}</td>
-        <td class="r">${fmt(row.rentBalance)}</td>
-        ${utCells}
-        <td class="r">${fmt(row.penaltyBalance)}</td>
-        <td class="r">${fmt(row.depositBalance)}</td>
-        <td class="r">${fmt(row.otherBalance)}</td>
-        <td>${row.oldestDueDate ? new Date(row.oldestDueDate).toLocaleDateString() : '—'}</td>
-        <td><span class="ba ${row.status}">${row.status}</span></td>
-      </tr>`;
-    }).join('')}</tbody>
-    <tfoot><tr>
-      <td colspan="4"><strong>TOTALS — ${rows.length} rows</strong></td>
-      <td></td>
-      <td class="r" style="color:#047857"><strong>${fmt(totRow.totalPaidApplied)}</strong></td>
-      <td class="r" style="color:#b91c1c"><strong>${fmt(totRow.outstanding)}</strong></td>
-      <td class="r"><strong>${fmt(totRow.unappliedCredit)}</strong></td>
-      <td class="r"><strong>${fmt(totRow.netBalance)}</strong></td>
-      <td class="r"><strong>${fmt(totRow.rentBalance)}</strong></td>
-      ${hasUt ? utTypes.map((ut) => `<td class="r"><strong>${fmt(utTotals[ut])}</strong></td>`).join('') : `<td class="r"><strong>${fmt(totRow.utilityBalance)}</strong></td>`}
-      <td class="r"><strong>${fmt(totRow.penaltyBalance)}</strong></td>
-      <td class="r"><strong>${fmt(totRow.depositBalance)}</strong></td>
-      <td class="r"><strong>${fmt(totRow.otherBalance)}</strong></td>
-      <td colspan="2"></td>
-    </tr></tfoot>
-    </table></body></html>`);
-    win.document.close();
-    win.onload = () => { win.focus(); win.print(); };
-  }, [canExportReports, currentCompany, currentUser, searchFilteredRows, report.summary, filters, allUtilityTypes, propertyNameMap]);
+    const columns = [
+      { label: "Tenant",      value: (r) => r.tenantName || "—" },
+      { label: "Property",    value: (r) => r.propertyName || "—" },
+      { label: "Unit",        value: (r) => r.unitNumber || "—" },
+      { label: "Invoiced",    align: "right", value: (r) => formatMoney(r.totalInvoiced) },
+      { label: "Breakdown",   value: (r) => buildInvoicedBreakdownParts(r).map((p) => `${p.label} ${p.value}`).join(" · ") || "—" },
+      { label: "Paid",        align: "right", value: (r) => formatMoney(r.totalPaidApplied) },
+      { label: "Outstanding", align: "right", value: (r) => formatMoney(r.outstanding) },
+      { label: "Unapplied",   align: "right", value: (r) => formatMoney(r.unappliedCredit) },
+      { label: "Net Bal",     align: "right", value: (r) => formatMoney(r.netBalance) },
+      { label: "Rent Bal",    align: "right", value: (r) => formatMoney(r.rentBalance) },
+      ...utCols,
+      { label: "Penalty",     align: "right", value: (r) => formatMoney(r.penaltyBalance) },
+      { label: "Deposit",     align: "right", value: (r) => formatMoney(r.depositBalance) },
+      { label: "Other",       align: "right", value: (r) => formatMoney(r.otherBalance) },
+      { label: "Oldest Due",  value: (r) => r.oldestDueDate ? fmtDate(r.oldestDueDate) : "—" },
+      { label: "Status",      value: (r) => (r.status || "").charAt(0).toUpperCase() + (r.status || "").slice(1) },
+    ];
+
+    const totalsRow = [
+      `TOTALS — ${rows.length} rows`,
+      "", "",
+      formatMoney(sum("totalInvoiced")),
+      "",
+      formatMoney(sum("totalPaidApplied")),
+      formatMoney(sum("outstanding")),
+      formatMoney(sum("unappliedCredit")),
+      formatMoney(sum("netBalance")),
+      formatMoney(sum("rentBalance")),
+      ...(hasUt ? utTypes.map((ut) => formatMoney(utTotals[ut])) : [formatMoney(sum("utilityBalance"))]),
+      formatMoney(sum("penaltyBalance")),
+      formatMoney(sum("depositBalance")),
+      formatMoney(sum("otherBalance")),
+      "", "",
+    ];
+
+    printTabularList({
+      title:     "Paid & Balance Report",
+      subtitle:  `Tenant receivables snapshot — ${dateRange}`,
+      company:   currentCompany,
+      summary:   summaryLine,
+      columns,
+      rows,
+      totalsRow,
+    });
+  }, [canExportReports, currentCompany, searchFilteredRows, report.summary, filters, allUtilityTypes, propertyNameMap]);
 
   return (
     <DashboardLayout lockContentScroll>
