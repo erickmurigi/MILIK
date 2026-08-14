@@ -898,6 +898,7 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
     if (!businessId) return next(createError(400, "A valid business id is required."));
 
     const asOfDate = normalizeDate(req.query.asOfDate, true) || normalizeDate(null, true);
+    const fromDate = req.query.startDate ? normalizeDate(req.query.startDate) : null;
     const tenantQuery = { business: businessId, status: { $nin: ["terminated", "moved_out", "evicted"] } };
     if (req.query.tenantId) tenantQuery._id = toObjectId(req.query.tenantId);
 
@@ -951,6 +952,7 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
     const REPORT_CHUNK = 500;
     const allRows = [];
     const allUtilityTypesSet = new Set();
+    const fromDateMs = fromDate ? fromDate.getTime() : null;
 
     for (let i = 0; i < baseRows.length; i += REPORT_CHUNK) {
       const chunkRows = baseRows.slice(i, i + REPORT_CHUNK);
@@ -965,7 +967,11 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
 
       for (const row of chunkRows) {
         const snapshot = snapshotMap.get(row.tenantId) || { invoiceSnapshots: [], receiptAllocations: [] };
-        const allInvoices = normalizeArray(snapshot.invoiceSnapshots);
+        const allInvoices = normalizeArray(snapshot.invoiceSnapshots).filter((inv) => {
+          if (!fromDateMs) return true;
+          const d = inv.invoiceDate ? new Date(inv.invoiceDate).getTime() : 0;
+          return d >= fromDateMs;
+        });
         // Filter invoices to this specific unit; invoices without a unit fall back to primary row
         const invoices = row.unitId
           ? allInvoices.filter((inv) => {

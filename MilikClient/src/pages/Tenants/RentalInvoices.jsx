@@ -1,4 +1,5 @@
 import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
+import { buildInvoiceNarration } from "../../utils/invoiceNarrationUtils";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
@@ -460,7 +461,7 @@ const buildInvoiceRows = ({ invoices = [], tenantLookup = {}, unitsFromStore = [
         _id: invoice?._id,
         id: invoice?.invoiceNumber || invoice?._id,
         period: formatPeriodLabel(month, year),
-        invoiceDescription: deriveInvoiceDescription(invoice) || formatPeriodLabel(month, year),
+        invoiceDescription: buildInvoiceNarration(invoice, unitName) || formatPeriodLabel(month, year),
         storagePeriodKey: formatPeriodLabel(month, year),
         chargeType,
         chargeTypeLabel: getInvoiceChargeTypeLabel(chargeType),

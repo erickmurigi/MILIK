@@ -1110,7 +1110,9 @@ const buildReceiptAllocationWorkspace = async (payment, { adminOverride = false 
       return {
         invoiceId,
         invoiceNumber: snapshot?.invoiceNumber || "",
+        unit: String(snapshot?.unit || ""),
         category: snapshot?.category || "",
+        metadata: snapshot?.metadata || null,
         priorityGroup: snapshot?.priorityGroup || "other",
         utilityType: snapshot?.utilityType || "",
         depositHeldBy: snapshot?.depositHeldBy || snapshot?.metadata?.depositHeldBy || "",
@@ -1134,7 +1136,7 @@ const buildReceiptAllocationWorkspace = async (payment, { adminOverride = false 
     const orphanIds = [...currentAllocatedByInvoice.keys()].filter((id) => id && !snapshotIds.has(id));
     if (orphanIds.length > 0) {
       const orphanInvoices = await TenantInvoice.find({ _id: { $in: orphanIds } })
-        .select("invoiceNumber category priorityGroup utilityType metadata invoiceDate dueDate amount status")
+        .select("invoiceNumber unit category priorityGroup utilityType metadata invoiceDate dueDate amount status")
         .lean();
       for (const inv of orphanInvoices) {
         const invoiceId = String(inv._id);
@@ -1142,7 +1144,9 @@ const buildReceiptAllocationWorkspace = async (payment, { adminOverride = false 
         invoiceOptions.push({
           invoiceId,
           invoiceNumber: inv.invoiceNumber || "",
+          unit: String(inv.unit || ""),
           category: inv.category || "",
+          metadata: inv.metadata || null,
           priorityGroup: inv.priorityGroup || "other",
           utilityType: inv.metadata?.utilityType || inv.utilityType || "",
           depositHeldBy: inv.metadata?.depositHeldBy || "",

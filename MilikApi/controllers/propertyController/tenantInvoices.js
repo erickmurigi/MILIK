@@ -850,10 +850,21 @@ const endOfDay = (value) => {
   return d;
 };
 
-const buildAsOfDateFilter = (field, asOfDate) => {
-  if (!asOfDate) return {};
-  return { [field]: { $lte: endOfDay(asOfDate) } };
+const startOfDay = (value) => {
+  const d = normalizeDate(value);
+  d.setHours(0, 0, 0, 0);
+  return d;
 };
+
+// Builds a combined $gte/$lte filter so both bounds share a single field key.
+const buildDateRangeFilter = (field, fromDate, asOfDate) => {
+  const bounds = {};
+  if (fromDate) bounds.$gte = startOfDay(fromDate);
+  if (asOfDate) bounds.$lte = endOfDay(asOfDate);
+  return Object.keys(bounds).length > 0 ? { [field]: bounds } : {};
+};
+
+const buildAsOfDateFilter = (field, asOfDate) => buildDateRangeFilter(field, null, asOfDate);
 
 const getActiveNotesForTenant = async ({ businessId, tenantId, asOfDate = null }) =>
   TenantInvoiceNote.find({

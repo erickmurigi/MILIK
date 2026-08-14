@@ -2,7 +2,8 @@
 import { useConfirm } from "../../context/ConfirmContext";
 import { formatMoney } from "../../utils/money";
 import { fmtDate } from "../../utils/dates";
-import { buildTenantOption } from "../../utils/tenantUtils";
+import { buildTenantOption, getUnitLabel } from "../../utils/tenantUtils";
+import { buildInvoiceNarration } from "../../utils/invoiceNarrationUtils";
 import { safeId } from "../../utils/idUtils";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
@@ -13,6 +14,7 @@ import {
   selectCurrentCompany,
   selectAllTenants,
   selectAllProperties,
+  selectAllUnits,
 } from "../../redux/selectors";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
@@ -140,9 +142,7 @@ const getAllocationGroupLabel = (value = "") => {
 
 const getInvoiceOptionLabel = (invoice = {}) => {
   const ref = invoice?.invoiceNumber || invoice?.description || "Invoice";
-  const categoryLabel = getAllocationGroupLabel(invoice?.priorityGroup || getInvoiceChargeType(invoice));
-  const utilitySuffix = invoice?.utilityType ? ` · ${invoice.utilityType}` : "";
-  return `${ref} · ${categoryLabel}${utilitySuffix}`;
+  return `${ref} · ${buildInvoiceNarration(invoice)}`;
 };
 
 const getAllocationOptionAmount = (invoice = {}) => {
@@ -152,11 +152,9 @@ const getAllocationOptionAmount = (invoice = {}) => {
   return maxAllocatable > 0 ? maxAllocatable : currentAllocation > 0 ? currentAllocation : amount;
 };
 
-const getAllocationOptionLabel = (invoice = {}) => {
+const getAllocationOptionLabel = (invoice = {}, unitLabel = "") => {
   const ref = invoice?.invoiceNumber || invoice?.description || invoice?.invoiceId || "Invoice";
-  const categoryLabel = getAllocationGroupLabel(invoice?.priorityGroup || invoice?.chargeType || getInvoiceChargeType(invoice));
-  const utilitySuffix = invoice?.utilityType ? ` · ${invoice.utilityType}` : "";
-  return `${ref} · ${categoryLabel}${utilitySuffix} · ${formatMoney(getAllocationOptionAmount(invoice))}`;
+  return `${ref} · ${buildInvoiceNarration(invoice, unitLabel)} · ${formatMoney(getAllocationOptionAmount(invoice))}`;
 };
 
 const buildAppliedAmountsByInvoice = (payments = [], tenantId = "") => {
@@ -333,8 +331,13 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const pageCreateLabel = isLandlordReceiptView ? "New Landlord Receipt" : "New Receipt";
   const rawTenants = useSelector(selectAllTenants);
   const properties = useSelector(selectAllProperties);
+  const unitsFromStore = useSelector(selectAllUnits);
 
   const tenants = useMemo(() => ensureArray(rawTenants), [rawTenants]);
+  const unitLookup = useMemo(
+    () => new Map((unitsFromStore || []).map((u) => [String(u._id), u])),
+    [unitsFromStore]
+  );
 
   const [receipts, setReceipts] = useState([]);
   const [recPagination, setRecPagination] = useState({ totalItems: 0, totalPages: 1, page: 1, limit: ITEMS_PER_PAGE });
@@ -1411,6 +1414,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
 
         if (!normalizedTerm) return true;
 
+        const unitLabel = getUnitLabel(unitLookup.get(String(invoice?.unit || "")));
         const haystack = [
           invoice?.invoiceNumber,
           invoice?.description,
@@ -1420,9 +1424,10 @@ const Receipts = ({ viewMode = "tenant" }) => {
           invoice?.category,
           invoice?.utilityType,
           invoice?.period,
+          unitLabel,
           getAllocationGroupLabel(invoice?.priorityGroup || invoice?.chargeType || getInvoiceChargeType(invoice)),
           getInvoiceOptionLabel(invoice),
-          getAllocationOptionLabel(invoice),
+          getAllocationOptionLabel(invoice, unitLabel),
         ]
           .filter(Boolean)
           .join(" ")
@@ -1434,7 +1439,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
           .every((token) => haystack.includes(token));
       });
     },
-    [allocationOptions, selectedAllocationOptionIds]
+    [allocationOptions, selectedAllocationOptionIds, unitLookup]
   );
 
   const isAppendOnlyAllocationMode = allocationRules?.appendOnlyUnappliedForConfirmed === true;
@@ -2767,8 +2772,9 @@ const Receipts = ({ viewMode = "tenant" }) => {
                               const isAnyLocked = isLockedBaseLine || isOrphanLine;
                               const lineRef = line?.invoiceNumber || (lineInvoiceId ? `#${lineInvoiceId.slice(-6)}` : "");
                               const linePriorityLabel = getAllocationGroupLabel(line?.priorityGroup || "");
+                              const optionUnitLabel = getUnitLabel(unitLookup.get(String(option?.unit || "")));
                               const resolvedSelectedLabel = option
-                                ? getAllocationOptionLabel(option)
+                                ? getAllocationOptionLabel(option, optionUnitLabel)
                                 : lineRef
                                 ? `${lineRef}${linePriorityLabel ? ` · ${linePriorityLabel}` : ""}${line?.utilityType ? ` · ${line.utilityType}` : ""}`
                                 : "";
@@ -2859,6 +2865,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                                                     const chargeLabel = getAllocationGroupLabel(invoice?.priorityGroup || invoice?.chargeType || getInvoiceChargeType(invoice));
                                                     const avail = getAllocationOptionAmount(invoice);
                                                     const isPaid = String(invoice?.status || "").toLowerCase() === "paid";
+                                                    const dropdownUnitLabel = getUnitLabel(unitLookup.get(String(invoice?.unit || "")));
                                                     return (
                                                       <button
                                                         key={invoiceId}
@@ -2885,9 +2892,12 @@ const Receipts = ({ viewMode = "tenant" }) => {
                                                             {invoice?.utilityType ? (
                                                               <span className="rounded bg-teal-50 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-teal-700">{invoice.utilityType}</span>
                                                             ) : null}
+                                                            {dropdownUnitLabel ? (
+                                                              <span className="rounded bg-blue-50 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-blue-600">{dropdownUnitLabel}</span>
+                                                            ) : null}
                                                           </div>
                                                           <div className="mt-0.5 flex items-center gap-1 text-[10px] text-slate-400">
-                                                            {invoice?.period ? <span>{invoice.period}</span> : null}
+                                                            <span>{buildInvoiceNarration(invoice)}</span>
                                                             {invoice?.dueDate ? <><span>·</span><span>Due {fmtDate(invoice.dueDate)}</span></> : null}
                                                             {invoice?.status ? <><span>·</span><span className={isPaid ? "font-semibold text-emerald-600" : ""}>{String(invoice.status).replace(/_/g, " ")}</span></> : null}
                                                           </div>
@@ -3069,17 +3079,20 @@ const Receipts = ({ viewMode = "tenant" }) => {
                     <div className="rounded-2xl border border-slate-200 bg-white p-4">
                       <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Lines preview</p>
                       <div className="mt-3 space-y-2">
-                        {allocationComputed.rows.length > 0 ? allocationComputed.rows.map((row) => (
+                        {allocationComputed.rows.length > 0 ? allocationComputed.rows.map((row) => {
+                          const previewUnitLabel = getUnitLabel(unitLookup.get(String(row.option?.unit || "")));
+                          return (
                           <div key={`${row.invoiceId}-${row.index}`} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-semibold text-slate-900">{row.option?.invoiceNumber || row.option?.description || row.invoiceId}</p>
-                                <p className="text-[11px] text-slate-500">{getAllocationGroupLabel(row.option?.priorityGroup)}{row.option?.utilityType ? ` · ${row.option.utilityType}` : ""}</p>
+                                <p className="text-[11px] text-slate-500">{getAllocationGroupLabel(row.option?.priorityGroup)}{row.option?.utilityType ? ` · ${row.option.utilityType}` : ""}{previewUnitLabel ? ` · ${previewUnitLabel}` : ""}</p>
                               </div>
                               <div className="text-right text-sm font-bold text-slate-900">{formatMoney(row.appliedAmount)}</div>
                             </div>
                           </div>
-                        )) : (
+                          );
+                        }) : (
                           <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-xs text-slate-500">No allocation lines selected yet.</div>
                         )}
                       </div>
