@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
@@ -27,6 +27,22 @@ const EMPTY_PAYOUT   = { payoutMethod: "bank_transfer", payoutReference: "", pay
 const PAGE_SIZE      = 50;
 
 const fmtLabel = (s) => (s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+const COMMISSION_COLS = [
+  { label: "Comm. No." },
+  { label: "Agent" },
+  { label: "Deal" },
+  { label: "Property" },
+  { label: "Rate" },
+  { label: "Gross Amt",   align: "right" },
+  { label: "WHT",         align: "right" },
+  { label: "Net Amt",     align: "right" },
+  { label: "Payout Date" },
+  { label: "Status" },
+];
+
+const COMMISSION_STATUS_OPTIONS = ["pending", "approved", "paid", "cancelled", "reversed"]
+  .map((s) => ({ value: s, label: fmtLabel(s) }));
 
 const SaleCommissions = () => {
   const confirm        = useConfirm();
@@ -59,7 +75,7 @@ const SaleCommissions = () => {
     enabled:  !!biz,
     staleTime: 10 * 60_000,
   });
-  const cashbookOptions = cashbookAccounts.map((a) => ({ value: a._id, label: `${a.code ? `${a.code} — ` : ""}${a.name}` }));
+  const cashbookOptions = useMemo(() => cashbookAccounts.map((a) => ({ value: a._id, label: `${a.code ? `${a.code} — ` : ""}${a.name}` })), [cashbookAccounts]);
 
   const { data: dealsData } = useQuery({
     queryKey: ["sale-deals-ref", biz],
@@ -145,6 +161,10 @@ const SaleCommissions = () => {
   const resetFilters = () => { setSearch(""); setStatusFilter(""); setAgentFilt(""); setDealFilt(""); setDateFrom(""); setDateTo(""); setPage(1); };
   const activeFilterCount = [search, statusFilter, agentFilt, dealFilt, dateFrom, dateTo].filter(Boolean).length;
 
+  const agentFilterOptions = useMemo(() => agentsRef.map((a) => ({ value: a._id, label: `${a.fullName}${a.agentNumber ? ` (${a.agentNumber})` : ""}` })), [agentsRef]);
+  const dealFilterOptions  = useMemo(() => dealsRef.map((d) => ({ value: d._id, label: `${d.dealNumber}${d.listing?.title ? ` — ${d.listing.title}` : ""}` })), [dealsRef]);
+  const handlePrintStatement = useCallback((e) => window.open(`/sale/commissions/${e.currentTarget.dataset.id}/statement`, "_blank"), []);
+
   return (
     <PropertySaleShell>
       <div className="flex h-full flex-col gap-1.5">
@@ -189,19 +209,19 @@ const SaleCommissions = () => {
           <AppSelect
             value={statusFilter}
             onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }}
-            options={["pending","approved","paid","cancelled","reversed"].map((s) => ({ value: s, label: fmtLabel(s) }))}
+            options={COMMISSION_STATUS_OPTIONS}
             placeholder="All Statuses" clearable size="sm"
           />
           <AppSelect
             value={agentFilt}
             onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }}
-            options={agentsRef.map((a) => ({ value: a._id, label: `${a.fullName}${a.agentNumber ? ` (${a.agentNumber})` : ""}` }))}
+            options={agentFilterOptions}
             placeholder="All Agents" clearable size="sm" searchable
           />
           <AppSelect
             value={dealFilt}
             onChange={(v) => { setDealFilt(v ?? ""); setPage(1); }}
-            options={dealsRef.map((d) => ({ value: d._id, label: `${d.dealNumber}${d.listing?.title ? ` — ${d.listing.title}` : ""}` }))}
+            options={dealFilterOptions}
             placeholder="All Deals" clearable size="sm" searchable
           />
 
@@ -243,18 +263,7 @@ const SaleCommissions = () => {
         {/* Table */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white">
           <MilikTable
-            columns={[
-              { label: "Comm. No." },
-              { label: "Agent" },
-              { label: "Deal" },
-              { label: "Property" },
-              { label: "Rate" },
-              { label: "Gross Amt", align: "right" },
-              { label: "WHT", align: "right" },
-              { label: "Net Amt", align: "right" },
-              { label: "Payout Date" },
-              { label: "Status" },
-            ]}
+            columns={COMMISSION_COLS}
             rows={commissions}
             loading={loading}
             empty="No commissions found."
@@ -306,7 +315,7 @@ const SaleCommissions = () => {
                     <FaUndo className="text-[8px]" />
                   </button>
                 )}
-                <button type="button" onClick={() => window.open(`/sale/commissions/${c._id}/statement`, "_blank")} title="Print Commission Statement" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                <button type="button" data-id={c._id} onClick={handlePrintStatement} title="Print Commission Statement" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
                   <FaPrint className="text-[8px]" />
                 </button>
               </div>

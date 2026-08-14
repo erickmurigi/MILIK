@@ -222,6 +222,7 @@ const TenantDeposits = () => {
   const [tenantPropertyFilter, setTenantPropertyFilter] = useTabState("/tenants/deposits:tenantPropertyFilter", "any");
   const [depositForm, setDepositForm] = useState({
     tenantId: "",
+    unitId: "",
     depositTypeId: "",
     amount: "",
     invoiceDate: todayInput(),
@@ -261,35 +262,40 @@ const TenantDeposits = () => {
   }, [draftFilters.propertyId, units]);
 
   const tenantOptions = useMemo(() => {
-    return tenants
-      .map((tenant) => {
-        const unitId = safeId(tenant?.unit);
+    const rows = [];
+    tenants.forEach((tenant) => {
+      const tenantId = safeId(tenant);
+      if (!tenantId) return;
+      const tenantName = formatTenantName(tenant);
+      const primaryUnitId = safeId(tenant?.unit);
+      const additionalUnitIds = (tenant?.additionalUnits ?? []).map((u) => safeId(u)).filter(Boolean);
+      const allUnitIds = [primaryUnitId, ...additionalUnitIds].filter(Boolean);
+
+      allUnitIds.forEach((unitId) => {
         const unit = unitLookup.get(unitId) || {};
         const propertyId = safeId(tenant?.property) || safeId(unit?.property) || safeId(tenant?.unit?.property);
+        if (tenantPropertyFilter !== "any" && String(propertyId) !== String(tenantPropertyFilter)) return;
         const property = propertyLookup.get(propertyId) || tenant?.property || unit?.property || {};
-        return {
-          tenant,
-          tenantId: safeId(tenant),
-          tenantName: formatTenantName(tenant),
-          unitName: formatUnitName(unit || tenant?.unit),
+        rows.push({
+          compositeKey: `${tenantId}__${unitId}`,
+          tenantId,
+          unitId,
+          tenantName,
+          unitName: formatUnitName(unit),
           propertyId,
           propertyName: formatPropertyName(property),
-        };
-      })
-      .filter((option) => {
-        if (!option.tenantId) return false;
-        if (tenantPropertyFilter !== "any" && String(option.propertyId) !== String(tenantPropertyFilter)) return false;
-        return true;
-      })
-      .sort((a, b) => a.tenantName.localeCompare(b.tenantName));
+        });
+      });
+    });
+    return rows.sort((a, b) => a.tenantName.localeCompare(b.tenantName) || a.unitName.localeCompare(b.unitName));
   }, [tenantPropertyFilter, tenants, unitLookup, propertyLookup]);
 
   const resolveTenantContext = useCallback(
-    (tenantId) => {
+    (tenantId, unitIdOverride) => {
       const tenant = tenantLookup.get(String(tenantId || "")) || null;
       if (!tenant) return null;
 
-      const unitId = safeId(tenant?.unit);
+      const unitId = unitIdOverride || safeId(tenant?.unit);
       const unit = unitLookup.get(unitId) || tenant?.unit || null;
       const propertyId =
         safeId(tenant?.property) ||
@@ -486,8 +492,8 @@ const TenantDeposits = () => {
     setAppliedFilters(emptyFilters);
   };
 
-  const syncDepositFormDefaults = ({ tenantId, depositTypeId, invoiceDate = todayInput(), dueDate = todayInput() }) => {
-    const context = resolveTenantContext(tenantId);
+  const syncDepositFormDefaults = ({ tenantId, unitId, depositTypeId, invoiceDate = todayInput(), dueDate = todayInput() }) => {
+    const context = resolveTenantContext(tenantId, unitId);
     const depositType = depositTypeLookup.get(String(depositTypeId || "")) || activeDepositTypes[0] || fallbackDepositType;
     const amount = Number(depositType?.defaultAmount || 0) > 0
       ? Number(depositType.defaultAmount)
@@ -496,6 +502,7 @@ const TenantDeposits = () => {
 
     return {
       tenantId: tenantId || "",
+      unitId: unitId || "",
       depositTypeId: String(depositType?._id || depositType?.code || ""),
       amount: amount > 0 ? String(amount) : "",
       invoiceDate,
@@ -526,10 +533,12 @@ const TenantDeposits = () => {
     setShowDepositModal(false);
   };
 
-  const updateDepositTenant = (tenantId) => {
+  const updateDepositTenant = (compositeKey) => {
+    const [tenantId = "", unitId = ""] = (compositeKey || "").split("__");
     setDepositForm((prev) =>
       syncDepositFormDefaults({
         tenantId,
+        unitId,
         depositTypeId: prev.depositTypeId,
         invoiceDate: prev.invoiceDate || todayInput(),
         dueDate: prev.dueDate || todayInput(),
@@ -541,6 +550,7 @@ const TenantDeposits = () => {
     setDepositForm((prev) =>
       syncDepositFormDefaults({
         tenantId: prev.tenantId,
+        unitId: prev.unitId,
         depositTypeId,
         invoiceDate: prev.invoiceDate || todayInput(),
         dueDate: prev.dueDate || todayInput(),
@@ -550,7 +560,7 @@ const TenantDeposits = () => {
 
   const handleCreateDepositInvoice = async () => {
     if (!currentCompany?._id) return;
-    const context = resolveTenantContext(depositForm.tenantId);
+    const context = resolveTenantContext(depositForm.tenantId, depositForm.unitId);
     const depositType = depositTypeLookup.get(String(depositForm.depositTypeId || "")) || activeDepositTypes[0] || fallbackDepositType;
     const amount = Number(depositForm.amount || 0);
     const holder = normalizeDepositHolder(depositForm.depositHeldBy) || (isLandlordWorkspace ? "landlord" : "manager");
@@ -977,10 +987,10 @@ const TenantDeposits = () => {
                     size="md"
                     searchable
                     placeholder="Select tenant"
-                    value={depositForm.tenantId}
+                    value={depositForm.unitId ? `${depositForm.tenantId}__${depositForm.unitId}` : depositForm.tenantId}
                     onChange={(v) => updateDepositTenant(v ?? "")}
                     options={tenantOptions.map((option) => ({
-                      value: option.tenantId,
+                      value: option.compositeKey,
                       label: `${option.tenantName} - ${option.propertyName} / ${option.unitName}`,
                     }))}
                   />

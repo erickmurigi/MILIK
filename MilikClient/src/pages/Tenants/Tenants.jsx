@@ -749,6 +749,34 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
   });
   const [draftFilters, setDraftFilters] = useState(appliedFilters);
 
+  // Detect filter-level changes (excludes page/limit) so we can show loading
+  // when switching from terminated→active view rather than flashing stale data.
+  const filterSignature = useMemo(() => JSON.stringify({
+    business:    currentCompany?._id,
+    statusQuery: tenantStatusQuery,
+    status:      appliedFilters.status,
+    search:      appliedFilters.search,
+    tenantName:  appliedFilters.tenantName,
+    tenantCode:  appliedFilters.tenantCode,
+    property:    appliedFilters.property,
+  }), [
+    currentCompany?._id,
+    tenantStatusQuery,
+    appliedFilters.status,
+    appliedFilters.search,
+    appliedFilters.tenantName,
+    appliedFilters.tenantCode,
+    appliedFilters.property,
+  ]);
+
+  // "" never equals a real JSON string, so the first fetch always shows loading
+  const [resolvedFilterSig, setResolvedFilterSig] = useState("");
+  useEffect(() => {
+    if (!isFetchingTenants) setResolvedFilterSig(filterSignature);
+  }, [isFetchingTenants, filterSignature]);
+
+  const tableLoading = isFetchingTenants && filterSignature !== resolvedFilterSig;
+
   // Pre-select property filter when navigated from Portfolio Pulse (or similar)
   useEffect(() => {
     const pf = location.state?.propertyFilter;
@@ -2267,7 +2295,7 @@ const confirmTransferUnit = useCallback(async () => {
           ]}
           rows={currentTenants}
           rowKey="id"
-          loading={isFetchingTenants && currentTenants.length === 0}
+          loading={tableLoading}
           empty={isTerminatedView ? "No terminated tenants found. Try adjusting filters." : "No tenants found. Try adjusting filters or create a new tenant."}
           groupBy={(tenant) => toListingCaps(tenant.propertyName)}
           checkboxes

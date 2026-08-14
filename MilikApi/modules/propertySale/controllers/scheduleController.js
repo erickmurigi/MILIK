@@ -8,7 +8,7 @@ import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationSer
 
 const recomputeStatuses = async (business, dealId) => {
   const now   = new Date();
-  const items = await SalePaymentSchedule.find({ business, deal: dealId });
+  const items = await SalePaymentSchedule.find({ business, deal: dealId }).select("_id status dueDate").lean();
   const ops   = items.map((item) => {
     if (item.status === "paid" || item.status === "waived") return null;
     const newStatus = item.dueDate < now ? "overdue" : "upcoming";
@@ -114,7 +114,7 @@ export const linkPaymentToSchedule = async (req, res, next) => {
     item.updatedBy     = userId;
     await item.save();
 
-    const populated = await SalePaymentSchedule.findById(item._id).populate("linkedPayment", "paymentNumber amount paymentDate status");
+    const populated = await SalePaymentSchedule.findById(item._id).populate("linkedPayment", "paymentNumber amount paymentDate status").lean();
     res.status(200).json(populated);
   } catch (err) { next(err); }
 };
@@ -171,6 +171,7 @@ export const getOverdueSchedule = async (req, res, next) => {
     const items = await SalePaymentSchedule.find({ business, status: "overdue" })
       .populate("deal", "dealNumber agreedPrice status")
       .sort({ dueDate: 1 })
+      .limit(200)
       .lean();
     res.status(200).json({ data: items, total: items.length });
   } catch (err) { next(err); }

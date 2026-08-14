@@ -184,10 +184,10 @@ export const updateDeal = async (req, res, next) => {
         { ...updates, updatedBy: userId },
         { new: true, runValidators: true }
       )
-    );
+    ).lean();
     if (!deal) return next(createError(404, "Deal not found"));
     const totalPaid = await computeTotals(business, deal._id);
-    res.status(200).json({ ...deal.toObject(), totalPaid, balance: deal.agreedPrice - totalPaid });
+    res.status(200).json({ ...deal, totalPaid, balance: deal.agreedPrice - totalPaid });
   } catch (err) {
     next(err);
   }
@@ -326,9 +326,9 @@ export const cancelDeal = async (req, res, next) => {
     if (depositPayments.length > 0 && depositAction === "forfeit") {
       const forfeitReason = `Deposit forfeited — deal ${deal.dealNumber} cancelled${req.body.cancellationReason ? `: ${req.body.cancellationReason}` : ""}`;
       try {
-        for (const payment of depositPayments) {
-          await forfeitDepositIncome({ businessId: business, payment, userId, reason: forfeitReason });
-        }
+        await Promise.all(depositPayments.map((payment) =>
+          forfeitDepositIncome({ businessId: business, payment, userId, reason: forfeitReason })
+        ));
       } catch (glErr) {
         // Forfeit posting failed — log but don't roll back; deal is already cancelled
         // User can post a manual journal entry to fix the GL
@@ -442,16 +442,13 @@ export const createDealFromOffer = async (req, res, next) => {
     ];
 
     if (offer.agent) {
-      const agent = await SaleAgent.findById(offer.agent._id).lean();
-      if (agent) {
-        ops.push(createCommissionForDeal({
-          business, dealId: deal._id, agent,
-          listingId: offer.listing._id, buyerId: offer.buyer._id,
-          agreedPrice,
-          overrides: { commissionRateOverride, commissionTypeOverride, commissionAmountOverride, whtRate },
-          userId,
-        }));
-      }
+      ops.push(createCommissionForDeal({
+        business, dealId: deal._id, agent: offer.agent,
+        listingId: offer.listing._id, buyerId: offer.buyer._id,
+        agreedPrice,
+        overrides: { commissionRateOverride, commissionTypeOverride, commissionAmountOverride, whtRate },
+        userId,
+      }));
     }
 
     await Promise.all(ops);

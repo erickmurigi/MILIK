@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import {
@@ -45,6 +45,16 @@ const PAYMENT_METHOD_OPTIONS = PAYMENT_METHODS.map((m) => ({ value: m, label: fm
 const DEAL_STATUS_OPTIONS    = [{ value: "active", label: "Active" }, { value: "closed", label: "Closed" }, { value: "cancelled", label: "Cancelled" }];
 const blankPayForm    = { amount: "", paymentType: "installment", paymentMethod: "bank_transfer", cashbook: "", reference: "", paymentDate: todayISO(), notes: "" };
 
+const DEAL_TABLE_COLS = [
+  { label: "Deal No." },
+  { label: "Property" },
+  { label: "Buyer" },
+  { label: "Agent" },
+  { label: "Agreed Price", align: "right" },
+  { label: "Paid",         align: "right" },
+  { label: "Balance",      align: "right" },
+  { label: "Status" },
+];
 
 const SaleDeals = () => {
   const confirm        = useConfirm();
@@ -136,12 +146,14 @@ const SaleDeals = () => {
     queryKey: ["deal-detail-payments", selected?._id],
     queryFn:  () => saleApi.listPayments({ deal: selected._id, limit: 200 }),
     enabled:  !!selected?._id,
+    placeholderData: (prev) => prev,
     staleTime: 30_000,
   });
   const { data: dealCommData } = useQuery({
     queryKey: ["deal-detail-commission", selected?._id],
     queryFn:  () => saleApi.listCommissions({ business: biz, deal: selected._id }),
     enabled:  !!selected?._id,
+    placeholderData: (prev) => prev,
     staleTime: 30_000,
   });
 
@@ -149,6 +161,7 @@ const SaleDeals = () => {
     queryKey: ["deal-detail-schedule", selected?._id],
     queryFn:  () => saleApi.listSchedule({ dealId: selected._id }),
     enabled:  !!selected?._id,
+    placeholderData: (prev) => prev,
     staleTime: 30_000,
   });
 
@@ -156,6 +169,7 @@ const SaleDeals = () => {
     queryKey: ["deal-detail-docs", selected?._id],
     queryFn:  () => saleApi.getDeal(selected._id, { business: biz }),
     enabled:  !!selected?._id,
+    placeholderData: (prev) => prev,
     staleTime: 30_000,
   });
 
@@ -166,15 +180,15 @@ const SaleDeals = () => {
   const buyers     = buyersData?.data   ?? [];
   const agents     = agentsData?.data   ?? [];
 
-  const cashbookOptions     = cashbookAccounts.map((a) => ({ value: a._id, label: `${a.code ? `${a.code} — ` : ""}${a.name}` }));
+  const cashbookOptions     = useMemo(() => cashbookAccounts.map((a) => ({ value: a._id, label: `${a.code ? `${a.code} — ` : ""}${a.name}` })), [cashbookAccounts]);
   const buyerOptions        = useMemo(() => buyers.map((b)  => ({ value: b._id, label: `${b.fullName} (${b.buyerNumber})` })), [buyers]);
   const agentFilterOptions  = useMemo(() => agents.map((a)  => ({ value: a._id, label: `${a.fullName}${a.agentNumber ? ` (${a.agentNumber})` : ""}` })), [agents]);
   const agentFormOptions    = useMemo(() => agents.map((a)  => ({ value: a._id, label: `${a.fullName} (${a.agentNumber})` })), [agents]);
   const listingFilterOptions= useMemo(() => listings.map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}` })), [listings]);
   const listingFormOptions  = useMemo(() => listings.filter((l) => ["available", "reserved", "under_contract"].includes(l.status)).map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}` })), [listings]);
 
-  const dealPmts    = (dealPmtsData?.data ?? []).filter((p) => p.status === "paid");
-  const dealComm    = (dealCommData?.data ?? [])[0] ?? null;
+  const dealPmts    = useMemo(() => (dealPmtsData?.data ?? []).filter((p) => p.status === "paid"), [dealPmtsData]);
+  const dealComm    = dealCommData?.data?.[0] ?? null;
   const dealSchedule= dealScheduleData?.data ?? [];
   const dealDocs    = dealDetail?.documents ?? [];
 
@@ -406,6 +420,10 @@ const SaleDeals = () => {
   const applySearch = (e) => { e.preventDefault(); setAppliedSearch(search); setPage(1); };
   const resetFilters = () => { setSearch(""); setAppliedSearch(""); setStatusFilter(""); setAgentFilt(""); setBuyerFilt(""); setListingFilt(""); setDateFrom(""); setDateTo(""); setPage(1); };
 
+  const handleRowClick       = useCallback((row) => setSelected((prev) => prev?._id === row._id ? null : row), []);
+  const handlePrintSummary   = useCallback((e) => window.open(`/sale/deals/${e.currentTarget.dataset.id}/summary`,   "_blank"), []);
+  const handlePrintStatement = useCallback((e) => window.open(`/sale/deals/${e.currentTarget.dataset.id}/statement`, "_blank"), []);
+
   return (
     <PropertySaleShell>
       <div className="relative flex flex-col flex-1 min-h-0 overflow-hidden">
@@ -457,21 +475,12 @@ const SaleDeals = () => {
       {/* ── Table ────────────────────────────────────────────────────────── */}
       <div className={`flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm transition-all ${selected ? "mr-[364px]" : ""}`}>
         <MilikTable
-          columns={[
-            { label: "Deal No." },
-            { label: "Property" },
-            { label: "Buyer" },
-            { label: "Agent" },
-            { label: "Agreed Price", align: "right" },
-            { label: "Paid", align: "right" },
-            { label: "Balance", align: "right" },
-            { label: "Status" },
-          ]}
+          columns={DEAL_TABLE_COLS}
           rows={deals}
           loading={loading}
           empty="No deals found."
           minWidth={780}
-          onRowClick={(row) => setSelected(selected?._id === row._id ? null : row)}
+          onRowClick={handleRowClick}
           isSelected={(row) => selected?._id === row._id}
           renderRow={(row) => {
             const balance = row.agreedPrice - (row.totalPaid || 0);
@@ -504,10 +513,10 @@ const SaleDeals = () => {
           }}
           renderActions={(row) => (
             <div className="inline-flex items-center gap-1">
-              <button type="button" onClick={() => window.open(`/sale/deals/${row._id}/summary`, "_blank")} title="Print Agreement Cover" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+              <button type="button" data-id={row._id} onClick={handlePrintSummary} title="Print Agreement Cover" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
                 <FaPrint className="text-[9px]" />
               </button>
-              <button type="button" onClick={() => window.open(`/sale/deals/${row._id}/statement`, "_blank")} title="Statement of Account" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+              <button type="button" data-id={row._id} onClick={handlePrintStatement} title="Statement of Account" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
                 <FaFileAlt className="text-[9px]" />
               </button>
               {row.status === "active" && (

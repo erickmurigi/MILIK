@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import Spinner from "./Spinner";
 import { FaChevronDown, FaChevronRight, FaSort, FaSortUp, FaSortDown } from "react-icons/fa";
 
@@ -10,6 +10,14 @@ function buildGroups(rows, groupFn) {
     map.get(key).push(row);
   }
   return [...map.entries()].map(([key, items]) => ({ key, items }));
+}
+
+function SortIcon({ col, sortKey, sortDir, onSort }) {
+  if (!col.sortKey || !onSort) return null;
+  if (col.sortKey !== sortKey) return <FaSort className="ml-0.5 inline opacity-40" size={8} />;
+  return sortDir === "asc"
+    ? <FaSortUp   className="ml-0.5 inline" size={8} />
+    : <FaSortDown className="ml-0.5 inline" size={8} />;
 }
 
 export default function MilikTable({
@@ -63,14 +71,6 @@ export default function MilikTable({
       s.has(key) ? s.delete(key) : s.add(key);
       return s;
     });
-  }
-
-  function SortIcon({ col }) {
-    if (!col.sortKey || !onSort) return null;
-    if (col.sortKey !== sortKey) return <FaSort className="ml-0.5 inline opacity-40" size={8} />;
-    return sortDir === "asc"
-      ? <FaSortUp   className="ml-0.5 inline" size={8} />
-      : <FaSortDown className="ml-0.5 inline" size={8} />;
   }
 
   function renderDataRows(items, startIdx) {
@@ -143,7 +143,10 @@ export default function MilikTable({
     });
   }
 
-  const grouped = groupBy ? buildGroups(rows, groupBy) : null;
+  const grouped = useMemo(
+    () => (groupBy ? buildGroups(rows, groupBy) : null),
+    [rows, groupBy],
+  );
 
   return (
     <div className={`flex-1 min-h-0 overflow-auto ${className ?? ""}`}>
@@ -181,7 +184,7 @@ export default function MilikTable({
                 style={col.width ? { width: col.width } : undefined}
               >
                 {col.label}
-                <SortIcon col={col} />
+                <SortIcon col={col} sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
               </th>
             ))}
             {hasActions && (

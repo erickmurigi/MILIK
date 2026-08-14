@@ -134,9 +134,7 @@ export const reversePropertySalePaymentLedger = async ({ businessId, payment, us
   if (!entries.length) return;
 
   const reason = `Void of property sale payment ${payment.paymentNumber || payment._id}`;
-  for (const entry of entries) {
-    await postReversal({ entryId: entry._id, reason, userId });
-  }
+  await Promise.all(entries.map((entry) => postReversal({ entryId: entry._id, reason, userId })));
 };
 
 // ─── Deposit transfer to revenue — called at deal close ───────────────────────
@@ -168,9 +166,10 @@ export const transferDepositToRevenue = async ({ businessId, payment, userId }) 
   });
   if (existing > 0) return;
 
+  const revenueAcc = await resolvePSAccount(businessId, "4410");
+
   const { start, end } = dayRange(new Date());
   const journalGroupId = new mongoose.Types.ObjectId();
-  const revenueAcc = await resolvePSAccount(businessId, "4410");
   const ref = payment.paymentNumber || String(payment._id);
 
   const base = {
@@ -212,17 +211,19 @@ export const forfeitDepositIncome = async ({ businessId, payment, userId, reason
   }).lean();
   if (!depositHeldEntry) return; // nothing posted to 2150 — skip
 
-  const existing = await FinancialLedgerEntry.countDocuments({
-    business: businessId,
-    sourceTransactionType: "property_sale_deposit_forfeit",
-    sourceTransactionId: String(payment._id),
-    status: { $ne: "reversed" },
-  });
+  const [existing, forfeitAcc] = await Promise.all([
+    FinancialLedgerEntry.countDocuments({
+      business: businessId,
+      sourceTransactionType: "property_sale_deposit_forfeit",
+      sourceTransactionId: String(payment._id),
+      status: { $ne: "reversed" },
+    }),
+    resolvePSAccount(businessId, "4420"),
+  ]);
   if (existing > 0) return;
 
   const { start, end } = dayRange(new Date());
   const journalGroupId = new mongoose.Types.ObjectId();
-  const forfeitAcc = await resolvePSAccount(businessId, "4420");
   const ref = payment.paymentNumber || String(payment._id);
   const msg = reason || `Deposit forfeited on deal cancellation — ${ref}`;
 
@@ -401,9 +402,7 @@ export const reversePropertySaleCommissionAccrual = async ({ businessId, commiss
   if (!entries.length) return;
 
   const msg = reason || `Commission cancelled — ${commission.commissionNumber || commission._id}`;
-  for (const entry of entries) {
-    await postReversal({ entryId: entry._id, reason: msg, userId });
-  }
+  await Promise.all(entries.map((entry) => postReversal({ entryId: entry._id, reason: msg, userId })));
 };
 
 // ─── Commission payout reversal ───────────────────────────────────────────────
@@ -419,7 +418,5 @@ export const reversePropertySaleCommissionPayout = async ({ businessId, commissi
   if (!payoutEntries.length) return;
 
   const msg = reason || `Commission payout reversed — ${commission.commissionNumber || commission._id}`;
-  for (const entry of payoutEntries) {
-    await postReversal({ entryId: entry._id, reason: msg, userId });
-  }
+  await Promise.all(payoutEntries.map((entry) => postReversal({ entryId: entry._id, reason: msg, userId })));
 };

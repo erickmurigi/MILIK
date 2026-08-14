@@ -55,6 +55,18 @@ const fmt   = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit
 const isOld = (date, status) => date && !["converted", "lost"].includes(status) && new Date(date) < new Date();
 const LIMIT = 50;
 
+const LEAD_TABLE_COLS = [
+  { label: "#", width: 36 },
+  { label: "Lead #" },
+  { label: "Name" },
+  { label: "Contact" },
+  { label: "Source" },
+  { label: "Status" },
+  { label: "Agent" },
+  { label: "Budget" },
+  { label: "Next Follow-up" },
+];
+
 const selectCls = "h-7 border border-slate-200 bg-white px-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none";
 const modalInputCls = "w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none";
 
@@ -98,6 +110,7 @@ export default function SaleLeads() {
     queryFn:  () => saleApi.listLeads({ business: biz, search: debSearch, status: statusFilter, source: sourceFilter, agent: agentFilter, overdueOnly: overdueOnly ? "1" : "", page, limit: pageSize }),
     enabled:  !!biz,
     placeholderData: (p) => p,
+    staleTime: 30_000,
   });
 
   const { data: agentsData } = useQuery({
@@ -119,12 +132,14 @@ export default function SaleLeads() {
     queryKey: ["sale-activities-lead", biz, selected?._id],
     queryFn:  () => saleApi.listActivities({ business: biz, relatedLead: selected._id, limit: 100 }),
     enabled:  !!biz && !!selected?._id,
+    staleTime: 30_000,
   });
 
   const { data: leadDetail, refetch: refetchDetail } = useQuery({
     queryKey: ["sale-lead-detail", biz, selected?._id],
     queryFn:  () => saleApi.getLead(selected._id, { business: biz }),
     enabled:  !!biz && !!selected?._id,
+    staleTime: 30_000,
   });
 
   const { data: listingsRef } = useQuery({
@@ -343,17 +358,7 @@ export default function SaleLeads() {
           {/* Table container */}
           <div className="flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm">
             <MilikTable
-              columns={[
-                { label: "#", width: 36 },
-                { label: "Lead #" },
-                { label: "Name" },
-                { label: "Contact" },
-                { label: "Source" },
-                { label: "Status" },
-                { label: "Agent" },
-                { label: "Budget" },
-                { label: "Next Follow-up" },
-              ]}
+              columns={LEAD_TABLE_COLS}
               rows={leads}
               loading={isLoading}
               empty="No leads found."

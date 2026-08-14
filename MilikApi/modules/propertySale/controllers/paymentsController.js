@@ -133,7 +133,7 @@ export const createPayment = async (req, res, next) => {
       return next(createError(500, `Payment saved but GL posting failed: ${glErr.message}. Payment has been rolled back.`));
     }
 
-    const populated = await populatePayment(SalePayment.findById(payment._id));
+    const populated = await populatePayment(SalePayment.findById(payment._id)).lean();
     res.status(201).json(populated);
   } catch (err) {
     next(err);
@@ -232,7 +232,7 @@ export const voidPayment = async (req, res, next) => {
       return next(createError(500, `GL reversal failed: ${glErr.message}. Payment void has been rolled back.`));
     }
 
-    const populated = await populatePayment(SalePayment.findById(payment._id));
+    const populated = await populatePayment(SalePayment.findById(payment._id)).lean();
     res.status(200).json(populated);
   } catch (err) {
     next(err);

@@ -40,6 +40,17 @@ const OFFER_STATUS_UPDATE_OPTIONS = [
   { value: "withdrawn",   label: "Withdrawn by Buyer" },
 ];
 
+const OFFER_TABLE_COLS = [
+  { label: "Offer No." },
+  { label: "Property" },
+  { label: "Buyer" },
+  { label: "Agent" },
+  { label: "Offer Amount",      align: "right" },
+  { label: "Counter / Final",   align: "right" },
+  { label: "Validity" },
+  { label: "Status" },
+];
+
 const SaleOffers = () => {
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const biz = currentCompany?._id;
@@ -382,16 +393,7 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
         {/* Table */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
           <MilikTable
-            columns={[
-              { label: "Offer No." },
-              { label: "Property" },
-              { label: "Buyer" },
-              { label: "Agent" },
-              { label: "Offer Amount", align: "right" },
-              { label: "Counter / Final", align: "right" },
-              { label: "Validity" },
-              { label: "Status" },
-            ]}
+            columns={OFFER_TABLE_COLS}
             rows={offers}
             loading={isFetching && offers.length === 0}
             empty="No offers found."

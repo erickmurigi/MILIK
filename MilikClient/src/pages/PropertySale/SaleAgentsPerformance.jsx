@@ -87,9 +87,11 @@ const SaleAgentsPerformance = () => {
     else { setSortCol(col); setSortDir("desc"); }
   };
 
-  const totalRevAll  = rows.reduce((s, r) => s + r.totalRevenue, 0);
-  const totalCommAll = rows.reduce((s, r) => s + r.commPaid, 0);
-  const closedAll    = rows.reduce((s, r) => s + r.closedDeals, 0);
+  const { totalRevAll, totalCommAll, closedAll } = useMemo(() => ({
+    totalRevAll:  rows.reduce((s, r) => s + r.totalRevenue, 0),
+    totalCommAll: rows.reduce((s, r) => s + r.commPaid, 0),
+    closedAll:    rows.reduce((s, r) => s + r.closedDeals, 0),
+  }), [rows]);
 
   return (
     <PropertySaleShell>

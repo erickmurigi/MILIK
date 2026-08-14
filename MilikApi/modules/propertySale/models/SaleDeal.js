@@ -40,5 +40,7 @@ saleDealSchema.index({ business: 1, dealNumber: 1 }, { unique: true });
 saleDealSchema.index({ business: 1, status: 1, createdAt: -1 });
 saleDealSchema.index({ business: 1, listing: 1 });
 saleDealSchema.index({ business: 1, buyer: 1 });
+saleDealSchema.index({ business: 1, agent: 1 });
+saleDealSchema.index({ business: 1, offer: 1 });
 
 export default mongoose.model("SaleDeal", saleDealSchema);

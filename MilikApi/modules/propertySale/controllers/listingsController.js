@@ -77,7 +77,7 @@ export const createListing = async (req, res, next) => {
       createdBy: userId,
       updatedBy: userId,
     });
-    const populated = await listing.populate("assignedAgent", "fullName agentNumber phone");
+    const populated = await SaleListing.findById(listing._id).populate("assignedAgent", "fullName agentNumber phone").lean();
     res.status(201).json(populated);
   } catch (err) {
     next(err);
@@ -99,7 +99,7 @@ export const updateListing = async (req, res, next) => {
       { _id: req.params.id, business },
       { ...updates, updatedBy: userId },
       { new: true, runValidators: true }
-    ).populate("assignedAgent", "fullName agentNumber phone");
+    ).populate("assignedAgent", "fullName agentNumber phone").lean();
     if (!listing) return next(createError(404, "Listing not found"));
     res.status(200).json(listing);
   } catch (err) {

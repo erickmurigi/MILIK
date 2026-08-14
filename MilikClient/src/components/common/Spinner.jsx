@@ -1,11 +1,13 @@
 // Two-ring Milik spinner — matches the PageLoader in App.jsx
-const SIZE_PX = { sm: 16, md: 26, lg: 40 };
+// [px, outerBorderWidth, innerBorderWidth, innerRingInset]
+const SIZES = {
+  sm: [16, 2, 1, 4],
+  md: [26, 2, 1, 6],
+  lg: [40, 3, 2, 9],
+};
 
 const Spinner = ({ size = "md", className = "" }) => {
-  const px     = SIZE_PX[size] ?? SIZE_PX.md;
-  const bw     = Math.max(2, Math.round(px * 0.075));   // outer border width
-  const ibw    = Math.max(1, Math.round(px * 0.05));    // inner border width
-  const inset  = Math.round(px * 0.225);                // inner ring inset
+  const [px, bw, ibw, inset] = SIZES[size] ?? SIZES.md;
 
   return (
     <span className={`inline-flex shrink-0 items-center justify-center ${className}`}>

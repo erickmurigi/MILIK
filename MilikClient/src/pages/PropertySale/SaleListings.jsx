@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import {
@@ -36,6 +36,16 @@ const PAGE_SIZE      = 50;
 const PROPERTY_TYPE_OPTIONS = PROPERTY_TYPES.map((t) => ({ value: t, label: t }));
 const SIZE_UNIT_OPTIONS     = SIZE_UNITS.map((u) => ({ value: u, label: u }));
 const STATUS_OPTIONS        = STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }));
+
+const LISTING_TABLE_COLS = [
+  { label: "Listing No." },
+  { label: "Title" },
+  { label: "Type" },
+  { label: "Location" },
+  { label: "Asking Price", align: "right" },
+  { label: "Agent" },
+  { label: "Status" },
+];
 
 const LISTING_STATUS_MAP = {
   available:      "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -91,7 +101,7 @@ const SaleListings = () => {
     staleTime: 5 * 60_000,
   });
 
-  const listings   = listingsData?.data ?? [];
+  const listings   = useMemo(() => listingsData?.data ?? [], [listingsData?.data]);
   const total      = listingsData?.total ?? 0;
   const agents     = agentsData?.data ?? [];
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -321,15 +331,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
       <div className="relative flex flex-col flex-1 min-h-0 overflow-hidden">
         <div className={`flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm transition-[margin] duration-200 ${selected ? "mr-[360px]" : ""}`}>
           <MilikTable
-            columns={[
-              { label: "Listing No." },
-              { label: "Title" },
-              { label: "Type" },
-              { label: "Location" },
-              { label: "Asking Price", align: "right" },
-              { label: "Agent" },
-              { label: "Status" },
-            ]}
+            columns={LISTING_TABLE_COLS}
             rows={listings}
             loading={loading}
             empty="No listings found. Create your first listing."

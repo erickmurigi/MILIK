@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
@@ -30,6 +30,16 @@ const STATUS_OPTS = [
   { value: "waived",   label: "Waived" },
 ];
 
+const SCHEDULE_TABLE_COLS = [
+  { label: "#" },
+  { label: "Deal" },
+  { label: "Property" },
+  { label: "Buyer" },
+  { label: "Description" },
+  { label: "Due Date" },
+  { label: "Amount", align: "right" },
+  { label: "Status" },
+];
 
 const SaleSchedule = () => {
   const navigate       = useNavigate();
@@ -78,12 +88,15 @@ const SaleSchedule = () => {
 
   const overdueItems  = overdueData?.data  ?? [];
   const upcomingItems = upcomingData?.data ?? [];
-  const overdueAmt    = overdueItems.reduce((s, i) => s + Number(i.expectedAmount || 0), 0);
 
-  const in30Days  = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-  const due30     = upcomingItems.filter((i) => new Date(i.dueDate) <= in30Days);
-  const due30Amt  = due30.reduce((s, i) => s + Number(i.expectedAmount || 0), 0);
-  const upcomingAmt = upcomingItems.reduce((s, i) => s + Number(i.expectedAmount || 0), 0);
+  const { overdueAmt, due30Amt, upcomingAmt } = useMemo(() => {
+    const cutoff     = Date.now() + 30 * 24 * 60 * 60 * 1000;
+    return {
+      overdueAmt:  overdueItems.reduce((s, i) => s + Number(i.expectedAmount || 0), 0),
+      due30Amt:    upcomingItems.filter((i) => new Date(i.dueDate).getTime() <= cutoff).reduce((s, i) => s + Number(i.expectedAmount || 0), 0),
+      upcomingAmt: upcomingItems.reduce((s, i) => s + Number(i.expectedAmount || 0), 0),
+    };
+  }, [overdueItems, upcomingItems]);
 
   const activeFilterCount = [statusFilter, dateFrom, dateTo].filter(Boolean).length;
 
@@ -179,16 +192,7 @@ const SaleSchedule = () => {
       {/* Table */}
       <div className="border border-slate-200 bg-white shadow-sm overflow-hidden">
         <MilikTable
-          columns={[
-            { label: "#" },
-            { label: "Deal" },
-            { label: "Property" },
-            { label: "Buyer" },
-            { label: "Description" },
-            { label: "Due Date" },
-            { label: "Amount", align: "right" },
-            { label: "Status" },
-          ]}
+          columns={SCHEDULE_TABLE_COLS}
           rows={items}
           loading={isLoading}
           empty="No schedule items found for the selected filter."

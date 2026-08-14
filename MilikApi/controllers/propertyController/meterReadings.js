@@ -96,7 +96,7 @@ const findActiveTenantForUnit = async ({ businessId, unitId }) => {
 
   return Tenant.findOne({
     business: businessId,
-    unit: unitId,
+    $or: [{ unit: unitId }, { additionalUnits: unitId }],
     status: { $in: ACTIVE_TENANT_STATUSES },
   })
     .sort({ moveInDate: -1, createdAt: -1 })
@@ -409,7 +409,7 @@ const resolveBillableTenantForReading = async (reading) => {
     const linkedTenant = await Tenant.findOne({
       _id: reading.tenant,
       business: reading.business,
-      unit: reading.unit,
+      $or: [{ unit: reading.unit }, { additionalUnits: reading.unit }],
       status: { $in: ACTIVE_TENANT_STATUSES },
     })
       .select("_id name")

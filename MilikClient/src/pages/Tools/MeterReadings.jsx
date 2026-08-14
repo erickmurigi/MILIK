@@ -378,7 +378,11 @@ const MeterReadings = () => {
   const filteredTenants = useMemo(() => {
     const scopedTenants = !form.unit
       ? tenants
-      : tenants.filter((tenant) => String(tenant?.unit?._id || tenant?.unit) === String(form.unit));
+      : tenants.filter((tenant) => {
+          const uid = String(form.unit);
+          if (String(tenant?.unit?._id || tenant?.unit) === uid) return true;
+          return (tenant?.additionalUnits ?? []).some((u) => String(u?._id || u) === uid);
+        });
 
     return scopedTenants.filter((tenant) => {
       const status = String(tenant?.status || "").trim().toLowerCase();

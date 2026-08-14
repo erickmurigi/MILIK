@@ -121,7 +121,7 @@ export const updateCommissionStatus = async (req, res, next) => {
 
     const commission = await populateCommission(
       SaleCommission.findOneAndUpdate({ _id: req.params.id, business }, update, { new: true })
-    );
+    ).lean();
     if (!commission) return next(createError(404, "Commission not found"));
 
     // GL hooks — all paths await and roll back on failure

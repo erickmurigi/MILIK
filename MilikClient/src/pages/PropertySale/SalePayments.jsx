@@ -33,6 +33,18 @@ const TYPE_BADGE = {
   other:         "border-slate-200 bg-slate-50 text-slate-600",
 };
 
+const PAYMENT_TABLE_COLS = [
+  { label: "Receipt No." },
+  { label: "Deal" },
+  { label: "Property / Buyer" },
+  { label: "Type" },
+  { label: "Method" },
+  { label: "Reference" },
+  { label: "Amount", align: "right" },
+  { label: "Date" },
+  { label: "Status" },
+];
+
 const PAYMENT_TYPES   = ["deposit", "installment", "final_payment", "other"];
 const PAYMENT_METHODS = ["cash", "mpesa", "bank_transfer", "cheque", "other"];
 const PAGE_SIZE       = 50;
@@ -260,17 +272,7 @@ const SalePayments = () => {
       {/* Table */}
       <div className="flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm">
         <MilikTable
-          columns={[
-            { label: "Receipt No." },
-            { label: "Deal" },
-            { label: "Property / Buyer" },
-            { label: "Type" },
-            { label: "Method" },
-            { label: "Reference" },
-            { label: "Amount", align: "right" },
-            { label: "Date" },
-            { label: "Status" },
-          ]}
+          columns={PAYMENT_TABLE_COLS}
           rows={payments}
           loading={loading}
           empty={`No payments found.${hasFilters ? " Try clearing filters." : ""}`}
