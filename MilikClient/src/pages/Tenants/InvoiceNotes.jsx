@@ -39,6 +39,7 @@ import {
 import { adminRequests } from "../../utils/requestMethods";
 import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
 import AppSelect from "../../components/common/AppSelect";
+import MilikTable from "../../components/common/MilikTable";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
@@ -936,170 +937,107 @@ const InvoiceNotes = () => {
             </div>
 
             {/* ── TABLE ── */}
-            <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
-              <table className="w-full min-w-[1320px] text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className={`${MILIK_GREEN} text-white`}>
-                    <th className="px-3 py-2 text-left border-r border-white/10">
-                      <input
-                        type="checkbox"
-                        checked={paginatedNotes.length > 0 && paginatedNotes.every((n) => selectedNotes.includes(String(n._id)))}
-                        onChange={toggleSelectAllNotes}
-                        className="accent-emerald-500"
-                      />
-                    </th>
-                    <th className="w-6 px-1 py-2 border-r border-white/10" />
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Note #</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Tenant</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Property</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Unit</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Description</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Type</th>
-                    <th className="px-3 py-2 text-center font-bold border-r border-white/10">Note Date</th>
-                    <th className="px-3 py-2 text-center font-bold border-r border-white/10">Source Invoice</th>
-                    <th className="px-3 py-2 text-right font-bold border-r border-white/10">Amount</th>
-                    <th className="px-3 py-2 text-center font-bold border-r border-white/10">Status</th>
-                    <th className="px-3 py-2 text-center font-bold border-r border-white/10">Payment</th>
-                    <th className="px-3 py-2 text-center font-bold border-r border-white/10">Created</th>
-                    <th className="px-3 py-2 text-right font-bold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredNotes.length === 0 ? (
-                    <tr>
-                      <td colSpan={15} className="px-4 py-8 text-center text-gray-500">
-                        <FaFileInvoice className="mb-2 inline-block text-4xl text-gray-300" />
-                        <p className="mt-1 text-sm font-semibold">No invoice notes found</p>
-                        <p className="mt-1 text-xs text-gray-400">{loading ? "Loading..." : "Adjust filters or add a new note."}</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    paginatedNotes.map((note, index) => {
-                      const noteId = String(note._id);
-                      const isNoteSelected = selectedNotes.includes(noteId);
-                      const isNoteExpanded = expandedNotes.has(noteId);
-                      const paymentState = getNotePaymentState(note);
-                      return (
-                        <React.Fragment key={noteId}>
-                          <tr
-                            className={`cursor-pointer border-b border-gray-100 transition-colors ${
-                              isNoteSelected
-                                ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50"
-                                : index % 2 === 0
-                                  ? "bg-white hover:bg-blue-50/40"
-                                  : "bg-slate-50/60 hover:bg-blue-50/40"
-                            }`}
-                            onClick={() => toggleNoteSelect(noteId)}
-                          >
-                            <td className="px-3 py-1 border-r border-gray-100 text-slate-600">
-                              <input
-                                type="checkbox"
-                                checked={isNoteSelected}
-                                onChange={() => toggleNoteSelect(noteId)}
-                                onClick={(event) => event.stopPropagation()}
-                                className="accent-emerald-500"
-                              />
-                            </td>
-                            <td
-                              className="w-6 cursor-pointer px-1 py-1 border-r border-gray-100 text-center text-slate-400"
-                              onClick={(event) => { event.stopPropagation(); toggleNoteExpand(noteId); }}
-                            >
-                              {isNoteExpanded ? "▼" : "▶"}
-                            </td>
-                            <td className="px-3 py-1 border-r border-gray-100">
-                              <p className="font-semibold text-blue-700">{note.noteNumber || note.invoiceNumber}</p>
-                            </td>
-                            <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{note?.tenant?.name || note?.tenantName || "-"}</td>
-                            <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{resolvePropertyName(note, propertyMap)}</td>
-                            <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{resolveUnitName(note, tenantMap)}</td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-orange-700">{note.description || note.metadata?.billItemLabel || `${humanizeCategory(note.noteType || note.documentType)} - ${humanizeCategory(note.category || "Charge")}`}</td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-slate-700">
-                              <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">{humanizeCategory(note.category || "-")}</span>
-                            </td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">{fmtDate(note.noteDate || note.invoiceDate || note.createdAt)}</td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">{note.sourceInvoiceNumber || note?.sourceInvoice?.invoiceNumber || "-"}</td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">{formatCurrency(note.amount)}</td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-center">
-                              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${getStatusChip(note?.status)}`}>
-                                {note?.status || "posted"}
-                              </span>
-                            </td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-center">
-                              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${paymentState.className}`}>
-                                {paymentState.label}
-                              </span>
-                            </td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">{fmtDate(note.createdAt || note.noteDate || note.invoiceDate)}</td>
-                            <td className="px-3 py-1 text-right" onClick={(event) => event.stopPropagation()}>
-                              {canReverseNote(note) ? (
-                                <button
-                                  type="button"
-                                  onClick={() => handleReverseNote(note)}
-                                  disabled={busyNoteId === noteId}
-                                  className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800 disabled:cursor-not-allowed disabled:opacity-40"
-                                  title={String(note?.noteType || "").toUpperCase() === "DEBIT_NOTE" ? "Reverse this debit note only if it is still unpaid" : "Reverse this credit note and restore the source invoice amount"}
-                                >
-                                  <FaUndo size={12} />
-                                </button>
-                              ) : (
-                                <span
-                                  className="inline-flex cursor-not-allowed rounded p-1 text-slate-300"
-                                  title={
-                                    String(note?.status || "").toLowerCase() === "reversed"
-                                      ? "Already reversed"
-                                      : "Cannot reverse a cancelled note"
-                                  }
-                                >
-                                  <FaUndo size={12} />
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                          {isNoteExpanded && (
-                            <tr className="border-b border-gray-200 bg-gray-100">
-                              <td colSpan={15} className="px-3 py-2">
-                                <div className="grid grid-cols-1 gap-3 text-xs md:grid-cols-4">
-                                  <div>
-                                    <span className="font-black uppercase tracking-[0.12em] text-emerald-700">Note Details</span>
-                                    <p className="mt-1 font-semibold text-slate-900">{note.noteNumber || note.invoiceNumber}</p>
-                                    <p className="text-slate-600">{fmtDate(note.noteDate || note.invoiceDate || note.createdAt)}</p>
-                                    <p className="text-slate-600">{humanizeCategory(note.noteType || note.documentType)}</p>
-                                  </div>
-                                  <div>
-                                    <span className="font-black uppercase tracking-[0.12em] text-blue-700">Source Invoice</span>
-                                    <p className="mt-1 font-semibold text-slate-900">{note.sourceInvoiceNumber || note?.sourceInvoice?.invoiceNumber || "-"}</p>
-                                    <p className="text-slate-600">{humanizeCategory(note.category || "-")}</p>
-                                    <p className="font-semibold text-[#0B3B2E]">{formatCurrency(note.amount)}</p>
-                                  </div>
-                                  <div>
-                                    <span className="font-black uppercase tracking-[0.12em] text-amber-700">Tenant & Property</span>
-                                    <p className="mt-1 font-semibold text-slate-900">{note?.tenant?.name || note?.tenantName || "-"}</p>
-                                    <p className="text-slate-600">{resolvePropertyName(note, propertyMap)}</p>
-                                    <p className="text-slate-600">{resolveUnitName(note, tenantMap)}</p>
-                                  </div>
-                                  <div>
-                                    <span className="font-black uppercase tracking-[0.12em] text-violet-700">Description & Status</span>
-                                    <p className="mt-1 text-slate-700">{note.description || note.metadata?.billItemLabel || `${humanizeCategory(note.noteType || note.documentType)} - ${humanizeCategory(note.category || "Charge")}`}</p>
-                                    <p className="mt-1 flex flex-wrap gap-1">
-                                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase ${getStatusChip(note?.status)}`}>
-                                        {note?.status || "posted"}
-                                      </span>
-                                      <span className={`inline-flex rounded px-2 py-0.5 text-[10px] font-semibold ${paymentState.className}`}>
-                                        {paymentState.label}
-                                      </span>
-                                    </p>
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <MilikTable
+              columns={[
+                { label: "Note #" },
+                { label: "Tenant" },
+                { label: "Property" },
+                { label: "Unit" },
+                { label: "Description" },
+                { label: "Type" },
+                { label: "Note Date", align: "center" },
+                { label: "Source Invoice", align: "center" },
+                { label: "Amount", align: "right" },
+                { label: "Status", align: "center" },
+                { label: "Payment", align: "center" },
+                { label: "Created", align: "center" },
+              ]}
+              rows={paginatedNotes}
+              rowKey="_id"
+              loading={loading}
+              empty="No invoice notes found. Adjust filters or add a new note."
+              minWidth={1320}
+              checkboxes
+              allChecked={paginatedNotes.length > 0 && paginatedNotes.every((n) => selectedNotes.includes(String(n._id)))}
+              someChecked={paginatedNotes.some((n) => selectedNotes.includes(String(n._id)))}
+              onCheckAll={toggleSelectAllNotes}
+              isChecked={(note) => selectedNotes.includes(String(note._id))}
+              onCheckRow={(note) => toggleNoteSelect(String(note._id))}
+              onRowClick={(note) => toggleNoteSelect(String(note._id))}
+              isSelected={(note) => selectedNotes.includes(String(note._id))}
+              renderRow={(note) => {
+                const paymentState = getNotePaymentState(note);
+                return (
+                  <>
+                    <td className="px-3 py-1.5 border-r border-gray-100">
+                      <p className="font-semibold text-blue-700">{note.noteNumber || note.invoiceNumber}</p>
+                    </td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{note?.tenant?.name || note?.tenantName || "-"}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{resolvePropertyName(note, propertyMap)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{resolveUnitName(note, tenantMap)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-orange-700">{note.description || note.metadata?.billItemLabel || `${humanizeCategory(note.noteType || note.documentType)} - ${humanizeCategory(note.category || "Charge")}`}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">{humanizeCategory(note.category || "-")}</span>
+                    </td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-center text-slate-700">{fmtDate(note.noteDate || note.invoiceDate || note.createdAt)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-center text-slate-700">{note.sourceInvoiceNumber || note?.sourceInvoice?.invoiceNumber || "-"}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold text-slate-900">{formatCurrency(note.amount)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-center">
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${getStatusChip(note?.status)}`}>{note?.status || "posted"}</span>
+                    </td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-center">
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${paymentState.className}`}>{paymentState.label}</span>
+                    </td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-center text-slate-700">{fmtDate(note.createdAt || note.noteDate || note.invoiceDate)}</td>
+                  </>
+                );
+              }}
+              renderExpanded={(note) => {
+                const paymentState = getNotePaymentState(note);
+                return (
+                  <div className="grid grid-cols-1 gap-3 text-xs md:grid-cols-4">
+                    <div>
+                      <span className="font-black uppercase tracking-[0.12em] text-emerald-700">Note Details</span>
+                      <p className="mt-1 font-semibold text-slate-900">{note.noteNumber || note.invoiceNumber}</p>
+                      <p className="text-slate-600">{fmtDate(note.noteDate || note.invoiceDate || note.createdAt)}</p>
+                      <p className="text-slate-600">{humanizeCategory(note.noteType || note.documentType)}</p>
+                    </div>
+                    <div>
+                      <span className="font-black uppercase tracking-[0.12em] text-blue-700">Source Invoice</span>
+                      <p className="mt-1 font-semibold text-slate-900">{note.sourceInvoiceNumber || note?.sourceInvoice?.invoiceNumber || "-"}</p>
+                      <p className="text-slate-600">{humanizeCategory(note.category || "-")}</p>
+                      <p className="font-semibold text-[#0B3B2E]">{formatCurrency(note.amount)}</p>
+                    </div>
+                    <div>
+                      <span className="font-black uppercase tracking-[0.12em] text-amber-700">Tenant & Property</span>
+                      <p className="mt-1 font-semibold text-slate-900">{note?.tenant?.name || note?.tenantName || "-"}</p>
+                      <p className="text-slate-600">{resolvePropertyName(note, propertyMap)}</p>
+                      <p className="text-slate-600">{resolveUnitName(note, tenantMap)}</p>
+                    </div>
+                    <div>
+                      <span className="font-black uppercase tracking-[0.12em] text-violet-700">Description & Status</span>
+                      <p className="mt-1 text-slate-700">{note.description || note.metadata?.billItemLabel || `${humanizeCategory(note.noteType || note.documentType)} - ${humanizeCategory(note.category || "Charge")}`}</p>
+                      <p className="mt-1 flex flex-wrap gap-1">
+                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase ${getStatusChip(note?.status)}`}>{note?.status || "posted"}</span>
+                        <span className={`inline-flex rounded px-2 py-0.5 text-[10px] font-semibold ${paymentState.className}`}>{paymentState.label}</span>
+                      </p>
+                    </div>
+                  </div>
+                );
+              }}
+              renderActions={(note) => {
+                const noteId = String(note._id);
+                return canReverseNote(note) ? (
+                  <button type="button" onClick={() => handleReverseNote(note)} disabled={busyNoteId === noteId} className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800 disabled:cursor-not-allowed disabled:opacity-40" title={String(note?.noteType || "").toUpperCase() === "DEBIT_NOTE" ? "Reverse this debit note only if it is still unpaid" : "Reverse this credit note and restore the source invoice amount"}>
+                    <FaUndo size={12} />
+                  </button>
+                ) : (
+                  <span className="inline-flex cursor-not-allowed rounded p-1 text-slate-300" title={String(note?.status || "").toLowerCase() === "reversed" ? "Already reversed" : "Cannot reverse a cancelled note"}>
+                    <FaUndo size={12} />
+                  </span>
+                );
+              }}
+            />
 
             {/* ── FOOTER PAGINATION ── */}
             <div className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">

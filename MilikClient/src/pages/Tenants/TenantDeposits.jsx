@@ -42,6 +42,7 @@ import { hasCompanyPermission } from "../../utils/permissions";
 import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import { useTabState } from "../../hooks/useTabState";
 import { safeId } from "../../utils/idUtils";
+import MilikTable from "../../components/common/MilikTable";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -821,136 +822,73 @@ const TenantDeposits = () => {
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
-              <table className="w-full min-w-[1480px] text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className={`${MILIK_GREEN} text-white`}>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">
-                      <input type="checkbox" checked={currentPageRows.length > 0 && selectAll} onChange={toggleSelectAll} />
-                    </th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Invoice #</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Tenant</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Unit</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Deposit Type</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{holderColumnLabel}</th>
-                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Booking / Invoice Date</th>
-                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Due Date</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Paid</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Outstanding</th>
-                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
-                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Created</th>
-                    <th className="px-3 py-1 text-right font-bold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading && currentPageRows.length === 0 ? (
-                    <tr>
-                      <td colSpan="15" className="px-4 py-8 text-center text-gray-500">
-                        <Spinner className="mb-2 text-2xl" />
-                        <p className="mt-1 text-sm font-semibold">Loading deposit invoices...</p>
-                      </td>
-                    </tr>
-                  ) : totalFilteredCount === 0 ? (
-                    <tr>
-                      <td colSpan="15" className="px-4 py-8 text-center text-gray-500">
-                        <FaFileInvoice className="mb-2 inline-block text-4xl text-gray-300" />
-                        <p className="mt-1 text-sm font-semibold">No deposit invoices found</p>
-                        <p className="mt-1 text-xs text-gray-400">Create a deposit invoice to see it in this register.</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    currentPageRows.map((row, idx) => (
-                      <tr
-                        key={row.key}
-                        className={`cursor-pointer border-b border-gray-100 transition-colors ${
-                          selectedInvoices.includes(row.key)
-                            ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50"
-                            : idx % 2 === 0
-                            ? "bg-white hover:bg-blue-50/40"
-                            : "bg-slate-50/60 hover:bg-blue-50/40"
-                        }`}
-                        onClick={() => navigate(`/tenant/${row.tenantId}/statement`)}
-                      >
-                        <td className="px-3 py-1 border-r border-gray-100">
-                          <input
-                            type="checkbox"
-                            checked={selectedInvoices.includes(row.key)}
-                            onChange={() => toggleRowSelection(row.key)}
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 font-bold text-blue-700">{row.id}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900">{row.tenantName}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.propertyName}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.unitName}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-orange-700">
-                          <div>{row.depositTypeLabel}</div>
-                          <div className="max-w-[220px] truncate text-[10px] font-normal text-slate-500">{row.description}</div>
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.holder}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-center text-gray-700">{row.invoiceDateLabel}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-center text-gray-700">{row.dueDateLabel}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{formatCurrency(row.amount)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">{formatCurrency(row.appliedAmount)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{formatCurrency(row.outstandingAmount)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-center">
-                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${getStatusBadgeClass(row.status)}`}>
-                            {row.status}
-                          </span>
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-center text-gray-600">{row.createdDate}</td>
-                        <td className="px-3 py-1 text-right">
-                          <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              onClick={() => navigate(`/tenant/${row.tenantId}/statement`)}
-                              className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800"
-                              title="View tenant statement"
-                            >
-                              <FaEye size={12} />
-                            </button>
-                            <button
-                              onClick={() => navigate(`/receipts/new?tenant=${row.tenantId}`)}
-                              className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800"
-                              title="Create receipt"
-                            >
-                              <FaReceipt size={12} />
-                            </button>
-                            {(() => {
-                              const isOnLedger = row.originalInvoice?.ledgerMode !== "off_ledger";
-                              const isPaid = ["paid", "partially_paid"].includes(row.rawStatus);
-                              const disabledReason = !canDeleteInvoice
-                                ? "You do not have permission"
-                                : isPaid
-                                ? "Paid deposits must be reversed via receipts first"
-                                : null;
-                              return (
-                                <button
-                                  onClick={() => handleDeleteSingle(row)}
-                                  disabled={!!disabledReason || deleting}
-                                  className={`rounded p-1 disabled:cursor-not-allowed disabled:opacity-40 ${isOnLedger ? "text-amber-600 hover:bg-amber-50 hover:text-amber-800" : "text-red-600 hover:bg-red-50 hover:text-red-800"}`}
-                                  title={disabledReason || (isOnLedger ? "Reverse deposit invoice (ledger will be reversed)" : "Delete deposit invoice")}
-                                >
-                                  {isOnLedger ? <FaUndo size={12} /> : <FaTrash size={12} />}
-                                </button>
-                              );
-                            })()}
-                            <button
-                              onClick={() => navigate(`/tenant/${row.tenantId}/statement`)}
-                              className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800"
-                              title="Open statement"
-                            >
-                              <FaArrowRight size={12} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <MilikTable
+              columns={[
+                { label: "Invoice #" },
+                { label: "Tenant" },
+                { label: "Property" },
+                { label: "Unit" },
+                { label: "Deposit Type" },
+                { label: holderColumnLabel },
+                { label: "Booking / Invoice Date", align: "center" },
+                { label: "Due Date", align: "center" },
+                { label: "Amount", align: "right" },
+                { label: "Paid", align: "right" },
+                { label: "Outstanding", align: "right" },
+                { label: "Status", align: "center" },
+                { label: "Created", align: "center" },
+              ]}
+              rows={currentPageRows}
+              rowKey="key"
+              loading={loading && currentPageRows.length === 0}
+              empty="No deposit invoices found. Create a deposit invoice to see it in this register."
+              minWidth={1480}
+              checkboxes
+              allChecked={currentPageRows.length > 0 && selectAll}
+              someChecked={selectedInvoices.length > 0 && !selectAll}
+              onCheckAll={toggleSelectAll}
+              isChecked={(row) => selectedInvoices.includes(row.key)}
+              onCheckRow={(row) => toggleRowSelection(row.key)}
+              onRowClick={(row) => navigate(`/tenant/${row.tenantId}/statement`)}
+              isSelected={(row) => selectedInvoices.includes(row.key)}
+              renderRow={(row) => (
+                <>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-bold text-blue-700">{row.id}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-bold text-slate-900">{row.tenantName}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{row.propertyName}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{row.unitName}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-orange-700">
+                    <div>{row.depositTypeLabel}</div>
+                    <div className="max-w-[220px] truncate text-[10px] font-normal text-slate-500">{row.description}</div>
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">{row.holder}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-center text-gray-700">{row.invoiceDateLabel}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-center text-gray-700">{row.dueDateLabel}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-slate-900">{formatCurrency(row.amount)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right text-slate-700">{formatCurrency(row.appliedAmount)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-slate-900">{formatCurrency(row.outstandingAmount)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-center">
+                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${getStatusBadgeClass(row.status)}`}>{row.status}</span>
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-center text-gray-600">{row.createdDate}</td>
+                </>
+              )}
+              renderActions={(row) => {
+                const isOnLedger = row.originalInvoice?.ledgerMode !== "off_ledger";
+                const isPaid = ["paid", "partially_paid"].includes(row.rawStatus);
+                const disabledReason = !canDeleteInvoice ? "You do not have permission" : isPaid ? "Paid deposits must be reversed via receipts first" : null;
+                return (
+                  <div className="flex justify-end gap-1">
+                    <button onClick={() => navigate(`/tenant/${row.tenantId}/statement`)} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800" title="View tenant statement"><FaEye size={12} /></button>
+                    <button onClick={() => navigate(`/receipts/new?tenant=${row.tenantId}`)} className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800" title="Create receipt"><FaReceipt size={12} /></button>
+                    <button onClick={() => handleDeleteSingle(row)} disabled={!!disabledReason || deleting} className={`rounded p-1 disabled:cursor-not-allowed disabled:opacity-40 ${isOnLedger ? "text-amber-600 hover:bg-amber-50 hover:text-amber-800" : "text-red-600 hover:bg-red-50 hover:text-red-800"}`} title={disabledReason || (isOnLedger ? "Reverse deposit invoice (ledger will be reversed)" : "Delete deposit invoice")}>
+                      {isOnLedger ? <FaUndo size={12} /> : <FaTrash size={12} />}
+                    </button>
+                    <button onClick={() => navigate(`/tenant/${row.tenantId}/statement`)} className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800" title="Open statement"><FaArrowRight size={12} /></button>
+                  </div>
+                );
+              }}
+            />
 
             <div className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-700">
               <p>

@@ -18,6 +18,7 @@ import { selectCurrentCompany } from "../../redux/selectors";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import MilikTable from "../../components/common/MilikTable";
 
 const PAGE_SIZE   = 50;
 const AUTO_RELOAD = 30; // seconds
@@ -779,223 +780,142 @@ export default function PmsMpesaNotifications() {
         </form>
 
         {/* Table area */}
-        <div className="relative flex-1 overflow-auto">
-          {loading && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60">
-              <div className="relative h-10 w-10">
-                <div className="absolute inset-0 animate-spin" style={{ border: "3px solid #e2e8f0", borderTopColor: "#027333", borderRightColor: "#0B3B2E", animationDuration: "0.9s" }} />
-                <div className="absolute inset-[9px] animate-spin" style={{ border: "2px solid #e2e8f0", borderBottomColor: "#027333", borderLeftColor: "#0B3B2E", animationDuration: "0.6s", animationDirection: "reverse" }} />
-              </div>
-            </div>
-          )}
-
-          <table className="w-full min-w-[1200px] text-[11px] border-collapse">
-            <thead className="sticky top-0 z-[5] bg-[#0B3B2E] text-white">
-              <tr>
-                <th className="px-2 py-1.5 text-left font-bold border-r border-white/10 whitespace-nowrap">Time</th>
-                <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Status</th>
-                <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Account Ref</th>
-                <th className="px-2 py-1.5 text-right font-bold border-r border-white/10">Amount</th>
-                <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Payer</th>
-                <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Txn Code</th>
-                <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Paybill Config</th>
-                <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Tenant</th>
-                <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Property</th>
-                <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Unit</th>
-                <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Receipt</th>
-                <th className="px-2 py-1.5 text-center font-bold">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {!loading && notifications.length === 0 && (
-                <tr>
-                  <td colSpan={12} className="px-4 py-12 text-center">
-                    <div className="flex flex-col items-center gap-2">
-                      <FaSearch size={28} className="text-slate-200" />
-                      <p className="text-sm font-bold text-slate-400">No collections found</p>
-                      <p className="text-[11px] text-slate-400">
-                        {applied.status || applied.ref || applied.search
-                          ? "Try adjusting your filters or click a status chip above to clear"
-                          : "No M-Pesa transactions for today. Upload a CSV or wait for callbacks."}
-                      </p>
-                      {(applied.status || applied.ref || applied.search) && (
-                        <button onClick={reset} className="mt-1 inline-flex items-center gap-1.5 border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
-                          <FaRedoAlt size={9} /> Clear filters
-                        </button>
+        <MilikTable
+          columns={[
+            { label: "Time" },
+            { label: "Status" },
+            { label: "Account Ref" },
+            { label: "Amount", align: "right" },
+            { label: "Payer" },
+            { label: "Txn Code" },
+            { label: "Paybill Config" },
+            { label: "Tenant" },
+            { label: "Property" },
+            { label: "Unit" },
+            { label: "Receipt" },
+          ]}
+          rows={notifications}
+          rowKey="_id"
+          loading={loading && notifications.length === 0}
+          empty={applied.status || applied.ref || applied.search ? "No collections match your filters." : "No M-Pesa transactions for today. Upload a CSV or wait for callbacks."}
+          minWidth={1200}
+          renderRow={(n) => {
+            const canRecord = (n.matchingStatus === "unmatched" || n.matchingStatus === "matched_tenant") && !!n.tenant && !n.matchedReceipt;
+            const isIgnored = n.matchingStatus === "ignored";
+            return (
+              <>
+                <td className="px-3 py-1.5 border-r border-gray-100 text-[10px] text-slate-400 whitespace-nowrap tabular-nums">{fmtDate(n.transactionDate || n.createdAt)}</td>
+                <td className="px-3 py-1.5 border-r border-gray-100"><StatusBadge status={n.matchingStatus} map={STATUS_MAP} /></td>
+                <td className="px-3 py-1.5 border-r border-gray-100">
+                  <div className="font-extrabold tracking-wider text-slate-900 leading-tight">{n.accountReference || "—"}</div>
+                  {n.billRefNumber && n.billRefNumber !== n.accountReference && <div className="text-[9px] text-slate-400 font-mono leading-tight">↳ {n.billRefNumber}</div>}
+                </td>
+                <td className={`px-3 py-1.5 border-r border-gray-100 text-right font-extrabold tabular-nums ${n.matchingStatus === "captured" ? "text-emerald-700" : "text-slate-700"}`}>
+                  {n.amount > 0 ? formatMoney(n.amount) : "—"}
+                </td>
+                <td className="px-3 py-1.5 border-r border-gray-100">
+                  <div className="font-semibold text-slate-700 leading-tight">{n.payerName || <span className="font-normal italic text-slate-400">—</span>}</div>
+                </td>
+                <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-[10px] text-slate-700 whitespace-nowrap">{n.transactionCode || "—"}</td>
+                <td className="px-3 py-1.5 border-r border-gray-100 text-[10px] font-semibold text-slate-800 leading-tight">{n.configName || "—"}</td>
+                <td className="px-3 py-1.5 border-r border-gray-100">
+                  {n.tenant ? (
+                    <div className="leading-tight">
+                      <span className="font-bold text-[#0B3B2E]">{getTenantLabel(n.tenant)}</span>
+                      {n.metadata?.manualAssignment?.assignedByName && (
+                        <div className="mt-0.5 inline-flex items-center gap-1">
+                          <span className="inline-flex items-center rounded px-1 py-px text-[8px] font-black uppercase tracking-wide bg-orange-100 text-orange-700 ring-1 ring-inset ring-orange-300 whitespace-nowrap">✎ {n.metadata.manualAssignment.assignedByName}</span>
+                        </div>
                       )}
                     </div>
-                  </td>
-                </tr>
+                  ) : <span className="italic text-[9px] text-slate-400">{n.notes || "—"}</span>}
+                </td>
+                <td className="px-3 py-1.5 border-r border-gray-100 text-[10px] text-slate-600 leading-tight">{n.tenant?.unit?.property?.propertyName || n.tenant?.property?.propertyName || "—"}</td>
+                <td className="px-3 py-1.5 border-r border-gray-100 text-[10px] font-semibold text-slate-700 leading-tight whitespace-nowrap">{n.tenant?.unit?.unitName || n.tenant?.unit?.unitNumber || n.tenant?.unit?.name || "—"}</td>
+                <td className="px-3 py-1.5 border-r border-gray-100 text-[10px] font-mono leading-tight">
+                  {n.matchedReceipt ? (
+                    <span className="font-bold text-emerald-700">{n.matchedReceipt.receiptNumber || n.matchedReceipt.referenceNumber || "linked"}</span>
+                  ) : canRecord ? (
+                    <div className="flex flex-col gap-px">
+                      <span className="inline-flex items-center rounded px-1 py-px text-[8px] font-black uppercase tracking-wide bg-blue-50 text-blue-600 ring-1 ring-inset ring-blue-200 whitespace-nowrap">Awaiting Record</span>
+                      {n.metadata?.autoReceiptSkipReason && <span className="text-[8px] text-amber-600 leading-tight" title={n.metadata.autoReceiptSkipReason}>⚠ {n.metadata.autoReceiptSkipReason}</span>}
+                    </div>
+                  ) : <span className="text-slate-300">—</span>}
+                </td>
+              </>
+            );
+          }}
+          renderExpanded={(n) => (
+            <>
+              <div className="mb-2.5 grid grid-cols-3 gap-x-5 gap-y-1.5 sm:grid-cols-6">
+                {[
+                  { label: "Payer",       value: n.payerName || "—" },
+                  { label: "Phone",       value: n.msisdn || "—" },
+                  { label: "Txn Code",    value: n.transactionCode || "—" },
+                  { label: "Amount",      value: n.amount > 0 ? formatMoney(n.amount) : "—" },
+                  { label: "Account Ref", value: n.accountReference || "—" },
+                  { label: "Bill Ref",    value: n.billRefNumber || "—" },
+                  { label: "Source",      value: n.source || "—" },
+                  { label: "Short Code",  value: n.shortCode || "—" },
+                  { label: "Txn Date",    value: n.transactionDate ? new Date(n.transactionDate).toLocaleString("en-KE") : "—" },
+                  { label: "Config",      value: n.configName || "—" },
+                  { label: "Org Balance", value: n.orgAccountBalance || "—" },
+                  { label: "Status",      value: n.matchingStatus || "—" },
+                  ...(n.metadata?.manualAssignment ? [
+                    { label: "Assigned By", value: n.metadata.manualAssignment.assignedByName || "—" },
+                    { label: "Assigned At", value: n.metadata.manualAssignment.assignedAt ? new Date(n.metadata.manualAssignment.assignedAt).toLocaleString("en-KE") : "—" },
+                  ] : []),
+                ].map(({ label, value }) => (
+                  <div key={label}>
+                    <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+                    <p className="mt-px break-all text-[10px] font-semibold text-slate-800">{value}</p>
+                  </div>
+                ))}
+              </div>
+              {n.notes && (
+                <div className="mb-2 flex items-start gap-2 border border-amber-200 bg-amber-50 px-3 py-2">
+                  <span className="text-[10px] font-bold uppercase text-amber-700">Notes:</span>
+                  <span className="text-[10px] text-amber-800">{n.notes}</span>
+                </div>
               )}
-
-              {notifications.map((n, index) => {
-                const isUnmatched = n.matchingStatus === "unmatched" || n.matchingStatus === "matched_tenant";
-                const canAssign = isUnmatched && !n.tenant && !n.matchedReceipt;
-                const canRecord = isUnmatched && !!n.tenant && !n.matchedReceipt;
-                const canIgnore = isUnmatched && !n.matchedReceipt;
-                const isIgnored = n.matchingStatus === "ignored";
-                const isOpen    = expanded === n._id;
-
-                return (
-                  <React.Fragment key={n._id}>
-                    <tr
-                      onClick={() => setExpanded(isOpen ? null : n._id)}
-                      className={`cursor-pointer border-b border-gray-100 transition-colors ${isIgnored ? "opacity-60 bg-red-50/20 hover:bg-red-50/40" : index % 2 === 0 ? "bg-white hover:bg-blue-50/30" : "bg-slate-50/40 hover:bg-blue-50/30"}`}>
-                      <td className="px-2 py-1 border-r border-gray-100 text-[10px] text-slate-400 whitespace-nowrap tabular-nums">{fmtDate(n.transactionDate || n.createdAt)}</td>
-                      <td className="px-2 py-1 border-r border-gray-100"><StatusBadge status={n.matchingStatus} map={STATUS_MAP} /></td>
-                      <td className="px-2 py-1 border-r border-gray-100">
-                        <div className="font-extrabold tracking-wider text-slate-900 leading-tight">{n.accountReference || "—"}</div>
-                        {n.billRefNumber && n.billRefNumber !== n.accountReference && (
-                          <div className="text-[9px] text-slate-400 font-mono leading-tight">↳ {n.billRefNumber}</div>
-                        )}
-                      </td>
-                      <td className={`px-2 py-1 border-r border-gray-100 text-right font-extrabold tabular-nums ${n.matchingStatus === "captured" ? "text-emerald-700" : "text-slate-700"}`}>
-                        {n.amount > 0 ? formatMoney(n.amount) : "—"}
-                      </td>
-                      <td className="px-2 py-1 border-r border-gray-100">
-                        <div className="font-semibold text-slate-700 leading-tight">{n.payerName || <span className="font-normal italic text-slate-400">—</span>}</div>
-                      </td>
-                      <td className="px-2 py-1 border-r border-gray-100 font-mono text-[10px] text-slate-700 whitespace-nowrap">{n.transactionCode || "—"}</td>
-                      <td className="px-2 py-1 border-r border-gray-100 text-[10px] font-semibold text-slate-800 leading-tight">
-                        {n.configName || "—"}
-                      </td>
-                      {/* Tenant */}
-                      <td className="px-2 py-1 border-r border-gray-100">
-                        {n.tenant
-                          ? (
-                            <div className="leading-tight">
-                              <span className="font-bold text-[#0B3B2E]">{getTenantLabel(n.tenant)}</span>
-                              {n.metadata?.manualAssignment?.assignedByName && (
-                                <div className="mt-0.5 inline-flex items-center gap-1">
-                                  <span className="inline-flex items-center rounded px-1 py-px text-[8px] font-black uppercase tracking-wide bg-orange-100 text-orange-700 ring-1 ring-inset ring-orange-300 whitespace-nowrap">
-                                    ✎ {n.metadata.manualAssignment.assignedByName}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          )
-                          : <span className="italic text-[9px] text-slate-400">{n.notes || "—"}</span>}
-                      </td>
-                      {/* Property */}
-                      <td className="px-2 py-1 border-r border-gray-100 text-[10px] text-slate-600 leading-tight">
-                        {n.tenant?.unit?.property?.propertyName || n.tenant?.property?.propertyName || "—"}
-                      </td>
-                      {/* Unit */}
-                      <td className="px-2 py-1 border-r border-gray-100 text-[10px] font-semibold text-slate-700 leading-tight whitespace-nowrap">
-                        {n.tenant?.unit?.unitName || n.tenant?.unit?.unitNumber || n.tenant?.unit?.name || "—"}
-                      </td>
-                      {/* Receipt */}
-                      <td className="px-2 py-1 border-r border-gray-100 text-[10px] font-mono leading-tight">
-                        {n.matchedReceipt
-                          ? <span className="font-bold text-emerald-700">{n.matchedReceipt.receiptNumber || n.matchedReceipt.referenceNumber || "linked"}</span>
-                          : canRecord
-                            ? (
-                              <div className="flex flex-col gap-px">
-                                <span className="inline-flex items-center rounded px-1 py-px text-[8px] font-black uppercase tracking-wide bg-blue-50 text-blue-600 ring-1 ring-inset ring-blue-200 whitespace-nowrap">Awaiting Record</span>
-                                {n.metadata?.autoReceiptSkipReason && (
-                                  <span className="text-[8px] text-amber-600 leading-tight" title={n.metadata.autoReceiptSkipReason}>
-                                    ⚠ {n.metadata.autoReceiptSkipReason}
-                                  </span>
-                                )}
-                              </div>
-                            )
-                            : <span className="text-slate-300">—</span>}
-                      </td>
-                      <td className="px-2 py-1 text-center" onClick={e => e.stopPropagation()}>
-                        <div className="flex flex-wrap items-center justify-center gap-1">
-                          {canAssign && (
-                            <button type="button" onClick={() => setAssignTarget(n)}
-                              className="inline-flex items-center gap-1 border border-amber-300 bg-amber-50 px-2 py-px text-[10px] font-bold text-amber-700 hover:bg-amber-100">
-                              <FaLink size={8} /> Assign
-                            </button>
-                          )}
-                          {canRecord && (
-                            <button type="button"
-                              onClick={() => {
-                                const pb = paybills.find(p => String(p.shortCode || "") === String(n.shortCode || "")) || paybills[0];
-                                const cbParam = pb?.defaultCashbookAccountId ? `&cashbookAccountId=${pb.defaultCashbookAccountId}` : "";
-                                navigate(`/receipts/new?tenant=${n.tenant?._id}&amount=${n.amount}&reference=${n.transactionCode}&collectionId=${n._id}&paymentMethod=mpesa&payerName=${encodeURIComponent(n.payerName || "")}&msisdn=${encodeURIComponent(n.msisdn || "")}${cbParam}`);
-                              }}
-                              className="inline-flex items-center gap-1 border border-emerald-300 bg-emerald-50 px-2 py-px text-[10px] font-bold text-emerald-700 hover:bg-emerald-100">
-                              <FaReceipt size={8} /> Record
-                            </button>
-                          )}
-                          {canIgnore && (
-                            <button type="button" onClick={() => setIgnoreTarget(n)}
-                              className="inline-flex items-center gap-1 border border-red-200 bg-red-50 px-2 py-px text-[10px] font-bold text-red-600 hover:bg-red-100">
-                              <FaBan size={8} /> Ignore
-                            </button>
-                          )}
-                          {isIgnored && (
-                            <button type="button" onClick={() => handleUnignore(n._id)} disabled={unignoringId === n._id}
-                              className="inline-flex items-center gap-1 border border-slate-300 bg-white px-2 py-px text-[10px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50">
-                              <FaUndo size={8} /> {unignoringId === n._id ? "…" : "Restore"}
-                            </button>
-                          )}
-                          <span className="text-slate-300">{isOpen ? <FaChevronUp size={8} /> : <FaChevronDown size={8} />}</span>
-                        </div>
-                      </td>
-                    </tr>
-
-                    {isOpen && (
-                      <tr className="border-b border-slate-200 bg-slate-50/80">
-                        <td colSpan={12} className="px-4 py-2.5">
-                          <div className="mb-2.5 grid grid-cols-3 gap-x-5 gap-y-1.5 sm:grid-cols-6">
-                            {[
-                              { label: "Payer",        value: n.payerName || "—"                                                     },
-                              { label: "Phone",        value: n.msisdn || "—"                                                        },
-                              { label: "Txn Code",     value: n.transactionCode || "—"                                               },
-                              { label: "Amount",       value: n.amount > 0 ? formatMoney(n.amount) : "—"                            },
-                              { label: "Account Ref",  value: n.accountReference || "—"                                              },
-                              { label: "Bill Ref",     value: n.billRefNumber || "—"                                                 },
-                              { label: "Source",       value: n.source || "—"                                                        },
-                              { label: "Short Code",   value: n.shortCode || "—"                                                     },
-                              { label: "Txn Date",     value: n.transactionDate ? new Date(n.transactionDate).toLocaleString("en-KE") : "—" },
-                              { label: "Config",       value: n.configName || "—"                                                    },
-                              { label: "Org Balance",  value: n.orgAccountBalance || "—"                                             },
-                              { label: "Status",       value: n.matchingStatus || "—"                                                },
-                              ...(n.metadata?.manualAssignment ? [
-                                { label: "Assigned By",  value: n.metadata.manualAssignment.assignedByName || "—"                   },
-                                { label: "Assigned At",  value: n.metadata.manualAssignment.assignedAt ? new Date(n.metadata.manualAssignment.assignedAt).toLocaleString("en-KE") : "—" },
-                              ] : []),
-                            ].map(({ label, value }) => (
-                              <div key={label}>
-                                <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-                                <p className="mt-px break-all text-[10px] font-semibold text-slate-800">{value}</p>
-                              </div>
-                            ))}
-                          </div>
-                          {n.notes && (
-                            <div className="mb-2 flex items-start gap-2 border border-amber-200 bg-amber-50 px-3 py-2">
-                              <span className="text-[10px] font-bold uppercase text-amber-700">Notes:</span>
-                              <span className="text-[10px] text-amber-800">{n.notes}</span>
-                            </div>
-                          )}
-                          {n.rawPayload && (
-                            <>
-                              <p className="mb-1 text-[10px] font-black uppercase tracking-wide text-slate-400">Raw Safaricom Payload</p>
-                              <pre className="max-h-40 overflow-auto rounded border border-slate-200 bg-white p-3 text-[10px] font-mono text-slate-700">
-                                {JSON.stringify(n.rawPayload, null, 2)}
-                              </pre>
-                            </>
-                          )}
-                          {!n.matchedReceipt && (
-                            <div className="mt-3 flex justify-end">
-                              <button onClick={() => handleDelete(n._id)} disabled={deletingId === n._id}
-                                className="inline-flex items-center gap-1.5 border border-rose-300 bg-rose-50 px-3 py-1.5 text-[10px] font-bold text-rose-600 hover:bg-rose-100 disabled:opacity-50">
-                                {deletingId === n._id ? <Spinner size="sm" /> : <FaTrash size={9} />}
-                                {deletingId === n._id ? "Deleting…" : "Delete Record"}
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+              {n.rawPayload && (
+                <>
+                  <p className="mb-1 text-[10px] font-black uppercase tracking-wide text-slate-400">Raw Safaricom Payload</p>
+                  <pre className="max-h-40 overflow-auto rounded border border-slate-200 bg-white p-3 text-[10px] font-mono text-slate-700">{JSON.stringify(n.rawPayload, null, 2)}</pre>
+                </>
+              )}
+              {!n.matchedReceipt && (
+                <div className="mt-3 flex justify-end">
+                  <button onClick={() => handleDelete(n._id)} disabled={deletingId === n._id} className="inline-flex items-center gap-1.5 border border-rose-300 bg-rose-50 px-3 py-1.5 text-[10px] font-bold text-rose-600 hover:bg-rose-100 disabled:opacity-50">
+                    {deletingId === n._id ? <Spinner size="sm" /> : <FaTrash size={9} />}
+                    {deletingId === n._id ? "Deleting…" : "Delete Record"}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+          renderActions={(n) => {
+            const isUnmatched = n.matchingStatus === "unmatched" || n.matchingStatus === "matched_tenant";
+            const canAssign = isUnmatched && !n.tenant && !n.matchedReceipt;
+            const canRecord = isUnmatched && !!n.tenant && !n.matchedReceipt;
+            const canIgnore = isUnmatched && !n.matchedReceipt;
+            const isIgnored = n.matchingStatus === "ignored";
+            return (
+              <div className="flex flex-wrap items-center justify-end gap-1">
+                {canAssign && <button type="button" onClick={() => setAssignTarget(n)} className="inline-flex items-center gap-1 border border-amber-300 bg-amber-50 px-2 py-px text-[10px] font-bold text-amber-700 hover:bg-amber-100"><FaLink size={8} /> Assign</button>}
+                {canRecord && (
+                  <button type="button" onClick={() => {
+                    const pb = paybills.find(p => String(p.shortCode || "") === String(n.shortCode || "")) || paybills[0];
+                    const cbParam = pb?.defaultCashbookAccountId ? `&cashbookAccountId=${pb.defaultCashbookAccountId}` : "";
+                    navigate(`/receipts/new?tenant=${n.tenant?._id}&amount=${n.amount}&reference=${n.transactionCode}&collectionId=${n._id}&paymentMethod=mpesa&payerName=${encodeURIComponent(n.payerName || "")}&msisdn=${encodeURIComponent(n.msisdn || "")}${cbParam}`);
+                  }} className="inline-flex items-center gap-1 border border-emerald-300 bg-emerald-50 px-2 py-px text-[10px] font-bold text-emerald-700 hover:bg-emerald-100"><FaReceipt size={8} /> Record</button>
+                )}
+                {canIgnore && <button type="button" onClick={() => setIgnoreTarget(n)} className="inline-flex items-center gap-1 border border-red-200 bg-red-50 px-2 py-px text-[10px] font-bold text-red-600 hover:bg-red-100"><FaBan size={8} /> Ignore</button>}
+                {isIgnored && <button type="button" onClick={() => handleUnignore(n._id)} disabled={unignoringId === n._id} className="inline-flex items-center gap-1 border border-slate-300 bg-white px-2 py-px text-[10px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50"><FaUndo size={8} /> {unignoringId === n._id ? "…" : "Restore"}</button>}
+              </div>
+            );
+          }}
+        />
 
           {/* Pagination footer */}
           <div className="flex-shrink-0 sticky bottom-0 z-20 bg-white border-t border-gray-200 px-2 py-1 flex items-center justify-between">
@@ -1014,7 +934,6 @@ export default function PmsMpesaNotifications() {
               </button>
             </div>
           </div>
-        </div>
       </div>
     </DashboardLayout>
   );

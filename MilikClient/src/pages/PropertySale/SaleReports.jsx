@@ -4,261 +4,309 @@ import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { FaPrint } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
-import SaleFilterBar from "./SaleFilterBar";
 import AppSelect from "../../components/common/AppSelect";
-import { fmtKES, saleApi } from "../../services/propertySaleApi";
-
-const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+import { fmtKES, SALE_MONTHS as MONTHS, saleApi } from "../../services/propertySaleApi";
+const currentYear = new Date().getFullYear();
+const YEAR_OPTS   = Array.from({ length: 6 }, (_, i) => currentYear - i + 1)
+  .map((y) => ({ value: String(y), label: String(y) }));
 
 const SaleReports = () => {
   const currentCompany = useSelector((s) => s.company?.currentCompany);
-  const biz = currentCompany?._id;
+  const biz            = currentCompany?._id;
 
-  const currentYear = new Date().getFullYear();
-  const [year, setYear] = useTabState("/sale/reports:year", String(currentYear));
-  const [report, setReport] = useState(null);
+  const [year,    setYear]    = useTabState("/sale/reports:year", String(currentYear));
+  const [report,  setReport]  = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!biz) return;
     setLoading(true);
     saleApi.getSalesReport({ business: biz, year })
-      .then((res) => setReport(res))
+      .then(setReport)
       .catch(() => toast.error("Failed to load sales report"))
       .finally(() => setLoading(false));
   }, [biz, year]);
 
-  const openMonthTab = (mName, mIdx) => {
-    const w = window.open(`/sale/reports/monthly/${year}/${mIdx + 1}`, "_blank");
+  const months = Array.isArray(report?.months) ? report.months : [];
+  const totals  = report?.totals || {};
+
+  const monthData = MONTHS.map((mName, idx) =>
+    months.find((x) => x.month === idx + 1 || x.monthName === mName) || {}
+  );
+
+  const openMonthTab = (idx) => {
+    const w = window.open(`/sale/reports/monthly/${year}/${idx + 1}`, "_blank");
     if (!w) toast.error("Pop-up blocked — allow pop-ups for this site");
   };
 
-  const months = Array.isArray(report?.months) ? report.months : [];
-  const totals = report?.totals || {};
-
   const printReport = () => {
-    const co = currentCompany || {};
+    const co   = currentCompany || {};
+    const coName = co.companyName || co.name || "MILIK";
+
     const rows = MONTHS.map((mName, idx) => {
-      const m = months.find((x) => x.month === idx + 1 || x.monthName === mName) || {};
-      return `<tr>
+      const m = monthData[idx];
+      const hasActivity = (m.listings||0)+(m.offers||0)+(m.dealsActive||0)+(m.dealsClosed||0)+(m.revenue||0) > 0;
+      return `<tr class="${hasActivity ? "" : "muted"}">
         <td>${mName}</td>
-        <td style="text-align:right">${m.listings ?? 0}</td>
-        <td style="text-align:right">${m.offers ?? 0}</td>
-        <td style="text-align:right">${m.dealsActive ?? 0}</td>
-        <td style="text-align:right">${m.dealsClosed ?? 0}</td>
-        <td style="text-align:right;font-weight:700">${(m.revenue ?? 0) > 0 ? fmtKES(m.revenue) : "—"}</td>
-        <td style="text-align:right">${(m.commissionsApproved ?? 0) > 0 ? fmtKES(m.commissionsApproved) : "—"}</td>
+        <td>${m.listings ?? 0}</td>
+        <td>${m.offers ?? 0}</td>
+        <td>${m.dealsActive ?? 0}</td>
+        <td>${m.dealsClosed ?? 0}</td>
+        <td class="num">${(m.revenue ?? 0) > 0 ? fmtKES(m.revenue) : "—"}</td>
+        <td class="num">${(m.commissionsApproved ?? 0) > 0 ? fmtKES(m.commissionsApproved) : "—"}</td>
       </tr>`;
     }).join("");
 
-    const html = `<!DOCTYPE html><html><head><title>Sales Report — ${year}</title>
+    const html = `<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"/>
+<title>Property Sales Report — ${year}</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:10.5px;color:#1a1a1a;background:#fff}
-.page{max-width:297mm;margin:0 auto;padding:16mm 18mm 14mm}
-.hdr{border-bottom:3px solid #0B3B2E;padding-bottom:10px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-start}
-.brand{font-size:22px;font-weight:900;color:#0B3B2E;letter-spacing:2px}.brand img{height:52px;object-fit:contain}
-.co-info{text-align:right;font-size:9.5px;color:#444;line-height:1.7}
-.doc-title{text-align:center;margin:14px 0 16px}
-.doc-title h1{font-size:18px;font-weight:900;letter-spacing:3px;color:#0B3B2E;text-transform:uppercase}
-.doc-title p{font-size:10px;color:#555;margin-top:3px}
-.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
-.kpi{border:1px solid #e0e7ef;border-radius:6px;padding:10px 12px;background:#f8fafb}
-.kpi .lbl{font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#888;margin-bottom:3px}
-.kpi .val{font-size:16px;font-weight:900;color:#0B3B2E}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Helvetica Neue",Arial,sans-serif;font-size:10.5px;color:#111;background:#fff}
+.page{max-width:260mm;margin:0 auto;padding:14mm 16mm 12mm}
+.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0B3B2E;padding-bottom:10px;margin-bottom:14px}
+.brand-name{font-size:15px;font-weight:900;letter-spacing:2px;color:#0B3B2E;text-transform:uppercase}
+.brand-sub{font-size:8px;color:#888;margin-top:2px;letter-spacing:1px;text-transform:uppercase}
+.brand img{height:48px;object-fit:contain}
+.co-meta{text-align:right;font-size:9px;color:#555;line-height:1.7}
+.report-id{margin-bottom:14px}
+.report-id h1{font-size:12px;font-weight:900;letter-spacing:2.5px;text-transform:uppercase;color:#0B3B2E}
+.report-id p{font-size:9px;color:#666;margin-top:2px}
+.summary-row{display:flex;gap:0;border:1px solid #e5e7eb;margin-bottom:16px}
+.summary-cell{flex:1;padding:8px 12px;border-right:1px solid #e5e7eb}
+.summary-cell:last-child{border-right:none}
+.summary-cell .lbl{font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#888;margin-bottom:3px}
+.summary-cell .val{font-size:14px;font-weight:900;color:#0B3B2E;font-variant-numeric:tabular-nums}
 table{width:100%;border-collapse:collapse}
-thead tr{background:#0B3B2E;color:#fff}thead th{padding:8px 10px;text-align:left;font-size:9px;font-weight:900;letter-spacing:1px;text-transform:uppercase}
-thead th:not(:first-child){text-align:right}
-tbody tr{border-bottom:1px solid #e5e7eb}tbody tr:nth-child(even){background:#f8fafb}tbody td{padding:7px 10px;font-size:10px;color:#333}
-tfoot tr{background:#0B3B2E;color:#fff}tfoot td{padding:9px 10px;font-size:10px;font-weight:900}tfoot td:not(:first-child){text-align:right}
-.footer{margin-top:24px;padding-top:10px;border-top:1.5px solid #0B3B2E;font-size:8.5px;color:#777;text-align:center}
-@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{size:A4 landscape;margin:12mm}}
-</style></head><body><div class="page">
+thead tr{background:#0B3B2E;color:#fff}
+thead th{padding:7px 9px;font-size:8.5px;font-weight:900;letter-spacing:1px;text-transform:uppercase;text-align:right}
+thead th:first-child{text-align:left}
+tbody tr{border-bottom:1px solid #e5e7eb}
+tbody tr:nth-child(even){background:#f9fafb}
+tbody tr.muted td{color:#bbb}
+tbody td{padding:6px 9px;font-size:10px;text-align:right}
+tbody td:first-child{text-align:left;font-weight:600;color:#111}
+.num{font-variant-numeric:tabular-nums}
+tfoot tr{background:#0B3B2E;color:#fff}
+tfoot td{padding:8px 9px;font-size:10px;font-weight:900;text-align:right}
+tfoot td:first-child{text-align:left}
+.footer{margin-top:20px;padding-top:8px;border-top:1px solid #ddd;font-size:8px;color:#aaa;display:flex;justify-content:space-between}
+@media print{
+  body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  @page{size:A4 landscape;margin:10mm}
+}
+</style></head>
+<body><div class="page">
 <div class="hdr">
-  <div class="brand">${co.logo?`<img src="${co.logo}" alt="logo"/>`:(co.companyName||"MILIK")}</div>
-  <div class="co-info"><strong>${co.companyName||""}</strong><br/>${co.physicalAddress||co.postalAddress||""}<br/>${[co.telephone,co.email].filter(Boolean).join(" | ")}<br/>${co.pinNumber?"PIN: "+co.pinNumber:""}</div>
+  <div>${co.logo
+    ? `<img src="${co.logo}" alt=""/>`
+    : `<div class="brand-name">${coName}</div><div class="brand-sub">Property Sales</div>`
+  }</div>
+  <div class="co-meta">
+    <strong>${coName}</strong><br/>
+    ${[co.physicalAddress||co.postalAddress, [co.telephone,co.email].filter(Boolean).join(" | "), co.pinNumber?"PIN: "+co.pinNumber:""].filter(Boolean).join("<br/>")}
+  </div>
 </div>
-<div class="doc-title"><h1>Property Sales Report</h1><p>Annual Sales Performance Summary — Financial Year ${year}</p></div>
-<div class="kpi-row">
-  <div class="kpi"><div class="lbl">Total Listings</div><div class="val">${totals.listings??0}</div></div>
-  <div class="kpi"><div class="lbl">Offers Received</div><div class="val">${totals.offers??0}</div></div>
-  <div class="kpi"><div class="lbl">Deals Closed</div><div class="val">${totals.dealsClosed??0}</div></div>
-  <div class="kpi"><div class="lbl">Total Revenue</div><div class="val">${fmtKES(totals.revenue??0)}</div></div>
+<div class="report-id">
+  <h1>Annual Sales Performance Report</h1>
+  <p>Financial Year: ${year} &nbsp;·&nbsp; Generated: ${new Date().toLocaleString("en-KE")}</p>
+</div>
+<div class="summary-row">
+  <div class="summary-cell"><div class="lbl">Listings Created</div><div class="val">${totals.listings??0}</div></div>
+  <div class="summary-cell"><div class="lbl">Offers Received</div><div class="val">${totals.offers??0}</div></div>
+  <div class="summary-cell"><div class="lbl">Active Deals</div><div class="val">${totals.dealsActive??0}</div></div>
+  <div class="summary-cell"><div class="lbl">Deals Closed</div><div class="val">${totals.dealsClosed??0}</div></div>
+  <div class="summary-cell"><div class="lbl">Total Revenue</div><div class="val">${fmtKES(totals.revenue??0)}</div></div>
+  <div class="summary-cell"><div class="lbl">Commissions</div><div class="val">${fmtKES(totals.commissionsApproved??0)}</div></div>
 </div>
 <table>
-  <thead><tr><th>Month</th><th style="text-align:right">Listings</th><th style="text-align:right">Offers</th><th style="text-align:right">Active Deals</th><th style="text-align:right">Closed Deals</th><th style="text-align:right">Revenue (KES)</th><th style="text-align:right">Commissions (KES)</th></tr></thead>
+  <thead>
+    <tr>
+      <th style="text-align:left">Month</th>
+      <th>Listings</th><th>Offers</th><th>Active Deals</th><th>Closed Deals</th>
+      <th>Revenue (KES)</th><th>Commissions (KES)</th>
+    </tr>
+  </thead>
   <tbody>${rows}</tbody>
-  <tfoot><tr><td>TOTALS — ${year}</td><td>${totals.listings??0}</td><td>${totals.offers??0}</td><td>${totals.dealsActive??0}</td><td>${totals.dealsClosed??0}</td><td>${fmtKES(totals.revenue??0)}</td><td>${fmtKES(totals.commissionsApproved??0)}</td></tr></tfoot>
+  <tfoot>
+    <tr>
+      <td>TOTALS — ${year}</td>
+      <td>${totals.listings??0}</td><td>${totals.offers??0}</td>
+      <td>${totals.dealsActive??0}</td><td>${totals.dealsClosed??0}</td>
+      <td>${fmtKES(totals.revenue??0)}</td><td>${fmtKES(totals.commissionsApproved??0)}</td>
+    </tr>
+  </tfoot>
 </table>
-<div class="footer">CONFIDENTIAL | Generated: ${new Date().toLocaleString("en-KE")} | MILIK Property Sales System</div>
+<div class="footer">
+  <span>CONFIDENTIAL — MILIK Property Sales System</span>
+  <span>Page 1 of 1</span>
+</div>
 </div></body></html>`;
-    const w = window.open("", "_blank", "width=1100,height=700");
+
+    const w = window.open("", "_blank", "width=1100,height=720");
+    if (!w) { toast.error("Pop-up blocked — allow pop-ups for this site"); return; }
     w.document.write(html);
     w.document.close();
     w.onload = () => w.print();
   };
 
-  return (
-    <PropertySaleShell
-      title="Sales Reports"
-      subtitle="Annual property sales performance analysis"
-      action={
-        <button
-          onClick={printReport}
-          className="inline-flex h-7 items-center gap-1.5 border border-[#B7C9C0] bg-white px-3 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-        >
-          <FaPrint size={9} /> Print Report
-        </button>
-      }
-    >
-      <div className="flex h-full flex-col gap-1.5">
-        {/* Year Selector */}
-        <SaleFilterBar>
-          <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">Financial Year</label>
-          <AppSelect
-            value={String(year)}
-            onChange={(v) => setYear(v ?? String(currentYear))}
-            options={Array.from({ length: 6 }, (_, i) => currentYear - i + 1).map((y) => ({ value: String(y), label: String(y) }))}
-            size="sm"
-          />
-          <span className="ml-auto text-[10px] text-slate-400">
-            Double-click any month row or bar to open detailed breakdown in a new tab
-          </span>
-        </SaleFilterBar>
+  // Bar chart values
+  const barValues = monthData.map((m) => m.revenue || 0);
+  const maxBar    = Math.max(...barValues, 1);
+  const thisMonth = new Date().getMonth();
+  const isCurrentYear = String(year) === String(currentYear);
 
-        {/* Summary KPIs */}
-        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-          {[
-            { label: "Listings Created", value: loading ? "—" : (totals.listings ?? 0), cls: "bg-slate-900 text-white" },
-            { label: "Offers Received", value: loading ? "—" : (totals.offers ?? 0), cls: "bg-amber-50 border border-amber-200 text-amber-900" },
-            { label: "Deals Closed", value: loading ? "—" : (totals.dealsClosed ?? 0), cls: "bg-emerald-50 border border-emerald-200 text-emerald-900" },
-            { label: "Total Revenue", value: loading ? "—" : fmtKES(totals.revenue ?? 0), cls: "bg-[#0B3B2E] text-white" },
-          ].map((c) => (
-            <div key={c.label} className={`px-3 py-2 ${c.cls}`}>
-              <div className="text-[10px] font-black uppercase tracking-wider opacity-70">{c.label}</div>
-              <div className="mt-0.5 text-sm font-black">{c.value}</div>
+  return (
+    <PropertySaleShell>
+      <div className="flex h-full flex-col gap-1.5">
+
+        {/* Toolbar: year selector + inline KPI strip + print button all on one line */}
+        <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5 border border-slate-200 bg-white px-3 py-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Financial Year</span>
+            <AppSelect
+              value={String(year)}
+              onChange={(v) => setYear(v ?? String(currentYear))}
+              options={YEAR_OPTS}
+              size="sm"
+            />
+          </div>
+          {!loading && report && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 border-l border-slate-200 pl-4">
+              {[
+                ["Listings",    totals.listings    ?? 0, false, false],
+                ["Offers",      totals.offers      ?? 0, false, false],
+                ["Active",      totals.dealsActive ?? 0, false, false],
+                ["Closed",      totals.dealsClosed ?? 0, true,  false],
+                ["Revenue",     fmtKES(totals.revenue             ?? 0), false, true],
+                ["Commissions", fmtKES(totals.commissionsApproved ?? 0), false, true],
+              ].map(([lbl, val, highlight, mono]) => (
+                <div key={lbl} className="flex items-baseline gap-1">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">{lbl}</span>
+                  <span className={`text-xs font-black tabular-nums ${highlight ? "text-emerald-700" : "text-slate-800"} ${mono ? "font-mono" : ""}`}>{val}</span>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+          <div className="ml-auto flex items-center gap-3">
+            <span className="hidden text-[9px] text-slate-400 sm:block">Double-click any row to open monthly detail</span>
+            <button
+              onClick={printReport}
+              disabled={loading || !report}
+              className="inline-flex h-7 items-center gap-1.5 border border-[#B7C9C0] bg-white px-3 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-40"
+            >
+              <FaPrint size={9} /> Print Report
+            </button>
+          </div>
         </div>
 
         {/* Revenue Bar Chart */}
-        {!loading && report && (() => {
-          const thisMonth = new Date().getMonth();
-          const isCurrentYear = String(year) === String(currentYear);
-          const values = MONTHS.map((mName, idx) => {
-            const m = months.find((x) => x.month === idx + 1 || x.monthName === mName) || {};
-            return m.revenue || 0;
-          });
-          const maxVal = Math.max(...values, 1);
-
-          return (
-            <div className="border border-slate-200 bg-white px-4 py-3 shadow-sm">
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400">Monthly Revenue — {year}</span>
-                <span className="text-[10px] font-black text-[#0B3B2E]">{fmtKES(totals.revenue ?? 0)} total</span>
-              </div>
-              <div className="flex h-20 items-end gap-1">
-                {MONTHS.map((mName, idx) => {
-                  const barH = Math.max(4, Math.round((values[idx] / maxVal) * 100));
-                  const isCurrent = isCurrentYear && idx === thisMonth;
-                  return (
-                    <div
-                      key={mName}
-                      className="group relative flex flex-1 cursor-pointer flex-col items-center"
-                      title={`${mName}: ${fmtKES(values[idx])} — double-click to open detail`}
-                      onDoubleClick={() => openMonthTab(mName, idx)}
-                    >
-                      <div className="flex w-full flex-col-reverse" style={{ height: "64px" }}>
-                        <div
-                          className={`w-full rounded-t transition-all ${
-                            isCurrent ? "bg-[#0B3B2E] group-hover:bg-[#07271e]" :
-                            values[idx] > 0 ? "bg-emerald-300 group-hover:bg-emerald-400" :
-                            "bg-slate-100 group-hover:bg-slate-200"
-                          }`}
-                          style={{ height: `${barH}%` }}
-                        />
-                      </div>
-                      <div className={`mt-1 text-[8px] font-bold ${isCurrent ? "text-[#0B3B2E]" : "text-slate-400"}`}>
-                        {mName.slice(0, 3)}
-                      </div>
-                      {values[idx] > 0 && (
-                        <div className="pointer-events-none absolute bottom-6 left-1/2 z-10 hidden -translate-x-1/2 whitespace-nowrap bg-slate-800 px-2 py-1 text-[9px] font-black text-white shadow-lg group-hover:block">
-                          {fmtKES(values[idx])}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+        {!loading && report && (
+          <div className="shrink-0 border border-slate-200 bg-white px-4 pb-2 pt-3">
+            <div className="mb-2 flex items-baseline justify-between">
+              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Monthly Revenue — {year}</span>
+              <span className="font-mono text-[10px] font-black text-[#0B3B2E]">{fmtKES(totals.revenue ?? 0)} total</span>
             </div>
-          );
-        })()}
+            <div className="flex h-[72px] items-end gap-0.5">
+              {MONTHS.map((mName, idx) => {
+                const barH      = Math.max(3, Math.round((barValues[idx] / maxBar) * 100));
+                const isCurrent = isCurrentYear && idx === thisMonth;
+                const hasRev    = barValues[idx] > 0;
+                return (
+                  <div
+                    key={mName}
+                    className="group relative flex flex-1 cursor-pointer flex-col items-center"
+                    title={`${mName} ${year}: ${fmtKES(barValues[idx])}`}
+                    onDoubleClick={() => openMonthTab(idx)}
+                  >
+                    <div className="flex w-full flex-col-reverse" style={{ height: 56 }}>
+                      <div
+                        className={`w-full transition-all ${
+                          isCurrent ? "bg-[#0B3B2E] group-hover:bg-[#07271e]"
+                          : hasRev  ? "bg-[#027333]/40 group-hover:bg-[#027333]/60"
+                          : "bg-slate-100"
+                        }`}
+                        style={{ height: `${barH}%` }}
+                      />
+                    </div>
+                    <div className={`mt-0.5 text-[7px] font-bold ${isCurrent ? "text-[#0B3B2E]" : "text-slate-400"}`}>
+                      {mName.slice(0, 3)}
+                    </div>
+                    {hasRev && (
+                      <div className="pointer-events-none absolute bottom-7 left-1/2 z-10 hidden -translate-x-1/2 whitespace-nowrap bg-slate-800 px-2 py-0.5 text-[8px] font-black text-white shadow group-hover:block">
+                        {fmtKES(barValues[idx])}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Monthly Breakdown Table */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
-          <div className="min-h-0 flex-1 overflow-auto">
-            <table className="min-w-full text-[11px] border-collapse">
-              <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-                <tr>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Month</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Listings</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Offers</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Active Deals</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Closed Deals</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Revenue (KES)</th>
-                  <th className="px-3 py-1 text-right font-bold">Commissions (KES)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-400">Loading report data...</td></tr>
-                ) : MONTHS.map((mName, idx) => {
-                  const m = months.find((x) => x.month === idx + 1 || x.monthName === mName) || {};
-                  const hasActivity = (m.listings||0)+(m.offers||0)+(m.dealsActive||0)+(m.dealsClosed||0)+(m.revenue||0) > 0;
-                  return (
-                    <tr
-                      key={mName}
-                      className={`cursor-pointer select-none border-b border-gray-100 transition ${
-                        hasActivity
-                          ? "bg-white hover:bg-emerald-50/50"
-                          : "bg-slate-50/60 text-slate-400 hover:bg-blue-50/40"
-                      }`}
-                      onDoubleClick={() => openMonthTab(mName, idx)}
-                      title="Double-click to open monthly detail in a new tab"
-                    >
-                      <td className="px-3 py-1 border-r border-gray-100 font-bold">
-                        <div className="flex items-center gap-2">
-                          {mName}
-                          {hasActivity && (
-                            <span className="text-[9px] text-slate-300 opacity-0 group-hover:opacity-100 transition">⤢</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-right">{m.listings ?? 0}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-right">{m.offers ?? 0}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-right">{m.dealsActive ?? 0}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-emerald-700">{m.dealsClosed ?? 0}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">{(m.revenue ?? 0) > 0 ? fmtKES(m.revenue) : "—"}</td>
-                      <td className="px-3 py-1 text-right text-slate-600">{(m.commissionsApproved ?? 0) > 0 ? fmtKES(m.commissionsApproved) : "—"}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              {!loading && report && (
-                <tfoot className="bg-slate-800 text-white">
-                  <tr>
-                    <td className="px-3 py-1.5 font-black tracking-wide">TOTALS — {year}</td>
-                    <td className="px-3 py-1.5 text-right font-black">{totals.listings ?? 0}</td>
-                    <td className="px-3 py-1.5 text-right font-black">{totals.offers ?? 0}</td>
-                    <td className="px-3 py-1.5 text-right font-black">{totals.dealsActive ?? 0}</td>
-                    <td className="px-3 py-1.5 text-right font-black">{totals.dealsClosed ?? 0}</td>
-                    <td className="px-3 py-1.5 text-right font-black">{fmtKES(totals.revenue ?? 0)}</td>
-                    <td className="px-3 py-1.5 text-right font-black">{fmtKES(totals.commissionsApproved ?? 0)}</td>
+        <div className="min-h-0 flex-1 overflow-auto border border-slate-200 bg-white">
+          <table className="min-w-full border-collapse text-xs">
+            <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+              <tr>
+                <th className="px-3 py-2 text-left text-[9px] font-black uppercase tracking-wide border-r border-white/10">Month</th>
+                <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-wide border-r border-white/10">Listings</th>
+                <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-wide border-r border-white/10">Offers</th>
+                <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-wide border-r border-white/10">Active Deals</th>
+                <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-wide border-r border-white/10">Closed Deals</th>
+                <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-wide border-r border-white/10">Revenue (KES)</th>
+                <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-wide">Commissions (KES)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={7} className="px-3 py-10 text-center text-slate-400">Loading report data…</td></tr>
+              ) : MONTHS.map((mName, idx) => {
+                const m   = monthData[idx];
+                const hasActivity = (m.listings||0)+(m.offers||0)+(m.dealsActive||0)+(m.dealsClosed||0)+(m.revenue||0) > 0;
+                return (
+                  <tr
+                    key={mName}
+                    className={`cursor-pointer select-none border-b transition ${
+                      hasActivity
+                        ? "border-slate-100 bg-white hover:bg-[#027333]/5"
+                        : "border-slate-100 bg-slate-50/60 text-slate-400 hover:bg-slate-50"
+                    }`}
+                    onDoubleClick={() => openMonthTab(idx)}
+                  >
+                    <td className="px-3 py-1.5 border-r border-slate-100 font-bold text-slate-800">{mName}</td>
+                    <td className="px-3 py-1.5 border-r border-slate-100 text-right tabular-nums">{m.listings ?? 0}</td>
+                    <td className="px-3 py-1.5 border-r border-slate-100 text-right tabular-nums">{m.offers ?? 0}</td>
+                    <td className="px-3 py-1.5 border-r border-slate-100 text-right tabular-nums">{m.dealsActive ?? 0}</td>
+                    <td className={`px-3 py-1.5 border-r border-slate-100 text-right tabular-nums font-black ${hasActivity && (m.dealsClosed||0) > 0 ? "text-emerald-700" : ""}`}>
+                      {m.dealsClosed ?? 0}
+                    </td>
+                    <td className="px-3 py-1.5 border-r border-slate-100 text-right font-mono font-black tabular-nums text-slate-900">
+                      {(m.revenue ?? 0) > 0 ? fmtKES(m.revenue) : "—"}
+                    </td>
+                    <td className="px-3 py-1.5 text-right font-mono tabular-nums text-slate-600">
+                      {(m.commissionsApproved ?? 0) > 0 ? fmtKES(m.commissionsApproved) : "—"}
+                    </td>
                   </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
+                );
+              })}
+            </tbody>
+            {!loading && report && (
+              <tfoot className="bg-[#0B3B2E] text-white">
+                <tr>
+                  <td className="px-3 py-2 font-black tracking-wide text-[10px]">TOTALS — {year}</td>
+                  <td className="px-3 py-2 text-right font-black tabular-nums">{totals.listings ?? 0}</td>
+                  <td className="px-3 py-2 text-right font-black tabular-nums">{totals.offers ?? 0}</td>
+                  <td className="px-3 py-2 text-right font-black tabular-nums">{totals.dealsActive ?? 0}</td>
+                  <td className="px-3 py-2 text-right font-black tabular-nums">{totals.dealsClosed ?? 0}</td>
+                  <td className="px-3 py-2 text-right font-mono font-black tabular-nums">{fmtKES(totals.revenue ?? 0)}</td>
+                  <td className="px-3 py-2 text-right font-mono font-black tabular-nums">{fmtKES(totals.commissionsApproved ?? 0)}</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
         </div>
+
       </div>
     </PropertySaleShell>
   );

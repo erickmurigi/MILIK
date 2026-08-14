@@ -4,11 +4,13 @@
  * Accounts used:
  *   [cashbook]  — Actual bank/cash account chosen at payment time (Dr side for receipts)
  *   1311 — Property Sale Receipts Control   (asset)    fallback Dr when no cashbook provided
+ *   2150 — Buyer Deposit Held               (liability) Dr/Cr for deposit staging; moves to 4410 on deal close
  *   2180 — Agent Commission Payable          (liability) accrued commission owed to agents
- *   4410 — Property Sale Revenue             (income)   credit side for payments received
+ *   4410 — Property Sale Revenue             (income)   credit side for non-deposit payments; recognised from 2150 at close
+ *   4420 — Forfeited Deposit Income          (income)   Cr when a non-refundable deposit is retained on deal cancel
+ *   5220 — Stamp Duty / Transfer Costs       (expense)  Dr when stamp duty is paid at deal close
  *   5320 — Property Sale Commission Expense  (expense)  debit side for commission accrual
- *   5321 — Agent Commission Disbursements    (liability) fallback Cr when no cashbook provided at payout;
- *           use a real bank/cashbook account at payout to avoid this fallback
+ *   5321 — Agent Commission Disbursements    (liability) fallback Cr when no cashbook provided at payout
  */
 
 import mongoose from "mongoose";
@@ -18,8 +20,11 @@ import { postEntry, postReversal } from "../../../services/ledgerPostingService.
 
 const PS_ACCOUNT_TEMPLATES = {
   "1311": { name: "Property Sale Receipts Control",  type: "asset",     group: "assets",      subGroup: "Current Assets" },
+  "2150": { name: "Buyer Deposit Held",              type: "liability", group: "liabilities", subGroup: "Buyer Deposits" },
   "2180": { name: "Agent Commission Payable",         type: "liability", group: "liabilities", subGroup: "Agent Payables" },
   "4410": { name: "Property Sale Revenue",            type: "income",    group: "income",      subGroup: "Property Sales" },
+  "4420": { name: "Forfeited Deposit Income",         type: "income",    group: "income",      subGroup: "Property Sales" },
+  "5220": { name: "Stamp Duty / Transfer Costs",      type: "expense",   group: "expenses",    subGroup: "Sale Costs" },
   "5320": { name: "Property Sale Commission Expense", type: "expense",   group: "expenses",    subGroup: "Sales Commissions" },
   "5321": { name: "Agent Commission Disbursements",   type: "liability", group: "liabilities", subGroup: "Agent Payables" },
 };
@@ -63,13 +68,11 @@ const resolvePSAccount = async (businessId, code) => {
   );
 };
 
-// ─── Payment received — Dr Cashbook (or 1311 fallback) / Cr Sale Revenue ────
+// ─── Payment received ─────────────────────────────────────────────────────────
+//
+// Deposits:  Dr Cashbook (or 1311) / Cr 2150 Buyer Deposit Held
+// All other: Dr Cashbook (or 1311) / Cr 4410 Property Sale Revenue
 
-/**
- * Posts when a sale payment is created with status="paid".
- *   Dr [cashbookAccountId] or Dr 1311  /  Cr 4410 Property Sale Revenue
- * cashbookAccountId: a ChartOfAccount _id already validated by the controller.
- */
 export const postPropertySalePaymentLedger = async ({ businessId, payment, userId, cashbookAccountId }) => {
   const amount = round2(Number(payment.amount || 0));
   if (amount <= 0) return;
@@ -83,15 +86,15 @@ export const postPropertySalePaymentLedger = async ({ businessId, payment, userI
   });
   if (existing > 0) return;
 
+  const isDeposit = payment.paymentType === "deposit";
   const { start, end } = dayRange(payment.paymentDate || payment.createdAt);
   const journalGroupId = new mongoose.Types.ObjectId();
 
-  // Resolve the debit account: use the provided cashbook or fall back to 1311
-  const [debitAcc, revenueAcc] = await Promise.all([
+  const [debitAcc, creditAcc] = await Promise.all([
     cashbookAccountId
       ? ChartOfAccount.findById(cashbookAccountId).lean()
       : resolvePSAccount(businessId, "1311"),
-    resolvePSAccount(businessId, "4410"),
+    resolvePSAccount(businessId, isDeposit ? "2150" : "4410"),
   ]);
 
   if (!debitAcc) throw new Error("Cashbook account not found — GL posting aborted");
@@ -114,7 +117,7 @@ export const postPropertySalePaymentLedger = async ({ businessId, payment, userI
 
   await Promise.all([
     postEntry({ ...base, accountId: debitAcc._id,  direction: "debit",  amount, notes: `Property sale ${typeLabel} received — ${ref}` }),
-    postEntry({ ...base, accountId: revenueAcc._id, direction: "credit", amount, notes: `Property sale ${typeLabel} revenue — ${ref}` }),
+    postEntry({ ...base, accountId: creditAcc._id, direction: "credit", amount, notes: isDeposit ? `Buyer deposit held — ${ref}` : `Property sale ${typeLabel} revenue — ${ref}` }),
   ]);
 };
 
@@ -136,12 +139,162 @@ export const reversePropertySalePaymentLedger = async ({ businessId, payment, us
   }
 };
 
+// ─── Deposit transfer to revenue — called at deal close ───────────────────────
+//
+// Moves a deposit from Buyer Deposit Held (2150) to Property Sale Revenue (4410).
+// Skips silently if the deposit was posted to 4410 directly (pre-fix legacy entries).
+//   Dr 2150 Buyer Deposit Held / Cr 4410 Property Sale Revenue
+
+export const transferDepositToRevenue = async ({ businessId, payment, userId }) => {
+  const amount = round2(Number(payment.amount || 0));
+  if (amount <= 0) return;
+
+  // Verify this deposit was actually posted to 2150 (not old-style 4410)
+  const depositHeldAcc = await resolvePSAccount(businessId, "2150");
+  const depositHeldEntry = await FinancialLedgerEntry.findOne({
+    business: businessId,
+    sourceTransactionType: "property_sale_payment",
+    sourceTransactionId: String(payment._id),
+    accountId: depositHeldAcc._id,
+    status: { $nin: ["reversed", "void"] },
+  }).lean();
+  if (!depositHeldEntry) return; // legacy entry posted directly to 4410 — skip
+
+  const existing = await FinancialLedgerEntry.countDocuments({
+    business: businessId,
+    sourceTransactionType: "property_sale_deposit_transfer",
+    sourceTransactionId: String(payment._id),
+    status: { $ne: "reversed" },
+  });
+  if (existing > 0) return;
+
+  const { start, end } = dayRange(new Date());
+  const journalGroupId = new mongoose.Types.ObjectId();
+  const revenueAcc = await resolvePSAccount(businessId, "4410");
+  const ref = payment.paymentNumber || String(payment._id);
+
+  const base = {
+    business: businessId,
+    sourceTransactionType: "property_sale_deposit_transfer",
+    sourceTransactionId: String(payment._id),
+    transactionDate: new Date(),
+    statementPeriodStart: start,
+    statementPeriodEnd: end,
+    journalGroupId,
+    category: "PROPERTY_SALE_DEPOSIT_TRANSFER",
+    createdBy: userId,
+    allowUnscoped: true,
+  };
+
+  await Promise.all([
+    postEntry({ ...base, accountId: depositHeldAcc._id, direction: "debit",  amount, notes: `Deposit released to revenue on deal close — ${ref}` }),
+    postEntry({ ...base, accountId: revenueAcc._id,     direction: "credit", amount, notes: `Property sale revenue recognised from deposit — ${ref}` }),
+  ]);
+};
+
+// ─── Deposit forfeiture — called when non-refundable deposit is retained ──────
+//
+// Converts held deposit to forfeited income on deal cancellation.
+//   Dr 2150 Buyer Deposit Held / Cr 4420 Forfeited Deposit Income
+
+export const forfeitDepositIncome = async ({ businessId, payment, userId, reason }) => {
+  const amount = round2(Number(payment.amount || 0));
+  if (amount <= 0) return;
+
+  // Only forfeit if the deposit was actually posted to 2150
+  const depositHeldAcc = await resolvePSAccount(businessId, "2150");
+  const depositHeldEntry = await FinancialLedgerEntry.findOne({
+    business: businessId,
+    sourceTransactionType: "property_sale_payment",
+    sourceTransactionId: String(payment._id),
+    accountId: depositHeldAcc._id,
+    status: { $nin: ["reversed", "void"] },
+  }).lean();
+  if (!depositHeldEntry) return; // nothing posted to 2150 — skip
+
+  const existing = await FinancialLedgerEntry.countDocuments({
+    business: businessId,
+    sourceTransactionType: "property_sale_deposit_forfeit",
+    sourceTransactionId: String(payment._id),
+    status: { $ne: "reversed" },
+  });
+  if (existing > 0) return;
+
+  const { start, end } = dayRange(new Date());
+  const journalGroupId = new mongoose.Types.ObjectId();
+  const forfeitAcc = await resolvePSAccount(businessId, "4420");
+  const ref = payment.paymentNumber || String(payment._id);
+  const msg = reason || `Deposit forfeited on deal cancellation — ${ref}`;
+
+  const base = {
+    business: businessId,
+    sourceTransactionType: "property_sale_deposit_forfeit",
+    sourceTransactionId: String(payment._id),
+    transactionDate: new Date(),
+    statementPeriodStart: start,
+    statementPeriodEnd: end,
+    journalGroupId,
+    category: "PROPERTY_SALE_DEPOSIT_FORFEIT",
+    createdBy: userId,
+    allowUnscoped: true,
+  };
+
+  await Promise.all([
+    postEntry({ ...base, accountId: depositHeldAcc._id, direction: "debit",  amount, notes: msg }),
+    postEntry({ ...base, accountId: forfeitAcc._id,     direction: "credit", amount, notes: msg }),
+  ]);
+};
+
+// ─── Stamp duty / transfer costs — called at deal close ───────────────────────
+//
+//   Dr 5220 Stamp Duty / Transfer Costs / Cr Cashbook (or 1311 fallback)
+
+export const postStampDutyEntry = async ({ businessId, dealId, amount, cashbookAccountId, userId, date }) => {
+  const amountRounded = round2(Number(amount || 0));
+  if (amountRounded <= 0) return;
+
+  const existing = await FinancialLedgerEntry.countDocuments({
+    business: businessId,
+    sourceTransactionType: "property_sale_stamp_duty",
+    sourceTransactionId: String(dealId),
+    status: { $ne: "reversed" },
+  });
+  if (existing > 0) return;
+
+  const effectiveDate = date ? new Date(date) : new Date();
+  const { start, end } = dayRange(effectiveDate);
+  const journalGroupId = new mongoose.Types.ObjectId();
+
+  const [stampDutyAcc, creditAcc] = await Promise.all([
+    resolvePSAccount(businessId, "5220"),
+    cashbookAccountId
+      ? ChartOfAccount.findById(cashbookAccountId).lean()
+      : resolvePSAccount(businessId, "1311"),
+  ]);
+
+  if (!creditAcc) throw new Error("Cashbook account not found for stamp duty posting");
+
+  const base = {
+    business: businessId,
+    sourceTransactionType: "property_sale_stamp_duty",
+    sourceTransactionId: String(dealId),
+    transactionDate: effectiveDate,
+    statementPeriodStart: start,
+    statementPeriodEnd: end,
+    journalGroupId,
+    category: "PROPERTY_SALE_STAMP_DUTY",
+    createdBy: userId,
+    allowUnscoped: true,
+  };
+
+  await Promise.all([
+    postEntry({ ...base, accountId: stampDutyAcc._id, direction: "debit",  amount: amountRounded, notes: `Stamp duty / transfer costs — deal ${dealId}` }),
+    postEntry({ ...base, accountId: creditAcc._id,    direction: "credit", amount: amountRounded, notes: `Stamp duty payment — deal ${dealId}` }),
+  ]);
+};
+
 // ─── Commission accrual — Dr Commission Expense / Cr Commission Payable ───────
 
-/**
- * Posted when deal closes and a pending commission becomes approved.
- *   Dr 5320 Commission Expense / Cr 2180 Agent Commission Payable
- */
 export const postPropertySaleCommissionAccrual = async ({ businessId, commission, userId }) => {
   const amount = round2(Number(commission.commissionAmount || 0));
   if (amount <= 0) return;
@@ -186,12 +339,6 @@ export const postPropertySaleCommissionAccrual = async ({ businessId, commission
 
 // ─── Commission payout — accrual + payable clearance ─────────────────────────
 
-/**
- * Called when a commission is marked "paid".
- * Step 1: ensure the accrual exists  — Dr 5320 Commission Expense / Cr 2180 Commission Payable
- * Step 2: clear the payable          — Dr 2180 Commission Payable / Cr [cashbook] (or fallback Cr 5321)
- * cashbookAccountId: ChartOfAccount _id; when provided the actual bank account is credited.
- */
 export const postPropertySaleCommissionPayout = async ({ businessId, commission, userId, payoutDate, cashbookAccountId }) => {
   await postPropertySaleCommissionAccrual({ businessId, commission, userId });
 
@@ -259,7 +406,7 @@ export const reversePropertySaleCommissionAccrual = async ({ businessId, commiss
   }
 };
 
-// ─── Commission payout reversal — when a paid commission is reversed ──────────
+// ─── Commission payout reversal ───────────────────────────────────────────────
 
 export const reversePropertySaleCommissionPayout = async ({ businessId, commission, userId, reason }) => {
   const payoutEntries = await FinancialLedgerEntry.find({

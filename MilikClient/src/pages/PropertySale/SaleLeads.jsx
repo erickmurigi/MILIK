@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import {
   FaCalendarAlt, FaClipboardList, FaEdit, FaEnvelope, FaExchangeAlt,
-  FaPhone, FaPlus, FaSearch, FaTimes, FaTrash, FaUserFriends,
+  FaPhone, FaPlus, FaTimes, FaTrash, FaUserFriends,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
@@ -13,7 +13,9 @@ import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
-import { inputClass, labelClass } from "../../utils/formStyles";
+import SaleFilterBar, { FilterSearch } from "./SaleFilterBar";
+import MilikTable from "../../components/common/MilikTable";
+import { labelClass } from "../../utils/formStyles";
 
 const LEAD_STATUSES  = ["new", "contacted", "qualified", "site_visited", "proposal_sent", "negotiating", "converted", "lost"];
 const LEAD_SOURCES   = ["walk_in", "referral", "online", "social_media", "agent", "cold_call", "other"];
@@ -45,8 +47,9 @@ const OUTCOME_COLORS = {
 };
 const ACT_ICONS = { call: "📞", email: "✉️", meeting: "🤝", site_visit: "🏠", whatsapp: "💬", note: "📝", follow_up: "🔔" };
 
-const blankLead = { fullName: "", phone: "", email: "", source: "walk_in", status: "new", assignedAgent: "", budgetMin: "", budgetMax: "", notes: "", lostReason: "", nextFollowUpDate: "" };
-const blankAct  = { type: "call", subject: "", notes: "", date: "", durationMinutes: "", outcome: "not_applicable", nextAction: "", nextActionDate: "" };
+const blankLead      = { fullName: "", phone: "", email: "", source: "walk_in", status: "new", assignedAgent: "", budgetMin: "", budgetMax: "", notes: "", lostReason: "", nextFollowUpDate: "" };
+const blankAct       = { type: "call", subject: "", notes: "", date: "", durationMinutes: "", outcome: "not_applicable", nextAction: "", nextActionDate: "" };
+const blankOfferForm = { listing: "", offerAmount: "", validityDate: "", agent: "", notes: "" };
 
 const fmt   = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 const isOld = (date, status) => date && !["converted", "lost"].includes(status) && new Date(date) < new Date();
@@ -80,9 +83,13 @@ export default function SaleLeads() {
   const [actForm,      setActForm]    = useState(blankAct);
   const [savingAct,    setSavingAct]  = useState(false);
 
-  const [showConvert,  setShowConvert] = useState(false);
-  const [convertId,    setConvertId]   = useState("");
-  const [converting,   setConverting]  = useState(false);
+  const [showConvert,      setShowConvert]      = useState(false);
+  const [convertId,        setConvertId]        = useState("");
+  const [converting,       setConverting]       = useState(false);
+
+  const [showConvertOffer, setShowConvertOffer] = useState(false);
+  const [offerForm,        setOfferForm]        = useState(blankOfferForm);
+  const [convertingOffer,  setConvertingOffer]  = useState(false);
 
   useEffect(() => setPage(1), [debSearch, statusFilter, sourceFilter, agentFilter, overdueOnly]);
 
@@ -240,6 +247,25 @@ export default function SaleLeads() {
     finally { setConverting(false); }
   };
 
+  const handleConvertToOffer = async (e) => {
+    e.preventDefault();
+    if (!offerForm.listing)     return toast.warning("Select a listing");
+    if (!offerForm.offerAmount) return toast.warning("Offer amount is required");
+    setConvertingOffer(true);
+    try {
+      await saleApi.convertLeadToOffer(selected._id, { ...offerForm, business: biz });
+      toast.success("Offer created from lead");
+      setShowConvertOffer(false);
+      setOfferForm(blankOfferForm);
+      invalidate();
+      qc.invalidateQueries({ queryKey: ["sale-offers", biz] });
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to create offer");
+    } finally {
+      setConvertingOffer(false);
+    }
+  };
+
   // ── Interested Listings ───────────────────────────────────────────────────
   const handleToggleListing = async (listingId, add) => {
     const current = interestedListings.map((l) => l._id || l);
@@ -257,18 +283,7 @@ export default function SaleLeads() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <PropertySaleShell
-      title="CRM — Leads Pipeline"
-      subtitle={total > 0 ? `${total} lead(s)` : undefined}
-      action={
-        <button
-          onClick={openCreate}
-          className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
-        >
-          <FaPlus size={9} /> Add Lead
-        </button>
-      }
-    >
+    <PropertySaleShell>
       <div className="flex h-full relative">
 
         {/* ── Main panel ──────────────────────────────────────────────────────── */}
@@ -298,119 +313,101 @@ export default function SaleLeads() {
           )}
 
           {/* Filter bar */}
-          <div className="flex flex-shrink-0 flex-wrap items-center gap-1 border-b border-slate-200 bg-white px-2 py-1.5">
-            <div className="relative min-w-0 flex-1 min-w-[140px]">
-              <FaSearch size={9} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search leads…"
-                className="h-7 w-full border border-slate-300 pl-6 pr-2 text-xs focus:border-[#0B3B2E] focus:outline-none"
-              />
-            </div>
-            <AppSelect
-              value={statusFilter}
-              onChange={(v) => setStatus(v ?? "")}
-              options={LEAD_STATUS_OPTIONS}
-              placeholder="All Statuses"
-              clearable
-              size="sm"
+          <SaleFilterBar
+            leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} lead{total !== 1 ? "s" : ""}</span>}
+            onReset={() => { setSearch(""); setStatus(""); setSource(""); setAgent(""); setOverdue(false); setPage(1); }}
+            activeCount={[search, statusFilter, sourceFilter, agentFilter, overdueOnly ? "1" : ""].filter(Boolean).length}
+            trailing={
+              <button
+                onClick={openCreate}
+                className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
+              >
+                <FaPlus size={9} /> Add Lead
+              </button>
+            }
+          >
+            <FilterSearch
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search leads…"
             />
-            <AppSelect
-              value={sourceFilter}
-              onChange={(v) => setSource(v ?? "")}
-              options={LEAD_SOURCE_OPTIONS}
-              placeholder="All Sources"
-              clearable
-              size="sm"
-            />
-            <AppSelect
-              value={agentFilter}
-              onChange={(v) => setAgent(v ?? "")}
-              options={agents.map((a) => ({ value: a._id, label: a.fullName }))}
-              placeholder="All Agents"
-              searchable
-              clearable
-              size="sm"
-            />
-            <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 cursor-pointer select-none whitespace-nowrap">
+            <AppSelect value={statusFilter} onChange={(v) => setStatus(v ?? "")} options={LEAD_STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
+            <AppSelect value={sourceFilter} onChange={(v) => setSource(v ?? "")} options={LEAD_SOURCE_OPTIONS} placeholder="All Sources" clearable size="sm" />
+            <AppSelect value={agentFilter} onChange={(v) => setAgent(v ?? "")} options={agents.map((a) => ({ value: a._id, label: a.fullName }))} placeholder="All Agents" searchable clearable size="sm" />
+            <label className="flex shrink-0 items-center gap-1.5 text-[11px] font-semibold text-slate-600 cursor-pointer select-none whitespace-nowrap">
               <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdue(e.target.checked)} className="accent-[#0B3B2E]" />
-              Overdue only
+              Overdue
             </label>
-          </div>
+          </SaleFilterBar>
 
           {/* Table container */}
           <div className="flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm">
-            <div className="flex-1 min-h-0 overflow-auto">
-              {isLoading ? (
-                <div className="p-10 text-center text-xs text-slate-400">Loading…</div>
-              ) : leads.length === 0 ? (
-                <div className="p-10 text-center text-xs text-slate-400">No leads found</div>
-              ) : (
-                <table className="w-full min-w-[860px] text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-[#0B3B2E]">
-                      {["#", "Lead #", "Name", "Contact", "Source", "Status", "Agent", "Budget", "Next Follow-up", ""].map((h) => (
-                        <th key={h} className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white whitespace-nowrap">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {leads.map((lead, i) => {
-                      const overdue = isOld(lead.nextFollowUpDate, lead.status);
-                      const isSel   = selected?._id === lead._id;
-                      return (
-                        <tr
-                          key={lead._id}
-                          onClick={() => setSelected(isSel ? null : lead)}
-                          className={`border-b border-slate-100 cursor-pointer ${isSel ? "bg-[#F1F6F3]" : "bg-white hover:bg-slate-50"} ${overdue ? "border-l-2 border-l-rose-400" : ""}`}
-                        >
-                          <td className="px-3 py-2 text-slate-400 text-[10px]">{(page - 1) * pageSize + i + 1}</td>
-                          <td className="px-3 py-2 font-mono font-bold text-[#0B3B2E] whitespace-nowrap">{lead.leadNumber}</td>
-                          <td className="px-3 py-2 font-semibold text-slate-800 whitespace-nowrap">{lead.fullName}</td>
-                          <td className="px-3 py-2">
-                            {lead.phone && <div className="flex items-center gap-1 text-slate-600"><FaPhone size={8} />{lead.phone}</div>}
-                            {lead.email && <div className="flex items-center gap-1 text-slate-400 text-[10px]"><FaEnvelope size={8} />{lead.email}</div>}
-                          </td>
-                          <td className="px-3 py-2 text-slate-500 capitalize whitespace-nowrap">{(lead.source || "").replace(/_/g, " ")}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${STATUS_COLORS[lead.status] || "border-slate-200 bg-slate-50 text-slate-500"}`}>
-                              {(lead.status || "").replace(/_/g, " ")}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{lead.assignedAgent?.fullName || "—"}</td>
-                          <td className="px-3 py-2 text-slate-500 whitespace-nowrap">
-                            {lead.budgetMin || lead.budgetMax
-                              ? `${lead.budgetMin ? fmtKES(lead.budgetMin) : "?"} – ${lead.budgetMax ? fmtKES(lead.budgetMax) : "?"}`
-                              : "—"}
-                          </td>
-                          <td className={`px-3 py-2 whitespace-nowrap ${overdue ? "text-rose-600 font-semibold" : "text-slate-500"}`}>
-                            {lead.nextFollowUpDate
-                              ? <span className="flex items-center gap-1"><FaCalendarAlt size={9} />{fmt(lead.nextFollowUpDate)}{overdue ? " !" : ""}</span>
-                              : "—"}
-                          </td>
-                          <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                            <div className="inline-flex items-center gap-1">
-                              <button onClick={() => openLogAct(lead)} title="Log Activity" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                                <FaClipboardList size={9} />
-                              </button>
-                              <button onClick={() => openEdit(lead)} title="Edit" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                                <FaEdit size={9} />
-                              </button>
-                              {lead.status !== "converted" && (
-                                <button onClick={() => handleDelete(lead)} title="Delete" className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100">
-                                  <FaTrash size={9} />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+            <MilikTable
+              columns={[
+                { label: "#", width: 36 },
+                { label: "Lead #" },
+                { label: "Name" },
+                { label: "Contact" },
+                { label: "Source" },
+                { label: "Status" },
+                { label: "Agent" },
+                { label: "Budget" },
+                { label: "Next Follow-up" },
+              ]}
+              rows={leads}
+              loading={isLoading}
+              empty="No leads found."
+              minWidth={860}
+              onRowClick={(row) => setSelected(selected?._id === row._id ? null : row)}
+              isSelected={(row) => selected?._id === row._id}
+              rowClassName={(row) => isOld(row.nextFollowUpDate, row.status) ? "border-l-2 border-l-rose-400" : ""}
+              renderRow={(row, i) => {
+                const overdue = isOld(row.nextFollowUpDate, row.status);
+                return (
+                  <>
+                    <td className="px-3 py-1.5 text-slate-400 text-[10px] border-r border-gray-100">{(page - 1) * pageSize + i + 1}</td>
+                    <td className="px-3 py-1.5 font-mono font-bold text-[#0B3B2E] whitespace-nowrap border-r border-gray-100">{row.leadNumber}</td>
+                    <td className="px-3 py-1.5 font-semibold text-slate-800 whitespace-nowrap border-r border-gray-100">{row.fullName}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100">
+                      {row.phone && <div className="flex items-center gap-1 text-slate-600"><FaPhone size={8} />{row.phone}</div>}
+                      {row.email && <div className="flex items-center gap-1 text-slate-400 text-[10px]"><FaEnvelope size={8} />{row.email}</div>}
+                    </td>
+                    <td className="px-3 py-1.5 text-slate-500 capitalize whitespace-nowrap border-r border-gray-100">{(row.source || "").replace(/_/g, " ")}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap border-r border-gray-100">
+                      <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${STATUS_COLORS[row.status] || "border-slate-200 bg-slate-50 text-slate-500"}`}>
+                        {(row.status || "").replace(/_/g, " ")}
+                      </span>
+                    </td>
+                    <td className="px-3 py-1.5 text-slate-500 whitespace-nowrap border-r border-gray-100">{row.assignedAgent?.fullName || "—"}</td>
+                    <td className="px-3 py-1.5 text-slate-500 whitespace-nowrap border-r border-gray-100">
+                      {row.budgetMin || row.budgetMax
+                        ? `${row.budgetMin ? fmtKES(row.budgetMin) : "?"} – ${row.budgetMax ? fmtKES(row.budgetMax) : "?"}`
+                        : "—"}
+                    </td>
+                    <td className={`px-3 py-1.5 whitespace-nowrap ${overdue ? "text-rose-600 font-semibold" : "text-slate-500"}`}>
+                      {row.nextFollowUpDate
+                        ? <span className="flex items-center gap-1"><FaCalendarAlt size={9} />{fmt(row.nextFollowUpDate)}{overdue ? " !" : ""}</span>
+                        : "—"}
+                    </td>
+                  </>
+                );
+              }}
+              renderActions={(row) => (
+                <div className="inline-flex items-center gap-1">
+                  <button onClick={() => openLogAct(row)} title="Log Activity" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                    <FaClipboardList size={9} />
+                  </button>
+                  <button onClick={() => openEdit(row)} title="Edit" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                    <FaEdit size={9} />
+                  </button>
+                  {row.status !== "converted" && (
+                    <button onClick={() => handleDelete(row)} title="Delete" className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100">
+                      <FaTrash size={9} />
+                    </button>
+                  )}
+                </div>
               )}
-            </div>
+            />
 
             <PaginationBar
               page={page}
@@ -429,7 +426,7 @@ export default function SaleLeads() {
 
         {/* ── Lead Detail Panel ─────────────────────────────────────────────── */}
         {selected && (
-          <div className="absolute right-0 top-0 bottom-0 w-[352px] bg-white border-l border-slate-200 shadow-xl flex flex-col overflow-hidden">
+          <div className="absolute right-0 top-0 bottom-0 w-full sm:w-[352px] bg-white border-l border-slate-200 shadow-xl flex flex-col overflow-hidden z-10">
             {/* Panel header */}
             <div className="flex flex-shrink-0 items-start justify-between gap-2 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
               <div className="min-w-0">
@@ -499,9 +496,14 @@ export default function SaleLeads() {
                 <FaEdit size={9} /> Edit
               </button>
               {selected.status !== "converted" && selected.status !== "lost" ? (
-                <button onClick={() => { setConvertId(""); setShowConvert(true); }} className="flex-1 inline-flex items-center justify-center gap-1 border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100">
-                  <FaExchangeAlt size={9} /> Convert
-                </button>
+                <>
+                  <button onClick={() => { setConvertId(""); setShowConvert(true); }} className="flex-1 inline-flex items-center justify-center gap-1 border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100">
+                    <FaExchangeAlt size={9} /> Buyer
+                  </button>
+                  <button onClick={() => { setOfferForm(blankOfferForm); setShowConvertOffer(true); }} className="flex-1 inline-flex items-center justify-center gap-1 border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-100">
+                    <FaExchangeAlt size={9} /> → Offer
+                  </button>
+                </>
               ) : selected.convertedBuyer ? (
                 <span className="flex-1 border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-center text-emerald-700">✓ Buyer Created</span>
               ) : null}
@@ -735,6 +737,63 @@ export default function SaleLeads() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {/* ── Convert to Offer Modal ───────────────────────────────────────────── */}
+      {showConvertOffer && selected && (
+        <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
+          <form onSubmit={handleConvertToOffer} className="flex w-full flex-col bg-white shadow-2xl sm:max-w-md sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
+            <div className="flex flex-shrink-0 items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
+              <div>
+                <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
+                  <FaExchangeAlt />Convert Lead → Offer
+                </h3>
+                <div className="text-[10px] text-white/60 mt-0.5">{selected.fullName}</div>
+              </div>
+              <button type="button" onClick={() => setShowConvertOffer(false)} className="p-1 text-white/70 hover:bg-white/10 hover:text-white"><FaTimes /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto bg-white px-5 py-4 grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className={labelClass}>Listing *</label>
+                <AppSelect
+                  value={offerForm.listing}
+                  onChange={(v) => setOfferForm((f) => ({ ...f, listing: v ?? "" }))}
+                  options={allListings.map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}` }))}
+                  placeholder="Select listing…"
+                  searchable
+                  size="md"
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Offer Amount (KES) *</label>
+                <input type="number" min="0" step="1" value={offerForm.offerAmount} onChange={(e) => setOfferForm((f) => ({ ...f, offerAmount: e.target.value }))} className={`${modalInputCls} h-8`} />
+              </div>
+              <div>
+                <label className={labelClass}>Valid Until</label>
+                <input type="date" value={offerForm.validityDate} onChange={(e) => setOfferForm((f) => ({ ...f, validityDate: e.target.value }))} className={`${modalInputCls} h-8`} />
+              </div>
+              <div className="col-span-2">
+                <label className={labelClass}>Assigned Agent</label>
+                <AppSelect
+                  value={offerForm.agent}
+                  onChange={(v) => setOfferForm((f) => ({ ...f, agent: v ?? "" }))}
+                  options={agents.map((a) => ({ value: a._id, label: a.name }))}
+                  placeholder="Select agent…"
+                  size="md"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className={labelClass}>Notes</label>
+                <textarea rows={2} value={offerForm.notes} onChange={(e) => setOfferForm((f) => ({ ...f, notes: e.target.value }))} className={`${modalInputCls} resize-none`} />
+              </div>
+            </div>
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+              <button type="button" onClick={() => setShowConvertOffer(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="submit" disabled={convertingOffer} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+                {convertingOffer ? "Creating…" : "Create Offer"}
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </PropertySaleShell>

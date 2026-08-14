@@ -8,8 +8,43 @@ import SaleOffer from "../models/SaleOffer.js";
 import SalePayment from "../models/SalePayment.js";
 import SaleCommission from "../models/SaleCommission.js";
 import { currentUserId, escapeRegex, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
-import { postPropertySaleCommissionAccrual, reversePropertySaleCommissionAccrual } from "../services/propertySaleAccountingService.js";
+import {
+  postPropertySaleCommissionAccrual,
+  reversePropertySaleCommissionAccrual,
+  transferDepositToRevenue,
+  forfeitDepositIncome,
+  postStampDutyEntry,
+} from "../services/propertySaleAccountingService.js";
+import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
+import { deleteDocumentFile } from "../middleware/dealDocumentUpload.js";
+
+const calcWHT = (commissionAmount, whtRate = 5) => {
+  const rate = Math.min(Math.max(Number(whtRate) || 5, 0), 100);
+  const whtAmount = Math.round((commissionAmount * rate) / 100 * 100) / 100;
+  return { whtRate: rate, whtAmount, netAmount: commissionAmount - whtAmount };
+};
+
+const createCommissionForDeal = async ({ business, dealId, agent, listingId, buyerId, agreedPrice, overrides, userId }) => {
+  const saleAmount     = Number(agreedPrice);
+  const whtRate        = overrides.whtRate != null ? Number(overrides.whtRate) : 5;
+  const commissionRate = overrides.commissionRateOverride != null ? Number(overrides.commissionRateOverride) : agent.commissionRate;
+  const commissionType = overrides.commissionTypeOverride ?? agent.commissionType;
+  const commissionAmount = overrides.commissionAmountOverride != null
+    ? Number(overrides.commissionAmountOverride)
+    : commissionType === "percentage"
+      ? (saleAmount * commissionRate) / 100
+      : commissionRate;
+  const { whtAmount, netAmount } = calcWHT(commissionAmount, whtRate);
+  const commissionNumber = await generateSequentialNumber(SaleCommission, business, "COM");
+  return SaleCommission.create({
+    business, commissionNumber, deal: dealId, agent: agent._id,
+    listing: listingId, buyer: buyerId,
+    saleAmount, commissionRate, commissionType, commissionAmount,
+    whtRate, whtAmount, netAmount,
+    status: "pending", createdBy: userId,
+  });
+};
 
 const populateDeal = (query) =>
   query
@@ -34,7 +69,9 @@ export const listDeals = async (req, res, next) => {
     const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
     const filter = { business };
     if (status)    filter.status  = status;
-    if (agentId)   filter.agent   = agentId;
+    // agent-scoped user can only see their own deals
+    if (req.saleAgentId) filter.agent = req.saleAgentId;
+    else if (agentId)    filter.agent = agentId;
     if (buyerId)   filter.buyer   = buyerId;
     if (listingId) filter.listing = listingId;
     if (dateFrom || dateTo) {
@@ -115,31 +152,14 @@ export const createDeal = async (req, res, next) => {
     const postDealOps = [SaleListing.findByIdAndUpdate(listing._id, { status: "under_contract" })];
 
     if (agent) {
-      const saleAmount = Number(req.body.agreedPrice);
-      const commissionRate = commissionRateOverride != null ? Number(commissionRateOverride) : agent.commissionRate;
-      const commissionType = commissionTypeOverride  ?? agent.commissionType;
-      const commissionAmount = commissionAmountOverride != null
-        ? Number(commissionAmountOverride)
-        : commissionType === "percentage"
-          ? (saleAmount * commissionRate) / 100
-          : commissionRate;
       postDealOps.push(
-        generateSequentialNumber(SaleCommission, business, "COM").then((commissionNumber) =>
-          SaleCommission.create({
-            business,
-            commissionNumber,
-            deal: deal._id,
-            agent: agent._id,
-            listing: req.body.listing,
-            buyer: req.body.buyer,
-            saleAmount,
-            commissionRate,
-            commissionType,
-            commissionAmount,
-            status: "pending",
-            createdBy: userId,
-          })
-        )
+        createCommissionForDeal({
+          business, dealId: deal._id, agent,
+          listingId: req.body.listing, buyerId: req.body.buyer,
+          agreedPrice: req.body.agreedPrice,
+          overrides: { commissionRateOverride, commissionTypeOverride, commissionAmountOverride, whtRate: req.body.whtRate },
+          userId,
+        })
       );
     }
 
@@ -186,31 +206,59 @@ export const closeDeal = async (req, res, next) => {
       return next(createError(400, `Outstanding balance of KES ${(deal.agreedPrice - totalPaid).toLocaleString()} must be cleared before closing`));
     }
 
+    const stampDutyAmount = Number(req.body.stampDutyAmount || 0);
     deal.status = "closed";
     deal.actualClosingDate = req.body.actualClosingDate || new Date();
     deal.titleTransferDate = req.body.titleTransferDate || null;
     deal.handoverNotes = req.body.handoverNotes || deal.handoverNotes;
+    if (stampDutyAmount > 0) deal.stampDutyAmount = stampDutyAmount;
     deal.updatedBy = userId;
     await deal.save();
 
-    const [, pendingCommissions] = await Promise.all([
+    const [, pendingCommissions, depositPayments] = await Promise.all([
       SaleListing.findByIdAndUpdate(deal.listing, { status: "sold" }),
       SaleCommission.find({ business, deal: deal._id, status: "pending" }).lean(),
+      SalePayment.find({ business, deal: deal._id, paymentType: "deposit", status: "paid" }).lean(),
     ]);
 
-    // Post GL accrual for every pending commission — if any fail, roll back the deal
+    // Resolve stamp duty cashbook if provided
+    let stampDutyCashbookId = null;
+    if (stampDutyAmount > 0 && req.body.stampDutyCashbook) {
+      const cbAcc = await ChartOfAccount.findOne({
+        _id: req.body.stampDutyCashbook, business,
+        isPosting: { $ne: false }, isHeader: { $ne: true },
+      }).lean();
+      if (!cbAcc) return next(createError(400, "Stamp duty cashbook account not found"));
+      stampDutyCashbookId = cbAcc._id;
+    }
+
+    // Post all GL: commissions + deposit transfers + stamp duty — roll back if any fail
     try {
       await Promise.all(
         pendingCommissions.map((commission) =>
           postPropertySaleCommissionAccrual({ businessId: business, commission, userId })
         )
       );
+      for (const payment of depositPayments) {
+        await transferDepositToRevenue({ businessId: business, payment, userId });
+      }
+      if (stampDutyAmount > 0) {
+        await postStampDutyEntry({
+          businessId: business,
+          dealId: String(deal._id),
+          amount: stampDutyAmount,
+          cashbookAccountId: stampDutyCashbookId,
+          userId,
+          date: deal.actualClosingDate,
+        });
+      }
     } catch (glErr) {
       deal.status = "active";
+      deal.stampDutyAmount = 0;
       deal.updatedBy = userId;
       await deal.save();
       await SaleListing.findByIdAndUpdate(deal.listing, { status: "under_contract" });
-      return next(createError(500, `GL accrual failed during deal close: ${glErr.message}. Deal has been rolled back to active.`));
+      return next(createError(500, `GL posting failed during deal close: ${glErr.message}. Deal has been rolled back to active.`));
     }
     await SaleCommission.updateMany({ business, deal: deal._id, status: "pending" }, { status: "approved" });
 
@@ -229,12 +277,19 @@ export const cancelDeal = async (req, res, next) => {
     if (deal.status === "closed") return next(createError(400, "Cannot cancel a closed deal"));
     if (deal.status === "cancelled") return next(createError(400, "Deal is already cancelled"));
 
-    const [paidPaymentCount, paidCommissionCount] = await Promise.all([
-      SalePayment.countDocuments({ business, deal: deal._id, status: "paid" }),
+    // depositAction: "void" means caller must void deposits first; "forfeit" means retain as income
+    const depositAction = req.body.depositAction === "forfeit" ? "forfeit" : "void";
+
+    const [depositPayments, nonDepositPaidCount, paidCommissionCount] = await Promise.all([
+      SalePayment.find({ business, deal: deal._id, paymentType: "deposit", status: "paid" }).lean(),
+      SalePayment.countDocuments({ business, deal: deal._id, paymentType: { $ne: "deposit" }, status: "paid" }),
       SaleCommission.countDocuments({ business, deal: deal._id, status: "paid" }),
     ]);
-    if (paidPaymentCount > 0) {
-      return next(createError(400, `${paidPaymentCount} payment(s) must be voided before cancelling this deal`));
+    if (nonDepositPaidCount > 0) {
+      return next(createError(400, `${nonDepositPaidCount} non-deposit payment(s) must be voided before cancelling this deal`));
+    }
+    if (depositPayments.length > 0 && depositAction === "void") {
+      return next(createError(400, `${depositPayments.length} deposit payment(s) must be voided first, or set depositAction="forfeit" to retain them as income`));
     }
     if (paidCommissionCount > 0) {
       return next(createError(400, `${paidCommissionCount} commission(s) have already been paid out — reverse them before cancelling this deal`));
@@ -266,6 +321,20 @@ export const cancelDeal = async (req, res, next) => {
       return next(createError(500, `GL reversal failed during deal cancellation: ${glErr.message}. Deal has been rolled back to active.`));
     }
     await SaleCommission.updateMany({ business, deal: deal._id, status: { $in: ["pending", "approved"] } }, { status: "cancelled" });
+
+    // Forfeit deposit payments to income if requested
+    if (depositPayments.length > 0 && depositAction === "forfeit") {
+      const forfeitReason = `Deposit forfeited — deal ${deal.dealNumber} cancelled${req.body.cancellationReason ? `: ${req.body.cancellationReason}` : ""}`;
+      try {
+        for (const payment of depositPayments) {
+          await forfeitDepositIncome({ businessId: business, payment, userId, reason: forfeitReason });
+        }
+      } catch (glErr) {
+        // Forfeit posting failed — log but don't roll back; deal is already cancelled
+        // User can post a manual journal entry to fix the GL
+        return next(createError(500, `Deal cancelled but deposit forfeit GL posting failed: ${glErr.message}. Post a manual journal entry to transfer deposits from "Buyer Deposit Held" to "Forfeited Deposit Income".`));
+      }
+    }
 
     res.status(200).json(deal);
   } catch (err) {
@@ -324,6 +393,113 @@ export const sendDealEmail = async (req, res, next) => {
     if (!body)    return next(createError(400, "Email body is required"));
     await sendAdHocEmail({ businessId: business, to, subject, bodyText: body });
     res.json({ success: true, message: "Email sent" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── Convert accepted/pending offer directly into a deal ─────────────────────
+export const createDealFromOffer = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId   = currentUserId(req);
+
+    const offer = await SaleOffer.findOne({ _id: req.params.offerId, business })
+      .populate("listing buyer agent").lean();
+    if (!offer) return next(createError(404, "Offer not found"));
+    if (["rejected", "expired", "withdrawn"].includes(offer.status)) {
+      return next(createError(400, `Cannot convert a ${offer.status} offer to a deal`));
+    }
+    const listing = await SaleListing.findOne({ _id: offer.listing._id, business }).lean();
+    if (!listing) return next(createError(400, "Listing not found"));
+    if (listing.status === "sold")           return next(createError(400, "Listing is already sold"));
+    if (listing.status === "under_contract") return next(createError(400, "Listing already has an active deal"));
+
+    const existingDeal = await SaleDeal.findOne({ business, offer: offer._id });
+    if (existingDeal) return next(createError(400, "A deal already exists for this offer"));
+
+    const agreedPrice = Number(req.body.agreedPrice ?? offer.counterOfferAmount ?? offer.offerAmount);
+    const { commissionRateOverride, commissionTypeOverride, commissionAmountOverride, whtRate, ...rest } = req.body;
+
+    const dealNumber = await generateSequentialNumber(SaleDeal, business, "DL");
+    const deal = await SaleDeal.create({
+      business, dealNumber,
+      offer:    offer._id,
+      listing:  offer.listing._id,
+      buyer:    offer.buyer._id,
+      agent:    offer.agent?._id ?? null,
+      agreedPrice,
+      dealDate:            rest.dealDate            || new Date(),
+      expectedClosingDate: rest.expectedClosingDate || null,
+      notes:               rest.notes               || offer.notes || "",
+      createdBy: userId,
+      updatedBy: userId,
+    });
+
+    const ops = [
+      SaleOffer.findByIdAndUpdate(offer._id, { status: "accepted", updatedBy: userId }),
+      SaleListing.findByIdAndUpdate(offer.listing._id, { status: "under_contract" }),
+    ];
+
+    if (offer.agent) {
+      const agent = await SaleAgent.findById(offer.agent._id).lean();
+      if (agent) {
+        ops.push(createCommissionForDeal({
+          business, dealId: deal._id, agent,
+          listingId: offer.listing._id, buyerId: offer.buyer._id,
+          agreedPrice,
+          overrides: { commissionRateOverride, commissionTypeOverride, commissionAmountOverride, whtRate },
+          userId,
+        }));
+      }
+    }
+
+    await Promise.all(ops);
+
+    const populated = await populateDeal(SaleDeal.findById(deal._id)).lean();
+    res.status(201).json({ ...populated, totalPaid: 0, balance: populated.agreedPrice });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── Deal documents ───────────────────────────────────────────────────────────
+export const uploadDealDocument = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId   = currentUserId(req);
+    const deal = await SaleDeal.findOne({ _id: req.params.id, business });
+    if (!deal) return next(createError(404, "Deal not found"));
+    if (!req.file)  return next(createError(400, "No file uploaded"));
+
+    deal.documents.push({
+      label:        String(req.body.label || "").trim() || req.file.originalname,
+      originalName: req.file.originalname,
+      filename:     req.file.filename,
+      mimetype:     req.file.mimetype,
+      size:         req.file.size,
+      uploadedAt:   new Date(),
+      uploadedBy:   userId,
+    });
+    await deal.save();
+    res.status(201).json(deal.documents[deal.documents.length - 1]);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const deleteDealDocument = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const deal = await SaleDeal.findOne({ _id: req.params.id, business });
+    if (!deal) return next(createError(404, "Deal not found"));
+    const doc = deal.documents.id(req.params.docId);
+    if (!doc) return next(createError(404, "Document not found"));
+    const filename = doc.filename;
+    doc.deleteOne();
+    await deal.save();
+    deleteDocumentFile(filename);
+    res.json({ message: "Document deleted" });
   } catch (err) {
     next(err);
   }

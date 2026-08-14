@@ -68,6 +68,7 @@ import { printTabularList } from "../../utils/printList";
 import { isCashbookAccount } from "../../utils/cashbookUtils";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import MilikTable from "../../components/common/MilikTable";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -1873,148 +1874,77 @@ const Receipts = ({ viewMode = "tenant" }) => {
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
-              <table className="w-full min-w-[1200px] text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10">
-                  <tr className={`${MILIK_GREEN} text-white`}>
-                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">
-                      <input
-                        type="checkbox"
-                        checked={currentPageReceipts.length > 0 && visibleReceiptIds.every((id) => selectedIds.includes(id))}
-                        onChange={toggleSelectAll}
-                      />
-                    </th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Receipt #</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Tenant</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Unit</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Cashbook</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Method</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Done By</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Reversed By</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Reference</th>
-                    <th className="px-3 py-1 text-center font-bold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {receipts.length === 0 ? (
-                    <tr>
-                      <td colSpan="14" className="px-3 py-10 text-center text-slate-500">
-                        No receipts found.
-                      </td>
-                    </tr>
-                  ) : (
-                    currentPageReceipts.map((receipt, index) => {
-                      const isSelected = selectedIds.includes(receipt._id);
-                      return (
-                        <tr
-                          key={receipt._id}
-                          className={`cursor-pointer border-b border-gray-100 transition-colors ${
-                            isSelected
-                              ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50"
-                              : index % 2 === 0
-                              ? "bg-white hover:bg-blue-50/40"
-                              : "bg-slate-50/60 hover:bg-blue-50/40"
-                          }`}
-                          onClick={() => toggleSelection(receipt._id)}
-                        >
-                          <td className="px-3 py-1 text-center border-r border-gray-100">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleSelection(receipt._id)}
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100">
-                            <button
-                              type="button"
-                              className="font-bold text-blue-700 hover:text-blue-900 hover:underline focus:outline-none"
-                              onClick={(e) => { e.stopPropagation(); openView(receipt); }}
-                            >
-                              {receipt.receiptNumber || "-"}
-                            </button>
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{fmtDate(receipt.paymentDate)}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getTenantName(receipt, tenants)}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getPropertyName(receipt, tenants)}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getUnitName(receipt, tenants)}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getCashbookLabel(receipt)}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900 capitalize">{(receipt.paymentMethod || "-").replace("_", " ")}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">
-                            Ksh {Math.abs(Number(receipt.amount || 0)).toLocaleString()}
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100">
-                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${
-                                receipt.isReversed
-                                  ? "bg-red-50 text-red-700 border-red-200"
-                                  : receipt.isConfirmed
-                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                  : "bg-amber-50 text-amber-700 border-amber-200"
-                              }`}>
-                              {receipt.isReversed ? "Reversed" : receipt.isConfirmed ? "Confirmed" : "Pending"}
-                            </span>
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getActorDisplayName(receipt.confirmedBy, receipt)}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getActorDisplayName(receipt.reversedBy)}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{receipt.referenceNumber || "-"}</td>
-                          <td className="px-3 py-1">
-                            <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
-                              <button onClick={() => openView(receipt)} className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700" title="View">
-                                <FaEye size={11} />
-                              </button>
-                              {!receipt.isReversed && (
-                                <button onClick={() => openAllocationDrawer(receipt)} className="px-2 py-1 rounded bg-[#0B3B2E] hover:bg-[#07271e] text-white" title="Allocate to Invoices">
-                                  <FaListAlt size={11} />
-                                </button>
-                              )}
-                              {!receipt.isConfirmed && !receipt.isReversed && (
-                                <button onClick={() => openEditForm(receipt)} className="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white" title="Edit">
-                                  <FaEdit size={11} />
-                                </button>
-                              )}
-                              {!receipt.isConfirmed && (
-                                <button onClick={() => handleConfirmOne(receipt)} className="px-2 py-1 rounded bg-green-600 hover:bg-green-700 text-white" title="Confirm">
-                                  <FaCheck size={11} />
-                                </button>
-                              )}
-                              {receipt.isConfirmed && !receipt.isReversed && (
-                                <button onClick={() => handleUnconfirmOne(receipt)} className="px-2 py-1 rounded bg-orange-500 hover:bg-orange-600 text-white" title="Unconfirm">
-                                  <FaTimes size={11} />
-                                </button>
-                              )}
-                              {!receipt.reversalOf && (
-                                <button onClick={() => handleDeleteOne(receipt._id, receipt)} className="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white" title="Delete">
-                                  <FaTrash size={11} />
-                                </button>
-                              )}
-                              {receipt.isConfirmed && !receipt.isReversed && (
-                                <button onClick={() => handleReverseOne(receipt)} className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white" title="Reverse">
-                                  <FaUndo size={11} />
-                                </button>
-                              )}
-                              {receipt.isReversed && canReverseReceipt && (
-                                <button onClick={() => handleCancelReversalOpen(receipt)} className="px-2 py-1 rounded bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] font-semibold leading-none" title="Cancel Reversal — restore this receipt">
-                                  Undo Rev
-                                </button>
-                              )}
-                              {canExportReceipt && (
-                                <button onClick={() => handleDownloadReceiptPdf(receipt)} className="px-2 py-1 rounded bg-slate-600 hover:bg-slate-700 text-white" title="Download PDF">
-                                  <FaDownload size={11} />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <MilikTable
+              columns={[
+                { label: "Receipt #" },
+                { label: "Date" },
+                { label: "Tenant" },
+                { label: "Property" },
+                { label: "Unit" },
+                { label: "Cashbook" },
+                { label: "Method" },
+                { label: "Amount", align: "right" },
+                { label: "Status" },
+                { label: "Done By" },
+                { label: "Reversed By" },
+                { label: "Reference" },
+              ]}
+              rows={currentPageReceipts}
+              rowKey="_id"
+              empty="No receipts found."
+              minWidth={1200}
+              checkboxes
+              allChecked={currentPageReceipts.length > 0 && visibleReceiptIds.every((id) => selectedIds.includes(id))}
+              someChecked={visibleReceiptIds.some((id) => selectedIds.includes(id))}
+              onCheckAll={toggleSelectAll}
+              isChecked={(receipt) => selectedIds.includes(receipt._id)}
+              onCheckRow={(receipt) => toggleSelection(receipt._id)}
+              onRowClick={(receipt) => toggleSelection(receipt._id)}
+              isSelected={(receipt) => selectedIds.includes(receipt._id)}
+              renderRow={(receipt) => (
+                <>
+                  <td className="px-3 py-1.5 border-r border-gray-100">
+                    <button type="button" className="font-bold text-blue-700 hover:text-blue-900 hover:underline focus:outline-none" onClick={(e) => { e.stopPropagation(); openView(receipt); }}>
+                      {receipt.receiptNumber || "-"}
+                    </button>
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{fmtDate(receipt.paymentDate)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{getTenantName(receipt, tenants)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{getPropertyName(receipt, tenants)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{getUnitName(receipt, tenants)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{getCashbookLabel(receipt)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold capitalize text-slate-900">{(receipt.paymentMethod || "-").replace("_", " ")}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-slate-900">
+                    Ksh {Math.abs(Number(receipt.amount || 0)).toLocaleString()}
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100">
+                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                      receipt.isReversed ? "bg-red-50 text-red-700 border-red-200" :
+                      receipt.isConfirmed ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                      "bg-amber-50 text-amber-700 border-amber-200"
+                    }`}>
+                      {receipt.isReversed ? "Reversed" : receipt.isConfirmed ? "Confirmed" : "Pending"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{getActorDisplayName(receipt.confirmedBy, receipt)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{getActorDisplayName(receipt.reversedBy)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{receipt.referenceNumber || "-"}</td>
+                </>
+              )}
+              renderActions={(receipt) => (
+                <div className="flex items-center justify-end gap-1">
+                  <button onClick={() => openView(receipt)} className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700" title="View"><FaEye size={11} /></button>
+                  {!receipt.isReversed && <button onClick={() => openAllocationDrawer(receipt)} className="px-2 py-1 rounded bg-[#0B3B2E] hover:bg-[#07271e] text-white" title="Allocate to Invoices"><FaListAlt size={11} /></button>}
+                  {!receipt.isConfirmed && !receipt.isReversed && <button onClick={() => openEditForm(receipt)} className="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white" title="Edit"><FaEdit size={11} /></button>}
+                  {!receipt.isConfirmed && <button onClick={() => handleConfirmOne(receipt)} className="px-2 py-1 rounded bg-green-600 hover:bg-green-700 text-white" title="Confirm"><FaCheck size={11} /></button>}
+                  {receipt.isConfirmed && !receipt.isReversed && <button onClick={() => handleUnconfirmOne(receipt)} className="px-2 py-1 rounded bg-orange-500 hover:bg-orange-600 text-white" title="Unconfirm"><FaTimes size={11} /></button>}
+                  {!receipt.reversalOf && <button onClick={() => handleDeleteOne(receipt._id, receipt)} className="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white" title="Delete"><FaTrash size={11} /></button>}
+                  {receipt.isConfirmed && !receipt.isReversed && <button onClick={() => handleReverseOne(receipt)} className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white" title="Reverse"><FaUndo size={11} /></button>}
+                  {receipt.isReversed && canReverseReceipt && <button onClick={() => handleCancelReversalOpen(receipt)} className="px-2 py-1 rounded bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] font-semibold leading-none" title="Cancel Reversal — restore this receipt">Undo Rev</button>}
+                  {canExportReceipt && <button onClick={() => handleDownloadReceiptPdf(receipt)} className="px-2 py-1 rounded bg-slate-600 hover:bg-slate-700 text-white" title="Download PDF"><FaDownload size={11} /></button>}
+                </div>
+              )}
+            />
             <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-1 text-xs text-slate-700">
               <p>
                 <span className="font-semibold">Showing:</span> {recPagination.totalItems === 0 ? 0 : startIndex + 1}

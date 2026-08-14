@@ -35,6 +35,7 @@ import { createRentPayment, reverseRentPayment, getChartOfAccounts } from "../..
 import { adminRequests } from "../../utils/requestMethods";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import MilikTable from "../../components/common/MilikTable";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -1038,114 +1039,66 @@ const TakeOnBalances = () => {
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-auto">
-              <table className="w-full min-w-[1120px] table-fixed text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className={`${MILIK_GREEN} text-white`}>
-                    <th className="px-2 py-1 text-left font-bold border-r border-white/10">Tenant</th>
-                    <th className="px-2 py-1 text-left font-bold border-r border-white/10">Property</th>
-                    <th className="px-2 py-1 text-left font-bold border-r border-white/10">Unit</th>
-                    <th className="px-2 py-1 text-left font-bold border-r border-white/10">Bill Item</th>
-                    <th className="px-2 py-1 text-left font-bold border-r border-white/10">Type</th>
-                    <th className="px-2 py-1 text-right font-bold border-r border-white/10">Amount</th>
-                    <th className="px-2 py-1 text-right font-bold border-r border-white/10">Allocated</th>
-                    <th className="px-2 py-1 text-right font-bold border-r border-white/10">Balance</th>
-                    <th className="px-2 py-1 text-left font-bold border-r border-white/10">Effective Date</th>
-                    <th className="px-2 py-1 text-right font-bold">Actions</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan={10} className="px-4 py-10 text-center text-[10px] text-slate-500">
-                        Loading take-on balances...
-                      </td>
-                    </tr>
-                  ) : filteredRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={10} className="px-4 py-10 text-center text-[10px] text-slate-500">
-                        No take-on balances found for the selected filters.
-                      </td>
-                    </tr>
-                  ) : (
-                    paginatedRows.map((row, index) => {
-                      const meta = statusMeta[row.status] || statusMeta.unallocated;
-
-                      const rowKey = row.invoiceId || row.receiptId || `${getRowPropertyId(row)}-${getTenantDisplayName(row.tenant)}-${index}`;
-                      return (
-                        <React.Fragment key={rowKey}>
-                        <tr
-                          onClick={() => setExpandedBalanceId((prev) => (prev === rowKey ? null : rowKey))}
-                          className={`cursor-pointer border-b border-gray-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-blue-50/40`}
-                        >
-                          <td className="min-w-[220px] px-2 py-1 border-r border-gray-100">
-                            <div className="font-semibold text-slate-900">{getTenantDisplayName(row.tenant)}</div>
-                          </td>
-                          <td className="whitespace-nowrap px-2 py-1 border-r border-gray-100 text-slate-700">{getRowPropertyName(row)}</td>
-                          <td className="whitespace-nowrap px-2 py-1 border-r border-gray-100 text-slate-700">{getUnitDisplay(row.unit)}</td>
-                          <td className="min-w-[220px] px-2 py-1 border-r border-gray-100 text-slate-700">
-                            <div className="font-semibold text-slate-900">{row.billItemLabel}</div>
-                            <div className="mt-1 text-[10px] text-slate-500">{row.invoiceNumber || "No invoice number"}</div>
-                          </td>
-                          <td className="whitespace-nowrap px-2 py-1 border-r border-gray-100 text-slate-700">{row.type}</td>
-                          <td className="whitespace-nowrap px-2 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">{formatCurrency(row.amount)}</td>
-                          <td className="whitespace-nowrap px-2 py-1 border-r border-gray-100 text-right text-slate-700">{formatCurrency(row.allocated)}</td>
-                          <td className="whitespace-nowrap px-2 py-1 border-r border-gray-100 text-right">
-                            <div className="font-semibold text-slate-900">{formatCurrency(row.balance)}</div>
-                            <span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${meta.classes}`}>{meta.label}</span>
-                          </td>
-                          <td className="whitespace-nowrap px-2 py-1 border-r border-gray-100 text-slate-700">{fmtDate(row.effectiveDate)}</td>
-                          <td className="whitespace-nowrap px-2 py-1 text-right">
-                            <div className="inline-flex flex-wrap justify-end gap-2 action-buttons">
-                              <button
-                                type="button"
-                                onClick={(event) => { event.stopPropagation(); setSelectedRow(row); }}
-                                className="rounded-lg border border-slate-300 bg-white p-2 text-slate-600 transition hover:bg-slate-100"
-                                title="View"
-                              >
-                                <FaEye />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(event) => { event.stopPropagation(); openEditModal(row); }}
-                                disabled={!row.canEdit}
-                                className="rounded-lg border border-orange-200 bg-orange-50 p-2 text-orange-600 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-40"
-                                title={row.canEdit ? "Edit" : "Allocated rows cannot be edited"}
-                              >
-                                <FaEdit />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(event) => { event.stopPropagation(); setRowToDelete(row); }}
-                                disabled={!row.canDelete}
-                                className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-rose-600 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40"
-                                title={row.canDelete ? "Delete" : "Allocated rows cannot be deleted"}
-                              >
-                                <FaTrash />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                        {expandedBalanceId === rowKey && (
-                          <tr className="border-t border-slate-100 bg-slate-50">
-                            <td colSpan={10} className="px-1.5 py-1">
-                              <div className="grid gap-2 text-[10px] md:grid-cols-4">
-                                <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Tenant</span><p className="font-semibold text-slate-900">{getTenantDisplayName(row.tenant)}</p></div>
-                                <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Property / Unit</span><p className="font-semibold text-slate-900">{getRowPropertyName(row)} · {getUnitDisplay(row.unit)}</p></div>
-                                <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Bill item</span><p className="font-semibold text-slate-900">{row.billItemLabel} · {row.type}</p></div>
-                                <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Posting position</span><p className="font-semibold text-slate-900">{meta.label} · Balance {formatCurrency(row.balance)}</p></div>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                        </React.Fragment>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <MilikTable
+              columns={[
+                { label: "Tenant" },
+                { label: "Property" },
+                { label: "Unit" },
+                { label: "Bill Item" },
+                { label: "Type" },
+                { label: "Amount", align: "right" },
+                { label: "Allocated", align: "right" },
+                { label: "Balance", align: "right" },
+                { label: "Effective Date" },
+              ]}
+              rows={paginatedRows}
+              rowKey="_id"
+              loading={loading}
+              empty="No take-on balances found for the selected filters."
+              minWidth={1120}
+              renderRow={(row) => {
+                const meta = statusMeta[row.status] || statusMeta.unallocated;
+                return (
+                  <>
+                    <td className="px-3 py-1.5 border-r border-gray-100">
+                      <div className="font-semibold text-slate-900">{getTenantDisplayName(row.tenant)}</div>
+                    </td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-slate-700">{getRowPropertyName(row)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-slate-700">{getUnitDisplay(row.unit)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100">
+                      <div className="font-semibold text-slate-900">{row.billItemLabel}</div>
+                      <div className="text-[10px] text-slate-500">{row.invoiceNumber || "No invoice number"}</div>
+                    </td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-slate-700">{row.type}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-right font-semibold text-slate-900">{formatCurrency(row.amount)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-right text-slate-700">{formatCurrency(row.allocated)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-right">
+                      <div className="font-semibold text-slate-900">{formatCurrency(row.balance)}</div>
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${meta.classes}`}>{meta.label}</span>
+                    </td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-slate-700">{fmtDate(row.effectiveDate)}</td>
+                  </>
+                );
+              }}
+              renderExpanded={(row) => {
+                const meta = statusMeta[row.status] || statusMeta.unallocated;
+                return (
+                  <div className="grid gap-2 text-[10px] md:grid-cols-4">
+                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Tenant</span><p className="font-semibold text-slate-900">{getTenantDisplayName(row.tenant)}</p></div>
+                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Property / Unit</span><p className="font-semibold text-slate-900">{getRowPropertyName(row)} · {getUnitDisplay(row.unit)}</p></div>
+                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Bill item</span><p className="font-semibold text-slate-900">{row.billItemLabel} · {row.type}</p></div>
+                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Posting position</span><p className="font-semibold text-slate-900">{meta.label} · Balance {formatCurrency(row.balance)}</p></div>
+                  </div>
+                );
+              }}
+              renderActions={(row) => (
+                <div className="inline-flex flex-wrap justify-end gap-1">
+                  <button type="button" onClick={() => setSelectedRow(row)} className="rounded-lg border border-slate-300 bg-white p-1.5 text-slate-600 transition hover:bg-slate-100" title="View"><FaEye size={11} /></button>
+                  <button type="button" onClick={() => openEditModal(row)} disabled={!row.canEdit} className="rounded-lg border border-orange-200 bg-orange-50 p-1.5 text-orange-600 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-40" title={row.canEdit ? "Edit" : "Allocated rows cannot be edited"}><FaEdit size={11} /></button>
+                  <button type="button" onClick={() => setRowToDelete(row)} disabled={!row.canDelete} className="rounded-lg border border-rose-200 bg-rose-50 p-1.5 text-rose-600 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40" title={row.canDelete ? "Delete" : "Allocated rows cannot be deleted"}><FaTrash size={11} /></button>
+                </div>
+              )}
+            />
             <div className="flex-shrink-0 border-t border-slate-200 bg-white px-1.5 py-1">
               <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
                 <div className="font-semibold">Showing <span className="font-bold text-slate-900">{paginatedRows.length > 0 ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredRows.length)}</span> of <span className="font-bold text-slate-900">{filteredRows.length}</span> take-on balance rows</div>

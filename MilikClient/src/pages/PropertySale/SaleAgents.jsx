@@ -162,40 +162,25 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
   const f = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
 
   return (
-    <PropertySaleShell
-      title="Sales Agents"
-      subtitle={`${total} agent(s)`}
-      action={
-        <>
-          <button
-            type="button"
-            onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-agents", biz] })}
-            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-          >
-            <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
-          </button>
-          <button
-            type="button"
-            onClick={openCreate}
-            className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
-          >
-            <FaPlus size={9} /> New Agent
-          </button>
-        </>
-      }
-    >
-      {/* Filter bar */}
+    <PropertySaleShell>
       <SaleFilterBar
+        leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} agent{total !== 1 ? "s" : ""}</span>}
         onReset={() => { setSearch(""); setStatusFilter(""); setCommTypeFilt(""); setPage(1); }}
         activeCount={[search, statusFilter, commTypeFilt].filter(Boolean).length}
+        trailing={
+          <>
+            <button type="button" onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-agents", biz] })} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+              <FaRedoAlt size={8} className={isFetching ? "animate-spin" : ""} /> Refresh
+            </button>
+            <button type="button" onClick={openCreate} className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]">
+              <FaPlus size={8} /> New Agent
+            </button>
+          </>
+        }
       >
-        <FilterSearch
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search agents…"
-        />
+        <FilterSearch value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search agents…" />
         <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? "")} options={[{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }]} placeholder="All Statuses" clearable size="sm" />
-        <AppSelect value={commTypeFilt} onChange={(v) => setCommTypeFilt(v ?? "")} options={[{ value: "percentage", label: "Percentage" }, { value: "flat", label: "Flat" }]} placeholder="All Commission Types" clearable size="sm" />
+        <AppSelect value={commTypeFilt} onChange={(v) => setCommTypeFilt(v ?? "")} options={[{ value: "percentage", label: "Percentage" }, { value: "flat", label: "Flat" }]} placeholder="All Comm. Types" clearable size="sm" />
       </SaleFilterBar>
 
       {/* Table */}

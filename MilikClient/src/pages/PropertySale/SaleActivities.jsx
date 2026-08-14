@@ -9,7 +9,8 @@ import { saleApi } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
-import { inputClass, labelClass } from "../../utils/formStyles";
+import SaleFilterBar, { FilterDateRange } from "./SaleFilterBar";
+import { labelClass } from "../../utils/formStyles";
 
 const ACTIVITY_TYPES = ["call", "email", "meeting", "site_visit", "whatsapp", "note", "follow_up"];
 const OUTCOMES       = ["positive", "neutral", "negative", "no_answer", "not_applicable"];
@@ -144,41 +145,31 @@ export default function SaleActivities() {
   const hasFilters = !!(typeFilter || outcomeFilter || from || to);
 
   return (
-    <PropertySaleShell
-      title="CRM — Activity Log"
-      subtitle={total > 0 ? `${total} activit${total === 1 ? "y" : "ies"}` : undefined}
-      action={
-        <button
-          onClick={openCreate}
-          className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
-        >
-          <FaPlus size={9} /> Log Activity
-        </button>
-      }
-    >
+    <PropertySaleShell>
       <div className="flex flex-col h-full">
 
         {/* Filter bar */}
-        <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-white px-3 py-1.5 flex-shrink-0">
+        <SaleFilterBar
+          leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} activit{total === 1 ? "y" : "ies"}</span>}
+          onReset={() => { setType(""); setOutcome(""); setFrom(""); setTo(""); }}
+          activeCount={[typeFilter, outcomeFilter, from, to].filter(Boolean).length}
+          trailing={
+            <button
+              onClick={openCreate}
+              className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
+            >
+              <FaPlus size={9} /> Log Activity
+            </button>
+          }
+        >
           <AppSelect value={typeFilter} onChange={(v) => setType(v ?? "")} options={ACTIVITY_TYPE_OPTIONS} placeholder="All Types" size="sm" clearable />
           <AppSelect value={outcomeFilter} onChange={(v) => setOutcome(v ?? "")} options={OUTCOME_OPTIONS} placeholder="All Outcomes" size="sm" clearable />
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] font-semibold text-slate-500">From</span>
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={`${inputClass} w-[130px]`} />
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] font-semibold text-slate-500">To</span>
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={`${inputClass} w-[130px]`} />
-          </div>
-          {hasFilters && (
-            <button
-              onClick={() => { setType(""); setOutcome(""); setFrom(""); setTo(""); }}
-              className="border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500 hover:bg-slate-50 hover:text-slate-700"
-            >
-              Clear
-            </button>
-          )}
-        </div>
+          <FilterDateRange
+            from={from} to={to}
+            onFromChange={(e) => setFrom(e.target.value)}
+            onToChange={(e) => setTo(e.target.value)}
+          />
+        </SaleFilterBar>
 
         {/* Timeline + PaginationBar */}
         <div className="flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm">

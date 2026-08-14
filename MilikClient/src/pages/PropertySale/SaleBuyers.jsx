@@ -295,39 +295,24 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
   };
 
   return (
-    <PropertySaleShell
-      title="Buyers / Clients"
-      subtitle={`${total} registered`}
-      action={
-        <>
-          <button
-            type="button"
-            onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-buyers", biz] })}
-            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-          >
-            <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
-          </button>
-          <button
-            type="button"
-            onClick={openCreate}
-            className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
-          >
-            <FaPlus size={9} /> New Buyer
-          </button>
-        </>
-      }
-    >
-      {/* Filter bar */}
+    <PropertySaleShell>
       <SaleFilterBar
+        leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} buyer{total !== 1 ? "s" : ""}</span>}
         onReset={() => { setSearch(""); setKycFilter(""); setSourceFilter(""); setPage(1); }}
         activeCount={[search, kycFilter, sourceFilter].filter(Boolean).length}
+        trailing={
+          <>
+            <button type="button" onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-buyers", biz] })} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+              <FaRedoAlt size={8} className={isFetching ? "animate-spin" : ""} /> Refresh
+            </button>
+            <button type="button" onClick={openCreate} className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]">
+              <FaPlus size={8} /> New Buyer
+            </button>
+          </>
+        }
       >
-        <FilterSearch
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Name, phone, ID…"
-        />
-        <AppSelect value={kycFilter} onChange={(v) => setKycFilter(v ?? "")} options={KYC_STATUSES.map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))} placeholder="All KYC Statuses" clearable size="sm" />
+        <FilterSearch value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, phone, ID…" />
+        <AppSelect value={kycFilter} onChange={(v) => setKycFilter(v ?? "")} options={KYC_STATUSES.map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))} placeholder="All KYC" clearable size="sm" />
         <AppSelect value={sourceFilter} onChange={(v) => setSourceFilter(v ?? "")} options={SOURCES.map((s) => ({ value: s, label: s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) }))} placeholder="All Sources" clearable size="sm" />
       </SaleFilterBar>
 
@@ -390,7 +375,7 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
 
         {/* Buyer Detail Panel */}
         {selected && (
-          <div className="absolute right-0 top-0 bottom-0 w-[380px] flex flex-col bg-white border-l border-slate-200 shadow-xl z-10 overflow-hidden">
+          <div className="absolute right-0 top-0 bottom-0 w-full sm:w-[380px] flex flex-col bg-white border-l border-slate-200 shadow-xl z-10 overflow-hidden">
             {/* Header */}
             <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-3 text-white">
               <div className="flex items-start justify-between gap-2">

@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import {
   FaBan, FaBuilding, FaCalendarAlt, FaCheck, FaEdit, FaEnvelope, FaFileAlt, FaHandshake, FaLink, FaMoneyBillWave,
-  FaPlus, FaPrint, FaRedoAlt, FaSearch, FaSms, FaTimes, FaTrash, FaUser,
+  FaPlus, FaPrint, FaRedoAlt, FaSearch, FaSms, FaTimes, FaTrash, FaUpload, FaUser,
 } from "react-icons/fa";
 import CwSmsModal from "../CarWash/CwSmsModal";
 import SaleEmailModal from "./SaleEmailModal";
@@ -20,6 +20,7 @@ import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
 import { inputClass, labelClass } from "../../utils/formStyles";
 import StatusBadge from "../../components/common/StatusBadge";
+import MilikTable from "../../components/common/MilikTable";
 
 const PAGE_SIZE = 25;
 
@@ -42,7 +43,7 @@ const fmtLabel        = (s) => (s || "").replace(/_/g, " ").replace(/\b\w/g, (c)
 const PAYMENT_TYPE_OPTIONS   = PAYMENT_TYPES.map((t) => ({ value: t, label: fmtLabel(t) }));
 const PAYMENT_METHOD_OPTIONS = PAYMENT_METHODS.map((m) => ({ value: m, label: fmtLabel(m) }));
 const DEAL_STATUS_OPTIONS    = [{ value: "active", label: "Active" }, { value: "closed", label: "Closed" }, { value: "cancelled", label: "Cancelled" }];
-const blankPayForm    = { amount: "", paymentType: "installment", paymentMethod: "bank_transfer", reference: "", paymentDate: todayISO(), notes: "" };
+const blankPayForm    = { amount: "", paymentType: "installment", paymentMethod: "bank_transfer", cashbook: "", reference: "", paymentDate: todayISO(), notes: "" };
 
 
 const SaleDeals = () => {
@@ -59,9 +60,10 @@ const SaleDeals = () => {
   const [editingId,      setEditingId]      = useState("");
   const [form,           setForm]           = useState(blankDealForm);
   const [closingDeal,    setClosingDeal]    = useState(null);
-  const [closeForm,      setCloseForm]      = useState({ actualClosingDate: todayISO(), titleTransferDate: "", handoverNotes: "" });
+  const [closeForm,      setCloseForm]      = useState({ actualClosingDate: todayISO(), titleTransferDate: "", handoverNotes: "", stampDutyAmount: "", stampDutyCashbook: "" });
   const [cancellingDeal, setCancellingDeal] = useState(null);
   const [cancelReason,   setCancelReason]   = useState("");
+  const [depositAction,  setDepositAction]  = useState("void");
   const [search,         setSearch]         = useTabState("/sale/deals:search", "");
   const [appliedSearch,  setAppliedSearch]  = useTabState("/sale/deals:appliedSearch", "");
   const [statusFilter,   setStatusFilter]   = useTabState("/sale/deals:statusFilter", "");
@@ -88,6 +90,11 @@ const SaleDeals = () => {
   const [scheduleItems,       setScheduleItems]       = useState([]);
   const [scheduleSaving,      setScheduleSaving]      = useState(false);
   const [linkingInstallment,  setLinkingInstallment]  = useState(null);
+
+  const [docLabel,      setDocLabel]      = useState("");
+  const [docFile,       setDocFile]       = useState(null);
+  const [uploadingDoc,  setUploadingDoc]  = useState(false);
+  const docFileRef = React.useRef(null);
 
   const biz = currentCompany?._id;
 
@@ -118,6 +125,13 @@ const SaleDeals = () => {
     staleTime: 5 * 60_000,
   });
 
+  const { data: cashbookAccounts = [] } = useQuery({
+    queryKey: ["sale-cashbook-accounts", biz],
+    queryFn:  () => saleApi.listCashbookAccounts({ business: biz }),
+    enabled:  !!biz,
+    staleTime: 10 * 60_000,
+  });
+
   const { data: dealPmtsData, isLoading: loadingDealPmts } = useQuery({
     queryKey: ["deal-detail-payments", selected?._id],
     queryFn:  () => saleApi.listPayments({ deal: selected._id, limit: 200 }),
@@ -138,6 +152,13 @@ const SaleDeals = () => {
     staleTime: 30_000,
   });
 
+  const { data: dealDetail, refetch: refetchDealDetail } = useQuery({
+    queryKey: ["deal-detail-docs", selected?._id],
+    queryFn:  () => saleApi.getDeal(selected._id, { business: biz }),
+    enabled:  !!selected?._id,
+    staleTime: 30_000,
+  });
+
   const deals      = dealsData?.data ?? [];
   const total      = dealsData?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -145,6 +166,7 @@ const SaleDeals = () => {
   const buyers     = buyersData?.data   ?? [];
   const agents     = agentsData?.data   ?? [];
 
+  const cashbookOptions     = cashbookAccounts.map((a) => ({ value: a._id, label: `${a.code ? `${a.code} — ` : ""}${a.name}` }));
   const buyerOptions        = useMemo(() => buyers.map((b)  => ({ value: b._id, label: `${b.fullName} (${b.buyerNumber})` })), [buyers]);
   const agentFilterOptions  = useMemo(() => agents.map((a)  => ({ value: a._id, label: `${a.fullName}${a.agentNumber ? ` (${a.agentNumber})` : ""}` })), [agents]);
   const agentFormOptions    = useMemo(() => agents.map((a)  => ({ value: a._id, label: `${a.fullName} (${a.agentNumber})` })), [agents]);
@@ -154,6 +176,7 @@ const SaleDeals = () => {
   const dealPmts    = (dealPmtsData?.data ?? []).filter((p) => p.status === "paid");
   const dealComm    = (dealCommData?.data ?? [])[0] ?? null;
   const dealSchedule= dealScheduleData?.data ?? [];
+  const dealDocs    = dealDetail?.documents ?? [];
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] });
@@ -188,6 +211,38 @@ const SaleDeals = () => {
       toast.error(err?.response?.data?.message || "Failed to save schedule");
     } finally {
       setScheduleSaving(false);
+    }
+  };
+
+  const handleUploadDoc = async (e) => {
+    e.preventDefault();
+    if (!docFile) return toast.warning("Select a file to upload");
+    setUploadingDoc(true);
+    try {
+      const fd = new FormData();
+      fd.append("document", docFile);
+      if (docLabel) fd.append("label", docLabel);
+      await saleApi.uploadDealDocument(selected._id, fd);
+      queryClient.invalidateQueries({ queryKey: ["deal-detail-docs", selected._id] });
+      setDocLabel("");
+      setDocFile(null);
+      if (docFileRef.current) docFileRef.current.value = "";
+      toast.success("Document uploaded");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Upload failed");
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  const handleDeleteDoc = async (docId) => {
+    if (!await confirm({ title: "Delete Document", message: "Remove this document?", confirmText: "Delete", isDangerous: true })) return;
+    try {
+      await saleApi.deleteDealDocument(selected._id, docId);
+      queryClient.invalidateQueries({ queryKey: ["deal-detail-docs", selected._id] });
+      toast.success("Document removed");
+    } catch (err) {
+      toast.error("Delete failed");
     }
   };
 
@@ -246,7 +301,13 @@ const SaleDeals = () => {
     if (!closingDeal) return;
     setActionKey(`${closingDeal._id}:close`);
     try {
-      await saleApi.closeDeal(closingDeal._id, { ...closeForm, business: biz });
+      const { stampDutyAmount, stampDutyCashbook, ...closeBase } = closeForm;
+      const payload = { ...closeBase, business: biz };
+      if (Number(stampDutyAmount) > 0) {
+        payload.stampDutyAmount = Number(stampDutyAmount);
+        if (stampDutyCashbook) payload.stampDutyCashbook = stampDutyCashbook;
+      }
+      await saleApi.closeDeal(closingDeal._id, payload);
       invalidate();
       setShowCloseModal(false);
       setClosingDeal(null);
@@ -262,7 +323,7 @@ const SaleDeals = () => {
     if (!cancellingDeal) return;
     setActionKey(`${cancellingDeal._id}:cancel`);
     try {
-      await saleApi.cancelDeal(cancellingDeal._id, { cancellationReason: cancelReason, business: biz });
+      await saleApi.cancelDeal(cancellingDeal._id, { cancellationReason: cancelReason, depositAction, business: biz });
       invalidate();
       setShowCancelModal(false);
       setCancellingDeal(null);
@@ -293,8 +354,10 @@ const SaleDeals = () => {
     if (!payForm.amount || Number(payForm.amount) <= 0) return toast.warning("Valid amount required");
     setPayingSave(true);
     try {
+      const { cashbook, ...payBase } = payForm;
       const payment = await saleApi.createPayment({
-        ...payForm, deal: payingDeal._id, business: biz, amount: Number(payForm.amount),
+        ...payBase, deal: payingDeal._id, business: biz, amount: Number(payForm.amount),
+        ...(cashbook && { cashbook }),
       });
       invalidate();
       queryClient.invalidateQueries({ queryKey: ["sale-payments", biz] });
@@ -344,35 +407,33 @@ const SaleDeals = () => {
   const resetFilters = () => { setSearch(""); setAppliedSearch(""); setStatusFilter(""); setAgentFilt(""); setBuyerFilt(""); setListingFilt(""); setDateFrom(""); setDateTo(""); setPage(1); };
 
   return (
-    <PropertySaleShell
-      title="Deals & Transactions"
-      subtitle={`${total} deal(s)`}
-      action={
-        <>
-          <button
-            type="button"
-            onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] })}
-            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-          >
-            <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
-          </button>
-          <button
-            type="button"
-            onClick={openCreate}
-            className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
-          >
-            <FaPlus size={9} /> New Deal
-          </button>
-        </>
-      }
-    >
+    <PropertySaleShell>
       <div className="relative flex flex-col flex-1 min-h-0 overflow-hidden">
 
       {/* ── Filter bar ───────────────────────────────────────────────────── */}
       <SaleFilterBar
+        leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} deal{total !== 1 ? "s" : ""}</span>}
         onSubmit={applySearch}
         onReset={resetFilters}
         activeCount={[appliedSearch, statusFilter, agentFilt, buyerFilt, listingFilt, dateFrom, dateTo].filter(Boolean).length}
+        trailing={
+          <>
+            <button
+              type="button"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] })}
+              className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+            >
+              <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
+            </button>
+            <button
+              type="button"
+              onClick={openCreate}
+              className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
+            >
+              <FaPlus size={9} /> New Deal
+            </button>
+          </>
+        }
       >
         <FilterSearch
           value={search}
@@ -395,110 +456,84 @@ const SaleDeals = () => {
 
       {/* ── Table ────────────────────────────────────────────────────────── */}
       <div className={`flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm transition-all ${selected ? "mr-[364px]" : ""}`}>
-        <div className="flex-1 min-h-0 overflow-auto">
-          <table className="w-full min-w-[780px] text-xs">
-            <thead>
-              <tr className="bg-[#0B3B2E]">
-                <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Deal No.</th>
-                <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Property</th>
-                <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Buyer</th>
-                <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Agent</th>
-                <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-white">Agreed Price</th>
-                <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-white">Paid</th>
-                <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-white">Balance</th>
-                <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Status</th>
-                <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-white">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={9} className="px-3 py-10 text-center text-xs font-semibold text-slate-400">Loading deals…</td></tr>
-              ) : deals.length === 0 ? (
-                <tr><td colSpan={9} className="px-3 py-10 text-center text-xs font-semibold text-slate-400">No deals found.</td></tr>
-              ) : deals.map((row) => {
-                const balance = row.agreedPrice - (row.totalPaid || 0);
-                const pct = row.agreedPrice > 0 ? Math.min(100, Math.round(((row.totalPaid || 0) / row.agreedPrice) * 100)) : 0;
-                return (
-                  <tr
-                    key={row._id}
-                    onClick={() => setSelected(selected?._id === row._id ? null : row)}
-                    className={`border-b border-slate-100 cursor-pointer ${selected?._id === row._id ? "bg-[#F1F6F3] border-l-2 border-l-[#0B3B2E]" : "hover:bg-[#F1F6F3]"}`}
-                  >
-                    <td className="px-3 py-2 font-mono font-bold text-[#0B3B2E]">{row.dealNumber}</td>
-                    <td className="px-3 py-2">
-                      <div className="max-w-[140px] truncate font-semibold text-slate-800">{row.listing?.title || "—"}</div>
-                      <div className="text-[10px] text-slate-400">{row.listing?.listingNumber}</div>
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="font-semibold text-slate-800">{row.buyer?.fullName || "—"}</div>
-                      <div className="text-[10px] text-slate-400">{row.buyer?.buyerNumber}</div>
-                    </td>
-                    <td className="px-3 py-2 text-slate-600">{row.agent?.fullName || <span className="italic text-slate-400">None</span>}</td>
-                    <td className="px-3 py-2 text-right">
-                      <div className="font-bold text-slate-900">{fmtKES(row.agreedPrice)}</div>
-                      <div className="mt-0.5 h-1 w-full overflow-hidden bg-slate-100">
-                        <div className="h-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 text-right font-bold text-emerald-700">{fmtKES(row.totalPaid || 0)}</td>
-                    <td className={`px-3 py-2 text-right font-black ${balance > 0 ? "text-rose-700" : "text-emerald-700"}`}>{fmtKES(balance)}</td>
-                    <td className="px-3 py-2">
-                      <StatusBadge status={row.status} map={DEAL_STATUS_MAP} />
-                    </td>
-                    <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="inline-flex items-center gap-1">
-                        <button type="button" onClick={() => window.open(`/sale/deals/${row._id}/summary`, "_blank")} title="Print Agreement Cover" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                          <FaPrint className="text-[9px]" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => window.open(`/sale/deals/${row._id}/statement`, "_blank")}
-                          title="Statement of Account"
-                          className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-                        >
-                          <FaFileAlt className="text-[9px]" />
-                        </button>
-                        {row.status === "active" && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => { setPayingDeal(row); setPayForm(blankPayForm); setShowPayModal(true); }}
-                              className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100"
-                            >
-                              <FaMoneyBillWave className="text-[9px]" /> Pay
-                            </button>
-                            <button type="button" onClick={() => openEdit(row)} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                              <FaEdit className="text-[9px]" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => { setClosingDeal(row); setCloseForm({ actualClosingDate: todayISO(), titleTransferDate: "", handoverNotes: "" }); setShowCloseModal(true); }}
-                              className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100"
-                            >
-                              <FaCheck className="text-[9px]" /> Close
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => { setCancellingDeal(row); setCancelReason(""); setShowCancelModal(true); }}
-                              className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100"
-                            >
-                              <FaBan className="text-[9px]" />
-                            </button>
-                          </>
-                        )}
-                        {row.status === "cancelled" && (
-                          <button type="button" onClick={() => handleDelete(row)} disabled={!!actionKey} className="border border-red-200 bg-white px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-50 disabled:opacity-50">
-                            <FaTimes className="text-[9px]" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <MilikTable
+          columns={[
+            { label: "Deal No." },
+            { label: "Property" },
+            { label: "Buyer" },
+            { label: "Agent" },
+            { label: "Agreed Price", align: "right" },
+            { label: "Paid", align: "right" },
+            { label: "Balance", align: "right" },
+            { label: "Status" },
+          ]}
+          rows={deals}
+          loading={loading}
+          empty="No deals found."
+          minWidth={780}
+          onRowClick={(row) => setSelected(selected?._id === row._id ? null : row)}
+          isSelected={(row) => selected?._id === row._id}
+          renderRow={(row) => {
+            const balance = row.agreedPrice - (row.totalPaid || 0);
+            const pct = row.agreedPrice > 0 ? Math.min(100, Math.round(((row.totalPaid || 0) / row.agreedPrice) * 100)) : 0;
+            return (
+              <>
+                <td className="px-3 py-1.5 font-mono font-bold text-[#0B3B2E] border-r border-gray-100">{row.dealNumber}</td>
+                <td className="px-3 py-1.5 border-r border-gray-100">
+                  <div className="max-w-[140px] truncate font-semibold text-slate-800">{row.listing?.title || "—"}</div>
+                  <div className="text-[10px] text-slate-400">{row.listing?.listingNumber}</div>
+                </td>
+                <td className="px-3 py-1.5 border-r border-gray-100">
+                  <div className="font-semibold text-slate-800">{row.buyer?.fullName || "—"}</div>
+                  <div className="text-[10px] text-slate-400">{row.buyer?.buyerNumber}</div>
+                </td>
+                <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{row.agent?.fullName || <span className="italic text-slate-400">None</span>}</td>
+                <td className="px-3 py-1.5 border-r border-gray-100 text-right">
+                  <div className="font-bold text-slate-900">{fmtKES(row.agreedPrice)}</div>
+                  <div className="mt-0.5 h-1 w-full overflow-hidden bg-slate-100">
+                    <div className="h-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+                  </div>
+                </td>
+                <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-emerald-700">{fmtKES(row.totalPaid || 0)}</td>
+                <td className={`px-3 py-1.5 border-r border-gray-100 text-right font-black ${balance > 0 ? "text-rose-700" : "text-emerald-700"}`}>{fmtKES(balance)}</td>
+                <td className="px-3 py-1.5">
+                  <StatusBadge status={row.status} map={DEAL_STATUS_MAP} />
+                </td>
+              </>
+            );
+          }}
+          renderActions={(row) => (
+            <div className="inline-flex items-center gap-1">
+              <button type="button" onClick={() => window.open(`/sale/deals/${row._id}/summary`, "_blank")} title="Print Agreement Cover" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                <FaPrint className="text-[9px]" />
+              </button>
+              <button type="button" onClick={() => window.open(`/sale/deals/${row._id}/statement`, "_blank")} title="Statement of Account" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                <FaFileAlt className="text-[9px]" />
+              </button>
+              {row.status === "active" && (
+                <>
+                  <button type="button" onClick={() => { setPayingDeal(row); setPayForm(blankPayForm); setShowPayModal(true); }} className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100">
+                    <FaMoneyBillWave className="text-[9px]" /> Pay
+                  </button>
+                  <button type="button" onClick={() => openEdit(row)} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                    <FaEdit className="text-[9px]" />
+                  </button>
+                  <button type="button" onClick={() => { setClosingDeal(row); setCloseForm({ actualClosingDate: todayISO(), titleTransferDate: "", handoverNotes: "", stampDutyAmount: "", stampDutyCashbook: "" }); setShowCloseModal(true); }} className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100">
+                    <FaCheck className="text-[9px]" /> Close
+                  </button>
+                  <button type="button" onClick={() => { setCancellingDeal(row); setCancelReason(""); setDepositAction("void"); setShowCancelModal(true); }} className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100">
+                    <FaBan className="text-[9px]" />
+                  </button>
+                </>
+              )}
+              {row.status === "cancelled" && (
+                <button type="button" onClick={() => handleDelete(row)} disabled={!!actionKey} className="border border-red-200 bg-white px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-50 disabled:opacity-50">
+                  <FaTimes className="text-[9px]" />
+                </button>
+              )}
+            </div>
+          )}
+        />
 
         <PaginationBar page={page} pages={totalPages} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} />
       </div>
@@ -509,7 +544,7 @@ const SaleDeals = () => {
 
       {/* ── Deal Detail Panel ─────────────────────────────────────────────── */}
       {selected && (
-        <div className="absolute right-0 top-0 bottom-0 w-[360px] flex flex-col bg-white border-l border-slate-200 shadow-xl overflow-hidden">
+        <div className="absolute right-0 top-0 bottom-0 w-full sm:w-[360px] flex flex-col bg-white border-l border-slate-200 shadow-xl overflow-hidden z-10">
           {/* Header */}
           <div className="flex-shrink-0 flex items-start justify-between gap-2 bg-[#0B3B2E] px-4 py-3 text-white">
             <div className="min-w-0">
@@ -696,6 +731,56 @@ const SaleDeals = () => {
             )}
           </div>
 
+            {/* Documents */}
+            <div className="flex-shrink-0 flex items-center justify-between border-t border-slate-200 px-4 py-1.5 mt-1">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Documents</span>
+            </div>
+            <div className="px-4 pb-3 space-y-1.5">
+              {dealDocs.length === 0 && <div className="text-[10px] text-slate-400">No documents uploaded yet.</div>}
+              {dealDocs.map((doc) => (
+                <div key={doc._id} className="flex items-center gap-2 border border-slate-100 bg-slate-50 px-2 py-1.5">
+                  <FaFileAlt size={10} className="text-slate-400 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate text-[11px] font-semibold text-slate-700">{doc.label || doc.originalName}</div>
+                    <div className="text-[9px] text-slate-400">{doc.originalName} · {(doc.size / 1024).toFixed(0)} KB</div>
+                  </div>
+                  <a
+                    href={`/uploads/sale-documents/${doc.filename}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="border border-[#B7C9C0] bg-white px-1.5 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+                  >View</a>
+                  <button
+                    onClick={() => handleDeleteDoc(doc._id)}
+                    className="border border-rose-200 bg-rose-50 p-0.5 text-[10px] text-rose-600 hover:bg-rose-100"
+                  ><FaTrash size={8} /></button>
+                </div>
+              ))}
+              {/* Upload form */}
+              <form onSubmit={handleUploadDoc} className="flex flex-col gap-1.5 pt-1 border-t border-slate-100 mt-1">
+                <input
+                  type="text"
+                  placeholder="Label (e.g. SPA, Title Deed…)"
+                  value={docLabel}
+                  onChange={(e) => setDocLabel(e.target.value)}
+                  className="h-7 w-full border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+                />
+                <div className="flex gap-1.5">
+                  <input
+                    ref={docFileRef}
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png,.webp"
+                    onChange={(e) => setDocFile(e.target.files[0] || null)}
+                    className="flex-1 text-[10px] text-slate-600 file:mr-2 file:border-0 file:bg-[#F1F6F3] file:px-2 file:py-0.5 file:text-[10px] file:font-bold file:text-[#0B3B2E]"
+                  />
+                  <button type="submit" disabled={uploadingDoc || !docFile} className="flex-shrink-0 inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-50">
+                    <FaUpload size={8} />{uploadingDoc ? "…" : "Upload"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
           {/* Panel footer actions */}
           <div className="flex-shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-2 flex items-center gap-1.5">
             <button onClick={() => window.open(`/sale/deals/${selected._id}/summary`, "_blank")} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
@@ -720,7 +805,7 @@ const SaleDeals = () => {
                   <FaEdit size={8} /> Edit
                 </button>
                 <button
-                  onClick={() => { setClosingDeal(selected); setCloseForm({ actualClosingDate: todayISO(), titleTransferDate: "", handoverNotes: "" }); setShowCloseModal(true); }}
+                  onClick={() => { setClosingDeal(selected); setCloseForm({ actualClosingDate: todayISO(), titleTransferDate: "", handoverNotes: "", stampDutyAmount: "", stampDutyCashbook: "" }); setShowCloseModal(true); }}
                   className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100"
                 >
                   <FaCheck size={8} /> Close
@@ -826,6 +911,19 @@ const SaleDeals = () => {
           <div className="mb-3 border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
             Cancelling will revert the listing to <strong>Available</strong> and cancel any pending commissions.
           </div>
+          <div className="mb-3 border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs">
+            <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-500">Deposit Payments</div>
+            <label className="mb-1.5 flex cursor-pointer items-center gap-2">
+              <input type="radio" name="depositAction" value="void" checked={depositAction === "void"} onChange={() => setDepositAction("void")} className="accent-[#0B3B2E]" />
+              <span className="font-semibold text-slate-700">Void deposits first</span>
+              <span className="text-slate-400">(go to Payments tab and void each deposit — for refunds)</span>
+            </label>
+            <label className="flex cursor-pointer items-center gap-2">
+              <input type="radio" name="depositAction" value="forfeit" checked={depositAction === "forfeit"} onChange={() => setDepositAction("forfeit")} className="accent-rose-600" />
+              <span className="font-semibold text-rose-700">Forfeit deposits as income</span>
+              <span className="text-slate-400">(non-refundable — posts Dr Buyer Deposit Held / Cr Forfeited Income)</span>
+            </label>
+          </div>
           <label className={labelClass}>Reason for Cancellation</label>
           <textarea rows={3} value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder="Optional — e.g. buyer withdrew, financing fell through…" className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-rose-500 focus:outline-none" />
         </Modal>
@@ -876,7 +974,7 @@ const SaleDeals = () => {
             </>
           }
         >
-          <div className="grid gap-3">
+          <div className="grid gap-3 md:grid-cols-2">
             <div>
               <label className={labelClass}>Actual Closing Date</label>
               <input type="date" value={closeForm.actualClosingDate} onChange={(e) => setCloseForm((p) => ({ ...p, actualClosingDate: e.target.value }))} className={inputClass} />
@@ -885,9 +983,30 @@ const SaleDeals = () => {
               <label className={labelClass}>Title Transfer Date</label>
               <input type="date" value={closeForm.titleTransferDate} onChange={(e) => setCloseForm((p) => ({ ...p, titleTransferDate: e.target.value }))} className={inputClass} />
             </div>
-            <div>
+            <div className="md:col-span-2">
               <label className={labelClass}>Handover Notes</label>
-              <textarea rows={3} value={closeForm.handoverNotes} onChange={(e) => setCloseForm((p) => ({ ...p, handoverNotes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+              <textarea rows={2} value={closeForm.handoverNotes} onChange={(e) => setCloseForm((p) => ({ ...p, handoverNotes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+            </div>
+            <div className="md:col-span-2 border-t border-slate-100 pt-3">
+              <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-500">Stamp Duty / Transfer Costs (Optional)</div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className={labelClass}>Amount (KES)</label>
+                  <AmountInput value={closeForm.stampDutyAmount} onChange={(v) => setCloseForm((p) => ({ ...p, stampDutyAmount: v }))} className={inputClass} placeholder="0.00 — leave blank if none" />
+                </div>
+                <div>
+                  <AppSelect
+                    label="Paid From (Cashbook)"
+                    value={closeForm.stampDutyCashbook}
+                    onChange={(v) => setCloseForm((p) => ({ ...p, stampDutyCashbook: v ?? "" }))}
+                    options={cashbookOptions}
+                    placeholder="— Fallback if blank —"
+                    clearable
+                    searchable
+                    size="md"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </Modal>
@@ -948,6 +1067,18 @@ const SaleDeals = () => {
             <div>
               <label className={labelClass}>Payment Date</label>
               <input type="date" value={payForm.paymentDate} onChange={(e) => setPayForm((f) => ({ ...f, paymentDate: e.target.value }))} className={inputClass} />
+            </div>
+            <div className="md:col-span-2">
+              <AppSelect
+                label="Bank / Cashbook Account (GL Debit)"
+                value={payForm.cashbook}
+                onChange={(v) => setPayForm((f) => ({ ...f, cashbook: v ?? "" }))}
+                options={cashbookOptions}
+                placeholder="— Fallback receipts account if blank —"
+                clearable
+                searchable
+                size="md"
+              />
             </div>
             <div className="md:col-span-2">
               <label className={labelClass}>

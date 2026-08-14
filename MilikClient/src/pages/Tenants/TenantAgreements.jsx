@@ -49,6 +49,7 @@ import {
   signLease,
   updateLease,
 } from "../../redux/apiCalls";
+import MilikTable from "../../components/common/MilikTable";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -716,227 +717,122 @@ const TenantAgreements = () => {
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-auto px-2 py-1">
-              <table className="w-full min-w-[1320px] text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className={`${MILIK_GREEN} text-white`}>
-                    <th className="w-6 border-r border-white/10 px-2 py-1 text-center font-bold">
-                      <input
-                        type="checkbox"
-                        checked={pagedRows.length > 0 && pagedRows.every((r) => selectedAgreements.includes(r.id))}
-                        onChange={toggleSelectAllAgreements}
-                        onClick={(event) => event.stopPropagation()}
-                        className="cursor-pointer rounded border-gray-300 text-orange-600 focus:ring-[#0B3B2E]/20"
-                      />
-                    </th>
-                    <th className="w-6 border-r border-white/10 px-2 py-1 text-center font-bold">+</th>
-                    <th className="min-w-[130px] border-r border-white/10 px-2 py-1 text-left font-bold">Agreement</th>
-                    <th className="min-w-[150px] border-r border-white/10 px-2 py-1 text-left font-bold">Tenant</th>
-                    <th className="min-w-[150px] border-r border-white/10 px-2 py-1 text-left font-bold">Property</th>
-                    <th className="min-w-[90px] border-r border-white/10 px-2 py-1 text-left font-bold">Unit</th>
-                    <th className="min-w-[95px] border-r border-white/10 px-2 py-1 text-center font-bold">Status</th>
-                    <th className="min-w-[115px] border-r border-white/10 px-2 py-1 text-left font-bold">Start</th>
-                    <th className="min-w-[115px] border-r border-white/10 px-2 py-1 text-left font-bold">End</th>
-                    <th className="min-w-[100px] border-r border-white/10 px-2 py-1 text-right font-bold">Rent</th>
-                    <th className="min-w-[105px] border-r border-white/10 px-2 py-1 text-right font-bold">Deposit</th>
-                    <th className="min-w-[130px] border-r border-white/10 px-2 py-1 text-left font-bold">Signatures</th>
-                    <th className="min-w-[120px] px-2 py-1 text-left font-bold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={13} className="px-3 py-4 text-center text-xs font-semibold text-gray-600">
-                        {isFetchingLeases ? "Loading agreements..." : "No tenant agreements found for the selected filters."}
-                      </td>
-                    </tr>
-                  ) : (
-                    pagedRows.map((row, idx) => {
-                      const normalizedStatus = String(row.status || "").toLowerCase();
-                      const tenantPending = !row.signedByTenant;
-                      const landlordPending = !row.signedByLandlord;
-                      const isAutoCreated = Boolean(row.raw?.autoCreatedFromTenant);
-                      const canEdit = !["renewed", "terminated", "cancelled"].includes(normalizedStatus);
-                      const canSign = !["renewed", "terminated", "cancelled", "expired"].includes(normalizedStatus);
-                      const canRenew = ["active", "expired"].includes(normalizedStatus);
-                      const canTerminate = ["draft", "pending_signature", "active", "expired"].includes(normalizedStatus);
-                      const canDelete = (["draft", "cancelled"].includes(normalizedStatus) && tenantPending && landlordPending) || isAutoCreated;
-                      const hasDocument = Boolean(String(row.raw?.documentUrl || "").trim());
-
-                      const isExpanded = expandedAgreements.has(row.id);
-                      const isSelected = selectedAgreements.includes(row.id);
-                      const isFirstOfProperty = idx === 0 || pagedRows[idx - 1].propertyName !== row.propertyName;
-
-                      return (
-                      <React.Fragment key={row.id}>
-                        {isFirstOfProperty && (
-                          <tr className="bg-transparent">
-                            <td colSpan={13} className="px-2 pb-1 pt-1.5">
-                              <h3 className="text-sm font-extrabold uppercase tracking-normal text-black">
-                                {toListingCaps(row.propertyName)}
-                              </h3>
-                              <div className="mt-1 h-[2px] w-full bg-[#FF8C00]" />
-                            </td>
-                          </tr>
-                        )}
-                      <tr
-                        onClick={() => toggleAgreementSelect(row.id)}
-                        className={`cursor-pointer border-b transition-colors ${
-                          row.isExpiring ? "border-red-100" : "border-gray-100"
-                        } ${
-                          isSelected
-                            ? "bg-orange-50 hover:bg-orange-100"
-                            : row.isExpiring
-                              ? "bg-red-50/70 hover:bg-red-100/80"
-                              : idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"
-                        }`}
-                      >
-                        <td className="border-r border-gray-100 px-2 py-1 text-center" onClick={(event) => event.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={(event) => {
-                              event.stopPropagation();
-                              toggleAgreementSelect(row.id);
-                            }}
-                            onClick={(event) => event.stopPropagation()}
-                            className="cursor-pointer rounded border-gray-300 text-orange-600 focus:ring-[#0B3B2E]/20"
-                          />
-                        </td>
-                          <td
-                          className="cursor-pointer border-r border-gray-100 px-2 py-1 text-center text-slate-400 transition hover:text-slate-700"
-                          onClick={(event) => { event.stopPropagation(); toggleAgreementExpand(row.id); }}
-                        >
-                          {isExpanded ? <FaChevronDown size={10} /> : <FaChevronRight size={10} />}
-                        </td>
-                        <td className="border-r border-gray-100 px-2 py-1 font-mono font-bold text-[#0B3B2E]">
-                          <div>{toListingCaps(row.agreementNumber)}</div>
-                          <div className="mt-0.5 font-sans font-normal text-gray-500">{getStatusLabel(row.leaseType)}</div>
-                          {row.isExpiring && (
-                            <div className="mt-0.5 text-[10px] font-semibold text-red-700">
-                              Expires in {row.daysToExpiry} day{row.daysToExpiry === 1 ? "" : "s"}
-                            </div>
-                          )}
-                        </td>
-                        <td className="border-r border-gray-100 px-2 py-1">
-                          <div className="font-bold text-gray-900">{toListingCaps(row.tenantName)}</div>
-                          <div className="mt-0.5 text-[10px] text-gray-500">{toListingCaps(row.tenantCode || "No code")}</div>
-                        </td>
-                        <td className="border-r border-gray-100 px-2 py-1 font-bold text-gray-900">
-                          <div className="font-semibold text-gray-900">{row.propertyCode ? `${row.propertyCode} • ${row.propertyName}` : row.propertyName}</div>
-                          {hasDocument && (
-                            <a
-                              href={row.raw.documentUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-700 hover:bg-slate-200"
-                            >
-                              Document Link
-                            </a>
-                          )}
-                        </td>
-                        <td className="border-r border-gray-100 px-2 py-1 font-bold text-gray-900">
-                          {toListingCaps(row.unitLabel !== "-" ? row.unitLabel : "No unit linked")}
-                        </td>
-                        <td className="border-r border-gray-100 px-2 py-1 text-center">
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${getStatusTone(row.status)}`}>
-                            {getStatusLabel(row.status)}
-                          </span>
-                        </td>
-                        <td className="border-r border-gray-100 px-2 py-1 font-bold text-gray-900">{formatDateLabel(row.startDate)}</td>
-                        <td className={`border-r border-gray-100 px-2 py-1 font-bold ${row.isExpiring ? "text-red-700" : "text-gray-900"}`}>{formatDateLabel(row.endDate)}</td>
-                        <td className="border-r border-gray-100 px-2 py-1 text-right font-bold text-gray-900">{formatCurrency(row.rentAmount)}</td>
-                        <td className="border-r border-gray-100 px-2 py-1 text-right font-bold text-gray-900">{formatCurrency(row.depositAmount)}</td>
-                        <td className="border-r border-gray-100 px-2 py-1">
-                          <div className="flex flex-col gap-1">
-                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${row.signedByTenant ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-                              <span className={`h-1.5 w-1.5 rounded-full ${row.signedByTenant ? "bg-emerald-500" : "bg-slate-400"}`} />
-                              T: {row.signedByTenant ? "Signed" : "Pending"}
-                            </span>
-                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${row.signedByLandlord ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-                              <span className={`h-1.5 w-1.5 rounded-full ${row.signedByLandlord ? "bg-emerald-500" : "bg-slate-400"}`} />
-                              L: {row.signedByLandlord ? "Signed" : "Pending"}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-2 py-1" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center gap-1.5">
-                            {canEdit && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); openEditModal(row); }}
-                                className="inline-flex items-center gap-1 rounded-lg border border-[#0B3B2E]/15 bg-[#0B3B2E]/5 px-2.5 py-1 text-[11px] font-bold text-[#0B3B2E] transition hover:bg-[#0B3B2E]/10"
-                              >
-                                <FaEdit size={10} /> Edit
-                              </button>
-                            )}
-                            <div className="relative">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setOpenDropdownId((prev) => (prev === row.id ? null : row.id)); }}
-                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 transition hover:bg-slate-50"
-                              >
-                                <FaEllipsisV size={10} />
-                              </button>
-                              {openDropdownId === row.id && (
-                                <div
-                                  className="absolute right-0 z-50 mt-1 w-44 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <button onClick={() => { handleGenerateDocument(row); setOpenDropdownId(null); }} disabled={generatingDocId === row.id} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-orange-700 transition hover:bg-orange-50 disabled:opacity-60">
-                                    <FaFilePdf size={11} /> {generatingDocId === row.id ? "Generating…" : hasDocument ? "Regenerate Doc" : "Generate Doc"}
-                                  </button>
-                                  {canSign && tenantPending && (
-                                    <button onClick={() => { handleSign(row, "tenant"); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-blue-700 transition hover:bg-blue-50">
-                                      <FaFileSignature size={11} /> Tenant Sign
-                                    </button>
-                                  )}
-                                  {canSign && landlordPending && (
-                                    <button onClick={() => { handleSign(row, "landlord"); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-violet-700 transition hover:bg-violet-50">
-                                      <FaCheck size={11} /> Landlord Sign
-                                    </button>
-                                  )}
-                                  {canRenew && (
-                                    <button onClick={() => { handleRenew(row); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-amber-700 transition hover:bg-amber-50">
-                                      <FaClock size={11} /> Renew
-                                    </button>
-                                  )}
-                                  <button onClick={() => { navigate(`/tenant/${row.tenantId}/statement`, { state: { tabTitle: `${row.tenantName} Statement` } }); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50">
-                                    <FaFileContract size={11} /> Statement
-                                  </button>
-                                  {canTerminate && (
-                                    <button onClick={() => { handleTerminate(row); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-xs font-semibold text-red-700 transition hover:bg-red-50">
-                                      <FaTimes size={11} /> Terminate
-                                    </button>
-                                  )}
-                                  {canDelete && (
-                                    <button onClick={() => { handleDelete(row); setOpenDropdownId(null); }} className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold transition ${isAutoCreated ? "text-red-700 hover:bg-red-50 border-t border-slate-100" : "text-slate-600 hover:bg-slate-50"}`}>
-                                      <FaTrash size={11} /> {isAutoCreated ? "Delete (Wrong Add)" : "Delete"}
-                                    </button>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                        {isExpanded && (
-                          <tr className="border-b border-gray-200 bg-gray-100">
-                            <td colSpan={13} className="px-3 py-1.5">
-                              <div className="grid grid-cols-1 gap-3 text-xs md:grid-cols-4">
-                                <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Lease period</span><p className="font-semibold text-slate-900">{formatDateLabel(row.startDate)} → {formatDateLabel(row.endDate)}</p></div>
-                                <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Rent</span><p className="font-semibold text-slate-900">{formatCurrency(row.rentAmount)}</p></div>
-                                <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Deposit</span><p className="font-semibold text-slate-900">{formatCurrency(row.depositAmount)}</p></div>
-                                <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Signature status</span><p className="font-semibold text-slate-900">Tenant: {row.signedByTenant ? 'Signed' : 'Pending'} · Landlord: {row.signedByLandlord ? 'Signed' : 'Pending'}</p></div>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+        <MilikTable
+              columns={[
+                { label: "Agreement" },
+                { label: "Tenant" },
+                { label: "Property" },
+                { label: "Unit" },
+                { label: "Status", align: "center" },
+                { label: "Start" },
+                { label: "End" },
+                { label: "Rent", align: "right" },
+                { label: "Deposit", align: "right" },
+                { label: "Signatures" },
+              ]}
+              rows={pagedRows}
+              rowKey="id"
+              loading={isFetchingLeases && pagedRows.length === 0}
+              empty="No tenant agreements found for the selected filters."
+              minWidth={1320}
+              groupBy={(row) => toListingCaps(row.propertyName)}
+              checkboxes
+              allChecked={pagedRows.length > 0 && pagedRows.every((r) => selectedAgreements.includes(r.id))}
+              someChecked={pagedRows.some((r) => selectedAgreements.includes(r.id))}
+              onCheckAll={toggleSelectAllAgreements}
+              isChecked={(row) => selectedAgreements.includes(row.id)}
+              onCheckRow={(row) => toggleAgreementSelect(row.id)}
+              onRowClick={(row) => toggleAgreementSelect(row.id)}
+              isSelected={(row) => selectedAgreements.includes(row.id)}
+              renderRow={(row) => {
+                const normalizedStatus = String(row.status || "").toLowerCase();
+                const hasDocument = Boolean(String(row.raw?.documentUrl || "").trim());
+                return (
+                  <>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-mono font-bold text-[#0B3B2E]">
+                      <div>{toListingCaps(row.agreementNumber)}</div>
+                      <div className="font-sans font-normal text-gray-500">{getStatusLabel(row.leaseType)}</div>
+                      {row.isExpiring && <div className="text-[10px] font-semibold text-red-700">Expires in {row.daysToExpiry} day{row.daysToExpiry === 1 ? "" : "s"}</div>}
+                    </td>
+                    <td className="px-3 py-1.5 border-r border-gray-100">
+                      <div className="font-bold text-gray-900">{toListingCaps(row.tenantName)}</div>
+                      <div className="text-[10px] text-gray-500">{toListingCaps(row.tenantCode || "No code")}</div>
+                    </td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-bold text-gray-900">
+                      <div className="font-semibold text-gray-900">{row.propertyCode ? `${row.propertyCode} • ${row.propertyName}` : row.propertyName}</div>
+                      {hasDocument && <a href={row.raw.documentUrl} target="_blank" rel="noreferrer" className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-700 hover:bg-slate-200">Document Link</a>}
+                    </td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-bold text-gray-900">{toListingCaps(row.unitLabel !== "-" ? row.unitLabel : "No unit linked")}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-center">
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${getStatusTone(row.status)}`}>{getStatusLabel(row.status)}</span>
+                    </td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-bold text-gray-900">{formatDateLabel(row.startDate)}</td>
+                    <td className={`px-3 py-1.5 border-r border-gray-100 font-bold ${row.isExpiring ? "text-red-700" : "text-gray-900"}`}>{formatDateLabel(row.endDate)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-gray-900">{formatCurrency(row.rentAmount)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-gray-900">{formatCurrency(row.depositAmount)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100">
+                      <div className="flex flex-col gap-0.5">
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${row.signedByTenant ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${row.signedByTenant ? "bg-emerald-500" : "bg-slate-400"}`} />
+                          T: {row.signedByTenant ? "Signed" : "Pending"}
+                        </span>
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${row.signedByLandlord ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${row.signedByLandlord ? "bg-emerald-500" : "bg-slate-400"}`} />
+                          L: {row.signedByLandlord ? "Signed" : "Pending"}
+                        </span>
+                      </div>
+                    </td>
+                  </>
+                );
+              }}
+              renderExpanded={(row) => (
+                <div className="grid grid-cols-1 gap-3 text-xs md:grid-cols-4">
+                  <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Lease period</span><p className="font-semibold text-slate-900">{formatDateLabel(row.startDate)} → {formatDateLabel(row.endDate)}</p></div>
+                  <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Rent</span><p className="font-semibold text-slate-900">{formatCurrency(row.rentAmount)}</p></div>
+                  <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Deposit</span><p className="font-semibold text-slate-900">{formatCurrency(row.depositAmount)}</p></div>
+                  <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Signature status</span><p className="font-semibold text-slate-900">Tenant: {row.signedByTenant ? "Signed" : "Pending"} · Landlord: {row.signedByLandlord ? "Signed" : "Pending"}</p></div>
+                </div>
+              )}
+              renderActions={(row) => {
+                const normalizedStatus = String(row.status || "").toLowerCase();
+                const tenantPending = !row.signedByTenant;
+                const landlordPending = !row.signedByLandlord;
+                const isAutoCreated = Boolean(row.raw?.autoCreatedFromTenant);
+                const hasDocument = Boolean(String(row.raw?.documentUrl || "").trim());
+                const canEdit = !["renewed", "terminated", "cancelled"].includes(normalizedStatus);
+                const canSign = !["renewed", "terminated", "cancelled", "expired"].includes(normalizedStatus);
+                const canRenew = ["active", "expired"].includes(normalizedStatus);
+                const canTerminate = ["draft", "pending_signature", "active", "expired"].includes(normalizedStatus);
+                const canDelete = (["draft", "cancelled"].includes(normalizedStatus) && tenantPending && landlordPending) || isAutoCreated;
+                return (
+                  <div className="flex items-center gap-1.5">
+                    {canEdit && (
+                      <button onClick={() => openEditModal(row)} className="inline-flex items-center gap-1 rounded-lg border border-[#0B3B2E]/15 bg-[#0B3B2E]/5 px-2 py-1 text-[11px] font-bold text-[#0B3B2E] transition hover:bg-[#0B3B2E]/10">
+                        <FaEdit size={10} /> Edit
+                      </button>
+                    )}
+                    <div className="relative">
+                      <button onClick={() => setOpenDropdownId((prev) => (prev === row.id ? null : row.id))} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-600 transition hover:bg-slate-50">
+                        <FaEllipsisV size={10} />
+                      </button>
+                      {openDropdownId === row.id && (
+                        <div className="absolute right-0 z-50 mt-1 w-44 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+                          <button onClick={() => { handleGenerateDocument(row); setOpenDropdownId(null); }} disabled={generatingDocId === row.id} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-orange-700 transition hover:bg-orange-50 disabled:opacity-60">
+                            <FaFilePdf size={11} /> {generatingDocId === row.id ? "Generating…" : hasDocument ? "Regenerate Doc" : "Generate Doc"}
+                          </button>
+                          {canSign && tenantPending && <button onClick={() => { handleSign(row, "tenant"); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-blue-700 transition hover:bg-blue-50"><FaFileSignature size={11} /> Tenant Sign</button>}
+                          {canSign && landlordPending && <button onClick={() => { handleSign(row, "landlord"); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-violet-700 transition hover:bg-violet-50"><FaCheck size={11} /> Landlord Sign</button>}
+                          {canRenew && <button onClick={() => { handleRenew(row); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-amber-700 transition hover:bg-amber-50"><FaClock size={11} /> Renew</button>}
+                          <button onClick={() => { navigate(`/tenant/${row.tenantId}/statement`, { state: { tabTitle: `${row.tenantName} Statement` } }); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"><FaFileContract size={11} /> Statement</button>
+                          {canTerminate && <button onClick={() => { handleTerminate(row); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-xs font-semibold text-red-700 transition hover:bg-red-50"><FaTimes size={11} /> Terminate</button>}
+                          {canDelete && <button onClick={() => { handleDelete(row); setOpenDropdownId(null); }} className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold transition ${isAutoCreated ? "text-red-700 hover:bg-red-50 border-t border-slate-100" : "text-slate-600 hover:bg-slate-50"}`}><FaTrash size={11} /> {isAutoCreated ? "Delete (Wrong Add)" : "Delete"}</button>}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              }}
+            />
 
             <div className="sticky bottom-0 z-20 flex flex-shrink-0 items-center justify-between border-t border-gray-200 bg-white px-2 py-2">
               <div className="text-xs font-bold text-gray-600">

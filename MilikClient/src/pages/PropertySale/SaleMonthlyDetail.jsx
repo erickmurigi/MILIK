@@ -5,10 +5,8 @@ import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { FaPrint } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
-import { fmtKES, saleApi } from "../../services/propertySaleApi";
+import { fmtKES, SALE_MONTHS, saleApi } from "../../services/propertySaleApi";
 import { fmtDate } from "../../utils/dates";
-
-const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const fmtLabel = (s) => (s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
 const METHOD_BADGE = {
@@ -61,7 +59,7 @@ const SaleMonthlyDetail = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useTabState(`${location.pathname}:activeTab`, "payments");
 
-  const monthName = MONTH_NAMES[Number(month) - 1] || "—";
+  const monthName = SALE_MONTHS[Number(month) - 1] || "—";
 
   useEffect(() => {
     if (!biz || !year || !month) return;

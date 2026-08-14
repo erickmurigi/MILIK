@@ -14,6 +14,7 @@ const saleAgentSchema = new mongoose.Schema(
     commissionRate: { type: Number, min: 0, default: 3 },
     commissionType: { type: String, enum: COMMISSION_TYPES, default: "percentage" },
     status: { type: String, enum: AGENT_STATUSES, default: "active", index: true },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, index: true },
     notes: { type: String, trim: true, default: "" },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },

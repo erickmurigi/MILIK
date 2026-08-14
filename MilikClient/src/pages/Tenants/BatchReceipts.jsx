@@ -21,6 +21,7 @@ import { getTenants, getChartOfAccounts } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import MilikTable from "../../components/common/MilikTable";
 
 const MONTHS = [
   { value: 1,  label: "January"   }, { value: 2,  label: "February"  }, { value: 3,  label: "March"     },
@@ -512,99 +513,57 @@ const BatchReceipts = () => {
               )}
 
               {/* Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[780px] border-collapse text-[12px]">
-                  <thead>
-                    <tr className="bg-[#0B3B2E] text-[11px] text-white">
-                      <th className="w-10 px-3 py-2 text-left">
-                        <button onClick={toggleAllMpesa} className="text-white/70 hover:text-white">
-                          {allFilteredSel ? <FaCheckSquare size={13} /> : <FaSquare size={13} />}
-                        </button>
-                      </th>
-                      <th className="border-r border-white/10 px-3 py-2 text-left font-bold">Date</th>
-                      <th className="border-r border-white/10 px-3 py-2 text-right font-bold">Amount</th>
-                      <th className="border-r border-white/10 px-3 py-2 text-left font-bold">M-Pesa Code</th>
-                      <th className="border-r border-white/10 px-3 py-2 text-left font-bold">Payer</th>
-                      <th className="border-r border-white/10 px-3 py-2 text-left font-bold">Account Ref</th>
-                      <th className="border-r border-white/10 px-3 py-2 text-left font-bold">Property</th>
-                      <th className="px-3 py-2 text-left font-bold">Tenant · Unit</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {colLoading ? (
-                      <tr>
-                        <td colSpan={8} className="py-14 text-center text-slate-400">
-                          <Spinner /> Loading M-Pesa collections…
-                        </td>
-                      </tr>
-                    ) : filteredCollections.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="py-14 text-center">
-                          <p className="text-[13px] font-bold text-slate-400">
-                            {collections.length > 0 ? "No collections match the filter." : "No matched M-Pesa transactions."}
-                          </p>
-                          <p className="mt-1 text-[11px] text-slate-400">
-                            Assign incoming M-Pesa payments to tenants first, then return here to batch-receipt.
-                          </p>
-                          <button
-                            onClick={() => navigate("/receipts/mpesa-collections")}
-                            className="mt-3 rounded-lg bg-[#0B3B2E] px-4 py-1.5 text-[11px] font-bold text-white hover:bg-[#0d4a38]"
-                          >
-                            Go to M-Pesa Collections →
-                          </button>
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredCollections.map((col, idx) => {
-                        const id      = String(col._id);
-                        const sel     = mpesaSel.has(id);
-                        const tenant  = col.tenant;
-                        const propName = tenant?.unit?.property?.propertyName || tenant?.unit?.property?.name || "—";
-                        const unitNo   = tenant?.unit?.unitNumber || "";
-                        return (
-                          <tr
-                            key={id}
-                            onClick={() => toggleMpesa(id)}
-                            className={`cursor-pointer border-b border-gray-100 transition-colors ${
-                              sel
-                                ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50"
-                                : idx % 2 === 0 ? "bg-white hover:bg-blue-50/30" : "bg-slate-50/50 hover:bg-blue-50/30"
-                            }`}
-                          >
-                            <td className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
-                              <button onClick={() => toggleMpesa(id)}>
-                                {sel ? <FaCheckSquare className="text-emerald-700" size={13} /> : <FaSquare className="text-slate-300" size={13} />}
-                              </button>
-                            </td>
-                            <td className="whitespace-nowrap border-r border-gray-100 px-3 py-1.5 text-slate-600">{fmtDate(col.transactionDate)}</td>
-                            <td className="border-r border-gray-100 px-3 py-1.5 text-right font-mono font-black text-slate-900">{fmt(col.amount)}</td>
-                            <td className="border-r border-gray-100 px-3 py-1.5">
-                              <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-700">
-                                {col.transactionCode || "—"}
-                              </span>
-                            </td>
-                            <td className="border-r border-gray-100 px-3 py-1.5 text-slate-700">{col.payerName || col.msisdn || "—"}</td>
-                            <td className="border-r border-gray-100 px-3 py-1.5 text-slate-500">{col.accountReference || col.billRefNumber || "—"}</td>
-                            <td className="border-r border-gray-100 px-3 py-1.5 text-slate-600">{propName}</td>
-                            <td className="px-3 py-1.5">
-                              {tenant ? (
-                                <span>
-                                  <span className="font-semibold text-slate-900">{tenant.name || "—"}</span>
-                                  {unitNo && <span className="ml-1.5 text-[10px] text-slate-400">· {unitNo}</span>}
-                                </span>
-                              ) : (
-                                <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600">
-                                  Unmatched
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              <MilikTable
+                columns={[
+                  { label: "Date" },
+                  { label: "Amount", align: "right" },
+                  { label: "M-Pesa Code" },
+                  { label: "Payer" },
+                  { label: "Account Ref" },
+                  { label: "Property" },
+                  { label: "Tenant · Unit" },
+                ]}
+                rows={filteredCollections}
+                rowKey="_id"
+                loading={colLoading}
+                empty={collections.length > 0 ? "No collections match the filter." : "No matched M-Pesa transactions. Assign incoming M-Pesa payments to tenants first, then return here to batch-receipt."}
+                minWidth={780}
+                checkboxes
+                allChecked={allFilteredSel}
+                someChecked={mpesaSel.size > 0 && !allFilteredSel}
+                onCheckAll={toggleAllMpesa}
+                isChecked={(col) => mpesaSel.has(String(col._id))}
+                onCheckRow={(col) => toggleMpesa(String(col._id))}
+                onRowClick={(col) => toggleMpesa(String(col._id))}
+                isSelected={(col) => mpesaSel.has(String(col._id))}
+                renderRow={(col) => {
+                  const tenant = col.tenant;
+                  const propName = tenant?.unit?.property?.propertyName || tenant?.unit?.property?.name || "—";
+                  const unitNo = tenant?.unit?.unitNumber || "";
+                  return (
+                    <>
+                      <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-slate-600">{fmtDate(col.transactionDate)}</td>
+                      <td className="px-3 py-1.5 border-r border-gray-100 text-right font-mono font-black text-slate-900">{fmt(col.amount)}</td>
+                      <td className="px-3 py-1.5 border-r border-gray-100">
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-700">{col.transactionCode || "—"}</span>
+                      </td>
+                      <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">{col.payerName || col.msisdn || "—"}</td>
+                      <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">{col.accountReference || col.billRefNumber || "—"}</td>
+                      <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{propName}</td>
+                      <td className="px-3 py-1.5 border-r border-gray-100">
+                        {tenant ? (
+                          <span>
+                            <span className="font-semibold text-slate-900">{tenant.name || "—"}</span>
+                            {unitNo && <span className="ml-1.5 text-[10px] text-slate-400">· {unitNo}</span>}
+                          </span>
+                        ) : (
+                          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600">Unmatched</span>
+                        )}
+                      </td>
+                    </>
+                  );
+                }}
+              />
             </div>
           )}
 

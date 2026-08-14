@@ -1,10 +1,11 @@
 import mongoose from "mongoose";
-import SaleListing   from "../models/SaleListing.js";
-import SaleDeal      from "../models/SaleDeal.js";
-import SalePayment   from "../models/SalePayment.js";
-import SaleCommission from "../models/SaleCommission.js";
-import SaleOffer     from "../models/SaleOffer.js";
-import SaleLead      from "../models/SaleLead.js";
+import SaleListing        from "../models/SaleListing.js";
+import SaleDeal           from "../models/SaleDeal.js";
+import SalePayment        from "../models/SalePayment.js";
+import SaleCommission     from "../models/SaleCommission.js";
+import SaleOffer          from "../models/SaleOffer.js";
+import SaleLead           from "../models/SaleLead.js";
+import SalePaymentSchedule from "../models/SalePaymentSchedule.js";
 import { resolveActiveBusinessId } from "../services/businessScope.js";
 
 export const getDashboardStats = async (req, res, next) => {
@@ -180,6 +181,121 @@ export const getSalesReport = async (req, res, next) => {
     );
 
     res.status(200).json({ year, months, totals });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getCashFlowForecast = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const bId      = new mongoose.Types.ObjectId(String(business));
+    const now      = new Date();
+
+    const d30  = new Date(now); d30.setDate(d30.getDate() + 30);
+    const d60  = new Date(now); d60.setDate(d60.getDate() + 60);
+    const d90  = new Date(now); d90.setDate(d90.getDate() + 90);
+
+    const allItems = await SalePaymentSchedule.find({
+      business: bId,
+      status: { $in: ["upcoming", "overdue"] },
+    })
+      .populate({
+        path: "deal",
+        select: "dealNumber agreedPrice totalPaid",
+        populate: [
+          { path: "listing", select: "title listingNumber" },
+          { path: "buyer",   select: "fullName phone" },
+        ],
+      })
+      .sort({ dueDate: 1 })
+      .lean();
+
+    const bucket = (item) => {
+      const due = new Date(item.dueDate);
+      if (due < now)   return "overdue";
+      if (due <= d30)  return "next30";
+      if (due <= d60)  return "next60";
+      if (due <= d90)  return "next90";
+      return "beyond90";
+    };
+
+    const buckets = { overdue: [], next30: [], next60: [], next90: [], beyond90: [] };
+    for (const item of allItems) buckets[bucket(item)].push(item);
+
+    const summarise = (items) => ({
+      count:  items.length,
+      amount: items.reduce((s, i) => s + Number(i.expectedAmount || 0), 0),
+      items,
+    });
+
+    res.status(200).json({
+      overdue:   summarise(buckets.overdue),
+      next30:    summarise(buckets.next30),
+      next60:    summarise(buckets.next60),
+      next90:    summarise(buckets.next90),
+      beyond90:  summarise(buckets.beyond90),
+      totalPipeline: allItems.reduce((s, i) => s + Number(i.expectedAmount || 0), 0),
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getConversionFunnel = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const bId      = new mongoose.Types.ObjectId(String(business));
+
+    const [leadStats, offerStats, dealStats] = await Promise.all([
+      SaleLead.aggregate([{ $match: { business: bId } }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
+      SaleOffer.aggregate([{ $match: { business: bId } }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
+      SaleDeal.aggregate([{ $match: { business: bId } }, { $group: { _id: "$status", count: { $sum: 1 }, value: { $sum: "$agreedPrice" } } }]),
+    ]);
+
+    const lm = Object.fromEntries(leadStats.map((s) => [s._id, s.count]));
+    const om = Object.fromEntries(offerStats.map((s) => [s._id, s.count]));
+    const dm = Object.fromEntries(dealStats.map((s) => [s._id, { count: s.count, value: s.value }]));
+
+    const totalLeads   = Object.values(lm).reduce((a, b) => a + b, 0);
+    const totalOffers  = Object.values(om).reduce((a, b) => a + b, 0);
+    const totalDeals   = Object.values(dm).reduce((a, b) => a + b.count, 0);
+    const closedDeals  = dm.closed?.count  || 0;
+    const closedValue  = dm.closed?.value  || 0;
+    const activeDeals  = dm.active?.count  || 0;
+    const activeValue  = dm.active?.value  || 0;
+
+    res.status(200).json({
+      leads: {
+        total:       totalLeads,
+        new:         lm.new          || 0,
+        contacted:   lm.contacted    || 0,
+        qualified:   lm.qualified    || 0,
+        siteVisited: lm.site_visited || 0,
+        negotiating: lm.negotiating  || 0,
+        converted:   lm.converted    || 0,
+        lost:        lm.lost         || 0,
+      },
+      offers: {
+        total:       totalOffers,
+        pending:     om.pending     || 0,
+        negotiating: om.negotiating || 0,
+        accepted:    om.accepted    || 0,
+        rejected:    om.rejected    || 0,
+        expired:     om.expired     || 0,
+        withdrawn:   om.withdrawn   || 0,
+      },
+      deals: {
+        total: totalDeals, active: activeDeals, closed: closedDeals,
+        cancelled: dm.cancelled?.count || 0,
+        activeValue, closedValue,
+      },
+      rates: {
+        leadsToOffers: totalLeads  > 0 ? Math.round((totalOffers / totalLeads)  * 100) : 0,
+        offersToDeals: totalOffers > 0 ? Math.round((totalDeals  / totalOffers) * 100) : 0,
+        dealsToClose:  totalDeals  > 0 ? Math.round((closedDeals / totalDeals)  * 100) : 0,
+      },
+    });
   } catch (err) {
     next(err);
   }

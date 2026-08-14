@@ -12,6 +12,7 @@ import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import MilikTable from "../../components/common/MilikTable";
 
 const STATUS_BADGE = {
   pending: "bg-amber-100 text-amber-700 border-amber-200",
@@ -212,11 +213,17 @@ const SaleOffers = () => {
     if (!dealForm.agreedPrice) { toast.warn("Agreed price is required"); return; }
     setConverting(true);
     try {
-      await saleApi.createDeal({ ...dealForm, business: biz, sourceOffer: showConvertDeal._id });
-      toast.success("Deal created successfully! View it in the Deals section.");
+      await saleApi.createDealFromOffer(showConvertDeal._id, {
+        agreedPrice:         dealForm.agreedPrice,
+        dealDate:            dealForm.dealDate,
+        expectedClosingDate: dealForm.expectedClosingDate,
+        notes:               dealForm.notes,
+      });
+      toast.success("Deal created! View it in the Deals section.");
       setShowConvertDeal(null);
       setDealForm(EMPTY_DEAL);
       invalidate();
+      queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] });
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to create deal");
     } finally {
@@ -337,32 +344,30 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <PropertySaleShell
-      title="Offers"
-      subtitle={`${total} offer(s)`}
-      action={
-        <>
-          <button
-            type="button"
-            onClick={invalidate}
-            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-          >
-            <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
-          </button>
-          <button
-            onClick={() => { setForm(EMPTY_FORM); setShowCreate(true); }}
-            className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
-          >
-            <FaPlus size={9} /> New Offer
-          </button>
-        </>
-      }
-    >
+    <PropertySaleShell>
       <div className="flex-1 min-h-0 flex flex-col gap-1">
         {/* Filter bar */}
         <SaleFilterBar
+          leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} offer{total !== 1 ? "s" : ""}</span>}
           onReset={() => { setSearch(""); setStatusFilter(""); setListingFilt(""); setBuyerFilt(""); setPage(1); }}
           activeCount={[search, statusFilter, listingFilt, buyerFilt].filter(Boolean).length}
+          trailing={
+            <>
+              <button
+                type="button"
+                onClick={invalidate}
+                className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+              >
+                <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
+              </button>
+              <button
+                onClick={() => { setForm(EMPTY_FORM); setShowCreate(true); }}
+                className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
+              >
+                <FaPlus size={9} /> New Offer
+              </button>
+            </>
+          }
         >
           <FilterSearch
             value={search}
@@ -376,157 +381,107 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
 
         {/* Table */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
-          <div className="min-h-0 flex-1 overflow-auto">
-            <table className="min-w-full text-[11px] border-collapse">
-              <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-                <tr>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Offer No.</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Buyer</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Agent</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Offer Amount</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Counter / Final</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Validity</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
-                  <th className="px-3 py-1 text-right font-bold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {isFetching && offers.length === 0 ? (
-                  <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400">Loading offers...</td></tr>
-                ) : offers.length === 0 ? (
-                  <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400">No offers found.</td></tr>
-                ) : offers.map((o, i) => {
-                  const hasCounter = !!o.counterOfferAmount;
-                  const isCounterActive = o.status === "negotiating" && hasCounter;
-                  const isAccepted = o.status === "accepted";
-                  const counterDelta = hasCounter
-                    ? Math.round(((o.counterOfferAmount - o.offerAmount) / o.offerAmount) * 100)
-                    : null;
-
-                  return (
-                    <tr key={o._id} className={`border-b border-slate-100 ${isCounterActive ? "bg-[#F1F6F3]" : i % 2 === 0 ? "bg-white hover:bg-[#F1F6F3]" : "bg-slate-50/60 hover:bg-[#F1F6F3]"}`}>
-                      <td className="px-3 py-1 border-r border-gray-100 font-black text-slate-900">{o.offerNumber}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{o.listing?.title || o.listing?.listingNumber || "—"}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{o.buyer?.fullName || "—"}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{o.agent?.fullName || <span className="italic text-slate-300">—</span>}</td>
-
-                      {/* Offer Amount */}
-                      <td className="px-3 py-1 border-r border-gray-100 text-right">
-                        <div className="font-black text-slate-900">{fmtKES(o.offerAmount)}</div>
-                        {o.listing?.askingPrice > 0 && (
-                          <div className={`text-[10px] font-bold ${o.offerAmount < o.listing.askingPrice ? "text-rose-500" : o.offerAmount > o.listing.askingPrice ? "text-emerald-500" : "text-slate-400"}`}>
-                            {o.offerAmount >= o.listing.askingPrice ? "+" : ""}
-                            {Math.round(((o.offerAmount - o.listing.askingPrice) / o.listing.askingPrice) * 100)}% vs asking
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Counter / Final Price */}
-                      <td className="px-3 py-1 border-r border-gray-100 text-right">
-                        {hasCounter ? (
-                          <div>
-                            <div className={`font-black ${isAccepted ? "text-emerald-700" : "text-violet-700"}`}>
-                              {fmtKES(o.counterOfferAmount)}
-                            </div>
-                            <div className="mt-0.5 flex items-center justify-end gap-1">
-                              {isCounterActive && (
-                                <span className="inline-flex border border-violet-300 bg-violet-100 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-violet-700">
-                                  counter
-                                </span>
-                              )}
-                              {isAccepted && (
-                                <span className="inline-flex border border-emerald-300 bg-emerald-100 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-emerald-700">
-                                  final
-                                </span>
-                              )}
-                            </div>
-                            {counterDelta !== null && (
-                              <div className={`text-[10px] font-bold ${counterDelta > 0 ? "text-rose-500" : "text-emerald-500"}`}>
-                                {counterDelta > 0 ? "+" : ""}{counterDelta}% vs offer
-                              </div>
-                            )}
-                          </div>
-                        ) : isAccepted ? (
-                          <div>
-                            <div className="font-black text-emerald-700">{fmtKES(o.offerAmount)}</div>
-                            <span className="inline-flex border border-emerald-300 bg-emerald-100 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-emerald-700">final</span>
-                          </div>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
-                      </td>
-
-                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{o.validityDate ? new Date(o.validityDate).toLocaleDateString("en-KE") : "—"}</td>
-
-                      {/* Status badge */}
-                      <td className="px-3 py-1 border-r border-gray-100">
-                        <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${STATUS_BADGE[o.status] || "border-slate-200 bg-slate-100 text-slate-600"}`}>
-                          {isCounterActive ? "Counter Active" : o.status}
-                        </span>
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-3 py-1">
-                        <div className="inline-flex flex-wrap justify-end gap-1">
-                          <button onClick={() => printOffer(o)} title="Print" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                            <FaPrint size={9} />
-                          </button>
-
-                          {isCounterActive && (
-                            <>
-                              <button
-                                onClick={() => handleAcceptCounter(o)}
-                                disabled={saving}
-                                title="Accept Counter Offer"
-                                className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40"
-                              >
-                                <FaCheck size={9} /> Accept
-                              </button>
-                              <button
-                                onClick={() => handleRejectCounter(o)}
-                                disabled={saving}
-                                title="Reject Counter Offer"
-                                className="inline-flex items-center gap-1 border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-40"
-                              >
-                                <FaTimes size={9} /> Reject
-                              </button>
-                            </>
-                          )}
-
-                          {isAccepted && (
-                            <button
-                              onClick={() => handleOpenConvertDeal(o)}
-                              title="Convert to Deal"
-                              className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-[#F1F6F3] px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#B7C9C0]/40"
-                            >
-                              <FaHandshake size={9} /> Deal
-                            </button>
-                          )}
-
-                          {["pending", "negotiating"].includes(o.status) && (
-                            <button
-                              title={isCounterActive ? "Edit Counter / Change Status" : "Update Status"}
-                              onClick={() => { setShowStatus(o); setStatusForm({ ...EMPTY_STATUS, counterOfferAmount: o.counterOfferAmount || "" }); }}
-                              className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-                            >
-                              <FaEdit />
-                            </button>
-                          )}
-
-                          {["pending", "rejected", "expired", "withdrawn"].includes(o.status) && (
-                            <button onClick={() => handleDelete(o)} title="Delete" className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100">
-                              <FaTimes />
-                            </button>
-                          )}
+          <MilikTable
+            columns={[
+              { label: "Offer No." },
+              { label: "Property" },
+              { label: "Buyer" },
+              { label: "Agent" },
+              { label: "Offer Amount", align: "right" },
+              { label: "Counter / Final", align: "right" },
+              { label: "Validity" },
+              { label: "Status" },
+            ]}
+            rows={offers}
+            loading={isFetching && offers.length === 0}
+            empty="No offers found."
+            rowClassName={(o) => {
+              const isCounterActive = o.status === "negotiating" && !!o.counterOfferAmount;
+              return isCounterActive ? "!bg-[#F1F6F3]" : "";
+            }}
+            renderRow={(o) => {
+              const hasCounter = !!o.counterOfferAmount;
+              const isCounterActive = o.status === "negotiating" && hasCounter;
+              const isAccepted = o.status === "accepted";
+              const counterDelta = hasCounter ? Math.round(((o.counterOfferAmount - o.offerAmount) / o.offerAmount) * 100) : null;
+              return (
+                <>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-black text-slate-900">{o.offerNumber}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">{o.listing?.title || o.listing?.listingNumber || "—"}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">{o.buyer?.fullName || "—"}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">{o.agent?.fullName || <span className="italic text-slate-300">—</span>}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right">
+                    <div className="font-black text-slate-900">{fmtKES(o.offerAmount)}</div>
+                    {o.listing?.askingPrice > 0 && (
+                      <div className={`text-[10px] font-bold ${o.offerAmount < o.listing.askingPrice ? "text-rose-500" : o.offerAmount > o.listing.askingPrice ? "text-emerald-500" : "text-slate-400"}`}>
+                        {o.offerAmount >= o.listing.askingPrice ? "+" : ""}{Math.round(((o.offerAmount - o.listing.askingPrice) / o.listing.askingPrice) * 100)}% vs asking
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right">
+                    {hasCounter ? (
+                      <div>
+                        <div className={`font-black ${isAccepted ? "text-emerald-700" : "text-violet-700"}`}>{fmtKES(o.counterOfferAmount)}</div>
+                        <div className="mt-0.5 flex items-center justify-end gap-1">
+                          {isCounterActive && <span className="inline-flex border border-violet-300 bg-violet-100 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-violet-700">counter</span>}
+                          {isAccepted && <span className="inline-flex border border-emerald-300 bg-emerald-100 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-emerald-700">final</span>}
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        {counterDelta !== null && <div className={`text-[10px] font-bold ${counterDelta > 0 ? "text-rose-500" : "text-emerald-500"}`}>{counterDelta > 0 ? "+" : ""}{counterDelta}% vs offer</div>}
+                      </div>
+                    ) : isAccepted ? (
+                      <div>
+                        <div className="font-black text-emerald-700">{fmtKES(o.offerAmount)}</div>
+                        <span className="inline-flex border border-emerald-300 bg-emerald-100 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-emerald-700">final</span>
+                      </div>
+                    ) : <span className="text-slate-300">—</span>}
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">{o.validityDate ? new Date(o.validityDate).toLocaleDateString("en-KE") : "—"}</td>
+                  <td className="px-3 py-1.5">
+                    <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${STATUS_BADGE[o.status] || "border-slate-200 bg-slate-100 text-slate-600"}`}>
+                      {isCounterActive ? "Counter Active" : o.status}
+                    </span>
+                  </td>
+                </>
+              );
+            }}
+            renderActions={(o) => {
+              const hasCounter = !!o.counterOfferAmount;
+              const isCounterActive = o.status === "negotiating" && hasCounter;
+              const isAccepted = o.status === "accepted";
+              return (
+                <div className="inline-flex flex-wrap justify-end gap-1">
+                  <button onClick={() => printOffer(o)} title="Print" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                    <FaPrint size={9} />
+                  </button>
+                  {isCounterActive && (
+                    <>
+                      <button onClick={() => handleAcceptCounter(o)} disabled={saving} title="Accept Counter Offer" className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40">
+                        <FaCheck size={9} /> Accept
+                      </button>
+                      <button onClick={() => handleRejectCounter(o)} disabled={saving} title="Reject Counter Offer" className="inline-flex items-center gap-1 border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-40">
+                        <FaTimes size={9} /> Reject
+                      </button>
+                    </>
+                  )}
+                  {isAccepted && (
+                    <button onClick={() => handleOpenConvertDeal(o)} title="Convert to Deal" className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-[#F1F6F3] px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#B7C9C0]/40">
+                      <FaHandshake size={9} /> Deal
+                    </button>
+                  )}
+                  {["pending", "negotiating"].includes(o.status) && (
+                    <button title={isCounterActive ? "Edit Counter / Change Status" : "Update Status"} onClick={() => { setShowStatus(o); setStatusForm({ ...EMPTY_STATUS, counterOfferAmount: o.counterOfferAmount || "" }); }} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                      <FaEdit />
+                    </button>
+                  )}
+                  {["pending", "rejected", "expired", "withdrawn"].includes(o.status) && (
+                    <button onClick={() => handleDelete(o)} title="Delete" className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100">
+                      <FaTimes />
+                    </button>
+                  )}
+                </div>
+              );
+            }}
+          />
           <PaginationBar page={page} pages={totalPages} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} />
         </div>
       </div>

@@ -67,6 +67,7 @@ import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import Spinner from "../../components/common/Spinner";
+import MilikTable from "../../components/common/MilikTable";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
@@ -2244,361 +2245,160 @@ const confirmTransferUnit = useCallback(async () => {
         </div>
 
         {/* ===== TENANTS TABLE ===== */}
-        <div className="flex-1 min-h-0 overflow-auto px-2">
-          <table className="w-full border-collapse table-fixed">
-            <thead className="sticky top-0 z-10 shadow-sm">
-              <tr className={`${MILIK_GREEN} text-white text-[11px]`}>
-                <th className="w-9 px-2 py-1.5 text-center border-r border-white/10">
-                  <input
-                    type="checkbox"
-                    checked={selectAll}
-                    onChange={handleSelectAll}
-                    onClick={handleCheckboxClick}
-                    className="rounded border-gray-300 text-orange-600 focus:ring-[#0B3B2E]/20 cursor-pointer"
-                  />
-                </th>
-                <th className="w-7 px-1 py-1.5 border-r border-white/10" />
-                <th className="w-[82px] px-3 py-1.5 text-left font-bold border-r border-white/10">Code</th>
-                <th className="px-3 py-1.5 text-left font-bold border-r border-white/10">Tenant</th>
-                <th className="w-[72px] px-3 py-1.5 text-left font-bold border-r border-white/10">Unit</th>
-                {isTerminatedView ? (
-                  <>
-                    <th className="w-[108px] px-3 py-1.5 text-left font-bold border-r border-white/10">Terminated</th>
-                    <th className="w-[100px] px-3 py-1.5 text-left font-bold border-r border-white/10">Move-out</th>
-                    <th className="w-[110px] px-3 py-1.5 text-right font-bold border-r border-white/10">Final Balance</th>
-                    <th className="w-[110px] px-3 py-1.5 text-right font-bold border-r border-white/10">Deposit Held</th>
-                    <th className="w-[110px] px-3 py-1.5 text-center font-bold border-r border-white/10">Settlement</th>
-                    <th className="w-[130px] px-3 py-1.5 text-left font-bold">Held By</th>
-                  </>
-                ) : (
-                  <>
-                    <th className="w-[188px] px-3 py-1.5 text-left font-bold border-r border-white/10">Lease Period</th>
-                    <th className="w-[100px] px-3 py-1.5 text-right font-bold border-r border-white/10">Rent</th>
-                    <th className="w-[112px] px-3 py-1.5 text-right font-bold border-r border-white/10">Balance</th>
-                    <th className="w-[92px] px-3 py-1.5 text-center font-bold border-r border-white/10">Status</th>
-                    <th className="w-[155px] px-3 py-1.5 text-left font-bold">Contact</th>
-                  </>
-                )}
-              </tr>
-            </thead>
-
-            <tbody>
-              {currentTenants.length > 0 ? (
-                currentTenants.map((tenant, idx) => {
-                  const isFirstOfProperty =
-                    idx === 0 || currentTenants[idx - 1].propertyName !== tenant.propertyName;
-
-                  return (
-                    <React.Fragment key={tenant.id}>
-                      {isFirstOfProperty && (
-                        <tr>
-                          <td colSpan={isTerminatedView ? 11 : 10} className="px-3 pt-2.5 pb-1 bg-white">
-                            <div className="flex items-center gap-2.5">
-                              <div className="h-4 w-1 rounded-full bg-[#FF8C00] shrink-0" />
-                              <span className="text-[11px] font-black tracking-widest text-slate-800 uppercase leading-none">
-                                {toListingCaps(tenant.propertyName)}
-                              </span>
-                              <span className="rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-500 tabular-nums leading-none">
-                                {propertyTenantCounts[tenant.propertyName] || 0}
-                              </span>
-                            </div>
-                            <div className="mt-1.5 h-px bg-gradient-to-r from-[#FF8C00]/50 via-orange-200/60 to-transparent" />
-                          </td>
-                        </tr>
-                      )}
-
-                      <tr
-                        className={`border-b text-[11px] cursor-pointer transition-colors ${
-                          tenant.expiryWarning?.hasWarning ? "border-red-200" : "border-gray-100"
-                        } ${
-                          selectedTenants.includes(tenant.id)
-                            ? "bg-emerald-50 shadow-[inset_3px_0_0_0_#0B3B2E]"
-                            : tenant.expiryWarning?.hasWarning
-                            ? "bg-red-50/60 hover:bg-red-100/60"
-                            : idx % 2 === 0
-                            ? "bg-white hover:bg-blue-50/40"
-                            : "bg-slate-50/60 hover:bg-blue-50/40"
-                        }`}
-                        onClick={() => handleSelectTenant(tenant.id)}
-                      >
-                        <td className="w-8 px-2 py-1.5 text-center border-r border-gray-100" onClick={handleCheckboxClick}>
-                          <input
-                            type="checkbox"
-                            checked={selectedTenants.includes(tenant.id)}
-                            onChange={() => handleSelectTenant(tenant.id)}
-                            onClick={handleCheckboxClick}
-                            className="rounded border-gray-300 text-orange-600 focus:ring-[#0B3B2E]/20 cursor-pointer"
-                          />
-                        </td>
-                        <td
-                          className="w-6 px-1 py-1.5 text-center border-r border-gray-100 cursor-pointer text-slate-300 transition hover:text-slate-600"
-                          onClick={(e) => { e.stopPropagation(); toggleTenantExpand(tenant.id); }}
-                        >
-                          {expandedTenants.includes(tenant.id) ? <FaChevronDown size={9} /> : <FaChevronRight size={9} />}
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                          <span className="font-mono text-[10px] text-slate-500 tracking-wide truncate block">{toListingCaps(tenant.tenantCode)}</span>
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                          <div className="font-semibold text-slate-900 leading-tight truncate" title={toListingCaps(tenant.tenantName)}>{toListingCaps(tenant.tenantName)}</div>
-                          {tenant.expiryWarning?.hasWarning && (
-                            <div className="mt-0.5 text-[10px] font-semibold text-red-600 leading-tight truncate">{tenant.expiryWarning.summary}</div>
-                          )}
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                          <span className="font-medium text-slate-700 truncate block">{toListingCaps(tenant.unitNumber)}</span>
-                        </td>
-                        {isTerminatedView ? (
-                          <>
-                            <td className="px-3 py-1.5 text-slate-700 border-r border-gray-100 overflow-hidden"><span className="truncate block">{tenant.terminationDate}</span></td>
-                            <td className="px-3 py-1.5 text-slate-700 border-r border-gray-100 overflow-hidden"><span className="truncate block">{tenant.moveOutDate}</span></td>
-                            <td className="px-3 py-1.5 text-right border-r border-gray-100 whitespace-nowrap">
-                              {tenant.balance < -0.009 ? (
-                                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                                  CR&nbsp;{Math.abs(tenant.balance).toLocaleString("en-KE", { minimumFractionDigits: 2 })}
-                                </span>
-                              ) : tenant.balance > 0.009 ? (
-                                <span className="font-bold text-red-600">KES {tenant.balance.toLocaleString()}</span>
-                              ) : (
-                                <span className="text-slate-300">—</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-1.5 text-right font-semibold text-slate-700 border-r border-gray-100 whitespace-nowrap">
-                              Ksh {tenant.depositHeld.toLocaleString()}
-                            </td>
-                            <td className="px-3 py-1.5 text-center border-r border-gray-100">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                                tenant.settlementStatus === "SETTLED" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                : tenant.settlementStatus === "REFUND_DUE" ? "bg-blue-50 text-blue-700 border-blue-200"
-                                : tenant.settlementStatus === "OWES_BALANCE" ? "bg-red-50 text-red-700 border-red-200"
-                                : "bg-amber-50 text-amber-700 border-amber-200"
-                              }`}>
-                                {tenant.settlementStatus.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}
-                              </span>
-                            </td>
-                            <td className="px-3 py-1 text-slate-700">{tenant.depositHeldBy}</td>
-                          </>
-                        ) : (
-                          <>
-                            <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap">
-                              <span className="text-slate-600">{tenant.startDate}</span>
-                              <span className="text-slate-300 mx-1.5">→</span>
-                              {tenant.endDate === "-"
-                                ? <span className="text-slate-400 italic text-[10px]">open</span>
-                                : <span className={tenant.expiryWarning?.hasWarning ? "font-semibold text-red-600" : "text-slate-600"}>{tenant.endDate}</span>
-                              }
-                            </td>
-                            <td className="px-3 py-1.5 text-right font-semibold text-slate-700 border-r border-gray-100 whitespace-nowrap">
-                              {tenant.rent}
-                            </td>
-                            <td className="px-3 py-1.5 text-right border-r border-gray-100 whitespace-nowrap">
-                              {tenant.balance < -0.009 ? (
-                                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                                  CR&nbsp;{Math.abs(tenant.balance).toLocaleString("en-KE", { minimumFractionDigits: 2 })}
-                                </span>
-                              ) : tenant.balance > 0.009 ? (
-                                <span className="font-bold text-red-600">KES {tenant.balance.toLocaleString()}</span>
-                              ) : (
-                                <span className="text-slate-300">—</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-1.5 text-center border-r border-gray-100">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                                tenant.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                : tenant.status === "terminated" ? "bg-red-50 text-red-700 border-red-200"
-                                : "bg-slate-100 text-slate-600 border-slate-200"
-                              }`}>
-                                {tenant.status}
-                              </span>
-                              {tenant.expiryWarning?.hasWarning && (
-                                <div className="mt-0.5">
-                                  <span className="inline-flex items-center rounded-full bg-red-50 border border-red-200 px-1.5 py-0.5 text-[9px] font-bold text-red-600">⚠ Expiring</span>
-                                </div>
-                              )}
-                            </td>
-                            <td className="px-3 py-1 overflow-hidden">
-                              {tenant.phone && tenant.phone !== "-" && (
-                                <div className="text-[11px] font-medium text-slate-700 leading-tight truncate">{tenant.phone}</div>
-                              )}
-                              {tenant.email && tenant.email !== "-" ? (
-                                <a
-                                  href={`mailto:${tenant.email}`}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="block text-[10px] text-blue-500 hover:text-blue-700 hover:underline truncate leading-tight mt-0.5"
-                                  title={tenant.email}
-                                >
-                                  {tenant.email}
-                                </a>
-                              ) : (
-                                !tenant.phone || tenant.phone === "-" ? <span className="text-slate-300">—</span> : null
-                              )}
-                            </td>
-                          </>
-                        )}
-                      </tr>
-
-                      {expandedTenants.includes(tenant.id) && (
-                        <tr className="bg-slate-50/80 border-b border-gray-100">
-                          <td colSpan={isTerminatedView ? 11 : 10} className="px-3 py-2">
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
-                              <div>
-                                <h4 className="mb-2 border-b border-slate-200 pb-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                                  Tenant Details
-                                </h4>
-                                <div className="space-y-1 text-xs">
-                                  <div>
-                                    <span className="font-bold text-gray-700 block text-xs">Email:</span>
-                                    <p className="text-gray-600 text-xs">{tenant.email}</p>
-                                  </div>
-                                  <div>
-                                    <span className="font-bold text-gray-700 block text-xs">Phone:</span>
-                                    <p className="text-gray-600 text-xs">{tenant.phone}</p>
-                                  </div>
-                                  <div>
-                                    <span className="font-bold text-gray-700 block text-xs">Property:</span>
-                                    <p className="text-gray-600 text-xs">{toListingCaps(tenant.propertyName)}</p>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div>
-                                <h4 className="mb-2 border-b border-slate-200 pb-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                                  Billing Info
-                                </h4>
-                                <div className="space-y-1 text-xs">
-                                  <div>
-                                    <span className="font-bold text-gray-700 block text-xs">Monthly Rent:</span>
-                                    <p className="text-gray-600 font-bold">{tenant.rent}</p>
-                                  </div>
-                                  <div>
-                                    <span className="font-bold text-gray-700 block text-xs">Balance:</span>
-                                    {tenant.balance < -0.009 ? (
-                                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
-                                        CR&nbsp;{Math.abs(tenant.balance).toLocaleString("en-KE", { minimumFractionDigits: 2 })}
-                                      </span>
-                                    ) : (
-                                      <p className={`font-bold ${tenant.balance > 0 ? "text-red-600" : "text-gray-400"}`}>
-                                        {tenant.balance > 0 ? `KES ${tenant.balance.toLocaleString()}` : "—"}
-                                      </p>
-                                    )}
-                                  </div>
-                                  <div>
-                                    <span className="font-bold text-gray-700 block text-xs">Status:</span>
-                                    <p
-                                      className={`text-xs font-bold ${
-                                        tenant.status === "any"
-                                          ? "text-green-700"
-                                          : "text-gray-700"
-                                      }`}
-                                    >
-                                      {tenant.status.toUpperCase()}
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div>
-                                <h4 className="mb-2 border-b border-slate-200 pb-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                                  Lease Details
-                                </h4>
-                                <div className="space-y-1 text-xs">
-                                  <div>
-                                    <span className="font-bold text-gray-700 block text-xs">Unit:</span>
-                                    <p className="text-gray-600 text-xs">{toListingCaps(tenant.unitNumber)}</p>
-                                  </div>
-                                  <div>
-                                    <span className="font-bold text-gray-700 block text-xs">Lease Start Date:</span>
-                                    <p className="text-gray-600 font-bold text-xs">{tenant.startDate}</p>
-                                  </div>
-                                  <div>
-                                    <span className="font-bold text-gray-700 block text-xs">Lease End Date:</span>
-                                    <p className={`${tenant.expiryWarning?.hasWarning ? "text-red-700" : "text-gray-600"} font-bold text-xs`}>{tenant.endDate}</p>
-                                  </div>
-                                  {tenant.expiryWarning?.hasWarning && (
-                                    <div className="rounded-lg border border-red-200 bg-red-50 px-2 py-2">
-                                      <span className="font-bold text-red-700 block text-xs">Expiry Warning:</span>
-                                      <p className="text-red-700 text-xs font-semibold">{tenant.expiryWarning.summary}</p>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              <div>
-                                <h4 className="mb-2 border-b border-slate-200 pb-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                                  Actions
-                                </h4>
-                                <div className="flex flex-col gap-1">
-                                  <button
-                                    onClick={() => {
-                                      const firstName = (tenant.tenantName || "Tenant").split(" ")[0];
-                                      const tabTitle = `${firstName}-${tenant.tenantCode || "TT0000"}`;
-                                      navigate(`/tenant/${tenant.id}/statement`, { state: { tabTitle } });
-                                    }}
-                                    className="rounded px-2 py-1 text-xs font-semibold text-white transition-colors bg-[#0B3B2E] hover:bg-[#0A3127]"
-                                  >
-                                    View Statement
-                                  </button>
-                                  {isTerminatedView && (
-                                    <>
-                                      <button
-                                        onClick={() => navigate(`/invoices/rental/${tenant.id}`, { state: { openSingleBooking: true } })}
-                                        className="rounded px-2 py-1 text-xs font-semibold text-white transition-colors bg-emerald-600 hover:bg-emerald-700"
-                                      >
-                                        Final Billing
-                                      </button>
-                                      <button
-                                        onClick={() => openDepositSettlementModal(tenant.id)}
-                                        className="rounded px-2 py-1 text-xs font-semibold text-white transition-colors bg-amber-600 hover:bg-amber-700"
-                                      >
-                                        Deposit Settlement
-                                      </button>
-                                      <button
-                                        onClick={() => handleMoveOutInspection(tenant.id)}
-                                        className="rounded px-2 py-1 text-xs font-semibold text-white transition-colors bg-slate-600 hover:bg-slate-700"
-                                      >
-                                        Move-out Inspection
-                                      </button>
-                                    </>
-                                  )}
-                                  {canDeleteTenant && (
-                                  <button
-                                  onClick={() => {
-                                    setSelectedTenants([tenant.id]);
-                                    setShowDeleteModal(true);
-                                  }}
-                                  disabled={!tenant.canDelete}
-                                  title={tenant.canDelete ? "Delete unused tenant record" : tenant.deleteBlockedReason}
-                                  className={`px-2 py-1 text-white font-bold rounded text-xs transition-colors ${tenant.canDelete ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}
-                                  >
-                                    🗑️ Delete
-                                  </button>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td colSpan={isTerminatedView ? 11 : 10} className="px-3 py-8 text-center text-gray-600 font-semibold text-xs">
-                    {isFetchingTenants ? (
-                      <div className="flex items-center justify-center gap-2 text-gray-400">
-                        <Spinner size="sm" />
-                        <span>Loading tenants…</span>
-                      </div>
-                    ) : (
-                      isTerminatedView ? "No terminated tenants found. Try adjusting filters." : "No tenants found. Try adjusting filters or create a new tenant."
-                    )}
+        <MilikTable
+          columns={[
+            { label: "Code", width: "82px" },
+            { label: "Tenant" },
+            { label: "Unit", width: "72px" },
+            ...(isTerminatedView ? [
+              { label: "Terminated", width: "108px" },
+              { label: "Move-out", width: "100px" },
+              { label: "Final Balance", align: "right", width: "110px" },
+              { label: "Deposit Held", align: "right", width: "110px" },
+              { label: "Settlement", align: "center", width: "110px" },
+              { label: "Held By", width: "130px" },
+            ] : [
+              { label: "Lease Period", width: "188px" },
+              { label: "Rent", align: "right", width: "100px" },
+              { label: "Balance", align: "right", width: "112px" },
+              { label: "Status", align: "center", width: "92px" },
+              { label: "Contact", width: "155px" },
+            ]),
+          ]}
+          rows={currentTenants}
+          rowKey="id"
+          loading={isFetchingTenants && currentTenants.length === 0}
+          empty={isTerminatedView ? "No terminated tenants found. Try adjusting filters." : "No tenants found. Try adjusting filters or create a new tenant."}
+          groupBy={(tenant) => toListingCaps(tenant.propertyName)}
+          checkboxes
+          allChecked={selectAll}
+          someChecked={selectedTenants.length > 0 && !selectAll}
+          onCheckAll={handleSelectAll}
+          isChecked={(tenant) => selectedTenants.includes(tenant.id)}
+          onCheckRow={(tenant) => handleSelectTenant(tenant.id)}
+          onRowClick={(tenant) => handleSelectTenant(tenant.id)}
+          isSelected={(tenant) => selectedTenants.includes(tenant.id)}
+          rowClassName={(tenant) => tenant.expiryWarning?.hasWarning ? "border-red-200 bg-red-50/60 hover:bg-red-100/60" : ""}
+          renderRow={(tenant) => (
+            <>
+              <td className="px-3 py-1.5 border-r border-gray-100 overflow-hidden">
+                <span className="font-mono text-[10px] text-slate-500 tracking-wide truncate block">{toListingCaps(tenant.tenantCode)}</span>
+              </td>
+              <td className="px-3 py-1.5 border-r border-gray-100 overflow-hidden">
+                <div className="font-semibold text-slate-900 leading-tight truncate" title={toListingCaps(tenant.tenantName)}>{toListingCaps(tenant.tenantName)}</div>
+                {tenant.expiryWarning?.hasWarning && <div className="text-[10px] font-semibold text-red-600 leading-tight truncate">{tenant.expiryWarning.summary}</div>}
+              </td>
+              <td className="px-3 py-1.5 border-r border-gray-100 overflow-hidden">
+                <span className="font-medium text-slate-700 truncate block">{toListingCaps(tenant.unitNumber)}</span>
+              </td>
+              {isTerminatedView ? (
+                <>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700 overflow-hidden"><span className="truncate block">{tenant.terminationDate}</span></td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700 overflow-hidden"><span className="truncate block">{tenant.moveOutDate}</span></td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right whitespace-nowrap">
+                    {tenant.balance < -0.009 ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">CR&nbsp;{Math.abs(tenant.balance).toLocaleString("en-KE", { minimumFractionDigits: 2 })}</span>
+                    ) : tenant.balance > 0.009 ? (
+                      <span className="font-bold text-red-600">KES {tenant.balance.toLocaleString()}</span>
+                    ) : <span className="text-slate-300">—</span>}
                   </td>
-                </tr>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold text-slate-700 whitespace-nowrap">Ksh {tenant.depositHeld.toLocaleString()}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-center">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                      tenant.settlementStatus === "SETTLED" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : tenant.settlementStatus === "REFUND_DUE" ? "bg-blue-50 text-blue-700 border-blue-200"
+                      : tenant.settlementStatus === "OWES_BALANCE" ? "bg-red-50 text-red-700 border-red-200"
+                      : "bg-amber-50 text-amber-700 border-amber-200"
+                    }`}>{tenant.settlementStatus.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}</span>
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">{tenant.depositHeldBy}</td>
+                </>
+              ) : (
+                <>
+                  <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap">
+                    <span className="text-slate-600">{tenant.startDate}</span>
+                    <span className="text-slate-300 mx-1.5">→</span>
+                    {tenant.endDate === "-" ? <span className="text-slate-400 italic text-[10px]">open</span> : <span className={tenant.expiryWarning?.hasWarning ? "font-semibold text-red-600" : "text-slate-600"}>{tenant.endDate}</span>}
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold text-slate-700 whitespace-nowrap">{tenant.rent}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right whitespace-nowrap">
+                    {tenant.balance < -0.009 ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">CR&nbsp;{Math.abs(tenant.balance).toLocaleString("en-KE", { minimumFractionDigits: 2 })}</span>
+                    ) : tenant.balance > 0.009 ? (
+                      <span className="font-bold text-red-600">KES {tenant.balance.toLocaleString()}</span>
+                    ) : <span className="text-slate-300">—</span>}
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-center">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                      tenant.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : tenant.status === "terminated" ? "bg-red-50 text-red-700 border-red-200"
+                      : "bg-slate-100 text-slate-600 border-slate-200"
+                    }`}>{tenant.status}</span>
+                    {tenant.expiryWarning?.hasWarning && <div className="mt-0.5"><span className="inline-flex items-center rounded-full bg-red-50 border border-red-200 px-1.5 py-0.5 text-[9px] font-bold text-red-600">Expiring</span></div>}
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 overflow-hidden">
+                    {tenant.phone && tenant.phone !== "-" && <div className="text-[11px] font-medium text-slate-700 leading-tight truncate">{tenant.phone}</div>}
+                    {tenant.email && tenant.email !== "-" ? (
+                      <a href={`mailto:${tenant.email}`} onClick={(e) => e.stopPropagation()} className="block text-[10px] text-blue-500 hover:text-blue-700 hover:underline truncate leading-tight mt-0.5" title={tenant.email}>{tenant.email}</a>
+                    ) : (!tenant.phone || tenant.phone === "-" ? <span className="text-slate-300">—</span> : null)}
+                  </td>
+                </>
               )}
-            </tbody>
-          </table>
-        </div>
+            </>
+          )}
+          renderExpanded={(tenant) => (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
+              <div>
+                <h4 className="mb-2 border-b border-slate-200 pb-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">Tenant Details</h4>
+                <div className="space-y-1 text-xs">
+                  <div><span className="font-bold text-gray-700 block text-xs">Email:</span><p className="text-gray-600 text-xs">{tenant.email}</p></div>
+                  <div><span className="font-bold text-gray-700 block text-xs">Phone:</span><p className="text-gray-600 text-xs">{tenant.phone}</p></div>
+                  <div><span className="font-bold text-gray-700 block text-xs">Property:</span><p className="text-gray-600 text-xs">{toListingCaps(tenant.propertyName)}</p></div>
+                </div>
+              </div>
+              <div>
+                <h4 className="mb-2 border-b border-slate-200 pb-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">Billing Info</h4>
+                <div className="space-y-1 text-xs">
+                  <div><span className="font-bold text-gray-700 block text-xs">Monthly Rent:</span><p className="text-gray-600 font-bold">{tenant.rent}</p></div>
+                  <div>
+                    <span className="font-bold text-gray-700 block text-xs">Balance:</span>
+                    {tenant.balance < -0.009 ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">CR&nbsp;{Math.abs(tenant.balance).toLocaleString("en-KE", { minimumFractionDigits: 2 })}</span>
+                    ) : <p className={`font-bold ${tenant.balance > 0 ? "text-red-600" : "text-gray-400"}`}>{tenant.balance > 0 ? `KES ${tenant.balance.toLocaleString()}` : "—"}</p>}
+                  </div>
+                  <div><span className="font-bold text-gray-700 block text-xs">Status:</span><p className={`text-xs font-bold ${tenant.status === "any" ? "text-green-700" : "text-gray-700"}`}>{tenant.status.toUpperCase()}</p></div>
+                </div>
+              </div>
+              <div>
+                <h4 className="mb-2 border-b border-slate-200 pb-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">Lease Details</h4>
+                <div className="space-y-1 text-xs">
+                  <div><span className="font-bold text-gray-700 block text-xs">Unit:</span><p className="text-gray-600 text-xs">{toListingCaps(tenant.unitNumber)}</p></div>
+                  <div><span className="font-bold text-gray-700 block text-xs">Lease Start Date:</span><p className="text-gray-600 font-bold text-xs">{tenant.startDate}</p></div>
+                  <div><span className="font-bold text-gray-700 block text-xs">Lease End Date:</span><p className={`${tenant.expiryWarning?.hasWarning ? "text-red-700" : "text-gray-600"} font-bold text-xs`}>{tenant.endDate}</p></div>
+                  {tenant.expiryWarning?.hasWarning && <div className="rounded-lg border border-red-200 bg-red-50 px-2 py-2"><span className="font-bold text-red-700 block text-xs">Expiry Warning:</span><p className="text-red-700 text-xs font-semibold">{tenant.expiryWarning.summary}</p></div>}
+                </div>
+              </div>
+              <div>
+                <h4 className="mb-2 border-b border-slate-200 pb-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">Actions</h4>
+                <div className="flex flex-col gap-1">
+                  <button onClick={() => { const firstName = (tenant.tenantName || "Tenant").split(" ")[0]; navigate(`/tenant/${tenant.id}/statement`, { state: { tabTitle: `${firstName}-${tenant.tenantCode || "TT0000"}` } }); }} className="rounded px-2 py-1 text-xs font-semibold text-white transition-colors bg-[#0B3B2E] hover:bg-[#0A3127]">View Statement</button>
+                  {isTerminatedView && (
+                    <>
+                      <button onClick={() => navigate(`/invoices/rental/${tenant.id}`, { state: { openSingleBooking: true } })} className="rounded px-2 py-1 text-xs font-semibold text-white transition-colors bg-emerald-600 hover:bg-emerald-700">Final Billing</button>
+                      <button onClick={() => openDepositSettlementModal(tenant.id)} className="rounded px-2 py-1 text-xs font-semibold text-white transition-colors bg-amber-600 hover:bg-amber-700">Deposit Settlement</button>
+                      <button onClick={() => handleMoveOutInspection(tenant.id)} className="rounded px-2 py-1 text-xs font-semibold text-white transition-colors bg-slate-600 hover:bg-slate-700">Move-out Inspection</button>
+                    </>
+                  )}
+                  {canDeleteTenant && (
+                    <button onClick={() => { setSelectedTenants([tenant.id]); setShowDeleteModal(true); }} disabled={!tenant.canDelete} title={tenant.canDelete ? "Delete unused tenant record" : tenant.deleteBlockedReason} className={`px-2 py-1 text-white font-bold rounded text-xs transition-colors ${tenant.canDelete ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}>
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        />
 
         {/* ===== COMPACT PAGINATION FOOTER ===== */}
         <div className="flex-shrink-0 sticky bottom-0 z-20 bg-white border-t border-gray-200 px-2 py-1 flex items-center justify-between">

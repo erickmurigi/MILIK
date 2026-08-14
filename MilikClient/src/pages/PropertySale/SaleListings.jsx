@@ -19,6 +19,7 @@ import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
 import { inputClass, labelClass } from "../../utils/formStyles";
 import StatusBadge from "../../components/common/StatusBadge";
+import MilikTable from "../../components/common/MilikTable";
 
 // Normalise image URLs — strips absolute origin from legacy URLs so relative
 // path proxy (/uploads/...) works in both dev and production.
@@ -281,32 +282,30 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
   const resetFilters = () => { setSearch(""); setStatusFilt(""); setTypeFilt(""); setAgentFilt(""); setPage(1); };
 
   return (
-    <PropertySaleShell
-      title="Sale Listings"
-      subtitle={`${total} listing(s)`}
-      action={
-        <>
-          <button
-            type="button"
-            onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] })}
-            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-          >
-            <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
-          </button>
-          <button
-            type="button"
-            onClick={openCreate}
-            className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
-          >
-            <FaPlus size={9} /> New Listing
-          </button>
-        </>
-      }
-    >
+    <PropertySaleShell>
       {/* Filter bar */}
       <SaleFilterBar
+        leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} listing{total !== 1 ? "s" : ""}</span>}
         onReset={resetFilters}
         activeCount={[search, statusFilt, typeFilt, agentFilt].filter(Boolean).length}
+        trailing={
+          <>
+            <button
+              type="button"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] })}
+              className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+            >
+              <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
+            </button>
+            <button
+              type="button"
+              onClick={openCreate}
+              className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
+            >
+              <FaPlus size={9} /> New Listing
+            </button>
+          </>
+        }
       >
         <FilterSearch
           value={search}
@@ -321,105 +320,74 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
       {/* Table + images panel */}
       <div className="relative flex flex-col flex-1 min-h-0 overflow-hidden">
         <div className={`flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm transition-[margin] duration-200 ${selected ? "mr-[360px]" : ""}`}>
-          <div className="flex-1 min-h-0 overflow-auto">
-            <table className="w-full min-w-[680px] text-xs border-collapse">
-              <thead>
-                <tr className="bg-[#0B3B2E]">
-                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Listing No.</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Title / Type</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Location</th>
-                  <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-white">Asking Price</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Agent</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Status</th>
-                  <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-white">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr><td colSpan={7} className="px-3 py-10 text-center text-xs font-semibold text-slate-400">Loading listings…</td></tr>
-                ) : listings.length === 0 ? (
-                  <tr><td colSpan={7} className="px-3 py-10 text-center text-xs font-semibold text-slate-400">No listings found. Create your first listing.</td></tr>
-                ) : listings.map((row) => {
-                  const isSelected = selected?._id === row._id;
-                  return (
-                    <tr
-                      key={row._id}
-                      onClick={() => setSelected(isSelected ? null : row)}
-                      className={`border-b border-slate-100 cursor-pointer ${isSelected ? "bg-[#F1F6F3]" : "hover:bg-slate-50"}`}
-                    >
-                      <td className="px-3 py-2 font-mono font-bold text-[#0B3B2E]">{row.listingNumber}</td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-start gap-1.5">
-                          <div className="min-w-0">
-                            <div className="font-semibold text-slate-900 max-w-[180px] truncate">{row.title}</div>
-                            <div className="text-[10px] capitalize text-slate-400">{row.propertyType}</div>
-                          </div>
-                          {row.images?.length > 0 && (
-                            <span className="mt-0.5 flex-shrink-0 inline-flex items-center gap-0.5 border border-[#B7C9C0] bg-[#F1F6F3] px-1.5 py-0.5 text-[9px] font-bold text-[#0B3B2E]">
-                              <FaCamera size={7} /> {row.images.length}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 text-slate-600">
-                        {[row.town, row.county].filter(Boolean).join(", ") || row.location || "—"}
-                      </td>
-                      <td className="px-3 py-2 text-right font-bold text-slate-900">{fmtKES(row.askingPrice)}</td>
-                      <td className="px-3 py-2 text-slate-600">
-                        {row.assignedAgent?.fullName || <span className="italic text-slate-400">Unassigned</span>}
-                      </td>
-                      <td className="px-3 py-2">
-                        <StatusBadge status={row.status} map={LISTING_STATUS_MAP} />
-                      </td>
-                      <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="inline-flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => printListing(row)}
-                            className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-                          >
-                            <FaPrint className="text-[9px]" /> Print
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openEdit(row)}
-                            className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-                          >
-                            <FaEdit className="text-[9px]" /> Edit
-                          </button>
-                          {row.status === "available" && (
-                            <button
-                              type="button"
-                              onClick={() => handleStatusChange(row, "reserved")}
-                              className="border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700 hover:bg-amber-100"
-                            >
-                              Reserve
-                            </button>
-                          )}
-                          {row.status === "reserved" && (
-                            <button
-                              type="button"
-                              onClick={() => handleStatusChange(row, "available")}
-                              className="border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-bold text-slate-600 hover:bg-slate-100"
-                            >
-                              Release
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(row)}
-                            className="border border-red-200 bg-white px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-50"
-                          >
-                            <FaTrash className="text-[9px]" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <MilikTable
+            columns={[
+              { label: "Listing No." },
+              { label: "Title" },
+              { label: "Type" },
+              { label: "Location" },
+              { label: "Asking Price", align: "right" },
+              { label: "Agent" },
+              { label: "Status" },
+            ]}
+            rows={listings}
+            loading={loading}
+            empty="No listings found. Create your first listing."
+            minWidth={720}
+            onRowClick={(row) => setSelected(selected?._id === row._id ? null : row)}
+            isSelected={(row) => selected?._id === row._id}
+            renderRow={(row) => (
+              <>
+                <td className="px-3 py-1.5 font-mono font-bold text-[#0B3B2E] border-r border-gray-100">{row.listingNumber}</td>
+                <td className="px-3 py-1.5 border-r border-gray-100">
+                  <div className="flex items-center gap-1.5 max-w-[200px]">
+                    <span className="truncate font-semibold text-slate-900">{row.title}</span>
+                    {row.images?.length > 0 && (
+                      <span className="flex-shrink-0 inline-flex items-center gap-0.5 border border-[#B7C9C0] bg-[#F1F6F3] px-1 py-0 text-[9px] font-bold text-[#0B3B2E]">
+                        <FaCamera size={7} /> {row.images.length}
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="px-3 py-1.5 border-r border-gray-100">
+                  <span className="capitalize text-slate-500">{(row.propertyType || "—").replace(/_/g, " ")}</span>
+                </td>
+                <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600 max-w-[140px] truncate">
+                  {[row.town, row.county].filter(Boolean).join(", ") || row.location || "—"}
+                </td>
+                <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold tabular-nums text-slate-900">{fmtKES(row.askingPrice)}</td>
+                <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">
+                  {row.assignedAgent?.fullName || <span className="italic text-slate-400">Unassigned</span>}
+                </td>
+                <td className="px-3 py-1.5">
+                  <StatusBadge status={row.status} map={LISTING_STATUS_MAP} />
+                </td>
+              </>
+            )}
+            renderActions={(row) => (
+              <div className="inline-flex items-center gap-1">
+                <button type="button" onClick={() => printListing(row)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                  <FaPrint className="text-[9px]" /> Print
+                </button>
+                <button type="button" onClick={() => openEdit(row)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                  <FaEdit className="text-[9px]" /> Edit
+                </button>
+                {row.status === "available" && (
+                  <button type="button" onClick={() => handleStatusChange(row, "reserved")} className="border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 hover:bg-amber-100">
+                    Reserve
+                  </button>
+                )}
+                {row.status === "reserved" && (
+                  <button type="button" onClick={() => handleStatusChange(row, "available")} className="border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-100">
+                    Release
+                  </button>
+                )}
+                <button type="button" onClick={() => handleDelete(row)} className="border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold text-red-600 hover:bg-red-50">
+                  <FaTrash className="text-[9px]" />
+                </button>
+              </div>
+            )}
+          />
 
           <PaginationBar page={page} pages={totalPages} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} />
         </div>
@@ -431,7 +399,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
 
         {/* Images Detail Panel */}
         {selected && (
-          <div className="absolute right-0 top-0 bottom-0 w-[360px] flex flex-col bg-white border-l border-slate-200 shadow-xl z-10 overflow-hidden">
+          <div className="absolute right-0 top-0 bottom-0 w-full sm:w-[360px] flex flex-col bg-white border-l border-slate-200 shadow-xl z-10 overflow-hidden">
             {/* Header */}
             <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-3 text-white">
               <div className="flex items-start justify-between gap-2">

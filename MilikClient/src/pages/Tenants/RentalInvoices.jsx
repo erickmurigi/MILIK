@@ -53,6 +53,7 @@ import {
 import { hasCompanyPermission } from "../../utils/permissions";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import MilikTable from "../../components/common/MilikTable";
 import SingleBookingModal from "./SingleBookingModal";
 import { useInvoicePricing } from "./useInvoicePricing";
 import {
@@ -2573,62 +2574,68 @@ const createInvoiceForTenant = async (
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
-              <table className="w-full min-w-[1200px] text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className={`${MILIK_GREEN} text-white`}>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">
-                      <input type="checkbox" checked={currentPageInvoices.length > 0 && selectAll} onChange={toggleSelectAll} />
-                    </th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Invoice #</th>
-                    {!tenantId && <th className="px-3 py-1 text-left font-bold border-r border-white/10">Tenant</th>}
-                    {!tenantId && <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>}
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Unit</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Description</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
-                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Booking / Invoice Date</th>
-                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Due Date</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Paid</th>
-                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
-                    <th className="px-3 py-1 text-right font-bold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {totalFilteredCount === 0 ? (
-                    <tr>
-                      <td colSpan={tenantId ? "11" : "13"} className="px-4 py-8 text-center text-gray-500">
-                        <FaFileInvoice className="mb-2 inline-block text-4xl text-gray-300" />
-                        <p className="mt-1 text-sm font-semibold">No invoices found</p>
-                        <p className="mt-1 text-xs text-gray-400">
-                          {tenantId
-                            ? "Create invoices from billing schedule"
-                            : "Create invoices and apply filters to see results"}
-                        </p>
-                      </td>
-                    </tr>
-                  ) : (
-                    currentPageInvoices.map((invoice, idx) => (
-                      <InvoiceTableRow
-                        key={invoice.key}
-                        invoice={invoice}
-                        isSelected={selectedInvoices.includes(invoice.key)}
-                        idx={idx}
-                        showTenantColumns={!tenantId}
-                        canExportInvoice={canExportInvoice}
-                        canDeleteInvoice={canDeleteInvoice}
-                        onView={handleViewInvoice}
-                        onPrint={handlePrintInvoice}
-                        onDownload={handleDownloadInvoice}
-                        onDelete={handleDeleteSingle}
-                        onSelect={toggleRowSelection}
-                        onViewStatement={handleViewTenantStatement}
-                      />
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <MilikTable
+              columns={[
+                { label: "Invoice #" },
+                ...(!tenantId ? [{ label: "Tenant" }, { label: "Property" }] : []),
+                { label: "Unit" },
+                { label: "Description" },
+                { label: "Type" },
+                { label: "Booking / Invoice Date", align: "center" },
+                { label: "Due Date", align: "center" },
+                { label: "Amount", align: "right" },
+                { label: "Paid", align: "right" },
+                { label: "Status", align: "center" },
+              ]}
+              rows={currentPageInvoices}
+              rowKey="key"
+              empty={tenantId ? "Create invoices from billing schedule." : "Create invoices and apply filters to see results."}
+              minWidth={1200}
+              checkboxes
+              allChecked={currentPageInvoices.length > 0 && selectAll}
+              someChecked={selectedInvoices.length > 0 && !selectAll}
+              onCheckAll={toggleSelectAll}
+              isChecked={(invoice) => selectedInvoices.includes(invoice.key)}
+              onCheckRow={(invoice) => toggleRowSelection(invoice.key)}
+              onRowClick={(invoice) => toggleRowSelection(invoice.key)}
+              isSelected={(invoice) => selectedInvoices.includes(invoice.key)}
+              renderRow={(invoice) => (
+                <>
+                  <td className="px-3 py-1.5 border-r border-gray-100">
+                    <button type="button" className="font-bold text-blue-700 hover:text-blue-900 hover:underline focus:outline-none" onClick={(e) => { e.stopPropagation(); handleViewInvoice(invoice); }}>{invoice.id}</button>
+                  </td>
+                  {!tenantId && <td className="px-3 py-1.5 border-r border-gray-100 font-bold text-slate-900">{invoice.tenantName}</td>}
+                  {!tenantId && <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{invoice.propertyName}</td>}
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{invoice.unitName}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-orange-700">{invoice.invoiceDescription || invoice.period}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100">
+                    <span className="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-700">{invoice.chargeTypeLabel || getInvoiceChargeTypeLabel(invoice.chargeType)}</span>
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-center text-gray-700">{invoice.invoiceDateLabel}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-center text-gray-700">{invoice.dueDateLabel}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-slate-900">KES {Number(invoice.amount || 0).toLocaleString()}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold text-emerald-700">
+                    {Number(invoice.appliedAmount || 0) > 0 ? `KES ${Number(invoice.appliedAmount).toLocaleString()}` : <span className="text-slate-400">—</span>}
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-center">
+                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                      invoice.status === "Paid" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                      invoice.status === "Cancelled" || invoice.status === "Reversed" ? "bg-slate-100 text-slate-600 border-slate-200" :
+                      "bg-amber-50 text-amber-700 border-amber-200"
+                    }`}>{invoice.status}</span>
+                  </td>
+                </>
+              )}
+              renderActions={(invoice) => (
+                <div className="flex justify-end gap-1">
+                  <button onClick={() => handleViewInvoice(invoice)} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800" title="View Invoice"><FaEye size={12} /></button>
+                  {canExportInvoice && <button onClick={() => handlePrintInvoice(invoice)} className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800" title="Print Invoice"><FaPrint size={12} /></button>}
+                  {canExportInvoice && <button onClick={() => handleDownloadInvoice(invoice)} className="rounded p-1 text-green-600 hover:bg-green-50 hover:text-green-800" title="Download Invoice"><FaDownload size={12} /></button>}
+                  {canDeleteInvoice && <button onClick={() => handleDeleteSingle(invoice)} className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800" title="Delete Invoice"><FaTrash size={12} /></button>}
+                  {!tenantId && <button onClick={() => handleViewTenantStatement(invoice.tenantId)} className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800" title="View Tenant Statement"><FaArrowRight size={12} /></button>}
+                </div>
+              )}
+            />
 
             <div className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-1 text-xs text-slate-700">
               <p>

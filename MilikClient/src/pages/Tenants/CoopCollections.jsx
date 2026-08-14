@@ -17,6 +17,7 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { useTabState } from "../../hooks/useTabState";
 import useDebounce from "../../hooks/useDebounce";
 import AppSelect from "../../components/common/AppSelect";
+import MilikTable from "../../components/common/MilikTable";
 
 const PAGE_SIZE   = 50;
 const AUTO_RELOAD = 30;
@@ -308,82 +309,61 @@ export default function CoopCollections() {
         </div>
 
         {/* Table */}
-        <div className="overflow-hidden border border-slate-200 bg-white shadow-sm">
-          {loading && items.length === 0 ? (
-            <div className="flex items-center justify-center gap-2 py-16 text-xs text-slate-400">
-              <Spinner size="sm" /> Loading Co-op collections…
-            </div>
-          ) : items.length === 0 ? (
-            <div className="py-16 text-center text-xs text-slate-400">
-              No Co-op Bank B2B collections yet. Payments will appear here automatically.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-xs">
-                <thead className="bg-[#0B3B2E]">
-                  <tr>
-                    {["Date","Transaction Ref","Account Ref","Tenant Code","Amount","Payer","Tenant","Status","Actions"].map(h => (
-                      <th key={h} className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-white">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {items.map(item => (
-                    <tr key={item._id} className="border-b border-slate-100 odd:bg-white even:bg-slate-50/50 hover:bg-[#EDF5F1]/70">
-                      <td className="whitespace-nowrap px-3 py-2.5 text-slate-500">{fmtDate(item.paymentDate || item.transactionDate)}</td>
-                      <td className="px-3 py-2.5 font-mono text-[10px] text-slate-700">{item.transactionReferenceCode || "—"}</td>
-                      <td className="px-3 py-2.5 font-mono text-[10px] text-slate-600">{item.documentReferenceNumber || "—"}</td>
-                      <td className="px-3 py-2.5 font-mono font-bold text-slate-700">{item.tenantCode || "—"}</td>
-                      <td className="whitespace-nowrap px-3 py-2.5 font-bold text-slate-900">{formatMoney(item.amount)}</td>
-                      <td className="max-w-[120px] truncate px-3 py-2.5 text-slate-600">{item.payerName || "—"}</td>
-                      <td className="px-3 py-2.5">
-                        {item.tenant ? (
-                          <div>
-                            <div className="font-bold text-slate-900">{item.tenant.name}</div>
-                            <div className="text-[10px] text-slate-500 font-mono">{item.tenant.tenantCode}</div>
-                          </div>
-                        ) : <span className="text-slate-400">—</span>}
-                      </td>
-                      <td className="px-3 py-2.5"><StatusBadge status={item.matchingStatus} map={STATUS_MAP} /></td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-1">
-                          {item.matchingStatus === "ignored" ? (
-                            <button
-                              onClick={() => handleUnignore(item)}
-                              disabled={unignoringId === item._id}
-                              className="inline-flex h-6 items-center gap-1 border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                              title="Unignore"
-                            >
-                              {unignoringId === item._id ? <Spinner size="sm" /> : <FaUndo size={8} />}
-                            </button>
-                          ) : item.matchingStatus !== "captured" ? (
-                            <>
-                              <button onClick={() => setAssignTarget(item)} className="inline-flex h-6 items-center gap-1 border border-blue-200 bg-blue-50 px-2 text-[10px] font-bold text-blue-700 hover:bg-blue-100" title="Assign tenant">
-                                <FaLink size={8} />
-                              </button>
-                              <button onClick={() => setIgnoreTarget(item)} className="inline-flex h-6 items-center gap-1 border border-red-200 bg-red-50 px-2 text-[10px] font-bold text-red-600 hover:bg-red-100" title="Ignore">
-                                <FaBan size={8} />
-                              </button>
-                            </>
-                          ) : null}
-                          {item.matchingStatus !== "captured" && (
-                            <button
-                              onClick={() => handleDelete(item)}
-                              disabled={deletingId === item._id}
-                              className="inline-flex h-6 items-center gap-1 border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                              title="Delete"
-                            >
-                              {deletingId === item._id ? <Spinner size="sm" /> : <FaTrash size={8} />}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+        <div className="border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <MilikTable
+            columns={[
+              { label: "Date" },
+              { label: "Transaction Ref" },
+              { label: "Account Ref" },
+              { label: "Tenant Code" },
+              { label: "Amount" },
+              { label: "Payer" },
+              { label: "Tenant" },
+              { label: "Status" },
+            ]}
+            rows={items}
+            rowKey="_id"
+            loading={loading && items.length === 0}
+            empty="No Co-op Bank B2B collections yet. Payments will appear here automatically."
+            renderRow={(item) => (
+              <>
+                <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-slate-500">{fmtDate(item.paymentDate || item.transactionDate)}</td>
+                <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-[10px] text-slate-700">{item.transactionReferenceCode || "—"}</td>
+                <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-[10px] text-slate-600">{item.documentReferenceNumber || "—"}</td>
+                <td className="px-3 py-1.5 border-r border-gray-100 font-mono font-bold text-slate-700">{item.tenantCode || "—"}</td>
+                <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap font-bold text-slate-900">{formatMoney(item.amount)}</td>
+                <td className="px-3 py-1.5 border-r border-gray-100 max-w-[120px] truncate text-slate-600">{item.payerName || "—"}</td>
+                <td className="px-3 py-1.5 border-r border-gray-100">
+                  {item.tenant ? (
+                    <div>
+                      <div className="font-bold text-slate-900">{item.tenant.name}</div>
+                      <div className="text-[10px] text-slate-500 font-mono">{item.tenant.tenantCode}</div>
+                    </div>
+                  ) : <span className="text-slate-400">—</span>}
+                </td>
+                <td className="px-3 py-1.5 border-r border-gray-100"><StatusBadge status={item.matchingStatus} map={STATUS_MAP} /></td>
+              </>
+            )}
+            renderActions={(item) => (
+              <div className="flex items-center gap-1">
+                {item.matchingStatus === "ignored" ? (
+                  <button onClick={() => handleUnignore(item)} disabled={unignoringId === item._id} className="inline-flex h-6 items-center gap-1 border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50" title="Unignore">
+                    {unignoringId === item._id ? <Spinner size="sm" /> : <FaUndo size={8} />}
+                  </button>
+                ) : item.matchingStatus !== "captured" ? (
+                  <>
+                    <button onClick={() => setAssignTarget(item)} className="inline-flex h-6 items-center gap-1 border border-blue-200 bg-blue-50 px-2 text-[10px] font-bold text-blue-700 hover:bg-blue-100" title="Assign tenant"><FaLink size={8} /></button>
+                    <button onClick={() => setIgnoreTarget(item)} className="inline-flex h-6 items-center gap-1 border border-red-200 bg-red-50 px-2 text-[10px] font-bold text-red-600 hover:bg-red-100" title="Ignore"><FaBan size={8} /></button>
+                  </>
+                ) : null}
+                {item.matchingStatus !== "captured" && (
+                  <button onClick={() => handleDelete(item)} disabled={deletingId === item._id} className="inline-flex h-6 items-center gap-1 border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50" title="Delete">
+                    {deletingId === item._id ? <Spinner size="sm" /> : <FaTrash size={8} />}
+                  </button>
+                )}
+              </div>
+            )}
+          />
         </div>
 
         {/* Pagination */}

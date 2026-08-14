@@ -43,7 +43,8 @@ export const listCommissions = async (req, res, next) => {
     const page = Math.max(Number(req.query.page || 1), 1);
     const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
     const filter = { business };
-    if (agentId) filter.agent = agentId;
+    if (req.saleAgentId) filter.agent = req.saleAgentId;
+    else if (agentId)    filter.agent = agentId;
     if (status)  filter.status = status;
     if (dealId)  filter.deal = dealId;
     if (search.trim()) filter.commissionNumber = { $regex: search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };

@@ -31,6 +31,7 @@ import {
   listMpesaCollections,
   reverseRentPayment,
 } from "../../redux/apiCalls";
+import MilikTable from "../../components/common/MilikTable";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -388,126 +389,87 @@ const InstantReceipts = () => {
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white rounded-lg shadow-sm border border-slate-200">
-            <div className="flex-1 min-h-0 overflow-auto">
-              <table className="min-w-full text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className="bg-[#0B3B2E] text-white">
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">M-Pesa Code</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Date</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Tenant</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Property</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Unit</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">TNT Code</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Receipt</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Status</th>
-                    <th className="px-3 py-2 text-right font-bold border-r border-white/10">Amount</th>
-                    <th className="px-3 py-2 text-left font-bold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRows.length === 0 ? (
-                    <tr>
-                      <td colSpan="10" className="px-4 py-10 text-center text-slate-500">
-                        {loading ? "Loading instant receipts..." : "No instant receipt notifications found."}
-                      </td>
-                    </tr>
-                  ) : (
-                    paginatedRows.map((row, index) => {
-                      const matchedReceipt = row?.matchedReceipt || null;
-                      const isConfirmed = matchedReceipt?.isConfirmed === true;
-                      const canDelete = matchedReceipt?._id ? !isConfirmed : true;
-                      const canReverse = Boolean(matchedReceipt?._id) && isConfirmed;
-                      return (
-                        <tr
-                          key={row._id}
-                          className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}
-                        >
-                          <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900">{row?.transactionCode || row?.accountReference || "-"}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{fmtDate(row?.transactionDate || row?.createdAt)}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">
-                            <div>{getTenantName(row?.tenant)}</div>
-                            <div className="text-[10px] text-slate-500">{row?.payerName || row?.msisdn || "-"}</div>
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getPropertyName(row?.tenant)}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getUnitName(row?.tenant)}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row?.tenant?.tenantCode || row?.accountReference || "-"}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">
-                            {matchedReceipt ? (
-                              <div>
-                                <div>{matchedReceipt?.receiptNumber || matchedReceipt?.referenceNumber || "Receipt"}</div>
-                                <div className="text-[10px] text-slate-500">{isConfirmed ? "Confirmed" : "Unconfirmed"}</div>
-                              </div>
-                            ) : (
-                              <span className="text-slate-500">Not yet captured</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100">
-                            <span
-                              className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${
-                                matchedReceipt
-                                  ? isConfirmed
-                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                    : "bg-orange-50 text-orange-700 border-orange-200"
-                                  : row?.tenant?._id
-                                  ? "bg-blue-50 text-blue-700 border-blue-200"
-                                  : "bg-amber-50 text-amber-700 border-amber-200"
-                              }`}
-                            >
-                              {matchedReceipt ? (isConfirmed ? "Confirmed" : "Unconfirmed") : row?.tenant?._id ? "Matched" : "Unmatched"}
-                            </span>
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{formatMoney(row?.amount || 0)}</td>
-                          <td className="px-3 py-1">
-                            <div className="flex flex-wrap items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => openAddReceipt(row)}
-                                className={`px-2 py-1 rounded text-white text-[10px] font-semibold ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
-                              >
-                                <FaPlus className="inline mr-1" /> Add Receipt
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => openConfirmModal(row)}
-                                disabled={isConfirmed || submitting}
-                                className={`px-2 py-1 rounded text-white text-[10px] font-semibold ${MILIK_GREEN} ${MILIK_GREEN_HOVER} disabled:opacity-50 disabled:cursor-not-allowed`}
-                              >
-                                <FaCheck className="inline mr-1" /> Confirm
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(row)}
-                                disabled={!canDelete || submitting}
-                                className="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                <FaTrash className="inline mr-1" /> Delete
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleReverse(row)}
-                                disabled={!canReverse || submitting}
-                                className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                <FaUndo className="inline mr-1" /> Reverse
-                              </button>
-                              {matchedReceipt?._id && (
-                                <button
-                                  type="button"
-                                  onClick={() => navigate(`/receipts/${matchedReceipt._id}`)}
-                                  className="px-2 py-1 rounded border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-[10px] font-semibold"
-                                >
-                                  <FaReceipt className="inline mr-1" /> Open
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <MilikTable
+              columns={[
+                { label: "M-Pesa Code" },
+                { label: "Date" },
+                { label: "Tenant" },
+                { label: "Property" },
+                { label: "Unit" },
+                { label: "TNT Code" },
+                { label: "Receipt" },
+                { label: "Status" },
+                { label: "Amount", align: "right" },
+              ]}
+              rows={paginatedRows}
+              rowKey="_id"
+              loading={loading}
+              empty="No instant receipt notifications found."
+              renderRow={(row) => {
+                const matchedReceipt = row?.matchedReceipt || null;
+                const isConfirmed = matchedReceipt?.isConfirmed === true;
+                return (
+                  <>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-bold text-slate-900">{row?.transactionCode || row?.accountReference || "-"}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{fmtDate(row?.transactionDate || row?.createdAt)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">
+                      <div>{getTenantName(row?.tenant)}</div>
+                      <div className="text-[10px] text-slate-500">{row?.payerName || row?.msisdn || "-"}</div>
+                    </td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{getPropertyName(row?.tenant)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{getUnitName(row?.tenant)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{row?.tenant?.tenantCode || row?.accountReference || "-"}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">
+                      {matchedReceipt ? (
+                        <div>
+                          <div>{matchedReceipt?.receiptNumber || matchedReceipt?.referenceNumber || "Receipt"}</div>
+                          <div className="text-[10px] text-slate-500">{isConfirmed ? "Confirmed" : "Unconfirmed"}</div>
+                        </div>
+                      ) : (
+                        <span className="text-slate-500">Not yet captured</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-1.5 border-r border-gray-100">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                        matchedReceipt
+                          ? isConfirmed ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-orange-50 text-orange-700 border-orange-200"
+                          : row?.tenant?._id ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-amber-50 text-amber-700 border-amber-200"
+                      }`}>
+                        {matchedReceipt ? (isConfirmed ? "Confirmed" : "Unconfirmed") : row?.tenant?._id ? "Matched" : "Unmatched"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-slate-900">{formatMoney(row?.amount || 0)}</td>
+                  </>
+                );
+              }}
+              renderActions={(row) => {
+                const matchedReceipt = row?.matchedReceipt || null;
+                const isConfirmed = matchedReceipt?.isConfirmed === true;
+                const canDelete = matchedReceipt?._id ? !isConfirmed : true;
+                const canReverse = Boolean(matchedReceipt?._id) && isConfirmed;
+                return (
+                  <div className="flex flex-wrap items-center gap-1">
+                    <button type="button" onClick={() => openAddReceipt(row)} className={`px-2 py-1 rounded text-white text-[10px] font-semibold ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}>
+                      <FaPlus className="inline mr-1" /> Add Receipt
+                    </button>
+                    <button type="button" onClick={() => openConfirmModal(row)} disabled={isConfirmed || submitting} className={`px-2 py-1 rounded text-white text-[10px] font-semibold ${MILIK_GREEN} ${MILIK_GREEN_HOVER} disabled:opacity-50 disabled:cursor-not-allowed`}>
+                      <FaCheck className="inline mr-1" /> Confirm
+                    </button>
+                    <button type="button" onClick={() => handleDelete(row)} disabled={!canDelete || submitting} className="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-semibold disabled:opacity-50 disabled:cursor-not-allowed">
+                      <FaTrash className="inline mr-1" /> Delete
+                    </button>
+                    <button type="button" onClick={() => handleReverse(row)} disabled={!canReverse || submitting} className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-semibold disabled:opacity-50 disabled:cursor-not-allowed">
+                      <FaUndo className="inline mr-1" /> Reverse
+                    </button>
+                    {matchedReceipt?._id && (
+                      <button type="button" onClick={() => navigate(`/receipts/${matchedReceipt._id}`)} className="px-2 py-1 rounded border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-[10px] font-semibold">
+                        <FaReceipt className="inline mr-1" /> Open
+                      </button>
+                    )}
+                  </div>
+                );
+              }}
+            />
             <div className="flex-shrink-0 border-t border-slate-200 bg-white px-4 py-2">
               <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
                 <div className="font-semibold">Showing <span className="font-bold text-slate-900">{paginatedRows.length > 0 ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredRows.length)}</span> of <span className="font-bold text-slate-900">{filteredRows.length}</span> instant receipt rows</div>

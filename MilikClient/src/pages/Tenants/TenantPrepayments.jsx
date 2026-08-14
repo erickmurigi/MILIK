@@ -15,6 +15,7 @@ import { getProperties } from "../../redux/propertyRedux";
 import AppSelect from "../../components/common/AppSelect";
 import { getTenantName } from "../../utils/tenantUtils";
 import { safeId } from "../../utils/idUtils";
+import MilikTable from "../../components/common/MilikTable";
 
 const ITEMS_PER_PAGE = 50;
 const MILIK_GREEN = "bg-[#0B3B2E]";
@@ -268,72 +269,51 @@ const TenantPrepayments = () => {
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full min-w-[1100px] text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className={`${MILIK_GREEN} text-white`}>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Receipt #</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Date</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Tenant</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Property</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Unit</th>
-                    <th className="px-3 py-2 text-right font-bold border-r border-white/10">Receipt</th>
-                    <th className="px-3 py-2 text-right font-bold border-r border-white/10">Allocated</th>
-                    <th className="px-3 py-2 text-right font-bold border-r border-white/10">Unapplied</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Status</th>
-                    <th className="px-3 py-2 text-center font-bold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoading ? (
-                    <tr>
-                      <td colSpan="10" className="px-3 py-10 text-center text-slate-500">
-                        Loading prepayments...
-                      </td>
-                    </tr>
-                  ) : rows.length === 0 ? (
-                    <tr>
-                      <td colSpan="10" className="px-3 py-10 text-center text-slate-500">
-                        No unapplied receipt balances matched the current filters.
-                      </td>
-                    </tr>
-                  ) : (
-                    rows.map((row, index) => (
-                      <tr
-                        key={row._id}
-                        className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}
-                      >
-                        <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900">{row.referenceNumber}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{fmtDate(row.paymentDate)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.tenantName}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.propertyName}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.unitName}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{formatMoney(row.amount)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-emerald-700">{formatMoney(row.allocatedAmount)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-amber-700">{formatMoney(row.unappliedAmount)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100">
-                          <span
-                            className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${
-                              row.isConfirmed ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"
-                            }`}
-                          >
-                            {row.isConfirmed ? "Confirmed" : "Pending"}
-                          </span>
-                        </td>
-                        <td className="px-3 py-1 text-center">
-                          <button
-                            onClick={() => navigate(`/receipts?receipt=${row._id}`)}
-                            className="inline-flex items-center gap-1 rounded-full bg-[#0B3B2E] px-2.5 py-0.5 text-[10px] font-bold text-white hover:bg-[#0A3127]"
-                          >
-                            <FaArrowRight size={9} /> Manage
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <MilikTable
+              columns={[
+                { label: "Receipt #" },
+                { label: "Date" },
+                { label: "Tenant" },
+                { label: "Property" },
+                { label: "Unit" },
+                { label: "Receipt", align: "right" },
+                { label: "Allocated", align: "right" },
+                { label: "Unapplied", align: "right" },
+                { label: "Status" },
+              ]}
+              rows={rows}
+              rowKey="_id"
+              loading={isLoading}
+              empty="No unapplied receipt balances matched the current filters."
+              minWidth={1100}
+              renderRow={(row) => (
+                <>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-bold text-slate-900">{row.referenceNumber}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{fmtDate(row.paymentDate)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{row.tenantName}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{row.propertyName}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{row.unitName}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-slate-900">{formatMoney(row.amount)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold text-emerald-700">{formatMoney(row.allocatedAmount)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-amber-700">{formatMoney(row.unappliedAmount)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100">
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                      row.isConfirmed ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"
+                    }`}>
+                      {row.isConfirmed ? "Confirmed" : "Pending"}
+                    </span>
+                  </td>
+                </>
+              )}
+              renderActions={(row) => (
+                <button
+                  onClick={() => navigate(`/receipts?receipt=${row._id}`)}
+                  className="inline-flex items-center gap-1 rounded-full bg-[#0B3B2E] px-2.5 py-0.5 text-[10px] font-bold text-white hover:bg-[#0A3127]"
+                >
+                  <FaArrowRight size={9} /> Manage
+                </button>
+              )}
+            />
 
             <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
               <p>

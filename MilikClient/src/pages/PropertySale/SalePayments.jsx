@@ -12,6 +12,7 @@ import { useConfirm } from "../../context/ConfirmContext";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
+import MilikTable from "../../components/common/MilikTable";
 
 const STATUS_BADGE = {
   paid:      "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -208,32 +209,36 @@ const SalePayments = () => {
   const hasFilters     = dealFilter || typeFilter || methodFilter || statusFilter || search;
   const resetFilters   = () => { setDealFilter(""); setTypeFilter(""); setMethodFilter(""); setStatusFilter(""); setSearch(""); setDateFrom(""); setDateTo(""); setPage(1); };
   return (
-    <PropertySaleShell
-      title="Payments"
-      subtitle={`${total} payment(s)`}
-      action={
-        <>
-          <button
-            type="button"
-            onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-payments", biz] })}
-            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-          >
-            <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
-          </button>
-          <button
-            type="button"
-            onClick={() => { setForm(EMPTY_FORM); setSelectedDeal(null); setShowCreate(true); }}
-            className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
-          >
-            <FaPlus size={9} /> Record Payment
-          </button>
-        </>
-      }
-    >
+    <PropertySaleShell>
       {/* Filter bar */}
       <SaleFilterBar
+        leading={
+          <>
+            <span className="shrink-0 font-mono text-[10px] font-black text-emerald-700">{fmtKES(totalCollected)}</span>
+            <span className="shrink-0 select-none text-slate-300">|</span>
+            <span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} payment{total !== 1 ? "s" : ""}</span>
+          </>
+        }
         onReset={resetFilters}
         activeCount={[search, dealFilter, typeFilter, methodFilter, statusFilter, dateFrom, dateTo].filter(Boolean).length}
+        trailing={
+          <>
+            <button
+              type="button"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-payments", biz] })}
+              className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+            >
+              <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
+            </button>
+            <button
+              type="button"
+              onClick={() => { setForm(EMPTY_FORM); setSelectedDeal(null); setShowCreate(true); }}
+              className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
+            >
+              <FaPlus size={9} /> Record Payment
+            </button>
+          </>
+        }
       >
         <FilterSearch
           value={search}
@@ -252,90 +257,73 @@ const SalePayments = () => {
         />
       </SaleFilterBar>
 
-      {/* Total collected stat */}
-      <div className="mb-1 flex items-center gap-3 border border-emerald-200 bg-emerald-50 px-3 py-1.5">
-        <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Total Collected (active filters)</span>
-        <span className="text-sm font-black text-emerald-800">{fmtKES(totalCollected)}</span>
-        <span className="ml-auto text-[10px] text-emerald-600">{total} payment(s)</span>
-      </div>
-
       {/* Table */}
       <div className="flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm">
-        <div className="flex-1 min-h-0 overflow-auto">
-          <table className="w-full min-w-[860px] text-xs border-collapse">
-            <thead>
-              <tr className="bg-[#0B3B2E]">
-                {["Receipt No.", "Deal", "Property / Buyer", "Type", "Method", "Reference", "Amount", "Date", "Status", "Actions"].map((h) => (
-                  <th key={h} className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white ${h === "Amount" || h === "Actions" ? "text-right" : "text-left"}`}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={10} className="px-3 py-10 text-center text-xs text-slate-400">Loading payments…</td></tr>
-              ) : payments.length === 0 ? (
-                <tr><td colSpan={10} className="px-3 py-10 text-center text-xs text-slate-400">No payments found.{hasFilters ? " Try clearing filters." : ""}</td></tr>
-              ) : payments.map((p) => (
-                <tr key={p._id} className={`border-b border-slate-100 ${p.status === "cancelled" ? "bg-rose-50/40 opacity-60" : "hover:bg-slate-50"}`}>
-                  <td className="px-3 py-2 font-mono font-black text-[#0B3B2E]">
-                    {p.paymentNumber}
-                    {p.status === "cancelled" && <div className="text-[9px] font-black uppercase text-rose-500">voided</div>}
-                  </td>
-                  <td className="px-3 py-2 font-bold text-slate-700">{p.deal?.dealNumber || "—"}</td>
-                  <td className="px-3 py-2">
-                    <div className="font-semibold text-slate-700">{p.deal?.listing?.title || p.deal?.listing?.listingNumber || "—"}</div>
-                    <div className="text-[10px] text-slate-400">{p.deal?.buyer?.fullName || "—"}</div>
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${TYPE_BADGE[p.paymentType] || "border-slate-200 bg-slate-50 text-slate-600"}`}>
-                      {fmtLabel(p.paymentType)}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${METHOD_BADGE[p.paymentMethod] || "border-slate-200 bg-slate-50 text-slate-600"}`}>
-                      {fmtLabel(p.paymentMethod)}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 font-mono text-[10px] text-slate-500">{p.reference || "—"}</td>
-                  <td className="px-3 py-2 text-right font-black text-slate-900">{fmtKES(p.amount)}</td>
-                  <td className="px-3 py-2 text-slate-500">{p.paymentDate ? new Date(p.paymentDate).toLocaleDateString("en-KE") : "—"}</td>
-                  <td className="px-3 py-2">
-                    <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${STATUS_BADGE[p.status] || "border-slate-200 bg-slate-50 text-slate-600"}`}>
-                      {p.status}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <div className="inline-flex items-center gap-1">
-                      <button type="button" onClick={() => window.open(`/sale/payments/${p._id}/receipt`, "_blank")} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]" title="Print Receipt">
-                        <FaPrint className="text-[9px]" />
-                      </button>
-                      {p.status !== "cancelled" && (
-                        <button type="button" onClick={() => openEdit(p)} className="border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100">
-                          <FaEdit className="text-[9px]" />
-                        </button>
-                      )}
-                      {p.status === "paid" && (
-                        <button
-                          type="button"
-                          onClick={() => handleVoid(p)}
-                          disabled={voiding === p._id}
-                          className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100 disabled:opacity-40"
-                        >
-                          <FaBan className="text-[9px]" />
-                        </button>
-                      )}
-                      {p.status === "cancelled" && (
-                        <button type="button" onClick={() => handleDelete(p)} className="border border-red-200 bg-white px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-50">
-                          <FaTimes className="text-[9px]" />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <MilikTable
+          columns={[
+            { label: "Receipt No." },
+            { label: "Deal" },
+            { label: "Property / Buyer" },
+            { label: "Type" },
+            { label: "Method" },
+            { label: "Reference" },
+            { label: "Amount", align: "right" },
+            { label: "Date" },
+            { label: "Status" },
+          ]}
+          rows={payments}
+          loading={loading}
+          empty={`No payments found.${hasFilters ? " Try clearing filters." : ""}`}
+          minWidth={860}
+          rowClassName={(p) => p.status === "cancelled" ? "opacity-60 !bg-rose-50/40" : ""}
+          renderRow={(p) => (
+            <>
+              <td className="px-3 py-1.5 font-mono font-black text-[#0B3B2E] border-r border-gray-100">
+                {p.paymentNumber}
+                {p.status === "cancelled" && <div className="text-[9px] font-black uppercase text-rose-500">voided</div>}
+              </td>
+              <td className="px-3 py-1.5 font-bold text-slate-700 border-r border-gray-100">{p.deal?.dealNumber || "—"}</td>
+              <td className="px-3 py-1.5 border-r border-gray-100">
+                <div className="font-semibold text-slate-700">{p.deal?.listing?.title || p.deal?.listing?.listingNumber || "—"}</div>
+                <div className="text-[10px] text-slate-400">{p.deal?.buyer?.fullName || "—"}</div>
+              </td>
+              <td className="px-3 py-1.5 border-r border-gray-100">
+                <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${TYPE_BADGE[p.paymentType] || "border-slate-200 bg-slate-50 text-slate-600"}`}>{fmtLabel(p.paymentType)}</span>
+              </td>
+              <td className="px-3 py-1.5 border-r border-gray-100">
+                <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${METHOD_BADGE[p.paymentMethod] || "border-slate-200 bg-slate-50 text-slate-600"}`}>{fmtLabel(p.paymentMethod)}</span>
+              </td>
+              <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-[10px] text-slate-500">{p.reference || "—"}</td>
+              <td className="px-3 py-1.5 border-r border-gray-100 text-right font-black text-slate-900">{fmtKES(p.amount)}</td>
+              <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">{p.paymentDate ? new Date(p.paymentDate).toLocaleDateString("en-KE") : "—"}</td>
+              <td className="px-3 py-1.5">
+                <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${STATUS_BADGE[p.status] || "border-slate-200 bg-slate-50 text-slate-600"}`}>{p.status}</span>
+              </td>
+            </>
+          )}
+          renderActions={(p) => (
+            <div className="inline-flex items-center gap-1">
+              <button type="button" onClick={() => window.open(`/sale/payments/${p._id}/receipt`, "_blank")} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]" title="Print Receipt">
+                <FaPrint className="text-[9px]" />
+              </button>
+              {p.status !== "cancelled" && (
+                <button type="button" onClick={() => openEdit(p)} className="border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100">
+                  <FaEdit className="text-[9px]" />
+                </button>
+              )}
+              {p.status === "paid" && (
+                <button type="button" onClick={() => handleVoid(p)} disabled={voiding === p._id} className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100 disabled:opacity-40">
+                  <FaBan className="text-[9px]" />
+                </button>
+              )}
+              {p.status === "cancelled" && (
+                <button type="button" onClick={() => handleDelete(p)} className="border border-red-200 bg-white px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-50">
+                  <FaTimes className="text-[9px]" />
+                </button>
+              )}
+            </div>
+          )}
+        />
 
         <PaginationBar page={page} pages={totalPages} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} />
       </div>
