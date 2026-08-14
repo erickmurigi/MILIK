@@ -5,8 +5,9 @@ import { useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import {
   FaArrowLeft, FaExchangeAlt, FaFilter, FaRedoAlt,
-  FaSyncAlt, FaTrashAlt, FaTimes, FaUndo, FaInfoCircle,
+  FaSyncAlt, FaTrashAlt, FaTimes, FaUndo, FaInfoCircle, FaPrint,
 } from "react-icons/fa";
+import printTabularList from "../../utils/printList";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { adminRequests } from "../../utils/requestMethods";
@@ -289,6 +290,35 @@ const LedgerAccountActivity = () => {
     return listLabels[type] ? `→ ${listLabels[type]}` : "Source";
   };
 
+  const handlePrint = useCallback(() => {
+    if (!account) return;
+    const dateRange   = [filters.startDate && fmtDate(filters.startDate), filters.endDate && fmtDate(filters.endDate)].filter(Boolean).join(" – ");
+    const summaryLine = [
+      `Opening Balance: ${formatMoney(openingBalance)}`,
+      `${rows.length} entr${rows.length === 1 ? "y" : "ies"}`,
+      `Closing Balance: ${formatMoney(closingBalance)}`,
+      dateRange,
+    ].filter(Boolean).join("   ·   ");
+
+    printTabularList({
+      title:    `${account.code} — ${account.name}`,
+      subtitle: "Account Activity Statement",
+      company:  currentCompany,
+      summary:  summaryLine,
+      columns: [
+        { label: "Date",        value: (e) => fmtDate(e.transactionDate) },
+        { label: "Ref",         value: (e) => shortRef(e.sourceTransactionId || e._id) },
+        { label: "Transaction", value: (e) => sourceLabel(e) },
+        { label: "Narration",   value: (e) => e.displayNarration || e.notes || e.category || "—" },
+        { label: "Debit (DR)",  value: (e) => e.direction === "debit"  ? formatMoney(e.amount) : "—", align: "right" },
+        { label: "Credit (CR)", value: (e) => e.direction === "credit" ? formatMoney(e.amount) : "—", align: "right" },
+        { label: "Balance",     value: (e) => formatMoney(e.runningBalance || 0), align: "right" },
+        { label: "Status",      value: (e) => auditBadge(e).label },
+      ],
+      rows,
+    });
+  }, [account, rows, openingBalance, closingBalance, filters, currentCompany]);
+
   const inputCls  = "h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
   const labelCls  = "block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1";
   const panelInputCls = "w-full border border-slate-300 px-2.5 py-1.5 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
@@ -327,6 +357,14 @@ const LedgerAccountActivity = () => {
               <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-600">Closing</p>
               <p className="text-xs font-black text-emerald-900 tabular-nums">{formatMoney(closingBalance)}</p>
             </div>
+            <button
+              onClick={handlePrint}
+              disabled={rows.length === 0 || !account}
+              title="Print ledger activity"
+              className="h-7 px-2.5 border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 flex items-center gap-1.5 text-xs font-semibold disabled:opacity-40"
+            >
+              <FaPrint size={9} /> Print
+            </button>
             <button
               onClick={() => loadActivity()}
               className="h-7 px-2.5 border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 flex items-center"

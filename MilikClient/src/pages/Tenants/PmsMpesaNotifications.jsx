@@ -19,6 +19,7 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
+import printTabularList from "../../utils/printList";
 
 const PAGE_SIZE   = 50;
 const AUTO_RELOAD = 30; // seconds
@@ -682,91 +683,38 @@ export default function PmsMpesaNotifications() {
   }, [summaryMap]);
 
   const handlePrint = useCallback(() => {
-    const company   = currentCompany?.businessName || currentCompany?.name || "Company";
-    const dateRange = [applied.dateFrom && fmtDate(applied.dateFrom), applied.dateTo && fmtDate(applied.dateTo)].filter(Boolean).join(" – ") || "All dates";
+    const dateRange   = [applied.dateFrom && fmtDate(applied.dateFrom), applied.dateTo && fmtDate(applied.dateTo)].filter(Boolean).join(" – ") || "All dates";
     const statusLabel = applied.status ? (STATUS_META[applied.status]?.label || applied.status) : "All statuses";
-    const refLabel    = applied.ref    ? `Ref: ${applied.ref}` : "";
-    const searchLabel = applied.search ? `Search: ${applied.search}` : "";
-    const filters = [statusLabel, dateRange, refLabel, searchLabel].filter(Boolean).join(" · ");
+    const captured    = summaryMap.captured;
+    const summaryLine = [
+      `Captured: ${captured?.count || 0} (${formatMoney(captured?.totalAmount || 0)})`,
+      `Unmatched: ${(summaryMap.unmatched?.count || 0) + (summaryMap.matched_tenant?.count || 0)}`,
+      `Duplicate: ${summaryMap.duplicate?.count || 0}`,
+      `Ignored: ${summaryMap.ignored?.count || 0}`,
+      `Filter: ${statusLabel} · ${dateRange}`,
+    ].join("   ·   ");
 
-    const amtCaptured = summaryMap.captured?.totalAmount || 0;
-
-    const rowsHtml = notifications.map((n, i) => {
-      const sl = STATUS_META[n.matchingStatus] || {};
-      const statusText = sl.label || n.matchingStatus || "—";
-      const tenantName = getTenantLabel(n.tenant) !== "—" ? getTenantLabel(n.tenant) : "—";
-      const property   = n.tenant?.unit?.property?.propertyName || n.tenant?.property?.propertyName || "—";
-      const unit       = n.tenant?.unit?.unitName || n.tenant?.unit?.unitNumber || n.tenant?.unit?.name || "—";
-      const receipt    = n.matchedReceipt ? (n.matchedReceipt.receiptNumber || n.matchedReceipt.referenceNumber || "linked") : "—";
-      const bg         = i % 2 === 0 ? "#fff" : "#f9fafb";
-      return `<tr style="background:${bg}">
-        <td>${fmtDate(n.transactionDate || n.createdAt)}</td>
-        <td>${statusText}</td>
-        <td>${n.accountReference || "—"}</td>
-        <td style="text-align:right;font-weight:700">${n.amount > 0 ? formatMoney(n.amount) : "—"}</td>
-        <td>${n.payerName || "—"}</td>
-        <td style="font-family:monospace">${n.transactionCode || "—"}</td>
-        <td>${n.configName || "—"}</td>
-        <td style="font-weight:700;color:#0B3B2E">${tenantName}</td>
-        <td>${property}</td>
-        <td>${unit}</td>
-        <td style="font-family:monospace">${receipt}</td>
-      </tr>`;
-    }).join("");
-
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-<title>M-Pesa Collections – ${company}</title>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Arial,sans-serif;font-size:10px;color:#1a1a1a;background:#fff;padding:16px}
-  .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
-  .hdr-left h1{font-size:16px;font-weight:900;color:#0B3B2E;text-transform:uppercase;letter-spacing:.05em}
-  .hdr-left p{font-size:9px;color:#555;margin-top:2px}
-  .hdr-right{text-align:right;font-size:9px;color:#555}
-  .summary{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
-  .chip{border:1px solid #e2e8f0;padding:4px 10px;font-size:9px;background:#f8fafc}
-  .chip strong{display:block;font-size:13px;font-weight:900}
-  table{width:100%;border-collapse:collapse;font-size:9px}
-  th{background:#0B3B2E;color:#fff;padding:4px 6px;text-align:left;font-weight:700;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
-  td{padding:3px 6px;border-bottom:1px solid #f0f0f0;vertical-align:top}
-  .foot{margin-top:10px;display:flex;justify-content:space-between;font-size:9px;color:#666;border-top:1px solid #e2e8f0;padding-top:6px}
-  @media print{body{padding:8px}@page{margin:10mm}}
-</style></head><body>
-<div class="hdr">
-  <div class="hdr-left">
-    <h1>M-Pesa Collections</h1>
-    <p>${company}</p>
-    <p style="margin-top:3px;font-size:8px;color:#888">${filters}</p>
-  </div>
-  <div class="hdr-right">
-    <p>Printed: ${new Date().toLocaleString("en-KE")}</p>
-    <p>Showing ${notifications.length} of ${pagination.total} records</p>
-  </div>
-</div>
-<div class="summary">
-  ${SUMMARY_CHIPS.map(({ key, value, sub }) => `<div class="chip"><strong>${value}</strong>${STATUS_META[key]?.label || key}</div>`).join("")}
-  <div class="chip" style="margin-left:auto"><strong>${formatMoney(amtCaptured)}</strong>Total Captured</div>
-</div>
-<table>
-  <thead><tr>
-    <th>Date</th><th>Status</th><th>Account Ref</th><th style="text-align:right">Amount</th>
-    <th>Payer</th><th>Txn Code</th><th>Paybill</th><th>Tenant</th><th>Property</th><th>Unit</th><th>Receipt</th>
-  </tr></thead>
-  <tbody>${rowsHtml}</tbody>
-</table>
-<div class="foot">
-  <span>M-Pesa Collections Report · ${company}</span>
-  <span>${filters}</span>
-</div>
-</body></html>`;
-
-    const win = window.open("", "_blank", "width=1100,height=800");
-    if (!win) { toast.error("Pop-up blocked — allow pop-ups to print"); return; }
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    setTimeout(() => { win.print(); }, 400);
-  }, [notifications, applied, summaryMap, SUMMARY_CHIPS, pagination.total, currentCompany]);
+    printTabularList({
+      title:    "M-Pesa Collections",
+      subtitle: dateRange,
+      company:  currentCompany,
+      summary:  summaryLine,
+      columns: [
+        { label: "Date",       value: (n) => fmtDate(n.transactionDate || n.createdAt) },
+        { label: "Status",     value: (n) => STATUS_META[n.matchingStatus]?.label || n.matchingStatus || "—" },
+        { label: "Account Ref",value: (n) => n.accountReference || "—" },
+        { label: "Amount",     value: (n) => n.amount > 0 ? formatMoney(n.amount) : "—", align: "right" },
+        { label: "Payer",      value: (n) => n.payerName || "—" },
+        { label: "Txn Code",   value: (n) => n.transactionCode || "—" },
+        { label: "Paybill",    value: (n) => n.configName || "—" },
+        { label: "Tenant",     value: (n) => getTenantLabel(n.tenant) !== "—" ? getTenantLabel(n.tenant) : "Unmatched" },
+        { label: "Property",   value: (n) => n.tenant?.unit?.property?.propertyName || n.tenant?.property?.propertyName || "—" },
+        { label: "Unit",       value: (n) => n.tenant?.unit?.unitName || n.tenant?.unit?.unitNumber || n.tenant?.unit?.name || "—" },
+        { label: "Receipt",    value: (n) => n.matchedReceipt ? (n.matchedReceipt.receiptNumber || n.matchedReceipt.referenceNumber || "linked") : "—" },
+      ],
+      rows: notifications,
+    });
+  }, [notifications, applied, summaryMap, currentCompany]);
 
   return (
     <DashboardLayout lockContentScroll>
