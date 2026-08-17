@@ -2375,7 +2375,10 @@ const Statements = () => {
                                 {depositSettlementAdditionRows.map((item, index) => (
                                   <tr key={item._id || item.id || `deposit-settlement-add-${index}`} className="odd:bg-white even:bg-emerald-50/20 hover:bg-orange-50/50 transition-colors">
                                     <td className="px-2 py-0.5 text-[10px] text-slate-400">{index + 1}</td>
-                                    <td className="px-2 py-0.5 text-slate-700">{item.description || "Deposit remittance"}</td>
+                                    <td className="px-2 py-0.5 text-slate-700">
+                                      {item.description || "Deposit remittance"}
+                                      {item.unit && <span className="ml-1.5 rounded bg-slate-100 px-1 py-px text-[9px] font-semibold text-slate-500">{item.unit}</span>}
+                                    </td>
                                     <td className="px-2 py-0.5"><span className="rounded bg-emerald-100 px-1 py-px text-[9px] font-semibold text-emerald-700">{item.holder === "landlord" ? "Landlord-held" : "Settlement"}</span></td>
                                     <td className="px-2 py-0.5 text-right font-semibold text-emerald-700">{currency(item.amount)}</td>
                                   </tr>
@@ -2383,7 +2386,10 @@ const Statements = () => {
                                 {depositSettlementOffsetRows.map((item, index) => (
                                   <tr key={item._id || item.id || `deposit-settlement-offset-${index}`} className="odd:bg-white even:bg-amber-50/20 hover:bg-orange-50/50 transition-colors">
                                     <td className="px-2 py-0.5 text-[10px] text-slate-400">{depositSettlementAdditionRows.length + index + 1}</td>
-                                    <td className="px-2 py-0.5 text-slate-700">{item.description || "Deposit offset"}</td>
+                                    <td className="px-2 py-0.5 text-slate-700">
+                                      {item.description || "Deposit offset"}
+                                      {item.unit && <span className="ml-1.5 rounded bg-slate-100 px-1 py-px text-[9px] font-semibold text-slate-500">{item.unit}</span>}
+                                    </td>
                                     <td className="px-2 py-0.5"><span className="rounded bg-amber-100 px-1 py-px text-[9px] font-semibold text-amber-700">Direct offset</span></td>
                                     <td className="px-2 py-0.5 text-right font-semibold text-amber-700">{currency(item.amount)}</td>
                                   </tr>
@@ -2438,12 +2444,12 @@ const Statements = () => {
 
                       {depositMemoRows.length > 0 && (
                         <div>
-                          <h4 className="mb-1 border-l-2 border-[#0B3B2E] pl-2 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">Deposit Memorandum <span className="ml-1 text-[9px] font-normal normal-case tracking-normal text-slate-400">held positions — excluded from settlement</span></h4>
+                          <h4 className="mb-1 border-l-2 border-[#0B3B2E] pl-2 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">Deposit Memorandum <span className="ml-1 text-[9px] font-normal normal-case tracking-normal text-slate-400">tenant funds held in trust — excluded from settlement</span></h4>
                           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
                             <table className="min-w-full divide-y divide-slate-100 text-xs">
                               <thead className="bg-slate-50">
                                 <tr>
-                                  {["Holder", "Opening", "Billed / Adj.", "Received", "Closing"].map((h, i) => (
+                                  {["Holder", "Held at Start", "Newly Billed", "Collected", "Held at Close"].map((h, i) => (
                                     <th key={h} className={`px-3 py-1.5 ${i === 0 ? "text-left" : "text-right"} font-semibold text-slate-600`}>{h}</th>
                                   ))}
                                 </tr>
@@ -2468,6 +2474,9 @@ const Statements = () => {
                               </tbody>
                             </table>
                           </div>
+                          <p className="mt-1.5 text-[10px] text-slate-400">
+                            <strong className="text-slate-500">Held at Close</strong> = deposit funds held in trust on behalf of tenants. This is <em>not</em> income — it is refundable to tenants on vacating (less any agreed deductions).
+                          </p>
                         </div>
                       )}
 

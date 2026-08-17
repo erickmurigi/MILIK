@@ -1855,6 +1855,7 @@ export const generateLandlordStatement = async ({
     holder = "landlord",
     paidDirectToLandlord = false,
     sourceId = "",
+    unit = "",
   }) => {
     const value = round2(Math.abs(Number(amount || 0)));
     if (value === 0) return;
@@ -1868,6 +1869,7 @@ export const generateLandlordStatement = async ({
       holder,
       paidDirectToLandlord: Boolean(paidDirectToLandlord),
       sourceId,
+      unit: unit || "",
     });
 
     if (normalizedEffect === "offset") {
@@ -2470,6 +2472,7 @@ export const generateLandlordStatement = async ({
       holder: depositHolder,
       paidDirectToLandlord: !!receipt.paidDirectToLandlord,
       sourceId,
+      unit: row.unit,
     });
 
     pushEntry({
@@ -2508,6 +2511,7 @@ export const generateLandlordStatement = async ({
         holder: depositHolder,
         paidDirectToLandlord: true,
         sourceId: `${sourceId}-offset`,
+        unit: row.unit,
       });
 
       pushEntry({

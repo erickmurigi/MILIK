@@ -788,6 +788,7 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
           .period-cell { text-align: right; font-weight: 700; white-space: nowrap; font-size: 8.5px; color: #374151; }
           .period-badge { display: inline-block; background: #0B3B2E; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 8px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 3px; }
           .section-title { margin: 8px 0 4px; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; color: #0B3B2E; border-bottom: 2px solid #0B3B2E; padding-bottom: 2px; }
+          .memo-note { margin: 3px 0 0; font-size: 7.5px; color: #6b7280; font-style: italic; }
           table { width: 100%; border-collapse: collapse; }
           th, td { border: 1px solid #d1d5db; padding: 3px 4px; vertical-align: middle; }
           th { background: #f3f4f6; font-weight: 700; }
@@ -992,7 +993,7 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
                 <div class="section-title">Deposit Memorandum</div>
                 <table class="simple-table">
                   <thead>
-                    <tr><th>Holder</th><th class="num">Opening</th><th class="num">Billed / Adj.</th><th class="num">Received</th><th class="num">Closing</th></tr>
+                    <tr><th>Holder</th><th class="num">Held at Start</th><th class="num">Newly Billed</th><th class="num">Collected</th><th class="num">Held at Close</th></tr>
                   </thead>
                   <tbody>
                     ${depositMemoRows.map((row) => `
@@ -1013,7 +1014,8 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
                       <td class="num">${formatDepositMemoCurrency(depositMemoTotals.closingBalance || 0)}</td>
                     </tr>
                   </tfoot>
-                </table>` : ""}
+                </table>
+                <p class="memo-note">Held at Close = deposit funds held in trust on behalf of tenants. This is not income — it is refundable to tenants on vacating (less any agreed deductions).</p>` : ""}
 
               <div class="section-title">Statement Summary</div>
               <table class="summary-table">
