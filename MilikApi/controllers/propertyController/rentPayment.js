@@ -777,6 +777,7 @@ const buildReceiptAllocationData = async ({ businessId, tenantId, amount, paymen
     utility: 0,
     latePenalty: 0,
     debitNote: 0,
+    debitNoteLabels: [],
     other: 0,
     unapplied: 0,
   };
@@ -841,6 +842,7 @@ const buildReceiptAllocationData = async ({ businessId, tenantId, amount, paymen
       sourceInvoice: snapshot,
     });
 
+    const billItemLabel = String(snapshot?.metadata?.billItemLabel || "").trim();
     allocations.push({
       invoice: snapshot._id,
       invoiceNumber: snapshot.invoiceNumber || "",
@@ -855,6 +857,7 @@ const buildReceiptAllocationData = async ({ businessId, tenantId, amount, paymen
       invoiceDate: snapshot.invoiceDate || null,
       dueDate: snapshot.dueDate || null,
       description: snapshot.description || "",
+      billItemLabel,
     });
 
     if (priorityGroup === "rent") allocationSummary.rent += appliedAmount;
@@ -864,8 +867,12 @@ const buildReceiptAllocationData = async ({ businessId, tenantId, amount, paymen
       const key = utilityType || metadata?.takeOnBillItemLabel || metadata?.utilityType || "Utility";
       utilityMap.set(key, Number(utilityMap.get(key) || 0) + appliedAmount);
     } else if (priorityGroup === "late_penalty") allocationSummary.latePenalty += appliedAmount;
-    else if (priorityGroup === "debit_note") allocationSummary.debitNote += appliedAmount;
-    else allocationSummary.other += appliedAmount;
+    else if (priorityGroup === "debit_note") {
+      allocationSummary.debitNote += appliedAmount;
+      const debitLabel = billItemLabel || String(snapshot.description || "").trim();
+      if (debitLabel && !allocationSummary.debitNoteLabels.includes(debitLabel))
+        allocationSummary.debitNoteLabels.push(debitLabel);
+    } else allocationSummary.other += appliedAmount;
 
     remaining -= appliedAmount;
   }
@@ -965,6 +972,7 @@ const summarizeAllocationRows = ({ rows = [], receiptAmount = 0, metadata = {}, 
     utility: 0,
     latePenalty: 0,
     debitNote: 0,
+    debitNoteLabels: [],
     other: 0,
     unapplied: 0,
   };
@@ -984,8 +992,12 @@ const summarizeAllocationRows = ({ rows = [], receiptAmount = 0, metadata = {}, 
       const key = String(row?.utilityType || row?.description || metadata?.takeOnBillItemLabel || metadata?.utilityType || "Utility").trim() || "Utility";
       utilityMap.set(key, round2(Number(utilityMap.get(key) || 0) + appliedAmount));
     } else if (priorityGroup === "late_penalty") allocationSummary.latePenalty += appliedAmount;
-    else if (priorityGroup === "debit_note") allocationSummary.debitNote += appliedAmount;
-    else allocationSummary.other += appliedAmount;
+    else if (priorityGroup === "debit_note") {
+      allocationSummary.debitNote += appliedAmount;
+      const debitLabel = String(row?.billItemLabel || row?.description || "").trim();
+      if (debitLabel && !allocationSummary.debitNoteLabels.includes(debitLabel))
+        allocationSummary.debitNoteLabels.push(debitLabel);
+    } else allocationSummary.other += appliedAmount;
   });
 
   allocationSummary.unapplied = round2(Math.max(0, round2(receiptAmount) - round2(
@@ -1305,6 +1317,7 @@ const buildManualReceiptAllocationData = async ({ payment, requestedAllocations 
       invoiceDate: option.invoiceDate || null,
       dueDate: option.dueDate || null,
       description: option.description || "",
+      billItemLabel: String(option?.metadata?.billItemLabel || "").trim(),
     });
   }
 
@@ -1616,7 +1629,12 @@ const buildReceiptAllocationLabel = (summary = {}) => {
   if (Number(summary.utility     || 0) > 0.009) parts.push("Utility");
   if (Number(summary.deposit     || 0) > 0.009) parts.push("Deposit");
   if (Number(summary.latePenalty || 0) > 0.009) parts.push("Penalty");
-  if (Number(summary.debitNote   || 0) > 0.009) parts.push("Debit Note");
+  if (Number(summary.debitNote   || 0) > 0.009) {
+    const labels = Array.isArray(summary.debitNoteLabels) && summary.debitNoteLabels.length > 0
+      ? summary.debitNoteLabels
+      : ["Debit Note"];
+    labels.forEach((l) => parts.push(l));
+  }
   if (Number(summary.other       || 0) > 0.009) parts.push("Other");
   if (Number(summary.unapplied   || 0) > 0.009) parts.push("Unapplied");
   return parts.length ? parts.join(" + ") : "Payment";
@@ -2071,10 +2089,14 @@ export const autoApplyPrepayments = async ({ businessId, tenantId, invoice, acto
     if (!releaseRows.length) continue;
 
     // Rebuild allocationSummary from new allocations array
-    const summary = { rent: 0, deposit: 0, utility: 0, latePenalty: 0, debitNote: 0, other: 0, unapplied: 0 };
+    const summary = { rent: 0, deposit: 0, utility: 0, latePenalty: 0, debitNote: 0, debitNoteLabels: [], other: 0, unapplied: 0 };
     for (const a of receipt.allocations) {
       const key = allocationRowToSummaryKey(a);
       summary[key] = round2((summary[key] || 0) + Number(a.appliedAmount || 0));
+      if (key === "debitNote") {
+        const debitLabel = String(a?.billItemLabel || a?.description || "").trim();
+        if (debitLabel && !summary.debitNoteLabels.includes(debitLabel)) summary.debitNoteLabels.push(debitLabel);
+      }
     }
     receipt.allocationSummary = summary;
     receipt.markModified("allocations");
