@@ -16,38 +16,58 @@ const fmt = (n: number) =>
   `KES ${Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 type Journal = {
-  _id: string;
+  _id:        string;
   reference?: string;
-  narration: string;
-  date: string;
-  status: string;
-  totalDebit: number;
-  totalCredit: number;
-  createdBy?: { name?: string };
+  narration:  string;
+  date:       string;
+  approvalStatus: string;
+  amount:     number;
+  createdBy?: { surname?: string; otherNames?: string };
 };
 
+// JournalEntry.status is the posting state: draft | posted | reversed
+// approvalStatus (pending_review / reviewed / approved) is a separate workflow field
 const STATUS_CFG: Record<string, { bg: string; color: string; label: string }> = {
-  draft:           { bg: '#F1F5F9', color: '#64748B', label: 'Draft'     },
-  pending_review:  { bg: '#FEF3C7', color: '#D97706', label: 'Pending'   },
-  reviewed:        { bg: '#DBEAFE', color: '#1D4ED8', label: 'Reviewed'  },
-  approved:        { bg: '#EDE9FE', color: '#7C3AED', label: 'Approved'  },
-  posted:          { bg: '#D1FAE5', color: '#065F46', label: 'Posted'    },
-  reversed:        { bg: '#FEE2E2', color: '#DC2626', label: 'Reversed'  },
+  draft:    { bg: '#F1F5F9', color: '#64748B', label: 'Draft'    },
+  posted:   { bg: '#D1FAE5', color: '#065F46', label: 'Posted'   },
+  reversed: { bg: '#FEE2E2', color: '#DC2626', label: 'Reversed' },
 };
 
 const TABS = [
-  { key: '',               label: 'All'      },
-  { key: 'draft',          label: 'Draft'    },
-  { key: 'pending_review', label: 'Pending'  },
-  { key: 'approved',       label: 'Approved' },
-  { key: 'posted',         label: 'Posted'   },
+  { key: '',         label: 'All'      },
+  { key: 'draft',    label: 'Draft'    },
+  { key: 'posted',   label: 'Posted'   },
+  { key: 'reversed', label: 'Reversed' },
 ] as const;
+
+type Period = '1M' | '3M' | '6M' | '1Y' | 'All';
+
+const PERIOD_TABS: { key: Period; label: string }[] = [
+  { key: '1M',  label: '1 Mo'    },
+  { key: '3M',  label: '3 Mo'    },
+  { key: '6M',  label: '6 Mo'    },
+  { key: '1Y',  label: 'This Yr' },
+  { key: 'All', label: 'All'     },
+];
+
+const getPeriodDates = (p: Period): { startDate?: string; endDate?: string } => {
+  if (p === 'All') return {};
+  const today = new Date();
+  const endDate = today.toISOString().slice(0, 10);
+  let from: Date;
+  if      (p === '1M') from = new Date(today.getFullYear(), today.getMonth(),     1);
+  else if (p === '3M') from = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+  else if (p === '6M') from = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+  else                 from = new Date(today.getFullYear(), 0, 1);
+  return { startDate: from.toISOString().slice(0, 10), endDate };
+};
 
 export default function JournalsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ status?: string }>();
 
   const [statusFilter, setStatusFilter] = useState(params.status ?? '');
+  const [period,       setPeriod]       = useState<Period>('3M');
   const [search,       setSearch]       = useState('');
   const [items,        setItems]        = useState<Journal[]>([]);
   const [loading,      setLoading]      = useState(true);
@@ -65,7 +85,10 @@ export default function JournalsScreen() {
     else setLoadingMore(true);
     try {
       const p: Record<string, string> = { page: String(pg), limit: String(LIMIT) };
-      if (statusFilter)             p.status = statusFilter;
+      if (statusFilter) p.status = statusFilter;
+      const { startDate, endDate } = getPeriodDates(period);
+      if (startDate) p.startDate = startDate;
+      if (endDate)   p.endDate   = endDate;
       if (searchRef.current.trim()) p.search = searchRef.current.trim();
       const { data } = await api.get('/journals', { params: p });
       const raw  = data?.data ?? data;
@@ -75,7 +98,7 @@ export default function JournalsScreen() {
       setPage(pg);
     } catch { if (pg === 1) setItems([]); }
     finally { setLoading(false); setRefreshing(false); setLoadingMore(false); }
-  }, [statusFilter]);
+  }, [statusFilter, period]);
 
   useEffect(() => { load(1); }, [load]);
   useEffect(() => {
@@ -84,7 +107,7 @@ export default function JournalsScreen() {
   }, [search]);
 
   const renderItem = ({ item }: { item: Journal }) => {
-    const sc = STATUS_CFG[item.status] ?? STATUS_CFG.draft;
+    const sc = STATUS_CFG[item.approvalStatus] ?? STATUS_CFG.draft;
     return (
       <TouchableOpacity
         style={[styles.card, { borderLeftColor: sc.color }]}
@@ -100,15 +123,15 @@ export default function JournalsScreen() {
             <View style={[styles.badge, { backgroundColor: sc.bg }]}>
               <Text style={[styles.badgeTxt, { color: sc.color }]}>{sc.label}</Text>
             </View>
-            <Text style={styles.amount}>{fmt(item.totalDebit)}</Text>
+            <Text style={styles.amount}>{fmt(item.amount)}</Text>
           </View>
         </View>
         <View style={styles.cardBottom}>
           <Text style={styles.dateTxt}>{fmtDate(item.date)}</Text>
-          {item.createdBy?.name ? (
+          {item.createdBy?.surname ? (
             <View style={styles.byRow}>
               <Ionicons name="person-outline" size={11} color="#94A3B8" />
-              <Text style={styles.byTxt}>{item.createdBy.name}</Text>
+              <Text style={styles.byTxt}>{[item.createdBy.surname, item.createdBy.otherNames].filter(Boolean).join(' ')}</Text>
             </View>
           ) : null}
         </View>
@@ -144,6 +167,20 @@ export default function JournalsScreen() {
           </TouchableOpacity>
         )}
       />
+
+      {/* Period filter */}
+      <View style={styles.periodRow}>
+        <Ionicons name="calendar-outline" size={13} color="#94A3B8" style={{ marginRight: 2 }} />
+        {PERIOD_TABS.map(pt => (
+          <TouchableOpacity
+            key={pt.key}
+            style={[styles.periodChip, period === pt.key && styles.periodChipActive]}
+            onPress={() => setPeriod(pt.key)}
+          >
+            <Text style={[styles.periodText, period === pt.key && styles.periodTextActive]}>{pt.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
       {loading ? <MilikLoader fullscreen /> : (
         <FlatList
@@ -187,7 +224,12 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 15, color: '#0F172A' },
 
-  tabsRow: { paddingHorizontal: 16, paddingBottom: 10, gap: 8 },
+  tabsRow: { paddingHorizontal: 16, paddingBottom: 8, gap: 8 },
+  periodRow:        { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 16, paddingBottom: 10 },
+  periodChip:       { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E2E8F0' },
+  periodChipActive: { backgroundColor: '#ECFDF5', borderColor: AC },
+  periodText:       { fontSize: 11, fontWeight: '600', color: '#94A3B8' },
+  periodTextActive: { color: AC, fontWeight: '700' },
   tab:      { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E2E8F0' },
   tabActive:    { backgroundColor: AC, borderColor: AC },
   tabTxt:       { fontSize: 12, fontWeight: '600', color: '#475569' },

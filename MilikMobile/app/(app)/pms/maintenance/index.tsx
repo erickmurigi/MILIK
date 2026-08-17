@@ -22,20 +22,27 @@ type MaintenanceItem = {
 };
 
 const PRIORITY_COLORS: Record<string, { bg: string; text: string }> = {
-  urgent: { bg: '#FFF1F0', text: '#CF1322' },
-  high:   { bg: Colors.dangerLight,  text: Colors.danger  },
-  medium: { bg: Colors.warningLight, text: Colors.warning },
-  low:    { bg: Colors.borderLight,  text: Colors.textMuted },
+  emergency: { bg: '#FFF1F0', text: '#CF1322' },
+  high:      { bg: Colors.dangerLight,  text: Colors.danger  },
+  medium:    { bg: Colors.warningLight, text: Colors.warning },
+  low:       { bg: Colors.borderLight,  text: Colors.textMuted },
 };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  open:        { bg: Colors.dangerLight,  text: Colors.danger  },
+  pending:     { bg: Colors.dangerLight,  text: Colors.danger  },
   in_progress: { bg: Colors.warningLight, text: Colors.warning },
-  resolved:    { bg: Colors.successLight, text: Colors.success },
-  closed:      { bg: Colors.borderLight,  text: Colors.textMuted },
+  completed:   { bg: Colors.successLight, text: Colors.success },
+  cancelled:   { bg: Colors.borderLight,  text: Colors.textMuted },
 };
 
-const FILTER_TABS = ['all', 'open', 'in_progress', 'resolved'] as const;
+const STATUS_LABELS: Record<string, string> = {
+  pending:     'Pending',
+  in_progress: 'In Progress',
+  completed:   'Completed',
+  cancelled:   'Cancelled',
+};
+
+const FILTER_TABS = ['all', 'pending', 'in_progress', 'completed'] as const;
 type FilterTab = typeof FILTER_TABS[number];
 
 const fmtDate = (d: string) =>
@@ -47,7 +54,7 @@ export default function MaintenanceScreen() {
   const [loading,     setLoading]     = useState(true);
   const [refreshing,  setRefreshing]  = useState(false);
   const [search,      setSearch]      = useState('');
-  const [filter,      setFilter]      = useState<FilterTab>('open');
+  const [filter,      setFilter]      = useState<FilterTab>('pending');
   const [page,        setPage]        = useState(1);
   const [hasMore,     setHasMore]     = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -89,7 +96,7 @@ export default function MaintenanceScreen() {
 
   const renderItem = ({ item }: { item: MaintenanceItem }) => {
     const pc = PRIORITY_COLORS[item.priority] ?? PRIORITY_COLORS.low;
-    const sc = STATUS_COLORS[item.status]   ?? STATUS_COLORS.open;
+    const sc = STATUS_COLORS[item.status]   ?? STATUS_COLORS.pending;
     const prop = item.unit?.property?.propertyName ?? item.unit?.property?.name ?? '';
 
     return (
@@ -108,7 +115,7 @@ export default function MaintenanceScreen() {
           <View style={{ alignItems: 'flex-end', gap: 4 }}>
             <View style={[styles.badge, { backgroundColor: sc.bg }]}>
               <Text style={[styles.badgeText, { color: sc.text }]}>
-                {item.status?.replace('_', ' ').toUpperCase()}
+                {(STATUS_LABELS[item.status] ?? item.status?.replace('_', ' ') ?? '').toUpperCase()}
               </Text>
             </View>
             <View style={[styles.badge, { backgroundColor: pc.bg }]}>
@@ -155,7 +162,7 @@ export default function MaintenanceScreen() {
             onPress={() => setFilter(f)}
           >
             <Text style={[styles.tabText, filter === f && styles.tabTextActive]}>
-              {f === 'in_progress' ? 'In Progress' : f.charAt(0).toUpperCase() + f.slice(1)}
+              {f === 'all' ? 'All' : (STATUS_LABELS[f] ?? f.charAt(0).toUpperCase() + f.slice(1))}
             </Text>
           </TouchableOpacity>
         ))}

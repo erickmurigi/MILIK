@@ -34,7 +34,7 @@ const fmtTime = (d: string) =>
   new Date(d).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' });
 
 type Summary = {
-  todayRevenue: number;
+  totalRevenue: number;
   cashTotal:    number;
   mpesaTotal:   number;
   statusCounts: Record<string, number>;
@@ -42,15 +42,17 @@ type Summary = {
 };
 
 type Job = {
-  _id:         string;
-  jobNumber?:  string;
-  plate:       string;
+  _id:          string;
+  jobNumber?:   string;
+  plateNumber:  string;
   vehicleType?: string;
-  status:      string;
-  totalAmount: number;
+  serviceName?: string;
+  status:       string;
+  price:        number;
+  discountAmount?: number;
   paymentStatus?: string;
-  createdAt:   string;
-  customer?:   { name?: string };
+  createdAt:    string;
+  customerName?: string;
 };
 
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
@@ -93,9 +95,9 @@ export default function CarWashDashboard() {
   useEffect(() => { load(); }, [load]);
 
   const counts      = summary?.statusCounts ?? {};
-  const revenue     = Number(summary?.todayRevenue ?? 0);
-  const cashTotal   = Number(summary?.cashTotal   ?? 0);
-  const mpesaTotal  = Number(summary?.mpesaTotal  ?? 0);
+  const revenue     = Number(summary?.totalRevenue ?? 0);
+  const cashTotal   = Number(summary?.cashTotal    ?? 0);
+  const mpesaTotal  = Number(summary?.mpesaTotal   ?? 0);
   const isToday     = date === todayISO();
 
   if (loading) return <MilikLoader fullscreen />;
@@ -208,11 +210,11 @@ export default function CarWashDashboard() {
                     activeOpacity={0.7}
                   >
                     <View style={[styles.jobPlateBox, { backgroundColor: CWL }]}>
-                      <Text style={[styles.jobPlate, { color: CW }]}>{job.plate}</Text>
+                      <Text style={[styles.jobPlate, { color: CW }]}>{job.plateNumber || '—'}</Text>
                     </View>
                     <View style={styles.jobMeta}>
                       <Text style={styles.jobVehicle} numberOfLines={1}>
-                        {job.customer?.name || job.vehicleType || 'Walk-in'}
+                        {job.customerName || job.vehicleType || job.serviceName || 'Walk-in'}
                       </Text>
                       <Text style={styles.jobTime}>{fmtTime(job.createdAt)}</Text>
                     </View>
@@ -222,7 +224,7 @@ export default function CarWashDashboard() {
                           {job.status.replace('_', ' ').toUpperCase()}
                         </Text>
                       </View>
-                      <Text style={styles.jobAmount}>{fmt(job.totalAmount)}</Text>
+                      <Text style={styles.jobAmount}>{fmt(Math.max(0, Number(job.price || 0) - Number(job.discountAmount || 0)))}</Text>
                     </View>
                   </TouchableOpacity>
                 );

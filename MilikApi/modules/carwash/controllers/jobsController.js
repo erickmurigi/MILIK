@@ -228,14 +228,23 @@ export const listJobs = async (req, res, next) => {
 export const getJob = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const job = await CarWashJob.findOne({ _id: req.params.id, business })
-      .populate("service", "name category vehicleType defaultPrice")
-      .populate("serviceLines.service", "name category vehicleType defaultPrice")
-      .populate("assignedStaff", "name phone role")
-      .populate("creditAccount", "accountType contactPerson accountNumber")
-      .lean();
+    const jobId    = req.params.id;
+    const [job, paidRows] = await Promise.all([
+      CarWashJob.findOne({ _id: jobId, business })
+        .populate("service", "name category vehicleType defaultPrice")
+        .populate("serviceLines.service", "name category vehicleType defaultPrice")
+        .populate("assignedStaff", "name phone role")
+        .populate("creditAccount", "accountType contactPerson accountNumber")
+        .lean(),
+      CarWashPayment.aggregate([
+        { $match: { business: new mongoose.Types.ObjectId(String(business)), job: new mongoose.Types.ObjectId(String(jobId)) } },
+        { $group: { _id: null, amount: { $sum: "$amount" } } },
+      ]),
+    ]);
     if (!job) return next(createError(404, "Car Wash job not found"));
-    res.status(200).json({ success: true, data: job, job });
+    const amountPaid = Number(paidRows?.[0]?.amount || 0);
+    const result = { ...job, amountPaid };
+    res.status(200).json({ success: true, data: result, job: result });
   } catch (error) {
     next(error);
   }

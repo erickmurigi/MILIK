@@ -20,14 +20,16 @@ const todayISO = () => {
 type Job = {
   _id:          string;
   jobNumber?:   string;
-  plate:        string;
+  plateNumber:  string;
   vehicleType?: string;
+  serviceName?: string;
   status:       string;
-  totalAmount:  number;
+  price:        number;
+  discountAmount?: number;
   paymentStatus?: string;
   createdAt:    string;
-  customer?:    { name?: string; phone?: string };
-  services?:    { name?: string }[];
+  customerName?: string;
+  serviceLines?: { serviceName?: string }[];
 };
 
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
@@ -75,7 +77,8 @@ export default function CarWashJobsScreen() {
     else setLoadingMore(true);
     try {
       const p: Record<string, string> = { page: String(pg), limit: String(LIMIT) };
-      if (statusFilter)            p.status = statusFilter;
+      if (statusFilter === 'paid') p.paymentStatus = 'paid';
+      else if (statusFilter)       p.status = statusFilter;
       if (searchRef.current.trim()) p.search = searchRef.current.trim();
       const { data } = await api.get('/carwash/jobs', { params: p });
       const raw  = data?.data ?? data;
@@ -94,9 +97,9 @@ export default function CarWashJobsScreen() {
   }, [search]);
 
   const renderItem = ({ item }: { item: Job }) => {
-    const sc      = STATUS_STYLE[item.status] ?? STATUS_STYLE.cancelled;
-    const svcText = item.services?.map(s => s.name).filter(Boolean).join(' · ') || item.vehicleType || '';
-    const svcCount = item.services?.length ?? 0;
+    const sc       = STATUS_STYLE[item.status] ?? STATUS_STYLE.cancelled;
+    const svcText  = item.serviceLines?.map(s => s.serviceName).filter(Boolean).join(' · ') || item.serviceName || item.vehicleType || '';
+    const svcCount = item.serviceLines?.length ?? 0;
     return (
       <TouchableOpacity
         style={[styles.card, { borderLeftColor: sc.color }]}
@@ -104,15 +107,15 @@ export default function CarWashJobsScreen() {
         activeOpacity={0.75}
       >
         <View style={[styles.plateBox, { backgroundColor: CWL }]}>
-          <Text style={[styles.plate, { color: CW }]}>{item.plate}</Text>
+          <Text style={[styles.plate, { color: CW }]}>{item.plateNumber || '—'}</Text>
           {item.jobNumber ? <Text style={styles.jobNum}>#{item.jobNumber}</Text> : null}
         </View>
         <View style={styles.cardBody}>
           <View style={styles.cardTop}>
             <Text style={styles.customerName} numberOfLines={1}>
-              {item.customer?.name || 'Walk-in'}
+              {item.customerName || 'Walk-in'}
             </Text>
-            <Text style={styles.amount}>{fmt(item.totalAmount)}</Text>
+            <Text style={styles.amount}>{fmt(Math.max(0, Number(item.price || 0) - Number(item.discountAmount || 0)))}</Text>
           </View>
           {svcText ? (
             <Text style={styles.services} numberOfLines={1}>

@@ -21,9 +21,45 @@ type Receipt = {
   isReversed:      boolean;
   isCancelled:     boolean;
   tenant?:         { name?: string };
-  unit?:           { unitNumber?: string };
-  property?:       { propertyName?: string; name?: string };
+  unit?:           { unitNumber?: string; property?: { propertyName?: string; name?: string } };
   allocationSummary?: { unapplied?: number };
+};
+
+type StatusFilter = 'all' | 'confirmed' | 'pending' | 'reversed';
+type Period       = '1M'  | '3M'  | '6M'  | '1Y'  | 'All';
+
+const STATUS_TABS: { key: StatusFilter; label: string }[] = [
+  { key: 'all',       label: 'All'       },
+  { key: 'confirmed', label: 'Confirmed' },
+  { key: 'pending',   label: 'Pending'   },
+  { key: 'reversed',  label: 'Reversed'  },
+];
+
+const PERIOD_TABS: { key: Period; label: string }[] = [
+  { key: '1M',  label: '1 Mo'    },
+  { key: '3M',  label: '3 Mo'    },
+  { key: '6M',  label: '6 Mo'    },
+  { key: '1Y',  label: 'This Yr' },
+  { key: 'All', label: 'All'     },
+];
+
+// Receipts API uses `from` / `to` (not fromDate/toDate)
+const getPeriodDates = (p: Period): { from?: string; to?: string } => {
+  if (p === 'All') return {};
+  const today = new Date();
+  const to    = today.toISOString().slice(0, 10);
+  let from: Date;
+  if      (p === '1M') from = new Date(today.getFullYear(), today.getMonth(),     1);
+  else if (p === '3M') from = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+  else if (p === '6M') from = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+  else                 from = new Date(today.getFullYear(), 0, 1);
+  return { from: from.toISOString().slice(0, 10), to };
+};
+
+const resolveStatus = (r: Receipt) => {
+  if (r.isReversed || r.isCancelled) return { label: 'REVERSED',  bg: '#F1F5F9',           text: '#64748B'       };
+  if (r.isConfirmed)                  return { label: 'CONFIRMED', bg: Colors.successLight, text: Colors.success  };
+  return                                     { label: 'PENDING',   bg: Colors.warningLight, text: Colors.warning  };
 };
 
 const fmt = (n: number) =>
@@ -32,23 +68,19 @@ const fmt = (n: number) =>
 const fmtDate = (d: string) =>
   new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' });
 
-const resolveStatus = (r: Receipt) => {
-  if (r.isReversed || r.isCancelled) return { label: 'REVERSED', bg: Colors.borderLight, text: Colors.textMuted };
-  if (r.isConfirmed) return { label: 'CONFIRMED', bg: Colors.successLight, text: Colors.success };
-  return { label: 'PENDING', bg: Colors.warningLight, text: Colors.warning };
-};
-
 export default function ReceiptsScreen() {
   const router = useRouter();
   const [receipts,    setReceipts]    = useState<Receipt[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [refreshing,  setRefreshing]  = useState(false);
   const [search,      setSearch]      = useState('');
+  const [filter,      setFilter]      = useState<StatusFilter>('all');
+  const [period,      setPeriod]      = useState<Period>('3M');
   const [page,        setPage]        = useState(1);
   const [hasMore,     setHasMore]     = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  const LIMIT = 50;
+  const LIMIT     = 50;
   const searchRef = useRef(search);
   searchRef.current = search;
 
@@ -60,6 +92,13 @@ export default function ReceiptsScreen() {
       const params: Record<string, string> = {
         page: String(pg), limit: String(LIMIT),
       };
+      // 'all' → status=active (API default: excludes reversed/cancelled/failed)
+      params.status = filter === 'all' ? 'active' : filter;
+
+      const { from, to } = getPeriodDates(period);
+      if (from) params.from = from;
+      if (to)   params.to   = to;
+
       if (searchRef.current.trim()) params.search = searchRef.current.trim();
 
       const { data } = await api.get('/rent-payments', { params });
@@ -74,7 +113,7 @@ export default function ReceiptsScreen() {
       setRefreshing(false);
       setLoadingMore(false);
     }
-  }, []);
+  }, [filter, period]);
 
   useEffect(() => { load(1); }, [load]);
   useEffect(() => {
@@ -82,27 +121,24 @@ export default function ReceiptsScreen() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const onEndReached = () => {
-    if (!loadingMore && hasMore) load(page + 1, false);
-  };
-
   const renderItem = ({ item }: { item: Receipt }) => {
-    const sc = resolveStatus(item);
+    const sc        = resolveStatus(item);
     const unapplied = Number(item.allocationSummary?.unapplied ?? 0);
-    const propName = item.property?.propertyName ?? item.property?.name ?? '';
+    const propName  = item.unit?.property?.propertyName ?? item.unit?.property?.name ?? '';
+    const isReversed = item.isReversed || item.isCancelled;
 
     return (
       <TouchableOpacity
-        style={styles.card}
+        style={[styles.card, isReversed && styles.cardReversed]}
         onPress={() => router.push(`/pms/receipts/${item._id}` as any)}
         activeOpacity={0.75}
       >
         <View style={styles.cardTop}>
           <View style={{ flex: 1, gap: 2 }}>
-            <Text style={styles.receiptNum}>
+            <Text style={[styles.receiptNum, isReversed && styles.textMuted]}>
               {item.receiptNumber || item.referenceNumber || '—'}
             </Text>
-            <Text style={styles.tenantName} numberOfLines={1}>
+            <Text style={[styles.tenantName, isReversed && styles.textMuted]} numberOfLines={1}>
               {item.tenant?.name ?? 'Unknown Tenant'}
             </Text>
             <Text style={styles.meta} numberOfLines={1}>
@@ -113,13 +149,13 @@ export default function ReceiptsScreen() {
             <View style={[styles.badge, { backgroundColor: sc.bg }]}>
               <Text style={[styles.badgeText, { color: sc.text }]}>{sc.label}</Text>
             </View>
-            <Text style={styles.amount}>KES {fmt(item.amount)}</Text>
+            <Text style={[styles.amount, isReversed && styles.textMuted]}>KES {fmt(item.amount)}</Text>
           </View>
         </View>
         <View style={styles.cardBottom}>
           <Text style={styles.meta}>{item.paymentType ?? ''}</Text>
           <Text style={styles.meta}>{fmtDate(item.paymentDate)}</Text>
-          {unapplied > 0 && (
+          {!isReversed && unapplied > 0 && (
             <Text style={[styles.meta, { color: Colors.warning, fontWeight: '700' }]}>
               Unallocated: {fmt(unapplied)}
             </Text>
@@ -152,6 +188,44 @@ export default function ReceiptsScreen() {
         </View>
       </View>
 
+      {/* Status tabs */}
+      <FlatList
+        horizontal
+        data={STATUS_TABS}
+        keyExtractor={t => t.key}
+        showsHorizontalScrollIndicator={false}
+        style={{ flexGrow: 0 }}
+        contentContainerStyle={styles.tabsRow}
+        renderItem={({ item: t }) => (
+          <TouchableOpacity
+            style={[styles.tab, filter === t.key && styles.tabActive,
+              t.key === 'reversed' && filter !== 'reversed' && styles.tabReversed]}
+            onPress={() => setFilter(t.key)}
+          >
+            <Text style={[styles.tabText, filter === t.key && styles.tabTextActive,
+              t.key === 'reversed' && filter !== 'reversed' && styles.tabReversedText]}>
+              {t.label}
+            </Text>
+          </TouchableOpacity>
+        )}
+      />
+
+      {/* Period filter */}
+      <View style={styles.periodRow}>
+        <Ionicons name="calendar-outline" size={13} color={Colors.textMuted} style={{ marginRight: 2 }} />
+        {PERIOD_TABS.map(p => (
+          <TouchableOpacity
+            key={p.key}
+            style={[styles.periodChip, period === p.key && styles.periodChipActive]}
+            onPress={() => setPeriod(p.key)}
+          >
+            <Text style={[styles.periodText, period === p.key && styles.periodTextActive]}>
+              {p.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       {loading ? (
         <MilikLoader fullscreen />
       ) : (
@@ -163,7 +237,7 @@ export default function ReceiptsScreen() {
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={() => load(1)} tintColor={Colors.primary} />
           }
-          onEndReached={onEndReached}
+          onEndReached={() => { if (!loadingMore && hasMore) load(page + 1, false); }}
           onEndReachedThreshold={0.3}
           ListEmptyComponent={
             <View style={styles.centered}>
@@ -181,7 +255,6 @@ export default function ReceiptsScreen() {
         />
       )}
 
-      {/* FAB — Record Payment */}
       <TouchableOpacity
         style={styles.fab}
         onPress={() => router.push('/pms/receipts/new' as any)}
@@ -198,6 +271,14 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   emptyText:{ fontSize: 15, color: Colors.textMuted },
   list:     { paddingBottom: 100 },
+  fab: {
+    position: 'absolute', bottom: 28, right: 20,
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: Colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25, shadowRadius: 8, elevation: 8,
+  },
 
   searchRow: { paddingHorizontal: 16, paddingVertical: 10 },
   searchBox: {
@@ -208,29 +289,31 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 14, color: Colors.text },
 
-  card: {
-    marginHorizontal: 16, marginBottom: 10,
-    backgroundColor: Colors.white, borderRadius: 14,
-    borderWidth: 1, borderColor: Colors.border,
-    padding: 14,
-  },
-  cardTop:    { flexDirection: 'row', gap: 10, marginBottom: 8 },
-  cardBottom: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
+  tabsRow:         { paddingHorizontal: 16, paddingBottom: 8, gap: 7 },
+  tab:             { paddingHorizontal: 13, paddingVertical: 6, borderRadius: 20, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border },
+  tabActive:       { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  tabReversed:     { borderColor: '#CBD5E1', backgroundColor: '#F8FAFC' },
+  tabText:         { fontSize: 12, fontWeight: '600', color: Colors.textSecondary },
+  tabTextActive:   { color: Colors.white },
+  tabReversedText: { color: '#94A3B8' },
+
+  periodRow:        { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 16, paddingBottom: 10 },
+  periodChip:       { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border },
+  periodChipActive: { backgroundColor: Colors.primaryFaded, borderColor: Colors.primary },
+  periodText:       { fontSize: 11, fontWeight: '600', color: Colors.textMuted },
+  periodTextActive: { color: Colors.primary, fontWeight: '700' },
+
+  card:         { marginHorizontal: 16, marginBottom: 10, backgroundColor: Colors.white, borderRadius: 14, borderWidth: 1, borderColor: Colors.border, padding: 14 },
+  cardReversed: { opacity: 0.65, borderStyle: 'dashed' },
+  cardTop:      { flexDirection: 'row', gap: 10, marginBottom: 8 },
+  cardBottom:   { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
 
   receiptNum: { fontSize: 14, fontWeight: '800', color: Colors.text },
   tenantName: { fontSize: 13, fontWeight: '600', color: Colors.text },
+  textMuted:  { color: Colors.textMuted },
   meta:       { fontSize: 11, color: Colors.textMuted },
   amount:     { fontSize: 14, fontWeight: '800', color: Colors.success },
 
   badge:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   badgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.4 },
-
-  fab: {
-    position: 'absolute', bottom: 28, right: 20,
-    width: 56, height: 56, borderRadius: 28,
-    backgroundColor: Colors.primary,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25, shadowRadius: 8, elevation: 8,
-  },
 });

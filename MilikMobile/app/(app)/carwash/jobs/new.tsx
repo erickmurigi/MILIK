@@ -25,8 +25,21 @@ const VEHICLE_TYPES = [
   { label: 'Bus / Matatu',        icon: 'bus-outline'           },
 ];
 
-type Service = { _id: string; name: string; price: number; category?: string };
-type Staff   = { _id: string; name: string };
+type PricingTier = { vehicleType: string; price: number };
+type Service = {
+  _id: string; name: string; defaultPrice: number;
+  vehicleType?: string; category?: string;
+  pricingTiers?: PricingTier[];
+};
+type Staff = { _id: string; name: string };
+
+const getServicePrice = (svc: Service, vType: string): number => {
+  if (vType && svc.pricingTiers?.length) {
+    const tier = svc.pricingTiers.find(t => t.vehicleType === vType);
+    if (tier) return tier.price;
+  }
+  return svc.defaultPrice || 0;
+};
 
 export default function NewCarWashJobScreen() {
   const router = useRouter();
@@ -100,7 +113,7 @@ export default function NewCarWashJobScreen() {
 
   const totalAmount = services
     .filter(s => selectedSvcIds.has(s._id))
-    .reduce((sum, s) => sum + Number(s.price || 0), 0);
+    .reduce((sum, s) => sum + getServicePrice(s, vehicleType), 0);
 
   const handleSubmit = async () => {
     if (!plate.trim())           { Alert.alert('Required', 'Enter the plate number.');      return; }
@@ -108,12 +121,19 @@ export default function NewCarWashJobScreen() {
     setSubmitting(true);
     try {
       await api.post('/carwash/jobs', {
-        plate:       plate.trim().toUpperCase().replace(/\s/g, ''),
-        vehicleType: vehicleType || undefined,
-        services:    [...selectedSvcIds],
-        staff:       selectedStaff.length > 0 ? selectedStaff : undefined,
-        customer:    customerName ? { name: customerName, phone: customerPhone } : undefined,
-        notes:       notes.trim() || undefined,
+        plateNumber:  plate.trim().toUpperCase().replace(/\s/g, ''),
+        serviceLines: services
+          .filter(s => selectedSvcIds.has(s._id))
+          .map(s => ({
+            service:     s._id,
+            serviceName: s.name,
+            vehicleType: vehicleType || s.vehicleType || '',
+            price:       getServicePrice(s, vehicleType),
+          })),
+        assignedStaff: selectedStaff.length > 0 ? selectedStaff : undefined,
+        customerName:  customerName.trim() || undefined,
+        phone:         customerPhone.trim() || undefined,
+        notes:         notes.trim() || undefined,
       });
       router.back();
     } catch (err: any) {
@@ -238,8 +258,11 @@ export default function NewCarWashJobScreen() {
                         )}
                         <Text style={[styles.svcName, sel && { color: CW }]} numberOfLines={2}>{svc.name}</Text>
                         <Text style={[styles.svcPrice, sel && { color: CW }]}>
-                          KES {Number(svc.price).toLocaleString()}
+                          KES {getServicePrice(svc, vehicleType).toLocaleString()}
                         </Text>
+                        {vehicleType && svc.pricingTiers?.length && svc.pricingTiers.find(t => t.vehicleType === vehicleType) ? (
+                          <Text style={styles.tierBadge}>{vehicleType}</Text>
+                        ) : null}
                       </TouchableOpacity>
                     );
                   })}
@@ -389,8 +412,9 @@ const styles = StyleSheet.create({
     width: 18, height: 18, borderRadius: 9,
     backgroundColor: CW, alignItems: 'center', justifyContent: 'center',
   },
-  svcName:  { fontSize: 12, fontWeight: '700', color: '#0F172A', paddingRight: 20 },
-  svcPrice: { fontSize: 12, fontWeight: '800', color: '#64748B' },
+  svcName:   { fontSize: 12, fontWeight: '700', color: '#0F172A', paddingRight: 20 },
+  svcPrice:  { fontSize: 12, fontWeight: '800', color: '#64748B' },
+  tierBadge: { fontSize: 9, color: CW, fontWeight: '700', marginTop: 2 },
 
   staffAvatar: {
     width: 28, height: 28, borderRadius: 14,

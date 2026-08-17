@@ -18,21 +18,23 @@ const fmt = (n: number) =>
 const fmtDT = (d: string) =>
   new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-type Service = { _id: string; name: string; price: number };
 type Job = {
   _id:            string;
   jobNumber?:     string;
-  plate:          string;
+  plateNumber:    string;
   vehicleType?:   string;
+  serviceName?:   string;
   status:         string;
   paymentStatus?: string;
-  totalAmount:    number;
+  price:          number;
+  discountAmount?: number;
   amountPaid?:    number;
   notes?:         string;
   createdAt:      string;
-  customer?:      { name?: string; phone?: string };
-  staff?:         { name?: string }[];
-  services?:      (Service | { service?: Service; name?: string; price?: number })[];
+  customerName?:  string;
+  phone?:         string;
+  assignedStaff?: { name?: string; phone?: string }[];
+  serviceLines?:  { service?: { name?: string }; serviceName?: string; vehicleType?: string; price?: number }[];
 };
 
 const STATUS_FLOW = ['waiting', 'washing', 'done', 'paid'] as const;
@@ -73,7 +75,8 @@ export default function JobDetailScreen() {
       const { data } = await api.get(`/carwash/jobs/${id}`);
       const j = data?.data ?? data;
       setJob(j);
-      const bal = Number(j?.totalAmount ?? 0) - Number(j?.amountPaid ?? 0);
+      const netPrice = Math.max(0, Number(j?.price ?? 0) - Number(j?.discountAmount ?? 0));
+      const bal      = netPrice - Number(j?.amountPaid ?? 0);
       if (bal > 0) setPayAmount(String(Math.round(bal * 100) / 100));
     } catch {}
     finally { setLoading(false); setRefreshing(false); }
@@ -143,23 +146,24 @@ export default function JobDetailScreen() {
   );
 
   const sc          = STATUS_CFG[job.status] ?? STATUS_CFG.cancelled;
+  const netPrice    = Math.max(0, Number(job.price ?? 0) - Number(job.discountAmount ?? 0));
   const amountPaid  = Number(job.amountPaid ?? 0);
-  const balance     = Number(job.totalAmount ?? 0) - amountPaid;
-  const isPaid      = balance <= 0;
+  const balance     = netPrice - amountPaid;
+  const isPaid      = job.paymentStatus === 'paid' || balance <= 0.01;
   const isCancelled = job.status === 'cancelled';
   const currentIdx  = STATUS_FLOW.indexOf(job.status as any);
 
-  const svcList = (job.services ?? []).map(s => {
-    const svc = (s as any).service ?? s;
-    return { name: svc.name ?? (s as any).name ?? '—', price: Number(svc.price ?? (s as any).price ?? 0) };
-  });
+  const svcList = (job.serviceLines ?? []).map(s => ({
+    name:  s.serviceName || s.service?.name || '—',
+    price: Number(s.price ?? 0),
+  }));
   const svcTotal = svcList.reduce((sum, s) => sum + s.price, 0);
 
   const payAmtNum = parseFloat(payAmount || '0') || 0;
 
   return (
     <>
-      <Stack.Screen options={{ title: `${job.plate}${job.jobNumber ? '  ·  #' + job.jobNumber : ''}` }} />
+      <Stack.Screen options={{ title: `${job.plateNumber || '—'}${job.jobNumber ? '  ·  #' + job.jobNumber : ''}` }} />
       <SafeAreaView style={styles.safe} edges={['bottom']}>
         <ScrollView
           contentContainerStyle={styles.scroll}
@@ -171,7 +175,7 @@ export default function JobDetailScreen() {
             {/* Plate + status row */}
             <View style={styles.heroTopRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.plateTxt}>{job.plate}</Text>
+                <Text style={styles.plateTxt}>{job.plateNumber || '—'}</Text>
                 {job.vehicleType ? <Text style={styles.vehicleTxt}>{job.vehicleType}</Text> : null}
               </View>
               <View style={{ alignItems: 'flex-end', gap: 8 }}>
@@ -183,28 +187,28 @@ export default function JobDetailScreen() {
             </View>
 
             {/* Customer */}
-            {(job.customer?.name || job.customer?.phone) ? (
+            {(job.customerName || job.phone) ? (
               <View style={styles.heroDivider} />
             ) : null}
-            {job.customer?.name ? <Text style={styles.customerTxt}>{job.customer.name}</Text> : null}
-            {job.customer?.phone ? (
+            {job.customerName ? <Text style={styles.customerTxt}>{job.customerName}</Text> : null}
+            {job.phone ? (
               <TouchableOpacity
                 style={styles.phoneRow}
-                onPress={() => Linking.openURL(`tel:${job.customer!.phone}`)}
+                onPress={() => Linking.openURL(`tel:${job.phone}`)}
                 activeOpacity={0.75}
               >
                 <Ionicons name="call-outline" size={13} color="rgba(255,255,255,0.65)" />
-                <Text style={styles.phoneTxt}>{job.customer.phone}</Text>
+                <Text style={styles.phoneTxt}>{job.phone}</Text>
               </TouchableOpacity>
             ) : null}
 
             {/* Footer row: staff + date */}
             <View style={styles.heroFooterRow}>
-              {job.staff?.length ? (
+              {job.assignedStaff?.length ? (
                 <View style={styles.heroMeta}>
                   <Ionicons name="person-outline" size={11} color="rgba(255,255,255,0.5)" />
                   <Text style={styles.heroMetaTxt} numberOfLines={1}>
-                    {job.staff.map(s => s.name).filter(Boolean).join(', ')}
+                    {job.assignedStaff.map(s => s.name).filter(Boolean).join(', ')}
                   </Text>
                 </View>
               ) : <View />}
@@ -276,7 +280,7 @@ export default function JobDetailScreen() {
             <View style={styles.finRow}>
               <View style={styles.finStat}>
                 <Text style={styles.finLabel}>TOTAL</Text>
-                <Text style={styles.finValue}>{fmt(job.totalAmount)}</Text>
+                <Text style={styles.finValue}>{fmt(netPrice)}</Text>
               </View>
               <View style={[styles.finStat, styles.finBorder]}>
                 <Text style={styles.finLabel}>PAID</Text>

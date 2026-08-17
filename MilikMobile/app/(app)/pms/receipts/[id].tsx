@@ -10,9 +10,10 @@ import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
 
 type Allocation = {
-  invoice?:    { invoiceNumber?: string; category?: string; amount?: number };
-  amount:      number;
-  description: string;
+  invoiceNumber?: string;
+  category?:      string;
+  appliedAmount:  number;
+  description?:   string;
 };
 
 type Receipt = {
@@ -35,12 +36,12 @@ type Receipt = {
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
-  RENT_CHARGE:    'Rent',
-  UTILITY_CHARGE: 'Utility',
-  DEPOSIT_CHARGE: 'Deposit',
-  PENALTY_CHARGE: 'Penalty',
-  DEBIT_NOTE:     'Debit Note',
-  TAKE_ON_DEBIT:  'Take-on',
+  RENT_CHARGE:         'Rent',
+  UTILITY_CHARGE:      'Utility',
+  DEPOSIT_CHARGE:      'Deposit',
+  LATE_PENALTY_CHARGE: 'Penalty',
+  DEBIT_NOTE:          'Debit Note',
+  TAKE_ON_DEBIT:       'Take-on',
 };
 
 const fmt = (n: number) =>
@@ -164,9 +165,8 @@ export default function ReceiptDetailScreen() {
               </View>
             ) : (
               receipt.allocations.map((alloc, i) => {
-                const cat = alloc.invoice?.category;
-                const catLabel = cat ? (CATEGORY_LABELS[cat] ?? cat) : '';
-                const invNum = alloc.invoice?.invoiceNumber ?? '';
+                const catLabel = alloc.category ? (CATEGORY_LABELS[alloc.category] ?? alloc.category) : '';
+                const invNum   = alloc.invoiceNumber ?? '';
                 return (
                   <View key={i} style={styles.allocRow}>
                     <View style={styles.allocIcon}>
@@ -175,7 +175,7 @@ export default function ReceiptDetailScreen() {
                     <View style={{ flex: 1, gap: 2 }}>
                       <Text style={styles.allocInv}>{[invNum, catLabel].filter(Boolean).join(' · ') || alloc.description || 'Invoice'}</Text>
                     </View>
-                    <Text style={styles.allocAmt}>KES {fmt(alloc.amount)}</Text>
+                    <Text style={styles.allocAmt}>KES {fmt(alloc.appliedAmount)}</Text>
                   </View>
                 );
               })

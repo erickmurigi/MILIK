@@ -15,38 +15,38 @@ const fmt = (n: number) =>
   `KES ${Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 type Requisition = {
-  _id:               string;
-  requisitionNumber?: string;
-  purpose:           string;
-  totalAmount:       number;
-  requestedBy?:      { name?: string };
-  date?:             string;
-  createdAt:         string;
-  status:            string;
-  urgency?:          string;
+  _id:             string;
+  requisitionNo?:  string;
+  title:           string;
+  amount:          number;
+  submittedBy?:    { surname?: string; otherNames?: string };
+  date?:           string;
+  createdAt:       string;
+  status:          string;
+  priority?:       string;
 };
 
 const STATUS_CFG: Record<string, { bg: string; color: string; label: string }> = {
-  draft:    { bg: '#F1F5F9', color: '#64748B', label: 'Draft'    },
-  pending:  { bg: '#FEF3C7', color: '#D97706', label: 'Pending'  },
-  approved: { bg: '#D1FAE5', color: '#065F46', label: 'Approved' },
-  rejected: { bg: '#FEE2E2', color: '#DC2626', label: 'Rejected' },
-  paid:     { bg: '#EDE9FE', color: '#7C3AED', label: 'Paid'     },
+  draft:     { bg: '#F1F5F9', color: '#64748B', label: 'Draft'     },
+  submitted: { bg: '#FEF3C7', color: '#D97706', label: 'Submitted' },
+  approved:  { bg: '#D1FAE5', color: '#065F46', label: 'Approved'  },
+  rejected:  { bg: '#FEE2E2', color: '#DC2626', label: 'Rejected'  },
+  converted: { bg: '#EDE9FE', color: '#7C3AED', label: 'Converted' },
+  cancelled: { bg: '#F1F5F9', color: '#94A3B8', label: 'Cancelled' },
 };
 
-const URGENCY_CFG: Record<string, { color: string }> = {
+const PRIORITY_CFG: Record<string, { color: string }> = {
   low:    { color: '#64748B' },
   medium: { color: '#D97706' },
   high:   { color: '#DC2626' },
-  urgent: { color: '#7C3AED' },
 };
 
 const TABS = [
-  { key: '',         label: 'All'      },
-  { key: 'draft',    label: 'Draft'    },
-  { key: 'pending',  label: 'Pending'  },
-  { key: 'approved', label: 'Approved' },
-  { key: 'paid',     label: 'Paid'     },
+  { key: '',          label: 'All'       },
+  { key: 'draft',     label: 'Draft'     },
+  { key: 'submitted', label: 'Submitted' },
+  { key: 'approved',  label: 'Approved'  },
+  { key: 'converted', label: 'Converted' },
 ] as const;
 
 export default function RequisitionsScreen() {
@@ -87,7 +87,7 @@ export default function RequisitionsScreen() {
   useEffect(() => { const t = setTimeout(() => load(1), 400); return () => clearTimeout(t); }, [search]);
 
   const quickApprove = (item: Requisition) => {
-    Alert.alert('Approve Requisition', `Approve "${item.purpose}"?`, [
+    Alert.alert('Approve Requisition', `Approve "${item.title}"?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Approve',
@@ -105,7 +105,10 @@ export default function RequisitionsScreen() {
 
   const renderItem = ({ item }: { item: Requisition }) => {
     const sc  = STATUS_CFG[item.status] ?? STATUS_CFG.draft;
-    const urg = item.urgency ? URGENCY_CFG[item.urgency] : null;
+    const pri = item.priority ? PRIORITY_CFG[item.priority] : null;
+    const submitter = item.submittedBy
+      ? [item.submittedBy.surname, item.submittedBy.otherNames].filter(Boolean).join(' ')
+      : null;
     return (
       <TouchableOpacity
         style={[styles.card, { borderLeftColor: sc.color }]}
@@ -114,12 +117,12 @@ export default function RequisitionsScreen() {
       >
         <View style={styles.cardTop}>
           <View style={{ flex: 1 }}>
-            {item.requisitionNumber ? <Text style={styles.numTxt}>{item.requisitionNumber}</Text> : null}
-            <Text style={styles.purpose} numberOfLines={2}>{item.purpose}</Text>
-            {item.requestedBy?.name ? (
+            {item.requisitionNo ? <Text style={styles.numTxt}>{item.requisitionNo}</Text> : null}
+            <Text style={styles.purpose} numberOfLines={2}>{item.title}</Text>
+            {submitter ? (
               <View style={styles.byRow}>
                 <Ionicons name="person-outline" size={11} color="#94A3B8" />
-                <Text style={styles.byTxt}>{item.requestedBy.name}</Text>
+                <Text style={styles.byTxt}>{submitter}</Text>
               </View>
             ) : null}
           </View>
@@ -127,15 +130,15 @@ export default function RequisitionsScreen() {
             <View style={[styles.badge, { backgroundColor: sc.bg }]}>
               <Text style={[styles.badgeTxt, { color: sc.color }]}>{sc.label}</Text>
             </View>
-            <Text style={styles.amount}>{fmt(item.totalAmount)}</Text>
-            {urg && item.urgency && (
-              <Text style={[styles.urgencyTxt, { color: urg.color }]}>{item.urgency.toUpperCase()}</Text>
+            <Text style={styles.amount}>{fmt(item.amount)}</Text>
+            {pri && item.priority && (
+              <Text style={[styles.urgencyTxt, { color: pri.color }]}>{item.priority.toUpperCase()}</Text>
             )}
           </View>
         </View>
         <View style={styles.cardBottom}>
           <Text style={styles.dateTxt}>{fmtDate(item.date ?? item.createdAt)}</Text>
-          {item.status === 'pending' && (
+          {item.status === 'submitted' && (
             <TouchableOpacity style={styles.approveBtn} onPress={() => quickApprove(item)}>
               <Ionicons name="checkmark" size={13} color={AC} />
               <Text style={styles.approveBtnTxt}>Approve</Text>

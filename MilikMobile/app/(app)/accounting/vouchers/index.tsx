@@ -15,30 +15,30 @@ const fmt = (n: number) =>
   `KES ${Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 type Voucher = {
-  _id: string;
-  voucherNumber?: string;
-  payee?: string | { name?: string };
-  date: string;
-  amount: number;
-  narration?: string;
-  status: string;
-  paymentAccount?: { name?: string } | string;
+  _id:              string;
+  voucherNo?:       string;
+  dueDate?:         string;
+  createdAt?:       string;
+  amount:           number;
+  narration?:       string;
+  status:           string;
+  serviceProvider?: { name?: string };
+  landlord?:        { firstName?: string; lastName?: string };
 };
 
 const STATUS_CFG: Record<string, { bg: string; color: string; label: string }> = {
-  draft:     { bg: '#F1F5F9', color: '#64748B', label: 'Draft'     },
-  pending:   { bg: '#FEF3C7', color: '#D97706', label: 'Pending'   },
-  approved:  { bg: '#EDE9FE', color: '#7C3AED', label: 'Approved'  },
-  paid:      { bg: '#D1FAE5', color: '#065F46', label: 'Paid'      },
-  cancelled: { bg: '#FEE2E2', color: '#DC2626', label: 'Cancelled' },
+  draft:    { bg: '#F1F5F9', color: '#64748B', label: 'Draft'    },
+  approved: { bg: '#EDE9FE', color: '#7C3AED', label: 'Approved' },
+  paid:     { bg: '#D1FAE5', color: '#065F46', label: 'Paid'     },
+  reversed: { bg: '#FEE2E2', color: '#DC2626', label: 'Reversed' },
 };
 
 const TABS = [
-  { key: '',          label: 'All'      },
-  { key: 'draft',     label: 'Draft'    },
-  { key: 'pending',   label: 'Pending'  },
-  { key: 'approved',  label: 'Approved' },
-  { key: 'paid',      label: 'Paid'     },
+  { key: '',         label: 'All'      },
+  { key: 'draft',    label: 'Draft'    },
+  { key: 'approved', label: 'Approved' },
+  { key: 'paid',     label: 'Paid'     },
+  { key: 'reversed', label: 'Reversed' },
 ] as const;
 
 export default function VouchersScreen() {
@@ -79,12 +79,14 @@ export default function VouchersScreen() {
   useEffect(() => { const t = setTimeout(() => load(1), 400); return () => clearTimeout(t); }, [search]);
 
   const getPayee = (v: Voucher) => {
-    if (!v.payee) return 'Unknown';
-    return typeof v.payee === 'string' ? v.payee : (v.payee.name ?? 'Unknown');
+    if (v.serviceProvider?.name) return v.serviceProvider.name;
+    if (v.landlord?.firstName) return [v.landlord.firstName, v.landlord.lastName].filter(Boolean).join(' ');
+    return v.narration ?? 'Unknown';
   };
 
   const renderItem = ({ item }: { item: Voucher }) => {
-    const sc = STATUS_CFG[item.status] ?? STATUS_CFG.draft;
+    const sc   = STATUS_CFG[item.status] ?? STATUS_CFG.draft;
+    const date = item.dueDate ?? item.createdAt ?? '';
     return (
       <TouchableOpacity
         style={[styles.card, { borderLeftColor: sc.color }]}
@@ -93,7 +95,7 @@ export default function VouchersScreen() {
       >
         <View style={styles.cardTop}>
           <View style={{ flex: 1 }}>
-            {item.voucherNumber ? <Text style={styles.numTxt}>{item.voucherNumber}</Text> : null}
+            {item.voucherNo ? <Text style={styles.numTxt}>{item.voucherNo}</Text> : null}
             <Text style={styles.payeeTxt} numberOfLines={1}>{getPayee(item)}</Text>
             {item.narration ? <Text style={styles.narration} numberOfLines={1}>{item.narration}</Text> : null}
           </View>
@@ -104,7 +106,7 @@ export default function VouchersScreen() {
             <Text style={styles.amount}>{fmt(item.amount)}</Text>
           </View>
         </View>
-        <Text style={styles.dateTxt}>{fmtDate(item.date)}</Text>
+        {date ? <Text style={styles.dateTxt}>{fmtDate(date)}</Text> : null}
       </TouchableOpacity>
     );
   };
