@@ -47,59 +47,58 @@ export const getInvoiceCategoryLabel = (invoice = {}) => {
   const billItemKey = String(metadata?.billItemKey || "").trim().toLowerCase();
   const billItemLabel = String(metadata?.billItemLabel || "").trim();
 
-  if (category === "OTHER_CHARGE") {
-    // Prefer stored label; fall back to legacy lease-fee detection
-    if (billItemLabel) return billItemLabel;
-    if (
-      sourceType === "lease_agreement_fee" ||
-      billItemKey === "lease_agreement_fee" ||
-      billItemKey === "lease_fee"
-    ) return "Lease Fee";
-    return "Other Charge";
-  }
+  // Stored label always wins — covers debit notes of any category
+  if (billItemLabel) return billItemLabel;
 
   if (category === "RENT_CHARGE") return "Rent Charge";
   if (category === "UTILITY_CHARGE") return "Utility Charge";
   if (category === "DEPOSIT_CHARGE") return "Deposit Charge";
-  if (category === "LATE_PENALTY_CHARGE") return "Late Penalty Charge";
+  if (category === "LATE_PENALTY_CHARGE") return "Late Penalty";
+  if (category === "OTHER_CHARGE") {
+    if (sourceType === "lease_agreement_fee" || billItemKey === "lease_agreement_fee" || billItemKey === "lease_fee")
+      return "Lease Fee";
+    return "Other Charge";
+  }
   return "Charge";
 };
 
-// Returns "Rent Charge – July 2026", "Utility Charge (Water) – July 2026", etc.
-// Pass unitLabel (e.g. "BAR") to append " · BAR" when the invoice belongs to
-// a specific unit that needs to be identified in a multi-unit context.
+// Returns "Rent Charge – July 2026", "Water – July 2026", "Security Deposit – July 2026", etc.
+// When metadata.billItemLabel is set (always true for debit notes), it is the canonical label
+// used across the allocation workspace, tenant statement, and rental invoices list.
+// Pass unitLabel (e.g. "B4") to append " · B4" for multi-unit context.
 export const buildInvoiceNarration = (invoice = {}, unitLabel = "") => {
   const category = String(invoice?.category || "").toUpperCase();
   const metadata = invoice?.metadata && typeof invoice.metadata === "object" ? invoice.metadata : {};
   const period = formatStatementLongPeriod(invoice?.invoiceDate || invoice?.createdAt);
+  const billItemLabel = String(metadata?.billItemLabel || "").trim();
 
   let baseLabel;
 
   if (category === "RENT_CHARGE") {
     const utilityBreakdown = Array.isArray(metadata.utilityBreakdown) ? metadata.utilityBreakdown : [];
     if (utilityBreakdown.length > 0) {
+      // Combined rent+utility invoice — keep the breakdown label regardless of billItemLabel
       const utilityNames = uniqueStatementParts(
         utilityBreakdown.map((item) => item?.label || item?.utilityType || item?.name)
       );
-      baseLabel = utilityNames.length > 0 ? `Rent + ${utilityNames.join(" + ")}` : "Rent Charge";
+      baseLabel = utilityNames.length > 0 ? `Rent + ${utilityNames.join(" + ")}` : (billItemLabel || "Rent Charge");
     } else {
-      baseLabel = "Rent Charge";
+      baseLabel = billItemLabel || "Rent Charge";
     }
   } else if (category === "UTILITY_CHARGE") {
-    const utilityNames = extractUtilityNamesFromInvoice(invoice);
-    baseLabel = utilityNames.length > 0 ? `Utility Charge (${utilityNames.join(" + ")})` : "Utility Charge";
-  } else if (category === "DEPOSIT_CHARGE") {
-    baseLabel = "Deposit Charge";
-  } else if (category === "LATE_PENALTY_CHARGE") {
-    baseLabel = "Late Penalty";
-  } else if (category === "OTHER_CHARGE") {
-    baseLabel = getInvoiceCategoryLabel(invoice) || cleanStatementPart(invoice?.description) || "Other Charge";
+    if (billItemLabel) {
+      // Debit note or labelled invoice — use the specific label directly
+      baseLabel = billItemLabel;
+    } else {
+      const utilityNames = extractUtilityNamesFromInvoice(invoice);
+      baseLabel = utilityNames.length > 0 ? `Utility Charge (${utilityNames.join(" + ")})` : "Utility Charge";
+    }
   } else {
-    baseLabel = getInvoiceCategoryLabel(invoice) || "Charge";
+    // DEPOSIT_CHARGE, LATE_PENALTY_CHARGE, OTHER_CHARGE, and any other type:
+    // getInvoiceCategoryLabel already prioritises billItemLabel so this is consistent.
+    baseLabel = getInvoiceCategoryLabel(invoice);
   }
 
-  const description = cleanStatementPart(
-    period ? `${baseLabel} – ${period}` : baseLabel || invoice?.description || "Charge"
-  );
+  const description = cleanStatementPart(period ? `${baseLabel} – ${period}` : baseLabel || "Charge");
   return unitLabel ? `${description} · ${unitLabel}` : description;
 };
