@@ -28,6 +28,23 @@ const LISTABLE_STATUS_MATCH = {
   $or: [{ status: "vacant" }, { status: "occupied", availableFrom: { $ne: null } }],
 };
 
+// Properties saved before these listing fields existed on the schema were
+// never re-saved, so `.lean()` reads simply omit the keys (Mongoose only
+// backfills defaults on hydrated documents, not on lean reads of old data).
+// Normalize here so the public API always has a consistent shape.
+const normalizeProperty = (property = {}) => ({
+  ...property,
+  description: property.description || "",
+  specificContactInfo: property.specificContactInfo || "",
+  amenities: Array.isArray(property.amenities) ? property.amenities : [],
+  nearbyPoints: Array.isArray(property.nearbyPoints) ? property.nearbyPoints : [],
+  listingContact: property.listingContact || {},
+  yearBuilt: property.yearBuilt ?? null,
+  verified: Boolean(property.verified),
+  coordinates: property.coordinates || { lat: null, lng: null },
+  images: Array.isArray(property.images) ? property.images : [],
+});
+
 // Cross-business search — the aggregated marketplace feed. Unlike the
 // per-business endpoint below, this has no businessId to scope by, so
 // filtering happens via an aggregation pipeline (Unit -> lookup Property ->
@@ -99,7 +116,10 @@ router.get("/", async (req, res) => {
     ];
 
     const [result] = await Unit.aggregate(pipeline);
-    const listings = result?.data || [];
+    const listings = (result?.data || []).map((item) => ({
+      ...item,
+      property: normalizeProperty(item.property),
+    }));
     const total = result?.totalCount?.[0]?.count || 0;
 
     return res.json({
@@ -131,6 +151,8 @@ router.get("/detail/:unitId", async (req, res) => {
     if (!unit) {
       return res.status(404).json({ success: false, message: "Listing not found" });
     }
+
+    unit.property = normalizeProperty(unit.property);
 
     return res.json({ success: true, listing: unit });
   } catch (err) {
@@ -171,7 +193,7 @@ router.get("/:businessId", async (req, res) => {
         logo: business.logo || "",
         slogan: business.slogan || "",
       },
-      listings,
+      listings: listings.map((item) => ({ ...item, property: normalizeProperty(item.property) })),
     });
   } catch (err) {
     console.error("Public listings error:", err);

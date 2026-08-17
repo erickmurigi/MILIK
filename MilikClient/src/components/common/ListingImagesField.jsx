@@ -1,6 +1,7 @@
 // components/Common/ListingImagesField.jsx
 import React, { useRef } from "react";
 import { FaTrash, FaPlus, FaImage } from "react-icons/fa";
+import { cloudinaryUrl } from "../../utils/cloudinaryUrl";
 
 /**
  * Controlled photo picker used by the Unit and Property forms to build public
@@ -47,7 +48,7 @@ export default function ListingImagesField({
       <div className="flex flex-wrap gap-3 mt-1.5">
         {existingImages.map((url) => (
           <div key={url} className="relative w-24 h-24 rounded-lg overflow-hidden border border-slate-200 group">
-            <img src={url} alt="" className="w-full h-full object-cover" />
+            <img src={cloudinaryUrl(url, { width: 192, height: 192 })} alt="" className="w-full h-full object-cover" loading="lazy" />
             <button
               type="button"
               onClick={() => onRemoveExisting(url)}

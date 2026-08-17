@@ -647,6 +647,11 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
     const depositMemo = workspace.depositMemo || {};
     const depositMemoRows = Array.isArray(depositMemo.rows) ? depositMemo.rows : [];
     const depositMemoTotals = depositMemo.totals || {};
+    const depositSettlement = workspace.depositSettlement || {};
+    const depositSettlementAllRows = Array.isArray(depositSettlement.rows) ? depositSettlement.rows : [];
+    const depositSettlementTotals = depositSettlement.totals || {};
+    const depositSettlementAdditionRows = depositSettlementAllRows.filter((r) => r.effect !== "offset");
+    const depositSettlementOffsetRows = depositSettlementAllRows.filter((r) => r.effect === "offset");
     const broughtForwardCreditApplications = workspace.broughtForwardCreditApplications || {};
     const broughtForwardCreditApplicationRows = Array.isArray(broughtForwardCreditApplications.rows)
       ? broughtForwardCreditApplications.rows
@@ -987,6 +992,36 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
                   <thead><tr><th>Date</th><th>Description</th><th class="num">Amount</th></tr></thead>
                   <tbody>${renderSimpleRows(advanceRecoveryRows, "No advance recoveries in this period")}</tbody>
                   <tfoot><tr><td colspan="2" class="num">Total</td><td class="num">${formatCurrency(totalAdvanceRecoveries)}</td></tr></tfoot>
+                </table>` : ""}
+
+              ${depositSettlementAllRows.length > 0 ? `
+                <div class="section-title">Deposit Remittance</div>
+                <table class="simple-table">
+                  <thead>
+                    <tr><th>#</th><th>Description</th><th>Type</th><th class="num">Amount</th></tr>
+                  </thead>
+                  <tbody>
+                    ${depositSettlementAdditionRows.map((item, i) => `
+                      <tr>
+                        <td class="muted" style="width:20px">${i + 1}</td>
+                        <td>${esc(item.description || "Deposit remittance")}${item.unit ? ` <span style="font-size:7px;color:#6b7280;">(${esc(item.unit)})</span>` : ""}</td>
+                        <td><span style="font-size:7px;font-weight:700;color:#065f46;">${item.holder === "landlord" ? "Landlord-held" : "Settlement"}</span></td>
+                        <td class="num" style="color:#065f46;">${formatCurrency(item.amount)}</td>
+                      </tr>`).join("")}
+                    ${depositSettlementOffsetRows.map((item, i) => `
+                      <tr>
+                        <td class="muted" style="width:20px">${depositSettlementAdditionRows.length + i + 1}</td>
+                        <td>${esc(item.description || "Deposit offset")}${item.unit ? ` <span style="font-size:7px;color:#6b7280;">(${esc(item.unit)})</span>` : ""}</td>
+                        <td><span style="font-size:7px;font-weight:700;color:#92400e;">Direct offset</span></td>
+                        <td class="num" style="color:#92400e;">(${formatCurrency(item.amount)})</td>
+                      </tr>`).join("")}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colspan="3" class="num" style="font-weight:700;">Net Added to Landlord</td>
+                      <td class="num" style="font-weight:700;">${formatCurrency((depositSettlementTotals.additions || 0) - (depositSettlementTotals.offsets || 0))}</td>
+                    </tr>
+                  </tfoot>
                 </table>` : ""}
 
               ${depositMemoRows.length > 0 ? `

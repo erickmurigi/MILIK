@@ -127,7 +127,7 @@ const resolveUnitName = (record, tenantMap) => {
 
 const getStatusChip = (status) => {
   const normalized = String(status || "draft").toLowerCase();
-  if (normalized === "posted") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (normalized === "posted") return "border-slate-300 bg-slate-50 text-slate-600";
   if (normalized === "reversed") return "border-amber-200 bg-amber-50 text-amber-700";
   if (normalized === "cancelled") return "border-rose-200 bg-rose-50 text-rose-700";
   return "border-slate-200 bg-slate-50 text-slate-700";
@@ -150,7 +150,7 @@ const getNotePaymentState = (note = {}) => {
   if (["part_paid", "partially_paid", "partial"].includes(paymentStatus) || paidAmount > 0 && paidAmount < amount) {
     return { label: "Part Paid", className: "bg-amber-100 text-amber-700" };
   }
-  return { label: "Unpaid", className: "bg-orange-100 text-orange-700" };
+  return { label: "Unpaid", className: "bg-rose-100 text-rose-700 border border-rose-200" };
 };
 
 const normalizeInvoiceItemKey = (invoice) => {
@@ -208,6 +208,13 @@ const resolveTenantLeaseStartDate = (tenant) =>
   tenant?.createdAt ||
   null;
 
+const LEASE_FEE_CHARGE_ITEM = {
+  key: "standalone-lease-fee",
+  label: "Lease Fee",
+  category: "OTHER_CHARGE",
+  metadata: { billItemKey: "lease_fee", billItemLabel: "Lease Fee", includeInLandlordStatement: false },
+};
+
 const STANDALONE_CHARGE_ITEMS = [
   {
     key: "standalone-water",
@@ -228,12 +235,6 @@ const STANDALONE_CHARGE_ITEMS = [
     metadata: { billItemKey: "utility:garbage", billItemLabel: "Garbage", utilityType: "Garbage", statementUtilityType: "Garbage" },
   },
   {
-    key: "standalone-service-charge",
-    label: "Service Charge",
-    category: "OTHER_CHARGE",
-    metadata: { billItemKey: "service_charge", billItemLabel: "Service Charge", includeInLandlordStatement: true },
-  },
-  {
     key: "standalone-late-payment",
     label: "Late Payment",
     category: "LATE_PENALTY_CHARGE",
@@ -247,12 +248,6 @@ const STANDALONE_CHARGE_ITEMS = [
     metadata: { billItemKey: "deposit", billItemLabel: "Deposit" },
   },
   {
-    key: "standalone-lease-fee",
-    label: "Lease Fee",
-    category: "OTHER_CHARGE",
-    metadata: { billItemKey: "lease_fee", billItemLabel: "Lease Fee", includeInLandlordStatement: false },
-  },
-  {
     key: "standalone-other-charge",
     label: "Other Charge",
     category: "OTHER_CHARGE",
@@ -260,7 +255,7 @@ const STANDALONE_CHARGE_ITEMS = [
   },
 ];
 
-const InvoiceNotes = () => {
+const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
   const dispatch = useDispatch();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentCompany = useSelector(selectCurrentCompany);
@@ -269,6 +264,7 @@ const InvoiceNotes = () => {
 
   const requestedType = String(searchParams.get("type") || "").trim().toLowerCase();
   const initialNoteType = requestedType === "debit" ? "DEBIT_NOTE" : "CREDIT_NOTE";
+  const isLocked = Boolean(lockedBillItemKey);
 
   const invoiceNotesDraftKey = buildScopedDraftKey({
     page: "invoice-notes",
@@ -303,6 +299,7 @@ const InvoiceNotes = () => {
   const setNoteType = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, noteType: typeof value === "function" ? value(prev.noteType || initialNoteType) : value }));
   const [currentPage, setCurrentPage] = useTabState("/invoices/notes:currentPage", 1);
   const filters = invoiceNotesDraft.filters || { propertyId: "", tenantId: "", tenantScope: "active", noteType: initialNoteType, search: "", status: "active" };
+  const effectiveFilters = isLocked ? { ...filters, noteType: "DEBIT_NOTE" } : filters;
   const setFilters = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, filters: typeof value === "function" ? value(prev.filters || filters) : value }));
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const showAddModal = Boolean(invoiceNotesDraft.showAddModal);
@@ -406,6 +403,11 @@ const InvoiceNotes = () => {
     setFilters((prev) => ({ ...prev, noteType: nextType }));
   }, [searchParams]);
 
+  useEffect(() => {
+    if (!isLocked || !tenantId) return;
+    setInvoiceItemSelection("standalone-lease-fee");
+  }, [isLocked, tenantId]);
+
   const propertyScopedTenants = useMemo(() => {
     const scoped = !propertyId ? tenants : tenants.filter((tenant) => resolvePropertyId(tenant) === String(propertyId));
     return scoped.filter((tenant) => tenantMatchesScope(tenant, tenantScope));
@@ -496,7 +498,8 @@ const InvoiceNotes = () => {
       });
     }
 
-    const otherOptions = STANDALONE_CHARGE_ITEMS.map((item) => ({
+    const chargePool = isLocked ? [LEASE_FEE_CHARGE_ITEM] : STANDALONE_CHARGE_ITEMS;
+    const otherOptions = chargePool.map((item) => ({
       ...item,
       anchorInvoiceId: "",
       anchorInvoice: null,
@@ -580,18 +583,20 @@ const InvoiceNotes = () => {
   }, [tenantId]);
 
   const filteredNotes = useMemo(() => {
-    const query = String(filters.search || "").trim().toLowerCase();
+    const query = String(effectiveFilters.search || "").trim().toLowerCase();
     return notes.filter((note) => {
-      if (filters.noteType && String(note.noteType || "").toUpperCase() !== String(filters.noteType)) return false;
-      if (filters.propertyId && resolvePropertyId(note) !== String(filters.propertyId)) return false;
-      if (filters.tenantId && resolveTenantId(note) !== String(filters.tenantId)) return false;
-      if ((filters.tenantScope || "active") !== "all") {
+      if (isLocked && String(note.noteType || "").toUpperCase() !== "DEBIT_NOTE") return false;
+      if (isLocked && String(note.metadata?.billItemKey || "").trim() !== lockedBillItemKey) return false;
+      if (effectiveFilters.noteType && String(note.noteType || "").toUpperCase() !== String(effectiveFilters.noteType)) return false;
+      if (effectiveFilters.propertyId && resolvePropertyId(note) !== String(effectiveFilters.propertyId)) return false;
+      if (effectiveFilters.tenantId && resolveTenantId(note) !== String(effectiveFilters.tenantId)) return false;
+      if ((effectiveFilters.tenantScope || "active") !== "all") {
         const noteTenant = note?.tenant && typeof note.tenant === "object" ? note.tenant : tenantMap.get(resolveTenantId(note));
-        if (!tenantMatchesScope(noteTenant, filters.tenantScope || "active")) return false;
+        if (!tenantMatchesScope(noteTenant, effectiveFilters.tenantScope || "active")) return false;
       }
-      if (filters.status === "active" && !isActiveNote(note)) return false;
-      if (filters.status === "reversed" && String(note?.status || "").toLowerCase() !== "reversed") return false;
-      if (filters.status === "all") {
+      if (effectiveFilters.status === "active" && !isActiveNote(note)) return false;
+      if (effectiveFilters.status === "reversed" && String(note?.status || "").toLowerCase() !== "reversed") return false;
+      if (effectiveFilters.status === "all") {
         // keep all
       }
       if (!query) return true;
@@ -609,7 +614,7 @@ const InvoiceNotes = () => {
         .toLowerCase();
       return haystack.includes(query);
     });
-  }, [notes, filters, propertyMap, tenantMap]);
+  }, [notes, effectiveFilters, isLocked, lockedBillItemKey, propertyMap, tenantMap]);
 
   const totalPages = Math.max(1, Math.ceil(filteredNotes.length / ITEMS_PER_PAGE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
@@ -871,9 +876,15 @@ const InvoiceNotes = () => {
                 <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Active: {formatCurrency(summaryCards.activeValue)}</span>
                 <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">Total: {formatCurrency(summaryCards.totalValue)}</span>
                 {selectedNotes.length > 0 && <span className="shrink-0 rounded border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">{selectedNotes.length} selected</span>}
+                {!isLocked && (
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                )}
+                {!isLocked && (
                 <button type="button" onClick={() => { setNoteType("CREDIT_NOTE"); setFilters((prev) => ({ ...prev, noteType: "CREDIT_NOTE" })); const p = new URLSearchParams(searchParams); p.set("type", "credit"); setSearchParams(p, { replace: true }); }} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold ${filters.noteType === "CREDIT_NOTE" ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}>Credit Notes</button>
+                )}
+                {!isLocked && (
                 <button type="button" onClick={() => { setNoteType("DEBIT_NOTE"); setFilters((prev) => ({ ...prev, noteType: "DEBIT_NOTE" })); const p = new URLSearchParams(searchParams); p.set("type", "debit"); setSearchParams(p, { replace: true }); }} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold ${filters.noteType === "DEBIT_NOTE" ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}>Debit Notes</button>
+                )}
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <input type="text" value={filters.search} onChange={setFilter("search")} placeholder="Search…" className="h-7 w-36 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 <AppSelect

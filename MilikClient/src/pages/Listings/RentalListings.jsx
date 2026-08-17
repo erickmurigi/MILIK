@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import { cloudinaryUrl } from "../../utils/cloudinaryUrl";
 
 const API_BASE = String(import.meta.env?.VITE_API_URL || "/api").replace(/\/$/, "");
 
@@ -69,9 +70,10 @@ const ListingCard = ({ unit, bizPhone }) => {
       <div className="relative h-48 bg-slate-100 flex-shrink-0">
         {img && !imgError ? (
           <img
-            src={img}
+            src={cloudinaryUrl(img, { width: 500, height: 400 })}
             alt={prop.propertyName}
             className="w-full h-full object-cover"
+            loading="lazy"
             onError={() => setImgError(true)}
           />
         ) : (

@@ -51,14 +51,13 @@ const MENU_PERMISSION_MAP = {
   "terminated-tenants": { resource: "tenants", action: "view", moduleKey: "propertyManagement" },
   "tenant-take-on-balances": { resource: "tenants", action: "view", moduleKey: "propertyManagement" },
   "rental-invoices-list": { resource: "tenantInvoices", action: "view", moduleKey: "propertyManagement" },
-  "new-invoice": { resource: "tenantInvoices", action: "create", moduleKey: "propertyManagement" },
   "credit-debit-notes": { resource: "tenantInvoices", action: "update", moduleKey: "propertyManagement" },
+  "utility-bills": { resource: "tenantInvoices", action: "view", moduleKey: "propertyManagement" },
   "late-penalties": { resource: "latePenalties", action: "view", moduleKey: "propertyManagement" },
   "rental-receipts": { resource: "receipts", action: "view", moduleKey: "propertyManagement" },
   "mpesa-collections":   { resource: "receipts", action: "view",   moduleKey: "propertyManagement" },
   "coop-collections":    { resource: "receipts", action: "view",   moduleKey: "propertyManagement" },
   "tenant-prepayments": { resource: "receipts", action: "view", moduleKey: "propertyManagement" },
-  "instant-receipts": { resource: "receipts", action: "create", moduleKey: "propertyManagement" },
   "landlord-receipt": { resource: "receipts", action: "view", moduleKey: "propertyManagement" },
   "payment-vouchers": { resource: "paymentVouchers", action: "view", moduleKey: "accounts" },
   expenses: { resource: "expenses", action: "view", moduleKey: "accounts" },
@@ -875,10 +874,11 @@ const TopToolbar = ({
       "tenant-financing": "/tenants/financing",
       "tenant-journals": "/tenants/journals",
       "rental-invoices-list": "/invoices/rental",
-      "new-invoice": "/invoices/new",
       "credit-notes": "/invoices/notes",
       "debit-notes": "/invoices/notes",
       "credit-debit-notes": "/invoices/notes",
+      "lease-fees": "/invoices/lease-fee",
+      "utility-bills": "/invoices/utility-bills",
       "late-penalties": "/invoices/late-penalties",
       "rental-invoices-vat": "/invoices/vat",
       "withholding-vat": "/invoices/withholding-vat",
@@ -889,7 +889,6 @@ const TopToolbar = ({
       "mpesa-collections":  "/receipts/mpesa-collections",
       "coop-collections":   "/receipts/coop-collections",
       "tenant-prepayments": "/receipts/prepayments",
-      "instant-receipts": "/receipts/instant",
       "landlord-receipt": "/receipts/landlord",
       "landlord-standing-orders": "/landlords/standing-orders",
       "landlord-advancement": "/landlords/advancement",
@@ -1481,7 +1480,7 @@ const TopToolbar = ({
       },
       {
         id: "financial",
-        label: "Billing",
+        label: "Billing & Receipting",
         icon: FaFileInvoice,
         submenu: [
           { id: "rental-invoicing", label: "Rental Invoicing", hasSubmenu: true, icon: FaFileInvoice, category: "invoicing", categoryColor: "#4F46E5" },
@@ -1507,7 +1506,7 @@ const TopToolbar = ({
       },
       {
         id: "tools",
-        label: "Tools",
+        label: "Operations",
         icon: FaToolbox,
         submenu: [
           { id: "settings", label: "Settings", icon: FaCog },
@@ -1559,7 +1558,6 @@ const TopToolbar = ({
         if (item.id === "financial") {
           return {
             ...item,
-            label: "Income & Expenses",
             submenu: [
               ...item.submenu
                 .filter((subItem) => subItem.id !== "landlord-payments")
@@ -1576,7 +1574,7 @@ const TopToolbar = ({
         if (item.id === "reports") {
           return {
             ...item,
-            label: "Portfolio Reports",
+            label: "Reports",
             submenu: item.submenu
               .filter((subItem) => !["commission-reports"].includes(subItem.id))
               .map((subItem) => {
@@ -1591,10 +1589,7 @@ const TopToolbar = ({
         }
 
         if (item.id === "tools") {
-          return {
-            ...item,
-            label: "Operations",
-          };
+          return item;
         }
 
         return item;
@@ -1611,8 +1606,9 @@ const TopToolbar = ({
     const submenus = {
       "rental-invoicing": [
         { id: "rental-invoices-list", label: "Rental Invoices", icon: FaFileInvoice },
-        { id: "new-invoice", label: "Create New Invoice", icon: FaFileInvoice },
         { id: "credit-debit-notes", label: "Credit & Debit Notes", icon: FaFileInvoice },
+        { id: "lease-fees", label: "Lease Fees", icon: FaFileInvoice },
+        { id: "utility-bills", label: "Utility Bills", icon: FaFileInvoice },
         { id: "late-penalties", label: "Late Penalties - Invoices", icon: FaExclamationTriangle },
         { id: "meter-readings", label: "Meter Readings", icon: FaDatabase },
         { type: "separator" },
@@ -1624,7 +1620,6 @@ const TopToolbar = ({
         { id: "mpesa-collections", label: "M-Pesa Collections",  icon: FaPhone },
         { id: "coop-collections",  label: "Co-op Collections",   icon: FaPhone },
         { id: "tenant-prepayments", label: "Tenants Prepayments", icon: FaCoins },
-        { id: "instant-receipts", label: "Instant Receipts", icon: FaReceipt },
         { id: "landlord-receipt", label: "Landlord Receipts", icon: FaReceipt },
       ],
       "landlord-payments": [
@@ -1641,7 +1636,6 @@ const TopToolbar = ({
 
     if (isLandlordMode) {
       submenus["rental-invoicing"] = submenus["rental-invoicing"].map((item) => {
-        if (item.id === "new-invoice") return { ...item, label: "Create Tenant Invoice" };
         if (item.id === "rental-aged-analysis") return { ...item, label: "Tenant Arrears Analysis" };
         return item;
       });

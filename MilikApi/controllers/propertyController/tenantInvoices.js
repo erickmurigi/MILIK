@@ -2645,9 +2645,11 @@ export const getTenantInvoicesList = async (req, res, next) => {
       // The snapshot engine (computeTenantInvoiceSnapshotsBatch) already computed their
       // outstanding balances — we just need to surface them here.
       const matchedInvoiceIds = new Set(adjustedInvoices.map((inv) => String(inv._id)));
+      const requestedCategory = String(req.query?.category || "").toUpperCase();
       snapshotByInvoiceId.forEach((snap) => {
         if (matchedInvoiceIds.has(String(snap._id))) return; // already a regular invoice
         if (String(snap?.metadata?.noteType || "").toUpperCase() !== "DEBIT_NOTE") return;
+        if (requestedCategory && String(snap?.category || "").toUpperCase() !== requestedCategory) return;
         const amt = round2(Math.abs(Number(snap.amount || 0)));
         const outstanding = round2(Number(snap.outstanding || 0));
         if (amt <= 0 || outstanding <= 0) return; // skip zero-amount or fully-paid notes

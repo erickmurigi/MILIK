@@ -108,10 +108,11 @@ const RentalInvoices      = lazy(() => import("./pages/Tenants/RentalInvoices"))
 const Receipts            = lazy(() => import("./pages/Tenants/Receipts"));
 const BatchReceipts       = lazy(() => import("./pages/Tenants/BatchReceipts"));
 const InvoiceNotes        = lazy(() => import("./pages/Tenants/InvoiceNotes"));
+const LeaseFeeInvoices    = lazy(() => import("./pages/Tenants/LeaseFeeInvoices"));
+const UtilityBills        = lazy(() => import("./pages/Tenants/UtilityBills"));
 const AddReceipt          = lazy(() => import("./pages/Tenants/AddReceipt"));
 const TenantDeposits      = lazy(() => import("./pages/Tenants/TenantDeposits"));
 const TenantPrepayments   = lazy(() => import("./pages/Tenants/TenantPrepayments"));
-const InstantReceipts     = lazy(() => import("./pages/Tenants/InstantReceipts"));
 const TakeOnBalances      = lazy(() => import("./pages/Tenants/TakeOnBalances"));
 const TenantAgreements    = lazy(() => import("./pages/Tenants/TenantAgreements"));
 const PmsMpesaNotifications   = lazy(() => import("./pages/Tenants/PmsMpesaNotifications"));
@@ -828,6 +829,8 @@ function App() {
             <Route path="/invoices/new"             element={<Guard resource="tenantInvoices" moduleKey="propertyManagement"><RentalInvoices initialOpenSingleBooking /></Guard>} />
             <Route path="/invoices/rental/:id"      element={<Guard resource="tenantInvoices" moduleKey="propertyManagement"><RentalInvoices /></Guard>} />
             <Route path="/invoices/notes"           element={<Guard resource="tenantInvoices" moduleKey="propertyManagement"><InvoiceNotes /></Guard>} />
+            <Route path="/invoices/lease-fee"       element={<Guard resource="invoices" moduleKey="propertyManagement"><LeaseFeeInvoices /></Guard>} />
+            <Route path="/invoices/utility-bills"   element={<Guard resource="tenantInvoices" moduleKey="propertyManagement"><UtilityBills /></Guard>} />
             <Route path="/invoices/vat"             element={<Guard resource="tenantInvoices" moduleKey="propertyManagement"><RentalInvoiceVATReport /></Guard>} />
             <Route path="/invoices/withholding-vat" element={<Navigate to="/reports/tax-reports" replace />} />
             <Route path="/invoices/withholding-tax" element={<Navigate to="/reports/tax-reports" replace />} />
@@ -837,7 +840,6 @@ function App() {
             <Route path="/receipts/prepayments"     element={<Guard resource="prepayments" moduleKey="propertyManagement"><TenantPrepayments /></Guard>} />
             <Route path="/receipts/mpesa-collections"   element={<Guard resource="receipts" action="view"   moduleKey="propertyManagement"><PmsMpesaNotifications /></Guard>} />
             <Route path="/receipts/coop-collections"    element={<Guard resource="receipts" action="view"   moduleKey="propertyManagement"><CoopCollections /></Guard>} />
-            <Route path="/receipts/instant"         element={<Guard resource="receipts" moduleKey="propertyManagement"><InstantReceipts /></Guard>} />
             <Route path="/receipts/landlord"        element={<Guard companyMode={{ allowLandlord: false }} resource="landlordReceipts" moduleKey="accounts"><LandlordReceipts /></Guard>} />
             <Route path="/receipts/:id"             element={<Guard resource="receipts" moduleKey="propertyManagement"><Receipts /></Guard>} />
 
