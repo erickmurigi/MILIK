@@ -28,7 +28,7 @@ import { toast } from "react-toastify";
 import MilikConfirmDialog from "../Modals/MilikConfirmDialog";
 import { getCompanyOperatingModeLabel, isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
-import ListingImagesField from "../Common/ListingImagesField";
+import ListingImagesField from "../common/ListingImagesField";
 
 const MILIK_ORANGE_BG = "bg-[#0B3B2E]";
 const MILIK_ORANGE_BG_HOVER = "hover:bg-[#0A3127]";

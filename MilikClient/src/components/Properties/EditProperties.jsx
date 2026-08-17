@@ -28,7 +28,7 @@ import { adminRequests } from "../../utils/requestMethods";
 import { toast } from "react-toastify";
 import MilikConfirmDialog from "../Modals/MilikConfirmDialog";
 import { getCompanyOperatingModeLabel, isSelfManagingLandlordCompany } from "../../utils/companyModules";
-import ListingImagesField from "../Common/ListingImagesField";
+import ListingImagesField from "../common/ListingImagesField";
 
 const MILIK_ORANGE_BG = "bg-orange-600";
 const MILIK_ORANGE_BG_HOVER = "hover:bg-orange-700";

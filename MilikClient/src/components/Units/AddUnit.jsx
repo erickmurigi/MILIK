@@ -10,7 +10,7 @@ import { getProperties } from "../../redux/propertyRedux";
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
 import { adminRequests } from "../../utils/requestMethods";
 import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
-import ListingImagesField from "../Common/ListingImagesField";
+import ListingImagesField from "../common/ListingImagesField";
 
 const MILIK_ORANGE_BG = "bg-[#0B3B2E]";
 const normalizeBillingPeriodKey = (value = "") =>
