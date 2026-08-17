@@ -12,8 +12,11 @@ import {
   getPropertyTenants,
   bulkImportProperties,
   backfillPropertyAccounts,
+  uploadPropertyImages,
+  deletePropertyImage,
 } from "../../controllers/propertyController/property.js"
 import { verifyUser } from "../../controllers/verifyToken.js"
+import { imagesUpload } from "../../utils/cloudinaryUpload.js"
 
 const router = express.Router()
 
@@ -43,5 +46,9 @@ router.get("/units/:id", verifyUser, getPropertyUnits)
 
 // Get property tenants
 router.get("/tenants/:id", verifyUser, getPropertyTenants)
+
+// Listing photos
+router.post("/:id/images", verifyUser, imagesUpload.array("images", 15), uploadPropertyImages)
+router.delete("/:id/images", verifyUser, deletePropertyImage)
 
 export default router

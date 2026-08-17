@@ -1,18 +1,32 @@
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { useState } from 'react';
+import {
+  View, Text, StyleSheet, TouchableOpacity, Alert,
+  Modal, FlatList, ActivityIndicator, Image,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useDispatch, useSelector } from 'react-redux';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { clearCredentials } from '../../../redux/slices/authSlice';
+import { clearCredentials, setCredentials } from '../../../redux/slices/authSlice';
 import { RootState } from '../../../redux/store';
 import { Colors } from '../../../constants/colors';
 import { STORAGE_KEYS } from '../../../constants';
+import api from '../../../services/api';
 
 export default function ProfileScreen() {
   const router   = useRouter();
   const dispatch = useDispatch();
   const { user, company } = useSelector((s: RootState) => s.auth);
+
+  const [showSwitcher, setShowSwitcher] = useState(false);
+  const [companies,    setCompanies]    = useState<any[]>([]);
+  const [loadingList,  setLoadingList]  = useState(false);
+  const [switching,    setSwitching]    = useState<string | null>(null);
+
+  const displayName =
+    [user?.surname, user?.otherNames].filter(Boolean).join(' ') ||
+    user?.name || 'User';
 
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure?', [
@@ -20,11 +34,11 @@ export default function ProfileScreen() {
       {
         text: 'Sign Out', style: 'destructive',
         onPress: async () => {
-          await AsyncStorage.multiRemove([
-            STORAGE_KEYS.AUTH_TOKEN,
-            STORAGE_KEYS.USER,
-            STORAGE_KEYS.COMPANY,
-          ]);
+          try {
+            await AsyncStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+            await AsyncStorage.removeItem(STORAGE_KEYS.USER);
+            await AsyncStorage.removeItem(STORAGE_KEYS.COMPANY);
+          } catch (_) {}
           dispatch(clearCredentials());
           router.replace('/(auth)/login');
         },
@@ -32,10 +46,43 @@ export default function ProfileScreen() {
     ]);
   };
 
+  const openSwitcher = async () => {
+    setShowSwitcher(true);
+    setLoadingList(true);
+    try {
+      const { data } = await api.get('/auth/accessible-companies');
+      setCompanies(data?.companies || []);
+    } catch {
+      Alert.alert('Error', 'Could not load companies.');
+      setShowSwitcher(false);
+    } finally {
+      setLoadingList(false);
+    }
+  };
+
+  const switchTo = async (companyId: string) => {
+    setSwitching(companyId);
+    try {
+      const { data } = await api.post('/auth/switch-company', { companyId });
+      const { token, user: newUser, company: newCompany } = data;
+      await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
+      await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(newUser));
+      await AsyncStorage.setItem(STORAGE_KEYS.COMPANY, JSON.stringify(newCompany));
+      await AsyncStorage.setItem(STORAGE_KEYS.LAST_COMPANY, companyId);
+      dispatch(setCredentials({ token, user: newUser, company: newCompany }));
+      setShowSwitcher(false);
+      router.replace('/(app)/(tabs)');
+    } catch (err: any) {
+      Alert.alert('Error', err?.response?.data?.message || 'Failed to switch company.');
+    } finally {
+      setSwitching(null);
+    }
+  };
+
   const rows = [
-    { icon: 'settings-outline',      label: 'Settings' },
-    { icon: 'shield-checkmark-outline', label: 'Security' },
-    { icon: 'help-circle-outline',   label: 'Help & Support' },
+    { icon: 'business-outline',        label: 'Switch Company',         onPress: openSwitcher },
+    { icon: 'settings-outline',        label: 'Settings',               onPress: undefined },
+    { icon: 'help-circle-outline',     label: 'Help & Support',         onPress: undefined },
   ];
 
   return (
@@ -48,18 +95,24 @@ export default function ProfileScreen() {
       <View style={styles.card}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>
-            {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+            {displayName.charAt(0).toUpperCase()}
           </Text>
         </View>
-        <Text style={styles.name}>{user?.name || 'Field Officer'}</Text>
+        <Text style={styles.name}>{displayName}</Text>
         <Text style={styles.email}>{user?.email || ''}</Text>
-        <Text style={styles.company}>{company?.companyName || 'Milik'}</Text>
+        <Text style={styles.company}>{company?.companyName || 'No company selected'}</Text>
       </View>
 
       {/* Menu */}
       <View style={styles.menu}>
         {rows.map((row) => (
-          <TouchableOpacity key={row.label} style={styles.row} activeOpacity={0.7}>
+          <TouchableOpacity
+            key={row.label}
+            style={styles.row}
+            activeOpacity={0.7}
+            onPress={row.onPress}
+            disabled={!row.onPress}
+          >
             <Ionicons name={row.icon as any} size={20} color={Colors.primary} />
             <Text style={styles.rowLabel}>{row.label}</Text>
             <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
@@ -70,6 +123,66 @@ export default function ProfileScreen() {
           <Text style={[styles.rowLabel, { color: Colors.danger }]}>Sign Out</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Company Switcher Modal */}
+      <Modal visible={showSwitcher} animationType="slide" transparent onRequestClose={() => setShowSwitcher(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Switch Company</Text>
+              <TouchableOpacity onPress={() => setShowSwitcher(false)}>
+                <Ionicons name="close" size={24} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            {loadingList ? (
+              <ActivityIndicator style={{ marginTop: 32 }} color={Colors.primary} />
+            ) : (
+              <FlatList
+                data={companies}
+                keyExtractor={(item) => item._id}
+                contentContainerStyle={{ paddingBottom: 24 }}
+                renderItem={({ item }) => {
+                  const isActive  = item._id === company?._id;
+                  const isBusy    = switching === item._id;
+                  const itemLogoUrl = item.logo
+                    ? item.logo.startsWith('http') ? item.logo : `https://milikproperty.com${item.logo}`
+                    : null;
+                  return (
+                    <TouchableOpacity
+                      style={[styles.companyRow, isActive && styles.companyRowActive]}
+                      onPress={() => !isActive && switchTo(item._id)}
+                      activeOpacity={isActive ? 1 : 0.7}
+                      disabled={!!switching}
+                    >
+                      <View style={styles.companyIcon}>
+                        {itemLogoUrl
+                          ? <Image source={{ uri: itemLogoUrl }} style={styles.companyLogoImg} resizeMode="contain" />
+                          : <Ionicons name="business-outline" size={18} color={isActive ? Colors.white : Colors.primary} />}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.companyRowName, isActive && { color: Colors.white }]}>
+                          {item.companyName}
+                        </Text>
+                        {item.town ? (
+                          <Text style={[styles.companyRowSub, isActive && { color: 'rgba(255,255,255,0.7)' }]}>
+                            {item.town}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {isBusy
+                        ? <ActivityIndicator size="small" color={isActive ? Colors.white : Colors.primary} />
+                        : isActive
+                          ? <Ionicons name="checkmark-circle" size={20} color={Colors.white} />
+                          : null}
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -110,4 +223,39 @@ const styles = StyleSheet.create({
   },
   rowDanger:  { borderBottomWidth: 0 },
   rowLabel:   { flex: 1, fontSize: 15, fontWeight: '600', color: Colors.text },
+
+  // Modal
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingTop: 8, maxHeight: '75%',
+  },
+  modalHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 16,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  modalTitle: { fontSize: 17, fontWeight: '800', color: Colors.text },
+
+  companyRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    marginHorizontal: 16, marginTop: 10,
+    paddingHorizontal: 14, paddingVertical: 14,
+    borderRadius: 14, backgroundColor: Colors.background,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  companyRowActive: {
+    backgroundColor: Colors.primary, borderColor: Colors.primary,
+  },
+  companyIcon: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: 'rgba(11,59,46,0.1)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  companyLogoImg: { width: 28, height: 28, borderRadius: 6 },
+  companyRowName: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  companyRowSub:  { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
 });

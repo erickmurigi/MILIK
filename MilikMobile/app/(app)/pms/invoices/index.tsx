@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   ActivityIndicator, RefreshControl,
@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Colors } from '../../../../constants/colors';
 import api from '../../../../services/api';
+import MilikLoader from '../../../../components/ui/MilikLoader';
 
 type Invoice = {
   _id:           string;
@@ -57,6 +58,8 @@ export default function InvoicesScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
 
   const LIMIT = 50;
+  const searchRef = useRef(search);
+  searchRef.current = search;
 
   const load = useCallback(async (pg = 1, replace = true) => {
     if (pg === 1) replace ? setLoading(true) : setRefreshing(true);
@@ -66,8 +69,8 @@ export default function InvoicesScreen() {
       const params: Record<string, string> = {
         page: String(pg), limit: String(LIMIT), paginate: 'true',
       };
-      if (filter !== 'all') params.status = filter;
-      if (search.trim())    params.search  = search.trim();
+      if (filter !== 'all')          params.status = filter;
+      if (searchRef.current.trim())  params.search  = searchRef.current.trim();
 
       const { data } = await api.get('/tenant-invoices', { params });
       const items: Invoice[] = data.data ?? data ?? [];
@@ -81,9 +84,14 @@ export default function InvoicesScreen() {
       setRefreshing(false);
       setLoadingMore(false);
     }
-  }, [filter, search]);
+  }, [filter]);
 
+  // trigger on filter change immediately; debounce search changes 400ms
   useEffect(() => { load(1); }, [load]);
+  useEffect(() => {
+    const t = setTimeout(() => load(1), 400);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const onEndReached = () => {
     if (!loadingMore && hasMore) load(page + 1, false);
@@ -185,9 +193,7 @@ export default function InvoicesScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-        </View>
+        <MilikLoader fullscreen />
       ) : (
         <FlatList
           data={invoices}

@@ -20,11 +20,11 @@ api.interceptors.response.use(
   (res) => res,
   async (err) => {
     if (err?.response?.status === 401) {
-      await AsyncStorage.multiRemove([
-        STORAGE_KEYS.AUTH_TOKEN,
-        STORAGE_KEYS.USER,
-        STORAGE_KEYS.COMPANY,
-      ]);
+      try {
+        await AsyncStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+        await AsyncStorage.removeItem(STORAGE_KEYS.USER);
+        await AsyncStorage.removeItem(STORAGE_KEYS.COMPANY);
+      } catch (_) {}
     }
     return Promise.reject(err);
   }

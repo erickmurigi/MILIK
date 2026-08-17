@@ -30,16 +30,35 @@ export default function LoginScreen() {
         email: email.trim().toLowerCase(),
         password,
       });
-      const { token, user, company } = data;
-      await AsyncStorage.multiSet([
-        [STORAGE_KEYS.AUTH_TOKEN, token],
-        [STORAGE_KEYS.USER,       JSON.stringify(user)],
-        [STORAGE_KEYS.COMPANY,    JSON.stringify(company)],
-      ]);
+      let { token, user, company } = data;
+
+      // If no company returned (system admin), try to restore the last used company
+      if (!company) {
+        const lastCompanyId = await AsyncStorage.getItem(STORAGE_KEYS.LAST_COMPANY);
+        if (lastCompanyId) {
+          try {
+            // Update the auth header with the new token before switching
+            api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+            const switchRes = await api.post('/auth/switch-company', { companyId: lastCompanyId });
+            token   = switchRes.data.token;
+            user    = switchRes.data.user;
+            company = switchRes.data.company;
+          } catch (_) {
+            // If switch fails, proceed without company
+          }
+        }
+      }
+
+      await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
+      await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+      await AsyncStorage.setItem(STORAGE_KEYS.COMPANY, JSON.stringify(company));
       dispatch(setCredentials({ token, user, company }));
       router.replace('/(app)/(tabs)');
     } catch (err: any) {
-      const msg = err?.response?.data?.message || 'Login failed. Check your credentials.';
+      const apiMsg = err?.response?.data?.message;
+      const status  = err?.response?.status;
+      const netErr  = err?.message;
+      const msg = apiMsg || (status ? `Server error ${status}` : netErr || 'Login failed. Check your credentials.');
       Alert.alert('Login Failed', msg);
     } finally {
       setLoading(false);
@@ -73,6 +92,9 @@ export default function LoginScreen() {
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
+            autoComplete="email"
+            textContentType="emailAddress"
+            importantForAutofill="yes"
           />
         </View>
 
@@ -85,6 +107,9 @@ export default function LoginScreen() {
             placeholder="••••••••"
             placeholderTextColor={Colors.textMuted}
             secureTextEntry
+            autoComplete="current-password"
+            textContentType="password"
+            importantForAutofill="yes"
           />
         </View>
 

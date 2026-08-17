@@ -32,7 +32,7 @@ import { toast } from "react-toastify";
 import { getProperties } from "../../redux/propertyRedux";
 import { getUnits } from "../../redux/unitRedux";
 import { createTenant, getTenants, updateTenant } from "../../redux/tenantsRedux";
-import { createTenantInvoice } from "../../redux/apiCalls";
+import { createTenantInvoicesBatch } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
 import { fetchCompanySettings, selectCompanySettings } from "../../redux/companySettingsRedux";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
@@ -418,8 +418,10 @@ const AddTenant = () => {
   const [showInvoicePrompt, setShowInvoicePrompt] = useState(false);
   const [pendingInvoiceContext, setPendingInvoiceContext] = useState(null);
   const [isCreatingInitialInvoices, setIsCreatingInitialInvoices] = useState(false);
+  const [checkedInvoiceItems, setCheckedInvoiceItems] = useState(new Set());
   const [tenantLoading, setTenantLoading] = useState(false);
   const [openingInvoiceMode, setOpeningInvoiceMode] = useState("separate");
+  const [proratedOverride, setProratedOverride] = useState("");
   const storedSettings = useSelector(selectCompanySettings);
   const utilityOptions = useMemo(
     () => Array.from(new Set(
@@ -960,6 +962,30 @@ useEffect(() => {
     sessionStorage.removeItem(draftStorageKey);
   };
 
+  const calculateProratedRent = () => {
+    if (!formData.moveInDate || !formData.rent) return null;
+    const startDate = new Date(formData.moveInDate);
+    const day = startDate.getDate();
+    if (day === 1) return null;
+    const month = startDate.getMonth();
+    const year = startDate.getFullYear();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const remainingDays = daysInMonth - day + 1;
+    const monthlyRent = parseFloat(formData.rent) || 0;
+    const dailyRate = monthlyRent / daysInMonth;
+    return { daysInMonth, remainingDays, dailyRate, proratedAmount: dailyRate * remainingDays };
+  };
+
+  const proratedInfo = useMemo(() => calculateProratedRent(), [formData.moveInDate, formData.rent]);
+
+  useEffect(() => { setProratedOverride(""); }, [formData.moveInDate, formData.rent]);
+
+  const effectiveFirstMonthRent = useMemo(() => {
+    if (!proratedInfo) return Number(formData.rent || 0);
+    const override = parseFloat(proratedOverride);
+    return proratedOverride !== "" && !isNaN(override) && override >= 0 ? override : proratedInfo.proratedAmount;
+  }, [proratedInfo, proratedOverride, formData.rent]);
+
   const invoicePreviewItems = useMemo(() => {
     const utilityRows = combinedUtilitiesPreview
       .filter((item) => item && !item.isIncluded && Number(item.unitCharge || 0) > 0)
@@ -972,14 +998,17 @@ useEffect(() => {
 
     const items = [];
 
-    if (Number(formData.rent || 0) > 0) {
+    if (effectiveFirstMonthRent > 0) {
       items.push({
         key: "rent",
         title: "Rent",
-        amount: Number(formData.rent || 0),
-        detail: selectedUnitRecord?.unitNumber
-          ? `Monthly rent for Unit ${selectedUnitRecord.unitNumber}`
-          : "Monthly rent charge",
+        amount: effectiveFirstMonthRent,
+        isProrated: !!proratedInfo,
+        detail: proratedInfo
+          ? `Prorated first-month rent (${proratedInfo.remainingDays} of ${proratedInfo.daysInMonth} days)${selectedUnitRecord?.unitNumber ? ` · Unit ${selectedUnitRecord.unitNumber}` : ""}`
+          : selectedUnitRecord?.unitNumber
+            ? `Monthly rent for Unit ${selectedUnitRecord.unitNumber}`
+            : "Monthly rent charge",
       });
     }
 
@@ -1002,7 +1031,7 @@ useEffect(() => {
     }
 
     return items;
-  }, [combinedUtilitiesPreview, formData.depositAmount, formData.depositHeldBy, formData.rent, selectedUnitRecord]);
+  }, [combinedUtilitiesPreview, effectiveFirstMonthRent, formData.depositAmount, formData.depositHeldBy, proratedInfo, selectedUnitRecord]);
 
 
   const buildTenantInvoiceContext = (savedTenantPayload) => {
@@ -1078,31 +1107,6 @@ useEffect(() => {
       setGeneralError("");
     }
   };
-
-  const calculateProratedRent = () => {
-    if (!formData.moveInDate || !formData.rent) return null;
-
-    const startDate = new Date(formData.moveInDate);
-    const day = startDate.getDate();
-    if (day === 1) return null;
-
-    const month = startDate.getMonth();
-    const year = startDate.getFullYear();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const remainingDays = daysInMonth - day + 1;
-    const monthlyRent = parseFloat(formData.rent) || 0;
-    const dailyRate = monthlyRent / daysInMonth;
-    const proratedAmount = dailyRate * remainingDays;
-
-    return {
-      daysInMonth,
-      remainingDays,
-      dailyRate,
-      proratedAmount,
-    };
-  };
-
-  const proratedInfo = useMemo(() => calculateProratedRent(), [formData.moveInDate, formData.rent]);
 
   const fullUtilityOptions = useMemo(
     () => Array.from(new Set([...utilityOptions, "Water", "Garbage", "Electricity", "Service Charge", "Security", "Others"])),
@@ -1271,6 +1275,7 @@ useEffect(() => {
       }
 
       setPendingInvoiceContext(nextInvoiceContext);
+      setCheckedInvoiceItems(new Set(nextInvoiceContext.items.map((i) => i.key)));
       setShowInvoicePrompt(true);
     } catch (err) {
       submittingRef.current = false;
@@ -1288,6 +1293,12 @@ useEffect(() => {
       toast.error("Saved tenant invoice context is missing.");
       setShowInvoicePrompt(false);
       navigate("/tenants");
+      return;
+    }
+
+    const selectedItems = pendingInvoiceContext.items.filter((i) => checkedInvoiceItems.has(i.key));
+    if (selectedItems.length === 0) {
+      toast.error("Select at least one invoice line to post.");
       return;
     }
 
@@ -1312,75 +1323,70 @@ useEffect(() => {
         createdBy: actorId,
       };
 
-const invoiceRequests = [];
-const rentItem = pendingInvoiceContext.items.find((item) => item.key === "rent");
-const utilityRows = pendingInvoiceContext.utilityRows.filter(
-  (item) => Number(item.amount || 0) > 0
-);
-const utilityTotal = utilityRows.reduce(
-  (sum, item) => sum + Number(item.amount || 0),
-  0
-);
-const depositItem = pendingInvoiceContext.items.find((item) => item.key === "deposit");
-const normalizedDepositHolder = normalizeDepositHolder(formData.depositHeldBy) || "manager";
-const depositLedgerMode = normalizedDepositHolder === "landlord" ? "off_ledger" : undefined;
+      const normalizedDepositHolder = normalizeDepositHolder(formData.depositHeldBy) || "manager";
+      const depositLedgerMode = normalizedDepositHolder === "landlord" ? "off_ledger" : undefined;
+      const tenantName = pendingInvoiceContext.tenant.name || formData.name;
 
-if (Number(rentItem?.amount || 0) > 0) {
-  invoiceRequests.push({
-    ...baseRequest,
-    category: "RENT_CHARGE",
-    amount: Number(rentItem.amount || 0),
-    description: `Opening rent balance for ${pendingInvoiceContext.tenant.name || formData.name}`,
-    metadata: buildTakeOnMetadata({
-      type: "debit",
-      billItemKey: "rent",
-      billItemLabel: "Rent",
-      invoicePriorityCategory: "rent",
-    }),
-  });
-}
+      const invoiceItems = [];
 
-if (utilityRows.length > 0) {
-  utilityRows.forEach((item) => {
-    const utilityLabel = item.label || "Utility";
-    invoiceRequests.push({
-      ...baseRequest,
-      category: "UTILITY_CHARGE",
-      amount: Number(item.amount || 0),
-      description: `Opening ${utilityLabel} balance for ${pendingInvoiceContext.tenant.name || formData.name}`,
-      metadata: buildTakeOnMetadata({
-        type: "debit",
-        billItemKey: `utility:${slugifyTakeOnValue(utilityLabel)}`,
-        billItemLabel: utilityLabel,
-        utilityType: utilityLabel,
-        meterUtilityType: utilityLabel,
-        statementUtilityType: utilityLabel,
-        invoicePriorityCategory: "utility",
-      }),
-    });
-  });
-}
+      if (checkedInvoiceItems.has("rent")) {
+        const rentItem = pendingInvoiceContext.items.find((i) => i.key === "rent");
+        if (Number(rentItem?.amount || 0) > 0) {
+          invoiceItems.push({
+            ...baseRequest,
+            category: "RENT_CHARGE",
+            amount: Number(rentItem.amount),
+            description: `Opening rent balance for ${tenantName}`,
+            metadata: buildTakeOnMetadata({ type: "debit", billItemKey: "rent", billItemLabel: "Rent", invoicePriorityCategory: "rent" }),
+          });
+        }
+      }
 
-if (Number(depositItem?.amount || 0) > 0) {
-  invoiceRequests.push({
-    ...baseRequest,
-    category: "DEPOSIT_CHARGE",
-    amount: Number(depositItem.amount || 0),
-    depositHeldBy: normalizedDepositHolder,
-    ledgerMode: depositLedgerMode,
-    description: `Opening deposit balance (${formData.depositHeldBy}) for ${pendingInvoiceContext.tenant.name || formData.name}`,
-    metadata: buildTakeOnMetadata({
-      type: "debit",
-      billItemKey: "deposit:security",
-      billItemLabel: "Security Deposit",
-      invoicePriorityCategory: "deposit",
-      depositHeldBy: normalizedDepositHolder,
-      ledgerMode: depositLedgerMode,
-    }),
-  });
-}
+      if (checkedInvoiceItems.has("utility")) {
+        const utilityRows = pendingInvoiceContext.utilityRows.filter((r) => Number(r.amount || 0) > 0);
+        utilityRows.forEach((row) => {
+          const label = row.label || "Utility";
+          invoiceItems.push({
+            ...baseRequest,
+            category: "UTILITY_CHARGE",
+            amount: Number(row.amount),
+            description: `Opening ${label} balance for ${tenantName}`,
+            metadata: buildTakeOnMetadata({
+              type: "debit",
+              billItemKey: `utility:${slugifyTakeOnValue(label)}`,
+              billItemLabel: label,
+              utilityType: label,
+              meterUtilityType: label,
+              statementUtilityType: label,
+              invoicePriorityCategory: "utility",
+            }),
+          });
+        });
+      }
 
-await Promise.all(invoiceRequests.map((req) => createTenantInvoice(req)));
+      if (checkedInvoiceItems.has("deposit")) {
+        const depositItem = pendingInvoiceContext.items.find((i) => i.key === "deposit");
+        if (Number(depositItem?.amount || 0) > 0) {
+          invoiceItems.push({
+            ...baseRequest,
+            category: "DEPOSIT_CHARGE",
+            amount: Number(depositItem.amount),
+            depositHeldBy: normalizedDepositHolder,
+            ledgerMode: depositLedgerMode,
+            description: `Opening deposit balance (${formData.depositHeldBy}) for ${tenantName}`,
+            metadata: buildTakeOnMetadata({
+              type: "debit",
+              billItemKey: "deposit:security",
+              billItemLabel: "Security Deposit",
+              invoicePriorityCategory: "deposit",
+              depositHeldBy: normalizedDepositHolder,
+              ledgerMode: depositLedgerMode,
+            }),
+          });
+        }
+      }
+
+      await createTenantInvoicesBatch({ business: pendingInvoiceContext.business, items: invoiceItems });
 
       toast.success("Tenant saved and opening invoice(s) created successfully.");
       setShowInvoicePrompt(false);
@@ -1967,31 +1973,40 @@ await Promise.all(invoiceRequests.map((req) => createTenantInvoice(req)));
                   {proratedInfo && (
                     <div className="mt-4 bg-[#0B3B2E]/5 border border-[#0B3B2E]/20 rounded-lg p-4">
                       <div className="flex items-start gap-2">
-                        <FaCalculator className="text-[#0B3B2E] mt-1" />
+                        <FaCalculator className="text-[#0B3B2E] mt-1 flex-shrink-0" />
                         <div className="flex-1">
-                          <h4 className="font-bold text-[#0B3B2E] text-sm mb-2">
-                            Prorated Rent Calculation (First Month)
-                          </h4>
+                          <h4 className="font-bold text-[#0B3B2E] text-sm mb-2">Prorated Rent Calculation (First Month)</h4>
                           <div className="text-xs text-[#0B3B2E]/70 space-y-1">
-                            <p>
-                              • Days in month:{" "}
-                              <span className="font-bold">{proratedInfo.daysInMonth}</span>
-                            </p>
-                            <p>
-                              • Remaining days (including start date):{" "}
-                              <span className="font-bold">{proratedInfo.remainingDays}</span>
-                            </p>
-                            <p>
-                              • Daily rate:{" "}
-                              <span className="font-bold">
-                                Ksh {proratedInfo.dailyRate.toFixed(2)}
-                              </span>
-                            </p>
-                            <p className="pt-1 border-t border-[#0B3B2E]/20">
-                              <span className="font-bold text-[#0B3B2E]">
-                                First month bill: Ksh {proratedInfo.proratedAmount.toFixed(2)}
-                              </span>
-                            </p>
+                            <p>• Days in month: <span className="font-bold">{proratedInfo.daysInMonth}</span></p>
+                            <p>• Remaining days (including start date): <span className="font-bold">{proratedInfo.remainingDays}</span></p>
+                            <p>• Daily rate: <span className="font-bold">Ksh {proratedInfo.dailyRate.toFixed(2)}</span></p>
+                          </div>
+                          <div className="mt-3 pt-2 border-t border-[#0B3B2E]/20">
+                            <label className="block text-xs font-bold text-[#0B3B2E] mb-1.5">First month bill (Ksh) — editable</label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                value={proratedOverride !== "" ? proratedOverride : proratedInfo.proratedAmount.toFixed(2)}
+                                onChange={(e) => setProratedOverride(e.target.value)}
+                                step="0.01"
+                                min="0"
+                                className="h-9 w-48 rounded border border-[#0B3B2E]/30 bg-white px-3 text-sm font-bold text-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/40"
+                              />
+                              {proratedOverride !== "" && (
+                                <button
+                                  type="button"
+                                  onClick={() => setProratedOverride("")}
+                                  className="text-[11px] text-slate-500 hover:text-slate-700 underline"
+                                >
+                                  Reset to calculated
+                                </button>
+                              )}
+                            </div>
+                            {proratedOverride !== "" && Math.abs(parseFloat(proratedOverride) - proratedInfo.proratedAmount) > 0.01 && (
+                              <p className="mt-1 text-[10px] text-amber-600">
+                                Calculated: Ksh {proratedInfo.proratedAmount.toFixed(2)} — invoice will use your amount of Ksh {parseFloat(proratedOverride).toFixed(2)}
+                              </p>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -2188,104 +2203,93 @@ await Promise.all(invoiceRequests.map((req) => createTenantInvoice(req)));
       </div>
 
       {showInvoicePrompt && pendingInvoiceContext ? (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm sm:items-center sm:p-6">
-          <div className="flex w-full max-w-2xl max-h-[calc(100vh-2rem)] flex-col overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
-            <div className={`sticky top-0 z-20 px-6 py-4 ${MILIK_GREEN_BG} text-white`}>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-bold tracking-tight">Create tenant invoice now?</h2>
-                  <p className="text-sm text-white/80 mt-1">
-                    {pendingInvoiceContext.tenant?.name || formData.name} has been saved successfully.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleSkipInitialInvoicing}
-                  disabled={isCreatingInitialInvoices}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <FaTimes /> Close
-                </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className={`flex items-start justify-between gap-3 ${MILIK_GREEN_BG} px-4 py-3`}>
+              <div>
+                <h2 className="text-sm font-black text-white tracking-tight">Post opening invoice?</h2>
+                <p className="text-[11px] text-white/70 mt-0.5 leading-tight">
+                  {pendingInvoiceContext.tenant?.name || formData.name}
+                  {selectedUnitRecord?.unitNumber ? ` · Unit ${selectedUnitRecord.unitNumber}` : ""}
+                  {(selectedPropertyRecord?.propertyName || selectedPropertyRecord?.name) ? ` · ${selectedPropertyRecord?.propertyName || selectedPropertyRecord?.name}` : ""}
+                </p>
               </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <p className="text-slate-500 text-xs uppercase tracking-wide">Tenant</p>
-                  <p className="font-semibold text-slate-900">
-                    {pendingInvoiceContext.tenant?.name || formData.name}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <p className="text-slate-500 text-xs uppercase tracking-wide">Unit / Property</p>
-                  <p className="font-semibold text-slate-900">
-                    {selectedUnitRecord?.unitNumber || "-"} • {selectedPropertyRecord?.propertyName || selectedPropertyRecord?.name || "-"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
-                <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">Opening invoice mode</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <label className={`rounded-xl border px-4 py-3 cursor-pointer ${openingInvoiceMode === "separate" ? "border-[#0B3B2E] bg-[#0B3B2E]/5" : "border-slate-200 bg-white"}`}>
-                    <input
-                      type="radio"
-                      name="openingInvoiceMode"
-                      value="separate"
-                      checked={openingInvoiceMode === "separate"}
-                      onChange={(e) => setOpeningInvoiceMode(e.target.value)}
-                      className="sr-only"
-                    />
-                    <p className="font-semibold text-slate-900">Separate</p>
-                    <p className="text-xs text-slate-500 mt-1">Create rent and utility invoices separately so each hits the correct ledger.</p>
-                  </label>
-                </div>
-              </div>
-
-              {pendingInvoiceContext?.leaseFeeAmount > 0 && (
-                <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm">
-                  <p className="font-semibold text-blue-900">
-                    {pendingInvoiceContext?.isLettingFee ? "Letting fee" : "Lease / Agreement fee"} already created
-                  </p>
-                  <p className="text-xs text-blue-700 mt-0.5">
-                    KES {Number(pendingInvoiceContext.leaseFeeAmount).toLocaleString()} was invoiced automatically when the tenant was saved.
-                  </p>
-                </div>
-              )}
-
-              <div className="rounded-2xl border border-slate-200 overflow-hidden">
-                <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
-                  <h3 className="font-bold text-slate-900">What will be invoiced</h3>
-                </div>
-                <div className="divide-y divide-slate-200">
-                  {pendingInvoiceContext.items.map((item) => (
-                    <div key={item.key} className="px-4 py-3 flex items-start justify-between gap-4">
-                      <div>
-                        <p className="font-semibold text-slate-900">{item.title}</p>
-                        <p className="text-xs text-slate-500 mt-1">{item.detail}</p>
-                      </div>
-                      <p className="font-bold text-slate-900">
-                        KES {Number(item.amount || 0).toLocaleString()}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-                <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-                  <span className="font-semibold text-slate-900">Total opening invoice amount</span>
-                  <span className="text-lg font-bold text-slate-900">
-                    KES {pendingInvoiceContext.items.reduce((sum, item) => sum + Number(item.amount || 0), 0).toLocaleString()}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="sticky bottom-0 z-20 flex flex-col justify-end gap-3 border-t border-slate-200 bg-slate-50/95 px-6 py-4 backdrop-blur-sm sm:flex-row">
               <button
                 type="button"
                 onClick={handleSkipInitialInvoicing}
                 disabled={isCreatingInitialInvoices}
-                className="w-full sm:w-auto h-10 px-4 rounded-md border border-slate-300 bg-white text-slate-700 text-sm font-semibold shadow-sm hover:bg-slate-100 disabled:opacity-60"
+                className="text-white/60 hover:text-white transition mt-0.5 disabled:opacity-40"
+              >
+                <FaTimes size={13} />
+              </button>
+            </div>
+
+            {/* Lease fee notice */}
+            {pendingInvoiceContext?.leaseFeeAmount > 0 && (
+              <div className="px-4 pt-3">
+                <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+                  <p className="text-[11px] font-semibold text-blue-900">
+                    {pendingInvoiceContext?.isLettingFee ? "Letting fee" : "Lease / Agreement fee"} already posted
+                  </p>
+                  <p className="text-[10px] text-blue-700 mt-0.5">
+                    KES {Number(pendingInvoiceContext.leaseFeeAmount).toLocaleString()} was invoiced automatically when the tenant was saved.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Items */}
+            <div className="px-4 pt-3 pb-1 divide-y divide-slate-100">
+              {pendingInvoiceContext.items.map((item) => {
+                const checked = checkedInvoiceItems.has(item.key);
+                return (
+                  <label key={item.key} className={`flex items-center gap-3 py-2.5 cursor-pointer select-none ${checked ? "" : "opacity-50"}`}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        setCheckedInvoiceItems((prev) => {
+                          const next = new Set(prev);
+                          e.target.checked ? next.add(item.key) : next.delete(item.key);
+                          return next;
+                        });
+                      }}
+                      className="h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]/30 flex-shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-semibold text-slate-800">{item.title}</p>
+                        {item.isProrated && (
+                          <span className="rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-700">Prorated</span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5 truncate">{item.detail}</p>
+                    </div>
+                    <p className={`text-xs font-bold whitespace-nowrap tabular-nums ${checked ? "text-slate-900" : "text-slate-400 line-through"}`}>
+                      KES {Number(item.amount || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  </label>
+                );
+              })}
+              <div className="flex items-center justify-between py-2.5">
+                <p className="text-[11px] font-black uppercase tracking-wide text-slate-600">Total to post</p>
+                <p className="text-sm font-black text-[#0B3B2E] tabular-nums">
+                  KES {pendingInvoiceContext.items
+                    .filter((i) => checkedInvoiceItems.has(i.key))
+                    .reduce((s, i) => s + Number(i.amount || 0), 0)
+                    .toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 px-4 py-3">
+              <button
+                type="button"
+                onClick={handleSkipInitialInvoicing}
+                disabled={isCreatingInitialInvoices}
+                className="h-8 px-3 rounded-md border border-slate-300 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-100 disabled:opacity-60 transition"
               >
                 Skip for now
               </button>
@@ -2293,21 +2297,11 @@ await Promise.all(invoiceRequests.map((req) => createTenantInvoice(req)));
                 type="button"
                 onClick={handleConfirmInitialInvoicing}
                 disabled={isCreatingInitialInvoices}
-                className={`w-full sm:w-auto h-10 px-5 rounded-md text-white text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-colors ${
-                  isCreatingInitialInvoices
-                    ? "bg-slate-400 cursor-not-allowed"
-                    : `${MILIK_ORANGE_BG} ${MILIK_ORANGE_BG_HOVER}`
+                className={`h-8 px-4 rounded-md text-white text-xs font-black flex items-center gap-1.5 transition-colors ${
+                  isCreatingInitialInvoices ? "bg-slate-400 cursor-not-allowed" : `${MILIK_ORANGE_BG} ${MILIK_ORANGE_BG_HOVER}`
                 }`}
               >
-                {isCreatingInitialInvoices ? (
-                  <>
-                    <Spinner size="sm" /> Creating invoice(s)...
-                  </>
-                ) : (
-                  <>
-                    <FaSave /> Continue & Invoice
-                  </>
-                )}
+                {isCreatingInitialInvoices ? <><Spinner size="sm" /> Creating…</> : <><FaSave size={10} /> Continue &amp; Invoice</>}
               </button>
             </div>
           </div>

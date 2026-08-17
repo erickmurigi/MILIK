@@ -1,19 +1,22 @@
 // routes/unit.js
 import express from "express"
-import { 
-  createUnit, 
-  getUnit, 
-  getUnits, 
-  updateUnit, 
+import {
+  createUnit,
+  getUnit,
+  getUnits,
+  updateUnit,
   deleteUnit,
   updateUnitStatus,
   getAvailableUnits,
   bulkImportUnits,
   getUnitUtilities,
   addUtilityToUnit,
-  removeUtilityFromUnit
+  removeUtilityFromUnit,
+  uploadUnitImages,
+  deleteUnitImage
 } from "../../controllers/propertyController/units.js"
 import { verifyUser } from "../../controllers/verifyToken.js"
+import { imagesUpload } from "../../utils/cloudinaryUpload.js"
 
 const router = express.Router()
 
@@ -45,4 +48,9 @@ router.get("/find/available", verifyUser, getAvailableUnits)
 router.get('/:id/utilities', verifyUser, getUnitUtilities);
 router.post('/:id/utilities', verifyUser, addUtilityToUnit);
 router.delete('/:unitId/utilities/:utilityId', verifyUser, removeUtilityFromUnit);
+
+// Listing photos
+router.post('/:id/images', verifyUser, imagesUpload.array('images', 12), uploadUnitImages);
+router.delete('/:id/images', verifyUser, deleteUnitImage);
+
 export default router

@@ -133,6 +133,15 @@ export async function resolveAuditActorUserId({
     }
   }
 
+  // No request context at all (webhook / background job) — use system audit user
+  // instead of attributing the action to a real user (e.g. the first company admin).
+  if (!req && isValidObjectId(businessId)) {
+    const systemAuditUser = await ensureSystemAuditUser(businessId);
+    if (systemAuditUser?._id) {
+      return String(systemAuditUser._id);
+    }
+  }
+
   if (!fallbackToCompanyUser) {
     throw new Error(fallbackErrorMessage);
   }

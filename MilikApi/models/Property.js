@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { slugifyWithSuffix } from "../utils/slugify.js";
 
 const landlordSchema = new mongoose.Schema(
   {
@@ -109,6 +110,34 @@ const commissionTaxSettingsSchema = new mongoose.Schema(
     rateOverride: { type: Number, default: null, min: 0 },
   },
   { _id: false }
+);
+
+const listingContactSchema = new mongoose.Schema(
+  {
+    name: { type: String, trim: true, default: "" },
+    phone: { type: String, trim: true, default: "" },
+    whatsapp: { type: String, trim: true, default: "" },
+    email: { type: String, trim: true, lowercase: true, default: "" },
+    preferredMethod: {
+      type: String,
+      enum: ["phone", "whatsapp", "email"],
+      default: "phone",
+    },
+  },
+  { _id: false }
+);
+
+const nearbyPointSchema = new mongoose.Schema(
+  {
+    category: {
+      type: String,
+      enum: ["road", "school", "hospital", "shopping", "transport", "security", "other"],
+      default: "other",
+    },
+    label: { type: String, required: true, trim: true },
+    distance: { type: String, trim: true, default: "" },
+  },
+  { _id: true }
 );
 
 
@@ -306,6 +335,28 @@ const PropertySchema = new mongoose.Schema(
 
     listingEnabled: { type: Boolean, default: false },
 
+    amenities: {
+      type: [{ type: String, trim: true }],
+      default: [],
+    },
+
+    yearBuilt: { type: Number, default: null, min: 1800 },
+
+    listingContact: {
+      type: listingContactSchema,
+      default: () => ({}),
+    },
+
+    nearbyPoints: {
+      type: [nearbyPointSchema],
+      default: [],
+    },
+
+    verified: { type: Boolean, default: false },
+    verifiedAt: { type: Date, default: null },
+
+    slug: { type: String, trim: true, default: "" },
+
     business: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",
@@ -428,6 +479,8 @@ PropertySchema.index({ business: 1, zoneRegion: 1 });
 PropertySchema.index({ "landlords.landlordId": 1 });
 PropertySchema.index({ "landlords.name": 1 });
 PropertySchema.index({ business: 1, createdAt: -1 });
+PropertySchema.index({ business: 1, slug: 1 }, { unique: true, sparse: true });
+PropertySchema.index({ business: 1, verified: 1 });
 
 PropertySchema.statics.updateUnitCounts = async function (propertyId) {
   const Unit = mongoose.model("Unit");
@@ -496,6 +549,20 @@ PropertySchema.pre("save", function (next) {
   this.netLettableArea = Number(this.netLettableArea || 0);
   this.rentPerMeasure = Number(this.rentPerMeasure || 0);
 
+  if (Array.isArray(this.amenities)) {
+    this.amenities = Array.from(
+      new Set(
+        this.amenities
+          .map((item) => (typeof item === "string" ? item.trim() : ""))
+          .filter(Boolean)
+      )
+    );
+  }
+
+  if (!this.slug || this.isModified("propertyName")) {
+    this.slug = slugifyWithSuffix(this.propertyName, this._id);
+  }
+
   if (this.landlords && this.landlords.length > 0) {
     this.landlords = this.landlords.filter(
       (landlord) =>
@@ -534,6 +601,17 @@ PropertySchema.pre("save", function (next) {
 
 PropertySchema.pre("validate", function normalizeLetManage(next) {
   this.letManage = normalizePropertyServiceMode(this.letManage);
+
+  // Must run before validation (not pre-save) since nearbyPoints.label is
+  // required — an empty entry needs to be dropped before that check runs.
+  if (Array.isArray(this.nearbyPoints)) {
+    this.nearbyPoints = this.nearbyPoints.filter((point) => point?.label?.trim());
+    this.nearbyPoints.forEach((point) => {
+      if (typeof point.label === "string") point.label = point.label.trim();
+      if (typeof point.distance === "string") point.distance = point.distance.trim();
+    });
+  }
+
   next();
 });
 

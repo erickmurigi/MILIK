@@ -24,11 +24,13 @@ export default function PMSLayout() {
       <Stack.Screen name="receipts/[id]"          options={{ title: 'Receipt' }} />
       <Stack.Screen name="penalties/index"        options={{ title: 'Late Penalties' }} />
       <Stack.Screen name="maintenance/index"      options={{ title: 'Maintenance' }} />
+      <Stack.Screen name="maintenance/new"        options={{ title: 'New Request' }} />
       <Stack.Screen name="maintenance/[id]"       options={{ title: 'Maintenance Request' }} />
       <Stack.Screen name="meters/index"           options={{ title: 'Meter Readings' }} />
       <Stack.Screen name="meters/new"             options={{ title: 'New Reading' }} />
       <Stack.Screen name="mpesa/index"            options={{ title: 'M-Pesa Notifications' }} />
       <Stack.Screen name="delinquency/index"      options={{ title: 'Delinquency Report' }} />
+      <Stack.Screen name="properties/index"      options={{ title: 'Properties' }} />
     </Stack>
   );
 }

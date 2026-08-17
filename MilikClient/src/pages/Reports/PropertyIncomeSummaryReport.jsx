@@ -6,7 +6,8 @@ import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties, selectAllLandlords } from '../../redux/selectors';
 import { getLandlords, getPropertyIncomeSummaryReport } from '../../redux/apiCalls';
 import { getProperties } from '../../redux/propertyRedux';
-import { FaFileDownload, FaFilter, FaPrint, FaSyncAlt } from 'react-icons/fa';
+import { FaFileDownload, FaPrint, FaSyncAlt } from 'react-icons/fa';
+import useDebounce from '../../hooks/useDebounce';
 import { toast } from 'react-toastify';
 import { hasCompanyPermission } from '../../utils/permissions';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
@@ -38,7 +39,6 @@ const PropertyIncomeSummaryReport = () => {
     || 'Milik';
 
   const [loading, setLoading] = useState(false);
-  const [filtersChanged, setFiltersChanged] = useState(false);
   const filtersInitialized = useRef(false);
   const [filters, setFilters] = useTabState("/reports/property-income-summary:filters", () => ({
     startDate: toDateInputValue(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
@@ -55,10 +55,10 @@ const PropertyIncomeSummaryReport = () => {
     if (!isLandlordMode) dispatch(getLandlords({ company: businessId }));
   }, [businessId, dispatch, isLandlordMode]);
 
+  const loadReportRef = useRef(null);
   const loadReport = useCallback(async () => {
     if (!businessId) return;
     setLoading(true);
-    setFiltersChanged(false);
     try {
       const data = await getPropertyIncomeSummaryReport({ business: businessId, ...filters });
       setReport({
@@ -77,10 +77,13 @@ const PropertyIncomeSummaryReport = () => {
     if (businessId) loadReport();
   }, [businessId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => { loadReportRef.current = loadReport; }, [loadReport]);
+
+  const debouncedTrigger = useDebounce(`${filters.startDate}|${filters.endDate}|${filters.propertyId}|${filters.landlordId}`, 500);
   useEffect(() => {
     if (!filtersInitialized.current) { filtersInitialized.current = true; return; }
-    setFiltersChanged(true);
-  }, [filters.startDate, filters.endDate, filters.propertyId, filters.landlordId]);
+    loadReportRef.current();
+  }, [debouncedTrigger]);
 
   const summary = report.summary || {};
   const propertyNameMap = useMemo(() => new Map(properties.map((p) => [String(p?._id), p?.propertyName || p?.name || 'Unnamed Property'])), [properties]);
@@ -378,7 +381,7 @@ const PropertyIncomeSummaryReport = () => {
               <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
                 <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? 'Export CSV' : 'No export permission'} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaFileDownload /> Export CSV</button>
                 <button onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? 'Print' : 'No print permission'} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint /> Print</button>
-                <button onClick={loadReport} className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] transition ${filtersChanged ? 'border border-[#0B3B2E] bg-[#0B3B2E] text-white hover:bg-[#0A3127]' : 'border border-slate-200 bg-white text-slate-700 hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white'}`}><FaSyncAlt className={loading ? 'animate-spin' : ''} /> {filtersChanged ? 'Apply Filters' : 'Refresh'}</button>
+                <button onClick={loadReport} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaSyncAlt className={loading ? 'animate-spin' : ''} /> Refresh</button>
               </div>
             </div>
 

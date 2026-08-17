@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   ActivityIndicator, RefreshControl,
@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Colors } from '../../../../constants/colors';
 import api from '../../../../services/api';
+import MilikLoader from '../../../../components/ui/MilikLoader';
 
 type Receipt = {
   _id:             string;
@@ -48,6 +49,8 @@ export default function ReceiptsScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
 
   const LIMIT = 50;
+  const searchRef = useRef(search);
+  searchRef.current = search;
 
   const load = useCallback(async (pg = 1, replace = true) => {
     if (pg === 1) replace ? setLoading(true) : setRefreshing(true);
@@ -57,10 +60,10 @@ export default function ReceiptsScreen() {
       const params: Record<string, string> = {
         page: String(pg), limit: String(LIMIT),
       };
-      if (search.trim()) params.search = search.trim();
+      if (searchRef.current.trim()) params.search = searchRef.current.trim();
 
       const { data } = await api.get('/rent-payments', { params });
-      const items: Receipt[] = data.data ?? (Array.isArray(data) ? data : []);
+      const items: Receipt[] = data.items ?? data.data ?? (Array.isArray(data) ? data : []);
 
       setReceipts(prev => replace || pg === 1 ? items : [...prev, ...items]);
       setHasMore(items.length === LIMIT);
@@ -71,9 +74,13 @@ export default function ReceiptsScreen() {
       setRefreshing(false);
       setLoadingMore(false);
     }
-  }, [search]);
+  }, []);
 
   useEffect(() => { load(1); }, [load]);
+  useEffect(() => {
+    const t = setTimeout(() => load(1), 400);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const onEndReached = () => {
     if (!loadingMore && hasMore) load(page + 1, false);
@@ -146,9 +153,7 @@ export default function ReceiptsScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-        </View>
+        <MilikLoader fullscreen />
       ) : (
         <FlatList
           data={receipts}

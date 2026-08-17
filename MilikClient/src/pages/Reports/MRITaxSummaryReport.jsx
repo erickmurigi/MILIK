@@ -7,6 +7,7 @@ import { selectCurrentUser, selectCurrentCompany, selectAllProperties } from '..
 import { getMRITaxSummaryReport } from '../../redux/apiCalls';
 import { getProperties } from '../../redux/propertyRedux';
 import { FaFileDownload, FaPrint, FaSyncAlt } from 'react-icons/fa';
+import useDebounce from '../../hooks/useDebounce';
 import { toast } from 'react-toastify';
 import { hasCompanyPermission } from '../../utils/permissions';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
@@ -36,7 +37,6 @@ const MRITaxSummaryReport = () => {
   const currentYear = new Date().getFullYear();
 
   const [loading, setLoading] = useState(false);
-  const [filtersChanged, setFiltersChanged] = useState(false);
   const filtersInitialized = useRef(false);
   const [filters, setFilters] = useTabState("/reports/mri-tax-summary:filters", () => ({
     startDate: toDateInputValue(new Date(currentYear, 0, 1)),
@@ -51,10 +51,10 @@ const MRITaxSummaryReport = () => {
     dispatch(getProperties({ business: businessId }));
   }, [businessId, dispatch]);
 
+  const loadReportRef = useRef(null);
   const loadReport = useCallback(async () => {
     if (!businessId) return;
     setLoading(true);
-    setFiltersChanged(false);
     try {
       const data = await getMRITaxSummaryReport({ business: businessId, ...filters });
       setReport({
@@ -74,10 +74,13 @@ const MRITaxSummaryReport = () => {
     if (businessId) loadReport();
   }, [businessId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => { loadReportRef.current = loadReport; }, [loadReport]);
+
+  const debouncedTrigger = useDebounce(`${filters.startDate}|${filters.endDate}|${filters.propertyId}`, 500);
   useEffect(() => {
     if (!filtersInitialized.current) { filtersInitialized.current = true; return; }
-    setFiltersChanged(true);
-  }, [filters.startDate, filters.endDate, filters.propertyId]);
+    loadReportRef.current();
+  }, [debouncedTrigger]);
 
   const summary = report.summary || {};
   const mriRatePercent = Math.round((report.mriRate || 0.075) * 100);
@@ -309,7 +312,7 @@ const MRITaxSummaryReport = () => {
               <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
                 <button onClick={handleExportCSV} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaFileDownload /> Export CSV</button>
                 <button onClick={handlePrint} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaPrint /> Print</button>
-                <button onClick={loadReport} className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] transition ${filtersChanged ? 'border border-orange-400 bg-orange-50 text-orange-700 hover:bg-orange-100' : 'border border-slate-200 bg-white text-slate-700 hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700'}`}><FaSyncAlt className={loading ? 'animate-spin' : ''} /> {filtersChanged ? 'Apply Filters' : 'Refresh'}</button>
+                <button onClick={loadReport} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaSyncAlt className={loading ? 'animate-spin' : ''} /> Refresh</button>
               </div>
             </div>
 

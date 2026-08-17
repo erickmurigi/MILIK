@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   ActivityIndicator, RefreshControl,
@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Colors } from '../../../../constants/colors';
 import api from '../../../../services/api';
+import MilikLoader from '../../../../components/ui/MilikLoader';
 
 type MaintenanceItem = {
   _id:         string;
@@ -46,12 +47,14 @@ export default function MaintenanceScreen() {
   const [loading,     setLoading]     = useState(true);
   const [refreshing,  setRefreshing]  = useState(false);
   const [search,      setSearch]      = useState('');
-  const [filter,      setFilter]      = useState<FilterTab>('all');
+  const [filter,      setFilter]      = useState<FilterTab>('open');
   const [page,        setPage]        = useState(1);
   const [hasMore,     setHasMore]     = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
   const LIMIT = 50;
+  const searchRef = useRef(search);
+  searchRef.current = search;
 
   const load = useCallback(async (pg = 1, replace = true) => {
     if (pg === 1) replace ? setLoading(true) : setRefreshing(true);
@@ -61,8 +64,8 @@ export default function MaintenanceScreen() {
       const params: Record<string, string> = {
         page: String(pg), limit: String(LIMIT),
       };
-      if (filter !== 'all') params.status = filter;
-      if (search.trim())    params.search  = search.trim();
+      if (filter !== 'all')         params.status = filter;
+      if (searchRef.current.trim()) params.search  = searchRef.current.trim();
 
       const { data } = await api.get('/maintenances', { params });
       const rows: MaintenanceItem[] = data.data ?? [];
@@ -76,9 +79,13 @@ export default function MaintenanceScreen() {
       setRefreshing(false);
       setLoadingMore(false);
     }
-  }, [filter, search]);
+  }, [filter]);
 
   useEffect(() => { load(1); }, [load]);
+  useEffect(() => {
+    const t = setTimeout(() => load(1), 400);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const renderItem = ({ item }: { item: MaintenanceItem }) => {
     const pc = PRIORITY_COLORS[item.priority] ?? PRIORITY_COLORS.low;
@@ -155,9 +162,7 @@ export default function MaintenanceScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-        </View>
+        <MilikLoader fullscreen />
       ) : (
         <FlatList
           data={items}
@@ -184,6 +189,15 @@ export default function MaintenanceScreen() {
           }
         />
       )}
+
+      {/* FAB */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => router.push('/pms/maintenance/new' as any)}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="add" size={26} color={Colors.white} />
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }
@@ -192,7 +206,16 @@ const styles = StyleSheet.create({
   safe:      { flex: 1, backgroundColor: Colors.background },
   centered:  { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   emptyText: { fontSize: 15, color: Colors.textMuted },
-  list:      { paddingBottom: 40 },
+  list:      { paddingBottom: 100 },
+
+  fab: {
+    position: 'absolute', bottom: 28, right: 20,
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: Colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25, shadowRadius: 8, elevation: 8,
+  },
 
   searchRow: { paddingHorizontal: 16, paddingVertical: 10 },
   searchBox: {

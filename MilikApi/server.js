@@ -137,6 +137,7 @@ import clientContractRoutes from "./modules/clients/routes/contracts.js";
 import clientInvoiceRoutes  from "./modules/clients/routes/invoices.js";
 import clientInteractionRoutes from "./modules/clients/routes/interactions.js";
 import publicListingsRoute  from "./routes/publicListings.js";
+import rentalListingLeadsRoute from "./routes/rentalListingLeads.js";
 import cookieParser from "cookie-parser";
 import mongoSanitize from "mongo-sanitize";
 import hpp from "hpp";
@@ -551,6 +552,7 @@ app.get("/api", (req, res) => {
       paymentVouchers: "/api/payment-vouchers",
       notifications: "/api/notifications",
       dashboard: "/api/dashboard",
+      rentalLeads: "/api/rental-leads",
       tenantInvoices: "/api/tenant-invoices",
       communications: "/api/communications",
       carwashServices: "/api/carwash/services",
@@ -570,6 +572,7 @@ app.use("/uploads", verifyToken, express.static(UPLOADS_ROOT));
 app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/trial", trialLimiter, trialRoutes);
 app.use("/api/public/listings", publicListingsLimiter, publicListingsRoute);
+app.use("/api/rental-leads", rentalListingLeadsRoute);
 app.use("/api/coop-b2b",       coopB2BRoutes);
 app.use("/api/pms/pay",        pmsPublicCallbacksRoutes);
 app.use("/api", tryAttachUserFromToken, enforceRequestedCompanyScope, enforceRoutePermissions);

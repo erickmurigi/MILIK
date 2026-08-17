@@ -10,6 +10,7 @@ import { getProperties } from "../../redux/propertyRedux";
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
 import { adminRequests } from "../../utils/requestMethods";
 import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
+import ListingImagesField from "../Common/ListingImagesField";
 
 const MILIK_ORANGE_BG = "bg-[#0B3B2E]";
 const normalizeBillingPeriodKey = (value = "") =>
@@ -181,7 +182,22 @@ const AddUnit = () => {
     furnished: "unfurnished",
     listingEnabled: false,
     ownerOccupied: false,
+    listingTitle: "",
+    bedrooms: "",
+    bathrooms: "",
+    parkingSpaces: "",
+    floorNumber: "",
+    petsAllowed: false,
+    rentNegotiable: false,
+    minimumLeaseTermMonths: "",
+    videoUrl: "",
+    virtualTourUrl: "",
+    availableFrom: "",
   });
+
+  const [existingImages, setExistingImages] = useState([]);
+  const [stagedImageFiles, setStagedImageFiles] = useState([]);
+  const [imagesSaving, setImagesSaving] = useState(false);
 
   const [fieldErrors, setFieldErrors] = useState({});
   const [generalError, setGeneralError] = useState("");
@@ -251,10 +267,41 @@ const AddUnit = () => {
           furnished: existingUnit.furnished || "unfurnished",
           listingEnabled: Boolean(existingUnit.listingEnabled),
           ownerOccupied: Boolean(existingUnit.ownerOccupied),
+          listingTitle: existingUnit.listingTitle || "",
+          bedrooms: existingUnit.bedrooms ?? "",
+          bathrooms: existingUnit.bathrooms ?? "",
+          parkingSpaces: existingUnit.parkingSpaces ?? "",
+          floorNumber: existingUnit.floorNumber || "",
+          petsAllowed: Boolean(existingUnit.petsAllowed),
+          rentNegotiable: Boolean(existingUnit.rentNegotiable),
+          minimumLeaseTermMonths: existingUnit.minimumLeaseTermMonths ?? "",
+          videoUrl: existingUnit.videoUrl || "",
+          virtualTourUrl: existingUnit.virtualTourUrl || "",
+          availableFrom: existingUnit.availableFrom
+            ? new Date(existingUnit.availableFrom).toISOString().slice(0, 10)
+            : "",
         });
       }
     }
   }, [isEditMode, unitId, units]);
+
+  // The units list endpoint omits `images` to keep list payloads light, so
+  // fetch the single unit directly to get its current photo gallery.
+  useEffect(() => {
+    if (!isEditMode || !unitId) return;
+    let cancelled = false;
+    adminRequests
+      .get(`/units/${unitId}`)
+      .then((res) => {
+        if (!cancelled) setExistingImages(Array.isArray(res.data?.images) ? res.data.images : []);
+      })
+      .catch(() => {
+        if (!cancelled) setExistingImages([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isEditMode, unitId]);
 
   useEffect(() => {
     if (!draftStorageKey || isEditMode) {
@@ -432,6 +479,39 @@ const AddUnit = () => {
     });
   };
 
+  const handleImageFilesSelected = (files) => {
+    setStagedImageFiles((prev) => [...prev, ...files]);
+  };
+
+  const handleRemoveStagedImage = (index) => {
+    setStagedImageFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleRemoveExistingImage = async (url) => {
+    if (!unitId) return;
+    setImagesSaving(true);
+    try {
+      const res = await adminRequests.delete(`/units/${unitId}/images`, { data: { url } });
+      setExistingImages(Array.isArray(res.data?.images) ? res.data.images : []);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to remove photo");
+    } finally {
+      setImagesSaving(false);
+    }
+  };
+
+  const uploadStagedImages = async (targetUnitId) => {
+    if (!targetUnitId || stagedImageFiles.length === 0) return;
+    const body = new FormData();
+    stagedImageFiles.forEach((file) => body.append("images", file));
+    try {
+      await adminRequests.post(`/units/${targetUnitId}/images`, body);
+      setStagedImageFiles([]);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Unit saved, but photo upload failed");
+    }
+  };
+
   // Calculate monthly rent (base rent only)
   const monthlyRent = parseFloat(formData.rent) || 0;
 
@@ -522,6 +602,17 @@ const AddUnit = () => {
       furnished: formData.furnished || "unfurnished",
       listingEnabled: Boolean(formData.listingEnabled),
       ownerOccupied: Boolean(formData.ownerOccupied),
+      listingTitle: formData.listingTitle?.trim() || "",
+      bedrooms: formData.bedrooms === "" ? null : Number(formData.bedrooms),
+      bathrooms: formData.bathrooms === "" ? null : Number(formData.bathrooms),
+      parkingSpaces: formData.parkingSpaces === "" ? 0 : Number(formData.parkingSpaces),
+      floorNumber: formData.floorNumber?.trim() || "",
+      petsAllowed: Boolean(formData.petsAllowed),
+      rentNegotiable: Boolean(formData.rentNegotiable),
+      minimumLeaseTermMonths: formData.minimumLeaseTermMonths === "" ? 0 : Number(formData.minimumLeaseTermMonths),
+      videoUrl: formData.videoUrl?.trim() || "",
+      virtualTourUrl: formData.virtualTourUrl?.trim() || "",
+      ...(isEditMode ? { availableFrom: formData.availableFrom || null } : {}),
       business: currentCompany._id,
       ...(isEditMode
         ? {
@@ -535,16 +626,23 @@ const AddUnit = () => {
       setFieldErrors({});
       setGeneralError("");
       
+      let savedUnit;
       if (isEditMode) {
         // Update existing unit
-        await dispatch(updateUnit({ id: unitId, unitData })).unwrap();
+        savedUnit = await dispatch(updateUnit({ id: unitId, unitData })).unwrap();
         toast.success("Unit updated successfully!");
       } else {
         // Create new unit
-        await dispatch(createUnit(unitData)).unwrap();
+        savedUnit = await dispatch(createUnit(unitData)).unwrap();
         toast.success("Unit created successfully!");
       }
-      
+
+      if (stagedImageFiles.length > 0) {
+        setImagesSaving(true);
+        await uploadStagedImages(savedUnit?._id || unitId);
+        setImagesSaving(false);
+      }
+
       clearDraftState();
       navigate("/units");
     } catch (err) {
@@ -569,7 +667,15 @@ const AddUnit = () => {
 
   const handleReset = () => {
     if (isEditMode) return;
-    setFormData({ unitNumber: "", property: "", unitType: "", areaSqFt: "", rent: "", deposit: "", status: "vacant", description: "", amenities: "", utilities: [], billingFrequency: "monthly", furnished: "unfurnished", listingEnabled: false, ownerOccupied: false });
+    setFormData({
+      unitNumber: "", property: "", unitType: "", areaSqFt: "", rent: "", deposit: "",
+      status: "vacant", description: "", amenities: "", utilities: [], billingFrequency: "monthly",
+      furnished: "unfurnished", listingEnabled: false, ownerOccupied: false,
+      listingTitle: "", bedrooms: "", bathrooms: "", parkingSpaces: "", floorNumber: "",
+      petsAllowed: false, rentNegotiable: false, minimumLeaseTermMonths: "",
+      videoUrl: "", virtualTourUrl: "", availableFrom: "",
+    });
+    setStagedImageFiles([]);
     setFieldErrors({});
     setGeneralError("");
     clearDraftState();
@@ -995,6 +1101,179 @@ const AddUnit = () => {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* ============================================= */}
+            {/* PUBLIC LISTING DETAILS */}
+            {/* ============================================= */}
+            <div className="xl:col-span-12 bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-lg p-4 space-y-3">
+              <h3 className="text-base font-bold text-slate-900 tracking-tight">Public Listing Details</h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-3">
+                <div className="md:col-span-3 xl:col-span-2">
+                  <label className={labelClass}>Listing Title</label>
+                  <input
+                    type="text"
+                    name="listingTitle"
+                    value={formData.listingTitle}
+                    onChange={handleInputChange}
+                    placeholder="e.g., Bright 2BR near Junction Mall"
+                    className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
+                    disabled={loading}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Bedrooms</label>
+                  <input
+                    type="number"
+                    name="bedrooms"
+                    value={formData.bedrooms}
+                    onChange={handleInputChange}
+                    min="0"
+                    className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
+                    disabled={loading}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Bathrooms</label>
+                  <input
+                    type="number"
+                    name="bathrooms"
+                    value={formData.bathrooms}
+                    onChange={handleInputChange}
+                    min="0"
+                    className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
+                    disabled={loading}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Parking Spaces</label>
+                  <input
+                    type="number"
+                    name="parkingSpaces"
+                    value={formData.parkingSpaces}
+                    onChange={handleInputChange}
+                    min="0"
+                    className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
+                    disabled={loading}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Floor</label>
+                  <input
+                    type="text"
+                    name="floorNumber"
+                    value={formData.floorNumber}
+                    onChange={handleInputChange}
+                    placeholder="e.g., Ground, 3rd"
+                    className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
+                    disabled={loading}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Minimum Lease Term (months)</label>
+                  <input
+                    type="number"
+                    name="minimumLeaseTermMonths"
+                    value={formData.minimumLeaseTermMonths}
+                    onChange={handleInputChange}
+                    min="0"
+                    className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
+                    disabled={loading}
+                  />
+                </div>
+
+                {isEditMode && (
+                  <div>
+                    <label className={labelClass}>Available From</label>
+                    <input
+                      type="date"
+                      name="availableFrom"
+                      value={formData.availableFrom}
+                      onChange={handleInputChange}
+                      className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
+                      disabled={loading}
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      Set this when a tenant gives notice, to list the unit before it's actually vacant.
+                    </p>
+                  </div>
+                )}
+
+                <div>
+                  <label className={labelClass}>Video URL</label>
+                  <input
+                    type="text"
+                    name="videoUrl"
+                    value={formData.videoUrl}
+                    onChange={handleInputChange}
+                    placeholder="https://..."
+                    className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
+                    disabled={loading}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Virtual Tour URL</label>
+                  <input
+                    type="text"
+                    name="virtualTourUrl"
+                    value={formData.virtualTourUrl}
+                    onChange={handleInputChange}
+                    placeholder="https://..."
+                    className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-6 pt-1">
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={Boolean(formData.petsAllowed)}
+                      onChange={(e) => setFormData((p) => ({ ...p, petsAllowed: e.target.checked }))}
+                      disabled={loading}
+                    />
+                    <div className={`w-10 h-5 rounded-full transition-colors ${formData.petsAllowed ? "bg-[#0B3B2E]" : "bg-slate-200"}`} />
+                    <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${formData.petsAllowed ? "translate-x-5" : "translate-x-0"}`} />
+                  </div>
+                  <span className="text-xs font-semibold text-slate-700">Pets Allowed</span>
+                </label>
+
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={Boolean(formData.rentNegotiable)}
+                      onChange={(e) => setFormData((p) => ({ ...p, rentNegotiable: e.target.checked }))}
+                      disabled={loading}
+                    />
+                    <div className={`w-10 h-5 rounded-full transition-colors ${formData.rentNegotiable ? "bg-[#0B3B2E]" : "bg-slate-200"}`} />
+                    <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${formData.rentNegotiable ? "translate-x-5" : "translate-x-0"}`} />
+                  </div>
+                  <span className="text-xs font-semibold text-slate-700">Rent Negotiable</span>
+                </label>
+              </div>
+
+              <ListingImagesField
+                label="Unit Photos"
+                existingImages={existingImages}
+                stagedFiles={stagedImageFiles}
+                onFilesSelected={handleImageFilesSelected}
+                onRemoveExisting={handleRemoveExistingImage}
+                onRemoveStaged={handleRemoveStagedImage}
+                disabled={loading || imagesSaving}
+                maxImages={12}
+              />
             </div>
 
             {/* Amenities */}

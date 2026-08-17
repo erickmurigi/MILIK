@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { canonicalizeBillingPeriodKey } from "../services/billingPeriodService.js";
+import { slugifyWithSuffix } from "../utils/slugify.js";
 
 const unitUtilitySchema = new mongoose.Schema(
   {
@@ -97,6 +98,26 @@ const UnitSchema = new mongoose.Schema(
 
     listingEnabled: { type: Boolean, default: false },
 
+    listingTitle: { type: String, trim: true, default: "" },
+    slug: { type: String, trim: true, default: "" },
+    featured: { type: Boolean, default: false },
+
+    bedrooms: { type: Number, default: null, min: 0 },
+    bathrooms: { type: Number, default: null, min: 0 },
+    parkingSpaces: { type: Number, default: 0, min: 0 },
+    floorNumber: { type: String, trim: true, default: "" },
+    petsAllowed: { type: Boolean, default: false },
+
+    rentNegotiable: { type: Boolean, default: false },
+    minimumLeaseTermMonths: { type: Number, default: 0, min: 0 },
+
+    videoUrl: { type: String, trim: true, default: "" },
+    virtualTourUrl: { type: String, trim: true, default: "" },
+
+    // Set when a tenant has given notice on an occupied unit, so it can be
+    // marketed ("Available from <date>") before it actually turns vacant.
+    availableFrom: { type: Date, default: null },
+
     ownerOccupied: { type: Boolean, default: false },
 
     business: {
@@ -114,6 +135,11 @@ UnitSchema.index({ business: 1, property: 1, unitNumber: 1 }, { unique: true });
 UnitSchema.index({ isVacant: 1 });
 UnitSchema.index({ listingEnabled: 1, status: 1 });
 UnitSchema.index({ business: 1, createdAt: -1 });
+UnitSchema.index({ business: 1, slug: 1 }, { unique: true, sparse: true });
+UnitSchema.index({ listingEnabled: 1, status: 1, availableFrom: 1 });
+UnitSchema.index({ listingEnabled: 1, featured: 1, status: 1 });
+UnitSchema.index({ listingEnabled: 1, status: 1, rent: 1 });
+UnitSchema.index({ listingEnabled: 1, status: 1, unitType: 1 });
 
 UnitSchema.pre("validate", function (next) {
   if (typeof this.unitNumber === "string") {
@@ -159,10 +185,20 @@ UnitSchema.pre("validate", function (next) {
     if (!this.vacantSince) {
       this.vacantSince = new Date();
     }
+    if (!this.availableFrom) {
+      this.availableFrom = this.vacantSince;
+    }
   } else {
     this.isVacant = false;
     this.vacantSince = null;
     this.daysVacant = 0;
+    // availableFrom is intentionally left untouched here — an occupied unit
+    // can carry a future availableFrom (tenant gave notice) so it can be
+    // marketed ahead of actually turning vacant.
+  }
+
+  if (!this.slug || this.isModified("unitNumber")) {
+    this.slug = slugifyWithSuffix(this.unitNumber, this._id);
   }
 
   next();

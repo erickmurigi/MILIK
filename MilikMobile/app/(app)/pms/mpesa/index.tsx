@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../../../constants/colors';
 import api from '../../../../services/api';
+import MilikLoader from '../../../../components/ui/MilikLoader';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type Collection = {
@@ -50,7 +51,7 @@ export default function MpesaNotificationsScreen() {
   const [summary,     setSummary]     = useState<SummaryRow[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [refreshing,  setRefreshing]  = useState(false);
-  const [filter,      setFilter]      = useState<FilterTab>('unmatched');
+  const [filter,      setFilter]      = useState<FilterTab>('all');
   const [search,      setSearch]      = useState('');
   const [page,        setPage]        = useState(1);
   const [hasMore,     setHasMore]     = useState(true);
@@ -59,11 +60,14 @@ export default function MpesaNotificationsScreen() {
   // Assign tenant modal
   const [assignTarget, setAssignTarget] = useState<Collection | null>(null);
   const [tenantSearch, setTenantSearch] = useState('');
+  const [allTenants,   setAllTenants]   = useState<TenantOption[]>([]);
   const [tenantResults, setTenantResults] = useState<TenantOption[]>([]);
   const [tenantSearching, setTenantSearching] = useState(false);
   const [assigning, setAssigning] = useState(false);
 
   const LIMIT = 50;
+  const searchRef = useRef(search);
+  searchRef.current = search;
 
   // ── Load ──────────────────────────────────────────────────────────────────
   const load = useCallback(async (pg = 1, replace = true) => {
@@ -74,8 +78,8 @@ export default function MpesaNotificationsScreen() {
       const params: Record<string, string> = {
         page: String(pg), limit: String(LIMIT),
       };
-      if (filter !== 'all') params.status = filter;
-      if (search.trim())    params.search  = search.trim();
+      if (filter !== 'all')         params.status = filter;
+      if (searchRef.current.trim()) params.search  = searchRef.current.trim();
 
       const { data } = await api.get('/mpesa-collections', { params });
       const rows: Collection[] = data.data ?? [];
@@ -90,32 +94,44 @@ export default function MpesaNotificationsScreen() {
       setRefreshing(false);
       setLoadingMore(false);
     }
-  }, [filter, search]);
+  }, [filter]);
 
   useEffect(() => { load(1); }, [load]);
+  useEffect(() => {
+    const t = setTimeout(() => load(1), 400);
+    return () => clearTimeout(t);
+  }, [search]);
 
   // ── Summary chips ─────────────────────────────────────────────────────────
   const sumMap = Object.fromEntries(summary.map(s => [s._id, s]));
   const unmatchedCount = (sumMap.unmatched?.count ?? 0) + (sumMap.matched_tenant?.count ?? 0);
 
-  // ── Tenant autocomplete ────────────────────────────────────────────────────
+  // Load all tenants when assign modal opens
   useEffect(() => {
-    if (!tenantSearch.trim() || tenantSearch.length < 2) { setTenantResults([]); return; }
-    const t = setTimeout(async () => {
-      setTenantSearching(true);
-      try {
-        const { data } = await api.get('/tenants', { params: { search: tenantSearch, limit: 20 } });
-        setTenantResults(data.data ?? data.tenants ?? []);
-      } catch { setTenantResults([]); }
-      finally { setTenantSearching(false); }
-    }, 350);
-    return () => clearTimeout(t);
-  }, [tenantSearch]);
+    if (!assignTarget) return;
+    setTenantSearching(true);
+    api.get('/tenants', { params: { limit: 100, status: 'active' } })
+      .then(({ data }) => {
+        const rows: TenantOption[] = data.data ?? data.tenants ?? [];
+        setAllTenants(rows);
+        setTenantResults(rows);
+      })
+      .catch(() => { setAllTenants([]); setTenantResults([]); })
+      .finally(() => setTenantSearching(false));
+  }, [assignTarget]);
+
+  // Filter locally as user types
+  useEffect(() => {
+    if (!tenantSearch.trim()) { setTenantResults(allTenants); return; }
+    const q = tenantSearch.toLowerCase();
+    setTenantResults(allTenants.filter(t => t.name.toLowerCase().includes(q)));
+  }, [tenantSearch, allTenants]);
 
   // ── Actions ───────────────────────────────────────────────────────────────
   const openAssign = (item: Collection) => {
     setAssignTarget(item);
     setTenantSearch('');
+    setAllTenants([]);
     setTenantResults([]);
   };
 
@@ -297,9 +313,7 @@ export default function MpesaNotificationsScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-        </View>
+        <MilikLoader fullscreen />
       ) : (
         <FlatList
           data={items}
@@ -341,7 +355,7 @@ export default function MpesaNotificationsScreen() {
                 </Text>
               ) : null}
             </View>
-            <TouchableOpacity onPress={() => { setAssignTarget(null); setTenantSearch(''); setTenantResults([]); }}>
+            <TouchableOpacity onPress={() => { setAssignTarget(null); setTenantSearch(''); setAllTenants([]); setTenantResults([]); }}>
               <Ionicons name="close" size={24} color={Colors.text} />
             </TouchableOpacity>
           </View>
@@ -363,8 +377,8 @@ export default function MpesaNotificationsScreen() {
 
           {assigning ? (
             <View style={styles.centered}>
-              <ActivityIndicator size="large" color={Colors.primary} />
-              <Text style={{ color: Colors.textMuted, marginTop: 8 }}>Assigning...</Text>
+              <MilikLoader size="small" />
+              <Text style={{ color: Colors.textMuted, marginTop: 12 }}>Assigning...</Text>
             </View>
           ) : (
             <FL
@@ -388,14 +402,10 @@ export default function MpesaNotificationsScreen() {
                 </TouchableOpacity>
               )}
               ListEmptyComponent={
-                tenantSearch.length >= 2 && !tenantSearching ? (
-                  <View style={{ padding: 32, alignItems: 'center' }}>
+                !tenantSearching ? (
+                  <View style={{ padding: 32, alignItems: 'center', gap: 8 }}>
                     <Ionicons name="people-outline" size={40} color={Colors.border} />
-                    <Text style={{ color: Colors.textMuted, marginTop: 8 }}>No tenants found</Text>
-                  </View>
-                ) : tenantSearch.length < 2 ? (
-                  <View style={{ padding: 32, alignItems: 'center' }}>
-                    <Text style={{ color: Colors.textMuted }}>Type at least 2 characters to search</Text>
+                    <Text style={{ color: Colors.textMuted }}>No tenants found</Text>
                   </View>
                 ) : null
               }

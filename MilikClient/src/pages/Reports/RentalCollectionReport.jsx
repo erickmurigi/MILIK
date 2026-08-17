@@ -8,6 +8,7 @@ import { getLandlords, getRentalCollectionReport } from '../../redux/apiCalls';
 import { getProperties } from '../../redux/propertyRedux';
 import { getTenants } from '../../redux/tenantsRedux';
 import { FaFileDownload, FaPrint, FaSyncAlt } from 'react-icons/fa';
+import useDebounce from '../../hooks/useDebounce';
 import ResetFiltersButton from '../../components/common/ResetFiltersButton';
 import { toast } from 'react-toastify';
 import { hasCompanyPermission } from '../../utils/permissions';
@@ -41,7 +42,6 @@ const RentalCollectionReport = () => {
   const companyName = currentCompany?.name || currentCompany?.companyName || currentCompany?.businessName || currentUser?.company?.name || currentUser?.company?.companyName || 'Milik';
 
   const [loading, setLoading] = useState(false);
-  const [filtersChanged, setFiltersChanged] = useState(false);
   const filtersInitialized = useRef(false);
   const [zoneOptions, setZoneOptions] = useState([]);
   const [filters, setFilters] = useTabState("/reports/rental-collection:filters", () => ({
@@ -58,7 +58,6 @@ const RentalCollectionReport = () => {
       propertyId: '', tenantId: '', unitId: '', landlordId: '',
       paymentMethod: '', cashbook: '', zone: '',
     });
-    setFiltersChanged(true);
   };
   const [report, setReport] = useState({ summary: {}, byProperty: [], rows: [], allUtilityTypes: [] });
   const [currentPage, setCurrentPage] = useTabState("/reports/rental-collection:currentPage", 1);
@@ -76,10 +75,10 @@ const RentalCollectionReport = () => {
       .catch(() => {});
   }, []);
 
+  const loadReportRef = useRef(null);
   const loadReport = useCallback(async (signal, filterOverrides = {}) => {
     if (!businessId) return;
     setLoading(true);
-    setFiltersChanged(false);
     try {
       const data = await getRentalCollectionReport({ business: businessId, ...filters, ...filterOverrides }, signal);
       if (signal?.aborted) return;
@@ -104,10 +103,18 @@ const RentalCollectionReport = () => {
     return () => controller.abort();
   }, [businessId]);
 
+  useEffect(() => { loadReportRef.current = loadReport; }, [loadReport]);
+
+  const debouncedTrigger = useDebounce(
+    `${filters.startDate}|${filters.endDate}|${filters.propertyId}|${filters.tenantId}|${filters.unitId}|${filters.landlordId}|${filters.paymentMethod}|${filters.cashbook}|${filters.zone}`,
+    500
+  );
   useEffect(() => {
     if (!filtersInitialized.current) { filtersInitialized.current = true; return; }
-    setFiltersChanged(true);
-  }, [filters.startDate, filters.endDate, filters.propertyId, filters.tenantId, filters.unitId, filters.landlordId, filters.paymentMethod, filters.cashbook, filters.zone]);
+    const controller = new AbortController();
+    loadReportRef.current(controller.signal);
+    return () => controller.abort();
+  }, [debouncedTrigger]);
 
   const units = useMemo(() => {
     return tenants
@@ -424,7 +431,7 @@ const RentalCollectionReport = () => {
                   <button onClick={handleExportCSV} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaFileDownload size={10} /> Export</button>
                   <button onClick={handlePrint} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint size={10} /> Print</button>
                   <ResetFiltersButton onReset={resetFilters} disabled={loading} />
-                  <button onClick={() => loadReport()} className={`inline-flex h-7 items-center gap-1.5 rounded px-3 text-[10px] font-bold uppercase tracking-[0.08em] transition ${filtersChanged ? 'bg-[#0B3B2E] text-white hover:bg-[#0A3127]' : 'border border-slate-200 bg-white text-slate-600 hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white'}`}><FaSyncAlt size={10} className={loading ? 'animate-spin' : ''} />{filtersChanged ? 'Apply Filters' : 'Refresh'}</button>
+                  <button onClick={() => loadReport()} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaSyncAlt size={10} className={loading ? 'animate-spin' : ''} /> Refresh</button>
                 </div>
               </div>
             </div>

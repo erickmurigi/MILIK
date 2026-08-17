@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import { Colors } from '../../../../constants/colors';
 import api from '../../../../services/api';
+import MilikLoader from '../../../../components/ui/MilikLoader';
 
 type Maintenance = {
   _id:         string;
@@ -86,9 +87,7 @@ export default function MaintenanceDetailScreen() {
     return (
       <SafeAreaView style={styles.safe} edges={['bottom']}>
         <Stack.Screen options={{ title: 'Maintenance Request' }} />
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-        </View>
+        <MilikLoader fullscreen />
       </SafeAreaView>
     );
   }

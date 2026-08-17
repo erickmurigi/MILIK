@@ -106,8 +106,7 @@ const CommissionReports = () => {
   const [statementRows, setStatementRows] = useState([]);
   const currentMonth = useMemo(() => toInputMonth(new Date()), []);
   const [appliedFilters, setAppliedFilters] = useTabState("/reports/commissions:appliedFilters", { monthFrom: currentMonth, monthTo: currentMonth, search: "", status: "recognized" });
-  const [draftFilters, setDraftFilters] = useState(appliedFilters);
-  const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
+  const setFilter = (key) => (e) => setAppliedFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [currentPage, setCurrentPage] = useTabState("/reports/commissions:currentPage", 1);
 
   const loadData = useCallback(async () => {
@@ -285,17 +284,13 @@ const CommissionReports = () => {
     win.onload = () => { win.focus(); win.print(); };
   }, [canExportReports, currentCompany, currentUser, filteredRows, totals, appliedFilters.monthFrom, appliedFilters.monthTo]);
 
-  const applySearch = () => setAppliedFilters({ ...draftFilters, search: draftFilters.search.trim() });
-
   const resetFilters = () => {
-    const nextFilters = {
+    setAppliedFilters({
       monthFrom: currentMonth,
       monthTo: currentMonth,
       search: "",
       status: "recognized",
-    };
-    setDraftFilters(nextFilters);
-    setAppliedFilters(nextFilters);
+    });
   };
 
   const handleExportCSV = () => {
@@ -333,7 +328,7 @@ const CommissionReports = () => {
     const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `milik_commission_report_${draftFilters.monthFrom || "from"}_${draftFilters.monthTo || "to"}.csv`;
+    link.download = `milik_commission_report_${appliedFilters.monthFrom || "from"}_${appliedFilters.monthTo || "to"}.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
     toast.success("Commission report exported.");
@@ -369,7 +364,7 @@ const CommissionReports = () => {
               <p style={{ margin: 0, fontSize: "10px", color: "#475569" }}>Recognized landlord commission by period.</p>
             </div>
             <div className="comm-print-meta">
-              <div><strong>Period:</strong> {draftFilters.monthFrom || "—"} to {draftFilters.monthTo || "—"}</div>
+              <div><strong>Period:</strong> {appliedFilters.monthFrom || "—"} to {appliedFilters.monthTo || "—"}</div>
               <div><strong>Generated:</strong> {new Date().toLocaleString()}</div>
               <div><strong>Prepared by:</strong> {preparedBy}</div>
             </div>
@@ -419,10 +414,10 @@ const CommissionReports = () => {
           {/* Filter bar */}
           <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
             <div className="flex flex-wrap items-center gap-1.5">
-              <input type="month" value={draftFilters.monthFrom} onChange={setFilter("monthFrom")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
-              <input type="month" value={draftFilters.monthTo} onChange={setFilter("monthTo")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
+              <input type="month" value={appliedFilters.monthFrom} onChange={setFilter("monthFrom")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
+              <input type="month" value={appliedFilters.monthTo} onChange={setFilter("monthTo")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
               <AppSelect
-                value={draftFilters.status}
+                value={appliedFilters.status}
                 onChange={(v) => setDraftFilters((prev) => ({ ...prev, status: v ?? "" }))}
                 options={[
                   { value: "recognized", label: "Recognized only" },
@@ -434,14 +429,13 @@ const CommissionReports = () => {
               />
               <div className="relative flex min-w-[200px] flex-1">
                 <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={9} />
-                <input value={draftFilters.search} onChange={setFilter("search")} onKeyDown={(e) => e.key === 'Enter' && applySearch()} placeholder="Search statement, property, landlord or basis…" className="h-7 w-full rounded-md border border-slate-200 bg-white pl-6 pr-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
+                <input value={appliedFilters.search} onChange={setFilter("search")} placeholder="Search statement, property, landlord or basis…" className="h-7 w-full rounded-md border border-slate-200 bg-white pl-6 pr-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
               </div>
               <div className="ml-auto flex items-center gap-1.5">
                 {canExportReports && <button onClick={handleExportCSV} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaFileDownload size={9} /> Export CSV</button>}
                 {canExportReports && <button onClick={handlePrint} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaPrint size={9} /> Print</button>}
                 <button onClick={resetFilters} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaRedoAlt size={9} /> Reset</button>
                 <button onClick={loadData} disabled={loading} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaRedoAlt size={9} className={loading ? 'animate-spin' : ''} /> Reload</button>
-                <button onClick={applySearch} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-[#0B3B2E] bg-[#0B3B2E] px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-white transition hover:bg-[#0A3127]"><FaSearch size={9} /> Apply</button>
               </div>
             </div>
           </div>

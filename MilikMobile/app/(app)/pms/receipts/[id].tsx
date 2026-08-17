@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import { Colors } from '../../../../constants/colors';
 import api from '../../../../services/api';
+import MilikLoader from '../../../../components/ui/MilikLoader';
 
 type Allocation = {
   invoice?:    { invoiceNumber?: string; category?: string; amount?: number };
@@ -76,9 +77,7 @@ export default function ReceiptDetailScreen() {
     return (
       <SafeAreaView style={styles.safe} edges={['bottom']}>
         <Stack.Screen options={{ title: 'Receipt' }} />
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-        </View>
+        <MilikLoader fullscreen />
       </SafeAreaView>
     );
   }

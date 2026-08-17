@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   ActivityIndicator, RefreshControl, Linking,
@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Colors } from '../../../../constants/colors';
 import api from '../../../../services/api';
+import MilikLoader from '../../../../components/ui/MilikLoader';
 
 type Tenant = {
   _id:     string;
@@ -31,17 +32,19 @@ export default function DelinquencyScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [search,     setSearch]     = useState('');
 
+  const searchRef = useRef(search);
+  searchRef.current = search;
+
   const load = useCallback(async (isRefresh = false) => {
     isRefresh ? setRefreshing(true) : setLoading(true);
     try {
       const params: Record<string, string> = {
         hasBalance: 'true', page: '1', limit: '200',
       };
-      if (search.trim()) params.search = search.trim();
+      if (searchRef.current.trim()) params.search = searchRef.current.trim();
 
       const { data } = await api.get('/tenants', { params });
       const rows: Tenant[] = data.data ?? data.tenants ?? [];
-      // Sort by balance descending
       rows.sort((a, b) => Number(b.balance ?? 0) - Number(a.balance ?? 0));
       setTenants(rows);
     } catch { /* fail silently */ }
@@ -49,9 +52,13 @@ export default function DelinquencyScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [search]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const t = setTimeout(() => load(), 400);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const totalArrears = tenants.reduce((s, t) => s + Number(t.balance ?? 0), 0);
 
@@ -126,9 +133,7 @@ export default function DelinquencyScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-        </View>
+        <MilikLoader fullscreen />
       ) : (
         <FlatList
           data={tenants}

@@ -20,7 +20,7 @@ const getJWTSecret = () => {
 
 const JWT_ISSUER = "milik-api";
 const JWT_AUDIENCE = "milik-client";
-const JWT_OPTIONS = { expiresIn: "1d", issuer: JWT_ISSUER, audience: JWT_AUDIENCE };
+const JWT_OPTIONS = { expiresIn: "90d", issuer: JWT_ISSUER, audience: JWT_AUDIENCE };
 
 // Pre-computed dummy hash — used to pad response timing when a login email is not found,
 // preventing user enumeration via timing attacks.

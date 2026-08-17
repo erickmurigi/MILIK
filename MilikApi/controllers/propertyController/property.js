@@ -28,6 +28,27 @@ import ExpenseRequisition from "../../models/ExpenseRequisition.js";
 import LatePenaltyBatch from "../../models/LatePenaltyBatch.js";
 import { ensureSystemChartOfAccounts } from "../../services/chartOfAccountsService.js";
 import {
+  uploadBufferToCloudinary,
+  destroyCloudinaryAsset,
+  publicIdFromCloudinaryUrl,
+} from "../../utils/cloudinaryUpload.js";
+
+const MAX_PROPERTY_IMAGES = 15;
+
+const loadPropertyWithAccessCheck = async (req, propertyId) => {
+  const property = await Property.findById(propertyId);
+  if (!property) {
+    return { error: { status: 404, message: "Property not found" } };
+  }
+  if (!req.user?.isSystemAdmin) {
+    const userBusinessId = req.user?.company || req.user?.business;
+    if (property.business.toString() !== userBusinessId?.toString()) {
+      return { error: { status: 403, message: "Not authorized to access this property" } };
+    }
+  }
+  return { property };
+};
+import {
   ensurePropertyControlAccount,
 } from "../../services/propertyAccountingService.js";
 import { createError } from "../../utils/error.js";
@@ -1822,6 +1843,74 @@ export const backfillPropertyAccounts = async (req, res, next) => {
       message: `Control account backfill complete. ${results.processed} propert${results.processed === 1 ? "y" : "ies"} updated, ${results.alreadyComplete} already complete${results.failed > 0 ? `, ${results.failed} failed` : ""}.`,
       ...results,
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// UPLOAD PROPERTY IMAGES (public listing photos)
+export const uploadPropertyImages = async (req, res, next) => {
+  try {
+    const result = await loadPropertyWithAccessCheck(req, req.params.id);
+    if (result.error) {
+      return next(createError(result.error.status, result.error.message));
+    }
+    const property = result.property;
+
+    const files = req.files || [];
+    if (files.length === 0) {
+      return next(createError(400, "No image files provided"));
+    }
+
+    const existingCount = (property.images || []).length;
+    if (existingCount + files.length > MAX_PROPERTY_IMAGES) {
+      return next(
+        createError(
+          400,
+          `A property can have at most ${MAX_PROPERTY_IMAGES} images (${existingCount} already uploaded).`
+        )
+      );
+    }
+
+    const uploaded = await Promise.all(
+      files.map((file) =>
+        uploadBufferToCloudinary(file.buffer, {
+          folder: `listings/properties/${property._id}`,
+          resource_type: "image",
+        })
+      )
+    );
+
+    property.images = [...(property.images || []), ...uploaded.map((r) => r.secure_url)];
+    const updatedProperty = await property.save();
+
+    return res.status(200).json({ success: true, images: updatedProperty.images });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// DELETE A SINGLE PROPERTY IMAGE
+export const deletePropertyImage = async (req, res, next) => {
+  try {
+    const result = await loadPropertyWithAccessCheck(req, req.params.id);
+    if (result.error) {
+      return next(createError(result.error.status, result.error.message));
+    }
+    const property = result.property;
+
+    const { url } = req.body || {};
+    if (!url || !(property.images || []).includes(url)) {
+      return next(createError(400, "Image not found on this property"));
+    }
+
+    property.images = (property.images || []).filter((img) => img !== url);
+    const updatedProperty = await property.save();
+
+    const publicId = publicIdFromCloudinaryUrl(url);
+    if (publicId) await destroyCloudinaryAsset(publicId);
+
+    return res.status(200).json({ success: true, images: updatedProperty.images });
   } catch (err) {
     next(err);
   }

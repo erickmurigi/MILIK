@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -40,16 +40,25 @@ export default function MoreScreen() {
   };
 
   const menuItems: MenuItem[] = [
-    { icon: 'speedometer-outline',  label: 'Meter Readings',   onPress: () => {} },
-    { icon: 'alert-circle-outline', label: 'Delinquency',      onPress: () => {} },
-    { icon: 'bar-chart-outline',    label: 'Reports',          onPress: () => {} },
-    { icon: 'notifications-outline',label: 'Notifications',    onPress: () => {} },
-    { icon: 'settings-outline',     label: 'Settings',         onPress: () => {} },
-    { icon: 'log-out-outline',      label: 'Sign Out',         onPress: handleLogout, danger: true },
+    { icon: 'notifications-outline', label: 'Notifications',    onPress: () => router.push('/notifications' as any) },
+    { icon: 'settings-outline',      label: 'Settings',         onPress: () => {} },
+    { icon: 'log-out-outline',       label: 'Sign Out',         onPress: handleLogout, danger: true },
+  ];
+
+  type ShortcutItem = { icon: string; label: string; color: string; route: string };
+
+  const shortcuts: ShortcutItem[] = [
+    { icon: 'document-text-outline',  label: 'Journals',     color: '#1D4ED8', route: '/accounting/journals'     },
+    { icon: 'receipt-outline',        label: 'Vouchers',     color: '#7C3AED', route: '/accounting/vouchers'     },
+    { icon: 'list-circle-outline',    label: 'Requisitions', color: '#D97706', route: '/accounting/requisitions' },
+    { icon: 'wallet-outline',         label: 'Petty Cash',   color: '#DC2626', route: '/accounting/petty-cash'   },
+    { icon: 'bar-chart-outline',      label: 'Reports',      color: '#064E3B', route: '/accounting/reports'      },
+    { icon: 'phone-portrait-outline', label: 'M-Pesa',       color: '#059669', route: '/carwash/mpesa'           },
   ];
 
   return (
     <SafeAreaView style={styles.safe}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
       {/* Profile card */}
       <View style={styles.profile}>
         <View style={styles.avatar}>
@@ -61,6 +70,24 @@ export default function MoreScreen() {
           <Text style={styles.profileName}>{user?.name || 'Field Officer'}</Text>
           <Text style={styles.profileSub}>{company?.companyName || 'Milik'}</Text>
         </View>
+      </View>
+
+      {/* Quick shortcuts */}
+      <Text style={styles.sectionLabel}>QUICK ACCESS</Text>
+      <View style={styles.shortcuts}>
+        {shortcuts.map((s) => (
+          <TouchableOpacity
+            key={s.label}
+            style={styles.shortcutItem}
+            onPress={() => router.push(s.route as any)}
+            activeOpacity={0.75}
+          >
+            <View style={[styles.shortcutIcon, { backgroundColor: s.color + '18' }]}>
+              <Ionicons name={s.icon as any} size={20} color={s.color} />
+            </View>
+            <Text style={styles.shortcutLabel}>{s.label}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       {/* Menu */}
@@ -90,6 +117,7 @@ export default function MoreScreen() {
       </View>
 
       <Text style={styles.version}>Milik Mobile · v1.0.0</Text>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -116,6 +144,19 @@ const styles = StyleSheet.create({
     borderRadius: 18, borderWidth: 1, borderColor: Colors.border,
     overflow: 'hidden',
   },
+  sectionLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, color: '#94A3B8', marginHorizontal: 20, marginBottom: 10, marginTop: 20 },
+  shortcuts: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 10,
+    marginHorizontal: 20, marginBottom: 4,
+  },
+  shortcutItem: {
+    width: '30%', alignItems: 'center', gap: 7,
+    backgroundColor: Colors.white, borderRadius: 14,
+    borderWidth: 1, borderColor: Colors.border,
+    paddingVertical: 14,
+  },
+  shortcutIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  shortcutLabel: { fontSize: 11, fontWeight: '700', color: Colors.text, textAlign: 'center' },
   menuItem: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
     paddingHorizontal: 18, paddingVertical: 16,

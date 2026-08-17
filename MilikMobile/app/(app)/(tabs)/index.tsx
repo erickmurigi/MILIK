@@ -1,6 +1,7 @@
+import { useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
-  TouchableOpacity, StatusBar,
+  TouchableOpacity, StatusBar, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,7 +29,7 @@ const ALL_MODULES: Module[] = [
     icon:      'business-outline',
     color:     '#0B3B2E',
     route:     '/pms',
-    moduleKey: 'pms',
+    moduleKey: 'propertyManagement',
   },
   {
     key:       'carwash',
@@ -67,13 +68,12 @@ const ALL_MODULES: Module[] = [
     moduleKey: 'propertySale',
   },
   {
-    key:       'accounts',
-    label:     'Accounts',
-    subtitle:  'GL · Reports · Balance Sheet',
-    icon:      'bar-chart-outline',
-    color:     '#0C4A6E',
-    route:     '/accounts',
-    moduleKey: 'accounts',
+    key:      'accounting',
+    label:    'Accounting',
+    subtitle: 'Journals · Vouchers · Reports',
+    icon:     'calculator-outline',
+    color:    '#064E3B',
+    route:    '/accounting',
   },
 ];
 
@@ -81,12 +81,18 @@ export default function ModulesHomeScreen() {
   const router  = useRouter();
   const { user, company } = useSelector((s: RootState) => s.auth);
 
-  // Show only modules the company has access to.
-  // If company.modules is undefined (e.g. super admin) show all.
-  const companyModules: string[] = company?.modules ?? [];
-  const visibleModules = companyModules.length === 0
-    ? ALL_MODULES
-    : ALL_MODULES.filter((m) => !m.moduleKey || companyModules.includes(m.moduleKey));
+  const logoUrl = company?.logo
+    ? company.logo.startsWith('http') ? company.logo : `https://milikproperty.com${company.logo}`
+    : null;
+
+  const visibleModules = useMemo(() => {
+    const enabled: string[] = company?.modules
+      ? Object.entries(company.modules).filter(([, v]) => v).map(([k]) => k)
+      : [];
+    return enabled.length === 0
+      ? ALL_MODULES
+      : ALL_MODULES.filter((m) => !m.moduleKey || enabled.includes(m.moduleKey));
+  }, [company?.modules]);
 
   const greeting = () => {
     const h = new Date().getHours();
@@ -108,16 +114,21 @@ export default function ModulesHomeScreen() {
           <View style={styles.headerLeft}>
             <Text style={styles.greeting}>{greeting()},</Text>
             <Text style={styles.userName} numberOfLines={1}>
-              {user?.name?.split(' ')[0] || 'there'}
+              {user?.surname?.split(' ')[0] || user?.name?.split(' ')[0] || 'there'}
             </Text>
             <Text style={styles.companyName} numberOfLines={1}>
               {company?.companyName || 'Milik'}
             </Text>
           </View>
-          <TouchableOpacity style={styles.notifBtn} onPress={() => router.push('/notifications' as any)}>
-            <Ionicons name="notifications-outline" size={22} color={Colors.text} />
-            <View style={styles.notifDot} />
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            {logoUrl && (
+              <Image source={{ uri: logoUrl }} style={styles.companyLogo} resizeMode="contain" />
+            )}
+            <TouchableOpacity style={styles.notifBtn} onPress={() => router.push('/notifications' as any)}>
+              <Ionicons name="notifications-outline" size={22} color={Colors.text} />
+              <View style={styles.notifDot} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Section label */}
@@ -163,6 +174,8 @@ const styles = StyleSheet.create({
   userName:    { fontSize: 26, fontWeight: '900', color: Colors.text, marginTop: 2 },
   companyName: { fontSize: 13, color: Colors.textSecondary, marginTop: 2, fontWeight: '500' },
 
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  companyLogo: { width: 40, height: 40, borderRadius: 10, backgroundColor: Colors.white },
   notifBtn: {
     width: 44, height: 44,
     borderRadius: 22,

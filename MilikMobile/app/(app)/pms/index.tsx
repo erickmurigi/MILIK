@@ -9,13 +9,15 @@ import api from '../../../services/api';
 type QuickAction = { icon: string; label: string; route: string };
 
 const QUICK_ACTIONS: QuickAction[] = [
-  { icon: 'people-outline',       label: 'Tenants',        route: '/pms/tenants'      },
-  { icon: 'receipt-outline',      label: 'Invoices',       route: '/pms/invoices'     },
-  { icon: 'cash-outline',         label: 'Receipts',       route: '/pms/receipts'     },
-  { icon: 'phone-portrait-outline',label: 'M-Pesa',        route: '/pms/mpesa'        },
-  { icon: 'construct-outline',    label: 'Maintenance',    route: '/pms/maintenance'  },
-  { icon: 'speedometer-outline',  label: 'Meter Readings', route: '/pms/meters'       },
-  { icon: 'alert-circle-outline', label: 'Delinquency',    route: '/pms/delinquency'  },
+  { icon: 'business-outline',      label: 'Properties',     route: '/pms/properties'   },
+  { icon: 'people-outline',        label: 'Tenants',        route: '/pms/tenants'      },
+  { icon: 'receipt-outline',       label: 'Invoices',       route: '/pms/invoices'     },
+  { icon: 'cash-outline',          label: 'Receipts',       route: '/pms/receipts'     },
+  { icon: 'phone-portrait-outline',label: 'M-Pesa',         route: '/pms/mpesa'        },
+  { icon: 'construct-outline',     label: 'Maintenance',    route: '/pms/maintenance'  },
+  { icon: 'speedometer-outline',   label: 'Meter Readings', route: '/pms/meters'       },
+  { icon: 'alert-circle-outline',  label: 'Delinquency',    route: '/pms/delinquency'  },
+  { icon: 'warning-outline',       label: 'Penalties',      route: '/pms/penalties'    },
 ];
 
 const fmtK = (n: number) => {

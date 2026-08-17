@@ -57,7 +57,6 @@ const PaidBalanceReport = () => {
   const companyName = currentCompany?.name || currentCompany?.companyName || currentCompany?.businessName || currentUser?.company?.name || currentUser?.company?.companyName || 'Milik';
 
   const [loading, setLoading] = useState(false);
-  const [filtersChanged, setFiltersChanged] = useState(false);
   const filtersInitialized = useRef(false);
   const [filters, setFilters] = useTabState("/reports/paid-balance:filters", () => {
     const now = new Date();
@@ -79,7 +78,6 @@ const PaidBalanceReport = () => {
       status: 'all',
       search: '',
     });
-    setFiltersChanged(true);
   };
   const [report, setReport] = useState({ summary: {}, rows: [], allUtilityTypes: [] });
   const [currentPage, setCurrentPage] = useTabState("/reports/paid-balance:currentPage", 1);
@@ -89,10 +87,10 @@ const PaidBalanceReport = () => {
     dispatch(getProperties({ business: businessId }));
   }, [businessId, dispatch]);
 
+  const loadReportRef = useRef(null);
   const loadReport = useCallback(async (signal, filterOverrides = {}) => {
     if (!businessId) return;
     setLoading(true);
-    setFiltersChanged(false);
     try {
       const data = await getTenantPaidBalanceReport({ business: businessId, ...filters, ...filterOverrides }, signal);
       if (signal?.aborted) return;
@@ -116,10 +114,20 @@ const PaidBalanceReport = () => {
     return () => controller.abort();
   }, [businessId]);
 
+  // Keep a ref to the latest loadReport so the auto-fetch effect doesn't need it as a dep
+  useEffect(() => { loadReportRef.current = loadReport; }, [loadReport]);
+
+  // Auto-fetch when date/property/status filters change (debounced for date typing)
+  const debouncedFilterTrigger = useDebounce(
+    `${filters.startDate}|${filters.asOfDate}|${filters.propertyId}|${filters.status}`,
+    500
+  );
   useEffect(() => {
     if (!filtersInitialized.current) { filtersInitialized.current = true; return; }
-    setFiltersChanged(true);
-  }, [filters.startDate, filters.asOfDate, filters.propertyId, filters.status]);
+    const controller = new AbortController();
+    loadReportRef.current(controller.signal);
+    return () => controller.abort();
+  }, [debouncedFilterTrigger]);
 
   // Debounce search so the filter useMemo doesn't fire on every keystroke
   const debouncedSearch = useDebounce(filters.search, 300);
@@ -369,7 +377,7 @@ const PaidBalanceReport = () => {
                 <button onClick={handleExportCSV} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaFileDownload /> Export CSV</button>
                 <button onClick={handlePrint} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint /> Print</button>
                 <ResetFiltersButton onReset={resetFilters} disabled={loading} />
-                <button onClick={() => loadReport()} className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] transition ${filtersChanged ? 'border border-[#0B3B2E] bg-[#0B3B2E] text-white hover:bg-[#0A3127]' : 'border border-slate-200 bg-white text-slate-700 hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white'}`}><FaSyncAlt className={loading ? 'animate-spin' : ''} /> {filtersChanged ? 'Apply Filters' : 'Refresh'}</button>
+                <button onClick={() => loadReport()} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaSyncAlt className={loading ? 'animate-spin' : ''} /> Refresh</button>
               </div>
             </div>
 

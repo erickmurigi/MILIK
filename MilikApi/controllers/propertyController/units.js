@@ -14,6 +14,13 @@ import MeterReading from "../../models/MeterReading.js";
 import LandlordStatementLine from "../../models/LandlordStatementLine.js";
 import { resolveBusinessId } from "../../utils/requestContext.js";
 import { createError } from "../../utils/error.js";
+import {
+  uploadBufferToCloudinary,
+  destroyCloudinaryAsset,
+  publicIdFromCloudinaryUrl,
+} from "../../utils/cloudinaryUpload.js";
+
+const MAX_UNIT_IMAGES = 12;
 
 const OCCUPYING_TENANT_STATUSES = ["active", "overdue"];
 const NON_OCCUPIABLE_UNIT_STATUSES = ["vacant", "maintenance", "reserved", "archived"];
@@ -1037,6 +1044,74 @@ export const removeUtilityFromUnit = async (req, res, next) => {
 
     const updatedUnit = await unit.save();
     return res.status(200).json(updatedUnit);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// UPLOAD UNIT IMAGES (public listing photos)
+export const uploadUnitImages = async (req, res, next) => {
+  try {
+    const result = await loadUnitWithAccessCheck(req, req.params.id);
+    if (result.error) {
+      return next(createError(result.error.status, result.error.message));
+    }
+    const unit = result.unit;
+
+    const files = req.files || [];
+    if (files.length === 0) {
+      return next(createError(400, "No image files provided"));
+    }
+
+    const existingCount = (unit.images || []).length;
+    if (existingCount + files.length > MAX_UNIT_IMAGES) {
+      return next(
+        createError(
+          400,
+          `A unit can have at most ${MAX_UNIT_IMAGES} images (${existingCount} already uploaded).`
+        )
+      );
+    }
+
+    const uploaded = await Promise.all(
+      files.map((file) =>
+        uploadBufferToCloudinary(file.buffer, {
+          folder: `listings/units/${unit._id}`,
+          resource_type: "image",
+        })
+      )
+    );
+
+    unit.images = [...(unit.images || []), ...uploaded.map((r) => r.secure_url)];
+    const updatedUnit = await unit.save();
+
+    return res.status(200).json({ success: true, images: updatedUnit.images });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// DELETE A SINGLE UNIT IMAGE
+export const deleteUnitImage = async (req, res, next) => {
+  try {
+    const result = await loadUnitWithAccessCheck(req, req.params.id);
+    if (result.error) {
+      return next(createError(result.error.status, result.error.message));
+    }
+    const unit = result.unit;
+
+    const { url } = req.body || {};
+    if (!url || !(unit.images || []).includes(url)) {
+      return next(createError(400, "Image not found on this unit"));
+    }
+
+    unit.images = (unit.images || []).filter((img) => img !== url);
+    const updatedUnit = await unit.save();
+
+    const publicId = publicIdFromCloudinaryUrl(url);
+    if (publicId) await destroyCloudinaryAsset(publicId);
+
+    return res.status(200).json({ success: true, images: updatedUnit.images });
   } catch (err) {
     next(err);
   }

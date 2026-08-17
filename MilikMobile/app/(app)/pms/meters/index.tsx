@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Colors } from '../../../../constants/colors';
 import api from '../../../../services/api';
+import MilikLoader from '../../../../components/ui/MilikLoader';
 
 type MeterReading = {
   _id:             string;
@@ -50,7 +51,7 @@ export default function MetersScreen() {
   const [items,       setItems]       = useState<MeterReading[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [refreshing,  setRefreshing]  = useState(false);
-  const [filter,      setFilter]      = useState<FilterTab>('all');
+  const [filter,      setFilter]      = useState<FilterTab>('draft');
   const [page,        setPage]        = useState(1);
   const [hasMore,     setHasMore]     = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -161,9 +162,7 @@ export default function MetersScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-        </View>
+        <MilikLoader fullscreen />
       ) : (
         <FlatList
           data={items}

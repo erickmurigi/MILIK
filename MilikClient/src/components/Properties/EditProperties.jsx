@@ -28,6 +28,7 @@ import { adminRequests } from "../../utils/requestMethods";
 import { toast } from "react-toastify";
 import MilikConfirmDialog from "../Modals/MilikConfirmDialog";
 import { getCompanyOperatingModeLabel, isSelfManagingLandlordCompany } from "../../utils/companyModules";
+import ListingImagesField from "../Common/ListingImagesField";
 
 const MILIK_ORANGE_BG = "bg-orange-600";
 const MILIK_ORANGE_BG_HOVER = "hover:bg-orange-700";
@@ -298,13 +299,22 @@ const EditProperty = () => {
       specificContactInfo: "",
       description: "",
       status: "active",
-      images: [],
+      listingEnabled: false,
+      amenities: "",
+      yearBuilt: "",
+      listingContact: { name: "", phone: "", whatsapp: "", email: "", preferredMethod: "phone" },
+      nearbyPoints: [],
+      coordinates: { lat: "", lng: "" },
     }),
     []
   );
 
   const [formData, setFormData] = useState(initialFormData);
   const [fieldErrors, setFieldErrors] = useState({});
+
+  const [existingImages, setExistingImages] = useState([]);
+  const [stagedImageFiles, setStagedImageFiles] = useState([]);
+  const [imagesSaving, setImagesSaving] = useState(false);
   const [generalError, setGeneralError] = useState("");
   const [utilityTypeOptions, setUtilityTypeOptions] = useState([]);
   const [utilityTypeOptionsLoading, setUtilityTypeOptionsLoading] = useState(false);
@@ -430,7 +440,20 @@ const EditProperty = () => {
         emailExemptions: currentProperty.emailExemptions || initialFormData.emailExemptions,
         lettingFeeMode: currentProperty.lettingFeeMode || "percentage",
         lettingFeeValue: currentProperty.lettingFeeValue ?? 100,
+        amenities: Array.isArray(currentProperty.amenities) ? currentProperty.amenities.join(", ") : "",
+        yearBuilt: currentProperty.yearBuilt ?? "",
+        listingContact: {
+          ...initialFormData.listingContact,
+          ...(currentProperty.listingContact || {}),
+        },
+        nearbyPoints: Array.isArray(currentProperty.nearbyPoints) ? currentProperty.nearbyPoints : [],
+        coordinates: {
+          lat: currentProperty.coordinates?.lat ?? "",
+          lng: currentProperty.coordinates?.lng ?? "",
+        },
       };
+
+      setExistingImages(Array.isArray(currentProperty.images) ? currentProperty.images : []);
 
       let nextFormData = transformedData;
       if (draftStorageKey) {
@@ -573,6 +596,75 @@ const EditProperty = () => {
     }));
   };
 
+  const addNearbyPoint = () => {
+    setFormData((prev) => ({
+      ...prev,
+      nearbyPoints: [...prev.nearbyPoints, { category: "road", label: "", distance: "" }],
+    }));
+  };
+
+  const removeNearbyPoint = (index) => {
+    setFormData((prev) => ({
+      ...prev,
+      nearbyPoints: prev.nearbyPoints.filter((_, i) => i !== index),
+    }));
+  };
+
+  const updateNearbyPoint = (index, field, value) => {
+    setFormData((prev) => {
+      const updated = [...prev.nearbyPoints];
+      updated[index] = { ...updated[index], [field]: value };
+      return { ...prev, nearbyPoints: updated };
+    });
+  };
+
+  const handleListingContactChange = (field, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      listingContact: { ...prev.listingContact, [field]: value },
+    }));
+  };
+
+  const handleCoordinateChange = (field, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      coordinates: { ...prev.coordinates, [field]: value },
+    }));
+  };
+
+  const handleImageFilesSelected = (files) => {
+    setStagedImageFiles((prev) => [...prev, ...files]);
+  };
+
+  const handleRemoveStagedImage = (index) => {
+    setStagedImageFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleRemoveExistingImage = async (url) => {
+    if (!id) return;
+    setImagesSaving(true);
+    try {
+      const res = await adminRequests.delete(`/properties/${id}/images`, { data: { url } });
+      setExistingImages(Array.isArray(res.data?.images) ? res.data.images : []);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to remove photo");
+    } finally {
+      setImagesSaving(false);
+    }
+  };
+
+  const uploadStagedPropertyImages = async (propertyId) => {
+    if (!propertyId || stagedImageFiles.length === 0) return;
+    const body = new FormData();
+    stagedImageFiles.forEach((file) => body.append("images", file));
+    try {
+      await adminRequests.post(`/properties/${propertyId}/images`, body);
+      setStagedImageFiles([]);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Property saved, but photo upload failed");
+    }
+  };
+
   const removeUtilityRate = (index) => {
     setFormData((prev) => ({
       ...prev,
@@ -684,6 +776,9 @@ const EditProperty = () => {
     delete cleanedFormData.lrNumber;
     delete cleanedFormData.specification;
     delete cleanedFormData.multiStoreyType;
+    // Images are managed exclusively via /properties/:id/images — never send
+    // the stale in-memory snapshot back through the main update payload.
+    delete cleanedFormData.images;
     const optionalEnumFields = ['category'];
     optionalEnumFields.forEach(field => {
       if (cleanedFormData[field] === '') {
@@ -698,12 +793,26 @@ const EditProperty = () => {
       landlords: isSelfManagingLandlordMode ? [] : cleanedFormData.landlords,
       tenantsPaysTo: isSelfManagingLandlordMode ? "landlord" : cleanedFormData.tenantsPaysTo,
       depositHeldBy: isSelfManagingLandlordMode ? "landlord" : cleanedFormData.depositHeldBy,
+      amenities: formData.amenities
+        ? formData.amenities.split(",").map((a) => a.trim()).filter(Boolean)
+        : [],
+      yearBuilt: formData.yearBuilt === "" ? null : Number(formData.yearBuilt),
+      coordinates: {
+        lat: formData.coordinates?.lat === "" ? null : Number(formData.coordinates?.lat),
+        lng: formData.coordinates?.lng === "" ? null : Number(formData.coordinates?.lng),
+      },
     };
 
     try {
       setFieldErrors({});
       setGeneralError("");
       const result = await dispatch(updateProperty({ id, propertyData })).unwrap();
+
+      if (stagedImageFiles.length > 0) {
+        setImagesSaving(true);
+        await uploadStagedPropertyImages(id);
+        setImagesSaving(false);
+      }
 
       await dispatch(getLandlords({ company: businessId }));
 
@@ -1843,6 +1952,189 @@ const EditProperty = () => {
             rows={3}
             className={`${textareaClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
             placeholder="Enter specific contact information..."
+          />
+        </div>
+      </div>
+
+      <div className={`${sectionCard} p-4`}>
+        <div className="flex items-center justify-between gap-4 mb-3">
+          <h3 className={sectionHeader}>PUBLIC LISTING DETAILS</h3>
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <input
+              type="checkbox"
+              name="listingEnabled"
+              checked={Boolean(formData.listingEnabled)}
+              onChange={handleChange}
+              className="h-4 w-4 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
+            />
+            List this property publicly
+          </label>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label className={labelClass}>Amenities</label>
+            <input
+              type="text"
+              name="amenities"
+              value={formData.amenities}
+              onChange={handleChange}
+              placeholder="e.g., Pool, Gym, Backup Generator (comma separated)"
+              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>Year Built</label>
+            <input
+              type="number"
+              name="yearBuilt"
+              value={formData.yearBuilt}
+              onChange={handleChange}
+              min="1800"
+              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelClass}>Latitude</label>
+              <input
+                type="number"
+                step="any"
+                value={formData.coordinates?.lat ?? ""}
+                onChange={(e) => handleCoordinateChange("lat", e.target.value)}
+                className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Longitude</label>
+              <input
+                type="number"
+                step="any"
+                value={formData.coordinates?.lng ?? ""}
+                onChange={(e) => handleCoordinateChange("lng", e.target.value)}
+                className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wide mb-2">Listing Contact</h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-3">
+            <div>
+              <label className={labelClass}>Name</label>
+              <input type="text" value={formData.listingContact?.name || ""} onChange={(e) => handleListingContactChange("name", e.target.value)} className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`} />
+            </div>
+            <div>
+              <label className={labelClass}>Phone</label>
+              <input type="text" value={formData.listingContact?.phone || ""} onChange={(e) => handleListingContactChange("phone", e.target.value)} className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`} />
+            </div>
+            <div>
+              <label className={labelClass}>WhatsApp</label>
+              <input type="text" value={formData.listingContact?.whatsapp || ""} onChange={(e) => handleListingContactChange("whatsapp", e.target.value)} className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`} />
+            </div>
+            <div>
+              <label className={labelClass}>Email</label>
+              <input type="email" value={formData.listingContact?.email || ""} onChange={(e) => handleListingContactChange("email", e.target.value)} className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`} />
+            </div>
+            <div>
+              <label className={labelClass}>Preferred Method</label>
+              <select
+                value={formData.listingContact?.preferredMethod || "phone"}
+                onChange={(e) => handleListingContactChange("preferredMethod", e.target.value)}
+                className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS} appearance-none`}
+              >
+                <option value="phone">Phone</option>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="email">Email</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <div className="flex justify-between items-center mb-2">
+            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wide">Nearby Points of Interest</h4>
+            <button
+              type="button"
+              onClick={addNearbyPoint}
+              className={`h-8 px-3 text-xs font-semibold ${MILIK_ORANGE_BG} text-white rounded-md flex items-center gap-2 ${MILIK_ORANGE_BG_HOVER} transition-colors`}
+            >
+              <FaPlus /> Add Point
+            </button>
+          </div>
+
+          {formData.nearbyPoints.length === 0 ? (
+            <div className="text-center py-4 text-slate-400 text-xs border border-dashed border-slate-200 rounded-lg">
+              e.g., "400m to Tarmac Road", "Close to Riara Academy"
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {formData.nearbyPoints.map((point, index) => (
+                <div key={index} className="grid grid-cols-1 md:grid-cols-8 gap-2 items-end p-2 bg-slate-50/60 border border-slate-200 rounded-lg">
+                  <div className="md:col-span-2">
+                    <label className={labelClass}>Category</label>
+                    <select
+                      value={point.category}
+                      onChange={(e) => updateNearbyPoint(index, "category", e.target.value)}
+                      className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS} appearance-none`}
+                    >
+                      <option value="road">Road</option>
+                      <option value="school">School</option>
+                      <option value="hospital">Hospital</option>
+                      <option value="shopping">Shopping</option>
+                      <option value="transport">Transport</option>
+                      <option value="security">Security</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div className="md:col-span-4">
+                    <label className={labelClass}>Label</label>
+                    <input
+                      type="text"
+                      value={point.label}
+                      onChange={(e) => updateNearbyPoint(index, "label", e.target.value)}
+                      placeholder="e.g., Tarmac Road"
+                      className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+                    />
+                  </div>
+                  <div className="md:col-span-1">
+                    <label className={labelClass}>Distance</label>
+                    <input
+                      type="text"
+                      value={point.distance}
+                      onChange={(e) => updateNearbyPoint(index, "distance", e.target.value)}
+                      placeholder="400m"
+                      className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+                    />
+                  </div>
+                  <div className="md:col-span-1 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => removeNearbyPoint(index)}
+                      className="h-9 px-3 rounded-md bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 transition-colors flex items-center justify-center"
+                    >
+                      <FaTrash className="text-xs" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4">
+          <ListingImagesField
+            label="Property Photos"
+            existingImages={existingImages}
+            stagedFiles={stagedImageFiles}
+            onFilesSelected={handleImageFilesSelected}
+            onRemoveExisting={handleRemoveExistingImage}
+            onRemoveStaged={handleRemoveStagedImage}
+            disabled={imagesSaving}
+            maxImages={15}
           />
         </div>
       </div>

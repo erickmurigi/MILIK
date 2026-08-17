@@ -215,7 +215,7 @@ router.get("/:id/activity", verifyUser, requireCompanyModule(GL_ACCESS_MODULES),
     const entries = await FinancialLedgerEntry.find(match)
       .sort({ transactionDate: 1, createdAt: 1, _id: 1 })
       .populate("accountId",  "code name type")
-      .populate("createdBy",  "firstName lastName")
+      .populate("createdBy",  "surname otherNames isSystemAuditUser")
       .populate("tenant",     "name")
       .populate("unit",       "unitNumber")
       .populate("landlord",   "landlordName")
@@ -228,13 +228,13 @@ router.get("/:id/activity", verifyUser, requireCompanyModule(GL_ACCESS_MODULES),
     if (reversedByEntryIds.length > 0) {
       const reversalEntries = await FinancialLedgerEntry.find({ _id: { $in: reversedByEntryIds } })
         .select("_id createdBy")
-        .populate("createdBy", "firstName lastName")
+        .populate("createdBy", "surname otherNames isSystemAuditUser")
         .lean();
       for (const re of reversalEntries) {
         const u = re.createdBy;
         reversalCreatorMap.set(
           String(re._id),
-          u ? [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || null : null
+          u && !u.isSystemAuditUser ? [u.surname, u.otherNames].filter(Boolean).join(" ").trim() || null : null
         );
       }
     }
@@ -243,7 +243,7 @@ router.get("/:id/activity", verifyUser, requireCompanyModule(GL_ACCESS_MODULES),
     const rows = entries.map((entry) => {
       runningBalance += entrySignedForAccount(entry, account.type);
       const u = entry.createdBy;
-      const createdByName = u ? [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || null : null;
+      const createdByName = u && !u.isSystemAuditUser ? [u.surname, u.otherNames].filter(Boolean).join(" ").trim() || null : null;
       const reversedByUserName = entry.reversedByEntry
         ? reversalCreatorMap.get(String(entry.reversedByEntry)) || null
         : null;

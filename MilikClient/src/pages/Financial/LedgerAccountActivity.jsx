@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import {
-  FaArrowLeft, FaExchangeAlt, FaFilter, FaRedoAlt,
+  FaArrowLeft, FaExchangeAlt, FaRedoAlt,
   FaSyncAlt, FaTrashAlt, FaTimes, FaUndo, FaInfoCircle, FaPrint,
 } from "react-icons/fa";
 import printTabularList from "../../utils/printList";
@@ -93,15 +94,10 @@ const LedgerAccountActivity = () => {
     accountCanManage(currentUser) &&
     hasCompanyPermission(currentUser || {}, currentCompany, "journals", "reverse", "accounts");
 
-  // Keep a stable ref to filters so loadActivity doesn't need filters in its deps
-  // (prevents auto-fetch on every date keystroke — user must click Apply)
-  const filtersRef = React.useRef(filters);
-  useEffect(() => { filtersRef.current = filters; }, [filters]);
-
   // ── Load activity ──
   const loadActivity = useCallback(async (appliedFilters) => {
     if (!businessId || !accountId) return;
-    const f = appliedFilters || filtersRef.current;
+    const f = appliedFilters;
     setRefreshing(true);
     try {
       const params = new URLSearchParams({ business: businessId });
@@ -127,12 +123,24 @@ const LedgerAccountActivity = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [businessId, accountId]); // filtersRef.current used instead of filters to avoid auto-fetch on every keystroke
+  }, [businessId, accountId]);
 
+  // Initial load
   useEffect(() => {
     setLoading(true);
-    loadActivity();
-  }, [loadActivity]); // eslint-disable-line
+    loadActivity(filters);
+  }, [accountId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-fetch when filters change (debounced so date typing doesn't spam requests)
+  const autoFetchInitRef = useRef(false);
+  const debouncedFiltersStr = useDebounce(
+    JSON.stringify({ s: filters.startDate, e: filters.endDate, d: filters.direction, r: filters.includeReversed }),
+    500
+  );
+  useEffect(() => {
+    if (!autoFetchInitRef.current) { autoFetchInitRef.current = true; return; }
+    loadActivity(filters);
+  }, [debouncedFiltersStr]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Update tab title once account name is known ──
   useEffect(() => {
@@ -162,8 +170,7 @@ const LedgerAccountActivity = () => {
   const startIdx        = (safePage - 1) * pageSize;
   const paginatedRows   = rows.slice(startIdx, startIdx + pageSize);
 
-  // ── Filter apply / reset ──
-  const applyFilters = () => { loadActivity(filters); };
+  // ── Filter reset ──
   const resetFilters = () => {
     const now = new Date();
     const fresh = {
@@ -314,6 +321,7 @@ const LedgerAccountActivity = () => {
         { label: "Credit (CR)", value: (e) => e.direction === "credit" ? formatMoney(e.amount) : "—", align: "right" },
         { label: "Balance",     value: (e) => formatMoney(e.runningBalance || 0), align: "right" },
         { label: "Status",      value: (e) => auditBadge(e).label },
+        { label: "Done By",     value: (e) => e.createdByName || "" },
       ],
       rows,
     });
@@ -366,7 +374,7 @@ const LedgerAccountActivity = () => {
               <FaPrint size={9} /> Print
             </button>
             <button
-              onClick={() => loadActivity()}
+              onClick={() => loadActivity(filters)}
               className="h-7 px-2.5 border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 flex items-center"
             >
               <FaSyncAlt size={9} className={refreshing ? "animate-spin" : ""} />
@@ -412,12 +420,6 @@ const LedgerAccountActivity = () => {
             Show reversals
           </label>
           <button
-            onClick={applyFilters}
-            className="h-7 px-3 bg-[#FF8C00] hover:bg-[#e67e00] text-white text-xs font-bold flex items-center gap-1"
-          >
-            <FaFilter size={9} /> Apply
-          </button>
-          <button
             onClick={resetFilters}
             className="h-7 px-3 bg-[#0B3B2E] hover:bg-[#0A3127] text-white text-xs font-bold flex items-center gap-1"
           >
@@ -434,7 +436,7 @@ const LedgerAccountActivity = () => {
             </div>
           ) : (
             <div className="flex-1 overflow-auto">
-              <table className="w-full min-w-[1100px] text-[11px] border-collapse">
+              <table className="w-full min-w-[1200px] text-[11px] border-collapse">
                 <thead>
                   <tr className="bg-[#0B3B2E] text-white">
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10 whitespace-nowrap">Date</th>
@@ -445,13 +447,14 @@ const LedgerAccountActivity = () => {
                     <th className="px-3 py-1 text-right font-bold border-r border-white/10">Credit</th>
                     <th className="px-3 py-1 text-right font-bold border-r border-white/10">Running Balance</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Done By</th>
                     <th className="px-3 py-1 text-right font-bold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {paginatedRows.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-10 text-center text-slate-400 italic text-xs">
+                      <td colSpan={10} className="px-4 py-10 text-center text-slate-400 italic text-xs">
                         No ledger entries for the selected period and filters.
                       </td>
                     </tr>
@@ -532,6 +535,11 @@ const LedgerAccountActivity = () => {
                           <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${badge.cls}`}>
                             {badge.label}
                           </span>
+                        </td>
+
+                        {/* Done By */}
+                        <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap text-slate-600 text-[10px]">
+                          {entry.createdByName || ""}
                         </td>
 
                         {/* Actions */}
