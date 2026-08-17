@@ -992,6 +992,44 @@ const getReceiptAllocationStatementImpact = ({
     };
   }
 
+  if (priorityGroup === "debit_note") {
+    // Debit notes carry their real charge category (RENT_CHARGE / UTILITY_CHARGE) on
+    // the allocation row's `category` field (not "DEBIT_NOTE"). Route accordingly.
+    const underlyingCategory = String(allocationRow?.category || "").toUpperCase();
+    if (underlyingCategory === "UTILITY_CHARGE") {
+      const utilityIdentity = resolveUtilityIdentity(
+        allocationRow?.utilityType || allocationRow?.description || sourceInvoice?.description || "",
+        {
+          utilityType: allocationRow?.utilityType || sourceInvoice?.metadata?.utilityType || "",
+          meterUtilityType: allocationRow?.utilityType || sourceInvoice?.metadata?.meterUtilityType || "",
+          statementUtilityType: allocationRow?.utilityType || sourceInvoice?.metadata?.statementUtilityType || "",
+        },
+        row
+      );
+      return {
+        rentAmount: 0,
+        utilityAmount: fallbackAmount,
+        utilities: fallbackAmount !== 0 ? [{ key: utilityIdentity.key, label: utilityIdentity.label, amount: fallbackAmount }] : [],
+        taxAmount: 0,
+        depositAmount: 0,
+        statementRelevantAmount: fallbackAmount,
+        statementCategory: "utility",
+        isStatementRelevant: fallbackAmount !== 0,
+      };
+    }
+    // Default: RENT_CHARGE debit notes and unclassified → rent
+    return {
+      rentAmount: fallbackAmount,
+      utilityAmount: 0,
+      utilities: [],
+      taxAmount: 0,
+      depositAmount: 0,
+      statementRelevantAmount: fallbackAmount,
+      statementCategory: "rent",
+      isStatementRelevant: fallbackAmount !== 0,
+    };
+  }
+
   if (priorityGroup === "utility") {
     const utilityIdentity = resolveUtilityIdentity(
       allocationRow?.utilityType || allocationRow?.description || "",
@@ -2486,6 +2524,63 @@ export const generateLandlordStatement = async ({
           depositDirectOffset: true,
         },
       });
+    }
+  }
+
+  // For deposit-type receipts that also cover non-deposit charges (e.g., a debit note
+  // paid on the same receipt as a security deposit), the deposit loop above only processes
+  // the deposit allocations. Process the remaining allocations here so they count toward
+  // paidRent / paidUtility on the statement.
+  for (const receipt of allDepositReceiptsInPeriod) {
+    if (receipt.paymentType !== "deposit") continue; // rent/utility receipts handled above
+    const mixedAllocRows = getReceiptAllocationRows(receipt);
+    if (mixedAllocRows.length === 0) continue;
+
+    const mixedHasNonDeposit = mixedAllocRows.some((a) => {
+      const pg = String(a?.priorityGroup || "").toLowerCase();
+      return pg && pg !== "deposit" && pg !== "unapplied";
+    });
+    if (!mixedHasNonDeposit) continue;
+
+    const mixedRow = ensureRow(receipt.tenant, receipt.unit);
+    let mixedRent = 0;
+    let mixedUtility = 0;
+    let mixedTax = 0;
+
+    mixedAllocRows.forEach((allocationRow) => {
+      const pg = String(allocationRow?.priorityGroup || "").toLowerCase();
+      if (!pg || pg === "deposit" || pg === "unapplied") return;
+
+      const sourceInvoice = invoiceStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
+      const impact = getReceiptAllocationStatementImpact({ allocationRow, sourceInvoice, row: mixedRow });
+      if (!impact.isStatementRelevant) return;
+
+      mixedRent    = round2(mixedRent    + Number(impact.rentAmount    || 0));
+      mixedUtility = round2(mixedUtility + Number(impact.utilityAmount || 0));
+      mixedTax     = round2(mixedTax     + Number(impact.taxAmount     || 0));
+
+      (Array.isArray(impact.utilities) ? impact.utilities : []).forEach((item) => {
+        applyUtility(mixedRow, "receipt", Number(item.amount || 0), item.label || allocationRow?.description || "", {
+          utilityType: item.label,
+          meterUtilityType: item.label,
+          statementUtilityType: item.label,
+        });
+      });
+    });
+
+    if (mixedRent !== 0) {
+      mixedRow.paidRent += mixedRent;
+      if (receipt.paidDirectToLandlord) totalRentReceivedLandlord += mixedRent;
+      else totalRentReceivedManager += mixedRent;
+    }
+    if (mixedUtility !== 0) {
+      if (receipt.paidDirectToLandlord) totalUtilityReceivedLandlord += mixedUtility;
+      else totalUtilityReceivedManager += mixedUtility;
+    }
+    if (mixedTax !== 0) {
+      mixedRow.paidTax += mixedTax;
+      if (receipt.paidDirectToLandlord) totalInvoiceTaxReceivedLandlord += mixedTax;
+      else totalInvoiceTaxReceivedManager += mixedTax;
     }
   }
 
