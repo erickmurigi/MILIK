@@ -114,6 +114,7 @@ export const generateReceiptPdf = async (receiptId, businessId) => {
       { label: 'Utilities', amount: Number(alloc.utility || 0) },
       { label: 'Security Deposit', amount: Number(alloc.deposit || 0) },
       { label: 'Late Penalty', amount: Number(alloc.latePenalty || 0) },
+      { label: 'Debit Note', amount: Number(alloc.debitNote || 0) },
       { label: 'Other Charges', amount: Number(alloc.other || 0) },
       { label: 'Unapplied / Advance', amount: Number(alloc.unapplied || 0) },
     ].filter((r) => r.amount > 0);

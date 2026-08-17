@@ -1017,7 +1017,11 @@ const getReceiptAllocationStatementImpact = ({
         isStatementRelevant: fallbackAmount !== 0,
       };
     }
-    // Default: RENT_CHARGE debit notes and unclassified → rent
+    // Only RENT_CHARGE debit notes count toward landlord rent. OTHER_CHARGE (lease fees,
+    // agency fees, etc.) are management company income and must never inflate paidRent.
+    if (underlyingCategory !== "RENT_CHARGE") {
+      return { rentAmount: 0, utilityAmount: 0, utilities: [], taxAmount: 0, depositAmount: 0, statementRelevantAmount: 0, statementCategory: "other", isStatementRelevant: false };
+    }
     return {
       rentAmount: fallbackAmount,
       utilityAmount: 0,

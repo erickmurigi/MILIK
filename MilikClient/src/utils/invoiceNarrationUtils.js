@@ -47,20 +47,22 @@ export const getInvoiceCategoryLabel = (invoice = {}) => {
   const billItemKey = String(metadata?.billItemKey || "").trim().toLowerCase();
   const billItemLabel = String(metadata?.billItemLabel || "").trim();
 
-  if (
-    category === "OTHER_CHARGE" &&
-    (
+  if (category === "OTHER_CHARGE") {
+    // Prefer stored label; fall back to legacy lease-fee detection
+    if (billItemLabel) return billItemLabel;
+    if (
       sourceType === "lease_agreement_fee" ||
       billItemKey === "lease_agreement_fee" ||
-      String(billItemLabel || "").toLowerCase() === "lease / agreement fee"
-    )
-  ) return "Lease / Agreement Fee";
+      billItemKey === "lease_fee"
+    ) return "Lease Fee";
+    return "Other Charge";
+  }
 
   if (category === "RENT_CHARGE") return "Rent Charge";
   if (category === "UTILITY_CHARGE") return "Utility Charge";
   if (category === "DEPOSIT_CHARGE") return "Deposit Charge";
   if (category === "LATE_PENALTY_CHARGE") return "Late Penalty Charge";
-  return invoice?.category || "Charge";
+  return "Charge";
 };
 
 // Returns "Rent Charge – July 2026", "Utility Charge (Water) – July 2026", etc.

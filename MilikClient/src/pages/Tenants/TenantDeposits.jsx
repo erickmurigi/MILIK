@@ -49,6 +49,8 @@ const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const DEPOSIT_STATUS_FILTERS = [
   { val: "ACTIVE", label: "All" },
   { val: "Issued", label: "Issued" },
+  { val: "Unpaid", label: "Unpaid" },
+  { val: "Partially Paid", label: "Partially Paid" },
   { val: "Paid", label: "Paid" },
 ];
 const MILIK_ORANGE = "bg-[#FF8C00]";
@@ -450,7 +452,9 @@ const TenantDeposits = () => {
   const filteredRows = useMemo(() => {
     return depositRows.filter((row) => {
       if (appliedFilters.status === "ACTIVE" && ["cancelled", "reversed"].includes(row.rawStatus)) return false;
-      if (appliedFilters.status === "Issued" && !["Issued", "Partially Paid"].includes(row.status)) return false;
+      if (appliedFilters.status === "Issued" && row.status !== "Issued") return false;
+      if (appliedFilters.status === "Unpaid" && !["Issued", "Partially Paid"].includes(row.status)) return false;
+      if (appliedFilters.status === "Partially Paid" && row.status !== "Partially Paid") return false;
       if (appliedFilters.status === "Paid" && row.status !== "Paid") return false;
       if (appliedFilters.invoiceNo && !row.id.toLowerCase().includes(appliedFilters.invoiceNo.toLowerCase())) return false;
       if (appliedFilters.tenantName && !row.tenantName.toLowerCase().includes(appliedFilters.tenantName.toLowerCase())) return false;
