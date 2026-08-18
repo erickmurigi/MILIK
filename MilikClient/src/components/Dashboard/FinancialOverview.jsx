@@ -72,20 +72,23 @@ const FinancialOverview = ({ summaryData = {} }) => {
   }, [isLandlord, expenseProperties, curYear, curMonth]);
 
   const { remaining, statRows } = useMemo(() => {
-    const rate      = cur.expected > 0 ? (cur.collected / cur.expected) * 100 : 0;
-    const net       = cur.collected - curExpenses;
-    const color     = rate >= 80 ? 'text-emerald-700' : rate >= 50 ? 'text-amber-700' : 'text-red-700';
+    const rawRate        = cur.expected > 0 ? (cur.collected / cur.expected) * 100 : 0;
+    const rate           = Math.min(rawRate, 100);
+    const arrearsCleared = Math.max(0, cur.collected - cur.expected);
+    const net            = cur.collected - curExpenses;
+    const color          = rate >= 80 ? 'text-emerald-700' : rate >= 50 ? 'text-amber-700' : 'text-red-700';
     const rows = isLandlord ? [
       { label: 'Billed',          value: fmtKES(cur.expected) },
       { label: 'Collected',       value: fmtKES(cur.collected) },
       { label: 'Expenses',        value: fmtKES(curExpenses) },
       { label: 'Net Income',      value: fmtKES(net),              cls: net >= 0 ? 'text-emerald-700' : 'text-red-700' },
-      { label: 'Live Arrears',    value: fmtKES(outstandingTotal) },
+      { label: 'Outstanding',     value: fmtKES(outstandingTotal), cls: outstandingTotal > 0 ? 'text-amber-700' : 'text-slate-900' },
       { label: 'Collection Rate', value: `${rate.toFixed(1)}%`,    cls: color },
     ] : [
       { label: 'Expected',        value: fmtKES(cur.expected) },
       { label: 'Collected',       value: fmtKES(cur.collected) },
-      { label: 'Arrears',         value: fmtKES(outstandingTotal) },
+      ...(arrearsCleared > 0 ? [{ label: 'Arrears Cleared', value: fmtKES(arrearsCleared), cls: 'text-emerald-700' }] : []),
+      { label: 'Outstanding',     value: fmtKES(outstandingTotal), cls: outstandingTotal > 0 ? 'text-amber-700' : 'text-slate-900' },
       { label: 'Collection Rate', value: `${rate.toFixed(1)}%`,    cls: color },
     ];
     return { remaining: Math.max(0, cur.expected - cur.collected), statRows: rows };

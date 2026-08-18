@@ -68,7 +68,8 @@ const PropertyTile = React.memo(({ property }) => {
           <div className="mb-0.5 flex items-center justify-between">
             <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Collection</span>
             <span className="text-[9px] font-black" style={{ color: collColor }}>
-              {Math.round(property.collectionRate)}%
+              {Math.min(Math.round(property.collectionRate), 100)}%
+              {property.collectionRate > 100 && <span className="ml-0.5 text-[8px] font-bold text-emerald-600">+arr</span>}
             </span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
@@ -114,7 +115,7 @@ const SummaryPane = React.memo(({ occupancy, collection, total, navigate }) => (
       ].map(({ label, value, barCls }) => (
         <div key={label}>
           <p className="text-[9px] font-bold uppercase tracking-widest text-white/50">{label}</p>
-          <p className="mt-0.5 text-2xl font-black leading-none text-white">{value.toFixed(1)}%</p>
+          <p className="mt-0.5 text-2xl font-black leading-none text-white">{Math.min(value, 100).toFixed(1)}%</p>
           <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/20">
             <div className={`h-full rounded-full ${barCls}`} style={{ width: `${Math.min(value, 100)}%` }} />
           </div>
