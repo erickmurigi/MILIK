@@ -397,7 +397,7 @@ const resolvePropertyAndLandlord = async (payment) => {
 };
 
 const findFirstAccount = async (businessId, candidates = []) => {
-  for (const candidate of candidates) {
+  const queries = candidates.map((candidate) => {
     const query = { business: businessId };
     const and = [];
     if (candidate._id) {
@@ -409,11 +409,12 @@ const findFirstAccount = async (businessId, candidates = []) => {
       if (candidate.nameRegex) and.push({ name: { $regex: candidate.nameRegex, $options: "i" } });
       if (and.length > 0) query.$and = and;
     }
-    const account = await ChartOfAccount.findOne(query).lean();
-    if (account) return account;
-  }
-  console.warn("[findFirstAccount] No matching account found for candidates:", JSON.stringify(candidates));
-  return null;
+    return ChartOfAccount.findOne(query).lean();
+  });
+  const results = await Promise.all(queries);
+  const found = results.find(Boolean);
+  if (!found) console.warn("[findFirstAccount] No matching account found for candidates:", JSON.stringify(candidates));
+  return found || null;
 };
 
 const resolveCashbookAccount = async (businessId, payment) => {

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   selectCurrentUser, selectCurrentCompany,
@@ -33,6 +33,7 @@ const Dashboard = ({ darkMode }) => {
   const [summaryData,    setSummaryData]    = useState({});
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState(null);
+  const phase2StartedRef = useRef(false);
 
   const businessId = useMemo(() => {
     const companyFromUser =
@@ -63,23 +64,23 @@ const Dashboard = ({ darkMode }) => {
       }
 
       // ── Phase 2: entity data (deferred — Portfolio Pulse + Activity) ──
-      // Skip Redux dispatches if data is already cached from a prior navigation
-      const alreadyCached = properties.length > 0 && units.length > 0 && tenants.length > 0;
-      if (!alreadyCached) {
+      // Use a ref so this runs exactly once per mount, not on every data arrival.
+      if (!phase2StartedRef.current) {
+        phase2StartedRef.current = true;
         dispatch(getProperties({ business: businessId, status: 'active', limit: 1000 }));
         dispatch(getUnits({ business: businessId }));
         dispatch(getTenants({ business: businessId }));
+        Promise.allSettled([
+          getMaintenances(dispatch, businessId),
+          getNotifications(dispatch, businessId),
+          getExpenseProperties(dispatch, businessId),
+        ]);
       }
-      Promise.allSettled([
-        getMaintenances(dispatch, businessId),
-        getNotifications(dispatch, businessId),
-        getExpenseProperties(dispatch, businessId),
-      ]);
     };
 
     load();
     return () => { active = false; };
-  }, [dispatch, businessId, properties.length, units.length, tenants.length]);
+  }, [dispatch, businessId]);
 
   useEffect(() => {
     if (!socket || !businessId) return;

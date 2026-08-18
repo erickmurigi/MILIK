@@ -131,7 +131,7 @@ export const updateMaintenance = async (req, res, next) => {
       if (key in req.body) safeUpdate[key] = req.body[key];
     }
     const query = scopedMaintenanceQuery(req, req.params.id);
-    const updatedMaintenance = await Maintenance.findOneAndUpdate(query, { $set: safeUpdate }, { new: true });
+    const updatedMaintenance = await Maintenance.findOneAndUpdate(query, { $set: safeUpdate }, { new: true }).lean();
     if (!updatedMaintenance) return next(createError(404, "Maintenance request not found"));
     res.status(200).json(updatedMaintenance);
   } catch (err) {

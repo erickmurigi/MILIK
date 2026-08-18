@@ -12,6 +12,7 @@ import { clearAuth } from "../../redux/authSlice";
 import { logoutUser } from "../../redux/apiCalls";
 import { clearCompanyState } from "../../redux/companiesRedux";
 import { clearClientSessionStorage } from "../../utils/sessionCleanup";
+import { selectCurrentUser, selectCurrentCompany } from "../../redux/selectors";
 
 const POST_LOGOUT_LANDING_KEY = "milik_post_logout_landing";
 
@@ -53,8 +54,8 @@ const CompanyAvatar = ({ logo, name, darkMode, size = "h-11 w-11" }) => {
 const Navbar = React.memo(({ setSidebarOpen, darkMode, setDarkMode }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { currentUser } = useSelector((state) => state.auth);
-  const { currentCompany } = useSelector((state) => state.company || {});
+  const currentUser = useSelector(selectCurrentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
 
   const isSystemAdmin = Boolean(currentUser?.isSystemAdmin || currentUser?.superAdminAccess);
 

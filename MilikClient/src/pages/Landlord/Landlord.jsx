@@ -30,7 +30,7 @@ import {
   FaPrint,
 } from "react-icons/fa";
 import { getLandlords, deleteLandlord, updateLandlord } from "../../redux/apiCalls";
-import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
+import { selectCurrentCompany, selectCurrentUser, selectAllLandlords, selectLandlordPagination, selectLandlordIsFetching } from "../../redux/selectors";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
 import LandlordImportModal from "../../components/Modals/LandlordImportModal";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
@@ -70,10 +70,9 @@ const Landlords = () => {
   const dispatch = useDispatch();
   
   // Redux state
-  const landlordState = useSelector((state) => state.landlord);
-  const landlords = landlordState?.landlords || [];
-  const landlordPagination = useSelector((state) => state.landlord?.pagination ?? { total: 0, page: 1, pages: 1, limit: 50 });
-  const isFetching = landlordState?.isFetching || false;
+  const landlords          = useSelector(selectAllLandlords);
+  const landlordPagination = useSelector(selectLandlordPagination);
+  const isFetching         = useSelector(selectLandlordIsFetching);
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   

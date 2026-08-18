@@ -1,5 +1,5 @@
 // components/Properties/EditProperties.jsx - COMPLETE EDIT FORM WITH FULL FUNCTIONALITY
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -24,12 +24,12 @@ import {
 } from "react-icons/fa";
 import { getPropertyById, updateProperty, clearCurrentProperty } from "../../redux/propertyRedux";
 import { getLandlords } from "../../redux/apiCalls";
-import { selectCurrentCompany, selectCurrentUser, selectAllLandlords, selectAllProperties } from "../../redux/selectors";
+import { selectCurrentCompany, selectCurrentUser, selectActiveLandlords, selectAllProperties, selectPropertyLoading, selectPropertyError, selectCurrentProperty } from "../../redux/selectors";
 import { adminRequests } from "../../utils/requestMethods";
 import { toast } from "react-toastify";
 import MilikConfirmDialog from "../Modals/MilikConfirmDialog";
 import { getCompanyOperatingModeLabel, isSelfManagingLandlordCompany } from "../../utils/companyModules";
-import PropertyMapPicker from "../common/PropertyMapPicker";
+const PropertyMapPicker = lazy(() => import("../common/PropertyMapPicker"));
 
 const MILIK_ORANGE_BG = "bg-orange-600";
 const MILIK_ORANGE_BG_HOVER = "hover:bg-orange-700";
@@ -211,7 +211,9 @@ const EditProperty = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  const { loading, error, currentProperty } = useSelector((state) => state.property);
+  const loading = useSelector(selectPropertyLoading);
+  const error = useSelector(selectPropertyError);
+  const currentProperty = useSelector(selectCurrentProperty);
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
 
@@ -226,7 +228,7 @@ const EditProperty = () => {
     activeCompanyContext?.slogan ||
     "";
 
-  const landlordsFromStore = useSelector(selectAllLandlords);
+  const landlordsFromStore = useSelector(selectActiveLandlords);
   const propertiesFromStore = useSelector(selectAllProperties);
 
   const [activeTab, setActiveTab] = useState("general");
@@ -329,13 +331,13 @@ const EditProperty = () => {
     sessionStorage.removeItem(draftStorageKey);
   };
 
-  const tabs = [
+  const tabs = useMemo(() => [
     { id: "general", label: "General Info", icon: <FaHome /> },
     { id: "space", label: "Space/Units", icon: <FaWarehouse /> },
     { id: "accounting", label: "Accounting", icon: <FaCalculator /> },
     { id: "utilityRates", label: "Meter Reading Rates", icon: <FaCog /> },
     { id: "notes", label: "Listing & Notes", icon: <FaStickyNote /> },
-  ];
+  ], []);
 
   const propertyTypes = [
     "Residential",
@@ -905,9 +907,7 @@ const EditProperty = () => {
 
   // RENDER FUNCTIONS - identical to AddProperties
   const renderGeneralInfo = () => {
-    const landlordItems = (Array.isArray(landlordsFromStore) ? landlordsFromStore : []).filter(
-      (landlord) => String(landlord?.status || "active").toLowerCase() !== "archived"
-    );
+    const landlordItems = Array.isArray(landlordsFromStore) ? landlordsFromStore : [];
 
     const getLandlordId = (l) => {
       const raw = l?._id || l?.id || l?.landlordId?._id || l?.landlordId;
@@ -1953,16 +1953,18 @@ const EditProperty = () => {
           <p className="mb-2 text-[11px] text-slate-400">
             Search by place name, click "Use Address ↑" to geocode from the address fields above, or click directly on the map to pin the property.
           </p>
-          <PropertyMapPicker
-            lat={formData.coordinates?.lat}
-            lng={formData.coordinates?.lng}
-            onLocationChange={({ lat, lng }) =>
-              setFormData((prev) => ({ ...prev, coordinates: { lat, lng } }))
-            }
-            addressHint={[formData.estateArea, formData.roadStreet, formData.townCityState]
-              .filter(Boolean)
-              .join(", ")}
-          />
+          <Suspense fallback={<div className="h-48 flex items-center justify-center text-xs text-slate-400">Loading map…</div>}>
+            <PropertyMapPicker
+              lat={formData.coordinates?.lat}
+              lng={formData.coordinates?.lng}
+              onLocationChange={({ lat, lng }) =>
+                setFormData((prev) => ({ ...prev, coordinates: { lat, lng } }))
+              }
+              addressHint={[formData.estateArea, formData.roadStreet, formData.townCityState]
+                .filter(Boolean)
+                .join(", ")}
+            />
+          </Suspense>
         </div>
 
         <div className="mt-4">

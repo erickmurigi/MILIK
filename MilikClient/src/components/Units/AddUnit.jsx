@@ -7,7 +7,7 @@ import { FaSave, FaTimes, FaChevronDown, FaSpinner, FaPlus, FaTrash, FaCalculato
 import { toast } from "react-toastify";
 import { createUnit, getUnits, updateUnit } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
-import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
+import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectAllUnits, selectUnitIsFetching } from "../../redux/selectors";
 import { adminRequests } from "../../utils/requestMethods";
 import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import ListingImagesField from "../common/ListingImagesField";
@@ -160,7 +160,8 @@ const AddUnit = () => {
   
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
-  const { isFetching: loading, units = [] } = useSelector((state) => state.unit);
+  const loading = useSelector(selectUnitIsFetching);
+  const units = useSelector(selectAllUnits);
   const properties = useSelector(selectAllProperties);
   const activeProperties = useMemo(
     () => properties.filter((property) => String(property?.status || "active").toLowerCase() !== "archived"),
@@ -244,7 +245,7 @@ const AddUnit = () => {
           setBillingPeriodOptions([{ key: "monthly", name: "Monthly", durationInMonths: 1 }]);
         });
     }
-  }, [dispatch, currentCompany, isEditMode]);
+  }, [dispatch, currentCompany?._id, isEditMode]);
 
   // Populate form data when editing an existing unit
   useEffect(() => {

@@ -7,7 +7,7 @@ import { FaArrowLeft, FaInfoCircle, FaSave } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { getProperties, updateProperty } from '../../redux/propertyRedux';
 import { adminRequests } from '../../utils/requestMethods';
-import { selectCurrentCompany, selectCurrentUser } from '../../redux/selectors';
+import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from '../../redux/selectors';
 import { hasCompanyPermission } from '../../utils/permissions';
 import AppSelect from '../../components/common/AppSelect';
 
@@ -78,10 +78,7 @@ const PropertyCommissionSettings = () => {
   const currentUser = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
   const canWrite = hasCompanyPermission(currentUser || {}, currentCompany, "commissions", "create", "propertyManagement");
-  const propertyState = useSelector((state) => state.property || {});
-  const properties = Array.isArray(propertyState?.properties)
-    ? propertyState.properties
-    : [];
+  const properties = useSelector(selectAllProperties);
 
   const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company;
   const [selectedPropertyId, setSelectedPropertyId] = useTabState('/properties/commission-settings:selectedPropertyId', '');

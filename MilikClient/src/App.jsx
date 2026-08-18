@@ -10,6 +10,7 @@ import { clearClientSessionStorage } from "./utils/sessionCleanup";
 import { hasSessionTimedOut } from "./utils/sessionTimeout";
 import "./App.css";
 import { checkUserModuleAccess, hasCompanyPermission } from "./utils/permissions";
+import { selectCurrentUser, selectCurrentCompany } from "./redux/selectors";
 import { GL_ACCESS_MODULES, hasAnyCompanyModule, hasCompanyModule, isPropertyManagerCompany, isSelfManagingLandlordCompany } from "./utils/companyModules";
 import { ConfirmProvider } from "./context/ConfirmContext";
 import { ESSContextProvider } from "./context/ESSContext";
@@ -365,8 +366,8 @@ function Guard({
   fallback    = "/moduleDashboard",
   allowMustChangePassword = false,
 }) {
-  const { currentUser }    = useSelector((state) => state.auth);
-  const { currentCompany } = useSelector((state) => state.company);
+  const currentUser    = useSelector(selectCurrentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const storedSession = useMemo(() => getStoredAuthSession(), []);
   const resolvedUser  = getResolvedAuthUser(currentUser, storedSession);
@@ -441,7 +442,7 @@ function ESSProtectedRoute({ children }) {
 }
 
 function SuperAdminRoute({ children }) {
-  const { currentUser } = useSelector((state) => state.auth);
+  const currentUser = useSelector(selectCurrentUser);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const storedSession = useMemo(() => getStoredAuthSession(), []);
   const resolvedUser = getResolvedAuthUser(currentUser, storedSession);
@@ -460,7 +461,7 @@ function resolveDefaultAuthenticatedRoute(currentUser) {
 }
 
 function PublicOnlyRoute({ children }) {
-  const { currentUser } = useSelector((state) => state.auth);
+  const currentUser = useSelector(selectCurrentUser);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const storedSession = useMemo(() => getStoredAuthSession(), []);
   const resolvedUser = getResolvedAuthUser(currentUser, storedSession);
@@ -487,7 +488,7 @@ function AppDocumentTitleGuard() {
 }
 
 function PublicEntryRoute() {
-  const { currentUser } = useSelector((state) => state.auth);
+  const currentUser = useSelector(selectCurrentUser);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const storedSession = useMemo(() => getStoredAuthSession(), []);
   const resolvedUser = getResolvedAuthUser(currentUser, storedSession);
@@ -500,8 +501,9 @@ function PublicEntryRoute() {
 // ─── App ──────────────────────────────────────────────────────────────────────
 function App() {
   const dispatch = useDispatch();
-  const { currentUser } = useSelector((state) => state.auth);
-  const { currentCompany, isSwitching: isCompanySwitching } = useSelector((state) => state.company);
+  const currentUser = useSelector(selectCurrentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const isCompanySwitching = useSelector((state) => Boolean(state.company?.isSwitching));
 
   useInactivityLogout();
 

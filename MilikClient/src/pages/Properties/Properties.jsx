@@ -28,7 +28,7 @@ import {
 import { toast } from "react-toastify";
 import { getProperties, deleteProperty, archiveProperty, restoreProperty } from "../../redux/propertyRedux";
 import { getLandlords } from "../../redux/apiCalls";
-import { selectCurrentCompany, selectCurrentUser, selectAllLandlords } from "../../redux/selectors";
+import { selectCurrentCompany, selectCurrentUser, selectAllLandlords, selectAllProperties, selectPropertyPagination, selectPropertyError } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
 import PropertyImportModal from "../../components/Modals/PropertyImportModal";
@@ -94,8 +94,10 @@ const Properties = () => {
   const navigate = useNavigate();
 
   // Redux state
-  const { properties, error, pagination } = useSelector((state) => state.property);
-  const landlords = useSelector(selectAllLandlords);
+  const properties = useSelector(selectAllProperties);
+  const pagination = useSelector(selectPropertyPagination);
+  const error      = useSelector(selectPropertyError);
+  const landlords  = useSelector(selectAllLandlords);
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
 

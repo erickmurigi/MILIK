@@ -16,7 +16,7 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { getLandlords, getLandlordPayments } from "../../redux/apiCalls";
-import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectAllTenants } from "../../redux/selectors";
+import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectAllTenants, selectAllLandlords, selectLandlordIsFetching } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { fmtDate } from "../../utils/dates";
 import AppSelect from "../../components/common/AppSelect";
@@ -35,7 +35,8 @@ const LandlordPayments = ({ mode = "payments" }) => {
   // Redux state
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
-  const { landlords = [], isFetching } = useSelector((state) => state.landlord || {});
+  const landlords = useSelector(selectAllLandlords);
+  const isFetching = useSelector(selectLandlordIsFetching);
   const properties = useSelector(selectAllProperties);
   const tenants = useSelector(selectAllTenants);
 

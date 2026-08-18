@@ -40,7 +40,8 @@ const MaintenanceSchema = new mongoose.Schema(
 // Indexes for better query performance
 MaintenanceSchema.index({ business: 1, status: 1, createdAt: -1 });
 MaintenanceSchema.index({ business: 1, priority: -1, createdAt: -1 });
-MaintenanceSchema.index({ business: 1, unit: 1 });
+// Covers unit filter + the controller's { priority: -1, createdAt: -1 } sort in one pass
+MaintenanceSchema.index({ business: 1, unit: 1, priority: -1, createdAt: -1 });
 MaintenanceSchema.index({ business: 1, tenant: 1 });
 
 export default mongoose.model("Maintenance", MaintenanceSchema);

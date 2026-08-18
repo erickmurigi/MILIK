@@ -89,7 +89,8 @@ const populateReadingQuery = (query) =>
     .populate("property", "propertyName propertyCode")
     .populate("unit", "unitNumber")
     .populate("tenant", "name tenantCode")
-    .populate("billedInvoice", "_id invoiceNumber status amount dueDate");
+    .populate("billedInvoice", "_id invoiceNumber status amount dueDate")
+    .lean();
 
 const findActiveTenantForUnit = async ({ businessId, unitId }) => {
   if (!businessId || !unitId) return null;
@@ -120,7 +121,16 @@ const resolveUtilityRate = async ({ businessId, unitDoc, utilityType, providedRa
     return Number(unitUtility.unitCharge || 0);
   }
 
-  const propertyDoc = await Property.findById(unitDoc?.property).select("utilityRates").lean();
+  const [propertyDoc, utilityDoc, settings] = await Promise.all([
+    Property.findById(unitDoc?.property).select("utilityRates").lean(),
+    Utility.findOne({
+      business: businessId,
+      name: { $regex: `^${String(utilityType || "").trim()}$`, $options: "i" },
+      isActive: true,
+    }).select("unitCost").lean(),
+    CompanySettings.findOne({ company: businessId }).select("utilityTypes").lean(),
+  ]);
+
   const propertyRate = (propertyDoc?.utilityRates || []).find(
     (r) => String(r?.utilityType || "").trim().toLowerCase() === normalizedUtility && r?.isActive !== false
   );
@@ -128,28 +138,8 @@ const resolveUtilityRate = async ({ businessId, unitDoc, utilityType, providedRa
     return Number(propertyRate.unitCost || 0);
   }
 
-  const utilityDoc = await Utility.findOne({
-    business: businessId,
-    name: { $regex: `^${String(utilityType || "").trim()}$`, $options: "i" },
-    isActive: true,
-  })
-    .select("unitCost")
-    .lean();
-
   if (utilityDoc && Number.isFinite(Number(utilityDoc.unitCost))) {
     return Number(utilityDoc.unitCost || 0);
-  }
-
-  const settings = await CompanySettings.findOne({ company: businessId })
-    .select("utilityTypes")
-    .lean();
-
-  const matchedSetting = (settings?.utilityTypes || []).find(
-    (item) => String(item?.name || "").trim().toLowerCase() === normalizedUtility
-  );
-
-  if (matchedSetting) {
-    return 0;
   }
 
   return 0;

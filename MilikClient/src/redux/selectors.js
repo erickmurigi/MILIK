@@ -32,6 +32,21 @@ export const selectCurrentCompanyId = createSelector(
   (company) => company?._id ?? null
 );
 
+const selectCompanySlice = (state) => state.company?.companies;
+export const selectAllCompanies = createSelector(
+  selectCompanySlice,
+  (companies) => (Array.isArray(companies) ? companies : EMPTY_ARRAY)
+);
+export const selectCompanyIsFetching = (state) => state.company?.isFetching ?? false;
+
+// ─── Users ─────────────────────────────────────────────────────────────────
+const selectUserSlice = (state) => state.user?.users;
+export const selectAllUsers = createSelector(
+  selectUserSlice,
+  (users) => (Array.isArray(users) ? users : EMPTY_ARRAY)
+);
+export const selectUserIsFetching = (state) => state.user?.isFetching ?? false;
+
 // ─── Properties ────────────────────────────────────────────────────────────
 const selectPropertySlice = (state) => state.property?.properties;
 
@@ -48,6 +63,12 @@ export const selectActiveProperties = createSelector(
     )
 );
 
+export const selectPropertyPagination = (state) =>
+  state.property?.pagination ?? { total: 0, page: 1, pages: 1, limit: 50 };
+export const selectPropertyError = (state) => state.property?.error ?? null;
+export const selectPropertyLoading = (state) => state.property?.loading ?? false;
+export const selectCurrentProperty = (state) => state.property?.currentProperty ?? null;
+
 // ─── Landlords ─────────────────────────────────────────────────────────────
 const selectLandlordSlice = (state) => state.landlord?.landlords;
 
@@ -55,6 +76,10 @@ export const selectAllLandlords = createSelector(
   selectLandlordSlice,
   (landlords) => (Array.isArray(landlords) ? landlords : EMPTY_ARRAY)
 );
+
+export const selectLandlordPagination = (state) =>
+  state.landlord?.pagination ?? { total: 0, page: 1, pages: 1, limit: 50 };
+export const selectLandlordIsFetching = (state) => state.landlord?.isFetching ?? false;
 
 export const selectActiveLandlords = createSelector(
   selectAllLandlords,
@@ -96,6 +121,7 @@ export const selectAllUnits = createSelector(
 
 export const selectUnitPagination = (state) =>
   state.unit?.pagination ?? { total: 0, page: 1, pages: 1, limit: 100 };
+export const selectUnitIsFetching = (state) => state.unit?.isFetching ?? false;
 
 export const selectVacantUnits = createSelector(
   selectAllUnits,

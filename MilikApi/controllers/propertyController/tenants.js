@@ -1729,14 +1729,11 @@ export const getTenantBalance = async (req, res, next) => {
       }
     }
 
-    const payments = await RentPayment.find({
-      tenant: req.params.id,
-      business: tenant.business,
-      paymentType: { $in: ["rent", "utility", "deposit"] },
-      isConfirmed: true,
-    }).limit(5000).lean();
-
-    const totalPaid = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    const [totalAgg] = await RentPayment.aggregate([
+      { $match: { tenant: tenant._id, business: tenant.business, paymentType: { $in: ["rent", "utility", "deposit"] }, isConfirmed: true } },
+      { $group: { _id: null, total: { $sum: "$amount" } } },
+    ]);
+    const totalPaid = totalAgg?.total || 0;
 
     return res.status(200).json({
       success: true,

@@ -48,7 +48,7 @@ import {
   getCompanyOperatingModeLabel,
   getEnabledCompanyModuleKeys,
 } from "../../utils/companyModules";
-import { selectCurrentUser } from "../../redux/selectors";
+import { selectCurrentUser, selectCurrentCompany, selectAllCompanies, selectCompanyIsFetching, selectAllUsers, selectUserIsFetching } from "../../redux/selectors";
 import AppSelect from "../../components/common/AppSelect";
 import StatusBadge from "../../components/common/StatusBadge";
 import { fmtDate } from "../../utils/dates";
@@ -942,8 +942,11 @@ export default function SystemSetupPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const { companies, isFetching: companiesFetching, currentCompany } = useSelector((state) => state.company || {});
-  const { users, isFetching: usersFetching } = useSelector((state) => state.user || {});
+  const currentCompany = useSelector(selectCurrentCompany);
+  const companies = useSelector(selectAllCompanies);
+  const companiesFetching = useSelector(selectCompanyIsFetching);
+  const users = useSelector(selectAllUsers);
+  const usersFetching = useSelector(selectUserIsFetching);
   const currentUser = useSelector(selectCurrentUser);
 
   const rawSection = location.pathname.split("/")[2] || "overview";

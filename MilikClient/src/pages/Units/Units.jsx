@@ -27,7 +27,7 @@ import {
 } from "react-icons/fa";
 import { getUnits, deleteUnit, updateUnit } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
-import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectUnitPagination } from "../../redux/selectors";
+import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectUnitPagination, selectAllUnits, selectUnitIsFetching } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { toast } from "react-toastify";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
@@ -96,13 +96,16 @@ const Units = () => {
   
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
-  const { units: unitsData, isFetching } = useSelector((state) => state.unit);
+  const unitsData      = useSelector(selectAllUnits);
+  const isFetching     = useSelector(selectUnitIsFetching);
   const unitPagination = useSelector(selectUnitPagination);
   const properties = useSelector(selectAllProperties);
 
-  const canCreateUnit = hasCompanyPermission(currentUser || {}, currentCompany, "units", "create", "propertyManagement");
-  const canUpdateUnit = hasCompanyPermission(currentUser || {}, currentCompany, "units", "update", "propertyManagement");
-  const canDeleteUnit = hasCompanyPermission(currentUser || {}, currentCompany, "units", "delete", "propertyManagement");
+  const { canCreateUnit, canUpdateUnit, canDeleteUnit } = useMemo(() => ({
+    canCreateUnit: hasCompanyPermission(currentUser || {}, currentCompany, "units", "create", "propertyManagement"),
+    canUpdateUnit: hasCompanyPermission(currentUser || {}, currentCompany, "units", "update", "propertyManagement"),
+    canDeleteUnit: hasCompanyPermission(currentUser || {}, currentCompany, "units", "delete", "propertyManagement"),
+  }), [currentUser, currentCompany]);
 
   // ---------------------------
   // UI STATE
@@ -260,7 +263,7 @@ const Units = () => {
       dispatch(getUnits({ business: currentCompany._id, page: 1, limit: ITEMS_PER_PAGE }));
       dispatch(getProperties({ business: currentCompany._id }));
     }
-  }, [dispatch, currentCompany]);
+  }, [dispatch, currentCompany?._id]);
 
   // Transform units data to match the table structure
   const formatRentAmount = (amount) => {

@@ -34,7 +34,8 @@ export const createInspection = async (req, res, next) => {
     const inspection = await Inspection.findById(created._id)
       .populate("property", "propertyName propertyCode")
       .populate("unit", "unitNumber property")
-      .populate("tenant", "name phone");
+      .populate("tenant", "name phone")
+      .lean();
 
     emitToCompany(business, "inspection:new", inspection);
     res.status(201).json(inspection);
@@ -111,7 +112,8 @@ export const getInspection = async (req, res, next) => {
     const inspection = await Inspection.findOne(query)
       .populate("property", "propertyName propertyCode address")
       .populate("unit", "unitNumber property")
-      .populate("tenant", "name phone email");
+      .populate("tenant", "name phone email")
+      .lean();
 
     if (!inspection) {
       return next(createError(404, "Inspection not found"));
@@ -148,7 +150,8 @@ export const updateInspection = async (req, res, next) => {
     const updated = await Inspection.findOneAndUpdate(query, { $set: safeUpdate }, { new: true })
       .populate("property", "propertyName propertyCode")
       .populate("unit", "unitNumber property")
-      .populate("tenant", "name phone");
+      .populate("tenant", "name phone")
+      .lean();
 
     if (!updated) {
       return next(createError(404, "Inspection not found"));

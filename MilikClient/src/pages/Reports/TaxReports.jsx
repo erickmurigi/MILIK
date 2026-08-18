@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTabState } from '../../hooks/useTabState';
 import { useDispatch, useSelector } from 'react-redux';
-import { selectCurrentCompany, selectCurrentUser } from '../../redux/selectors';
+import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from '../../redux/selectors';
 import { FaFileDownload, FaFilter, FaPrint, FaReceipt } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { hasCompanyPermission } from '../../utils/permissions';
@@ -46,12 +46,7 @@ const TaxReports = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
-  const propertyState = useSelector((state) => state.property || {});
-  const properties = Array.isArray(propertyState?.properties?.data)
-    ? propertyState.properties.data
-    : Array.isArray(propertyState?.properties)
-    ? propertyState.properties
-    : [];
+  const properties = useSelector(selectAllProperties);
 
   const [filters, setFilters] = useTabState("/accounts/tax-reports:filters", () => ({
     startDate: toDateInput(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),

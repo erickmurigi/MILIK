@@ -2,6 +2,7 @@
 import React, { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
+import { selectCurrentProperty, selectPropertyLoading } from '../../redux/selectors';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import {
   FaArrowLeft, FaEdit, FaTrash, FaPhone, FaEnvelope,
@@ -14,7 +15,8 @@ const PropertyDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const { currentProperty, loading } = useSelector((state) => state.property);
+  const currentProperty = useSelector(selectCurrentProperty);
+  const loading = useSelector(selectPropertyLoading);
 
   useEffect(() => {
     dispatch(getPropertyById(id));

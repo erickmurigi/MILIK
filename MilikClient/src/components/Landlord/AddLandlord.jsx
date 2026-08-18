@@ -17,7 +17,7 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { createLandlord, updateLandlord } from "../../redux/apiCalls";
-import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
+import { selectCurrentCompany, selectCurrentUser, selectLandlordIsFetching } from "../../redux/selectors";
 
 const MILIK_ORANGE_BG = "bg-[#0B3B2E]";
 const MILIK_ORANGE_BG_HOVER = "hover:bg-[#0A3127]";
@@ -132,7 +132,7 @@ const AddLandlord = () => {
   const location = useLocation();
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
-  const { isFetching } = useSelector((state) => state.landlord);
+  const isFetching = useSelector(selectLandlordIsFetching);
   const fileInputRef = useRef(null);
   const editLandlordId = location.state?.landlordId || null;
   const editLandlordData = location.state?.landlordData || null;

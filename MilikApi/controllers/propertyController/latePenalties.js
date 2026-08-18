@@ -224,25 +224,24 @@ const buildCandidateRows = async ({ businessId, rule, runDate }) => {
   const runAt = startOfDay(runDate);
   assertRuleCanRun(rule, runAt);
 
-  const invoices = await TenantInvoice.find({
-    business: businessId,
-    status: { $in: ["pending", "partially_paid"] },
-    dueDate: { $lt: runAt },
-    category: { $in: ["RENT_CHARGE", "UTILITY_CHARGE"] },
-  })
-    .populate("tenant", "name tenantCode")
-    .populate("property", "propertyName propertyCode exemptFromLatePenalties")
-    .populate("unit", "unitNumber")
-    .sort({ dueDate: 1, createdAt: 1 })
-    .limit(5000)
-    .lean();
-
   const periodKey = buildPeriodKey(rule, runDate);
-  const existingPenaltyItemStates = await resolveExistingPenaltyItemStates({
-    businessId,
-    ruleId: rule._id,
-    periodKey,
-  });
+
+  // Phase 1: parallel — invoices query and existing-state lookup are independent
+  const [invoices, existingPenaltyItemStates] = await Promise.all([
+    TenantInvoice.find({
+      business: businessId,
+      status: { $in: ["pending", "partially_paid"] },
+      dueDate: { $lt: runAt },
+      category: { $in: ["RENT_CHARGE", "UTILITY_CHARGE"] },
+    })
+      .populate("tenant", "name tenantCode")
+      .populate("property", "propertyName propertyCode exemptFromLatePenalties")
+      .populate("unit", "unitNumber")
+      .sort({ dueDate: 1, createdAt: 1 })
+      .limit(5000)
+      .lean(),
+    resolveExistingPenaltyItemStates({ businessId, ruleId: rule._id, periodKey }),
+  ]);
 
   const tenantIds = [
     ...new Set(
@@ -251,32 +250,32 @@ const buildCandidateRows = async ({ businessId, rule, runDate }) => {
         .filter(Boolean)
     ),
   ];
-  const snapshotMap = await computeTenantInvoiceSnapshotsBatch({
-    businessId,
-    tenantIds,
-    asOfDate: runAt,
-  });
+
+  // Phase 2: parallel — snapshot batch and duplicate-invoice check both depend only on invoices
+  const [snapshotMap, duplicatePenaltyInvoices] = await Promise.all([
+    computeTenantInvoiceSnapshotsBatch({ businessId, tenantIds, asOfDate: runAt }),
+    invoices.length
+      ? TenantInvoice.find({
+          business: businessId,
+          category: "LATE_PENALTY_CHARGE",
+          status: { $nin: ["cancelled", "reversed"] },
+          "metadata.penaltyRuleId": String(rule._id),
+          "metadata.penaltySourceInvoiceId": {
+            $in: invoices.map((invoice) => String(invoice._id)),
+          },
+          "metadata.penaltyPeriodKey": periodKey,
+        })
+          .select("_id invoiceNumber amount metadata.penaltySourceInvoiceId")
+          .lean()
+      : Promise.resolve([]),
+  ]);
+
   const outstandingByInvoiceId = new Map();
   snapshotMap.forEach(({ invoiceSnapshots = [] }) => {
     invoiceSnapshots.forEach((snapshot) => {
       outstandingByInvoiceId.set(String(snapshot._id), round2(Number(snapshot.outstanding || 0)));
     });
   });
-
-  const duplicatePenaltyInvoices = invoices.length
-    ? await TenantInvoice.find({
-        business: businessId,
-        category: "LATE_PENALTY_CHARGE",
-        status: { $nin: ["cancelled", "reversed"] },
-        "metadata.penaltyRuleId": String(rule._id),
-        "metadata.penaltySourceInvoiceId": {
-          $in: invoices.map((invoice) => String(invoice._id)),
-        },
-        "metadata.penaltyPeriodKey": periodKey,
-      })
-        .select("_id invoiceNumber amount metadata.penaltySourceInvoiceId")
-        .lean()
-    : [];
   const duplicatePenaltyInvoiceMap = new Map(
     duplicatePenaltyInvoices
       .map((invoice) => [String(invoice?.metadata?.penaltySourceInvoiceId || ""), invoice])

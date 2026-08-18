@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
+import { selectCurrentCompany } from "../../redux/selectors";
 import { useNavigate } from "react-router-dom";
 import { FaExternalLinkAlt, FaRedoAlt, FaSearch } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -18,7 +19,7 @@ const isCashbookAccount = (account = {}) =>
 
 const CarWashCashbooks = () => {
   const navigate = useNavigate();
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentCompany = useSelector(selectCurrentCompany);
   const [filters, setFilters] = useTabState("/carwash/cashbooks:filters", defaultFilters);
   const [appliedFilters, setAppliedFilters] = useTabState("/carwash/cashbooks:appliedFilters", defaultFilters);
   const [page, setPage] = useTabState("/carwash/cashbooks:page", 1);

@@ -31,7 +31,7 @@ import { getUnits, updateUnit } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
 import { getTenants } from "../../redux/tenantsRedux";
 import { getMaintenances } from "../../redux/apiCalls";
-import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectAllTenants, selectAllMaintenances } from "../../redux/selectors";
+import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectAllTenants, selectAllMaintenances, selectAllUnits, selectUnitIsFetching } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
 import AppSelect from "../../components/common/AppSelect";
@@ -200,8 +200,8 @@ const Vacants = () => {
   const canUpdateUnit   = hasCompanyPermission(currentUser || {}, currentCompany, 'units', 'update', 'propertyManagement');
   const { propertiesLoaded, unitsLoaded, tenantsLoaded } = useEntityCache(currentCompany?._id);
 
-  const units = useSelector((state) => state.unit?.units || []);
-  const unitsLoading = useSelector((state) => state.unit?.isFetching || false);
+  const units = useSelector(selectAllUnits);
+  const unitsLoading = useSelector(selectUnitIsFetching);
   const properties = useSelector(selectAllProperties);
   const tenants = useSelector(selectAllTenants);
   const maintenances = useSelector(selectAllMaintenances);

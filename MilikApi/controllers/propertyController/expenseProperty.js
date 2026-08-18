@@ -75,7 +75,8 @@ export const getExpenses = async (req, res, next) => {
     const expenses = await ExpenseProperty.find(filter)
       .populate("property", "name address")
       .populate("unit", "unitNumber")
-      .sort({ date: -1, createdAt: -1 });
+      .sort({ date: -1, createdAt: -1 })
+      .lean();
 
     return res.status(200).json(expenses);
   } catch (err) {
@@ -97,7 +98,8 @@ export const getExpense = async (req, res, next) => {
       business,
     })
       .populate("property", "name address landlord")
-      .populate("unit", "unitNumber");
+      .populate("unit", "unitNumber")
+      .lean();
 
     if (!expense) {
       return next(createError(404, "Expense not found"));
@@ -118,27 +120,18 @@ export const updateExpense = async (req, res, next) => {
       return next(createError(400, "Business/company context is required"));
     }
 
-    const existingExpense = await ExpenseProperty.findOne({
-      _id: req.params.id,
-      business,
-    });
-
-    if (!existingExpense) {
-      return next(createError(404, "Expense not found"));
-    }
-
     const updatedExpense = await ExpenseProperty.findOneAndUpdate(
       { _id: req.params.id, business },
-      {
-        $set: {
-          ...req.body,
-          business,
-        },
-      },
+      { $set: { ...req.body, business } },
       { new: true }
     )
       .populate("property", "name address landlord")
-      .populate("unit", "unitNumber");
+      .populate("unit", "unitNumber")
+      .lean();
+
+    if (!updatedExpense) {
+      return next(createError(404, "Expense not found"));
+    }
 
     return res.status(200).json(updatedExpense);
   } catch (err) {
@@ -254,7 +247,8 @@ export const getPropertyExpenses = async (req, res, next) => {
     const expenses = await ExpenseProperty.find(filter)
       .populate("property", "name address")
       .populate("unit", "unitNumber")
-      .sort({ date: -1, createdAt: -1 });
+      .sort({ date: -1, createdAt: -1 })
+      .lean();
 
     const summary = await ExpenseProperty.aggregate([
       {

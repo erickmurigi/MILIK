@@ -6,6 +6,10 @@ import {
 } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { markAllNotificationsAsRead } from '../../redux/apiCalls';
+import {
+  selectAllNotifications, selectAllRentPayments, selectAllMaintenances,
+  selectAllLeases, selectAllTenants,
+} from '../../redux/selectors';
 import { parseDate } from './dashboardUtils';
 import DashboardCard from './DashboardCard';
 
@@ -44,18 +48,12 @@ const fmtRel = (v) => {
 };
 
 const RecentActivity = () => {
-  const dispatch   = useDispatch();
-  const rawNotifs  = useSelector((s) => s.notification?.notifications);
-  const rawPayments= useSelector((s) => s.rentPayment?.rentPayments);
-  const rawMaint   = useSelector((s) => s.maintenance?.maintenances);
-  const rawLeases  = useSelector((s) => s.lease?.leases);
-  const rawTenants = useSelector((s) => s.tenant?.tenants);
-
-  const notifications = ensureArr(rawNotifs,   'data', 'notifications');
-  const rentPayments  = ensureArr(rawPayments,  'data', 'rentPayments');
-  const maintenances  = ensureArr(rawMaint,     'data', 'maintenances');
-  const leases        = ensureArr(rawLeases,    'data', 'leases');
-  const tenants       = ensureArr(rawTenants,   'data', 'tenants');
+  const dispatch      = useDispatch();
+  const notifications = useSelector(selectAllNotifications);
+  const rentPayments  = useSelector(selectAllRentPayments);
+  const maintenances  = useSelector(selectAllMaintenances);
+  const leases        = useSelector(selectAllLeases);
+  const tenants       = useSelector(selectAllTenants);
 
   const [newIds,    setNewIds]    = useState(new Set());
   const [marking,   setMarking]   = useState(false);
