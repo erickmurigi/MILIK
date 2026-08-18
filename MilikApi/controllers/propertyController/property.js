@@ -558,6 +558,8 @@ export const createProperty = async (req, res) => {
       notes,
       specificContactInfo,
       description,
+      videoUrl,
+      virtualTourUrl,
       status,
       images,
       business,
@@ -746,6 +748,8 @@ export const createProperty = async (req, res) => {
       notes,
       specificContactInfo,
       description: description || notes,
+      videoUrl: videoUrl || undefined,
+      virtualTourUrl: virtualTourUrl || undefined,
       status: status || "active",
       images: images || [],
       business: businessId,
@@ -910,6 +914,8 @@ export const getProperties = async (req, res, next) => {
           "accountLedgerType propertyLedgerEnabled commissionPercentage " +
           "commissionPaymentMode commissionCategoryKeys commissionTaxSettings " +
           "depositHeldBy vatRate taxMode taxCodeKey " +
+          "grossLettableArea netLettableArea unitMeasurement rentPerMeasure rentCurrency " +
+          "standingCharges securityDeposits " +
           "business controlAccount createdAt updatedAt"
         )
         .populate("landlords.landlordId", "_id landlordName firstName lastName")

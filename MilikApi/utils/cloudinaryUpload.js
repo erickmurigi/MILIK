@@ -1,24 +1,23 @@
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+// Configured lazily so env vars are read at call-time, not at ESM import time
+// (server.js calls dotenv.config() after all imports are resolved).
+const applyCloudinaryConfig = () =>
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+  });
 
-// Applied to every listing photo on upload: caps the stored master at 1920px
-// (never upscales — "limit" only shrinks), auto-picks the best format per
-// browser (WebP/AVIF where supported), and auto-tunes quality. This keeps
-// storage/bandwidth down at the source, on top of the per-context sizing
-// done at delivery time via cloudinaryUrl() below.
 const DEFAULT_UPLOAD_TRANSFORMATION = [
   { width: 1920, height: 1920, crop: "limit" },
   { quality: "auto:good", fetch_format: "auto" },
 ];
 
-export const uploadBufferToCloudinary = (buffer, options) =>
-  new Promise((resolve, reject) => {
+export const uploadBufferToCloudinary = (buffer, options) => {
+  applyCloudinaryConfig();
+  return new Promise((resolve, reject) => {
     cloudinary.uploader
       .upload_stream(
         { transformation: DEFAULT_UPLOAD_TRANSFORMATION, ...options },
@@ -29,9 +28,12 @@ export const uploadBufferToCloudinary = (buffer, options) =>
       )
       .end(buffer);
   });
+};
 
-export const destroyCloudinaryAsset = (publicId) =>
-  cloudinary.uploader.destroy(publicId).catch(() => {});
+export const destroyCloudinaryAsset = (publicId) => {
+  applyCloudinaryConfig();
+  return cloudinary.uploader.destroy(publicId).catch(() => {});
+};
 
 // Recovers the Cloudinary public_id (including folder) from a secure_url so
 // an image can be deleted from storage when it's removed from a listing.

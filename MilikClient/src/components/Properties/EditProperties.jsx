@@ -20,6 +20,7 @@ import {
   FaWarehouse,
   FaSpinner,
   FaChevronDown,
+  FaArrowLeft,
 } from "react-icons/fa";
 import { getPropertyById, updateProperty, clearCurrentProperty } from "../../redux/propertyRedux";
 import { getLandlords } from "../../redux/apiCalls";
@@ -28,12 +29,12 @@ import { adminRequests } from "../../utils/requestMethods";
 import { toast } from "react-toastify";
 import MilikConfirmDialog from "../Modals/MilikConfirmDialog";
 import { getCompanyOperatingModeLabel, isSelfManagingLandlordCompany } from "../../utils/companyModules";
-import ListingImagesField from "../common/ListingImagesField";
+import PropertyMapPicker from "../common/PropertyMapPicker";
 
 const MILIK_ORANGE_BG = "bg-orange-600";
 const MILIK_ORANGE_BG_HOVER = "hover:bg-orange-700";
 const MILIK_ORANGE_RING = "focus:ring-orange-500/30";
-const MILIK_ORANGE_BORDER_FOCUS = "focus:border-orange-700";
+const MILIK_ORANGE_BORDER_FOCUS = "focus:border-orange-500";
 
 const normalizePropertyServiceMode = (value = "Managing") => {
   const normalized = String(value || "").trim().toLowerCase();
@@ -146,7 +147,7 @@ function MilikSelect({
   return (
     <div className={`${className} relative`} ref={wrapRef}>
       {label ? (
-        <label className="block text-sm font-bold text-slate-800 mb-1 tracking-tight">
+        <label className="mb-0.5 block text-xs font-semibold text-slate-700">
           {label} {required ? "*" : ""}
         </label>
       ) : null}
@@ -156,17 +157,16 @@ function MilikSelect({
         disabled={disabled}
         onClick={() => setOpen((s) => !s)}
         className={[
-          "w-full h-10 px-3 rounded-md bg-white text-slate-900 shadow-sm border border-slate-300",
-          "transition-all duration-200 ease-out hover:border-slate-400",
-          "focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-700",
+          "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition",
+          "focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20",
           "flex items-center justify-between gap-2",
           disabled ? "opacity-50 cursor-not-allowed" : "",
         ].join(" ")}
       >
-        <span className="text-sm font-semibold truncate">
+        <span className="text-xs truncate">
           {selectedItem ? getLabel(selectedItem) : <span className="text-slate-400">{placeholder}</span>}
         </span>
-        <FaChevronDown className="text-slate-600" />
+        <FaChevronDown className="text-slate-500 text-[10px]" />
       </button>
 
       {open && !disabled && (
@@ -187,7 +187,7 @@ function MilikSelect({
                       setOpen(false);
                     }}
                     className={[
-                      "w-full text-left px-3 py-2 text-sm font-semibold transition-colors",
+                      "w-full text-left px-3 py-1.5 text-xs font-semibold transition-colors",
                       isSelected
                         ? `${MILIK_ORANGE_BG} text-white`
                         : "text-slate-800 hover:bg-orange-50",
@@ -302,6 +302,8 @@ const EditProperty = () => {
       listingEnabled: false,
       amenities: "",
       yearBuilt: "",
+      videoUrl: "",
+      virtualTourUrl: "",
       listingContact: { name: "", phone: "", whatsapp: "", email: "", preferredMethod: "phone" },
       nearbyPoints: [],
       coordinates: { lat: "", lng: "" },
@@ -312,9 +314,6 @@ const EditProperty = () => {
   const [formData, setFormData] = useState(initialFormData);
   const [fieldErrors, setFieldErrors] = useState({});
 
-  const [existingImages, setExistingImages] = useState([]);
-  const [stagedImageFiles, setStagedImageFiles] = useState([]);
-  const [imagesSaving, setImagesSaving] = useState(false);
   const [generalError, setGeneralError] = useState("");
   const [utilityTypeOptions, setUtilityTypeOptions] = useState([]);
   const [utilityTypeOptionsLoading, setUtilityTypeOptionsLoading] = useState(false);
@@ -335,6 +334,7 @@ const EditProperty = () => {
     { id: "space", label: "Space/Units", icon: <FaWarehouse /> },
     { id: "accounting", label: "Accounting", icon: <FaCalculator /> },
     { id: "utilityRates", label: "Meter Reading Rates", icon: <FaCog /> },
+    { id: "notes", label: "Listing & Notes", icon: <FaStickyNote /> },
   ];
 
   const propertyTypes = [
@@ -355,22 +355,14 @@ const EditProperty = () => {
     "Estate",
   ];
 
-  const labelClass = "block text-sm font-bold text-slate-800 mb-1 tracking-tight";
+  const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
   const helperLabelClass = "block text-xs font-medium text-slate-600 mb-1";
 
-  const baseField =
-    "w-full rounded-md bg-white text-slate-900 placeholder:text-slate-400 " +
-    "border border-slate-300 shadow-sm " +
-    "transition-all duration-200 ease-out " +
-    `focus:outline-none focus:border-slate-700 focus:ring-2 ${MILIK_ORANGE_RING} ` +
-    "hover:border-slate-400";
+  const inputClass = "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20";
+  const textareaClass = "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20 min-h-[80px]";
 
-  const inputClass = `${baseField} h-10 px-3 text-sm font-semibold`;
-  const selectClass = `${baseField} h-10 px-3 text-sm font-semibold`;
-  const textareaClass = `${baseField} min-h-[96px] px-3 py-2 text-sm font-semibold`;
-
-  const sectionCard = "bg-white border border-slate-200 rounded-lg shadow-sm";
-  const sectionHeader = "text-sm font-bold text-slate-900 tracking-tight";
+  const sectionCard = "overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm";
+  const sectionHeader = "text-[11px] font-bold uppercase tracking-wide text-slate-700";
 
   useEffect(() => {
     adminRequests.get('/zones', { params: { limit: 500, isActive: 'true' } })
@@ -452,8 +444,6 @@ const EditProperty = () => {
           lng: currentProperty.coordinates?.lng ?? "",
         },
       };
-
-      setExistingImages(Array.isArray(currentProperty.images) ? currentProperty.images : []);
 
       let nextFormData = transformedData;
       if (draftStorageKey) {
@@ -632,39 +622,6 @@ const EditProperty = () => {
     }));
   };
 
-  const handleImageFilesSelected = (files) => {
-    setStagedImageFiles((prev) => [...prev, ...files]);
-  };
-
-  const handleRemoveStagedImage = (index) => {
-    setStagedImageFiles((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleRemoveExistingImage = async (url) => {
-    if (!id) return;
-    setImagesSaving(true);
-    try {
-      const res = await adminRequests.delete(`/properties/${id}/images`, { data: { url } });
-      setExistingImages(Array.isArray(res.data?.images) ? res.data.images : []);
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to remove photo");
-    } finally {
-      setImagesSaving(false);
-    }
-  };
-
-  const uploadStagedPropertyImages = async (propertyId) => {
-    if (!propertyId || stagedImageFiles.length === 0) return;
-    const body = new FormData();
-    stagedImageFiles.forEach((file) => body.append("images", file));
-    try {
-      await adminRequests.post(`/properties/${propertyId}/images`, body);
-      setStagedImageFiles([]);
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Property saved, but photo upload failed");
-    }
-  };
-
   const removeUtilityRate = (index) => {
     setFormData((prev) => ({
       ...prev,
@@ -807,12 +764,6 @@ const EditProperty = () => {
       setFieldErrors({});
       setGeneralError("");
       const result = await dispatch(updateProperty({ id, propertyData })).unwrap();
-
-      if (stagedImageFiles.length > 0) {
-        setImagesSaving(true);
-        await uploadStagedPropertyImages(id);
-        setImagesSaving(false);
-      }
 
       await dispatch(getLandlords({ company: businessId }));
 
@@ -1932,14 +1883,14 @@ const EditProperty = () => {
         </div>
 
         <div className="mt-4">
-          <label className={labelClass}>Notes/Description</label>
+          <label className={labelClass}>Internal Notes</label>
           <textarea
             name="notes"
             value={formData.notes}
             onChange={handleChange}
-            rows={5}
+            rows={3}
             className={`${textareaClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-            placeholder="Enter any additional notes or descriptions about the property..."
+            placeholder="Internal notes (not shown publicly)..."
           />
         </div>
 
@@ -1971,7 +1922,7 @@ const EditProperty = () => {
           </label>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label className={labelClass}>Amenities</label>
             <input
@@ -1995,28 +1946,59 @@ const EditProperty = () => {
               className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
             />
           </div>
+        </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelClass}>Latitude</label>
-              <input
-                type="number"
-                step="any"
-                value={formData.coordinates?.lat ?? ""}
-                onChange={(e) => handleCoordinateChange("lat", e.target.value)}
-                className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Longitude</label>
-              <input
-                type="number"
-                step="any"
-                value={formData.coordinates?.lng ?? ""}
-                onChange={(e) => handleCoordinateChange("lng", e.target.value)}
-                className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-              />
-            </div>
+        <div className="mt-4">
+          <label className={labelClass}>Location on Map</label>
+          <p className="mb-2 text-[11px] text-slate-400">
+            Search by place name, click "Use Address ↑" to geocode from the address fields above, or click directly on the map to pin the property.
+          </p>
+          <PropertyMapPicker
+            lat={formData.coordinates?.lat}
+            lng={formData.coordinates?.lng}
+            onLocationChange={({ lat, lng }) =>
+              setFormData((prev) => ({ ...prev, coordinates: { lat, lng } }))
+            }
+            addressHint={[formData.estateArea, formData.roadStreet, formData.townCityState]
+              .filter(Boolean)
+              .join(", ")}
+          />
+        </div>
+
+        <div className="mt-4">
+          <label className={labelClass}>Property Description <span className="font-normal text-slate-400">(shown on listing page)</span></label>
+          <textarea
+            name="description"
+            value={formData.description}
+            onChange={handleChange}
+            rows={4}
+            className={`${textareaClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+            placeholder="Describe the property to prospective tenants — location highlights, building features, security, etc."
+          />
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className={labelClass}>Video URL</label>
+            <input
+              type="url"
+              name="videoUrl"
+              value={formData.videoUrl || ""}
+              onChange={handleChange}
+              placeholder="https://youtube.com/..."
+              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Virtual Tour URL</label>
+            <input
+              type="url"
+              name="virtualTourUrl"
+              value={formData.virtualTourUrl || ""}
+              onChange={handleChange}
+              placeholder="https://matterport.com/..."
+              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+            />
           </div>
         </div>
 
@@ -2125,18 +2107,6 @@ const EditProperty = () => {
           )}
         </div>
 
-        <div className="mt-4">
-          <ListingImagesField
-            label="Property Photos"
-            existingImages={existingImages}
-            stagedFiles={stagedImageFiles}
-            onFilesSelected={handleImageFilesSelected}
-            onRemoveExisting={handleRemoveExistingImage}
-            onRemoveStaged={handleRemoveStagedImage}
-            disabled={imagesSaving}
-            maxImages={15}
-          />
-        </div>
       </div>
     </div>
   );
@@ -2295,7 +2265,7 @@ const EditProperty = () => {
 
   if (!formData || formData === initialFormData) {
     return (
-      <DashboardLayout>
+      <DashboardLayout lockContentScroll>
         <div className="flex justify-center items-center h-full">
           <p className="text-sm font-semibold text-slate-600">Loading property details...</p>
         </div>
@@ -2305,69 +2275,46 @@ const EditProperty = () => {
 
   return (
     <>
-      <DashboardLayout>
+      <DashboardLayout lockContentScroll>
       <style>{`
-        select {
-          accent-color: #ea580c;
-        }
-        
-        input[type="checkbox"] {
-          accent-color: #ea580c;
-          width: 18px;
-          height: 18px;
-          cursor: pointer;
-        }
-        
-        select option {
-          background-color: white;
-          color: #1e293b;
-        }
-        
-        select option:hover,
-        select option:focus,
-        select option:active,
-        select option:checked {
-          background-color: #ea580c !important;
-          background: #ea580c !important;
-          color: white !important;
-          outline: none !important;
+        select { accent-color: #ea580c; }
+        input[type="checkbox"] { accent-color: #ea580c; width: 18px; height: 18px; cursor: pointer; }
+        select option { background-color: white; color: #1e293b; }
+        select option:hover, select option:focus, select option:active, select option:checked {
+          background-color: #ea580c !important; background: #ea580c !important;
+          color: white !important; outline: none !important;
         }
       `}</style>
-      <div className="p-3 w-full h-full overflow-y-auto bg-slate-50">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-3">
-          <div>
-            <h1 className="text-lg font-extrabold text-slate-900 tracking-tight">
-              Edit Property
-            </h1>
-            <p className="text-sm text-slate-600">
-              {isSelfManagingLandlordMode
-                ? `${formData.propertyName || "Property Details"} · Self-managing landlord workspace`
-                : formData.propertyName || "Property Details"}
-            </p>
-          </div>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
 
-          <div className="flex items-center gap-2">
-            <span className="hidden sm:inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">
-              {operatingModeLabel}
-            </span>
-            <button
-              onClick={() => {
-                clearDraftState();
-                navigate("/properties");
-              }}
-              className="h-10 px-4 text-sm font-semibold border border-slate-300 rounded-md bg-white hover:bg-slate-50 transition-colors"
-              disabled={loading}
-            >
-              <FaTimes className="inline-block mr-2" />
-              Cancel
-            </button>
+        {/* Sticky dark header */}
+        <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-2.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => { clearDraftState(); navigate("/properties"); }}
+                disabled={loading}
+                className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#B7C9C0] hover:text-white transition disabled:opacity-50"
+              >
+                <FaArrowLeft /> Back
+              </button>
+              <div className="h-4 w-px bg-[#2A5C4A]" />
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">Properties</div>
+                <h1 className="text-sm font-black text-white leading-none">
+                  {formData.propertyName || "Edit Property"}
+                  {isSelfManagingLandlordMode && <span className="ml-2 text-[11px] font-normal text-[#B7C9C0]">· Self-managing</span>}
+                </h1>
+              </div>
+            </div>
+            <span className="rounded-lg border border-[#2A5C4A] bg-[#0A3127] px-2.5 py-1 text-[10px] font-bold text-[#B7C9C0]">{operatingModeLabel}</span>
           </div>
         </div>
 
-        {/* Tabs Navigation */}
-        <div className="border-b border-slate-200 mb-3">
-          <div className="flex flex-wrap gap-2">
+        {/* Tab navigation */}
+        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-3">
+          <div className="flex flex-wrap gap-0.5">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
@@ -2377,13 +2324,11 @@ const EditProperty = () => {
                   disabled={loading}
                   className={[
                     "h-10 px-4 text-sm font-bold flex items-center gap-2 rounded-t-md transition-all duration-200",
-                    isActive
-                      ? `${MILIK_ORANGE_BG} text-white shadow-sm border-b-2 border-orange-700`
-                      : "text-slate-700 hover:bg-slate-100",
+                    isActive ? `${MILIK_ORANGE_BG} text-white shadow-sm` : "text-slate-700 hover:bg-slate-100",
                     loading ? "opacity-50 cursor-not-allowed" : "",
                   ].join(" ")}
                 >
-                  <span className="text-base">{tab.icon}</span>
+                  <span>{tab.icon}</span>
                   {tab.label}
                 </button>
               );
@@ -2391,85 +2336,37 @@ const EditProperty = () => {
           </div>
         </div>
 
-        {/* Form Content */}
-        <div className={`${sectionCard}`}>
-          <div className="p-4">
-            <form id="edit-property-form" onSubmit={handleSubmit}>{renderContent()}</form>
+        {/* Scrollable content */}
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          <div className={`${sectionCard}`}>
+            <form id="edit-property-form" onSubmit={handleSubmit}>
+              <div className="p-3">{renderContent()}</div>
+            </form>
           </div>
+          {fieldErrors.business && (
+            <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {fieldErrors.business}
+            </div>
+          )}
         </div>
 
-        {fieldErrors.business && (
-          <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {fieldErrors.business}
-          </div>
-        )}
-
-        {/* Action Buttons */}
-        <div className="flex justify-between items-center mt-4">
-          <div className="text-xs text-slate-500">Fields marked with * are required</div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                clearDraftState();
-                navigate("/properties");
-              }}
-              disabled={loading}
-              className="h-10 px-5 text-sm font-semibold border border-slate-300 rounded-md bg-white hover:bg-slate-50 transition-colors disabled:opacity-50"
-            >
-              Cancel
-            </button>
-
-            <button
-              type="button"
-              onClick={handleReset}
-              disabled={loading}
-              className="h-10 px-5 text-sm font-semibold border border-slate-300 rounded-md bg-white hover:bg-slate-50 transition-colors disabled:opacity-50"
-            >
-              Reset
-            </button>
-
-            {!isFirstTab && (
-              <button
-                type="button"
-                onClick={handlePreviousTab}
-                disabled={loading}
-                className="h-10 px-5 text-sm font-semibold border border-slate-300 rounded-md bg-white hover:bg-slate-50 transition-colors disabled:opacity-50"
-              >
-                Previous
+        {/* Sticky footer */}
+        <div className="flex-shrink-0 border-t border-slate-200 bg-[#F6FAF8] px-4 py-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs text-slate-500">Fields marked with * are required</div>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => { clearDraftState(); navigate("/properties"); }} disabled={loading} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Cancel</button>
+              <button type="button" onClick={handleReset} disabled={loading} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Reset</button>
+              {!isFirstTab && (
+                <button type="button" onClick={handlePreviousTab} disabled={loading} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Previous</button>
+              )}
+              {!isLastTab && (
+                <button type="button" onClick={handleNextTab} disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-2 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
+              )}
+              <button type="submit" form="edit-property-form" disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-3 py-2 text-xs font-black text-white transition hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                {loading ? <><FaSpinner className="animate-spin" /> Saving…</> : <><FaSave /> Update Property</>}
               </button>
-            )}
-
-            {!isLastTab && (
-              <button
-                type="button"
-                onClick={handleNextTab}
-                disabled={loading}
-                className={`h-10 px-5 text-sm font-semibold ${MILIK_ORANGE_BG} text-white rounded-md ${MILIK_ORANGE_BG_HOVER} transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
-              >
-                Next
-              </button>
-            )}
-
-            <button
-                type="submit"
-                form="edit-property-form"
-                disabled={loading}
-                className="h-10 px-5 text-sm font-semibold bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? (
-                  <>
-                    <FaSpinner className="inline-block mr-2 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <FaSave className="inline-block mr-2" />
-                    Update Property
-                  </>
-                )}
-              </button>
+            </div>
           </div>
         </div>
       </div>

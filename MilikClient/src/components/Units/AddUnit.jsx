@@ -205,6 +205,7 @@ const AddUnit = () => {
   const [billingPeriodOptions, setBillingPeriodOptions] = useState([{ key: "monthly", name: "Monthly", durationInMonths: 1 }]);
   const [depositTouched, setDepositTouched] = useState(Boolean(isEditMode));
   const [rentTouched, setRentTouched] = useState(Boolean(isEditMode));
+  const [utilitiesTouched, setUtilitiesTouched] = useState(Boolean(isEditMode));
   const draftStorageKey = currentCompany?._id
     ? `milik:${isEditMode ? "edit" : "new"}-unit-draft:${currentCompany._id}${unitId ? `:${unitId}` : ""}`
     : null;
@@ -416,6 +417,21 @@ const AddUnit = () => {
     }
   }, [depositTouched, formData.areaSqFt, formData.rent, isEditMode, selectedProperty]);
 
+  useEffect(() => {
+    if (!selectedProperty || isEditMode || utilitiesTouched) return;
+    const charges = Array.isArray(selectedProperty.standingCharges) ? selectedProperty.standingCharges : [];
+    if (charges.length === 0) return;
+    const derived = charges
+      .filter((c) => c.serviceCharge)
+      .map((c) => ({ utility: c.serviceCharge, isIncluded: false, unitCharge: c.chargeValue ? String(c.chargeValue) : "" }));
+    if (derived.length === 0) return;
+    setFormData((prev) => {
+      const alreadySet = prev.utilities.some((u) => u.utility);
+      if (alreadySet) return prev;
+      return { ...prev, utilities: derived };
+    });
+  }, [isEditMode, selectedProperty, utilitiesTouched]);
+
   // Input classes for consistency
   const inputClass =
     "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
@@ -438,6 +454,7 @@ const AddUnit = () => {
     if (name === "property") {
       setRentTouched(false);
       setDepositTouched(false);
+      setUtilitiesTouched(false);
     }
 
     setFormData((prev) => {
@@ -458,6 +475,7 @@ const AddUnit = () => {
   };
 
   const addUtility = () => {
+    setUtilitiesTouched(true);
     setFormData((prev) => ({
       ...prev,
       utilities: [...prev.utilities, { utility: "", isIncluded: false, unitCharge: "" }]
@@ -465,6 +483,7 @@ const AddUnit = () => {
   };
 
   const removeUtility = (index) => {
+    setUtilitiesTouched(true);
     setFormData((prev) => ({
       ...prev,
       utilities: prev.utilities.filter((_, i) => i !== index)
@@ -472,6 +491,7 @@ const AddUnit = () => {
   };
 
   const updateUtility = (index, field, value) => {
+    setUtilitiesTouched(true);
     setFormData((prev) => {
       const updated = [...prev.utilities];
       updated[index] = { ...updated[index], [field]: value };
@@ -1009,41 +1029,32 @@ const AddUnit = () => {
                 Billing Calculation Summary
               </h3>
 
-              {/* Breakdown Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Monthly Rent */}
-                <div className="bg-white border border-slate-200 rounded-lg p-4 boxshadow-sm">
-                  <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
-                    Monthly Rent
+              {/* Breakdown Cards — only shown when utilities are charged separately */}
+              {monthlyUtilityBill > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Utility Charges */}
+                  <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+                    <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+                      Utilities (Not in Rent)
+                    </div>
+                    <div className="text-xl font-bold text-[#0B3B2E]">
+                      KES {monthlyUtilityBill.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-2">Additional monthly charges</div>
                   </div>
-                  <div className="text-xl font-bold text-slate-900">
-                    KES {monthlyRent.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                  <div className="text-xs text-slate-500 mt-2">Base rental amount</div>
-                </div>
 
-                {/* Utility Charges */}
-                <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
-                  <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
-                    Utilities (Not in Rent)
+                  {/* Total Monthly Bill */}
+                  <div className="bg-gradient-to-br from-[#0B3B2E] to-[#0A3127] border border-[#0B3B2E] rounded-lg p-4 shadow-md">
+                    <div className="text-xs font-semibold text-white/70 uppercase tracking-wide mb-1">
+                      Total Monthly Bill
+                    </div>
+                    <div className="text-xl font-bold text-white">
+                      KES {totalMonthlyBill.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    <div className="text-xs text-white/50 mt-2">Rent + utilities</div>
                   </div>
-                  <div className="text-xl font-bold text-[#0B3B2E]">
-                    KES {monthlyUtilityBill.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                  <div className="text-xs text-slate-500 mt-2">Additional monthly charges</div>
                 </div>
-
-                {/* Total Monthly Bill */}
-                <div className="bg-gradient-to-br from-[#0B3B2E] to-[#0A3127] border border-[#0B3B2E] rounded-lg p-4 shadow-md">
-                  <div className="text-xs font-semibold text-white/70 uppercase tracking-wide mb-1">
-                    Total Monthly Bill
-                  </div>
-                  <div className="text-xl font-bold text-white">
-                    KES {totalMonthlyBill.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                  <div className="text-xs text-white/50 mt-2">Rent + utilities</div>
-                </div>
-              </div>
+              )}
 
               {/* Billing Frequency Selector */}
               <div className="bg-white border border-slate-200 rounded-lg p-4">

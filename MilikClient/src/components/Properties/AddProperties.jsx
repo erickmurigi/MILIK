@@ -28,12 +28,12 @@ import { toast } from "react-toastify";
 import MilikConfirmDialog from "../Modals/MilikConfirmDialog";
 import { getCompanyOperatingModeLabel, isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
-import ListingImagesField from "../common/ListingImagesField";
+import PropertyMapPicker from "../common/PropertyMapPicker";
 
-const MILIK_ORANGE_BG = "bg-[#0B3B2E]";
-const MILIK_ORANGE_BG_HOVER = "hover:bg-[#0A3127]";
-const MILIK_ORANGE_RING = "";
-const MILIK_ORANGE_BORDER_FOCUS = "";
+const MILIK_ORANGE_BG = "bg-orange-600";
+const MILIK_ORANGE_BG_HOVER = "hover:bg-orange-700";
+const MILIK_ORANGE_RING = "focus:ring-orange-500/30";
+const MILIK_ORANGE_BORDER_FOCUS = "focus:border-orange-500";
 
 const normalizePropertyServiceMode = (value = "Managing") => {
   const normalized = String(value || "").trim().toLowerCase();
@@ -292,6 +292,8 @@ const AddProperty = () => {
       listingEnabled: false,
       amenities: "",
       yearBuilt: "",
+      videoUrl: "",
+      virtualTourUrl: "",
       listingContact: { name: "", phone: "", whatsapp: "", email: "", preferredMethod: "phone" },
       nearbyPoints: [],
       coordinates: { lat: "", lng: "" },
@@ -302,12 +304,6 @@ const AddProperty = () => {
   const [formData, setFormData] = useState(initialFormData);
   const [fieldErrors, setFieldErrors] = useState({});
   const [generalError, setGeneralError] = useState("");
-
-  // A not-yet-created property has no existing images — this stays empty
-  // until the record exists, so it needs no setter.
-  const existingImages = [];
-  const [stagedImageFiles, setStagedImageFiles] = useState([]);
-  const [imagesSaving, setImagesSaving] = useState(false);
 
   const [openAddLandlordModal, setOpenAddLandlordModal] = useState(false);
   const [newLandlord, setNewLandlord] = useState({
@@ -376,34 +372,12 @@ const AddProperty = () => {
     }));
   };
 
-  const handleImageFilesSelected = (files) => {
-    setStagedImageFiles((prev) => [...prev, ...files]);
-  };
-
-  const handleRemoveStagedImage = (index) => {
-    setStagedImageFiles((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  // No-op: a not-yet-created property has no existing images to remove.
-  const handleRemoveExistingImage = () => {};
-
-  const uploadStagedPropertyImages = async (propertyId) => {
-    if (!propertyId || stagedImageFiles.length === 0) return;
-    const body = new FormData();
-    stagedImageFiles.forEach((file) => body.append("images", file));
-    try {
-      await adminRequests.post(`/properties/${propertyId}/images`, body);
-      setStagedImageFiles([]);
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Property saved, but photo upload failed");
-    }
-  };
-
   const tabs = [
     { id: "general", label: "General Info", icon: <FaHome /> },
     { id: "space", label: "Space/Units", icon: <FaWarehouse /> },
     { id: "accounting", label: "Accounting", icon: <FaCalculator /> },
     { id: "utilityRates", label: "Meter Reading Rates", icon: <FaCog /> },
+    { id: "notes", label: "Listing & Notes", icon: <FaStickyNote /> },
   ];
 
   const propertyTypes = [
@@ -695,12 +669,6 @@ const AddProperty = () => {
       setGeneralError("");
 
       const result = await dispatch(createProperty(propertyData)).unwrap();
-
-      if (stagedImageFiles.length > 0) {
-        setImagesSaving(true);
-        await uploadStagedPropertyImages(result?.data?._id);
-        setImagesSaving(false);
-      }
 
       await dispatch(getLandlords({ company: businessId }));
 
@@ -1850,14 +1818,14 @@ const AddProperty = () => {
         </div>
 
         <div className="mt-4">
-          <label className={labelClass}>Notes/Description</label>
+          <label className={labelClass}>Internal Notes</label>
           <textarea
             name="notes"
             value={formData.notes}
             onChange={handleChange}
-            rows={5}
+            rows={3}
             className={`${textareaClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-            placeholder="Enter any additional notes or descriptions about the property..."
+            placeholder="Internal notes (not shown publicly)..."
           />
         </div>
 
@@ -1889,7 +1857,7 @@ const AddProperty = () => {
           </label>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label className={labelClass}>Amenities</label>
             <input
@@ -1913,28 +1881,59 @@ const AddProperty = () => {
               className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
             />
           </div>
+        </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelClass}>Latitude</label>
-              <input
-                type="number"
-                step="any"
-                value={formData.coordinates?.lat ?? ""}
-                onChange={(e) => handleCoordinateChange("lat", e.target.value)}
-                className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Longitude</label>
-              <input
-                type="number"
-                step="any"
-                value={formData.coordinates?.lng ?? ""}
-                onChange={(e) => handleCoordinateChange("lng", e.target.value)}
-                className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-              />
-            </div>
+        <div className="mt-4">
+          <label className={labelClass}>Location on Map</label>
+          <p className="mb-2 text-[11px] text-slate-400">
+            Search by place name, click "Use Address ↑" to geocode from the address fields above, or click directly on the map to pin the property.
+          </p>
+          <PropertyMapPicker
+            lat={formData.coordinates?.lat}
+            lng={formData.coordinates?.lng}
+            onLocationChange={({ lat, lng }) =>
+              setFormData((prev) => ({ ...prev, coordinates: { lat, lng } }))
+            }
+            addressHint={[formData.estateArea, formData.roadStreet, formData.townCityState]
+              .filter(Boolean)
+              .join(", ")}
+          />
+        </div>
+
+        <div className="mt-4">
+          <label className={labelClass}>Property Description <span className="font-normal text-slate-400">(shown on listing page)</span></label>
+          <textarea
+            name="description"
+            value={formData.description}
+            onChange={handleChange}
+            rows={4}
+            className={`${textareaClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+            placeholder="Describe the property to prospective tenants — location highlights, building features, security, etc."
+          />
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className={labelClass}>Video URL</label>
+            <input
+              type="url"
+              name="videoUrl"
+              value={formData.videoUrl || ""}
+              onChange={handleChange}
+              placeholder="https://youtube.com/..."
+              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Virtual Tour URL</label>
+            <input
+              type="url"
+              name="virtualTourUrl"
+              value={formData.virtualTourUrl || ""}
+              onChange={handleChange}
+              placeholder="https://matterport.com/..."
+              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+            />
           </div>
         </div>
 
@@ -2043,18 +2042,6 @@ const AddProperty = () => {
           )}
         </div>
 
-        <div className="mt-4">
-          <ListingImagesField
-            label="Property Photos"
-            existingImages={existingImages}
-            stagedFiles={stagedImageFiles}
-            onFilesSelected={handleImageFilesSelected}
-            onRemoveExisting={handleRemoveExistingImage}
-            onRemoveStaged={handleRemoveStagedImage}
-            disabled={imagesSaving}
-            maxImages={15}
-          />
-        </div>
       </div>
     </div>
   );
@@ -2219,8 +2206,8 @@ const AddProperty = () => {
                     onClick={() => setActiveTab(tab.id)}
                     disabled={loading}
                     className={[
-                      "h-9 px-3 text-xs font-bold flex items-center gap-1.5 border-b-2 transition-all",
-                      isActive ? "border-[#0B3B2E] text-[#0B3B2E]" : "border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50",
+                      "h-10 px-4 text-sm font-bold flex items-center gap-2 rounded-t-md transition-all duration-200",
+                      isActive ? `${MILIK_ORANGE_BG} text-white shadow-sm` : "text-slate-700 hover:bg-slate-100",
                       loading ? "opacity-50 cursor-not-allowed" : "",
                     ].join(" ")}
                   >

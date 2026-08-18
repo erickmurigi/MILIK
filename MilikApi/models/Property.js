@@ -315,6 +315,8 @@ const PropertySchema = new mongoose.Schema(
     notes: { type: String, trim: true },
     specificContactInfo: { type: String, trim: true },
     description: { type: String, trim: true },
+    videoUrl: { type: String, trim: true },
+    virtualTourUrl: { type: String, trim: true },
 
     totalUnits: { type: Number, default: 0 },
     occupiedUnits: { type: Number, default: 0 },

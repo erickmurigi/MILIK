@@ -9,10 +9,10 @@ import { escapeRegex } from "../utils/escapeRegex.js";
 const router = express.Router();
 
 const UNIT_PUBLIC_FIELDS =
-  "unitNumber unitType listingTitle slug featured rent deposit areaSqFt furnished bedrooms bathrooms parkingSpaces floorNumber petsAllowed rentNegotiable minimumLeaseTermMonths videoUrl virtualTourUrl amenities utilities images description status vacantSince availableFrom property";
+  "unitNumber unitType listingTitle slug featured rent deposit billingFrequency areaSqFt furnished bedrooms bathrooms parkingSpaces floorNumber petsAllowed rentNegotiable minimumLeaseTermMonths videoUrl virtualTourUrl amenities utilities images description status vacantSince availableFrom property";
 
 const PROPERTY_PUBLIC_FIELDS =
-  "propertyName slug townCityState estateArea zoneRegion roadStreet propertyType images description coordinates specificContactInfo listingContact amenities nearbyPoints yearBuilt verified";
+  "propertyName slug townCityState estateArea zoneRegion roadStreet propertyType description videoUrl virtualTourUrl coordinates specificContactInfo listingContact amenities nearbyPoints yearBuilt verified";
 
 // A unit is public-listable once it's actually vacant, or it's occupied but
 // carries an availableFrom date (tenant has given notice) so it can be
@@ -59,6 +59,9 @@ router.get("/", async (req, res) => {
       minRent = "",
       maxRent = "",
       bedrooms = "",
+      bathrooms = "",
+      furnished = "",
+      petsAllowed = "",
       page = 1,
       limit = 24,
     } = req.query;
@@ -69,6 +72,9 @@ router.get("/", async (req, res) => {
     const unitMatch = { ...LISTABLE_STATUS_MATCH };
     if (unitType) unitMatch.unitType = unitType;
     if (bedrooms) unitMatch.bedrooms = { $gte: Number(bedrooms) || 0 };
+    if (bathrooms) unitMatch.bathrooms = { $gte: Number(bathrooms) || 0 };
+    if (furnished) unitMatch.furnished = furnished;
+    if (petsAllowed === "true") unitMatch.petsAllowed = true;
     if (minRent || maxRent) {
       unitMatch.rent = {};
       if (minRent) unitMatch.rent.$gte = Number(minRent) || 0;
@@ -96,7 +102,7 @@ router.get("/", async (req, res) => {
             {
               $project: {
                 unitNumber: 1, unitType: 1, listingTitle: 1, slug: 1, featured: 1,
-                rent: 1, deposit: 1, areaSqFt: 1, furnished: 1, bedrooms: 1, bathrooms: 1,
+                rent: 1, deposit: 1, billingFrequency: 1, areaSqFt: 1, furnished: 1, bedrooms: 1, bathrooms: 1,
                 parkingSpaces: 1, floorNumber: 1, petsAllowed: 1, rentNegotiable: 1,
                 minimumLeaseTermMonths: 1, videoUrl: 1, virtualTourUrl: 1, images: 1,
                 description: 1, status: 1, vacantSince: 1, availableFrom: 1,
@@ -145,7 +151,7 @@ router.get("/detail/:unitId", async (req, res) => {
     const unit = await Unit.findOne({ _id: unitId, ...LISTABLE_STATUS_MATCH })
       .select(`${UNIT_PUBLIC_FIELDS} business`)
       .populate("property", PROPERTY_PUBLIC_FIELDS)
-      .populate("business", "companyName phoneNo logo slogan")
+      .populate("business", "companyName phoneNo email logo slogan")
       .lean();
 
     if (!unit) {
