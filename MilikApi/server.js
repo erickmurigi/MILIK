@@ -812,6 +812,11 @@ async function startServer() {
       console.error('[CW Customer] phone cleanup warning (non-fatal):', e?.message || e);
     }
 
+    // Cron jobs must only run on one worker. PM2 sets NODE_APP_INSTANCE per worker (0, 1, 2…).
+    // Without this guard all workers fire simultaneously → duplicate invoices/emails.
+    const isPrimaryWorker = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
+
+    if (isPrimaryWorker) {
     // ── Monthly billing cron ────────────────────────────────────────────────
     // Runs at 08:00 EAT daily. Generates and SMS-sends statements for any
     // monthly account whose billingDay matches today. Idempotent — skips if a
@@ -906,6 +911,22 @@ async function startServer() {
       console.log("[RenewalReminder Cron] Scheduled — daily at 08:30 EAT");
     } catch (cronErr) {
       console.error("[RenewalReminder Cron] Failed to schedule:", cronErr?.message || cronErr);
+    }
+    } // end isPrimaryWorker
+
+    // Socket.IO Redis adapter — required for cross-worker events in PM2 cluster mode.
+    // emitToCompany/emitToUser would otherwise only reach clients on the same worker.
+    if (process.env.REDIS_URL) {
+      try {
+        const { createAdapter } = await import("@socket.io/redis-adapter");
+        const { default: Redis } = await import("ioredis");
+        const pubClient = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: 1, enableOfflineQueue: false });
+        const subClient = pubClient.duplicate();
+        io.adapter(createAdapter(pubClient, subClient));
+        console.log("[Socket.IO] Redis adapter active — cross-worker events enabled");
+      } catch (adapterErr) {
+        console.error("[Socket.IO] Redis adapter setup failed — events will be worker-local:", adapterErr.message);
+      }
     }
 
     server.listen(PORT, () => {
