@@ -920,8 +920,11 @@ async function startServer() {
       try {
         const { createAdapter } = await import("@socket.io/redis-adapter");
         const { default: Redis } = await import("ioredis");
-        const pubClient = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: 1, enableOfflineQueue: false });
+        // lazyConnect + explicit connect() ensures both clients are fully
+        // connected before createAdapter() calls subscribe() on subClient.
+        const pubClient = new Redis(process.env.REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 1 });
         const subClient = pubClient.duplicate();
+        await Promise.all([pubClient.connect(), subClient.connect()]);
         io.adapter(createAdapter(pubClient, subClient));
         console.log("[Socket.IO] Redis adapter active — cross-worker events enabled");
       } catch (adapterErr) {
