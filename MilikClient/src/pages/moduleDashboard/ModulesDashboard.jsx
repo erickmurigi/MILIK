@@ -210,7 +210,7 @@ const ModulesDashboard = () => {
       <header className="odoo-topbar">
         <div className="odoo-topbar-left">
           <img
-            src={activeCompanyContext?.logo || "/MILIK CUBES.png"}
+            src={activeCompanyContext?.logo || "/MIIK CUBES.png"}
             alt={activeCompanyContext?.companyName || "Milik"}
             className="odoo-topbar-logo"
           />

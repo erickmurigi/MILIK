@@ -204,7 +204,7 @@ function Login() {
           <div className="bg-gradient-to-r from-[#0B3B2E] to-[#0A3127] p-8 text-center">
             <div className="flex items-center justify-center gap-3 mb-2">
               <img
-                src="/MILIK CUBES.png"
+                src="/MIIK CUBES.png"
                 alt="Milik logo"
                 className="w-12 h-12 md:w-14 md:h-14 object-contain drop-shadow-md"
               />
