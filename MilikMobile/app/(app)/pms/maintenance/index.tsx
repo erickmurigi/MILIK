@@ -42,7 +42,7 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled:   'Cancelled',
 };
 
-const FILTER_TABS = ['all', 'pending', 'in_progress', 'completed'] as const;
+const FILTER_TABS = ['all', 'pending', 'in_progress', 'completed', 'cancelled'] as const;
 type FilterTab = typeof FILTER_TABS[number];
 
 const fmtDate = (d: string) =>

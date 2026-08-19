@@ -43,6 +43,7 @@ const TABS = [
   { key: '',           label: 'All'        },
   { key: 'Active',     label: 'Active'     },
   { key: 'Probation',  label: 'Probation'  },
+  { key: 'Suspended',  label: 'Suspended'  },
   { key: 'Terminated', label: 'Terminated' },
 ] as const;
 

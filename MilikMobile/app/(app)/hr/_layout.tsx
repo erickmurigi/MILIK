@@ -16,6 +16,7 @@ export default function HRLayout() {
       <Stack.Screen name="employees/index"    options={{ title: 'Employees'         }} />
       <Stack.Screen name="employees/[id]"     options={{ title: 'Employee Profile'  }} />
       <Stack.Screen name="leave/index"        options={{ title: 'Leave Applications'}} />
+      <Stack.Screen name="leave/new"          options={{ title: 'New Leave Application'}} />
       <Stack.Screen name="attendance/index"   options={{ title: 'Attendance'        }} />
     </Stack>
   );

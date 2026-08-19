@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import { Colors } from '../../../../constants/colors';
 import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
+import { Dropdown, DropdownItem } from '../../../../components/ui/Dropdown';
 
 type MeterReading = {
   _id:             string;
@@ -46,6 +47,8 @@ const fmtDate = (d: string) =>
 const FILTER_TABS = ['all', 'draft', 'billed'] as const;
 type FilterTab = typeof FILTER_TABS[number];
 
+const LIMIT = 50;
+
 export default function MetersScreen() {
   const router = useRouter();
   const [items,       setItems]       = useState<MeterReading[]>([]);
@@ -55,18 +58,36 @@ export default function MetersScreen() {
   const [page,        setPage]        = useState(1);
   const [hasMore,     setHasMore]     = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [billingId,   setBillingId]   = useState<string | null>(null);
 
-  const LIMIT = 50;
+  const [properties,    setProperties]    = useState<DropdownItem[]>([]);
+  const [propsLoading,  setPropsLoading]  = useState(false);
+  const [propId,        setPropId]        = useState('');
+  const [propLabel,     setPropLabel]     = useState('');
+  const [propOpen,      setPropOpen]      = useState(false);
+
+  useEffect(() => {
+    setPropsLoading(true);
+    api.get('/properties', { params: { limit: 100 } })
+      .then(({ data }) =>
+        setProperties(
+          (data.data ?? []).map((p: { _id: string; propertyName?: string; propertyCode?: string }) => ({
+            _id: p._id, label: p.propertyName ?? '', sublabel: p.propertyCode,
+          }))
+        )
+      )
+      .catch(() => {})
+      .finally(() => setPropsLoading(false));
+  }, []);
 
   const load = useCallback(async (pg = 1, replace = true) => {
     if (pg === 1) replace ? setLoading(true) : setRefreshing(true);
     else setLoadingMore(true);
 
     try {
-      const params: Record<string, string> = {
-        page: String(pg), limit: String(LIMIT),
-      };
+      const params: Record<string, string> = { page: String(pg), limit: String(LIMIT) };
       if (filter !== 'all') params.status = filter;
+      if (propId)           params.property = propId;
 
       const { data } = await api.get('/meter-readings', { params });
       const rows: MeterReading[] = data.data ?? [];
@@ -80,17 +101,42 @@ export default function MetersScreen() {
       setRefreshing(false);
       setLoadingMore(false);
     }
-  }, [filter]);
+  }, [filter, propId]);
 
   useEffect(() => { load(1); }, [load]);
 
+  const handleBill = useCallback((item: MeterReading) => {
+    Alert.alert(
+      'Generate Bill',
+      `Generate a utility invoice for ${item.tenant?.name ?? 'this tenant'} (${item.utilityType} · ${item.billingPeriod})?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Generate',
+          onPress: async () => {
+            setBillingId(item._id);
+            try {
+              await api.post(`/meter-readings/${item._id}/bill`);
+              Alert.alert('Success', 'Invoice generated successfully.');
+              load(1);
+            } catch (err: unknown) {
+              const e = err as { response?: { data?: { message?: string } } };
+              Alert.alert('Error', e?.response?.data?.message ?? 'Failed to generate invoice.');
+            } finally { setBillingId(null); }
+          },
+        },
+      ]
+    );
+  }, [load]);
+
   const renderItem = ({ item }: { item: MeterReading }) => {
-    const sc = STATUS_COLORS[item.status] ?? STATUS_COLORS.draft;
+    const sc       = STATUS_COLORS[item.status] ?? STATUS_COLORS.draft;
     const iconName = UTILITY_ICONS[item.utilityType?.toLowerCase()] ?? 'speedometer-outline';
     const propName = item.property?.propertyName ?? item.property?.name ?? '';
+    const isBilling = billingId === item._id;
 
     return (
-      <View style={styles.card}>
+      <TouchableOpacity style={styles.card} activeOpacity={0.75} onPress={() => {}}>
         <View style={styles.cardTop}>
           <View style={styles.utilIcon}>
             <Ionicons name={iconName as any} size={20} color={Colors.primary} />
@@ -116,7 +162,6 @@ export default function MetersScreen() {
           </View>
         </View>
 
-        {/* Reading details */}
         <View style={styles.readingRow}>
           <View style={styles.readingCell}>
             <Text style={styles.readingLabel}>PREV</Text>
@@ -139,14 +184,45 @@ export default function MetersScreen() {
           </View>
         </View>
 
-        <Text style={styles.date}>{fmtDate(item.readingDate)}</Text>
-      </View>
+        <View style={styles.cardFooter}>
+          <Text style={styles.date}>{fmtDate(item.readingDate)}</Text>
+          {item.status === 'draft' && (
+            <TouchableOpacity
+              style={[styles.billBtn, isBilling && { opacity: 0.6 }]}
+              onPress={() => !isBilling && handleBill(item)}
+              disabled={isBilling}
+            >
+              {isBilling
+                ? <ActivityIndicator size="small" color={Colors.white} />
+                : <>
+                    <Ionicons name="receipt-outline" size={13} color={Colors.white} />
+                    <Text style={styles.billBtnText}>Generate Bill</Text>
+                  </>
+              }
+            </TouchableOpacity>
+          )}
+        </View>
+      </TouchableOpacity>
     );
   };
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      {/* Filter tabs */}
+      <View style={styles.header}>
+        <Dropdown
+          label=""
+          placeholder="All properties"
+          selectedId={propId}
+          selectedLabel={propLabel}
+          items={properties}
+          onSelect={item => { setPropId(item._id); setPropLabel(item.label); setPropOpen(false); }}
+          onClear={() => { setPropId(''); setPropLabel(''); }}
+          loading={propsLoading}
+          open={propOpen}
+          onToggle={() => setPropOpen(o => !o)}
+        />
+      </View>
+
       <View style={styles.tabs}>
         {FILTER_TABS.map(f => (
           <TouchableOpacity
@@ -190,7 +266,6 @@ export default function MetersScreen() {
         />
       )}
 
-      {/* FAB — New Reading */}
       <TouchableOpacity
         style={styles.fab}
         onPress={() => router.push('/pms/meters/new' as any)}
@@ -216,7 +291,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25, shadowRadius: 8, elevation: 8,
   },
 
-  tabs: { flexDirection: 'row', padding: 16, gap: 8, paddingBottom: 8 },
+  header: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, zIndex: 10 },
+
+  tabs: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 8, gap: 8 },
   tab: {
     paddingHorizontal: 14, paddingVertical: 7,
     borderRadius: 20, backgroundColor: Colors.white,
@@ -254,5 +331,17 @@ const styles = StyleSheet.create({
   badge:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   badgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.4 },
 
-  date: { fontSize: 10, color: Colors.textMuted, alignSelf: 'flex-end' },
+  cardFooter: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderTopWidth: 1, borderTopColor: Colors.borderLight, paddingTop: 8,
+  },
+  date: { fontSize: 10, color: Colors.textMuted },
+
+  billBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: Colors.primary, borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 6,
+    minWidth: 44, justifyContent: 'center',
+  },
+  billBtnText: { fontSize: 11, fontWeight: '700', color: Colors.white },
 });

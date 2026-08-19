@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, RefreshControl, TextInput, Linking,
@@ -68,21 +68,29 @@ export default function JobDetailScreen() {
   const [payAmount,  setPayAmount]  = useState('');
   const [payRef,     setPayRef]     = useState('');
   const [paying,     setPaying]     = useState(false);
+  const [payments,   setPayments]   = useState<{ _id: string; amount: number; method: string; reference?: string; createdAt: string }[]>([]);
 
-  const load = async (isRefresh = false) => {
+  const load = useCallback(async (isRefresh = false) => {
     isRefresh ? setRefreshing(true) : setLoading(true);
-    try {
-      const { data } = await api.get(`/carwash/jobs/${id}`);
-      const j = data?.data ?? data;
+    const [jobRes, paymentsRes] = await Promise.allSettled([
+      api.get(`/carwash/jobs/${id}`),
+      api.get('/carwash/payments', { params: { job: id } }),
+    ]);
+    if (jobRes.status === 'fulfilled') {
+      const j = jobRes.value.data?.data ?? jobRes.value.data;
       setJob(j);
       const netPrice = Math.max(0, Number(j?.price ?? 0) - Number(j?.discountAmount ?? 0));
       const bal      = netPrice - Number(j?.amountPaid ?? 0);
       if (bal > 0) setPayAmount(String(Math.round(bal * 100) / 100));
-    } catch {}
-    finally { setLoading(false); setRefreshing(false); }
-  };
+    }
+    if (paymentsRes.status === 'fulfilled') {
+      const raw = paymentsRes.value.data?.data ?? paymentsRes.value.data;
+      setPayments(Array.isArray(raw) ? raw : (raw?.payments ?? []));
+    }
+    setLoading(false); setRefreshing(false);
+  }, [id]);
 
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => { load(); }, [load]);
 
   const advanceStatus = (next: string) => {
     const cfg = STATUS_CFG[next];
@@ -316,6 +324,25 @@ export default function JobDetailScreen() {
             </View>
           )}
 
+          {/* ── Payment history ── */}
+          {payments.length > 0 && (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>PAYMENT HISTORY ({payments.length})</Text>
+              {payments.map((p, i) => (
+                <View key={p._id} style={[styles.svcRow, i === payments.length - 1 && { borderBottomWidth: 0 }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.svcName}>{PAY_LABELS[p.method as PayMethod] ?? p.method}</Text>
+                    {p.reference ? <Text style={styles.payHistoryRef}>{p.reference}</Text> : null}
+                  </View>
+                  <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                    <Text style={styles.svcPrice}>{fmt(p.amount)}</Text>
+                    <Text style={styles.payHistoryDate}>{fmtDT(p.createdAt)}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
           {/* ── Record payment ── */}
           {!isPaid && !isCancelled && (
             <View style={styles.card}>
@@ -448,8 +475,10 @@ const styles = StyleSheet.create({
   svcName:      { fontSize: 14, color: '#0F172A', fontWeight: '600', flex: 1 },
   svcPrice:     { fontSize: 14, fontWeight: '800', color: CW },
   svcTotalRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, marginTop: 2, borderTopWidth: 1.5, borderTopColor: '#E2E8F0' },
-  svcTotalLabel: { fontSize: 13, fontWeight: '700', color: '#0F172A' },
-  svcTotalValue: { fontSize: 15, fontWeight: '900', color: CW },
+  svcTotalLabel:    { fontSize: 13, fontWeight: '700', color: '#0F172A' },
+  svcTotalValue:    { fontSize: 15, fontWeight: '900', color: CW },
+  payHistoryRef:  { fontSize: 10, color: '#94A3B8', fontFamily: 'monospace', marginTop: 1 },
+  payHistoryDate: { fontSize: 10, color: '#94A3B8' },
 
   /* Payment */
   payForm:    { gap: 12, marginTop: 2 },

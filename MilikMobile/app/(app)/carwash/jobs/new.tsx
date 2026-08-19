@@ -11,7 +11,6 @@ import MilikLoader from '../../../../components/ui/MilikLoader';
 
 const CW  = '#1E3A8A';
 const CWL = '#EEF2FF';
-const ACC = '#C8511A';
 
 const VEHICLE_TYPES = [
   { label: 'Sedan / Saloon',      icon: 'car-outline'           },

@@ -4,18 +4,17 @@ import {
   ScrollView, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, Stack } from 'expo-router';
 import { Colors } from '../../../../constants/colors';
 import api from '../../../../services/api';
 import { Dropdown, DropdownItem } from '../../../../components/ui/Dropdown';
 import { DateField } from '../../../../components/ui/DateField';
 
 const CATEGORIES = [
-  { value: 'RENT_CHARGE',    label: 'Rent'        },
-  { value: 'UTILITY_CHARGE', label: 'Utility'     },
-  { value: 'DEPOSIT_CHARGE', label: 'Deposit'     },
-  { value: 'PENALTY_CHARGE', label: 'Late Penalty' },
-  { value: 'DEBIT_NOTE',     label: 'Debit Note'  },
+  { value: 'RENT_CHARGE',    label: 'Rent'       },
+  { value: 'UTILITY_CHARGE', label: 'Utility'    },
+  { value: 'DEPOSIT_CHARGE', label: 'Deposit'    },
+  { value: 'DEBIT_NOTE',     label: 'Debit Note' },
 ];
 
 const pad2  = (n: number) => String(n).padStart(2, '0');
@@ -130,7 +129,9 @@ export default function NewInvoiceScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['bottom']}>
+    <>
+      <Stack.Screen options={{ title: 'New Invoice' }} />
+      <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
@@ -233,6 +234,7 @@ export default function NewInvoiceScreen() {
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
+    </>
   );
 }
 

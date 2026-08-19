@@ -72,24 +72,30 @@ const QUEUE_ITEMS = [
 
 export default function CarWashDashboard() {
   const router = useRouter();
-  const [date,      setDate]      = useState(todayISO());
-  const [summary,   setSummary]   = useState<Summary | null>(null);
-  const [jobs,      setJobs]      = useState<Job[]>([]);
-  const [loading,   setLoading]   = useState(true);
-  const [refreshing,setRefreshing]= useState(false);
+  const [date,             setDate]             = useState(todayISO());
+  const [summary,          setSummary]          = useState<Summary | null>(null);
+  const [jobs,             setJobs]             = useState<Job[]>([]);
+  const [mpesaUnallocated, setMpesaUnallocated] = useState(0);
+  const [loading,          setLoading]          = useState(true);
+  const [refreshing,       setRefreshing]       = useState(false);
 
   const load = useCallback(async (isRefresh = false) => {
     isRefresh ? setRefreshing(true) : setLoading(true);
-    try {
-      const [sumRes, jobsRes] = await Promise.all([
-        api.get('/carwash/reports/daily-summary', { params: { date } }),
-        api.get('/carwash/jobs', { params: { date, limit: 20 } }),
-      ]);
-      setSummary(sumRes.data?.data ?? sumRes.data ?? null);
-      const raw = jobsRes.data?.data ?? jobsRes.data;
+    const [sumRes, jobsRes, mpesaRes] = await Promise.allSettled([
+      api.get('/carwash/reports/daily-summary', { params: { date } }),
+      api.get('/carwash/jobs', { params: { date, limit: 20 } }),
+      api.get('/carwash/mpesa/notifications', { params: { allocated: 'false', limit: 1 } }),
+    ]);
+    if (sumRes.status === 'fulfilled') setSummary(sumRes.value.data?.data ?? sumRes.value.data ?? null);
+    if (jobsRes.status === 'fulfilled') {
+      const raw = jobsRes.value.data?.data ?? jobsRes.value.data;
       setJobs(Array.isArray(raw) ? raw : (raw?.jobs ?? []));
-    } catch { /* fail silently */ }
-    finally { setLoading(false); setRefreshing(false); }
+    }
+    if (mpesaRes.status === 'fulfilled') {
+      const d = mpesaRes.value.data;
+      setMpesaUnallocated(d?.total ?? d?.data?.total ?? 0);
+    }
+    setLoading(false); setRefreshing(false);
   }, [date]);
 
   useEffect(() => { load(); }, [load]);
@@ -168,6 +174,21 @@ export default function CarWashDashboard() {
           })}
         </View>
 
+        {/* M-Pesa alert */}
+        {mpesaUnallocated > 0 && (
+          <TouchableOpacity
+            style={styles.mpesaAlert}
+            onPress={() => router.push('/carwash/mpesa' as any)}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="phone-portrait-outline" size={16} color={ACC} />
+            <Text style={styles.mpesaAlertText}>
+              {mpesaUnallocated} unallocated M-Pesa payment{mpesaUnallocated > 1 ? 's' : ''} — tap to allocate
+            </Text>
+            <Ionicons name="chevron-forward" size={14} color={ACC} />
+          </TouchableOpacity>
+        )}
+
         {/* Quick actions */}
         <View style={styles.actionsRow}>
           <TouchableOpacity style={[styles.actionBtn, { backgroundColor: CW }]} onPress={() => router.push('/carwash/jobs/new' as any)}>
@@ -187,7 +208,7 @@ export default function CarWashDashboard() {
         {/* Recent jobs */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>TODAY'S JOBS</Text>
+            <Text style={styles.sectionTitle}>{isToday ? "TODAY'S JOBS" : `${fmtDateLabel(date).toUpperCase()} JOBS`}</Text>
             <TouchableOpacity onPress={() => router.push('/carwash/jobs' as any)}>
               <Text style={[styles.seeAll, { color: CW }]}>See all</Text>
             </TouchableOpacity>
@@ -316,6 +337,14 @@ const styles = StyleSheet.create({
 
   statusBadge:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   statusBadgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.4 },
+
+  mpesaAlert: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderRadius: 12, borderWidth: 1.5,
+    borderColor: '#FED7AA', backgroundColor: '#FFF7ED',
+    paddingHorizontal: 14, paddingVertical: 11,
+  },
+  mpesaAlertText: { flex: 1, fontSize: 13, fontWeight: '700', color: ACC },
 
   fab: {
     position: 'absolute', bottom: 28, right: 20,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, RefreshControl, ActivityIndicator,
@@ -80,16 +80,16 @@ export default function JournalDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [acting,     setActing]     = useState(false);
 
-  const load = async (isRefresh = false) => {
+  const load = useCallback(async (isRefresh = false) => {
     isRefresh ? setRefreshing(true) : setLoading(true);
     try {
       const { data } = await api.get(`/journals/${id}`);
       setJournal(data?.data ?? data);
     } catch {}
     finally { setLoading(false); setRefreshing(false); }
-  };
+  }, [id]);
 
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => { load(); }, [load]);
 
   const doAction = (action: Action) => {
     const proceed = async () => {

@@ -120,8 +120,11 @@ export default function CarWashMpesaScreen() {
           <Text style={styles.txDate}>{fmtDT(item.transactionDate)}</Text>
         </View>
 
-        {/* Phone */}
-        <Text style={styles.meta}>{item.msisdn}</Text>
+        {/* Phone + bill ref */}
+        <View style={styles.cardRow}>
+          <Text style={styles.meta}>{item.msisdn}</Text>
+          {item.billRefNumber ? <Text style={styles.billRef}>Ref: {item.billRefNumber}</Text> : null}
+        </View>
 
         {/* Action */}
         {item.allocatedJob ? (
@@ -162,6 +165,23 @@ export default function CarWashMpesaScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Summary strip for unallocated tab */}
+        {!loading && tab === 'unallocated' && items.length > 0 && (
+          <View style={styles.summaryStrip}>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>{items.length}{hasMore ? '+' : ''}</Text>
+              <Text style={styles.summaryLabel}>Unallocated</Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>
+                {`KES ${items.reduce((s, n) => s + n.amount, 0).toLocaleString('en-KE', { maximumFractionDigits: 0 })}`}
+              </Text>
+              <Text style={styles.summaryLabel}>On this page</Text>
+            </View>
+          </View>
+        )}
 
         {loading ? (
           <MilikLoader fullscreen />
@@ -256,6 +276,16 @@ const styles = StyleSheet.create({
   tabText:       { fontSize: 12, fontWeight: '600', color: '#475569' },
   tabTextActive: { color: '#fff' },
 
+  summaryStrip: {
+    flexDirection: 'row', marginHorizontal: 16, marginBottom: 8,
+    backgroundColor: '#EEF2FF', borderRadius: 12,
+    borderWidth: 1, borderColor: '#C7D2FE', padding: 12,
+  },
+  summaryItem:   { flex: 1, alignItems: 'center', gap: 2 },
+  summaryDivider:{ width: 1, backgroundColor: '#C7D2FE', marginVertical: 4 },
+  summaryValue:  { fontSize: 15, fontWeight: '900', color: CW },
+  summaryLabel:  { fontSize: 10, color: '#6366F1', fontWeight: '600' },
+
   list:      { paddingHorizontal: 16, paddingBottom: 40 },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingTop: 60 },
   emptyText: { fontSize: 15, color: '#94A3B8' },
@@ -272,7 +302,8 @@ const styles = StyleSheet.create({
   txDate:      { fontSize: 11, color: '#94A3B8' },
   amount:      { fontSize: 22, fontWeight: '900', color: '#0F172A' },
   payerName:   { fontSize: 13, fontWeight: '600', color: '#475569', marginTop: 1 },
-  meta:        { fontSize: 11, color: '#94A3B8' },
+  meta:        { fontSize: 11, color: '#94A3B8', flex: 1 },
+  billRef:     { fontSize: 10, color: '#64748B', fontWeight: '700' },
 
   allocatedBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,

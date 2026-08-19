@@ -18,6 +18,9 @@ export default function AppLayout() {
       <Stack.Screen name="pms"      options={{ headerShown: false }} />
       <Stack.Screen name="carwash"    options={{ headerShown: false }} />
       <Stack.Screen name="accounting" options={{ headerShown: false }} />
+      <Stack.Screen name="hr"          options={{ headerShown: false }} />
+      <Stack.Screen name="inventory"   options={{ headerShown: false }} />
+      <Stack.Screen name="sales"       options={{ headerShown: false }} />
     </Stack>
   );
 }

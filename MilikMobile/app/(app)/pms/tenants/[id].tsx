@@ -178,6 +178,13 @@ export default function TenantProfileScreen() {
                 <Ionicons name="cash-outline" size={20} color={Colors.white} />
                 <Text style={[styles.actionBtnLabel, { color: Colors.white }]}>Receipt</Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionBtnAccent]}
+                onPress={() => router.push(`/pms/invoices/new?tenant=${id}` as any)}
+              >
+                <Ionicons name="add-circle-outline" size={20} color={Colors.white} />
+                <Text style={[styles.actionBtnLabel, { color: Colors.white }]}>Invoice</Text>
+              </TouchableOpacity>
             </View>
 
             {/* Statement link */}
@@ -243,7 +250,12 @@ export default function TenantProfileScreen() {
             ) : (
               <View style={styles.listCard}>
                 {invoices.slice(0, 5).map((inv, i, arr) => (
-                  <View key={inv._id} style={[styles.listRow, i === arr.length - 1 && styles.listRowLast]}>
+                  <TouchableOpacity
+                    key={inv._id}
+                    style={[styles.listRow, i === arr.length - 1 && styles.listRowLast]}
+                    onPress={() => router.push(`/pms/invoices/${inv._id}` as any)}
+                    activeOpacity={0.75}
+                  >
                     <View style={[styles.statusStripe, { backgroundColor: INV_STATUS_COLOR[inv.status] || Colors.textMuted }]} />
                     <View style={styles.listRowBody}>
                       <Text style={styles.listRowTitle}>
@@ -254,7 +266,8 @@ export default function TenantProfileScreen() {
                     <Text style={[styles.listRowAmt, { color: INV_STATUS_COLOR[inv.status] || Colors.text }]}>
                       {fmt(inv.amount)}
                     </Text>
-                  </View>
+                    <Ionicons name="chevron-forward" size={14} color={Colors.textMuted} style={{ marginRight: 10 }} />
+                  </TouchableOpacity>
                 ))}
               </View>
             )}
@@ -270,7 +283,12 @@ export default function TenantProfileScreen() {
             ) : (
               <View style={styles.listCard}>
                 {payments.slice(0, 5).map((pay, i, arr) => (
-                  <View key={pay._id} style={[styles.listRow, i === arr.length - 1 && styles.listRowLast]}>
+                  <TouchableOpacity
+                    key={pay._id}
+                    style={[styles.listRow, i === arr.length - 1 && styles.listRowLast]}
+                    onPress={() => router.push(`/pms/receipts/${pay._id}` as any)}
+                    activeOpacity={0.75}
+                  >
                     <View style={[styles.statusStripe, { backgroundColor: pay.isConfirmed ? Colors.success : Colors.warning }]} />
                     <View style={styles.listRowBody}>
                       <Text style={styles.listRowTitle}>
@@ -281,7 +299,8 @@ export default function TenantProfileScreen() {
                     <Text style={[styles.listRowAmt, { color: Colors.success }]}>
                       {fmt(pay.amount)}
                     </Text>
-                  </View>
+                    <Ionicons name="chevron-forward" size={14} color={Colors.textMuted} style={{ marginRight: 10 }} />
+                  </TouchableOpacity>
                 ))}
               </View>
             )}
@@ -329,6 +348,7 @@ const styles = StyleSheet.create({
   },
   actionBtnWhatsApp: { backgroundColor: 'rgba(37,211,102,0.15)' },
   actionBtnPrimary:  { backgroundColor: Colors.accent },
+  actionBtnAccent:   { backgroundColor: Colors.primary },
   actionBtnLabel:    { fontSize: 13, fontWeight: '700', color: Colors.white },
   statementBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,

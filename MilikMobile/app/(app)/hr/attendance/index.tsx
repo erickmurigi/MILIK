@@ -56,7 +56,7 @@ export default function AttendanceScreen() {
   const [items,      setItems]      = useState<AttendanceRecord[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [summary,    setSummary]    = useState({ present: 0, absent: 0, late: 0, leave: 0 });
+  const [summary,    setSummary]    = useState({ present: 0, absent: 0, late: 0, halfDay: 0, leave: 0 });
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
@@ -68,6 +68,7 @@ export default function AttendanceScreen() {
         present: rows.filter(r => r.status === 'Present').length,
         absent:  rows.filter(r => r.status === 'Absent').length,
         late:    rows.filter(r => r.status === 'Late').length,
+        halfDay: rows.filter(r => r.status === 'HalfDay').length,
         leave:   rows.filter(r => r.status === 'Leave').length,
       });
     } catch { setItems([]); }
@@ -124,10 +125,11 @@ export default function AttendanceScreen() {
       {!loading && items.length > 0 && (
         <View style={styles.summaryRow}>
           {[
-            { label: 'Present', value: summary.present, color: '#065F46' },
-            { label: 'Absent',  value: summary.absent,  color: '#DC2626' },
-            { label: 'Late',    value: summary.late,    color: '#D97706' },
-            { label: 'Leave',   value: summary.leave,   color: '#0369A1' },
+            { label: 'Present',  value: summary.present,  color: '#065F46' },
+            { label: 'Absent',   value: summary.absent,   color: '#DC2626' },
+            { label: 'Late',     value: summary.late,     color: '#D97706' },
+            { label: 'Half Day', value: summary.halfDay,  color: '#7C3AED' },
+            { label: 'Leave',    value: summary.leave,    color: '#0369A1' },
           ].map(s => (
             <View key={s.label} style={styles.sumItem}>
               <Text style={[styles.sumVal, { color: s.color }]}>{s.value}</Text>

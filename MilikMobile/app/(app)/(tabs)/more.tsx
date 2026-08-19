@@ -45,16 +45,21 @@ export default function MoreScreen() {
     { icon: 'log-out-outline',       label: 'Sign Out',         onPress: handleLogout, danger: true },
   ];
 
-  type ShortcutItem = { icon: string; label: string; color: string; route: string };
+  type ShortcutItem = { icon: string; label: string; color: string; route: string; moduleKey?: string };
+
+  const mods: string[] = company?.modules
+    ? Object.entries(company.modules).filter(([, v]) => v).map(([k]) => k)
+    : [];
+  const hasModule = (key: string) => mods.length === 0 || mods.includes(key);
 
   const shortcuts: ShortcutItem[] = [
-    { icon: 'document-text-outline',  label: 'Journals',     color: '#1D4ED8', route: '/accounting/journals'     },
-    { icon: 'receipt-outline',        label: 'Vouchers',     color: '#7C3AED', route: '/accounting/vouchers'     },
-    { icon: 'list-circle-outline',    label: 'Requisitions', color: '#D97706', route: '/accounting/requisitions' },
-    { icon: 'wallet-outline',         label: 'Petty Cash',   color: '#DC2626', route: '/accounting/petty-cash'   },
-    { icon: 'bar-chart-outline',      label: 'Reports',      color: '#064E3B', route: '/accounting/reports'      },
-    { icon: 'phone-portrait-outline', label: 'M-Pesa',       color: '#059669', route: '/carwash/mpesa'           },
-  ];
+    { icon: 'document-text-outline',  label: 'Journals',     color: '#1D4ED8', route: '/accounting/journals',     moduleKey: 'accounts' },
+    { icon: 'receipt-outline',        label: 'Vouchers',     color: '#7C3AED', route: '/accounting/vouchers',     moduleKey: 'accounts' },
+    { icon: 'list-circle-outline',    label: 'Requisitions', color: '#D97706', route: '/accounting/requisitions', moduleKey: 'accounts' },
+    { icon: 'wallet-outline',         label: 'Petty Cash',   color: '#DC2626', route: '/accounting/petty-cash',   moduleKey: 'accounts' },
+    { icon: 'bar-chart-outline',      label: 'Reports',      color: '#064E3B', route: '/accounting/reports',      moduleKey: 'accounts' },
+    { icon: 'phone-portrait-outline', label: 'M-Pesa',       color: '#059669', route: '/carwash/mpesa',           moduleKey: 'carwash'  },
+  ].filter((s) => !s.moduleKey || hasModule(s.moduleKey));
 
   return (
     <SafeAreaView style={styles.safe}>

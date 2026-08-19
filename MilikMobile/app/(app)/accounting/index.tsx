@@ -46,9 +46,10 @@ export default function AccountingDashboard() {
     isRefresh ? setRefreshing(true) : setLoading(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
+      const yearStart = `${new Date().getFullYear()}-01-01`;
       const [perRes, isRes, jRes, vRes, rRes] = await Promise.allSettled([
         api.get('/accounting-periods', { params: { status: 'open', limit: 1 } }),
-        api.get('/financial-reports/income-statement', { params: { endDate: today } }),
+        api.get('/financial-reports/income-statement', { params: { startDate: yearStart, endDate: today } }),
         api.get('/journals',              { params: { status: 'pending_review', limit: 1 } }),
         api.get('/payment-vouchers',      { params: { status: 'pending',        limit: 1 } }),
         api.get('/expense-requisitions',  { params: { status: 'pending',        limit: 1 } }),
@@ -60,11 +61,12 @@ export default function AccountingDashboard() {
         if (list.length) setPeriod(list[0]);
       }
       if (isRes.status === 'fulfilled') {
-        const d = isRes.value.data?.data ?? isRes.value.data;
+        const d = isRes.value.data;
+        // API returns { summary: { totalIncome, totalExpenses, netProfit }, income: { total }, expenses: { total } }
         setSummary({
-          totalIncome:    Number(d?.totalIncome   ?? d?.income   ?? 0),
-          totalExpenses:  Number(d?.totalExpenses ?? d?.expenses ?? 0),
-          netIncome:      Number(d?.netIncome     ?? d?.net      ?? 0),
+          totalIncome:   Number(d?.summary?.totalIncome   ?? d?.income?.total   ?? 0),
+          totalExpenses: Number(d?.summary?.totalExpenses ?? d?.expenses?.total ?? 0),
+          netIncome:     Number(d?.summary?.netProfit     ?? 0),
         });
       }
       setPendingCounts({

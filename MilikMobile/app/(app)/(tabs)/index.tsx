@@ -41,12 +41,13 @@ const ALL_MODULES: Module[] = [
     moduleKey: 'carwash',
   },
   {
-    key:      'accounting',
-    label:    'Accounting',
-    subtitle: 'Journals · Vouchers · Reports',
-    icon:     'calculator-outline',
-    color:    '#064E3B',
-    route:    '/accounting',
+    key:       'accounting',
+    label:     'Accounting',
+    subtitle:  'Journals · Vouchers · Reports',
+    icon:      'calculator-outline',
+    color:     '#064E3B',
+    route:     '/accounting',
+    moduleKey: 'accounts',
   },
   {
     key:       'sales',
@@ -55,7 +56,7 @@ const ALL_MODULES: Module[] = [
     icon:      'home-outline',
     color:     '#7C2D12',
     route:     '/sales',
-    moduleKey: 'propertySales',
+    moduleKey: 'propertySale',
   },
   {
     key:       'hr',
@@ -65,6 +66,15 @@ const ALL_MODULES: Module[] = [
     color:     '#4C1D95',
     route:     '/hr',
     moduleKey: 'hr',
+  },
+  {
+    key:       'inventory',
+    label:     'Inventory',
+    subtitle:  'Products · Stock · POS',
+    icon:      'cube-outline',
+    color:     '#92400E',
+    route:     '/inventory',
+    moduleKey: 'inventory',
   },
 ];
 

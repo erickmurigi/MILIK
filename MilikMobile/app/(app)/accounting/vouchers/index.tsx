@@ -28,7 +28,10 @@ type Voucher = {
 
 const STATUS_CFG: Record<string, { bg: string; color: string; label: string }> = {
   draft:    { bg: '#F1F5F9', color: '#64748B', label: 'Draft'    },
+  pending:  { bg: '#FEF3C7', color: '#D97706', label: 'Pending'  },
   approved: { bg: '#EDE9FE', color: '#7C3AED', label: 'Approved' },
+  rejected: { bg: '#FEE2E2', color: '#DC2626', label: 'Rejected' },
+  posted:   { bg: '#D1FAE5', color: '#065F46', label: 'Posted'   },
   paid:     { bg: '#D1FAE5', color: '#065F46', label: 'Paid'     },
   reversed: { bg: '#FEE2E2', color: '#DC2626', label: 'Reversed' },
 };
@@ -36,9 +39,10 @@ const STATUS_CFG: Record<string, { bg: string; color: string; label: string }> =
 const TABS = [
   { key: '',         label: 'All'      },
   { key: 'draft',    label: 'Draft'    },
+  { key: 'pending',  label: 'Pending'  },
   { key: 'approved', label: 'Approved' },
+  { key: 'posted',   label: 'Posted'   },
   { key: 'paid',     label: 'Paid'     },
-  { key: 'reversed', label: 'Reversed' },
 ] as const;
 
 export default function VouchersScreen() {

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl,
+  View, Text, StyleSheet, ScrollView, ActivityIndicator,
+  RefreshControl, TouchableOpacity, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -40,6 +41,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   UTILITY_CHARGE:      'Utility',
   DEPOSIT_CHARGE:      'Deposit',
   LATE_PENALTY_CHARGE: 'Penalty',
+  PENALTY_CHARGE:      'Penalty',
   DEBIT_NOTE:          'Debit Note',
   TAKE_ON_DEBIT:       'Take-on',
 };
@@ -62,17 +64,35 @@ export default function ReceiptDetailScreen() {
   const [receipt,    setReceipt]    = useState<Receipt | null>(null);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
-  const load = async (isRefresh = false) => {
-    isRefresh ? setRefreshing(true) : setLoading(true);
+  const fetchReceipt = useCallback(async (): Promise<Receipt | null> => {
+    const { data } = await api.get(`/rent-payments/${id}`);
+    return data?.data ?? data;
+  }, [id]);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchReceipt().then(setReceipt).catch(() => setReceipt(null)).finally(() => setLoading(false));
+  }, [fetchReceipt]);
+
+  const refresh = useCallback(() => {
+    setRefreshing(true);
+    fetchReceipt().then(setReceipt).catch(() => {}).finally(() => setRefreshing(false));
+  }, [fetchReceipt]);
+
+  const confirm = useCallback(async () => {
+    setConfirming(true);
     try {
-      const { data } = await api.get(`/rent-payments/${id}`);
-      setReceipt(data?.data ?? data);
-    } catch { /* fail silently */ }
-    finally { setLoading(false); setRefreshing(false); }
-  };
-
-  useEffect(() => { load(); }, [id]);
+      await api.put(`/rent-payments/confirm/${id}`);
+      const updated = await fetchReceipt();
+      if (updated) setReceipt(updated);
+      Alert.alert('Confirmed', 'Receipt has been confirmed successfully.');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      Alert.alert('Error', msg ?? 'Failed to confirm receipt.');
+    } finally { setConfirming(false); }
+  }, [id, fetchReceipt]);
 
   if (loading) {
     return (
@@ -95,16 +115,17 @@ export default function ReceiptDetailScreen() {
     );
   }
 
-  const statusLabel = receipt.isReversed || receipt.isCancelled ? 'REVERSED'
+  const isVoided    = receipt.isReversed || receipt.isCancelled;
+  const statusLabel = isVoided ? 'REVERSED'
     : receipt.isConfirmed ? 'CONFIRMED' : 'PENDING';
-  const statusColor = receipt.isReversed || receipt.isCancelled ? Colors.textMuted
+  const statusColor = isVoided ? Colors.textMuted
     : receipt.isConfirmed ? Colors.success : Colors.warning;
-  const statusBg = receipt.isReversed || receipt.isCancelled ? Colors.borderLight
+  const statusBg    = isVoided ? Colors.borderLight
     : receipt.isConfirmed ? Colors.successLight : Colors.warningLight;
 
   const totalAllocated = Number(receipt.allocationSummary?.totalAllocated ?? 0);
   const unapplied      = Number(receipt.allocationSummary?.unapplied ?? 0);
-  const propName = receipt.unit?.property?.propertyName ?? receipt.unit?.property?.name ?? '';
+  const propName       = receipt.unit?.property?.propertyName ?? receipt.unit?.property?.name ?? '';
 
   return (
     <>
@@ -113,18 +134,37 @@ export default function ReceiptDetailScreen() {
         <ScrollView
           contentContainerStyle={styles.scroll}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={Colors.primary} />
+            <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={Colors.primary} />
           }
         >
+          {receipt.isConfirmed && !isVoided && (
+            <View style={styles.confirmedBanner}>
+              <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
+              <Text style={styles.confirmedText}>Receipt confirmed</Text>
+            </View>
+          )}
+
+          {isVoided && (
+            <View style={styles.voidedBanner}>
+              <Ionicons name="ban-outline" size={15} color={Colors.textMuted} />
+              <Text style={styles.voidedText}>This receipt has been {receipt.isReversed ? 'reversed' : 'cancelled'}</Text>
+            </View>
+          )}
+
           {/* Hero */}
           <View style={styles.heroCard}>
             <View style={styles.heroTop}>
               <View style={{ flex: 1, gap: 4 }}>
-                <Text style={styles.receiptNum}>{receipt.receiptNumber ?? receipt.referenceNumber ?? '—'}</Text>
+                <Text style={styles.receiptNum}>
+                  {receipt.receiptNumber ?? receipt.referenceNumber ?? '—'}
+                </Text>
                 <Text style={styles.tenantName}>{receipt.tenant?.name ?? 'Unknown Tenant'}</Text>
                 {(receipt.unit?.unitNumber || propName) ? (
                   <Text style={styles.meta}>
-                    {[receipt.unit?.unitNumber && `Unit ${receipt.unit.unitNumber}`, propName].filter(Boolean).join(' · ')}
+                    {[
+                      receipt.unit?.unitNumber && `Unit ${receipt.unit.unitNumber}`,
+                      propName,
+                    ].filter(Boolean).join(' · ')}
                   </Text>
                 ) : null}
               </View>
@@ -137,29 +177,29 @@ export default function ReceiptDetailScreen() {
             </View>
           </View>
 
-          {/* Details */}
+          {/* Payment details */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>RECEIPT DETAILS</Text>
             <Row label="Reference No."  value={receipt.referenceNumber || '—'} />
-            <Row label="Payment Type"   value={receipt.paymentType ?? '—'} />
+            <Row label="Payment Method" value={receipt.paymentType ?? '—'} />
             <Row label="Payment Date"   value={fmtDate(receipt.paymentDate)} />
             {receipt.cashbook ? <Row label="Cashbook" value={receipt.cashbook} /> : null}
             {receipt.description ? <Row label="Description" value={receipt.description} /> : null}
             <View style={styles.divider} />
             <Row label="Total Amount"  value={`KES ${fmt(receipt.amount)}`} />
-            <Row label="Allocated"     value={`KES ${fmt(totalAllocated)}`}    valueColor={Colors.success} />
+            <Row label="Allocated"     value={`KES ${fmt(totalAllocated)}`} valueColor={Colors.success} />
             {unapplied > 0 ? (
               <Row label="Unallocated" value={`KES ${fmt(unapplied)}`} valueColor={Colors.warning} />
             ) : null}
           </View>
 
-          {/* Allocations */}
+          {/* Applied invoices */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>APPLIED TO INVOICES</Text>
             {!receipt.allocations || receipt.allocations.length === 0 ? (
-              <View style={styles.emptyNotes}>
+              <View style={styles.emptySection}>
                 <Ionicons name="link-outline" size={32} color={Colors.border} />
-                <Text style={styles.emptyNotesText}>
+                <Text style={styles.emptySectionText}>
                   {unapplied > 0 ? 'Not yet allocated to any invoice' : 'No allocation details available'}
                 </Text>
               </View>
@@ -173,7 +213,9 @@ export default function ReceiptDetailScreen() {
                       <Ionicons name="receipt-outline" size={14} color={Colors.primary} />
                     </View>
                     <View style={{ flex: 1, gap: 2 }}>
-                      <Text style={styles.allocInv}>{[invNum, catLabel].filter(Boolean).join(' · ') || alloc.description || 'Invoice'}</Text>
+                      <Text style={styles.allocInv}>
+                        {[invNum, catLabel].filter(Boolean).join(' · ') || alloc.description || 'Invoice'}
+                      </Text>
                     </View>
                     <Text style={styles.allocAmt}>KES {fmt(alloc.appliedAmount)}</Text>
                   </View>
@@ -181,14 +223,32 @@ export default function ReceiptDetailScreen() {
               })
             )}
             {unapplied > 0 && (
-              <View style={[styles.allocRow, { backgroundColor: Colors.warningLight, borderRadius: 8, padding: 10, marginTop: 4 }]}>
+              <View style={styles.unappliedRow}>
                 <Ionicons name="warning-outline" size={14} color={Colors.warning} />
-                <Text style={{ flex: 1, fontSize: 13, color: Colors.warning, fontWeight: '600', marginLeft: 8 }}>
+                <Text style={styles.unappliedText}>
                   KES {fmt(unapplied)} unallocated — awaiting allocation
                 </Text>
               </View>
             )}
           </View>
+
+          {!receipt.isConfirmed && !isVoided && (
+            <TouchableOpacity
+              style={[styles.confirmBtn, confirming && { opacity: 0.6 }]}
+              onPress={confirm}
+              disabled={confirming}
+              activeOpacity={0.85}
+            >
+              {confirming ? (
+                <ActivityIndicator size="small" color={Colors.white} />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle-outline" size={18} color={Colors.white} />
+                  <Text style={styles.confirmBtnText}>Confirm Receipt</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
         </ScrollView>
       </SafeAreaView>
     </>
@@ -200,6 +260,20 @@ const styles = StyleSheet.create({
   centered:  { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   emptyText: { fontSize: 15, color: Colors.textMuted },
   scroll:    { padding: 16, gap: 12, paddingBottom: 40 },
+
+  confirmedBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.successLight,
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10,
+  },
+  confirmedText: { fontSize: 13, color: Colors.success, fontWeight: '600' },
+
+  voidedBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.borderLight,
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10,
+  },
+  voidedText: { fontSize: 13, color: Colors.textMuted, fontWeight: '600' },
 
   heroCard: {
     backgroundColor: Colors.white, borderRadius: 18,
@@ -217,15 +291,21 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white, borderRadius: 14,
     borderWidth: 1, borderColor: Colors.border, padding: 16,
   },
-  cardTitle: { fontSize: 10, fontWeight: '700', letterSpacing: 1, color: Colors.textMuted, marginBottom: 12 },
+  cardTitle: {
+    fontSize: 10, fontWeight: '700', letterSpacing: 1,
+    color: Colors.textMuted, marginBottom: 12,
+  },
 
-  row:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
+  row:      {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.borderLight,
+  },
   rowLabel: { fontSize: 13, color: Colors.textSecondary },
   rowValue: { fontSize: 13, fontWeight: '700', color: Colors.text },
   divider:  { height: 1, backgroundColor: Colors.border, marginVertical: 4 },
 
-  emptyNotes:     { alignItems: 'center', paddingVertical: 24, gap: 8 },
-  emptyNotesText: { fontSize: 13, color: Colors.textMuted, textAlign: 'center' },
+  emptySection:     { alignItems: 'center', paddingVertical: 24, gap: 8 },
+  emptySectionText: { fontSize: 13, color: Colors.textMuted, textAlign: 'center' },
 
   allocRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
@@ -239,4 +319,18 @@ const styles = StyleSheet.create({
   },
   allocInv: { fontSize: 13, fontWeight: '600', color: Colors.text },
   allocAmt: { fontSize: 14, fontWeight: '800', color: Colors.success },
+
+  unappliedRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.warningLight, borderRadius: 8,
+    padding: 10, marginTop: 4,
+  },
+  unappliedText: { flex: 1, fontSize: 13, color: Colors.warning, fontWeight: '600' },
+
+  confirmBtn: {
+    backgroundColor: Colors.primary, borderRadius: 14,
+    height: 54, flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'center', gap: 8, marginTop: 4,
+  },
+  confirmBtnText: { color: Colors.white, fontSize: 16, fontWeight: '800' },
 });

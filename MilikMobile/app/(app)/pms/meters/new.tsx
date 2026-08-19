@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  ScrollView, ActivityIndicator, Alert,
+  ScrollView, ActivityIndicator, Alert, Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -48,10 +48,11 @@ export default function NewMeterReadingScreen() {
   const [readingDate,  setReadingDate] = useState(
     `${today.getFullYear()}-${pad2(today.getMonth()+1)}-${pad2(today.getDate())}`
   );
-  const [prevReading, setPrevReading] = useState('');
-  const [currReading, setCurrReading] = useState('');
-  const [ratePerUnit, setRatePerUnit] = useState('');
-  const [submitting,  setSubmitting]  = useState(false);
+  const [prevReading,      setPrevReading]      = useState('');
+  const [currReading,      setCurrReading]      = useState('');
+  const [ratePerUnit,      setRatePerUnit]      = useState('');
+  const [generateInvoice,  setGenerateInvoice]  = useState(false);
+  const [submitting,       setSubmitting]       = useState(false);
 
   // Load properties on mount
   useEffect(() => {
@@ -134,6 +135,7 @@ export default function NewMeterReadingScreen() {
         previousReading: Number(prevReading||0),
         currentReading:  Number(currReading),
         ratePerUnit:     Number(ratePerUnit),
+        generateInvoice,
       });
       Alert.alert('Saved', 'Meter reading recorded.', [{ text: 'OK', onPress: () => router.back() }]);
     } catch (err: any) {
@@ -273,6 +275,20 @@ export default function NewMeterReadingScreen() {
           </View>
         ) : null}
 
+        {/* Generate Invoice toggle */}
+        <View style={styles.toggleRow}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={styles.toggleLabel}>Generate Invoice</Text>
+            <Text style={styles.toggleSub}>Automatically create a utility invoice after saving</Text>
+          </View>
+          <Switch
+            value={generateInvoice}
+            onValueChange={setGenerateInvoice}
+            trackColor={{ false: Colors.border, true: Colors.primary }}
+            thumbColor={Colors.white}
+          />
+        </View>
+
         <TouchableOpacity
           style={[styles.submitBtn, submitting && { opacity: 0.6 }]}
           onPress={submit}
@@ -333,6 +349,15 @@ const styles = StyleSheet.create({
   summaryRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   summaryLabel: { fontSize: 13, color: Colors.textSecondary, fontWeight: '600' },
   summaryValue: { fontSize: 15, fontWeight: '800', color: Colors.text },
+
+  toggleRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: Colors.white, borderRadius: 14,
+    borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: 16, paddingVertical: 14,
+  },
+  toggleLabel: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  toggleSub:   { fontSize: 11, color: Colors.textMuted },
 
   submitBtn: {
     backgroundColor: Colors.primary, borderRadius: 14,

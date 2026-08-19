@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
 
@@ -30,10 +31,10 @@ const STATUS_CFG: Record<string, { bg: string; color: string; label: string }> =
 };
 
 const TABS = [
+  { key: '',         label: 'All'      },
   { key: 'Pending',  label: 'Pending'  },
   { key: 'Approved', label: 'Approved' },
   { key: 'Rejected', label: 'Rejected' },
-  { key: '',         label: 'All'      },
 ] as const;
 
 const fmtDate = (d: string) =>
@@ -50,7 +51,10 @@ const getLeaveType = (t: LeaveApp['leaveType']) =>
 const LIMIT = 30;
 
 export default function LeaveScreen() {
+  const router = useRouter();
+
   const [statusFilter, setStatusFilter] = useState('Pending');
+  const [search,       setSearch]       = useState('');
   const [items,        setItems]        = useState<LeaveApp[]>([]);
   const [loading,      setLoading]      = useState(true);
   const [refreshing,   setRefreshing]   = useState(false);
@@ -59,12 +63,16 @@ export default function LeaveScreen() {
   const [hasMore,      setHasMore]      = useState(true);
   const [acting,       setActing]       = useState<string | null>(null);
 
+  const searchRef = useRef(search);
+  searchRef.current = search;
+
   const load = useCallback(async (pg = 1, isRefresh = false) => {
     if (pg === 1) isRefresh ? setRefreshing(true) : setLoading(true);
     else setLoadingMore(true);
     try {
       const p: Record<string, string> = { page: String(pg), limit: String(LIMIT) };
-      if (statusFilter) p.status = statusFilter;
+      if (statusFilter)             p.status = statusFilter;
+      if (searchRef.current.trim()) p.search = searchRef.current.trim();
       const { data } = await api.get('/hr/leave-applications', { params: p });
       const rows: LeaveApp[] = data?.data ?? data?.leaveApplications ?? (Array.isArray(data) ? data : []);
       setItems(prev => pg === 1 ? rows : [...prev, ...rows]);
@@ -75,6 +83,7 @@ export default function LeaveScreen() {
   }, [statusFilter]);
 
   useEffect(() => { load(1); }, [load]);
+  useEffect(() => { const t = setTimeout(() => load(1), 400); return () => clearTimeout(t); }, [search]);
 
   const updateStatus = (id: string, status: 'Approved' | 'Rejected', label: string) => {
     Alert.alert(label, `${label} this leave application?`, [
@@ -155,10 +164,26 @@ export default function LeaveScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <View style={styles.searchWrap}>
+        <Ionicons name="search-outline" size={18} color="#94A3B8" />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Employee name..."
+          placeholderTextColor="#94A3B8"
+          value={search}
+          onChangeText={setSearch}
+        />
+        {search ? (
+          <TouchableOpacity onPress={() => setSearch('')}>
+            <Ionicons name="close-circle" size={18} color="#94A3B8" />
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
       <FlatList
         horizontal data={TABS as any} keyExtractor={t => t.key}
         showsHorizontalScrollIndicator={false}
-        style={{ flexGrow: 0, marginTop: 12 }}
+        style={{ flexGrow: 0 }}
         contentContainerStyle={styles.tabsRow}
         renderItem={({ item: t }) => (
           <TouchableOpacity
@@ -191,6 +216,13 @@ export default function LeaveScreen() {
           ListFooterComponent={loadingMore ? <ActivityIndicator color={HC} style={{ padding: 20 }} /> : null}
         />
       )}
+
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => router.push('/hr/leave/new' as any)}
+      >
+        <Ionicons name="add" size={26} color="#fff" />
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }
@@ -198,6 +230,8 @@ export default function LeaveScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F5F3FF' },
 
+  searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, margin: 16, marginBottom: 8, backgroundColor: '#fff', borderRadius: 14, borderWidth: 1.5, borderColor: '#E2E8F0', paddingHorizontal: 14, height: 50 },
+  searchInput: { flex: 1, fontSize: 15, color: '#0F172A' },
   tabsRow: { paddingHorizontal: 16, paddingBottom: 10, gap: 8 },
   tab:         { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E2E8F0' },
   tabActive:   { backgroundColor: HC, borderColor: HC },
@@ -231,4 +265,5 @@ const styles = StyleSheet.create({
     gap: 5, borderRadius: 10, paddingVertical: 9,
   },
   actionTxt: { fontSize: 13, fontWeight: '700' },
+  fab: { position: 'absolute', bottom: 28, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: HC, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 8 },
 });
