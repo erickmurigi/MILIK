@@ -458,7 +458,7 @@ const sanitizePrintableSections = ({
 }) => ({
   additionRows: additionRows
     .map(normalizePrintableRow)
-    .filter((row) => row.amount > 0),
+    .filter((row) => row.amount > 0 && String(row.category || "") !== "deposit_remittance"),
   expenseRows: expenseRows
     .map(normalizePrintableRow)
     .filter((row) => row.amount > 0),
@@ -646,7 +646,19 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
     const depositSettlement = workspace.depositSettlement || {};
     const depositSettlementAllRows = Array.isArray(depositSettlement.rows) ? depositSettlement.rows : [];
     const depositSettlementTotals = depositSettlement.totals || {};
-    const depositSettlementAdditionRows = depositSettlementAllRows.filter((r) => r.effect !== "offset");
+    const depositSettlementAdditionRows = (() => {
+      const raw = depositSettlementAllRows.filter((r) => r.effect !== "offset");
+      const map = new Map();
+      for (const item of raw) {
+        const key = String(item.description || item.label || "");
+        if (map.has(key)) {
+          map.get(key).amount = Number(map.get(key).amount || 0) + Number(item.amount || 0);
+        } else {
+          map.set(key, { ...item, amount: Number(item.amount || 0) });
+        }
+      }
+      return Array.from(map.values());
+    })();
     const depositSettlementOffsetRows = depositSettlementAllRows.filter((r) => r.effect === "offset");
     const broughtForwardCreditApplications = workspace.broughtForwardCreditApplications || {};
     const broughtForwardCreditApplicationRows = Array.isArray(broughtForwardCreditApplications.rows)

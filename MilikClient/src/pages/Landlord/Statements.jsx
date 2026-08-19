@@ -26,7 +26,6 @@ const _KES_FMT = new Intl.NumberFormat("en-KE", {
 });
 const currency = (value) => _KES_FMT.format(Number(value || 0));
 
-const depositMemoCurrency = (value) => currency(Math.abs(Number(value || 0)));
 
 // Returns payment status for a single statement row.
 const getRowPaymentStatus = (row) => {
@@ -1260,13 +1259,22 @@ const Statements = () => {
     () => expenseRows.filter((item) => String(item?.category || "") !== "deposit_direct_offset"),
     [expenseRows]
   );
-  const depositSettlementAdditionRows = useMemo(
-    () =>
-      depositSettlementRows.filter(
-        (item) => String(item?.effect || "").toLowerCase() === "addition"
-      ),
-    [depositSettlementRows]
-  );
+  const depositSettlementAdditionRows = useMemo(() => {
+    const raw = depositSettlementRows.filter(
+      (item) => String(item?.effect || "").toLowerCase() === "addition"
+    );
+    // Consolidate: group by description so a tenant who paid in instalments appears once
+    const map = new Map();
+    for (const item of raw) {
+      const key = String(item?.description || item?.label || "");
+      if (map.has(key)) {
+        map.get(key).amount = Number(map.get(key).amount || 0) + Number(item?.amount || 0);
+      } else {
+        map.set(key, { ...item, amount: Number(item?.amount || 0) });
+      }
+    }
+    return Array.from(map.values());
+  }, [depositSettlementRows]);
   const depositSettlementOffsetRows = useMemo(
     () =>
       depositSettlementRows.filter(
