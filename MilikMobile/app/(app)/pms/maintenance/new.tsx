@@ -130,9 +130,9 @@ export default function NewMaintenanceScreen() {
                 setTenantOpen(false);
                 setPriorityOpen(false);
               }}
-              onSelect={(id, label) => {
-                setSelectedPropId(id);
-                setSelectedPropLabel(label);
+              onSelect={(item) => {
+                setSelectedPropId(item._id);
+                setSelectedPropLabel(item.label);
                 setSelectedTenantId('');
                 setSelectedTenantLabel('');
                 setPropOpen(false);
@@ -159,9 +159,9 @@ export default function NewMaintenanceScreen() {
                 setPropOpen(false);
                 setPriorityOpen(false);
               }}
-              onSelect={(id, label) => {
-                setSelectedTenantId(id);
-                setSelectedTenantLabel(label);
+              onSelect={(item) => {
+                setSelectedTenantId(item._id);
+                setSelectedTenantLabel(item.label);
                 setTenantOpen(false);
               }}
               onClear={() => {
@@ -184,9 +184,9 @@ export default function NewMaintenanceScreen() {
                 setPropOpen(false);
                 setTenantOpen(false);
               }}
-              onSelect={(id, label) => {
-                setSelectedPriority(id);
-                setSelectedPriorityLabel(label);
+              onSelect={(item) => {
+                setSelectedPriority(item._id);
+                setSelectedPriorityLabel(item.label);
                 setPriorityOpen(false);
               }}
               onClear={() => {

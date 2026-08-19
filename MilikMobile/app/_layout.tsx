@@ -44,7 +44,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <Provider store={store}>
         <AuthRestorer />
-        <StatusBar style="light" backgroundColor={Colors.primary} />
+        <StatusBar style="light" />
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(app)" />

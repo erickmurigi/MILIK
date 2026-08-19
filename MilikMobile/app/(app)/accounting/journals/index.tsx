@@ -16,13 +16,14 @@ const fmt = (n: number) =>
   `KES ${Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 type Journal = {
-  _id:        string;
-  reference?: string;
-  narration:  string;
-  date:       string;
+  _id:            string;
+  reference?:     string;
+  narration:      string;
+  date:           string;
+  status:         string;
   approvalStatus: string;
-  amount:     number;
-  createdBy?: { surname?: string; otherNames?: string };
+  amount:         number;
+  createdBy?:     { surname?: string; otherNames?: string };
 };
 
 // JournalEntry.status is the posting state: draft | posted | reversed
@@ -107,7 +108,7 @@ export default function JournalsScreen() {
   }, [search]);
 
   const renderItem = ({ item }: { item: Journal }) => {
-    const sc = STATUS_CFG[item.approvalStatus] ?? STATUS_CFG.draft;
+    const sc = STATUS_CFG[item.status] ?? STATUS_CFG.draft;
     return (
       <TouchableOpacity
         style={[styles.card, { borderLeftColor: sc.color }]}

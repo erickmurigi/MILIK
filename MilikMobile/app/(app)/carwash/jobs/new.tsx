@@ -48,7 +48,7 @@ export default function NewCarWashJobScreen() {
   const [lookingUp,     setLookingUp]     = useState(false);
   const [customerName,  setCustomerName]  = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const lookupTimer = useRef<ReturnType<typeof setTimeout>>();
+  const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [vehicleType,       setVehicleType]       = useState('');
   const [showVehiclePicker, setShowVehiclePicker] = useState(false);

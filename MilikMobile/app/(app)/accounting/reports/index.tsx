@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  RefreshControl, ActivityIndicator,
+  RefreshControl, ActivityIndicator, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -250,7 +250,6 @@ export default function FinancialReportsScreen() {
 }
 
 function TextInputCompat({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const { TextInput } = require('react-native');
   return (
     <TextInput
       style={{ backgroundColor: '#fff', borderRadius: 10, borderWidth: 1.5, borderColor: '#E2E8F0', paddingHorizontal: 10, paddingVertical: 9, fontSize: 13, color: '#0F172A' }}

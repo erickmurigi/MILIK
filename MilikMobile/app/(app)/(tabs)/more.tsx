@@ -27,10 +27,10 @@ export default function MoreScreen() {
       {
         text: 'Sign Out', style: 'destructive',
         onPress: async () => {
-          await AsyncStorage.multiRemove([
-            STORAGE_KEYS.AUTH_TOKEN,
-            STORAGE_KEYS.USER,
-            STORAGE_KEYS.COMPANY,
+          await Promise.all([
+            AsyncStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN),
+            AsyncStorage.removeItem(STORAGE_KEYS.USER),
+            AsyncStorage.removeItem(STORAGE_KEYS.COMPANY),
           ]);
           dispatch(clearCredentials());
           router.replace('/(auth)/login');
