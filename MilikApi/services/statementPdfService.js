@@ -60,8 +60,6 @@ const formatCurrency = (value) =>
     maximumFractionDigits: 2,
   }).format(Number(value || 0));
 
-const formatDepositMemoCurrency = (value) =>
-  formatCurrency(Math.abs(Number(value || 0)));
 
 const formatDate = (value) => (value ? new Date(value).toLocaleDateString("en-GB") : "");
 
@@ -644,9 +642,7 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
     const totalAdvanceRecoveries = advanceRecoveryRows.reduce((s, r) => s + r.amount, 0);
 
     const summary = workspace.summary || {};
-    const depositMemo = workspace.depositMemo || {};
-    const depositMemoRows = Array.isArray(depositMemo.rows) ? depositMemo.rows : [];
-    const depositMemoTotals = depositMemo.totals || {};
+
     const depositSettlement = workspace.depositSettlement || {};
     const depositSettlementAllRows = Array.isArray(depositSettlement.rows) ? depositSettlement.rows : [];
     const depositSettlementTotals = depositSettlement.totals || {};
@@ -1024,33 +1020,6 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
                   </tfoot>
                 </table>` : ""}
 
-              ${depositMemoRows.length > 0 ? `
-                <div class="section-title">Deposit Memorandum</div>
-                <table class="simple-table">
-                  <thead>
-                    <tr><th>Holder</th><th class="num">Held at Start</th><th class="num">Newly Billed</th><th class="num">Collected</th><th class="num">Held at Close</th></tr>
-                  </thead>
-                  <tbody>
-                    ${depositMemoRows.map((row) => `
-                      <tr>
-                        <td>${esc(row.label)}</td>
-                        <td class="num">${formatDepositMemoCurrency(row.openingBalance)}</td>
-                        <td class="num">${formatDepositMemoCurrency(row.billed)}</td>
-                        <td class="num">${formatDepositMemoCurrency(row.received)}</td>
-                        <td class="num">${formatDepositMemoCurrency(row.closingBalance)}</td>
-                      </tr>`).join("")}
-                  </tbody>
-                  <tfoot>
-                    <tr>
-                      <td class="num">Total</td>
-                      <td class="num">${formatDepositMemoCurrency(depositMemoTotals.openingBalance || 0)}</td>
-                      <td class="num">${formatDepositMemoCurrency(depositMemoTotals.billed || 0)}</td>
-                      <td class="num">${formatDepositMemoCurrency(depositMemoTotals.received || 0)}</td>
-                      <td class="num">${formatDepositMemoCurrency(depositMemoTotals.closingBalance || 0)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-                <p class="memo-note">Held at Close = deposit funds held in trust on behalf of tenants. This is not income — it is refundable to tenants on vacating (less any agreed deductions).</p>` : ""}
 
               <div class="section-title">Statement Summary</div>
               <table class="summary-table">

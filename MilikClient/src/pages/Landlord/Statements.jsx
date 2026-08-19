@@ -2442,43 +2442,6 @@ const Statements = () => {
                         </div>
                       )}
 
-                      {depositMemoRows.length > 0 && (
-                        <div>
-                          <h4 className="mb-1 border-l-2 border-[#0B3B2E] pl-2 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">Deposit Memorandum <span className="ml-1 text-[9px] font-normal normal-case tracking-normal text-slate-400">tenant funds held in trust — excluded from settlement</span></h4>
-                          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                            <table className="min-w-full divide-y divide-slate-100 text-xs">
-                              <thead className="bg-slate-50">
-                                <tr>
-                                  {["Holder", "Held at Start", "Newly Billed", "Collected", "Held at Close"].map((h, i) => (
-                                    <th key={h} className={`px-3 py-1.5 ${i === 0 ? "text-left" : "text-right"} font-semibold text-slate-600`}>{h}</th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100 bg-white">
-                                {depositMemoRows.map((item, index) => (
-                                  <tr key={item._id || item.id || item.key || `deposit-memo-${index}`} className="hover:bg-slate-50/60 transition-colors">
-                                    <td className="px-3 py-1.5 text-slate-700">{item.label || item.key || "Deposit memo"}</td>
-                                    <td className="px-3 py-1.5 text-right text-slate-600">{depositMemoCurrency(item.openingBalance)}</td>
-                                    <td className="px-3 py-1.5 text-right text-slate-600">{depositMemoCurrency(item.billed)}</td>
-                                    <td className="px-3 py-1.5 text-right text-slate-600">{depositMemoCurrency(item.received)}</td>
-                                    <td className="px-3 py-1.5 text-right font-semibold text-slate-900">{depositMemoCurrency(item.closingBalance)}</td>
-                                  </tr>
-                                ))}
-                                <tr className="bg-slate-50 font-semibold">
-                                  <td className="px-3 py-1.5 text-slate-700">Total</td>
-                                  <td className="px-3 py-1.5 text-right text-slate-900">{depositMemoCurrency(depositMemoTotals.openingBalance)}</td>
-                                  <td className="px-3 py-1.5 text-right text-slate-900">{depositMemoCurrency(depositMemoTotals.billed)}</td>
-                                  <td className="px-3 py-1.5 text-right text-slate-900">{depositMemoCurrency(depositMemoTotals.received)}</td>
-                                  <td className="px-3 py-1.5 text-right text-slate-900">{depositMemoCurrency(depositMemoTotals.closingBalance)}</td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
-                          <p className="mt-1.5 text-[10px] text-slate-400">
-                            <strong className="text-slate-500">Held at Close</strong> = deposit funds held in trust on behalf of tenants. This is <em>not</em> income — it is refundable to tenants on vacating (less any agreed deductions).
-                          </p>
-                        </div>
-                      )}
 
                       {nonDepositExpenseRows.length > 0 && (
                         <div>
