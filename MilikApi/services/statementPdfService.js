@@ -647,10 +647,13 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
     const depositSettlementAllRows = Array.isArray(depositSettlement.rows) ? depositSettlement.rows : [];
     const depositSettlementTotals = depositSettlement.totals || {};
     const depositSettlementAdditionRows = (() => {
-      const raw = depositSettlementAllRows.filter((r) => r.effect !== "offset");
+      const raw = depositSettlementAllRows.filter(
+        (r) => r.effect !== "offset" && String(r.holder || "").toLowerCase() === "landlord"
+      );
+      // Consolidate: group by unit+holder so instalment payers appear once
       const map = new Map();
       for (const item of raw) {
-        const key = String(item.description || item.label || "");
+        const key = `${item.unit || ""}::${item.holder || ""}`;
         if (map.has(key)) {
           map.get(key).amount = Number(map.get(key).amount || 0) + Number(item.amount || 0);
         } else {

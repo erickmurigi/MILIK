@@ -1261,12 +1261,14 @@ const Statements = () => {
   );
   const depositSettlementAdditionRows = useMemo(() => {
     const raw = depositSettlementRows.filter(
-      (item) => String(item?.effect || "").toLowerCase() === "addition"
+      (item) =>
+        String(item?.effect || "").toLowerCase() === "addition" &&
+        String(item?.holder || "").toLowerCase() === "landlord"
     );
-    // Consolidate: group by description so a tenant who paid in instalments appears once
+    // Consolidate: group by unit+holder so a tenant who paid in instalments appears once
     const map = new Map();
     for (const item of raw) {
-      const key = String(item?.description || item?.label || "");
+      const key = `${item?.unit || ""}::${item?.holder || ""}`;
       if (map.has(key)) {
         map.get(key).amount = Number(map.get(key).amount || 0) + Number(item?.amount || 0);
       } else {
