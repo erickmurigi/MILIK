@@ -2520,6 +2520,10 @@ export const createPayment = async (req, res, next) => {
         return next(createError(400, "Receipt number already exists in this company."));
       }
     }
+    if (err?.name === "ValidationError") {
+      const firstMsg = Object.values(err.errors || {})[0]?.message || err.message;
+      return next(createError(400, `Invalid receipt data: ${firstMsg}`));
+    }
     return next(err);
   }
 };

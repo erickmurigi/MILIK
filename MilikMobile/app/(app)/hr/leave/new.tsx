@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import api from '../../../../services/api';
+import { DateField } from '../../../../components/ui/DateField';
 
 const HC = '#4C1D95';
 
@@ -131,28 +132,8 @@ export default function NewLeaveScreen() {
             {/* Dates */}
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>DATES <Text style={{ color: '#DC2626' }}>*</Text></Text>
-              <View style={styles.row2}>
-                <View style={{ flex: 1, gap: 6 }}>
-                  <Text style={styles.label}>Start Date</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={startDate}
-                    onChangeText={setStartDate}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor="#94A3B8"
-                  />
-                </View>
-                <View style={{ flex: 1, gap: 6 }}>
-                  <Text style={styles.label}>End Date</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={endDate}
-                    onChangeText={setEndDate}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor="#94A3B8"
-                  />
-                </View>
-              </View>
+              <DateField label="START DATE" value={startDate} onChange={setStartDate} required />
+              <DateField label="END DATE" value={endDate} onChange={setEndDate} required />
               {days > 0 && (
                 <View style={styles.daysBanner}>
                   <Ionicons name="moon-outline" size={14} color={HC} />

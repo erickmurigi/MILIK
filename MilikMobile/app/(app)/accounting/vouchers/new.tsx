@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import api from '../../../../services/api';
+import { DateField } from '../../../../components/ui/DateField';
 
 const AC  = '#064E3B';
 const ACL = '#ECFDF5';
@@ -95,27 +96,33 @@ export default function NewVoucherScreen() {
 
             {/* Payee */}
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>PAYEE</Text>
-              <TouchableOpacity style={styles.pickerBtn} onPress={() => { setPickerMode('payee'); setProvSearch(''); }}>
-                <Ionicons name="person-outline" size={15} color={payee ? AC : '#94A3B8'} />
-                <Text style={[styles.pickerBtnTxt, payee && { color: '#0F172A' }]} numberOfLines={1}>
-                  {payee || 'Select or type payee...'}
-                </Text>
-                <Ionicons name="chevron-down" size={15} color="#94A3B8" />
-              </TouchableOpacity>
-              <TextInput style={styles.input} placeholder="Or type payee name manually" placeholderTextColor="#94A3B8" value={payee} onChangeText={setPayee} />
+              <Text style={styles.sectionLabel}>PAYEE <Text style={{ color: '#DC2626' }}>*</Text></Text>
+              <View style={styles.payeeRow}>
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  placeholder="Type payee name…"
+                  placeholderTextColor="#94A3B8"
+                  value={payee}
+                  onChangeText={setPayee}
+                />
+                <TouchableOpacity
+                  style={styles.payeePickBtn}
+                  onPress={() => { setPickerMode('payee'); setProvSearch(''); }}
+                >
+                  <Ionicons name="people-outline" size={18} color={AC} />
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Date + Amount */}
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>DETAILS</Text>
               <View style={styles.row2}>
-                <View style={{ flex: 1, gap: 6 }}>
-                  <Text style={styles.label}>Date</Text>
-                  <TextInput style={styles.input} value={date} onChangeText={setDate} placeholder="YYYY-MM-DD" placeholderTextColor="#94A3B8" />
+                <View style={{ flex: 1 }}>
+                  <DateField label="DATE" value={date} onChange={setDate} />
                 </View>
                 <View style={{ flex: 1, gap: 6 }}>
-                  <Text style={styles.label}>Reference</Text>
+                  <Text style={styles.label}>REFERENCE</Text>
                   <TextInput style={styles.input} value={reference} onChangeText={setReference} placeholder="Optional" placeholderTextColor="#94A3B8" />
                 </View>
               </View>
@@ -266,6 +273,12 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#fff', borderRadius: 10, borderWidth: 1.5, borderColor: '#E2E8F0', paddingHorizontal: 12, paddingVertical: 11, fontSize: 14, color: '#0F172A' },
   amountInput: { fontSize: 22, fontWeight: '800', color: AC },
   textarea:    { minHeight: 72, paddingTop: 11 },
+  payeeRow:     { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  payeePickBtn: {
+    width: 50, height: 50, borderRadius: 10,
+    backgroundColor: ACL, borderWidth: 1.5, borderColor: AC + '40',
+    alignItems: 'center', justifyContent: 'center',
+  },
   pickerBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1.5, borderColor: '#E2E8F0', paddingHorizontal: 12, paddingVertical: 13 },
   pickerBtnTxt: { flex: 1, fontSize: 14, color: '#94A3B8', fontWeight: '500' },
   methodGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

@@ -31,6 +31,17 @@ import { loginSuccess } from "../../redux/authSlice";
 import { getCompanySuccess } from "../../redux/companiesRedux";
 import "./home.css";
 
+// The standalone Milik Listings site (separate deployable) — linked from the
+// Public Listings spotlight section below.
+const LISTINGS_SITE_URL = import.meta.env.VITE_LISTINGS_URL || "https://miliklisting.vercel.app";
+
+const LISTING_PREVIEW_CARDS = [
+  { title: "2 Bedroom, Kilimani", location: "Nairobi", price: "KES 45,000", gradient: "from-[#18A06F]/40 to-[#0B3B2E]/60" },
+  { title: "Studio, Westlands", location: "Nairobi", price: "KES 22,000", gradient: "from-[#FF8C00]/40 to-[#0B3B2E]/60" },
+  { title: "1 Bedroom, Kasarani", location: "Nairobi", price: "KES 18,000", gradient: "from-[#0B3B2E]/50 to-[#18A06F]/30" },
+  { title: "3 Bedroom, Ruaka", location: "Kiambu", price: "KES 65,000", gradient: "from-[#FF8C00]/30 to-[#18A06F]/40" },
+];
+
 const heroHighlights = [
   "PROPERTY — rent invoices, M-PESA matching and landlord statements",
   "CAR WASH — job queue, loyalty cards and staff commissions",
@@ -617,6 +628,7 @@ function Home() {
   const navigate = useNavigate();
   const [showTrialModal, setShowTrialModal] = React.useState(false);
   const [trialRole, setTrialRole] = React.useState("property_manager");
+  const [cameFromListings, setCameFromListings] = React.useState(false);
   const [activeFaq, setActiveFaq] = React.useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
@@ -625,6 +637,19 @@ function Home() {
     setTrialRole(role);
     setShowTrialModal(true);
   };
+
+  // Deep link from Milik Listings' "List with Milik" button
+  // (?trial=1&role=property_manager|landlord) straight into the trial form,
+  // instead of landing on the homepage and making them hunt for the CTA.
+  React.useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("trial") === "1") {
+      const role = params.get("role") === "landlord" ? "landlord" : "property_manager";
+      setCameFromListings(true);
+      openTrialModal(role);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   React.useEffect(() => {
     const ob = new IntersectionObserver(
@@ -723,6 +748,24 @@ function Home() {
           </div>
         )}
       </nav>
+
+      {cameFromListings && (
+        <div className="border-b border-[#FF8C00]/20 bg-[#FF8C00]/10">
+          <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-3 sm:flex-row sm:px-6 lg:px-8">
+            <p className="text-center text-sm font-bold text-[#0B3B2E] sm:text-left">
+              👋 Coming from Milik Listings — list your vacant units and get seen by renters searching right now.
+            </p>
+            <button
+              type="button"
+              onClick={() => openTrialModal(trialRole)}
+              className="inline-flex flex-shrink-0 items-center gap-2 rounded-full bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#0A3127]"
+            >
+              List My Properties
+              <FaArrowRight />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Hero */}
       <section className="relative overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(11,59,46,0.18),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(255,140,0,0.15),_transparent_26%),linear-gradient(135deg,#ffffff_0%,#f7fbf8_45%,#eef5f1_100%)] lg:h-[calc(100vh-48px)] lg:min-h-[500px]">
@@ -899,6 +942,59 @@ function Home() {
               </p>
             </Link>
           ))}
+        </div>
+      </section>
+
+      {/* Public Listings */}
+      <section id="listings" className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+        <div className="reveal grid grid-cols-1 items-center gap-8 overflow-hidden rounded-3xl bg-[#0B3B2E] p-8 text-white lg:grid-cols-2 lg:p-12">
+          <div>
+            <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.24em] text-[#FF8C00]">
+              <FaBolt /> Included with Property Management
+            </p>
+            <h2 className="mt-4 text-2xl font-extrabold leading-tight sm:text-3xl">
+              Your vacant units, seen by renters searching right now
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-white/70">
+              Every property manager and landlord on Milik can publish vacant units to Milik Listings — a
+              dedicated rental search site — at no extra cost while it&apos;s new. More people search for a
+              place to rent every day than ever search for property management software, so your units get
+              found without you spending anything extra on marketing.
+            </p>
+            <ul className="mt-5 space-y-2 text-sm text-white/80">
+              <li className="flex items-center gap-2"><FaCheckCircle className="flex-shrink-0 text-[#FF8C00]" /> Toggle a unit public and it&apos;s live — no separate setup</li>
+              <li className="flex items-center gap-2"><FaCheckCircle className="flex-shrink-0 text-[#FF8C00]" /> Inquiries land as leads in your dashboard, not lost DMs</li>
+              <li className="flex items-center gap-2"><FaCheckCircle className="flex-shrink-0 text-[#FF8C00]" /> A verified badge builds renter trust over informal listings</li>
+            </ul>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <a
+                href={LISTINGS_SITE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-full bg-[#FF8C00] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-orange-600"
+              >
+                Browse Live Listings <FaArrowRight />
+              </a>
+              <button
+                type="button"
+                onClick={() => openTrialModal("property_manager")}
+                className="inline-flex items-center gap-2 rounded-full border border-white/30 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-white/10"
+              >
+                List My Properties
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {LISTING_PREVIEW_CARDS.map((card) => (
+              <div key={card.title} className="rounded-2xl bg-white/5 p-4 ring-1 ring-white/10">
+                <div className={`h-20 rounded-xl bg-gradient-to-br ${card.gradient}`} />
+                <p className="mt-3 text-xs font-bold text-white">{card.title}</p>
+                <p className="text-[11px] text-white/60">{card.location}</p>
+                <p className="mt-1.5 text-sm font-extrabold text-[#FF8C00]">{card.price}<span className="text-[10px] font-medium text-white/50">/mo</span></p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 

@@ -30,21 +30,33 @@ const fmtCompact = (v) => {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 };
 
-const buildInvoicedBreakdownParts = (row) => {
+const buildBreakdownParts = ({ rent, utilityBreakdown, utility, penalty, deposit, other }) => {
   const parts = [];
-  if (Number(row.rentInvoiced || 0) > 0) parts.push({ label: 'Rent', value: fmtCompact(row.rentInvoiced) });
-  const utBreakdown = row.utilityInvoicedBreakdown || {};
-  const utKeys = Object.keys(utBreakdown).filter((k) => utBreakdown[k] > 0).sort();
+  if (Number(rent || 0) > 0) parts.push({ label: 'Rent', value: fmtCompact(rent) });
+  const utMap = utilityBreakdown || {};
+  const utKeys = Object.keys(utMap).filter((k) => utMap[k] > 0).sort();
   if (utKeys.length > 0) {
-    utKeys.forEach((k) => parts.push({ label: k, value: fmtCompact(utBreakdown[k]) }));
-  } else if (Number(row.utilityInvoiced || 0) > 0) {
-    parts.push({ label: 'Utility', value: fmtCompact(row.utilityInvoiced) });
+    utKeys.forEach((k) => parts.push({ label: k, value: fmtCompact(utMap[k]) }));
+  } else if (Number(utility || 0) > 0) {
+    parts.push({ label: 'Utility', value: fmtCompact(utility) });
   }
-  if (Number(row.penaltyInvoiced || 0) > 0) parts.push({ label: 'Penalty', value: fmtCompact(row.penaltyInvoiced) });
-  if (Number(row.depositInvoiced || 0) > 0) parts.push({ label: 'Deposit', value: fmtCompact(row.depositInvoiced) });
-  if (Number(row.otherInvoiced || 0) > 0) parts.push({ label: 'Other', value: fmtCompact(row.otherInvoiced) });
+  if (Number(penalty || 0) > 0) parts.push({ label: 'Penalty', value: fmtCompact(penalty) });
+  if (Number(deposit || 0) > 0) parts.push({ label: 'Deposit', value: fmtCompact(deposit) });
+  if (Number(other || 0) > 0) parts.push({ label: 'Other', value: fmtCompact(other) });
   return parts;
 };
+
+const buildInvoicedBreakdownParts = (row) => buildBreakdownParts({
+  rent: row.rentInvoiced, utilityBreakdown: row.utilityInvoicedBreakdown,
+  utility: row.utilityInvoiced, penalty: row.penaltyInvoiced,
+  deposit: row.depositInvoiced, other: row.otherInvoiced,
+});
+
+const buildArrearsBreakdownParts = (row) => buildBreakdownParts({
+  rent: row.previousArrearsRent, utilityBreakdown: row.previousArrearsUtilityBreakdown,
+  utility: row.previousArrearsUtility, penalty: row.previousArrearsPenalty,
+  deposit: row.previousArrearsDeposit, other: row.previousArrearsOther,
+});
 
 const PaidBalanceReport = () => {
   const dispatch = useDispatch();
@@ -196,10 +208,10 @@ const PaidBalanceReport = () => {
     if (!canExportReports) { toast.error("You do not have permission to export reports"); return; }
     const utilityCols = hasUtilityBreakdown ? allUtilityTypes : ['Utility Balance'];
     const utilInvCols = hasUtilityBreakdown ? allUtilityTypes.map((ut) => `${ut} Invoiced`) : ['Utility Invoiced'];
-    const header = ['Tenant', 'Property', 'Unit', 'Invoiced', 'Rent Invoiced', ...utilInvCols, 'Penalty Invoiced', 'Deposit Invoiced', 'Other Invoiced', 'Paid Applied', 'Outstanding', 'Unapplied Credit', 'Net Balance', 'Rent Balance', ...utilityCols, 'Penalty Balance', 'Deposit Balance', 'Other Balance', 'Oldest Due', 'Last Payment', 'Status'];
+    const header = ['Tenant', 'Property', 'Unit', 'Prev. Arrears', 'Rent Invoiced', ...utilInvCols, 'Penalty Invoiced', 'Deposit Invoiced', 'Other Invoiced', 'Paid Applied', 'Outstanding', 'Unapplied Credit', 'Net Balance', 'Rent Balance', ...utilityCols, 'Penalty Balance', 'Deposit Balance', 'Other Balance', 'Oldest Due', 'Last Payment', 'Status'];
     const rows = (report.rows || []).map((row) => [
       row.tenantName || '', row.propertyName || '', row.unitNumber || '',
-      row.totalInvoiced || 0,
+      row.previousArrears || 0,
       row.rentInvoiced || 0,
       ...(hasUtilityBreakdown ? allUtilityTypes.map((ut) => row.utilityInvoicedBreakdown?.[ut] || 0) : [row.utilityInvoiced || 0]),
       row.penaltyInvoiced || 0, row.depositInvoiced || 0, row.otherInvoiced || 0,
@@ -258,17 +270,17 @@ const PaidBalanceReport = () => {
       { label: "Tenant",      value: (r) => r.tenantName || "—" },
       { label: "Property",    value: (r) => r.propertyName || "—" },
       { label: "Unit",        value: (r) => r.unitNumber || "—" },
-      { label: "Invoiced",    align: "right", value: (r) => formatMoney(r.totalInvoiced) },
-      { label: "Breakdown",   value: (r) => buildInvoicedBreakdownParts(r).map((p) => `${p.label} ${p.value}`).join(" · ") || "—" },
-      { label: "Paid",        align: "right", value: (r) => formatMoney(r.totalPaidApplied) },
+      { label: "B/F Arrears",     align: "right", value: (r) => Number(r.previousArrears || 0) > 0 ? `${formatMoney(r.previousArrears)} (${buildArrearsBreakdownParts(r).map((p) => `${p.label} ${p.value}`).join(" · ")})` : "—" },
+      { label: "Period Charges",  value: (r) => buildInvoicedBreakdownParts(r).map((p) => `${p.label} ${p.value}`).join(" · ") || "—" },
+      { label: "Applied",   align: "right", value: (r) => formatMoney(r.totalPaidApplied) },
       { label: "Outstanding", align: "right", value: (r) => formatMoney(r.outstanding) },
-      { label: "Unapplied",   align: "right", value: (r) => formatMoney(r.unappliedCredit) },
-      { label: "Net Bal",     align: "right", value: (r) => formatMoney(r.netBalance) },
-      { label: "Rent Bal",    align: "right", value: (r) => formatMoney(r.rentBalance) },
+      { label: "Unapplied Credit", align: "right", value: (r) => formatMoney(r.unappliedCredit) },
+      { label: "Net Balance", align: "right", value: (r) => formatMoney(r.netBalance) },
+      { label: "Rent O/S",   align: "right", value: (r) => formatMoney(r.rentBalance) },
       ...utCols,
-      { label: "Penalty",     align: "right", value: (r) => formatMoney(r.penaltyBalance) },
-      { label: "Deposit",     align: "right", value: (r) => formatMoney(r.depositBalance) },
-      { label: "Other",       align: "right", value: (r) => formatMoney(r.otherBalance) },
+      { label: "Penalty O/S", align: "right", value: (r) => formatMoney(r.penaltyBalance) },
+      { label: "Deposit O/S", align: "right", value: (r) => formatMoney(r.depositBalance) },
+      { label: "Other O/S",   align: "right", value: (r) => formatMoney(r.otherBalance) },
       { label: "Oldest Due",  value: (r) => r.oldestDueDate ? fmtDate(r.oldestDueDate) : "—" },
       { label: "Status",      value: (r) => (r.status || "").charAt(0).toUpperCase() + (r.status || "").slice(1) },
     ];
@@ -276,7 +288,7 @@ const PaidBalanceReport = () => {
     const totalsRow = [
       `TOTALS — ${rows.length} rows`,
       "", "",
-      formatMoney(sum("totalInvoiced")),
+      formatMoney(sum("previousArrears")),
       "",
       formatMoney(sum("totalPaidApplied")),
       formatMoney(sum("outstanding")),
@@ -354,8 +366,8 @@ const PaidBalanceReport = () => {
               <div className="flex-1 overflow-x-auto">
                 <div className="flex h-full min-w-max divide-x divide-slate-100">
                   {[
-                    { label: 'Total Invoiced',  value: formatMoney(summary.totalInvoiced),        accent: 'text-slate-800',   sub: null },
-                    { label: 'Paid Applied',     value: formatMoney(summary.totalPaidApplied),     accent: 'text-emerald-700', sub: null },
+                    { label: 'Period Invoiced', value: formatMoney(summary.totalInvoiced),        accent: 'text-slate-800',   sub: null },
+                    { label: 'Applied',         value: formatMoney(summary.totalPaidApplied),     accent: 'text-emerald-700', sub: null },
                     { label: 'Outstanding',      value: formatMoney(summary.totalOutstanding),     accent: 'text-red-600',     sub: Number(summary.totalOutstanding || 0) > 0 ? `${summary.owingCount || 0} owing` : null },
                     { label: 'Unapplied',        value: formatMoney(summary.totalUnappliedCredit), accent: 'text-amber-600',   sub: Number(summary.totalUnappliedCredit || 0) > 0 ? `${summary.creditCount || 0} credit` : null },
                     { label: 'Net Balance',      value: formatMoney(summary.netBalance),           accent: 'text-slate-800',   sub: null },
@@ -397,9 +409,9 @@ const PaidBalanceReport = () => {
                   <table className="min-w-full text-[10px] border-collapse">
                     <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                       <tr>
-                        {['Tenant', 'Property', 'Unit', 'Invoiced', 'Inv. Breakdown', 'Paid', 'Outstanding', 'Unapplied', 'Net Bal', 'Rent Bal',
-                          ...(hasUtilityBreakdown ? allUtilityTypes : ['Utility Bal']),
-                          'Penalty', 'Deposit', 'Other', 'Oldest Due', 'Status'
+                        {['Tenant', 'Property', 'Unit', 'B/F Arrears', 'Period Charges', 'Applied', 'Outstanding', 'Unapplied Credit', 'Net Balance', 'Rent O/S',
+                          ...(hasUtilityBreakdown ? allUtilityTypes.map(u => `${u} O/S`) : ['Utility O/S']),
+                          'Penalty O/S', 'Deposit O/S', 'Other O/S', 'Oldest Due', 'Status'
                         ].map((h, i, arr) => (
                           <th key={h} className={`whitespace-nowrap px-2 py-1 text-left font-bold text-[9px] tracking-wide ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
                         ))}
@@ -413,7 +425,15 @@ const PaidBalanceReport = () => {
                           <td className="px-2 py-1 border-r border-gray-100 font-semibold text-slate-900 whitespace-nowrap">{row.tenantName}</td>
                           <td className="px-2 py-1 border-r border-gray-100 text-slate-600 whitespace-nowrap">{row.propertyName}</td>
                           <td className="px-2 py-1 border-r border-gray-100 text-slate-600">{row.unitNumber}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-right text-slate-700">{formatMoney(row.totalInvoiced)}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 text-[8.5px] text-orange-500 whitespace-nowrap">
+                            {(() => {
+                              const parts = buildArrearsBreakdownParts(row);
+                              if (parts.length === 0) return <span className="text-slate-300">—</span>;
+                              return parts.map(({ label, value }, idx) => (
+                                <span key={label}>{idx > 0 && <span className="mx-0.5 text-orange-200">·</span>}<span className="font-semibold text-orange-600">{label}</span> {value}</span>
+                              ));
+                            })()}
+                          </td>
                           <td className="px-2 py-1 border-r border-gray-100 text-[8.5px] text-slate-500 whitespace-nowrap">
                             {(() => {
                               const parts = buildInvoicedBreakdownParts(row);

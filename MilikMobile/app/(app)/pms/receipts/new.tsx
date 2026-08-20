@@ -35,10 +35,10 @@ type TenantBalance = {
 };
 
 const PAYMENT_METHODS = [
-  { value: 'MPESA',         label: 'M-Pesa'        },
-  { value: 'CASH',          label: 'Cash'          },
-  { value: 'BANK_TRANSFER', label: 'Bank Transfer' },
-  { value: 'CHEQUE',        label: 'Cheque'        },
+  { value: 'MPESA',         label: 'M-Pesa',        schema: 'mobile_money'  },
+  { value: 'CASH',          label: 'Cash',          schema: 'cash'          },
+  { value: 'BANK_TRANSFER', label: 'Bank Transfer', schema: 'bank_transfer' },
+  { value: 'CHEQUE',        label: 'Cheque',        schema: 'check'         },
 ];
 
 const INVOICE_CAT_LABELS: Record<string, string> = {
@@ -80,6 +80,13 @@ export default function NewReceiptScreen() {
     invoice:    prefilledInvoiceId,
   } = useLocalSearchParams<{ tenant?: string; tenantName?: string; invoice?: string }>();
 
+  // Property filter
+  const [properties,       setProperties]       = useState<DropdownItem[]>([]);
+  const [propsLoading,     setPropsLoading]     = useState(false);
+  const [selectedPropId,   setSelectedPropId]   = useState('');
+  const [selectedPropLabel,setSelectedPropLabel]= useState('');
+  const [propOpen,         setPropOpen]         = useState(false);
+
   // Tenant selection
   const [selectedTenant,   setSelectedTenant]   = useState<TenantOption | null>(null);
   const [tenantSearch,     setTenantSearch]     = useState('');
@@ -109,6 +116,23 @@ export default function NewReceiptScreen() {
   const [directToLandlord, setDirectToLandlord] = useState(false);
   const [submitting,       setSubmitting]       = useState(false);
 
+  // Load properties
+  useEffect(() => {
+    setPropsLoading(true);
+    api.get('/properties', { params: { limit: 100 } })
+      .then(({ data }) =>
+        setProperties(
+          (data.data ?? []).map((p: Record<string, unknown>) => ({
+            _id:      String(p._id ?? ''),
+            label:    String((p.propertyName ?? p.name) ?? ''),
+            sublabel: String(p.propertyCode ?? ''),
+          }))
+        )
+      )
+      .catch(() => {})
+      .finally(() => setPropsLoading(false));
+  }, []);
+
   // Pre-fill from params on mount
   useEffect(() => {
     if (!prefilledTenantId) return;
@@ -124,18 +148,20 @@ export default function NewReceiptScreen() {
       .catch(() => {});
   }, [prefilledTenantId, prefilledTenantName]);
 
-  // Load cashbooks once
+  // Load cashbooks once — accounts are type "asset"; filter by name for cashbook-like accounts
   useEffect(() => {
     setCashbooksLoading(true);
-    api.get('/chart-of-accounts', { params: { type: 'Bank' } })
+    api.get('/chart-of-accounts', { params: { type: 'asset' } })
       .then(({ data }) => {
-        const banks: DropdownItem[] = (Array.isArray(data) ? data : []).map(
-          (a: Record<string, unknown>) => ({
+        const all: Record<string, unknown>[] = Array.isArray(data) ? data : [];
+        const cashbookRe = /cash|bank|m-?pesa|mobile|wallet|petty|till|collection/i;
+        const banks: DropdownItem[] = all
+          .filter(a => cashbookRe.test(`${a.name ?? ''} ${a.accountName ?? ''} ${a.group ?? ''} ${a.subGroup ?? ''}`))
+          .map(a => ({
             _id:      String(a._id ?? ''),
-            label:    String(a.name ?? ''),
+            label:    String(a.name ?? a.accountName ?? ''),
             sublabel: String(a.code ?? ''),
-          })
-        );
+          }));
         setCashbooks(banks);
         if (banks.length > 0) { setCashbookId(banks[0]._id); setCashbookLabel(banks[0].label); }
       })
@@ -143,14 +169,16 @@ export default function NewReceiptScreen() {
       .finally(() => setCashbooksLoading(false));
   }, []);
 
-  // Debounced live tenant search
+  // Debounced live tenant search (filtered by property when one is selected)
   useEffect(() => {
     if (selectedTenant) return;
     if (searchTimer.current) clearTimeout(searchTimer.current);
     if (tenantSearch.length < 2) { setTenantResults([]); return; }
     searchTimer.current = setTimeout(() => {
       setTenantSearching(true);
-      api.get('/tenants', { params: { search: tenantSearch, limit: 20, status: 'active' } })
+      const params: Record<string, string | number> = { search: tenantSearch, limit: 20, status: 'active' };
+      if (selectedPropId) params.property = selectedPropId;
+      api.get('/tenants', { params })
         .then(({ data }) => {
           const list: Record<string, unknown>[] = Array.isArray(data?.data) ? data.data : [];
           setTenantResults(list.map(parseTenant));
@@ -159,7 +187,7 @@ export default function NewReceiptScreen() {
         .finally(() => setTenantSearching(false));
     }, 400);
     return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
-  }, [tenantSearch, selectedTenant]);
+  }, [tenantSearch, selectedTenant, selectedPropId]);
 
   // Load balance + open invoices when tenant selected
   const loadTenantData = useCallback(async (tenantId: string) => {
@@ -223,15 +251,16 @@ export default function NewReceiptScreen() {
 
     setSubmitting(true);
     try {
+      const schemaMethod = PAYMENT_METHODS.find(pm => pm.value === paymentMethod)?.schema ?? 'cash';
       const body: Record<string, unknown> = {
-        tenant:          selectedTenant._id,
-        unit:            selectedTenant.unitId,
-        amount:          Number(amount),
-        referenceNumber: refNumber.trim(),
-        paymentType:     paymentMethod,
-        paymentDate:     new Date(paymentDate).toISOString(),
+        tenant:               selectedTenant._id,
+        unit:                 selectedTenant.unitId,
+        amount:               Number(amount),
+        referenceNumber:      refNumber.trim(),
+        paymentMethod:        schemaMethod,
+        paymentDate:          new Date(paymentDate).toISOString(),
         paidDirectToLandlord: directToLandlord,
-        description:     description.trim() || undefined,
+        description:          description.trim() || undefined,
       };
       if (!directToLandlord && cashbookId) body.cashbook = cashbookLabel;
 
@@ -254,6 +283,31 @@ export default function NewReceiptScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/* Property filter */}
+          <Dropdown
+            label="PROPERTY"
+            placeholder="All properties"
+            selectedId={selectedPropId}
+            selectedLabel={selectedPropLabel}
+            items={properties}
+            onSelect={(item) => {
+              setSelectedPropId(item._id);
+              setSelectedPropLabel(item.label);
+              setTenantSearch('');
+              setTenantResults([]);
+              setPropOpen(false);
+            }}
+            onClear={() => {
+              setSelectedPropId('');
+              setSelectedPropLabel('');
+              setTenantSearch('');
+              setTenantResults([]);
+            }}
+            loading={propsLoading}
+            open={propOpen}
+            onToggle={() => setPropOpen(o => !o)}
+          />
+
           {/* Tenant selection */}
           <View style={styles.field}>
             <Text style={styles.label}>TENANT <Text style={{ color: Colors.danger }}>*</Text></Text>

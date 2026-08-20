@@ -967,11 +967,52 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
 
       for (const row of chunkRows) {
         const snapshot = snapshotMap.get(row.tenantId) || { invoiceSnapshots: [], receiptAllocations: [] };
-        const allInvoices = normalizeArray(snapshot.invoiceSnapshots).filter((inv) => {
+        const allSnapshotInvoices = normalizeArray(snapshot.invoiceSnapshots);
+        const allInvoices = allSnapshotInvoices.filter((inv) => {
           if (!fromDateMs) return true;
           const d = inv.invoiceDate ? new Date(inv.invoiceDate).getTime() : 0;
           return d >= fromDateMs;
         });
+        // Previous arrears: outstanding on invoices dated before the period start, broken down by category
+        const priorInvoices = fromDateMs
+          ? allSnapshotInvoices
+              .filter((inv) => {
+                const d = inv.invoiceDate ? new Date(inv.invoiceDate).getTime() : 0;
+                return d < fromDateMs;
+              })
+              .filter((inv) => {
+                if (!row.unitId) return true;
+                const invUnit = String(inv.unit || "");
+                return invUnit === row.unitId || (!invUnit && row.isPrimary);
+              })
+          : [];
+        let previousArrears = 0;
+        let previousArrearsRent = 0;
+        let previousArrearsUtility = 0;
+        const previousArrearsUtilityBreakdown = {};
+        let previousArrearsPenalty = 0;
+        let previousArrearsDeposit = 0;
+        let previousArrearsOther = 0;
+        for (const inv of priorInvoices) {
+          const remaining = Number(inv.outstanding || 0);
+          if (remaining <= 0) continue;
+          previousArrears += remaining;
+          const cat = String(inv.category || "").toUpperCase();
+          if (cat === "RENT_CHARGE") {
+            previousArrearsRent += remaining;
+          } else if (cat === "UTILITY_CHARGE") {
+            previousArrearsUtility += remaining;
+            const uName = extractUtilityInvoiceName(inv);
+            previousArrearsUtilityBreakdown[uName] = round2((previousArrearsUtilityBreakdown[uName] || 0) + remaining);
+          } else if (cat === "LATE_PENALTY_CHARGE") {
+            previousArrearsPenalty += remaining;
+          } else if (cat === "DEPOSIT_CHARGE") {
+            previousArrearsDeposit += remaining;
+          } else {
+            previousArrearsOther += remaining;
+          }
+        }
+        previousArrears = round2(previousArrears);
         // Filter invoices to this specific unit; invoices without a unit fall back to primary row
         const invoices = row.unitId
           ? allInvoices.filter((inv) => {
@@ -1046,13 +1087,20 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
           }
         }
 
-        const netBalance = round2(outstanding - unappliedCredit);
+        const netBalance = round2(previousArrears + outstanding - unappliedCredit);
         const status = netBalance > 0.009 ? "owing" : netBalance < -0.009 ? "credit" : "settled";
 
         if (filterStatus && status !== filterStatus) continue;
 
         allRows.push({
           ...row,
+          previousArrears,
+          previousArrearsRent: round2(previousArrearsRent),
+          previousArrearsUtility: round2(previousArrearsUtility),
+          previousArrearsUtilityBreakdown,
+          previousArrearsPenalty: round2(previousArrearsPenalty),
+          previousArrearsDeposit: round2(previousArrearsDeposit),
+          previousArrearsOther: round2(previousArrearsOther),
           totalInvoiced: round2(totalInvoiced),
           totalPaidApplied: round2(totalPaidApplied),
           outstanding: round2(outstanding),

@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import api from '../../../../services/api';
+import { DateField } from '../../../../components/ui/DateField';
 
 const AC  = '#064E3B';
 const ACL = '#ECFDF5';
@@ -102,12 +103,11 @@ export default function NewJournalScreen() {
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>JOURNAL DETAILS</Text>
               <View style={styles.row2}>
-                <View style={{ flex: 1, gap: 6 }}>
-                  <Text style={styles.label}>Date</Text>
-                  <TextInput style={styles.input} value={date} onChangeText={setDate} placeholder="YYYY-MM-DD" placeholderTextColor="#94A3B8" />
+                <View style={{ flex: 1 }}>
+                  <DateField label="DATE" value={date} onChange={setDate} />
                 </View>
                 <View style={{ flex: 1, gap: 6 }}>
-                  <Text style={styles.label}>Reference</Text>
+                  <Text style={styles.label}>REFERENCE</Text>
                   <TextInput style={styles.input} value={reference} onChangeText={setReference} placeholder="JV-001" placeholderTextColor="#94A3B8" />
                 </View>
               </View>

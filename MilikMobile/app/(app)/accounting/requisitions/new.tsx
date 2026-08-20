@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import api from '../../../../services/api';
+import { DateField } from '../../../../components/ui/DateField';
 
 const AC  = '#064E3B';
 const ACL = '#ECFDF5';
@@ -84,12 +85,11 @@ export default function NewRequisitionScreen() {
               <TextInput style={[styles.input, styles.textarea]} value={purpose} onChangeText={setPurpose} placeholder="Brief description of what's needed..." placeholderTextColor="#94A3B8" multiline numberOfLines={2} textAlignVertical="top" />
             </View>
             <View style={styles.row2}>
-              <View style={{ flex: 1, gap: 6 }}>
-                <Text style={styles.label}>Date Needed</Text>
-                <TextInput style={styles.input} value={date} onChangeText={setDate} placeholder="YYYY-MM-DD" placeholderTextColor="#94A3B8" />
+              <View style={{ flex: 1 }}>
+                <DateField label="DATE NEEDED" value={date} onChange={setDate} />
               </View>
               <View style={{ flex: 1, gap: 6 }}>
-                <Text style={styles.label}>Department</Text>
+                <Text style={styles.label}>DEPARTMENT</Text>
                 <TextInput style={styles.input} value={department} onChangeText={setDepartment} placeholder="Optional" placeholderTextColor="#94A3B8" />
               </View>
             </View>
