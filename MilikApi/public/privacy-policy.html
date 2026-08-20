@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Milik Privacy Policy</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&family=Fraunces:opsz,wght@9..144,400;9..144,600&display=swap">
+<style>
+  :root {
+    --brand:      #0B3B2E;
+    --accent:     #1A6B50;
+    --accent-lt:  #D1EDE3;
+    --ground:     #F6F9F7;
+    --surface:    #FFFFFF;
+    --border:     #C8DDD6;
+    --text:       #0F2117;
+    --text-2:     #4B6358;
+    --text-3:     #7BA898;
+    --link:       #1A6B50;
+    --tag-bg:     #E4F2EB;
+    --tag-txt:    #0B4A30;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --brand:     #0B3B2E;
+      --accent:    #3CB87A;
+      --accent-lt: #0D2E1F;
+      --ground:    #0C1A13;
+      --surface:   #111F17;
+      --border:    #1E3828;
+      --text:      #E8F5EE;
+      --text-2:    #7EAA92;
+      --text-3:    #4B7260;
+      --link:      #3CB87A;
+      --tag-bg:    #0D2E1F;
+      --tag-txt:   #5DD49A;
+    }
+  }
+  :root[data-theme="dark"] {
+    --brand:     #0B3B2E;
+    --accent:    #3CB87A;
+    --accent-lt: #0D2E1F;
+    --ground:    #0C1A13;
+    --surface:   #111F17;
+    --border:    #1E3828;
+    --text:      #E8F5EE;
+    --text-2:    #7EAA92;
+    --text-3:    #4B7260;
+    --link:      #3CB87A;
+    --tag-bg:    #0D2E1F;
+    --tag-txt:   #5DD49A;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--ground);
+    color: var(--text);
+    font-family: 'DM Sans', system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--brand);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 28px; height: 52px;
+  }
+  .topbar-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .topbar-logo {
+    width: 28px; height: 28px;
+    background: rgba(255,255,255,0.15); border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .topbar-logo svg { display: block; }
+  .topbar-name { font-family: 'DM Sans', sans-serif; font-size: 17px; font-weight: 700; color: #fff; letter-spacing: -0.3px; }
+  .topbar-label { font-size: 12px; font-weight: 500; color: rgba(255,255,255,0.55); letter-spacing: 0.3px; }
+  .hero { background: var(--brand); padding: 56px 28px 52px; text-align: center; }
+  .hero-eyebrow { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: rgba(255,255,255,0.5); margin-bottom: 14px; }
+  .hero-title { font-family: 'Fraunces', Georgia, serif; font-size: clamp(28px, 5vw, 40px); font-weight: 400; color: #fff; line-height: 1.2; text-wrap: balance; margin-bottom: 16px; }
+  .hero-meta { display: flex; align-items: center; justify-content: center; gap: 20px; flex-wrap: wrap; }
+  .hero-badge { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.18); border-radius: 20px; padding: 5px 14px; font-size: 12.5px; color: rgba(255,255,255,0.75); font-weight: 500; }
+  .jumpnav { background: var(--surface); border-bottom: 1px solid var(--border); }
+  .jumpnav-inner { max-width: 720px; margin: 0 auto; padding: 0 28px; display: flex; align-items: center; overflow-x: auto; scrollbar-width: none; }
+  .jumpnav-inner::-webkit-scrollbar { display: none; }
+  .jumpnav-link { flex-shrink: 0; font-size: 12.5px; font-weight: 600; color: var(--text-2); text-decoration: none; padding: 13px 14px; border-bottom: 2px solid transparent; letter-spacing: 0.1px; transition: color 0.15s, border-color 0.15s; white-space: nowrap; }
+  .jumpnav-link:hover, .jumpnav-link:focus-visible { color: var(--accent); border-bottom-color: var(--accent); outline: none; }
+  .content { max-width: 720px; margin: 0 auto; padding: 56px 28px 80px; display: flex; flex-direction: column; gap: 48px; }
+  .section { display: flex; flex-direction: column; gap: 16px; }
+  .section-heading { font-family: 'Fraunces', Georgia, serif; font-size: 22px; font-weight: 600; color: var(--text); line-height: 1.25; padding-left: 16px; border-left: 3px solid var(--accent); text-wrap: balance; }
+  .section p { font-size: 15.5px; color: var(--text); max-width: 65ch; line-height: 1.8; }
+  .section p + p { margin-top: 10px; }
+  .data-table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  thead th { background: var(--accent-lt); color: var(--text-2); font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 10px 16px; text-align: left; }
+  tbody td { padding: 11px 16px; color: var(--text); border-top: 1px solid var(--border); vertical-align: top; line-height: 1.6; }
+  tbody tr:last-child td { border-bottom: none; }
+  .tag-list { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; }
+  .tag-list li { background: var(--tag-bg); color: var(--tag-txt); font-size: 13px; font-weight: 600; padding: 5px 12px; border-radius: 20px; }
+  .highlight { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 0 10px 10px 0; padding: 16px 20px; font-size: 15px; color: var(--text); line-height: 1.7; }
+  .highlight strong { color: var(--accent); font-weight: 700; }
+  .contact-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px 28px; display: flex; flex-direction: column; gap: 6px; }
+  .contact-card .contact-name { font-size: 17px; font-weight: 700; color: var(--text); }
+  .contact-card a { color: var(--link); text-decoration: none; font-weight: 500; font-size: 15px; }
+  .contact-card a:hover { text-decoration: underline; }
+  .contact-card .contact-line { font-size: 15px; color: var(--text-2); }
+  .divider { border: none; border-top: 1px solid var(--border); }
+  .footer { background: var(--brand); text-align: center; padding: 32px 28px; font-size: 13px; color: rgba(255,255,255,0.45); }
+  .footer a { color: rgba(255,255,255,0.65); text-decoration: none; }
+  .footer a:hover { color: #fff; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="topbar-brand" href="https://milikproperty.com">
+    <div class="topbar-logo">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M8 1L1 6v9h5v-5h4v5h5V6L8 1z" fill="white"/>
+      </svg>
+    </div>
+    <span class="topbar-name">Milik</span>
+  </a>
+  <span class="topbar-label">milikproperty.com</span>
+</div>
+
+<div class="hero">
+  <span class="hero-eyebrow">Legal</span>
+  <h1 class="hero-title">Privacy Policy</h1>
+  <div class="hero-meta">
+    <span class="hero-badge">Effective: 20 August 2026</span>
+    <span class="hero-badge">Last updated: 20 August 2026</span>
+  </div>
+</div>
+
+<nav class="jumpnav" aria-label="Jump to section">
+  <div class="jumpnav-inner">
+    <a class="jumpnav-link" href="#overview">Overview</a>
+    <a class="jumpnav-link" href="#data-collected">Data We Collect</a>
+    <a class="jumpnav-link" href="#how-we-use">How We Use It</a>
+    <a class="jumpnav-link" href="#sharing">Sharing</a>
+    <a class="jumpnav-link" href="#security">Security</a>
+    <a class="jumpnav-link" href="#retention">Retention</a>
+    <a class="jumpnav-link" href="#rights">Your Rights</a>
+    <a class="jumpnav-link" href="#contact">Contact</a>
+  </div>
+</nav>
+
+<main class="content">
+
+  <section class="section" id="overview">
+    <h2 class="section-heading">Overview</h2>
+    <p>Milik is a business management platform operated by <strong>Milik Systems</strong> ("we", "us", or "our"). This policy explains what personal information we collect when you use the Milik web platform or mobile application, how we use it, and the choices you have.</p>
+    <p>By creating an account or using the Milik platform, you agree to the collection and use of information as described in this policy.</p>
+    <div class="highlight">
+      <strong>Short version:</strong> We collect only what we need to operate the platform. We do not sell your personal data. All data is encrypted in transit and at rest.
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <section class="section" id="data-collected">
+    <h2 class="section-heading">Data We Collect</h2>
+    <p>We collect information you provide directly and information generated as you use the platform.</p>
+    <div class="data-table-wrap">
+      <table>
+        <thead>
+          <tr><th>Category</th><th>Examples</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Account information</strong></td>
+            <td>Name, email address, password (hashed)</td>
+            <td>Authentication and account management</td>
+          </tr>
+          <tr>
+            <td><strong>Business data</strong></td>
+            <td>Property details, tenant records, lease terms, payment records, invoices</td>
+            <td>Core platform functionality — entered by you</td>
+          </tr>
+          <tr>
+            <td><strong>Device &amp; usage data</strong></td>
+            <td>Device type, OS version, app version, session activity, error logs</td>
+            <td>Performance monitoring, bug fixing, security</td>
+          </tr>
+          <tr>
+            <td><strong>Push notification token</strong></td>
+            <td>Device push token (Expo/FCM)</td>
+            <td>Sending in-app notifications you opt into</td>
+          </tr>
+          <tr>
+            <td><strong>Financial transaction data</strong></td>
+            <td>M-Pesa transaction IDs, payment references</td>
+            <td>Recording and payment reconciliation</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>We do not collect payment card numbers. M-Pesa payments are processed directly by Safaricom; we receive only the transaction confirmation details.</p>
+  </section>
+
+  <hr class="divider">
+
+  <section class="section" id="how-we-use">
+    <h2 class="section-heading">How We Use Your Information</h2>
+    <ul class="tag-list">
+      <li>Providing &amp; operating the platform</li>
+      <li>User authentication</li>
+      <li>Sending invoices &amp; payment receipts</li>
+      <li>Push notifications (opt-in)</li>
+      <li>Generating financial reports</li>
+      <li>Customer support</li>
+      <li>Security &amp; fraud prevention</li>
+      <li>Legal compliance</li>
+    </ul>
+    <p>We do not use your data for advertising, and we do not build advertising profiles.</p>
+  </section>
+
+  <hr class="divider">
+
+  <section class="section" id="sharing">
+    <h2 class="section-heading">Sharing &amp; Third Parties</h2>
+    <p>We do not sell, rent, or trade your personal data. We share data only in the following circumstances:</p>
+    <div class="data-table-wrap">
+      <table>
+        <thead>
+          <tr><th>Party</th><th>Why</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Safaricom (M-Pesa / Daraja API)</strong></td>
+            <td>Processing M-Pesa C2B payments and STK push</td>
+          </tr>
+          <tr>
+            <td><strong>Africa's Talking</strong></td>
+            <td>Sending SMS notifications to tenants and payers</td>
+          </tr>
+          <tr>
+            <td><strong>Expo / Google Firebase (FCM)</strong></td>
+            <td>Delivering push notifications to the mobile app</td>
+          </tr>
+          <tr>
+            <td><strong>Cloud hosting provider</strong></td>
+            <td>Server infrastructure — data processed under a data processing agreement</td>
+          </tr>
+          <tr>
+            <td><strong>Legal authorities</strong></td>
+            <td>When required by law, court order, or to protect our legal rights</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <section class="section" id="security">
+    <h2 class="section-heading">Security</h2>
+    <p>We take security seriously and implement the following safeguards:</p>
+    <ul class="tag-list">
+      <li>TLS 1.2+ encryption in transit</li>
+      <li>Passwords stored as bcrypt hashes</li>
+      <li>JWT tokens with expiry &amp; rotation</li>
+      <li>Role-based access control</li>
+      <li>Input validation &amp; XSS protection</li>
+      <li>Database access restricted by IP allowlist</li>
+    </ul>
+    <p>No system is completely secure. If you believe your account has been compromised, contact us immediately at <a href="mailto:info@milikproperty.com">info@milikproperty.com</a>.</p>
+  </section>
+
+  <hr class="divider">
+
+  <section class="section" id="retention">
+    <h2 class="section-heading">Data Retention</h2>
+    <p>We retain your account and business data for as long as your account is active. If you close your account, we will delete or anonymise your personal data within <strong>90 days</strong>, unless we are required to retain it longer by law (for example, financial records required for tax compliance).</p>
+    <p>Anonymised or aggregated data that cannot identify you may be retained indefinitely for analytics purposes.</p>
+  </section>
+
+  <hr class="divider">
+
+  <section class="section" id="rights">
+    <h2 class="section-heading">Your Rights</h2>
+    <p>You have the right to:</p>
+    <ul class="tag-list">
+      <li>Access your data</li>
+      <li>Correct inaccurate data</li>
+      <li>Request deletion of your account</li>
+      <li>Export your data</li>
+      <li>Opt out of push notifications</li>
+      <li>Withdraw consent</li>
+    </ul>
+    <p>To exercise any of these rights, email us at <a href="mailto:info@milikproperty.com">info@milikproperty.com</a>. We will respond within 30 days.</p>
+  </section>
+
+  <hr class="divider">
+
+  <section class="section" id="cookies">
+    <h2 class="section-heading">Cookies</h2>
+    <p>The Milik web platform uses session cookies strictly necessary for authentication. We do not use tracking cookies, advertising cookies, or third-party analytics cookies.</p>
+    <p>The Milik mobile app stores authentication tokens in device secure storage (AsyncStorage) — no browser cookies are used in the app.</p>
+  </section>
+
+  <hr class="divider">
+
+  <section class="section" id="children">
+    <h2 class="section-heading">Children's Privacy</h2>
+    <p>Milik is a business platform intended for adults aged 18 and above. We do not knowingly collect personal information from children under 18. If we become aware that a child has provided us with personal data, we will delete it promptly.</p>
+  </section>
+
+  <hr class="divider">
+
+  <section class="section" id="changes">
+    <h2 class="section-heading">Changes to This Policy</h2>
+    <p>We may update this privacy policy from time to time. When we make material changes, we will update the "Last updated" date at the top of this page and, where appropriate, notify you by email or in-app notification. Your continued use of the platform after changes become effective constitutes acceptance of the updated policy.</p>
+  </section>
+
+  <hr class="divider">
+
+  <section class="section" id="contact">
+    <h2 class="section-heading">Contact Us</h2>
+    <p>For any questions, requests, or concerns about this privacy policy or how we handle your data:</p>
+    <div class="contact-card">
+      <span class="contact-name">Milik Systems</span>
+      <span class="contact-line">Nairobi, Kenya</span>
+      <a href="mailto:info@milikproperty.com">info@milikproperty.com</a>
+      <a href="mailto:miliksystem@gmail.com">miliksystem@gmail.com</a>
+      <a href="https://milikproperty.com">milikproperty.com</a>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <p>© 2026 Milik Systems · <a href="https://milikproperty.com">milikproperty.com</a></p>
+  <p style="margin-top:6px;">This policy is effective as of 20 August 2026.</p>
+</footer>
+
+</body>
+</html>

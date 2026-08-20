@@ -693,6 +693,10 @@ app.use("/api/clients/invoices",          clientInvoiceRoutes);
 app.use("/api/clients/interactions",      clientInteractionRoutes);
 app.use("/api/clients",                   clientRoutes);
 
+app.get("/privacy-policy", (req, res) => {
+  res.sendFile(path.join(path.dirname(fileURLToPath(import.meta.url)), "public", "privacy-policy.html"));
+});
+
 app.use((err, req, res, next) => {
   const errorStatus = err.status || err.statusCode || 500;
   const errorMessage = err.message || "Something went wrong!";
