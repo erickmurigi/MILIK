@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -64,8 +64,8 @@ export default function POSSalesScreen() {
     else setLoadingMore(true);
     const ds = dateStr(date);
     const [salesRes, sumRes] = await Promise.allSettled([
-      api.get('/inventory/pos-sales', { params: { date: ds, page: String(pg), limit: String(LIMIT) } }),
-      pg === 1 ? api.get('/inventory/pos-sales/summary', { params: { date: ds } }) : Promise.resolve(null),
+      api.get('/pos/sales', { params: { date: ds, page: String(pg), limit: String(LIMIT) } }),
+      pg === 1 ? api.get('/pos/sales/summary', { params: { date: ds } }) : Promise.resolve(null),
     ]);
     if (salesRes.status === 'fulfilled') {
       const rows: POSSale[] = salesRes.value.data?.data ?? (Array.isArray(salesRes.value.data) ? salesRes.value.data : []);
@@ -73,6 +73,9 @@ export default function POSSalesScreen() {
       setHasMore(rows.length === LIMIT);
       setPage(pg);
     } else if (pg === 1) {
+      const e = salesRes.reason;
+      const msg = e?.response?.data?.message ?? e?.message ?? 'Failed to load POS sales';
+      Alert.alert('Error', msg);
       setItems([]);
     }
     if (sumRes.status === 'fulfilled' && sumRes.value) {

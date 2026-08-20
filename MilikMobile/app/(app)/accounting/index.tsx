@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -74,7 +74,9 @@ export default function AccountingDashboard() {
         vouchers:     extractCount(vRes),
         requisitions: extractCount(rRes),
       });
-    } catch {}
+    } catch {
+      Alert.alert('Error', 'Failed to load dashboard data.');
+    }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 

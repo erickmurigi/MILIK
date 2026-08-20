@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Modal, Alert, FlatList as FL, Platform,
+  ActivityIndicator, RefreshControl, Modal, Alert, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -64,13 +64,16 @@ export default function CarWashMpesaScreen() {
       const params: Record<string, string | number> = { page: pg, limit: LIMIT };
       if (tab === 'unallocated') params.allocated = 'false';
       if (tab === 'allocated')   params.allocated = 'true';
-      const { data } = await api.get('/carwash/mpesa/notifications', { params });
+      const { data } = await api.get('/carwash/mpesa-collections', { params });
       const raw  = data?.data ?? data;
-      const rows: Notification[] = Array.isArray(raw) ? raw : (raw?.notifications ?? []);
+      const rows: Notification[] = Array.isArray(raw) ? raw : (raw?.collections ?? []);
       setItems(prev => pg === 1 ? rows : [...prev, ...rows]);
       setHasMore(rows.length === LIMIT);
       setPage(pg);
-    } catch { if (pg === 1) setItems([]); }
+    } catch (err: any) {
+      if (pg === 1) setItems([]);
+      if (pg === 1) Alert.alert('Error', err?.response?.data?.message ?? 'Failed to load M-Pesa collections.');
+    }
     finally { setLoading(false); setRefreshing(false); setLoadingMore(false); }
   }, [tab]);
 
@@ -80,7 +83,7 @@ export default function CarWashMpesaScreen() {
     setTarget(notif);
     setJobsLoading(true);
     try {
-      const { data } = await api.get('/carwash/mpesa/unpaid-jobs');
+      const { data } = await api.get('/carwash/mpesa-collections/unpaid-jobs');
       const raw = data?.data ?? data;
       setUnpaidJobs(Array.isArray(raw) ? raw : (raw?.jobs ?? []));
     } catch { setUnpaidJobs([]); }
@@ -91,7 +94,7 @@ export default function CarWashMpesaScreen() {
     if (!target) return;
     setAllocating(true);
     try {
-      await api.post(`/carwash/mpesa/notifications/${target._id}/allocate`, { jobId });
+      await api.post(`/carwash/mpesa-collections/${target._id}/allocate`, { jobId });
       setTarget(null);
       load(1, true);
     } catch (err: any) {
@@ -230,7 +233,7 @@ export default function CarWashMpesaScreen() {
                 <Text style={{ color: '#94A3B8', marginTop: 12 }}>Allocating...</Text>
               </View>
             ) : (
-              <FL
+              <FlatList
                 data={unpaidJobs}
                 keyExtractor={j => j._id}
                 contentContainerStyle={{ padding: 16, gap: 8 }}

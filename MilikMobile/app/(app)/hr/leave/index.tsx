@@ -78,7 +78,10 @@ export default function LeaveScreen() {
       setItems(prev => pg === 1 ? rows : [...prev, ...rows]);
       setHasMore(rows.length === LIMIT);
       setPage(pg);
-    } catch { if (pg === 1) setItems([]); }
+    } catch (err: any) {
+      if (pg === 1) setItems([]);
+      if (pg === 1) Alert.alert('Error', err?.response?.data?.message ?? 'Failed to load leave applications.');
+    }
     finally { setLoading(false); setRefreshing(false); setLoadingMore(false); }
   }, [statusFilter]);
 

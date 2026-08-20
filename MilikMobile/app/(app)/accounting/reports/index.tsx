@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  RefreshControl, ActivityIndicator, TextInput,
+  RefreshControl, ActivityIndicator, TextInput, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -71,10 +71,12 @@ export default function FinancialReportsScreen() {
         incomeStatement: '/financial-reports/income-statement',
         balanceSheet:    '/financial-reports/balance-sheet',
       };
-      const { data: res } = await api.get(endpointMap[report], { params });
+      const { data: apiData } = await api.get(endpointMap[report], { params });
+      // unwrap envelope: API may return { data: { rows, totals } } or { rows, totals } directly
+      const res = apiData?.data ?? apiData;
       setData(prev => ({ ...prev, [report]: res }));
     } catch (e: any) {
-      console.warn('[FinancialReports]', e?.response?.status, e?.response?.data?.message ?? e?.message);
+      Alert.alert('Error', e?.response?.data?.message ?? 'Failed to load report.');
     }
     finally { setLoading(false); setRefreshing(false); }
   }, [startDate, endDate]);

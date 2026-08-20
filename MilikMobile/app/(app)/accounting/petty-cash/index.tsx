@@ -92,7 +92,9 @@ export default function PettyCashScreen() {
       const res = await api.get('/petty-cash/accounts');
       const raw = res.data?.data ?? res.data;
       setAccounts(Array.isArray(raw) ? raw : (raw?.accounts ?? []));
-    } catch {}
+    } catch {
+      Alert.alert('Error', 'Failed to load petty cash accounts.');
+    }
     finally { setAcctLoading(false); setRefreshing(false); }
   }, []);
 
@@ -108,7 +110,9 @@ export default function PettyCashScreen() {
       const res = await api.get('/petty-cash/disbursements', { params });
       const raw = res.data?.data ?? res.data;
       setDisbursements(Array.isArray(raw) ? raw : (raw?.disbursements ?? []));
-    } catch {}
+    } catch {
+      Alert.alert('Error', 'Failed to load disbursements.');
+    }
     finally { setDisbLoading(false); setRefreshing(false); }
   }, [disbFilter, period]);
 

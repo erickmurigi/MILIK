@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -97,7 +97,12 @@ export default function JournalsScreen() {
       setItems(prev => pg === 1 ? rows : [...prev, ...rows]);
       setHasMore(rows.length === LIMIT);
       setPage(pg);
-    } catch { if (pg === 1) setItems([]); }
+    } catch {
+      if (pg === 1) {
+        setItems([]);
+        Alert.alert('Error', 'Failed to load journal entries.');
+      }
+    }
     finally { setLoading(false); setRefreshing(false); setLoadingMore(false); }
   }, [statusFilter, period]);
 

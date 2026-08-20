@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -71,7 +71,10 @@ export default function AttendanceScreen() {
         halfDay: rows.filter(r => r.status === 'HalfDay').length,
         leave:   rows.filter(r => r.status === 'Leave').length,
       });
-    } catch { setItems([]); }
+    } catch (err: any) {
+      setItems([]);
+      Alert.alert('Error', err?.response?.data?.message ?? 'Failed to load attendance records.');
+    }
     finally { setLoading(false); setRefreshing(false); }
   }, [date]);
 

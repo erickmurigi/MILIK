@@ -79,7 +79,12 @@ export default function RequisitionsScreen() {
       setItems(prev => pg === 1 ? rows : [...prev, ...rows]);
       setHasMore(rows.length === LIMIT);
       setPage(pg);
-    } catch { if (pg === 1) setItems([]); }
+    } catch {
+      if (pg === 1) {
+        setItems([]);
+        Alert.alert('Error', 'Failed to load requisitions.');
+      }
+    }
     finally { setLoading(false); setRefreshing(false); setLoadingMore(false); }
   }, [statusFilter]);
 

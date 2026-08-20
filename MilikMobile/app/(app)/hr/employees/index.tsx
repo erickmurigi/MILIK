@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -84,7 +84,10 @@ export default function EmployeesScreen() {
       setItems(prev => pg === 1 ? rows : [...prev, ...rows]);
       setHasMore(rows.length === LIMIT);
       setPage(pg);
-    } catch { if (pg === 1) setItems([]); }
+    } catch (err: any) {
+      if (pg === 1) setItems([]);
+      if (pg === 1) Alert.alert('Error', err?.response?.data?.message ?? 'Failed to load employees.');
+    }
     finally { setLoading(false); setRefreshing(false); setLoadingMore(false); }
   }, [statusFilter]);
 

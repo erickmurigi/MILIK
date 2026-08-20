@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  RefreshControl, ActivityIndicator,
+  RefreshControl, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,7 +12,7 @@ const SC  = '#7C2D12';
 const SCL = '#FEF3C7';
 
 const fmt = (n: number) =>
-  `KES ${Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  `KES ${Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 type Stats = {
   activeListings?:  number;
@@ -42,7 +42,10 @@ export default function SalesDashboardScreen() {
       const { data } = await api.get('/sale/reports/dashboard');
       const d = data?.data ?? data;
       setStats(d ?? {});
-    } catch {}
+    } catch (e: any) {
+      const msg = e?.response?.data?.message ?? e?.message ?? 'Failed to load sales data';
+      Alert.alert('Error', msg);
+    }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 

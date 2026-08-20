@@ -274,7 +274,7 @@ export default function InvoicesScreen() {
           renderItem={renderItem}
           contentContainerStyle={styles.list}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => load(1)} tintColor={Colors.primary} />
+            <RefreshControl refreshing={refreshing} onRefresh={() => load(1, false)} tintColor={Colors.primary} />
           }
           onEndReached={() => { if (!loadingMore && hasMore) load(page + 1, false); }}
           onEndReachedThreshold={0.3}

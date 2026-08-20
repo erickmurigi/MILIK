@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +17,7 @@ const fmt = (n: number) =>
 type Voucher = {
   _id:              string;
   voucherNo?:       string;
+  date?:            string;
   dueDate?:         string;
   createdAt?:       string;
   amount:           number;
@@ -75,7 +76,12 @@ export default function VouchersScreen() {
       setItems(prev => pg === 1 ? rows : [...prev, ...rows]);
       setHasMore(rows.length === LIMIT);
       setPage(pg);
-    } catch { if (pg === 1) setItems([]); }
+    } catch {
+      if (pg === 1) {
+        setItems([]);
+        Alert.alert('Error', 'Failed to load payment vouchers.');
+      }
+    }
     finally { setLoading(false); setRefreshing(false); setLoadingMore(false); }
   }, [statusFilter]);
 
@@ -90,7 +96,7 @@ export default function VouchersScreen() {
 
   const renderItem = ({ item }: { item: Voucher }) => {
     const sc   = STATUS_CFG[item.status] ?? STATUS_CFG.draft;
-    const date = item.dueDate ?? item.createdAt ?? '';
+    const date = item.date ?? item.dueDate ?? item.createdAt ?? '';
     return (
       <TouchableOpacity
         style={[styles.card, { borderLeftColor: sc.color }]}

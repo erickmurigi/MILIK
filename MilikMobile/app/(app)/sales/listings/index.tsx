@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -39,7 +39,7 @@ const TABS = [
 ] as const;
 
 const fmt = (n: number) =>
-  `KES ${Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 0 })}`;
+  `KES ${Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const LIMIT = 30;
 
@@ -64,11 +64,15 @@ export default function ListingsScreen() {
       if (statusFilter) p.status = statusFilter;
       if (searchRef.current.trim()) p.search = searchRef.current.trim();
       const { data } = await api.get('/sale/listings', { params: p });
-      const rows: Listing[] = data?.data ?? (Array.isArray(data) ? data : []);
+      const rows: Listing[] = Array.isArray(data) ? data : data?.data ?? data?.items ?? data?.listings ?? [];
       setItems(prev => pg === 1 ? rows : [...prev, ...rows]);
       setHasMore(rows.length === LIMIT);
       setPage(pg);
-    } catch { if (pg === 1) setItems([]); }
+    } catch (e: any) {
+      const msg = e?.response?.data?.message ?? e?.message ?? 'Failed to load listings';
+      Alert.alert('Error', msg);
+      if (pg === 1) setItems([]);
+    }
     finally { setLoading(false); setRefreshing(false); setLoadingMore(false); }
   }, [statusFilter]);
 

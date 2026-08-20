@@ -40,7 +40,7 @@ export default function InventoryDashboardScreen() {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     const today = todayStr();
     const [sumRes, lowRes, prodRes] = await Promise.allSettled([
-      api.get('/inventory/pos-sales/summary', { params: { date: today } }),
+      api.get('/pos/sales/summary', { params: { date: today } }),
       api.get('/inventory/stock-movements/low-stock'),
       api.get('/inventory/products', { params: { limit: 1, active: 'true' } }),
     ]);

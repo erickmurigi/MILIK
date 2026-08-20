@@ -80,12 +80,14 @@ export default function TenantProfileScreen() {
         api.get(`/tenants/${id}`),
         api.get(`/tenants/balance/${id}`),
         api.get('/tenant-invoices', { params: { tenant: id, limit: 10, page: 1 } }),
-        api.get(`/tenants/payments/${id}`, { params: { limit: 10 } }),
+        api.get('/rent-payments', { params: { tenant: id, limit: 10, page: 1 } }),
       ]);
       setTenant(tenantRes.data.data || tenantRes.data);
-      setBalance(balRes.data.data);
-      setInvoices(invRes.data.data || []);
-      setPayments(payRes.data.data || []);
+      setBalance(balRes.data?.data ?? balRes.data);
+      const invRows = invRes.data;
+      setInvoices(Array.isArray(invRows) ? invRows : invRows?.data ?? invRows?.items ?? []);
+      const payRows = payRes.data;
+      setPayments(Array.isArray(payRows) ? payRows : payRows?.data ?? payRows?.items ?? []);
     } catch (err) {
       console.error('Tenant profile load error:', err);
     } finally {

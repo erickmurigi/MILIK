@@ -93,8 +93,22 @@ export default function TenantStatementScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  const { rows, totalCharged, totalPaid } = useMemo(() => {
+  const { rows, totalCharged, totalPaid, openingBalance } = useMemo(() => {
     const cutoff = cutoffDate(period);
+
+    // Sum all transactions BEFORE the cutoff to get the opening balance
+    let openingBalance = 0;
+    if (cutoff) {
+      for (const inv of invoices) {
+        const d = new Date(inv.dueDate || inv.createdAt || Date.now());
+        if (d < cutoff) openingBalance += inv.amount;
+      }
+      for (const pay of payments) {
+        const d = new Date(pay.paymentDate || Date.now());
+        if (d < cutoff) openingBalance -= pay.amount;
+      }
+    }
+
     const entries: Omit<LedgerRow, 'balance'>[] = [];
 
     for (const inv of invoices) {
@@ -125,7 +139,8 @@ export default function TenantStatementScreen() {
 
     entries.sort((a, b) => a.date.getTime() - b.date.getTime());
 
-    let balance      = 0;
+    // Running balance starts from the opening balance, not zero
+    let balance      = openingBalance;
     let totalCharged = 0;
     let totalPaid    = 0;
 
@@ -136,10 +151,11 @@ export default function TenantStatementScreen() {
       return { ...e, balance };
     });
 
-    return { rows, totalCharged, totalPaid };
+    return { rows, totalCharged, totalPaid, openingBalance };
   }, [invoices, payments, period]);
 
-  const balanceDue = totalCharged - totalPaid;
+  // True current balance = opening balance carried in + period activity
+  const balanceDue = openingBalance + totalCharged - totalPaid;
 
   if (loading) {
     return (
@@ -186,21 +202,24 @@ export default function TenantStatementScreen() {
           {/* Summary card */}
           <View style={styles.summaryCard}>
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>TOTAL CHARGED</Text>
+              <Text style={styles.summaryLabel}>INVOICED</Text>
               <Text style={[styles.summaryValue, { color: Colors.danger }]}>
                 {totalCharged.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </Text>
             </View>
             <View style={[styles.summaryItem, styles.summaryBorder]}>
-              <Text style={styles.summaryLabel}>TOTAL PAID</Text>
+              <Text style={styles.summaryLabel}>RECEIVED</Text>
               <Text style={[styles.summaryValue, { color: Colors.success }]}>
                 {totalPaid.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </Text>
             </View>
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>BALANCE DUE</Text>
+              <Text style={styles.summaryLabel}>NET BALANCE</Text>
               <Text style={[styles.summaryValue, { color: balanceDue > 0 ? Colors.danger : Colors.success }]}>
                 {fmtBal(balanceDue)}
+              </Text>
+              <Text style={{ fontSize: 9, fontWeight: '700', color: balanceDue > 0 ? Colors.danger : Colors.success }}>
+                {balanceDue > 0 ? 'DR' : balanceDue < 0 ? 'CR' : ''}
               </Text>
             </View>
           </View>
@@ -218,7 +237,20 @@ export default function TenantStatementScreen() {
                   <Text style={[styles.th, styles.colAmt, styles.right]}>BALANCE</Text>
                 </View>
 
-                {rows.length === 0 ? (
+                {/* Opening balance row */}
+                {openingBalance !== 0 && (
+                  <View style={[styles.tableRow, styles.rowOpening]}>
+                    <Text style={[styles.td, styles.colDate, { color: Colors.textMuted }]}>B/F</Text>
+                    <Text style={[styles.td, styles.colDesc, { color: Colors.textMuted, fontStyle: 'italic' }]}>Opening Balance</Text>
+                    <Text style={[styles.td, styles.colAmt, styles.right, { color: Colors.textMuted }]}>—</Text>
+                    <Text style={[styles.td, styles.colAmt, styles.right, { color: Colors.textMuted }]}>—</Text>
+                    <Text style={[styles.td, styles.tdBold, styles.colAmt, styles.right, { color: openingBalance > 0 ? Colors.danger : Colors.success }]}>
+                      {fmtBal(openingBalance)}
+                    </Text>
+                  </View>
+                )}
+
+                {rows.length === 0 && openingBalance === 0 ? (
                   <View style={styles.emptyWrap}>
                     <Text style={styles.emptyText}>No transactions in this period</Text>
                   </View>
@@ -304,6 +336,7 @@ const styles = StyleSheet.create({
   tableHeader:  { backgroundColor: Colors.primaryFaded },
   rowInvoice:   { backgroundColor: Colors.dangerLight },
   rowPayment:   { backgroundColor: Colors.successLight },
+  rowOpening:   { backgroundColor: '#F8FAFC' },
 
   th: {
     fontSize: 9, fontWeight: '800', letterSpacing: 0.6, color: Colors.primary,

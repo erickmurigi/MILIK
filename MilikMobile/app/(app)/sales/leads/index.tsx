@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -81,11 +81,15 @@ export default function LeadsScreen() {
       if (statusFilter) p.status = statusFilter;
       if (searchRef.current.trim()) p.search = searchRef.current.trim();
       const { data } = await api.get('/sale/leads', { params: p });
-      const rows: Lead[] = data?.data ?? (Array.isArray(data) ? data : []);
+      const rows: Lead[] = Array.isArray(data) ? data : data?.data ?? data?.items ?? data?.leads ?? [];
       setItems(prev => pg === 1 ? rows : [...prev, ...rows]);
       setHasMore(rows.length === LIMIT);
       setPage(pg);
-    } catch { if (pg === 1) setItems([]); }
+    } catch (e: any) {
+      const msg = e?.response?.data?.message ?? e?.message ?? 'Failed to load leads';
+      Alert.alert('Error', msg);
+      if (pg === 1) setItems([]);
+    }
     finally { setLoading(false); setRefreshing(false); setLoadingMore(false); }
   }, [statusFilter]);
 

@@ -84,7 +84,7 @@ export default function CarWashDashboard() {
     const [sumRes, jobsRes, mpesaRes] = await Promise.allSettled([
       api.get('/carwash/reports/daily-summary', { params: { date } }),
       api.get('/carwash/jobs', { params: { date, limit: 20 } }),
-      api.get('/carwash/mpesa/notifications', { params: { allocated: 'false', limit: 1 } }),
+      api.get('/carwash/mpesa-collections', { params: { allocated: 'false', limit: 1 } }),
     ]);
     if (sumRes.status === 'fulfilled') setSummary(sumRes.value.data?.data ?? sumRes.value.data ?? null);
     if (jobsRes.status === 'fulfilled') {
