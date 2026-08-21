@@ -5,12 +5,17 @@ import {
   addUtilityType,
   updateUtilityType,
   deleteUtilityType,
+  getUnitTypes,
+  addUnitType,
+  updateUnitType,
+  deleteUnitType,
+  getMaintenanceCategories,
+  addMaintenanceCategory,
+  updateMaintenanceCategory,
+  deleteMaintenanceCategory,
   addBillingPeriod,
   updateBillingPeriod,
   deleteBillingPeriod,
-  addCommission,
-  updateCommission,
-  deleteCommission,
   addExpenseItem,
   updateExpenseItem,
   deleteExpenseItem,
@@ -48,15 +53,22 @@ router.post("/:businessId/utilities", verifyUser, addUtilityType);
 router.put("/:businessId/utilities/:utilityId", verifyUser, updateUtilityType);
 router.delete("/:businessId/utilities/:utilityId", verifyUser, deleteUtilityType);
 
+// Unit Types
+router.get("/:businessId/unit-types", verifyUser, getUnitTypes);
+router.post("/:businessId/unit-types", verifyUser, addUnitType);
+router.put("/:businessId/unit-types/:itemId", verifyUser, updateUnitType);
+router.delete("/:businessId/unit-types/:itemId", verifyUser, deleteUnitType);
+
+// Maintenance Categories
+router.get("/:businessId/maintenance-categories", verifyUser, getMaintenanceCategories);
+router.post("/:businessId/maintenance-categories", verifyUser, addMaintenanceCategory);
+router.put("/:businessId/maintenance-categories/:itemId", verifyUser, updateMaintenanceCategory);
+router.delete("/:businessId/maintenance-categories/:itemId", verifyUser, deleteMaintenanceCategory);
+
 // Billing Periods
 router.post("/:businessId/periods", verifyUser, addBillingPeriod);
 router.put("/:businessId/periods/:periodId", verifyUser, updateBillingPeriod);
 router.delete("/:businessId/periods/:periodId", verifyUser, deleteBillingPeriod);
-
-// Commissions
-router.post("/:businessId/commissions", verifyUser, addCommission);
-router.put("/:businessId/commissions/:commissionId", verifyUser, updateCommission);
-router.delete("/:businessId/commissions/:commissionId", verifyUser, deleteCommission);
 
 // Tax Configuration
 router.put("/:businessId/tax-configuration", verifyUser, updateTaxConfiguration);

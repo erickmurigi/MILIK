@@ -18,7 +18,7 @@ import { fmtDate } from "../../utils/dates";
 import Modal from "../../components/common/Modal";
 
 const GRN = "#0B3B2E";
-const emptyForm = { name: "", phone: "", role: "", active: true, branch: "" };
+const emptyForm = { name: "", phone: "", role: "", startDate: "", active: true, branch: "" };
 const DEFAULT_PAGE_SIZE = 25;
 const fmt = formatMoney;
 
@@ -305,7 +305,7 @@ const CarWashStaff = () => {
   const openEdit = (row) => {
     const draft = readDraft(`cw-staff-edit-${row._id}`);
     setEditingId(row._id);
-    setForm(draft ?? { name: row.name || "", phone: row.phone || "", role: row.role || "", active: row.active !== false, branch: row.branch?._id || row.branch || "" });
+    setForm(draft ?? { name: row.name || "", phone: row.phone || "", role: row.role || "", startDate: row.startDate ? row.startDate.slice(0, 10) : "", active: row.active !== false, branch: row.branch?._id || row.branch || "" });
     setShowModal(true);
   };
 
@@ -504,6 +504,10 @@ const CarWashStaff = () => {
             <div>
               <label className={labelClass}>Role</label>
               <input className={inputClass} value={form.role} onChange={(e) => setForm((p) => ({ ...p, role: e.target.value }))} />
+            </div>
+            <div>
+              <label className={labelClass}>Start Date *</label>
+              <input type="date" className={inputClass} value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} required />
             </div>
             <div>
               <AppSelect

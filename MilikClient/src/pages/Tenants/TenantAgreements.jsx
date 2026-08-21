@@ -178,6 +178,7 @@ const TenantAgreements = () => {
   const [currentPage, setCurrentPage] = useTabState("/agreements:currentPage", 1);
   const [expandedAgreements, setExpandedAgreements] = useState(new Set());
   const [selectedAgreements, setSelectedAgreements] = useState([]);
+  const selectedAgreementsSet = useMemo(() => new Set(selectedAgreements), [selectedAgreements]);
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(buildInitialForm());
   const [submitting, setSubmitting] = useState(false);
@@ -394,7 +395,7 @@ const TenantAgreements = () => {
   };
   const toggleSelectAllAgreements = () => {
     const allIds = pagedRows.map((r) => r.id);
-    const allSelected = allIds.length > 0 && allIds.every((id) => selectedAgreements.includes(id));
+    const allSelected = allIds.length > 0 && allIds.every((id) => selectedAgreementsSet.has(id));
     setSelectedAgreements(allSelected ? [] : allIds);
   };
   const toggleAgreementExpand = (id) => {
@@ -738,13 +739,13 @@ const TenantAgreements = () => {
               minWidth={1320}
               groupBy={(row) => toListingCaps(row.propertyName)}
               checkboxes
-              allChecked={pagedRows.length > 0 && pagedRows.every((r) => selectedAgreements.includes(r.id))}
-              someChecked={pagedRows.some((r) => selectedAgreements.includes(r.id))}
+              allChecked={pagedRows.length > 0 && pagedRows.every((r) => selectedAgreementsSet.has(r.id))}
+              someChecked={pagedRows.some((r) => selectedAgreementsSet.has(r.id))}
               onCheckAll={toggleSelectAllAgreements}
-              isChecked={(row) => selectedAgreements.includes(row.id)}
+              isChecked={(row) => selectedAgreementsSet.has(row.id)}
               onCheckRow={(row) => toggleAgreementSelect(row.id)}
               onRowClick={(row) => toggleAgreementSelect(row.id)}
-              isSelected={(row) => selectedAgreements.includes(row.id)}
+              isSelected={(row) => selectedAgreementsSet.has(row.id)}
               renderRow={(row) => {
                 const normalizedStatus = String(row.status || "").toLowerCase();
                 const hasDocument = Boolean(String(row.raw?.documentUrl || "").trim());

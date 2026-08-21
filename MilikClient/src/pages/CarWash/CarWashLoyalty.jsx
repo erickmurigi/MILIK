@@ -843,6 +843,7 @@ const CarWashLoyalty = () => {
                 someChecked={selectedIds.size > 0 && !allPageSelected}
                 onCheckAll={handleSelectAll}
                 isChecked={(c) => selectedIds.has(c._id)}
+                isSelected={(c) => selectedIds.has(c._id)}
                 onCheckRow={(c) => handleSelect(c._id)}
                 rowClassName={(c) => (c.loyaltyCard?.pendingRewards ?? 0) > 0 ? "!bg-amber-50/40" : ""}
                 renderExpanded={(c) => (

@@ -691,6 +691,7 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const actionBtnCls = (enabled, activeCls) =>
     `h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white ${enabled ? activeCls : "bg-gray-400 cursor-not-allowed"}`;
   const [selectedInvoices, setSelectedInvoices] = useState([]);
+  const selectedInvoicesSet = useMemo(() => new Set(selectedInvoices), [selectedInvoices]);
   const [selectAll, setSelectAll] = useState(false);
   const [showSmsModal, setShowSmsModal] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
@@ -1323,7 +1324,7 @@ const visibleInvoiceKeys = useMemo(
       setSelectAll(false);
       return;
     }
-    setSelectAll(visibleInvoiceKeys.every((key) => selectedInvoices.includes(key)));
+    setSelectAll(visibleInvoiceKeys.every((key) => selectedInvoicesSet.has(key)));
   }, [selectedInvoices, currentPageInvoices, visibleInvoiceKeys]);
 
   const openHtmlDocument = (title, html) => {
@@ -2419,7 +2420,7 @@ const createInvoiceForTenant = async (
       return;
     }
 
-    const selectedRows = filteredInvoices.filter((inv) => selectedInvoices.includes(inv.key));
+    const selectedRows = filteredInvoices.filter((inv) => selectedInvoicesSet.has(inv.key));
     const undeletable = selectedRows.filter((invoice) =>
       ["paid", "partially_paid"].includes(String(invoice.status || "").toLowerCase())
     );
@@ -2597,10 +2598,10 @@ const createInvoiceForTenant = async (
               allChecked={currentPageInvoices.length > 0 && selectAll}
               someChecked={selectedInvoices.length > 0 && !selectAll}
               onCheckAll={toggleSelectAll}
-              isChecked={(invoice) => selectedInvoices.includes(invoice.key)}
+              isChecked={(invoice) => selectedInvoicesSet.has(invoice.key)}
               onCheckRow={(invoice) => toggleRowSelection(invoice.key)}
               onRowClick={(invoice) => toggleRowSelection(invoice.key)}
-              isSelected={(invoice) => selectedInvoices.includes(invoice.key)}
+              isSelected={(invoice) => selectedInvoicesSet.has(invoice.key)}
               renderRow={(invoice) => (
                 <>
                   <td className="px-3 py-1.5 border-r border-gray-100">

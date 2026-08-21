@@ -20,7 +20,7 @@ function SortIcon({ col, sortKey, sortDir, onSort }) {
     : <FaSortDown className="ml-0.5 inline" size={8} />;
 }
 
-export default function MilikTable({
+const MilikTable = React.memo(function MilikTable({
   columns   = [],   // { label, align?, width?, className?, sortKey? }
   rows      = [],
   rowKey    = "_id",
@@ -50,6 +50,8 @@ export default function MilikTable({
   empty = "No records found.",
 
   minWidth,
+  tableFixed,
+  actionsWidth,
   stickyHeader = true,
   className,
 }) {
@@ -152,7 +154,7 @@ export default function MilikTable({
     <div className={`flex-1 min-h-0 overflow-auto ${className ?? ""}`}>
       <table
         className="w-full border-collapse text-xs"
-        style={minWidth ? { minWidth } : undefined}
+        style={{ ...(minWidth ? { minWidth } : {}), ...(tableFixed ? { tableLayout: 'fixed' } : {}) }}
       >
         {/* ── Head ── */}
         <thead className={stickyHeader ? "sticky top-0 z-10 shadow-sm" : undefined}>
@@ -188,7 +190,10 @@ export default function MilikTable({
               </th>
             ))}
             {hasActions && (
-              <th className="px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-right whitespace-nowrap">
+              <th
+                className="px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-right whitespace-nowrap"
+                style={actionsWidth ? { width: actionsWidth } : undefined}
+              >
                 Actions
               </th>
             )}
@@ -246,4 +251,6 @@ export default function MilikTable({
       </table>
     </div>
   );
-}
+});
+
+export default MilikTable;

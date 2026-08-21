@@ -427,6 +427,214 @@ export const deleteUtilityType = async (req, res, next) => {
   }
 };
 
+// ─── Unit Types ───────────────────────────────────────────────────────────────
+
+export const getUnitTypes = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    const settings = await findCompanySettings(businessId);
+    const items = settings?.unitTypes || [];
+    res.status(200).json({ unitTypes: items });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const addUnitType = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    const name = normalizeText(req.body?.name);
+    const description = normalizeText(req.body?.description);
+    const category = normalizeText(req.body?.category) || "residential";
+
+    if (!name) {
+      return next(createError(400, "Unit type name is required"));
+    }
+
+    const settings = await ensureSettingsDocument(businessId);
+    ensureUniqueCollectionName({ items: settings.unitTypes, name, label: "Unit type" });
+
+    const newUnitType = {
+      _id: new mongoose.Types.ObjectId(),
+      name,
+      description,
+      category,
+      isActive: true,
+    };
+
+    settings.unitTypes.push(newUnitType);
+    await settings.save();
+
+    res.status(201).json({ unitType: newUnitType, settings, message: "Unit type added successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updateUnitType = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    const { itemId } = req.params;
+    const { isActive } = req.body;
+    const name = req.body?.name === undefined ? undefined : normalizeText(req.body.name);
+    const description = req.body?.description === undefined ? undefined : normalizeText(req.body.description);
+    const category = req.body?.category === undefined ? undefined : normalizeText(req.body.category);
+
+    const settings = await findCompanySettings(businessId);
+    if (!settings) {
+      return next(createError(404, "Settings not found"));
+    }
+
+    const unitType = settings.unitTypes.id(itemId);
+    if (!unitType) {
+      return next(createError(404, "Unit type not found"));
+    }
+
+    if (name !== undefined) {
+      if (!name) {
+        return next(createError(400, "Unit type name is required"));
+      }
+      ensureUniqueCollectionName({
+        items: settings.unitTypes,
+        name,
+        excludeId: itemId,
+        label: "Unit type",
+      });
+      unitType.name = name;
+    }
+    if (description !== undefined) unitType.description = description;
+    if (category !== undefined) unitType.category = category || "residential";
+    if (isActive !== undefined) unitType.isActive = Boolean(isActive);
+
+    await settings.save();
+    res.status(200).json({ unitType, settings, message: "Unit type updated successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const deleteUnitType = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    const { itemId } = req.params;
+    return await archiveEmbeddedSetting({
+      req,
+      res,
+      next,
+      businessId,
+      itemId,
+      collectionKey: "unitTypes",
+      successLabel: "Unit type",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── Maintenance Categories ───────────────────────────────────────────────────
+
+export const getMaintenanceCategories = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    const settings = await findCompanySettings(businessId);
+    const items = settings?.maintenanceCategories || [];
+    res.status(200).json({ maintenanceCategories: items });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const addMaintenanceCategory = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    const name = normalizeText(req.body?.name);
+    const description = normalizeText(req.body?.description);
+    const priority = normalizeText(req.body?.priority) || "medium";
+
+    if (!name) {
+      return next(createError(400, "Maintenance category name is required"));
+    }
+
+    const settings = await ensureSettingsDocument(businessId);
+    ensureUniqueCollectionName({ items: settings.maintenanceCategories, name, label: "Maintenance category" });
+
+    const newCategory = {
+      _id: new mongoose.Types.ObjectId(),
+      name,
+      description,
+      priority,
+      isActive: true,
+    };
+
+    settings.maintenanceCategories.push(newCategory);
+    await settings.save();
+
+    res.status(201).json({ maintenanceCategory: newCategory, settings, message: "Maintenance category added successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updateMaintenanceCategory = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    const { itemId } = req.params;
+    const { isActive } = req.body;
+    const name = req.body?.name === undefined ? undefined : normalizeText(req.body.name);
+    const description = req.body?.description === undefined ? undefined : normalizeText(req.body.description);
+    const priority = req.body?.priority === undefined ? undefined : normalizeText(req.body.priority);
+
+    const settings = await findCompanySettings(businessId);
+    if (!settings) {
+      return next(createError(404, "Settings not found"));
+    }
+
+    const category = settings.maintenanceCategories.id(itemId);
+    if (!category) {
+      return next(createError(404, "Maintenance category not found"));
+    }
+
+    if (name !== undefined) {
+      if (!name) {
+        return next(createError(400, "Maintenance category name is required"));
+      }
+      ensureUniqueCollectionName({
+        items: settings.maintenanceCategories,
+        name,
+        excludeId: itemId,
+        label: "Maintenance category",
+      });
+      category.name = name;
+    }
+    if (description !== undefined) category.description = description;
+    if (priority !== undefined) category.priority = priority || "medium";
+    if (isActive !== undefined) category.isActive = Boolean(isActive);
+
+    await settings.save();
+    res.status(200).json({ maintenanceCategory: category, settings, message: "Maintenance category updated successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const deleteMaintenanceCategory = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    const { itemId } = req.params;
+    return await archiveEmbeddedSetting({
+      req,
+      res,
+      next,
+      businessId,
+      itemId,
+      collectionKey: "maintenanceCategories",
+      successLabel: "Maintenance category",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const addBillingPeriod = async (req, res, next) => {
   try {
     const businessId = resolveAuthorizedBusinessId(req);
@@ -545,96 +753,6 @@ export const deleteBillingPeriod = async (req, res, next) => {
       itemId: periodId,
       collectionKey: "billingPeriods",
       successLabel: "Billing period",
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-export const addCommission = async (req, res, next) => {
-  try {
-    const businessId = resolveAuthorizedBusinessId(req);
-    const name = normalizeText(req.body?.name);
-    const percentage = toNumber(req.body?.percentage, NaN);
-    const applicableTo = normalizeText(req.body?.applicableTo) || "rent";
-    const description = normalizeText(req.body?.description);
-
-    if (!name || Number.isNaN(percentage)) {
-      return next(createError(400, "Name and percentage are required"));
-    }
-
-    const settings = await ensureSettingsDocument(businessId);
-    ensureUniqueCollectionName({ items: settings.commissions, name, label: "Commission" });
-
-    const newCommission = {
-      _id: new mongoose.Types.ObjectId(),
-      name,
-      percentage,
-      applicableTo,
-      description,
-      isActive: true,
-    };
-
-    settings.commissions.push(newCommission);
-    await settings.save();
-
-    res.status(201).json({ commission: newCommission, settings, message: "Commission added successfully" });
-  } catch (err) {
-    next(err);
-  }
-};
-
-export const updateCommission = async (req, res, next) => {
-  try {
-    const businessId = resolveAuthorizedBusinessId(req);
-    const { commissionId } = req.params;
-    const settings = await findCompanySettings(businessId);
-    if (!settings) {
-      return next(createError(404, "Settings not found"));
-    }
-
-    const commission = settings.commissions.id(commissionId);
-    if (!commission) {
-      return next(createError(404, "Commission not found"));
-    }
-
-    if (req.body?.name !== undefined) {
-      const name = normalizeText(req.body.name);
-      if (!name) {
-        return next(createError(400, "Commission name is required"));
-      }
-      ensureUniqueCollectionName({
-        items: settings.commissions,
-        name,
-        excludeId: commissionId,
-        label: "Commission",
-      });
-      commission.name = name;
-    }
-    if (req.body?.percentage !== undefined) commission.percentage = toNumber(req.body.percentage, 0);
-    if (req.body?.applicableTo !== undefined) commission.applicableTo = normalizeText(req.body.applicableTo) || "rent";
-    if (req.body?.description !== undefined) commission.description = normalizeText(req.body.description);
-    if (req.body?.isActive !== undefined) commission.isActive = Boolean(req.body.isActive);
-
-    await settings.save();
-    res.status(200).json({ commission, settings, message: "Commission updated successfully" });
-  } catch (err) {
-    next(err);
-  }
-};
-
-export const deleteCommission = async (req, res, next) => {
-  try {
-    const businessId = resolveAuthorizedBusinessId(req);
-    const { commissionId } = req.params;
-    return await archiveEmbeddedSetting({
-      req,
-      res,
-      next,
-      businessId,
-      itemId: commissionId,
-      collectionKey: "commissions",
-      successLabel: "Commission",
     });
   } catch (err) {
     next(err);

@@ -218,6 +218,7 @@ const TenantDeposits = () => {
   const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [currentPage, setCurrentPage] = useTabState("/tenants/deposits:currentPage", 1);
   const [selectedInvoices, setSelectedInvoices] = useState([]);
+  const selectedInvoicesSet = useMemo(() => new Set(selectedInvoices), [selectedInvoices]);
   const [selectAll, setSelectAll] = useState(false);
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [communicationModal, setCommunicationModal] = useState(null);
@@ -512,7 +513,7 @@ const TenantDeposits = () => {
 
   useEffect(() => {
     const pageKeys = currentPageRows.map((row) => row.key);
-    setSelectAll(pageKeys.length > 0 && pageKeys.every((key) => selectedInvoices.includes(key)));
+    setSelectAll(pageKeys.length > 0 && pageKeys.every((key) => selectedInvoicesSet.has(key)));
   }, [currentPageRows, selectedInvoices]);
 
   const applySearch = () => setAppliedFilters({ ...draftFilters });
@@ -887,10 +888,10 @@ const TenantDeposits = () => {
               allChecked={currentPageRows.length > 0 && selectAll}
               someChecked={selectedInvoices.length > 0 && !selectAll}
               onCheckAll={toggleSelectAll}
-              isChecked={(row) => selectedInvoices.includes(row.key)}
+              isChecked={(row) => selectedInvoicesSet.has(row.key)}
               onCheckRow={(row) => toggleRowSelection(row.key)}
               onRowClick={(row) => navigate(`/tenant/${row.tenantId}/statement`)}
-              isSelected={(row) => selectedInvoices.includes(row.key)}
+              isSelected={(row) => selectedInvoicesSet.has(row.key)}
               renderRow={(row) => (
                 <>
                   <td className="px-3 py-1.5 border-r border-gray-100 font-bold text-blue-700">{row.id}</td>

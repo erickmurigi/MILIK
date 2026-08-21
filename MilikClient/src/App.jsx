@@ -272,6 +272,7 @@ const SaleAgentPerformance       = lazy(() => import("./pages/PropertySale/SaleA
 const SaleAgentsPerformance      = lazy(() => import("./pages/PropertySale/SaleAgentsPerformance"));
 const SaleSchedule               = lazy(() => import("./pages/PropertySale/SaleSchedule"));
 const SaleCashFlow               = lazy(() => import("./pages/PropertySale/SaleCashFlow"));
+const SaleSettings               = lazy(() => import("./pages/PropertySale/SaleSettings"));
 const SaleConversionFunnel       = lazy(() => import("./pages/PropertySale/SaleConversionFunnel"));
 
 // Client Management module
@@ -756,6 +757,7 @@ function App() {
             <Route path="/sale/agents/performance"           element={<Guard moduleKey="propertySale" resource="saleAgents"><SaleAgentsPerformance /></Guard>} />
             <Route path="/sale/agents/:id/performance"       element={<Guard moduleKey="propertySale" resource="saleAgents"><SaleAgentPerformance /></Guard>} />
             <Route path="/sale/schedule"                     element={<Guard moduleKey="propertySale" resource="saleDeals"><SaleSchedule /></Guard>} />
+            <Route path="/sale/settings"                     element={<Guard moduleKey="propertySale" resource="companySettings"><SaleSettings /></Guard>} />
             <Route path="/sale/chart-of-accounts"            element={<Guard moduleKey={GL_ACCESS_MODULES} resource="chartOfAccounts"><ChartOfAccounts /></Guard>} />
             <Route path="/sale/chart-of-accounts/:accountId/activity" element={<Guard moduleKey="propertySale" resource="chartOfAccounts"><LedgerAccountActivity /></Guard>} />
 

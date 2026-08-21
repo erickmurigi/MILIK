@@ -65,21 +65,6 @@ export const deleteBillingPeriod = async (dispatch, businessId, periodId) =>
     adminRequests.delete(`/company-settings/${businessId}/periods/${periodId}`)
   );
 
-export const addCommission = async (dispatch, businessId, commissionData) =>
-  runMutation(dispatch, businessId, () =>
-    adminRequests.post(`/company-settings/${businessId}/commissions`, commissionData)
-  );
-
-export const updateCommission = async (dispatch, businessId, commissionId, commissionData) =>
-  runMutation(dispatch, businessId, () =>
-    adminRequests.put(`/company-settings/${businessId}/commissions/${commissionId}`, commissionData)
-  );
-
-export const deleteCommission = async (dispatch, businessId, commissionId) =>
-  runMutation(dispatch, businessId, () =>
-    adminRequests.delete(`/company-settings/${businessId}/commissions/${commissionId}`)
-  );
-
 export const addExpenseItem = async (dispatch, businessId, expenseData) =>
   runMutation(dispatch, businessId, () =>
     adminRequests.post(`/company-settings/${businessId}/expenses`, expenseData)

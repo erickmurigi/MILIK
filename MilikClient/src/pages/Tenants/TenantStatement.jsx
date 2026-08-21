@@ -459,13 +459,23 @@ const TenantStatement = () => {
 
   const resolveTenantUnitNumber = (targetTenant) => {
     if (!targetTenant) return "-";
-    if (targetTenant?.unit?.unitNumber) return targetTenant.unit.unitNumber;
 
-    const tenantUnitId = targetTenant?.unit?._id || targetTenant?.unit;
-    const tenantUnitIdStr = tenantUnitId ? String(tenantUnitId) : "";
-    const matchedUnit = unitsFromStore.find((unit) => String(unit?._id || "") === tenantUnitIdStr);
+    const resolveLabel = (unitRef) => {
+      if (!unitRef) return null;
+      if (unitRef?.unitNumber) return unitRef.unitNumber;
+      const id = String(unitRef?._id || unitRef || "");
+      if (!id) return null;
+      const matched = unitsFromStore.find((u) => String(u?._id || "") === id);
+      return getUnitLabel(matched) || null;
+    };
 
-    return getUnitLabel(matchedUnit) || "-";
+    const primaryLabel = resolveLabel(targetTenant?.unit);
+    const additionalLabels = Array.isArray(targetTenant?.additionalUnits)
+      ? targetTenant.additionalUnits.map(resolveLabel).filter(Boolean)
+      : [];
+
+    const labels = [primaryLabel, ...additionalLabels].filter(Boolean);
+    return labels.length ? labels.join(", ") : "-";
   };
 
   const resolveTenantInvoiceContext = (targetTenant) => {
@@ -1369,7 +1379,11 @@ const TenantStatement = () => {
     const name = co.companyName || co.name || co.businessName || 'Milik';
     const logo = co.logo || '';
     const tenantName = tenant?.tenantName || tenant?.name || 'Tenant';
-    const unit = tenant?.unit?.unitNumber || '—';
+    const unit = (() => {
+      const all = [tenant?.unit, ...(Array.isArray(tenant?.additionalUnits) ? tenant.additionalUnits : [])]
+        .map((u) => u?.unitNumber).filter(Boolean);
+      return all.length ? all.join(", ") : "—";
+    })();
     const property = tenant?.unit?.property?.propertyName || tenant?.property?.propertyName || '—';
     const allTxns = statementData?.transactions || [];
     const printStart = startDate ? new Date(`${startDate}T00:00:00`) : null;

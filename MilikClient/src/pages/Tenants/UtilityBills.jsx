@@ -107,6 +107,7 @@ const UtilityBills = () => {
   const [draftFilters, setDraftFilters] = useState(emptyFilters);
   const [appliedFilters, setAppliedFilters] = useState(emptyFilters);
   const [selectedRows, setSelectedRows] = useState([]);
+  const selectedRowsSet = useMemo(() => new Set(selectedRows), [selectedRows]);
   const [selectAll, setSelectAll] = useState(false);
   const [communicationModal, setCommunicationModal] = useState(null);
   const [currentPage, setCurrentPage] = useTabState("/invoices/utility-bills:currentPage", 1);
@@ -256,7 +257,7 @@ const UtilityBills = () => {
   useEffect(() => { if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage); }, [currentPage, safeCurrentPage]);
   useEffect(() => {
     const keys = currentPageRows.map((r) => r.key);
-    setSelectAll(keys.length > 0 && keys.every((k) => selectedRows.includes(k)));
+    setSelectAll(keys.length > 0 && keys.every((k) => selectedRowsSet.has(k)));
   }, [currentPageRows, selectedRows]);
 
   const toggleRow = (key) => setSelectedRows((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]);
@@ -326,10 +327,10 @@ const UtilityBills = () => {
               allChecked={currentPageRows.length > 0 && selectAll}
               someChecked={selectedRows.length > 0 && !selectAll}
               onCheckAll={toggleAll}
-              isChecked={(row) => selectedRows.includes(row.key)}
+              isChecked={(row) => selectedRowsSet.has(row.key)}
               onCheckRow={(row) => toggleRow(row.key)}
               onRowClick={(row) => toggleRow(row.key)}
-              isSelected={(row) => selectedRows.includes(row.key)}
+              isSelected={(row) => selectedRowsSet.has(row.key)}
               renderRow={(row) => (
                 <>
                   <td className="px-3 py-1.5 border-r border-gray-100 font-bold text-blue-700">{row.id}</td>

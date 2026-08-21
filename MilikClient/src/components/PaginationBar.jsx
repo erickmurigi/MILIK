@@ -67,7 +67,7 @@ const PaginationBar = ({
             <span className="text-xs font-semibold text-slate-500 whitespace-nowrap">Per page:</span>
             <select
               value={pageSize}
-              onChange={(e) => { onPageSizeChange(Number(e.target.value)); onPageChange(1); }}
+              onChange={(e) => onPageSizeChange(Number(e.target.value))}
               disabled={loading}
               className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
             >

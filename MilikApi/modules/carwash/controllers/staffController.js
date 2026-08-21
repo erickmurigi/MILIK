@@ -13,6 +13,7 @@ const sanitizeStaffPayload = (body = {}) => ({
   name: String(body.name || "").trim().toUpperCase(),
   phone: String(body.phone || "").trim(),
   role: String(body.role || "").trim().toUpperCase(),
+  startDate: body.startDate ? new Date(body.startDate) : null,
   active: parseBoolean(body.active, true),
 });
 
@@ -51,6 +52,7 @@ export const createStaff = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const payload = sanitizeStaffPayload(req.body);
     if (!payload.name) return next(createError(400, "Staff name is required"));
+    if (!payload.startDate) return next(createError(400, "Start date is required"));
     const userId = currentUserId(req);
     const branchFromBody = toOidOrNull(req.body.branch);
     const branchId = branchFromBody || resolveActiveBranchId(req) || null;

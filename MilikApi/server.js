@@ -132,6 +132,7 @@ import saleReportRoutes     from "./modules/propertySale/routes/reports.js";
 import saleLeadRoutes       from "./modules/propertySale/routes/leads.js";
 import saleActivityRoutes   from "./modules/propertySale/routes/activities.js";
 import saleScheduleRoutes   from "./modules/propertySale/routes/schedule.js";
+import saleSettingsRoutes   from "./modules/propertySale/routes/settings.js";
 import clientRoutes         from "./modules/clients/routes/clients.js";
 import clientContractRoutes from "./modules/clients/routes/contracts.js";
 import clientInvoiceRoutes  from "./modules/clients/routes/invoices.js";
@@ -670,6 +671,7 @@ app.use("/api/sale/reports",      saleReportRoutes);
 app.use("/api/sale/leads",        saleLeadRoutes);
 app.use("/api/sale/activities",   saleActivityRoutes);
 app.use("/api/sale/schedule",     saleScheduleRoutes);
+app.use("/api/sale/settings",    saleSettingsRoutes);
 app.use("/api/inventory/locations",       invLocationRoutes);
 app.use("/api/inventory/categories",      invCategoryRoutes);
 app.use("/api/inventory/products",        invProductRoutes);
@@ -702,7 +704,7 @@ app.use((err, req, res, next) => {
   const errorMessage = err.message || "Something went wrong!";
   const clientMessage = errorStatus >= 500 && isProduction ? "Internal server error" : errorMessage;
 
-  if (errorStatus >= 500) {
+  if (errorStatus >= 500 && err.name !== "MongoClientClosedError") {
     console.error("Unhandled server error:", err);
   }
 
@@ -962,7 +964,10 @@ process.on("uncaughtException", (err) => {
 
 // Graceful shutdown — allows in-flight requests to complete before process exits.
 // Required for zero-downtime restarts under PM2, Docker, and Kubernetes (SIGTERM).
+let _shuttingDown = false;
 const gracefulShutdown = (signal) => {
+  if (_shuttingDown) return;
+  _shuttingDown = true;
   console.log(`[Shutdown] ${signal} received — closing server gracefully…`);
   server.close(() => {
     console.log("[Shutdown] HTTP server closed. Closing MongoDB connection…");

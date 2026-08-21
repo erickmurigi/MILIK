@@ -178,6 +178,7 @@ const MENU_PERMISSION_MAP = {
   "sale-crm-activities":  { resource: "saleActivities",       action: "view", moduleKey: "propertySale" },
   "sale-schedule":        { resource: "sale-schedule",        action: "view", moduleKey: "propertySale" },
   "sale-agent-perf":      { resource: "saleAgents",           action: "view", moduleKey: "propertySale" },
+  "sale-settings":        { resource: "companySettings",      action: "view", moduleKey: "propertySale" },
 };
 
 const filterMenuByPermissions = (items = [], currentUser = {}, activeCompany = null) =>
@@ -458,6 +459,7 @@ const MENU_COLOR_MAP = {
   "sale-finance":     { color: "#027333", label: "Finance",   icon: FaMoneyBillWave },
   "sale-reporting":   { color: "#027333", label: "Reports",   icon: FaFileAlt },
   "sale-crm":         { color: "#027333", label: "CRM",       icon: FaUserClock },
+  "sale-setup":       { color: "#027333", label: "Setup",     icon: FaCog },
   "clients-main":            { color: "#0B3B2E", label: "Clients",   icon: FaUsers },
   "clients-contracts-group": { color: "#0B3B2E", label: "Contracts", icon: FaHandshake },
   "clients-billing":         { color: "#0B3B2E", label: "Billing",   icon: FaFileInvoice },
@@ -748,6 +750,7 @@ const TopToolbar = ({
         "sale-agent-perf":     "/sale/agents/performance",
         "sale-crm-leads":      "/sale/crm/leads",
         "sale-crm-activities": "/sale/crm/activities",
+        "sale-settings":       "/sale/settings",
         documentation: "/help/documentation",
         support: "/help/support",
         about: "/help/about",
@@ -1020,6 +1023,14 @@ const TopToolbar = ({
           submenu: [
             { id: "sale-crm-leads",      label: "Leads",      icon: FaUserFriends },
             { id: "sale-crm-activities", label: "Activities", icon: FaClipboard },
+          ],
+        },
+        {
+          id: "sale-setup",
+          label: "Setup",
+          icon: FaCog,
+          submenu: [
+            { id: "sale-settings", label: "Operational Settings", icon: FaCog },
           ],
         },
       ];
@@ -1936,15 +1947,23 @@ const TopToolbar = ({
           >
             <FaRedoAlt aria-hidden="true" />
           </button>
-          <button
-            onClick={() => navigate("/settings")}
-            className={`rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
-            title="Settings"
-          >
-            <FaCog aria-hidden="true" />
-          </button>
         </div>
         )}
+        <button
+          onClick={() => {
+            const settingsRoutes = {
+              carwash:          "/carwash/settings",
+              inventory:        "/inventory/setup/receipt-settings",
+              "human-resource": "/hr/setup",
+              "property-sale":  "/sale/settings",
+            };
+            navigate(settingsRoutes[currentWorkspace] ?? "/settings");
+          }}
+          className={`rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
+          title="Operational Settings"
+        >
+          <FaCog aria-hidden="true" />
+        </button>
       </div>
 
       {activeMenu && (

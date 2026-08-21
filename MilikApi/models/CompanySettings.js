@@ -12,6 +12,30 @@ const utilityTypeSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const unitTypeSchema = new mongoose.Schema(
+  {
+    _id: mongoose.Schema.Types.ObjectId,
+    name: { type: String, required: true, trim: true },
+    description: { type: String, default: "", trim: true },
+    category: { type: String, enum: ["residential", "commercial", "mixed"], default: "residential" },
+    isActive: { type: Boolean, default: true },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
+const maintenanceCategorySchema = new mongoose.Schema(
+  {
+    _id: mongoose.Schema.Types.ObjectId,
+    name: { type: String, required: true, trim: true },
+    description: { type: String, default: "", trim: true },
+    priority: { type: String, enum: ["low", "medium", "high", "critical"], default: "medium" },
+    isActive: { type: Boolean, default: true },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const billingPeriodSchema = new mongoose.Schema(
   {
     _id: mongoose.Schema.Types.ObjectId,
@@ -32,19 +56,6 @@ const billingPeriodSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     durationInDays: { type: Number, required: true },
     durationInMonths: { type: Number, default: 0 },
-    isActive: { type: Boolean, default: true },
-    createdAt: { type: Date, default: Date.now },
-  },
-  { _id: false }
-);
-
-const commissionSchema = new mongoose.Schema(
-  {
-    _id: mongoose.Schema.Types.ObjectId,
-    name: { type: String, required: true },
-    description: { type: String, default: "" },
-    percentage: { type: Number, required: true },
-    applicableTo: { type: String, enum: ["rent", "utilities", "all"], default: "rent" },
     isActive: { type: Boolean, default: true },
     createdAt: { type: Date, default: Date.now },
   },
@@ -272,12 +283,16 @@ const CompanySettingsSchema = new mongoose.Schema(
       type: [utilityTypeSchema],
       default: [],
     },
-    billingPeriods: {
-      type: [billingPeriodSchema],
+    unitTypes: {
+      type: [unitTypeSchema],
       default: [],
     },
-    commissions: {
-      type: [commissionSchema],
+    maintenanceCategories: {
+      type: [maintenanceCategorySchema],
+      default: [],
+    },
+    billingPeriods: {
+      type: [billingPeriodSchema],
       default: [],
     },
     expenseItems: {
@@ -346,6 +361,8 @@ const CompanySettingsSchema = new mongoose.Schema(
 );
 
 CompanySettingsSchema.index({ "utilityTypes.isActive": 1 });
+CompanySettingsSchema.index({ "unitTypes.isActive": 1 });
+CompanySettingsSchema.index({ "maintenanceCategories.isActive": 1 });
 CompanySettingsSchema.index({ "billingPeriods.isActive": 1 });
 CompanySettingsSchema.index({ "billingPeriods.key": 1 });
 CompanySettingsSchema.index({ "expenseItems.isActive": 1 });

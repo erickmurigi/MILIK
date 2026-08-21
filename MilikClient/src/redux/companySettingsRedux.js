@@ -163,62 +163,6 @@ const companySettingsSlice = createSlice({
       state.errorMessage = action.payload;
     },
 
-    // Commissions
-    addCommissionStart: (state) => {
-      state.isFetching = true;
-      state.error = false;
-    },
-    addCommissionSuccess: (state, action) => {
-      state.isFetching = false;
-      if (state.companySettings?.commissions) {
-        state.companySettings.commissions.push(action.payload);
-      }
-    },
-    addCommissionFailure: (state, action) => {
-      state.isFetching = false;
-      state.error = true;
-      state.errorMessage = action.payload;
-    },
-
-    updateCommissionStart: (state) => {
-      state.isFetching = true;
-      state.error = false;
-    },
-    updateCommissionSuccess: (state, action) => {
-      state.isFetching = false;
-      if (state.companySettings?.commissions) {
-        const index = state.companySettings.commissions.findIndex(
-          (c) => c._id === action.payload._id
-        );
-        if (index !== -1) {
-          state.companySettings.commissions[index] = action.payload;
-        }
-      }
-    },
-    updateCommissionFailure: (state, action) => {
-      state.isFetching = false;
-      state.error = true;
-      state.errorMessage = action.payload;
-    },
-
-    deleteCommissionStart: (state) => {
-      state.isFetching = true;
-      state.error = false;
-    },
-    deleteCommissionSuccess: (state, action) => {
-      state.isFetching = false;
-      if (state.companySettings?.commissions) {
-        state.companySettings.commissions = state.companySettings.commissions.filter(
-          (c) => c._id !== action.payload
-        );
-      }
-    },
-    deleteCommissionFailure: (state, action) => {
-      state.isFetching = false;
-      state.error = true;
-      state.errorMessage = action.payload;
-    },
-
     // Expense Items
     addExpenseStart: (state) => {
       state.isFetching = true;
@@ -299,15 +243,6 @@ export const {
   deletePeriodStart,
   deletePeriodSuccess,
   deletePeriodFailure,
-  addCommissionStart,
-  addCommissionSuccess,
-  addCommissionFailure,
-  updateCommissionStart,
-  updateCommissionSuccess,
-  updateCommissionFailure,
-  deleteCommissionStart,
-  deleteCommissionSuccess,
-  deleteCommissionFailure,
   addExpenseStart,
   addExpenseSuccess,
   addExpenseFailure,

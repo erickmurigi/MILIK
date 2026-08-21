@@ -3,18 +3,11 @@ import { useTabState } from "../../hooks/useTabState";
 import PaginationBar from '../../components/PaginationBar';
 import { useConfirm } from "../../context/ConfirmContext";
 import { fmtDate } from "../../utils/dates";
-import { inputClass, labelClass } from "../../utils/formStyles";
 import {
-  FaBolt,
-  FaCalendarAlt,
   FaCheckSquare,
   FaEnvelope,
   FaExclamationTriangle,
   FaEye,
-  FaHistory,
-  FaPen,
-  FaPlus,
-  FaSave,
   FaSms,
   FaTimes,
   FaTrash,
@@ -27,20 +20,16 @@ import AppSelect from "../../components/common/AppSelect";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import StatusBadge from "../../components/common/StatusBadge";
 import {
-  createLatePenaltyRule,
   deleteLatePenalty,
   deleteLatePenaltyBatch,
   getLatePenaltyBatch,
   getLatePenaltyBatches,
-  getLatePenaltyPostingAccounts,
   getLatePenaltyRules,
   previewLatePenalties,
   processLatePenalties,
   reverseLatePenalty,
-  updateLatePenaltyRule,
 } from "../../redux/apiCalls";
 
-const MILIK_GREEN = "#0B3B2E";
 const pageShellClass =
   "overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm";
 const pillTabClass = (active, tone = "green") => {
@@ -53,24 +42,6 @@ const pillTabClass = (active, tone = "green") => {
 const getErrorMessage = (error, fallback) =>
   error?.response?.data?.message || error?.message || fallback;
 
-const defaultRuleForm = {
-  ruleName: "",
-  effectiveFrom: new Date().toISOString().slice(0, 10),
-  active: true,
-  postingAccount: "",
-  graceDays: 0,
-  minimumOverdueDays: 1,
-  penalizeItem: "outstanding_invoice_balance",
-  calculationType: "percentage_overdue_balance",
-  rateOrAmount: 5,
-  minimumBalance: 0,
-  maximumBalance: 0,
-  maximumPenaltyCap: 0,
-  applyAutomatically: false,
-  repeatFrequency: "manual",
-  notes: "",
-};
-
 const formatCurrency = (value) =>
   new Intl.NumberFormat("en-KE", {
     style: "currency",
@@ -78,24 +49,6 @@ const formatCurrency = (value) =>
     minimumFractionDigits: 2,
   }).format(Number(value || 0));
 
-
-const mapRuleToForm = (rule) => ({
-  ruleName: rule?.ruleName || "",
-  effectiveFrom: rule?.effectiveFrom ? new Date(rule.effectiveFrom).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
-  active: rule?.active !== false,
-  postingAccount: rule?.postingAccount?._id || rule?.postingAccount || "",
-  graceDays: Number(rule?.graceDays || 0),
-  minimumOverdueDays: Number(rule?.minimumOverdueDays || 0),
-  penalizeItem: rule?.penalizeItem || "outstanding_invoice_balance",
-  calculationType: rule?.calculationType || "percentage_overdue_balance",
-  rateOrAmount: Number(rule?.rateOrAmount || 0),
-  minimumBalance: Number(rule?.minimumBalance || 0),
-  maximumBalance: Number(rule?.maximumBalance || 0),
-  maximumPenaltyCap: Number(rule?.maximumPenaltyCap || 0),
-  applyAutomatically: false,
-  repeatFrequency: rule?.repeatFrequency || "manual",
-  notes: rule?.notes || "",
-});
 
 const PENALTY_STATUS_MAP = {
   processed:      "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -122,18 +75,13 @@ const LatePenalties = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const businessId = currentCompany?._id || "";
 
-  const [accounts, setAccounts] = useState([]);
   const [rules, setRules] = useState([]);
   const [batches, setBatches] = useState([]);
   const [selectedRuleId, setSelectedRuleId] = useTabState("/invoices/late-penalties:selectedRuleId", "");
-  const [ruleForm, setRuleForm] = useState(defaultRuleForm);
-  const [editingRuleId, setEditingRuleId] = useState("");
-  const [showRuleModal, setShowRuleModal] = useState(false);
   const [runDate, setRunDate] = useState(new Date().toISOString().slice(0, 10));
   const [preview, setPreview] = useState(null);
   const [selectedRows, setSelectedRows] = useState({});
   const [loading, setLoading] = useState(false);
-  const [savingRule, setSavingRule] = useState(false);
   const [batchDetail, setBatchDetail] = useState(null);
   const [workspaceView, setWorkspaceView] = useTabState("/invoices/late-penalties:workspaceView", "processed_penalties");
   const [communicationModal, setCommunicationModal] = useState(null);
@@ -147,16 +95,6 @@ const LatePenalties = () => {
   const [batchStatusFilter, setBatchStatusFilter] = useTabState("/invoices/late-penalties:batchStatusFilter", "all");
   const [processedPenaltyPage, setProcessedPenaltyPage] = useTabState("/invoices/late-penalties:processedPenaltyPage", 1);
   const [processedBatchPage, setProcessedBatchPage] = useTabState("/invoices/late-penalties:processedBatchPage", 1);
-
-  const incomeAccounts = useMemo(
-    () => (Array.isArray(accounts) ? accounts.filter((account) => String(account?.type || "").toLowerCase() === "income") : []),
-    [accounts]
-  );
-
-  const selectedRule = useMemo(
-    () => rules.find((rule) => String(rule._id) === String(selectedRuleId)) || null,
-    [rules, selectedRuleId]
-  );
 
   const loadRules = useCallback(
     async (preferredRuleId = "") => {
@@ -194,40 +132,10 @@ const LatePenalties = () => {
     return rows;
   }, [businessId]);
 
-  const loadAccounts = useCallback(async () => {
-    if (!businessId) {
-      setAccounts([]);
-      return;
-    }
-
-    const res = await getLatePenaltyPostingAccounts(businessId);
-    const rows = Array.isArray(res) ? res : Array.isArray(res?.accounts) ? res.accounts : [];
-    setAccounts(rows);
-  }, [businessId]);
-
   useEffect(() => {
     loadRules().catch((error) => toast.error(getErrorMessage(error, "Failed to load late penalty rules.")));
     loadBatches().catch((error) => toast.error(getErrorMessage(error, "Failed to load late penalty batches.")));
-    loadAccounts().catch((error) => toast.error(getErrorMessage(error, "Failed to load late penalty posting accounts.")));
-  }, [loadRules, loadBatches, loadAccounts]);
-
-  useEffect(() => {
-    if (!selectedRuleId) return;
-    const selected = rules.find((rule) => String(rule._id) === String(selectedRuleId));
-    if (selected) {
-      setRuleForm(mapRuleToForm(selected));
-      setEditingRuleId(selected._id);
-    }
-  }, [selectedRuleId, rules]);
-
-  useEffect(() => {
-    if (!showRuleModal) return undefined;
-    const onKeyDown = (event) => {
-      if (event.key === "Escape" && !savingRule) setShowRuleModal(false);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showRuleModal, savingRule]);
+  }, [loadRules, loadBatches]);
 
   const processedPenaltyRows = useMemo(() => {
     const rows = [];
@@ -511,60 +419,6 @@ const LatePenalties = () => {
     }
   };
 
-  const openNewRuleModal = () => {
-    setEditingRuleId("");
-    setRuleForm(defaultRuleForm);
-    setShowRuleModal(true);
-  };
-
-  const openEditRuleModal = (rule) => {
-    if (!rule) return;
-    setEditingRuleId(rule._id || "");
-    setSelectedRuleId(rule._id || "");
-    setRuleForm(mapRuleToForm(rule));
-    setShowRuleModal(true);
-  };
-
-  const handleSaveRule = async () => {
-    if (!businessId) {
-      toast.error("Active business context is required.");
-      return;
-    }
-
-    if (!String(ruleForm.ruleName || "").trim()) {
-      toast.error("Rule name is required.");
-      return;
-    }
-
-    if (!ruleForm.postingAccount) {
-      toast.error("Posting account is required.");
-      return;
-    }
-
-    try {
-      setSavingRule(true);
-      let savedRuleId = editingRuleId;
-
-      if (editingRuleId) {
-        const res = await updateLatePenaltyRule(editingRuleId, { business: businessId, ...ruleForm });
-        savedRuleId = res?.rule?._id || editingRuleId;
-        toast.success(res?.message || "Late penalty rule updated.");
-      } else {
-        const res = await createLatePenaltyRule({ business: businessId, ...ruleForm });
-        savedRuleId = res?.rule?._id || "";
-        toast.success(res?.message || "Late penalty rule created.");
-      }
-
-      await loadRules(savedRuleId);
-      setShowRuleModal(false);
-      if (savedRuleId) setSelectedRuleId(savedRuleId);
-    } catch (error) {
-      toast.error(getErrorMessage(error, "Failed to save late penalty rule."));
-    } finally {
-      setSavingRule(false);
-    }
-  };
-
   const openBatch = async (batchId) => {
     try {
       setLoading(true);
@@ -716,14 +570,6 @@ const LatePenalties = () => {
                   {item.label} <span className={`normal-case tracking-normal ${item.accent}`}>{item.value}</span>
                 </span>
               ))}
-              <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-              <button
-                type="button"
-                onClick={openNewRuleModal}
-                className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-1.5 text-[9px] font-bold text-white hover:bg-[#0A3127]"
-              >
-                <FaPlus size={7} /> Add Rule
-              </button>
             </div>
           </div>
 
@@ -1015,76 +861,7 @@ const LatePenalties = () => {
             ) : null}
 
             {workspaceView === "rules" ? (
-              <div className="grid flex-1 min-h-0 grid-cols-1 gap-4 p-3 md:p-5 xl:grid-cols-[340px_minmax(0,1fr)]">
-                <div className="flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white">
-                  <div className="border-b border-slate-200 px-4 py-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h2 className="text-base font-semibold text-slate-900">Saved rules</h2>
-                        <p className="text-xs text-slate-500">Pick a rule, edit it, then preview the current run.</p>
-                      </div>
-                      <FaBolt className="text-[#0B3B2E]" />
-                    </div>
-                  </div>
-
-                  <div className="flex-1 overflow-auto p-3">
-                    <div className="space-y-3">
-                      {rules.map((rule) => {
-                        const active = String(rule._id) === String(selectedRuleId);
-                        return (
-                          <button
-                            key={rule._id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedRuleId(rule._id);
-                              setEditingRuleId(rule._id);
-                            }}
-                            className={`w-full rounded-xl border px-4 py-3 text-left shadow-sm transition ${
-                              active
-                                ? "border-[#0B3B2E] bg-[#E7F5EC]"
-                                : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="font-semibold text-slate-900">{rule.ruleName}</p>
-                                <p className="mt-1 text-xs text-slate-500">
-                                  {rule.postingAccount?.code ? `${rule.postingAccount.code} · ` : ""}
-                                  {rule.postingAccount?.name || "Posting account not loaded"}
-                                </p>
-                              </div>
-                              <span className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold ${PENALTY_STATUS_MAP[rule.active ? "processed" : "failed"] || "border-slate-200 bg-slate-100 text-slate-700"}`}>
-                                {rule.active ? "Active" : "Inactive"}
-                              </span>
-                            </div>
-                            <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500">
-                              <span>{rule.repeatFrequency || "manual"}</span>
-                              <span>{rule.calculationType || "percentage_overdue_balance"}</span>
-                            </div>
-                            <div className="mt-3">
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  openEditRuleModal(rule);
-                                }}
-                                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
-                              >
-                                <FaPen /> Edit Rule
-                              </button>
-                            </div>
-                          </button>
-                        );
-                      })}
-                      {!rules.length ? (
-                        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-                          No late penalty rules have been configured yet.
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-
+              <div className="flex flex-1 min-h-0 flex-col p-3 md:p-5">
                 <div className="flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white">
                   <div className="flex-none sticky top-0 z-10 border-b border-slate-200 bg-white shadow-sm">
                     <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
@@ -1423,227 +1200,7 @@ const LatePenalties = () => {
         </div>
       ) : null}
 
-      {showRuleModal ? (
-        <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
-          <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
-            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
-              <h2 className="text-sm font-black uppercase tracking-wide">
-                {editingRuleId ? "Edit late penalty rule" : "Add late penalty rule"}
-              </h2>
-              <button
-                onClick={() => !savingRule && setShowRuleModal(false)}
-                className="text-white/70 transition-colors hover:text-white"
-                type="button"
-              >
-                <FaTimes />
-              </button>
-            </div>
 
-            <div className="flex-1 overflow-y-auto bg-white px-5 py-4">
-              <div className="mb-5 grid grid-cols-1 gap-3 lg:grid-cols-3">
-                <div className="rounded-xl border border-orange-100 bg-orange-50 px-4 py-2 text-xs text-slate-700">
-                  <p className="font-semibold text-slate-900">Grace days</p>
-                  <p className="mt-1">Days allowed after due date before penalty counting begins.</p>
-                </div>
-                <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2 text-xs text-slate-700">
-                  <p className="font-semibold text-slate-900">Minimum overdue days</p>
-                  <p className="mt-1">Extra threshold after grace. The row must still reach this number to qualify.</p>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">
-                  <p className="font-semibold text-slate-900">Posting account</p>
-                  <p className="mt-1">This is the income ledger the late penalty invoice will credit.</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                <div className="space-y-4">
-                  <div>
-                    <label className={labelClass}>Rule name</label>
-                    <input
-                      className={inputClass}
-                      value={ruleForm.ruleName}
-                      onChange={(e) => setRuleForm((prev) => ({ ...prev, ruleName: e.target.value }))}
-                      placeholder="Example: Standard monthly arrears penalty"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className={labelClass}>Effective from</label>
-                      <input
-                        type="date"
-                        className={inputClass}
-                        value={ruleForm.effectiveFrom}
-                        onChange={(e) => setRuleForm((prev) => ({ ...prev, effectiveFrom: e.target.value }))}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Posting account</label>
-                      <AppSelect
-                        value={ruleForm.postingAccount}
-                        onChange={(v) => setRuleForm((prev) => ({ ...prev, postingAccount: v ?? "" }))}
-                        options={incomeAccounts.map((account) => ({ value: account._id, label: `${account.code ? account.code + " · " : ""}${account.name}` }))}
-                        placeholder="Select account"
-                        searchable
-                        clearable
-                        size="md"
-                        className="w-full"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className={labelClass}>Grace days</label>
-                      <input
-                        type="number"
-                        min="0"
-                        className={inputClass}
-                        value={ruleForm.graceDays}
-                        onChange={(e) => setRuleForm((prev) => ({ ...prev, graceDays: Number(e.target.value || 0) }))}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Min overdue days</label>
-                      <input
-                        type="number"
-                        min="0"
-                        className={inputClass}
-                        value={ruleForm.minimumOverdueDays}
-                        onChange={(e) => setRuleForm((prev) => ({ ...prev, minimumOverdueDays: Number(e.target.value || 0) }))}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className={labelClass}>Penalize item</label>
-                    <AppSelect
-                      value={ruleForm.penalizeItem}
-                      onChange={(v) => setRuleForm((prev) => ({ ...prev, penalizeItem: v ?? "outstanding_invoice_balance" }))}
-                      options={[
-                        { value: "rent_only", label: "Rent only" },
-                        { value: "current_period_rent_only", label: "Current period rent only" },
-                        { value: "current_period_bill_balance_only", label: "Current period bill balance only" },
-                        { value: "all_arrears", label: "All arrears" },
-                        { value: "outstanding_invoice_balance", label: "Outstanding invoice balance" },
-                      ]}
-                      size="md"
-                      className="w-full"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className={labelClass}>Calculation type</label>
-                      <AppSelect
-                        value={ruleForm.calculationType}
-                        onChange={(v) => setRuleForm((prev) => ({ ...prev, calculationType: v ?? "percentage_overdue_balance" }))}
-                        options={[
-                          { value: "flat_amount", label: "Flat amount" },
-                          { value: "percentage_overdue_balance", label: "Percentage of overdue balance" },
-                          { value: "daily_fixed_amount", label: "Daily fixed amount" },
-                          { value: "daily_percentage", label: "Daily percentage" },
-                        ]}
-                        size="md"
-                        className="w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Rate / amount</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className={inputClass}
-                        value={ruleForm.rateOrAmount}
-                        onChange={(e) => setRuleForm((prev) => ({ ...prev, rateOrAmount: Number(e.target.value || 0) }))}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className={labelClass}>Min balance</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className={inputClass}
-                        value={ruleForm.minimumBalance}
-                        onChange={(e) => setRuleForm((prev) => ({ ...prev, minimumBalance: Number(e.target.value || 0) }))}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Max balance</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className={inputClass}
-                        value={ruleForm.maximumBalance}
-                        onChange={(e) => setRuleForm((prev) => ({ ...prev, maximumBalance: Number(e.target.value || 0) }))}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Penalty cap</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className={inputClass}
-                        value={ruleForm.maximumPenaltyCap}
-                        onChange={(e) => setRuleForm((prev) => ({ ...prev, maximumPenaltyCap: Number(e.target.value || 0) }))}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className={labelClass}>Repeat frequency</label>
-                    <AppSelect
-                      value={ruleForm.repeatFrequency}
-                      onChange={(v) => setRuleForm((prev) => ({ ...prev, repeatFrequency: v ?? "manual" }))}
-                      options={[{ value: "manual", label: "Manual" }, { value: "monthly", label: "Monthly" }]}
-                      size="md"
-                      className="w-full"
-                    />
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <label className={labelClass}>Notes</label>
-                    <textarea
-                      rows={8}
-                      className={`${inputClass} min-h-[180px]`}
-                      value={ruleForm.notes}
-                      onChange={(e) => setRuleForm((prev) => ({ ...prev, notes: e.target.value }))}
-                      placeholder="Optional internal guidance for the team."
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
-              <button
-                type="button"
-                onClick={() => setShowRuleModal(false)}
-                className="inline-flex items-center gap-2 border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-              >
-                <FaTimes /> Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveRule}
-                disabled={savingRule || !incomeAccounts.length}
-                className="inline-flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <FaSave /> {savingRule ? "Saving..." : editingRuleId ? "Update Rule" : "Save Rule"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       <CommunicationComposerModal
         open={Boolean(communicationModal)}

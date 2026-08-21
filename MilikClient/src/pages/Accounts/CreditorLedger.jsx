@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { FaArrowLeft, FaBook, FaSync, FaAddressCard } from "react-icons/fa";
@@ -81,22 +81,29 @@ const CreditorLedger = () => {
     setStatement(null);
   };
 
-  const filtered = providers.filter((p) => {
-    if (!search) return true;
-    const s = search.toLowerCase();
-    return (
-      (p.name || "").toLowerCase().includes(s) ||
-      (p.providerCode || "").toLowerCase().includes(s) ||
-      (p.category || "").toLowerCase().includes(s) ||
-      (p.phone || "").includes(s)
-    );
-  });
+  const filtered = useMemo(
+    () =>
+      providers.filter((p) => {
+        if (!search) return true;
+        const s = search.toLowerCase();
+        return (
+          (p.name || "").toLowerCase().includes(s) ||
+          (p.providerCode || "").toLowerCase().includes(s) ||
+          (p.category || "").toLowerCase().includes(s) ||
+          (p.phone || "").includes(s)
+        );
+      }),
+    [providers, search]
+  );
 
-  const listTotals = {
-    invoiced: filtered.reduce((s, p) => s + (p.totalInvoiced || 0), 0),
-    paid: filtered.reduce((s, p) => s + (p.totalPaid || 0), 0),
-    outstanding: filtered.reduce((s, p) => s + (p.outstanding || 0), 0),
-  };
+  const listTotals = useMemo(
+    () => ({
+      invoiced: filtered.reduce((s, p) => s + (p.totalInvoiced || 0), 0),
+      paid: filtered.reduce((s, p) => s + (p.totalPaid || 0), 0),
+      outstanding: filtered.reduce((s, p) => s + (p.outstanding || 0), 0),
+    }),
+    [filtered]
+  );
 
   return (
     <DashboardLayout lockContentScroll>

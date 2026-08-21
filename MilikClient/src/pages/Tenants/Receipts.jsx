@@ -361,6 +361,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const [draftFilters, setDraftFilters] = useState(appliedFilters);
   const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [selectedIds, setSelectedIds] = useState([]);
+  const selectedIdsSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const [currentPage, setCurrentPage] = useTabState("/receipts:currentPage", 1);
   const [showForm, setShowForm] = useState(false);
   const [showSmsModal, setShowSmsModal] = useState(false);
@@ -912,7 +913,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
       return;
     }
 
-    const selectedReceipts = receipts.filter((r) => selectedIds.includes(r._id));
+    const selectedReceipts = receipts.filter((r) => selectedIdsSet.has(r._id));
     const eligible = selectedReceipts.filter((r) => r.isConfirmed && !r.isReversed);
 
     if (eligible.length === 0) {
@@ -1900,13 +1901,13 @@ const Receipts = ({ viewMode = "tenant" }) => {
               empty="No receipts found."
               minWidth={1200}
               checkboxes
-              allChecked={currentPageReceipts.length > 0 && visibleReceiptIds.every((id) => selectedIds.includes(id))}
-              someChecked={visibleReceiptIds.some((id) => selectedIds.includes(id))}
+              allChecked={currentPageReceipts.length > 0 && visibleReceiptIds.every((id) => selectedIdsSet.has(id))}
+              someChecked={visibleReceiptIds.some((id) => selectedIdsSet.has(id))}
               onCheckAll={toggleSelectAll}
-              isChecked={(receipt) => selectedIds.includes(receipt._id)}
+              isChecked={(receipt) => selectedIdsSet.has(receipt._id)}
               onCheckRow={(receipt) => toggleSelection(receipt._id)}
               onRowClick={(receipt) => toggleSelection(receipt._id)}
-              isSelected={(receipt) => selectedIds.includes(receipt._id)}
+              isSelected={(receipt) => selectedIdsSet.has(receipt._id)}
               renderRow={(receipt) => (
                 <>
                   <td className="px-3 py-1.5 border-r border-gray-100">

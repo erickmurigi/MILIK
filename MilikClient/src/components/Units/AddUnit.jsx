@@ -204,6 +204,7 @@ const AddUnit = () => {
   const [generalError, setGeneralError] = useState("");
   const [utilityOptions, setUtilityOptions] = useState([]);
   const [billingPeriodOptions, setBillingPeriodOptions] = useState([{ key: "monthly", name: "Monthly", durationInMonths: 1 }]);
+  const [configuredUnitTypes, setConfiguredUnitTypes] = useState([]);
   const [depositTouched, setDepositTouched] = useState(Boolean(isEditMode));
   const [rentTouched, setRentTouched] = useState(Boolean(isEditMode));
   const [utilitiesTouched, setUtilitiesTouched] = useState(Boolean(isEditMode));
@@ -239,6 +240,10 @@ const AddUnit = () => {
             : [];
           setUtilityOptions(names);
           setBillingPeriodOptions(periods.length > 0 ? periods : [{ key: "monthly", name: "Monthly", durationInMonths: 1 }]);
+          const activeUnitTypes = Array.isArray(res?.data?.unitTypes)
+            ? res.data.unitTypes.filter((t) => t?.isActive !== false && t?.name)
+            : [];
+          setConfiguredUnitTypes(activeUnitTypes);
         })
         .catch(() => {
           setUtilityOptions([]);
@@ -702,7 +707,7 @@ const AddUnit = () => {
     clearDraftState();
   };
 
-  const unitTypes = [
+  const DEFAULT_UNIT_TYPES = [
     { value: "studio", label: "Studio" },
     { value: "1bed", label: "1 Bedroom" },
     { value: "2bed", label: "2 Bedrooms" },
@@ -710,6 +715,9 @@ const AddUnit = () => {
     { value: "4bed", label: "4 Bedrooms" },
     { value: "commercial", label: "Commercial" },
   ];
+  const unitTypes = configuredUnitTypes.length
+    ? configuredUnitTypes.map((t) => ({ value: t.name.toLowerCase().replace(/\s+/g, ""), label: t.name }))
+    : DEFAULT_UNIT_TYPES;
 
   const statusOptions = useMemo(() => {
     const baseOptions = [

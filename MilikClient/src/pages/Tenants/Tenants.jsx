@@ -699,6 +699,7 @@ const Tenants = ({ listingMode = "active" }) => {
   const [currentPage, setCurrentPage] = useTabState("/tenants:currentPage", 1);
   const [expandedTenants, setExpandedTenants] = useState([]);
   const [selectedTenants, setSelectedTenants] = useState([]);
+  const selectedTenantsSet = useMemo(() => new Set(selectedTenants), [selectedTenants]);
   const [selectAll, setSelectAll] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -1123,8 +1124,8 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
   );
 
   const selectedTenantRows = useMemo(
-    () => transformedTenants.filter((tenant) => selectedTenants.includes(tenant.id)),
-    [transformedTenants, selectedTenants]
+    () => transformedTenants.filter((tenant) => selectedTenantsSet.has(tenant.id)),
+    [transformedTenants, selectedTenantsSet]
   );
   const selectedDeletableTenants = useMemo(
     () => selectedTenantRows.filter((tenant) => tenant.canDelete),
@@ -2301,10 +2302,10 @@ const confirmTransferUnit = useCallback(async () => {
           allChecked={selectAll}
           someChecked={selectedTenants.length > 0 && !selectAll}
           onCheckAll={handleSelectAll}
-          isChecked={(tenant) => selectedTenants.includes(tenant.id)}
+          isChecked={(tenant) => selectedTenantsSet.has(tenant.id)}
           onCheckRow={(tenant) => handleSelectTenant(tenant.id)}
           onRowClick={(tenant) => handleSelectTenant(tenant.id)}
-          isSelected={(tenant) => selectedTenants.includes(tenant.id)}
+          isSelected={(tenant) => selectedTenantsSet.has(tenant.id)}
           rowClassName={(tenant) => tenant.expiryWarning?.hasWarning ? "border-red-200 bg-red-50/60 hover:bg-red-100/60" : ""}
           renderRow={(tenant) => (
             <>

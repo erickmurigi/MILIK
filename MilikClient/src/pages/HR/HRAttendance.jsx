@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTabState } from "../../hooks/useTabState";
 import {
@@ -169,12 +169,16 @@ export default function HRAttendance() {
   const total      = data?.total      || 0;
   const totalPages = data?.totalPages || 1;
 
-  const filteredRecords = search
-    ? records.filter((r) => {
-        const name = `${r.employee?.surname} ${r.employee?.otherNames} ${r.employee?.employeeNumber}`.toLowerCase();
-        return name.includes(search.toLowerCase());
-      })
-    : records;
+  const filteredRecords = useMemo(
+    () =>
+      search
+        ? records.filter((r) => {
+            const name = `${r.employee?.surname} ${r.employee?.otherNames} ${r.employee?.employeeNumber}`.toLowerCase();
+            return name.includes(search.toLowerCase());
+          })
+        : records,
+    [records, search]
+  );
 
   const handleSaved = useCallback(() => {
     setModal(null);

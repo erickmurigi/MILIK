@@ -213,6 +213,7 @@ const LandlordStandingOrders = () => {
   const [runModal, setRunModal] = useState({ open: false, row: null, periodKey: "", amount: "", note: "" });
   const [expandedId, setExpandedId] = useState("");
   const [selectedIds, setSelectedIds] = useState([]);
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const [bulkRunning, setBulkRunning] = useState(false);
   const [cashbooks, setCashbooks] = useState([]);
   const [reversingRunId, setReversingRunId] = useState("");
@@ -664,7 +665,8 @@ const LandlordStandingOrders = () => {
               allChecked={allSelectableChecked}
               someChecked={selectedIds.length > 0 && !allSelectableChecked}
               onCheckAll={toggleSelectAll}
-              isChecked={(row) => selectedIds.includes(String(row._id))}
+              isChecked={(row) => selectedIdSet.has(String(row._id))}
+              isSelected={(row) => selectedIdSet.has(String(row._id))}
               onCheckRow={(row) => {
                 const runnable = row.status === "active" && (row.eligiblePeriods || []).length > 0;
                 if (runnable) toggleRowSelection(row._id);

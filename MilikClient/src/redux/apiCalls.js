@@ -230,15 +230,6 @@ import {
   deletePeriodStart,
   deletePeriodSuccess,
   deletePeriodFailure,
-  addCommissionStart,
-  addCommissionSuccess,
-  addCommissionFailure,
-  updateCommissionStart,
-  updateCommissionSuccess,
-  updateCommissionFailure,
-  deleteCommissionStart,
-  deleteCommissionSuccess,
-  deleteCommissionFailure,
   addExpenseStart,
   addExpenseSuccess,
   addExpenseFailure,
@@ -2152,6 +2143,12 @@ export const getLatePenaltyPostingAccounts = async (business) => {
     accounts: rows.length ? rows : Array.isArray(res.data?.accounts) ? res.data.accounts : [],
   };
 };
+
+export const getCompanyUnitTypes = (businessId) =>
+  adminRequests.get(`/company-settings/${businessId}/unit-types`).then((r) => r.data);
+
+export const getCompanyMaintenanceCategories = (businessId) =>
+  adminRequests.get(`/company-settings/${businessId}/maintenance-categories`).then((r) => r.data);
 
 export const getLatePenaltyRules = async (business) => {
   const params = new URLSearchParams();

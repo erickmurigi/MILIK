@@ -867,10 +867,10 @@ const SaleDeals = () => {
                   {form.commOverrideEnabled && (
                     <div className="mt-2.5 grid gap-3 sm:grid-cols-3">
                       <div>
-                        <AppSelect label="Commission Type" value={form.commissionTypeOverride || selAgent?.commissionType || "percentage"} onChange={(v) => setForm((p) => ({ ...p, commissionTypeOverride: v ?? "", commissionAmountOverride: "" }))} options={[{ value: "percentage", label: "Percentage (%)" }, { value: "fixed", label: "Fixed Amount (KES)" }]} size="md" />
+                        <AppSelect label="Commission Type" value={form.commissionTypeOverride || selAgent?.commissionType || "percentage"} onChange={(v) => setForm((p) => ({ ...p, commissionTypeOverride: v ?? "", commissionAmountOverride: "" }))} options={[{ value: "percentage", label: "Percentage (%)" }, { value: "flat", label: "Flat Amount (KES)" }]} size="md" />
                       </div>
                       <div>
-                        <label className={labelClass}>{(form.commissionTypeOverride || selAgent?.commissionType) === "fixed" ? "Commission Amount (KES)" : "Commission Rate (%)"}</label>
+                        <label className={labelClass}>{(form.commissionTypeOverride || selAgent?.commissionType) === "flat" ? "Commission Amount (KES)" : "Commission Rate (%)"}</label>
                         <input type="number" min="0" step="0.01" value={form.commissionRateOverride} onChange={(e) => setForm((p) => ({ ...p, commissionRateOverride: e.target.value, commissionAmountOverride: "" }))} className={inputClass} placeholder={selAgent ? String(selAgent.commissionRate) : ""} />
                       </div>
                       <div>

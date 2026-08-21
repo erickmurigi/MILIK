@@ -8,6 +8,8 @@ import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
 import { useConfirm } from "../../context/ConfirmContext";
 import { adminRequests } from "../../utils/requestMethods";
+import { createLatePenaltyRule, getChartOfAccounts, getLatePenaltyRules, updateLatePenaltyRule } from "../../redux/apiCalls";
+import { inputClass, labelClass } from "../../utils/formStyles";
 import { hasCompanyModule } from "../../utils/companyModules";
 import { toast } from "react-toastify";
 import {
@@ -18,7 +20,6 @@ import {
   FaEdit,
   FaExclamationCircle,
   FaLightbulb,
-  FaMoneyBillWave,
   FaPlus,
   FaReceipt,
   FaSave,
@@ -54,15 +55,6 @@ const TAB_CONFIG = {
       "Maintain reusable billing cycle defaults for future schedules and operational setup. Historical postings stay untouched.",
     requiredModules: ["propertyManagement"],
   },
-  commissions: {
-    label: "Commissions",
-    icon: FaMoneyBillWave,
-    endpoint: "commissions",
-    empty: "No commission defaults saved yet.",
-    subtitle:
-      "Company-level commission defaults are future-facing policy references. Property-level commission setup remains the source of truth per property.",
-    requiredModules: ["propertyManagement", "propertySale"],
-  },
   expenses: {
     label: "Expense Items",
     icon: FaReceipt,
@@ -79,6 +71,22 @@ const TAB_CONFIG = {
     empty: "No deposit types saved yet.",
     subtitle:
       "Maintain reusable tenant deposit invoice types for future security, utility and custom deposit charges.",
+    requiredModules: ["propertyManagement"],
+  },
+  unitTypes: {
+    label: "Unit Types",
+    icon: FaCog,
+    endpoint: "unit-types",
+    empty: "No unit types configured yet.",
+    subtitle: "Manage unit type labels used when creating and filtering units across the system.",
+    requiredModules: ["propertyManagement"],
+  },
+  maintenanceCategories: {
+    label: "Maintenance Categories",
+    icon: FaCog,
+    endpoint: "maintenance-categories",
+    empty: "No maintenance categories configured yet.",
+    subtitle: "Manage categories used when logging and tracking maintenance requests.",
     requiredModules: ["propertyManagement"],
   },
   tax: {
@@ -101,14 +109,27 @@ const TAB_CONFIG = {
     icon: FaBalanceScale,
     requiredModules: ["propertyManagement"],
   },
+  penaltyRules: {
+    label: "Late Payment Rules",
+    icon: FaClock,
+    requiredModules: ["propertyManagement"],
+  },
 };
+
+const SIDEBAR_GROUPS = [
+  { label: "Property Setup",           items: ["unitTypes", "deposits", "periods"] },
+  { label: "Utilities & Maintenance",  items: ["utilities", "maintenanceCategories"] },
+  { label: "Financial & Accounting",   items: ["tax", "accounting", "incomeRules", "expenses"] },
+  { label: "Billing Rules",            items: ["penaltyRules", "autoInvoicing"] },
+];
 
 const emptyForms = {
   utilities: { name: "", description: "", category: "utility", isActive: true },
   periods: { name: "", durationInMonths: 1, durationInDays: 30, isActive: true },
-  commissions: { name: "", percentage: "", applicableTo: "rent", description: "", isActive: true },
   expenses: { name: "", description: "", code: "", category: "other", defaultAmount: 0, isActive: true },
   deposits: { name: "", description: "", code: "", defaultAmount: 0, refundable: true, isActive: true },
+  unitTypes: { name: "", description: "", category: "residential", isActive: true },
+  maintenanceCategories: { name: "", description: "", priority: "medium", isActive: true },
 };
 
 const toClientTaxCodeId = (value, fallback) => {
@@ -391,6 +412,34 @@ const ACCOUNTING_DEFAULT_FIELDS = [
 const extractErrorMessage = (error) =>
   error?.response?.data?.message || error?.message || "Failed to process company settings request";
 
+const defaultPenaltyRuleForm = {
+  ruleName: "", effectiveFrom: new Date().toISOString().slice(0, 10),
+  active: true, postingAccount: "", graceDays: 0, minimumOverdueDays: 1,
+  penalizeItem: "outstanding_invoice_balance",
+  calculationType: "percentage_overdue_balance",
+  rateOrAmount: 5, minimumBalance: 0, maximumBalance: 0,
+  maximumPenaltyCap: 0, applyAutomatically: false,
+  repeatFrequency: "manual", notes: "",
+};
+
+const mapPenaltyRuleToForm = (rule) => ({
+  ruleName: rule?.ruleName || "",
+  effectiveFrom: rule?.effectiveFrom ? new Date(rule.effectiveFrom).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+  active: rule?.active !== false,
+  postingAccount: rule?.postingAccount?._id || rule?.postingAccount || "",
+  graceDays: Number(rule?.graceDays || 0),
+  minimumOverdueDays: Number(rule?.minimumOverdueDays || 0),
+  penalizeItem: rule?.penalizeItem || "outstanding_invoice_balance",
+  calculationType: rule?.calculationType || "percentage_overdue_balance",
+  rateOrAmount: Number(rule?.rateOrAmount || 0),
+  minimumBalance: Number(rule?.minimumBalance || 0),
+  maximumBalance: Number(rule?.maximumBalance || 0),
+  maximumPenaltyCap: Number(rule?.maximumPenaltyCap || 0),
+  applyAutomatically: false,
+  repeatFrequency: rule?.repeatFrequency || "manual",
+  notes: rule?.notes || "",
+});
+
 const Card = ({ title, subtitle, action, children }) => (
   <div className="border border-slate-200 bg-white shadow-sm">
     <div className="flex items-center justify-between gap-3 bg-[#0B3B2E] px-3 py-2">
@@ -530,6 +579,12 @@ const CompanySettings = () => {
   const [modalTab, setModalTab] = useState("utilities");
   const [editingItem, setEditingItem] = useState(null);
   const [formData, setFormData] = useState(emptyForms.utilities);
+  const [penaltyRules, setPenaltyRules] = useState([]);
+  const [penaltyAccounts, setPenaltyAccounts] = useState([]);
+  const [penaltyRuleForm, setPenaltyRuleForm] = useState(defaultPenaltyRuleForm);
+  const [editingPenaltyRuleId, setEditingPenaltyRuleId] = useState("");
+  const [showPenaltyRuleModal, setShowPenaltyRuleModal] = useState(false);
+  const [savingPenaltyRule, setSavingPenaltyRule] = useState(false);
 
   useEffect(() => {
     if (!visibleTabKeys.size) return;
@@ -618,18 +673,41 @@ const CompanySettings = () => {
     loadSettings();
   }, [loadSettings]);
 
+  const loadPenaltyRules = useCallback(async () => {
+    if (!currentCompany?._id) return;
+    try {
+      const res = await getLatePenaltyRules(currentCompany._id);
+      setPenaltyRules(Array.isArray(res?.rules) ? res.rules : []);
+    } catch { setPenaltyRules([]); }
+  }, [currentCompany?._id]);
+
+  const loadPenaltyAccounts = useCallback(async () => {
+    if (!currentCompany?._id) return;
+    try {
+      const res = await getChartOfAccounts({ business: currentCompany._id, type: "income" });
+      setPenaltyAccounts(Array.isArray(res) ? res : []);
+    } catch { setPenaltyAccounts([]); }
+  }, [currentCompany?._id]);
+
   useEffect(() => {
-    if (activeTab !== "accounting" && activeTab !== "hrAccounting") return;
-    loadChartAccounts();
-  }, [loadChartAccounts, activeTab]);
+    if (activeTab === "accounting" || activeTab === "hrAccounting") {
+      loadChartAccounts();
+    }
+    if (activeTab === "penaltyRules") {
+      loadPenaltyRules();
+      loadPenaltyAccounts();
+    }
+  }, [loadChartAccounts, loadPenaltyRules, loadPenaltyAccounts, activeTab]);
 
   const activeCounts = useMemo(
     () => ({
       utilities: (settings?.utilityTypes || []).filter((item) => item?.isActive !== false).length,
       periods: (settings?.billingPeriods || []).filter((item) => item?.isActive !== false).length,
-      commissions: (settings?.commissions || []).filter((item) => item?.isActive !== false).length,
+
       expenses: (settings?.expenseItems || []).filter((item) => item?.isActive !== false).length,
       deposits: (settings?.depositTypes || []).filter((item) => item?.isActive !== false).length,
+      unitTypes: (settings?.unitTypes || []).filter((item) => item?.isActive !== false).length,
+      maintenanceCategories: (settings?.maintenanceCategories || []).filter((item) => item?.isActive !== false).length,
     }),
     [settings]
   );
@@ -688,9 +766,10 @@ const CompanySettings = () => {
   const collectionMap = {
     utilities: settings?.utilityTypes || [],
     periods: settings?.billingPeriods || [],
-    commissions: settings?.commissions || [],
     expenses: settings?.expenseItems || [],
     deposits: settings?.depositTypes || [],
+    unitTypes: settings?.unitTypes || [],
+    maintenanceCategories: settings?.maintenanceCategories || [],
   };
 
   const visibleItems = useMemo(() => {
@@ -714,23 +793,12 @@ const CompanySettings = () => {
       return;
     }
 
-    if (modalTab === "commissions") {
-      const percentage = Number(formData?.percentage);
-      if (!Number.isFinite(percentage)) {
-        toast.error("Enter a valid commission percentage.");
-        return;
-      }
-    }
-
     setSaving(true);
     try {
       const payload = { ...formData };
       if (modalTab === "periods") {
         payload.durationInMonths = Number(payload.durationInMonths || 0);
         payload.durationInDays = Number(payload.durationInDays || payload.durationInMonths * 30 || 0);
-      }
-      if (modalTab === "commissions") {
-        payload.percentage = Number(payload.percentage || 0);
       }
       if (modalTab === "expenses") {
         payload.defaultAmount = Number(payload.defaultAmount || 0);
@@ -944,16 +1012,6 @@ const CompanySettings = () => {
       return `Duration: ${Number(item?.durationInMonths || 0)} month(s) • ${Number(item?.durationInDays || 0)} day(s)`;
     }
 
-    if (tabKey === "commissions") {
-      return [
-        `Rate: ${Number(item?.percentage || 0)}%`,
-        `Applies to: ${String(item?.applicableTo || "rent").replace(/_/g, " ")}`,
-        item?.description,
-      ]
-        .filter(Boolean)
-        .join(" • ");
-    }
-
     if (tabKey === "expenses") {
       return [
         item?.code ? `Code: ${item.code}` : null,
@@ -976,15 +1034,24 @@ const CompanySettings = () => {
         .join(" - ");
     }
 
+    if (tabKey === "unitTypes") {
+      return [item?.description, item?.category ? `Category: ${String(item.category).replace(/_/g, " ")}` : null].filter(Boolean).join(" • ");
+    }
+
+    if (tabKey === "maintenanceCategories") {
+      return [item?.description, `Priority: ${item?.priority || "medium"}`].filter(Boolean).join(" • ");
+    }
+
     return "";
   };
 
   const COLLECTION_COLUMNS = {
     utilities: ["Name", "Category", "Description", "Status", "Actions"],
     periods: ["Name", "Months", "Days", "Status", "Actions"],
-    commissions: ["Name", "Rate", "Applies To", "Description", "Status", "Actions"],
     expenses: ["Name", "Code", "Category", "Default Amount", "Status", "Actions"],
     deposits: ["Name", "Code", "Default Amount", "Refundable", "Description", "Status", "Actions"],
+    unitTypes: ["Name", "Category", "Description", "Status", "Actions"],
+    maintenanceCategories: ["Name", "Priority", "Description", "Status", "Actions"],
   };
 
   const renderCollectionRow = (tabKey, item, idx = 0) => {
@@ -1004,13 +1071,6 @@ const CompanySettings = () => {
             <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-600">{item.durationInDays ?? "—"}</td>
           </>
         )}
-        {tabKey === "commissions" && (
-          <>
-            <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-600">{item.percentage != null ? `${item.percentage}%` : "—"}</td>
-            <td className="px-3 py-1 border-r border-gray-100 capitalize text-slate-600">{String(item.applicableTo || "").replace(/_/g, " ") || "—"}</td>
-            <td className="max-w-[160px] truncate px-3 py-1 border-r border-gray-100 text-slate-500">{item.description || "—"}</td>
-          </>
-        )}
         {tabKey === "expenses" && (
           <>
             <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{item.code || "—"}</td>
@@ -1024,6 +1084,18 @@ const CompanySettings = () => {
             <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-600">{Number(item.defaultAmount || 0).toLocaleString()}</td>
             <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{item.refundable === false ? "No" : "Yes"}</td>
             <td className="max-w-[180px] truncate px-3 py-1 border-r border-gray-100 text-slate-500">{item.description || "—"}</td>
+          </>
+        )}
+        {tabKey === "unitTypes" && (
+          <>
+            <td className="px-3 py-1 border-r border-gray-100 capitalize text-slate-600">{String(item.category || "").replace(/_/g, " ") || "—"}</td>
+            <td className="max-w-[200px] truncate px-3 py-1 border-r border-gray-100 text-slate-500">{item.description || "—"}</td>
+          </>
+        )}
+        {tabKey === "maintenanceCategories" && (
+          <>
+            <td className="px-3 py-1 border-r border-gray-100 capitalize text-slate-600">{item.priority || "medium"}</td>
+            <td className="max-w-[200px] truncate px-3 py-1 border-r border-gray-100 text-slate-500">{item.description || "—"}</td>
           </>
         )}
         <td className="px-3 py-1 border-r border-gray-100">
@@ -1049,6 +1121,33 @@ const CompanySettings = () => {
     );
   };
 
+  const DEFAULT_UNIT_TYPES_SEED = [
+    { name: "Studio",     category: "residential", isActive: true },
+    { name: "1 Bedroom",  category: "residential", isActive: true },
+    { name: "2 Bedroom",  category: "residential", isActive: true },
+    { name: "3 Bedroom",  category: "residential", isActive: true },
+    { name: "4 Bedroom",  category: "residential", isActive: true },
+    { name: "Commercial", category: "commercial",  isActive: true },
+  ];
+
+  const [loadingDefaults, setLoadingDefaults] = React.useState(false);
+
+  const handleLoadDefaultUnitTypes = async () => {
+    if (!currentCompany?._id || loadingDefaults) return;
+    setLoadingDefaults(true);
+    try {
+      for (const ut of DEFAULT_UNIT_TYPES_SEED) {
+        await adminRequests.post(`/company-settings/${currentCompany._id}/unit-types`, ut);
+      }
+      toast.success("Default unit types loaded.");
+      await loadSettings({ silent: true });
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setLoadingDefaults(false);
+    }
+  };
+
   const renderCollectionTab = (tabKey) => {
     const tab = TAB_CONFIG[tabKey];
     const list = collectionMap[tabKey] || [];
@@ -1065,9 +1164,21 @@ const CompanySettings = () => {
               Show archived
             </label>
           </div>
-          <button onClick={() => openCreateModal(tabKey)} className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#0A3127]">
-            <FaPlus className="text-[10px]" /> Add {tab.label.slice(0, -1)}
-          </button>
+          <div className="flex items-center gap-2">
+            {tabKey === "unitTypes" && list.length === 0 && (
+              <button
+                onClick={handleLoadDefaultUnitTypes}
+                disabled={loadingDefaults}
+                className="inline-flex items-center gap-1.5 border border-[#0B3B2E] px-3 py-1.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#EDF5F1] disabled:opacity-50"
+              >
+                {loadingDefaults ? <Spinner size="sm" /> : null}
+                Load Defaults
+              </button>
+            )}
+            <button onClick={() => openCreateModal(tabKey)} className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#0A3127]">
+              <FaPlus className="text-[10px]" /> Add {tab.label.replace(/ies$/, "y").replace(/s$/, "")}
+            </button>
+          </div>
         </div>
         <div className="min-h-0 flex-1 overflow-auto">
           {visibleItems.length === 0 ? (
@@ -1728,6 +1839,81 @@ const CompanySettings = () => {
     </div>
   );
 
+  const handleSavePenaltyRule = async () => {
+    if (!currentCompany?._id) return;
+    if (!String(penaltyRuleForm.ruleName || "").trim()) { toast.error("Rule name is required."); return; }
+    if (!penaltyRuleForm.postingAccount) { toast.error("Posting account is required."); return; }
+    try {
+      setSavingPenaltyRule(true);
+      if (editingPenaltyRuleId) {
+        const res = await updateLatePenaltyRule(editingPenaltyRuleId, { business: currentCompany._id, ...penaltyRuleForm });
+        toast.success(res?.message || "Rule updated.");
+      } else {
+        const res = await createLatePenaltyRule({ business: currentCompany._id, ...penaltyRuleForm });
+        toast.success(res?.message || "Rule created.");
+      }
+      await loadPenaltyRules();
+      setShowPenaltyRuleModal(false);
+    } catch (err) { toast.error(extractErrorMessage(err)); }
+    finally { setSavingPenaltyRule(false); }
+  };
+
+  const renderPenaltyRulesTab = () => {
+    const active = penaltyRules.filter(r => r.active !== false).length;
+    return (
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/80 px-4 py-2">
+          <span className="text-xs text-slate-500">{active} active · {penaltyRules.length - active} inactive</span>
+          <button onClick={() => { setEditingPenaltyRuleId(""); setPenaltyRuleForm(defaultPenaltyRuleForm); setShowPenaltyRuleModal(true); }}
+            className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#0A3127]">
+            <FaPlus className="text-[10px]" /> Add Rule
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto">
+          {penaltyRules.length === 0 ? (
+            <div className="flex h-40 items-center justify-center text-sm text-slate-500">No late payment rules configured yet.</div>
+          ) : (
+            <table className="w-full text-[11px] border-collapse">
+              <thead className="sticky top-0 z-10">
+                <tr className="bg-[#0B3B2E] text-white">
+                  {["Rule Name","Calc Type","Rate","Grace Days","Frequency","Posting Account","Status","Actions"].map((h,i,arr) => (
+                    <th key={h} className={`px-3 py-1 text-left font-bold ${i < arr.length-1 ? 'border-r border-white/10' : ''}`}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {penaltyRules.map((rule, idx) => {
+                  const isActive = rule.active !== false;
+                  return (
+                    <tr key={rule._id} className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                      <td className="px-3 py-1 border-r border-gray-100 font-medium text-slate-900">{rule.ruleName || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-600 capitalize">{String(rule.calculationType || "").replace(/_/g," ")}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{rule.rateOrAmount ?? "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-600">{rule.graceDays ?? 0}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 capitalize text-slate-600">{rule.repeatFrequency || "manual"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{rule.postingAccount?.name || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100">
+                        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${isActive ? "border-emerald-200 bg-emerald-100 text-emerald-700" : "border-slate-200 bg-slate-100 text-slate-500"}`}>
+                          {isActive ? "Active" : "Inactive"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-1">
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => { setEditingPenaltyRuleId(rule._id); setPenaltyRuleForm(mapPenaltyRuleToForm(rule)); setShowPenaltyRuleModal(true); }}
+                            className="rounded px-2 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-100">Edit</button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderModalBody = () => {
     const tabKey = modalTab;
 
@@ -1778,38 +1964,6 @@ const CompanySettings = () => {
       );
     }
 
-    if (tabKey === "commissions") {
-      return (
-        <div className="space-y-4">
-          <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">Name *</label>
-            <Input value={formData.name || ""} onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))} placeholder="Default" />
-          </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-xs font-bold text-slate-700">Percentage (%) *</label>
-              <Input type="number" min="0" step="0.01" value={formData.percentage || ""} onChange={(e) => setFormData((prev) => ({ ...prev, percentage: e.target.value }))} />
-            </div>
-            <AppSelect
-              label="Applies To"
-              value={formData.applicableTo || "rent"}
-              onChange={(v) => setFormData((prev) => ({ ...prev, applicableTo: v ?? "rent" }))}
-              options={[
-                { value: "rent", label: "Rent" },
-                { value: "utilities", label: "Utilities" },
-                { value: "all", label: "All" },
-              ]}
-              size="md"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">Description</label>
-            <Input value={formData.description || ""} onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))} placeholder="Optional guidance" />
-          </div>
-        </div>
-      );
-    }
-
     if (tabKey === "deposits") {
       return (
         <div className="space-y-4">
@@ -1840,6 +1994,59 @@ const CompanySettings = () => {
             <label className="mb-1 block text-xs font-bold text-slate-700">Description</label>
             <Input value={formData.description || ""} onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))} placeholder="Optional guidance" />
           </div>
+        </div>
+      );
+    }
+
+    if (tabKey === "unitTypes") {
+      return (
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Name *</label>
+            <Input value={formData.name || ""} onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))} placeholder="Studio" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Description</label>
+            <Input value={formData.description || ""} onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))} placeholder="Optional description" />
+          </div>
+          <AppSelect
+            label="Category"
+            value={formData.category || "residential"}
+            onChange={(v) => setFormData((prev) => ({ ...prev, category: v ?? "residential" }))}
+            options={[
+              { value: "residential", label: "Residential" },
+              { value: "commercial", label: "Commercial" },
+              { value: "mixed", label: "Mixed" },
+            ]}
+            size="md"
+          />
+        </div>
+      );
+    }
+
+    if (tabKey === "maintenanceCategories") {
+      return (
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Name *</label>
+            <Input value={formData.name || ""} onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))} placeholder="Plumbing" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Description</label>
+            <Input value={formData.description || ""} onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))} placeholder="Optional description" />
+          </div>
+          <AppSelect
+            label="Priority"
+            value={formData.priority || "medium"}
+            onChange={(v) => setFormData((prev) => ({ ...prev, priority: v ?? "medium" }))}
+            options={[
+              { value: "low", label: "Low" },
+              { value: "medium", label: "Medium" },
+              { value: "high", label: "High" },
+              { value: "critical", label: "Critical" },
+            ]}
+            size="md"
+          />
         </div>
       );
     }
@@ -1905,53 +2112,72 @@ const CompanySettings = () => {
             </div>
           </div>
 
-          {/* Tab bar */}
-          <div className="flex flex-shrink-0 gap-0 overflow-x-auto border-b border-slate-200">
-            {visibleTabEntries.map(([key, tab]) => {
-              const Icon = tab.icon;
-              const isActive = key === activeTab;
-              return (
-                <button
-                  key={key}
-                  onClick={() => switchTab(key)}
-                  className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide transition ${
-                    isActive ? "border-[#FF8C00] bg-[#EDF5F1] text-[#0B3B2E]" : "border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700"
-                  }`}
-                >
-                  <Icon size={10} />
-                  {tab.label}
-                  {!["tax", "accounting", "autoInvoicing"].includes(key) && (
-                    <span className={`px-1.5 py-0.5 text-[9px] font-bold ${isActive ? "bg-[#0B3B2E]/10 text-[#0B3B2E]" : "bg-slate-100 text-slate-500"}`}>
-                      {activeCounts[key] ?? 0}
-                    </span>
-                  )}
-                  {key === "autoInvoicing" && (
-                    <span className={`px-1.5 py-0.5 text-[9px] font-bold ${autoInvoicing.enabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-                      {autoInvoicing.enabled ? "ON" : "OFF"}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          {/* Body: sidebar + content */}
+          <div className="flex min-h-0 flex-1 overflow-hidden">
 
-          {/* Content */}
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {loading ? (
-              <div className="flex h-40 items-center justify-center gap-2 text-sm text-slate-500">
-                <Spinner size="sm" /> Loading...
-              </div>
-            ) : activeTab === "accounting" ? (
-              <div className="flex-1 overflow-auto px-4 py-4">{renderAccountingTab()}</div>
-            ) : activeTab === "tax" ? (
-              <div className="flex-1 overflow-auto px-4 py-4">{renderTaxTab()}</div>
-            ) : activeTab === "autoInvoicing" ? (
-              <div className="flex-1 overflow-auto px-4 py-4">{renderAutoInvoicingTab()}</div>
-            ) : activeTab === "incomeRules" ? (
-              <div className="flex-1 overflow-auto px-4 py-4">{renderIncomeRulesTab()}</div>
-            ) : (
-              renderCollectionTab(activeTab)
-            )}
+            {/* Left sidebar nav */}
+            <div className="w-48 flex-shrink-0 overflow-y-auto border-r border-slate-200 bg-slate-50">
+              {SIDEBAR_GROUPS.map((group) => {
+                const visibleItems = group.items.filter((k) => visibleTabKeys.has(k));
+                if (visibleItems.length === 0) return null;
+                return (
+                  <div key={group.label} className="py-2">
+                    <p className="px-3 pb-1 pt-0.5 text-[9px] font-black uppercase tracking-widest text-slate-400">{group.label}</p>
+                    {visibleItems.map((key) => {
+                      const tab = TAB_CONFIG[key];
+                      const Icon = tab.icon;
+                      const isActive = key === activeTab;
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => switchTab(key)}
+                          className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-bold transition ${
+                            isActive
+                              ? "bg-[#0B3B2E] text-white"
+                              : "text-slate-600 hover:bg-slate-100 hover:text-slate-800"
+                          }`}
+                        >
+                          <Icon size={10} className="shrink-0" />
+                          <span className="flex-1 truncate">{tab.label}</span>
+                          {!["tax", "accounting", "autoInvoicing", "incomeRules", "penaltyRules"].includes(key) && (
+                            <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${isActive ? "bg-white/20 text-white" : "bg-slate-200 text-slate-500"}`}>
+                              {activeCounts[key] ?? 0}
+                            </span>
+                          )}
+                          {key === "autoInvoicing" && (
+                            <span className={`px-1.5 py-0.5 text-[9px] font-bold ${autoInvoicing.enabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-500"}`}>
+                              {autoInvoicing.enabled ? "ON" : "OFF"}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Content area */}
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              {loading ? (
+                <div className="flex h-40 items-center justify-center gap-2 text-sm text-slate-500">
+                  <Spinner size="sm" /> Loading...
+                </div>
+              ) : activeTab === "accounting" ? (
+                <div className="flex-1 overflow-auto px-4 py-4">{renderAccountingTab()}</div>
+              ) : activeTab === "tax" ? (
+                <div className="flex-1 overflow-auto px-4 py-4">{renderTaxTab()}</div>
+              ) : activeTab === "autoInvoicing" ? (
+                <div className="flex-1 overflow-auto px-4 py-4">{renderAutoInvoicingTab()}</div>
+              ) : activeTab === "incomeRules" ? (
+                <div className="flex-1 overflow-auto px-4 py-4">{renderIncomeRulesTab()}</div>
+              ) : activeTab === "penaltyRules" ? (
+                renderPenaltyRulesTab()
+              ) : (
+                renderCollectionTab(activeTab)
+              )}
+            </div>
+
           </div>
 
         </div>
@@ -1960,7 +2186,7 @@ const CompanySettings = () => {
       {showModal && (
         <Modal
           onClose={closeModal}
-          title={editingItem?._id ? `Edit ${TAB_CONFIG[modalTab].label.slice(0, -1)}` : `Add ${TAB_CONFIG[modalTab].label.slice(0, -1)}`}
+          title={editingItem?._id ? `Edit ${TAB_CONFIG[modalTab]?.singularLabel || TAB_CONFIG[modalTab].label.replace(/ies$/, "y").replace(/s$/, "")}` : `Add ${TAB_CONFIG[modalTab]?.singularLabel || TAB_CONFIG[modalTab].label.replace(/ies$/, "y").replace(/s$/, "")}`}
           footer={
             <div className="flex flex-wrap justify-end gap-2">
               <ActionButton onClick={closeModal}>
@@ -1976,6 +2202,228 @@ const CompanySettings = () => {
           {renderModalBody()}
         </Modal>
       )}
+
+      {showPenaltyRuleModal ? (
+        <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <h2 className="text-sm font-black uppercase tracking-wide">
+                {editingPenaltyRuleId ? "Edit late penalty rule" : "Add late penalty rule"}
+              </h2>
+              <button
+                onClick={() => !savingPenaltyRule && setShowPenaltyRuleModal(false)}
+                className="text-white/70 transition-colors hover:text-white"
+                type="button"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto bg-white px-5 py-4">
+              <div className="mb-5 grid grid-cols-1 gap-3 lg:grid-cols-3">
+                <div className="rounded-xl border border-orange-100 bg-orange-50 px-4 py-2 text-xs text-slate-700">
+                  <p className="font-semibold text-slate-900">Grace days</p>
+                  <p className="mt-1">Days allowed after due date before penalty counting begins.</p>
+                </div>
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2 text-xs text-slate-700">
+                  <p className="font-semibold text-slate-900">Minimum overdue days</p>
+                  <p className="mt-1">Extra threshold after grace. The row must still reach this number to qualify.</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">
+                  <p className="font-semibold text-slate-900">Posting account</p>
+                  <p className="mt-1">This is the income ledger the late penalty invoice will credit.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <div className="space-y-4">
+                  <div>
+                    <label className={labelClass}>Rule name</label>
+                    <input
+                      className={inputClass}
+                      value={penaltyRuleForm.ruleName}
+                      onChange={(e) => setPenaltyRuleForm((prev) => ({ ...prev, ruleName: e.target.value }))}
+                      placeholder="Example: Standard monthly arrears penalty"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelClass}>Effective from</label>
+                      <input
+                        type="date"
+                        className={inputClass}
+                        value={penaltyRuleForm.effectiveFrom}
+                        onChange={(e) => setPenaltyRuleForm((prev) => ({ ...prev, effectiveFrom: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Posting account</label>
+                      <AppSelect
+                        value={penaltyRuleForm.postingAccount}
+                        onChange={(v) => setPenaltyRuleForm((prev) => ({ ...prev, postingAccount: v ?? "" }))}
+                        options={penaltyAccounts.map((account) => ({ value: account._id, label: `${account.code ? account.code + " · " : ""}${account.name}` }))}
+                        placeholder="Select account"
+                        searchable
+                        clearable
+                        size="md"
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelClass}>Grace days</label>
+                      <input
+                        type="number"
+                        min="0"
+                        className={inputClass}
+                        value={penaltyRuleForm.graceDays}
+                        onChange={(e) => setPenaltyRuleForm((prev) => ({ ...prev, graceDays: Number(e.target.value || 0) }))}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Min overdue days</label>
+                      <input
+                        type="number"
+                        min="0"
+                        className={inputClass}
+                        value={penaltyRuleForm.minimumOverdueDays}
+                        onChange={(e) => setPenaltyRuleForm((prev) => ({ ...prev, minimumOverdueDays: Number(e.target.value || 0) }))}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Penalize item</label>
+                    <AppSelect
+                      value={penaltyRuleForm.penalizeItem}
+                      onChange={(v) => setPenaltyRuleForm((prev) => ({ ...prev, penalizeItem: v ?? "outstanding_invoice_balance" }))}
+                      options={[
+                        { value: "rent_only", label: "Rent only" },
+                        { value: "current_period_rent_only", label: "Current period rent only" },
+                        { value: "current_period_bill_balance_only", label: "Current period bill balance only" },
+                        { value: "all_arrears", label: "All arrears" },
+                        { value: "outstanding_invoice_balance", label: "Outstanding invoice balance" },
+                      ]}
+                      size="md"
+                      className="w-full"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelClass}>Calculation type</label>
+                      <AppSelect
+                        value={penaltyRuleForm.calculationType}
+                        onChange={(v) => setPenaltyRuleForm((prev) => ({ ...prev, calculationType: v ?? "percentage_overdue_balance" }))}
+                        options={[
+                          { value: "flat_amount", label: "Flat amount" },
+                          { value: "percentage_overdue_balance", label: "Percentage of overdue balance" },
+                          { value: "daily_fixed_amount", label: "Daily fixed amount" },
+                          { value: "daily_percentage", label: "Daily percentage" },
+                        ]}
+                        size="md"
+                        className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Rate / amount</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className={inputClass}
+                        value={penaltyRuleForm.rateOrAmount}
+                        onChange={(e) => setPenaltyRuleForm((prev) => ({ ...prev, rateOrAmount: Number(e.target.value || 0) }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className={labelClass}>Min balance</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className={inputClass}
+                        value={penaltyRuleForm.minimumBalance}
+                        onChange={(e) => setPenaltyRuleForm((prev) => ({ ...prev, minimumBalance: Number(e.target.value || 0) }))}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Max balance</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className={inputClass}
+                        value={penaltyRuleForm.maximumBalance}
+                        onChange={(e) => setPenaltyRuleForm((prev) => ({ ...prev, maximumBalance: Number(e.target.value || 0) }))}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Penalty cap</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className={inputClass}
+                        value={penaltyRuleForm.maximumPenaltyCap}
+                        onChange={(e) => setPenaltyRuleForm((prev) => ({ ...prev, maximumPenaltyCap: Number(e.target.value || 0) }))}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Repeat frequency</label>
+                    <AppSelect
+                      value={penaltyRuleForm.repeatFrequency}
+                      onChange={(v) => setPenaltyRuleForm((prev) => ({ ...prev, repeatFrequency: v ?? "manual" }))}
+                      options={[{ value: "manual", label: "Manual" }, { value: "monthly", label: "Monthly" }]}
+                      size="md"
+                      className="w-full"
+                    />
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <label className={labelClass}>Notes</label>
+                    <textarea
+                      rows={8}
+                      className={`${inputClass} min-h-[180px]`}
+                      value={penaltyRuleForm.notes}
+                      onChange={(e) => setPenaltyRuleForm((prev) => ({ ...prev, notes: e.target.value }))}
+                      placeholder="Optional internal guidance for the team."
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <button
+                type="button"
+                onClick={() => setShowPenaltyRuleModal(false)}
+                className="inline-flex items-center gap-2 border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                <FaTimes /> Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSavePenaltyRule}
+                disabled={savingPenaltyRule}
+                className="inline-flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <FaSave /> {savingPenaltyRule ? "Saving..." : editingPenaltyRuleId ? "Update Rule" : "Save Rule"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </DashboardLayout>
   );
 };

@@ -297,6 +297,7 @@ const MeterReadings = () => {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedReadingIds, setSelectedReadingIds] = useState([]);
+  const selectedReadingSet = useMemo(() => new Set(selectedReadingIds), [selectedReadingIds]);
   const [appliedFilters, setAppliedFilters] = useTabState("/meter-readings:appliedFilters", emptyFilters);
   const [draftFilters, setDraftFilters] = useState(appliedFilters);
   const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
@@ -559,8 +560,8 @@ const MeterReadings = () => {
   const currentPageReadings = filteredReadings.slice(startIndex, endIndex);
 
   const selectedRows = useMemo(
-    () => readings.filter((row) => selectedReadingIds.includes(row._id)),
-    [readings, selectedReadingIds]
+    () => readings.filter((row) => selectedReadingSet.has(row._id)),
+    [readings, selectedReadingSet]
   );
   const selectedDraftRows = selectedRows.filter((row) => row.status === "draft");
   const selectedDeletableRows = selectedRows.filter((row) => row.status !== "deleted");
@@ -572,7 +573,7 @@ const MeterReadings = () => {
   const visibleSelectableRows = currentPageReadings.filter((row) => row.status !== "deleted");
   const selectAll =
     visibleSelectableRows.length > 0 &&
-    visibleSelectableRows.every((row) => selectedReadingIds.includes(row._id));
+    visibleSelectableRows.every((row) => selectedReadingSet.has(row._id));
 
   const totalAmount = filteredReadings.reduce((sum, item) => sum + Number(item?.amount || 0), 0);
   const draftAmount = filteredReadings
@@ -1272,10 +1273,10 @@ const MeterReadings = () => {
               allChecked={currentPageReadings.length > 0 && selectAll}
               someChecked={selectedReadingIds.length > 0 && !selectAll}
               onCheckAll={toggleSelectAll}
-              isChecked={(reading) => selectedReadingIds.includes(reading._id)}
+              isChecked={(reading) => selectedReadingSet.has(reading._id)}
               onCheckRow={(reading) => toggleRowSelection(reading._id)}
               onRowClick={(reading) => handleRowClick(reading)}
-              isSelected={(reading) => selectedReadingIds.includes(reading._id)}
+              isSelected={(reading) => selectedReadingSet.has(reading._id)}
               renderRow={(reading) => {
                 const isBilled = reading.status === "billed";
                 return (

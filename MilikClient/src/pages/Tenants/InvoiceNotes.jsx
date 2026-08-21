@@ -336,15 +336,16 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
   const [saving, setSaving] = useState(false);
   const [busyNoteId, setBusyNoteId] = useState("");
   const [selectedNotes, setSelectedNotes] = useState([]);
+  const selectedNotesSet = useMemo(() => new Set(selectedNotes), [selectedNotes]);
   const [expandedNotes, setExpandedNotes] = useState(new Set());
   const [communicationModal, setCommunicationModal] = useState(null);
   const [reverseNoteModal, setReverseNoteModal] = useState({ open: false, note: null, reason: "", loading: false });
   const [showImportModal, setShowImportModal] = useState(false);
 
   const selectedNoteTenantIds = useMemo(() => {
-    const objs = notes.filter((n) => selectedNotes.includes(String(n._id)));
+    const objs = notes.filter((n) => selectedNotesSet.has(String(n._id)));
     return [...new Set(objs.map((n) => String(n.tenant?._id || n.tenant || '')).filter(Boolean))];
-  }, [notes, selectedNotes]);
+  }, [notes, selectedNotesSet]);
 
   const propertyMap = useMemo(
     () => new Map((properties || []).map((item) => [String(item?._id || ""), item])),
@@ -638,7 +639,7 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
   };
   const toggleSelectAllNotes = () => {
     const allIds = paginatedNotes.map((n) => String(n._id));
-    const allSelected = allIds.length > 0 && allIds.every((id) => selectedNotes.includes(id));
+    const allSelected = allIds.length > 0 && allIds.every((id) => selectedNotesSet.has(id));
     setSelectedNotes(allSelected ? [] : allIds);
   };
   const toggleNoteExpand = (id) => {
@@ -970,13 +971,13 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
               empty="No invoice notes found. Adjust filters or add a new note."
               minWidth={1320}
               checkboxes
-              allChecked={paginatedNotes.length > 0 && paginatedNotes.every((n) => selectedNotes.includes(String(n._id)))}
-              someChecked={paginatedNotes.some((n) => selectedNotes.includes(String(n._id)))}
+              allChecked={paginatedNotes.length > 0 && paginatedNotes.every((n) => selectedNotesSet.has(String(n._id)))}
+              someChecked={paginatedNotes.some((n) => selectedNotesSet.has(String(n._id)))}
               onCheckAll={toggleSelectAllNotes}
-              isChecked={(note) => selectedNotes.includes(String(note._id))}
+              isChecked={(note) => selectedNotesSet.has(String(note._id))}
               onCheckRow={(note) => toggleNoteSelect(String(note._id))}
               onRowClick={(note) => toggleNoteSelect(String(note._id))}
-              isSelected={(note) => selectedNotes.includes(String(note._id))}
+              isSelected={(note) => selectedNotesSet.has(String(note._id))}
               renderRow={(note) => {
                 const paymentState = getNotePaymentState(note);
                 return (
