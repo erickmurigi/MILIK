@@ -49,7 +49,7 @@ const addDays = (dateStr: string, n: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-const LIMIT = 50;
+const LIMIT = 200;
 
 export default function AttendanceScreen() {
   const [date,       setDate]       = useState(todayStr());

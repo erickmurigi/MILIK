@@ -16,15 +16,17 @@ type RawInvoice = {
   invoiceNumber?: string;
   category?:      string;
   amount:         number;
+  invoiceDate?:   string;
   dueDate?:       string;
   createdAt?:     string;
 };
 
 type RawPayment = {
-  _id:            string;
-  receiptNumber?: string;
-  amount:         number;
-  paymentDate?:   string;
+  _id:              string;
+  referenceNumber?: string;
+  description?:     string;
+  amount:           number;
+  paymentDate?:     string;
 };
 
 type LedgerRow = {
@@ -72,8 +74,8 @@ export default function TenantStatementScreen() {
   const load = useCallback(async () => {
     const [tenantRes, invRes, payRes] = await Promise.allSettled([
       api.get(`/tenants/${id}`),
-      api.get('/tenant-invoices',      { params: { tenant: id, limit: 200 } }),
-      api.get(`/tenants/payments/${id}`, { params: { limit: 200 } }),
+      api.get('/tenant-invoices',      { params: { tenant: id, limit: 200, status: 'ACTIVE' } }),
+      api.get('/rent-payments', { params: { tenant: id, limit: 200 } }),
     ]);
 
     if (tenantRes.status === 'fulfilled') {
@@ -81,10 +83,12 @@ export default function TenantStatementScreen() {
       setTenant(d.data || d);
     }
     if (invRes.status === 'fulfilled') {
-      setInvoices(invRes.value.data?.data ?? []);
+      const raw = invRes.value.data;
+      setInvoices(Array.isArray(raw) ? raw : (raw?.data ?? []));
     }
     if (payRes.status === 'fulfilled') {
-      setPayments(payRes.value.data?.data ?? []);
+      const pd = payRes.value.data;
+      setPayments(pd?.items ?? pd?.data ?? []);
     }
 
     setLoading(false);
@@ -100,7 +104,7 @@ export default function TenantStatementScreen() {
     let openingBalance = 0;
     if (cutoff) {
       for (const inv of invoices) {
-        const d = new Date(inv.dueDate || inv.createdAt || Date.now());
+        const d = new Date(inv.invoiceDate || inv.dueDate || inv.createdAt || Date.now());
         if (d < cutoff) openingBalance += inv.amount;
       }
       for (const pay of payments) {
@@ -112,7 +116,7 @@ export default function TenantStatementScreen() {
     const entries: Omit<LedgerRow, 'balance'>[] = [];
 
     for (const inv of invoices) {
-      const d = new Date(inv.dueDate || inv.createdAt || Date.now());
+      const d = new Date(inv.invoiceDate || inv.dueDate || inv.createdAt || Date.now());
       if (cutoff && d < cutoff) continue;
       entries.push({
         id:          inv._id,
@@ -130,7 +134,7 @@ export default function TenantStatementScreen() {
       entries.push({
         id:          pay._id,
         date:        d,
-        description: pay.receiptNumber || 'Payment',
+        description: pay.referenceNumber || pay.description || 'Payment',
         debit:       0,
         credit:      pay.amount,
         type:        'payment',

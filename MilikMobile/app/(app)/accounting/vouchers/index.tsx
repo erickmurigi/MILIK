@@ -44,6 +44,7 @@ const TABS = [
   { key: 'approved', label: 'Approved' },
   { key: 'posted',   label: 'Posted'   },
   { key: 'paid',     label: 'Paid'     },
+  { key: 'reversed', label: 'Reversed' },
 ] as const;
 
 export default function VouchersScreen() {

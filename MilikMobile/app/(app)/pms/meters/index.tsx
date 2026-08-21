@@ -68,7 +68,7 @@ export default function MetersScreen() {
 
   useEffect(() => {
     setPropsLoading(true);
-    api.get('/properties', { params: { limit: 100 } })
+    api.get('/properties', { params: { limit: 200, status: 'active' } })
       .then(({ data }) =>
         setProperties(
           (data.data ?? []).map((p: { _id: string; propertyName?: string; propertyCode?: string }) => ({

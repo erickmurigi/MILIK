@@ -19,16 +19,16 @@ const fmtDT = (d: string) =>
   new Date(d).toLocaleString('en-KE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 type Notification = {
-  _id:               string;
-  transactionCode:   string;
-  transactionDate:   string;
-  amount:            number;
-  payerName:         string;
-  msisdn:            string;
-  billRefNumber?:    string;
-  isAllocated:       boolean;
-  isReversed?:       boolean;
-  allocatedJob?:     { jobNumber?: string; plate?: string };
+  _id:             string;
+  transactionCode: string;
+  transactionDate: string;
+  amount:          number;
+  senderName:      string;
+  msisdn:          string;
+  billRefNumber?:  string;
+  status:          'matched' | 'unmatched' | 'duplicate' | 'rejected' | 'error' | 'stk_pending';
+  isReversed?:     boolean;
+  matchedJob?:     { jobNumber?: string; plateNumber?: string };
 };
 
 type UnpaidJob = { _id: string; jobNumber?: string; plate: string; totalAmount: number; customer?: { name?: string } };
@@ -62,11 +62,11 @@ export default function CarWashMpesaScreen() {
     else setLoadingMore(true);
     try {
       const params: Record<string, string | number> = { page: pg, limit: LIMIT };
-      if (tab === 'unallocated') params.allocated = 'false';
-      if (tab === 'allocated')   params.allocated = 'true';
-      const { data } = await api.get('/carwash/mpesa-collections', { params });
+      if (tab === 'unallocated') params.status = 'unmatched';
+      if (tab === 'allocated')   params.status = 'matched';
+      const { data } = await api.get('/carwash/mpesa/notifications', { params });
       const raw  = data?.data ?? data;
-      const rows: Notification[] = Array.isArray(raw) ? raw : (raw?.collections ?? []);
+      const rows: Notification[] = Array.isArray(raw) ? raw : (raw?.notifications ?? []);
       setItems(prev => pg === 1 ? rows : [...prev, ...rows]);
       setHasMore(rows.length === LIMIT);
       setPage(pg);
@@ -83,7 +83,7 @@ export default function CarWashMpesaScreen() {
     setTarget(notif);
     setJobsLoading(true);
     try {
-      const { data } = await api.get('/carwash/mpesa-collections/unpaid-jobs');
+      const { data } = await api.get('/carwash/mpesa/unpaid-jobs');
       const raw = data?.data ?? data;
       setUnpaidJobs(Array.isArray(raw) ? raw : (raw?.jobs ?? []));
     } catch { setUnpaidJobs([]); }
@@ -94,7 +94,7 @@ export default function CarWashMpesaScreen() {
     if (!target) return;
     setAllocating(true);
     try {
-      await api.post(`/carwash/mpesa-collections/${target._id}/allocate`, { jobId });
+      await api.post(`/carwash/mpesa/notifications/${target._id}/allocate`, { jobId });
       setTarget(null);
       load(1, true);
     } catch (err: any) {
@@ -103,14 +103,14 @@ export default function CarWashMpesaScreen() {
   };
 
   const renderItem = ({ item }: { item: Notification }) => {
-    const allocated = item.isAllocated || !!item.allocatedJob;
+    const allocated = item.status === 'matched';
     return (
       <View style={[styles.card, { borderLeftColor: allocated ? '#059669' : '#D97706' }]}>
         {/* Amount + status */}
         <View style={styles.cardHeader}>
           <View style={{ flex: 1 }}>
             <Text style={styles.amount}>{fmt(item.amount)}</Text>
-            <Text style={styles.payerName} numberOfLines={1}>{item.payerName}</Text>
+            <Text style={styles.payerName} numberOfLines={1}>{item.senderName}</Text>
           </View>
           <View style={[styles.statusDot, { backgroundColor: allocated ? '#D1FAE5' : '#FEF3C7' }]}>
             <Ionicons name={allocated ? 'checkmark-circle' : 'time-outline'} size={16} color={allocated ? '#059669' : '#D97706'} />
@@ -130,11 +130,11 @@ export default function CarWashMpesaScreen() {
         </View>
 
         {/* Action */}
-        {item.allocatedJob ? (
+        {item.matchedJob ? (
           <View style={styles.allocatedBadge}>
             <Ionicons name="car-outline" size={11} color="#059669" />
             <Text style={styles.allocatedText}>
-              {item.allocatedJob.plate}{item.allocatedJob.jobNumber ? `  ·  #${item.allocatedJob.jobNumber}` : ''}
+              {item.matchedJob.plateNumber}{item.matchedJob.jobNumber ? `  ·  #${item.matchedJob.jobNumber}` : ''}
             </Text>
           </View>
         ) : !item.isReversed ? (

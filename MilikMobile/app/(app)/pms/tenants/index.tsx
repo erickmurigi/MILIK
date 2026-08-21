@@ -57,7 +57,7 @@ export default function TenantSearchScreen() {
 
   // Load properties once for the filter chips
   useEffect(() => {
-    api.get('/properties', { params: { limit: 100 } })
+    api.get('/properties', { params: { limit: 200, status: 'active' } })
       .then(({ data }) => setProperties(data.data ?? []))
       .catch(() => {});
   }, []);

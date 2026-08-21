@@ -64,7 +64,7 @@ export default function POSSalesScreen() {
     else setLoadingMore(true);
     const ds = dateStr(date);
     const [salesRes, sumRes] = await Promise.allSettled([
-      api.get('/pos/sales', { params: { date: ds, page: String(pg), limit: String(LIMIT) } }),
+      api.get('/pos/sales', { params: { date: ds, page: String(pg), limit: String(LIMIT), status: 'completed' } }),
       pg === 1 ? api.get('/pos/sales/summary', { params: { date: ds } }) : Promise.resolve(null),
     ]);
     if (salesRes.status === 'fulfilled') {
