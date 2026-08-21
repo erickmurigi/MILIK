@@ -1,5 +1,6 @@
 import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import { buildInvoiceNarration } from "../../utils/invoiceNarrationUtils";
+import PaginationBar from '../../components/PaginationBar';
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
@@ -93,7 +94,6 @@ const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
-const ITEMS_PER_PAGE = 50;
 
 
 
@@ -674,6 +674,7 @@ const InvoiceTableRow = React.memo(InvoiceTableRowBase, areEqual);
 const EMPTY_ARRAY = [];
 
 const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
+  const [pageSize, setPageSize] = useState(50);
   const { id: tenantId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -702,7 +703,7 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const [tenantInvoicesFromApi, setTenantInvoicesFromApi] = useState([]);
   const [invoiceListPagination, setInvoiceListPagination] = useState({
     page: 1,
-    limit: ITEMS_PER_PAGE,
+    limit: pageSize,
     totalItems: 0,
     totalPages: 1,
   });
@@ -891,14 +892,14 @@ setBatchBookingForm((prev) => ({ ...prev, taxCodeKey: prev.taxCodeKey || default
           includeSnapshots: true,
           paginate: true,
           page: currentPage,
-          limit: ITEMS_PER_PAGE,
+          limit: pageSize,
           ...appliedServerFilters,
         });
 
         setTenantInvoicesFromApi(Array.isArray(payload?.data) ? payload.data : []);
         setInvoiceListPagination({
           page: Number(payload?.pagination?.page || currentPage || 1),
-          limit: Number(payload?.pagination?.limit || ITEMS_PER_PAGE),
+          limit: Number(payload?.pagination?.limit || pageSize),
           totalItems: Number(payload?.pagination?.totalItems || 0),
           totalPages: Number(payload?.pagination?.totalPages || 1),
         });
@@ -912,7 +913,7 @@ setBatchBookingForm((prev) => ({ ...prev, taxCodeKey: prev.taxCodeKey || default
         setTenantInvoicesFromApi([]);
         setInvoiceListPagination({
           page: 1,
-          limit: ITEMS_PER_PAGE,
+          limit: pageSize,
           totalItems: 0,
           totalPages: 1,
         });
@@ -925,7 +926,7 @@ setBatchBookingForm((prev) => ({ ...prev, taxCodeKey: prev.taxCodeKey || default
     };
 
     loadInvoices();
-  }, [currentCompany?._id, tenantId, refreshTick, currentPage, appliedServerFilters]);
+  }, [currentCompany?._id, tenantId, refreshTick, currentPage, appliedServerFilters, pageSize]);
 
   const uniqueProperties = useMemo(() => {
     return [
@@ -1053,7 +1054,7 @@ setBatchBookingForm((prev) => ({ ...prev, taxCodeKey: prev.taxCodeKey || default
   const totalFilteredCount = Number(invoiceListPagination?.totalItems || 0);
   const totalPages = Math.max(1, Number(invoiceListPagination?.totalPages || 1));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = totalFilteredCount === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const startIndex = totalFilteredCount === 0 ? 0 : (safeCurrentPage - 1) * pageSize;
   const endIndex = totalFilteredCount === 0 ? 0 : Math.min(startIndex + filteredInvoices.length, totalFilteredCount);
   const currentPageInvoices = filteredInvoices;
 
@@ -2638,48 +2639,16 @@ const createInvoiceForTenant = async (
               )}
             />
 
-            <div className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-1 text-xs text-slate-700">
-              <p>
-                <span className="font-semibold">Showing:</span> {totalFilteredCount === 0 ? 0 : startIndex + 1}
-                {" - "}
-                {endIndex} of {totalFilteredCount} invoice(s)
-                {appliedFilters.status !== "ACTIVE" && ` · Status: ${appliedFilters.status}`}
-              </p>
-              <div className="flex items-center gap-3">
-                <p>
-                  <span className="font-semibold">Selected:</span> {selectedCount}
-                  {totalFilteredCount > 0 && (
-                    <>
-                      {" · "}
-                      <span className="font-semibold">Total:</span> KES {totalAmount.toLocaleString()}
-                    </>
-                  )}
-                </p>
-                <div className="h-4 w-px bg-slate-300" />
-                <span className="text-slate-500">Per page: {ITEMS_PER_PAGE}</span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                    disabled={safeCurrentPage === 1}
-                    className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Previous
-                  </button>
-                  <span className="rounded border border-slate-200 bg-white px-2.5 py-0.5 font-semibold text-slate-700">
-                    Page {safeCurrentPage} of {totalPages}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                    disabled={safeCurrentPage === totalPages}
-                    className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            </div>
+            <PaginationBar
+              page={safeCurrentPage}
+              pages={totalPages}
+              total={totalFilteredCount}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              loading={false}
+              label="invoices"
+            />
           </div>
         </div>
       </div>

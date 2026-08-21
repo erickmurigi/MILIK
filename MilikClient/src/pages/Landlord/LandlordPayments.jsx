@@ -10,8 +10,6 @@ import {
   FaFileInvoiceDollar,
   FaPrint,
   FaTimes,
-  FaChevronLeft,
-  FaChevronRight,
   FaSms,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -24,8 +22,9 @@ import CommunicationComposerModal from "../../components/Communications/Communic
 import { getProperties } from "../../redux/propertyRedux";
 // NOTE: getLandlords is a thunk creator — must be called via dispatch(getLandlords({...}))
 
+import PaginationBar from "../../components/PaginationBar";
+
 const MILIK_GREEN = "bg-[#0B3B2E]";
-const ITEMS_PER_PAGE = 20;
 
 
 const LandlordPayments = ({ mode = "payments" }) => {
@@ -47,6 +46,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
 
   // Local state
   const [filters, setFilters] = useTabState("/landlord-payments:filters", { search: "", status: "", paymentStatus: "" });
+  const [pageSize, setPageSize] = useState(20);
   const [currentPage, setCurrentPage] = useTabState("/landlord-payments:currentPage", 1);
   const [selectedLandlords, setSelectedLandlords] = useState([]);
   const [showSmsModal, setShowSmsModal] = useState(false);
@@ -171,10 +171,10 @@ const LandlordPayments = ({ mode = "payments" }) => {
   }, [landlordData, filters]);
 
   // Pagination
-  const totalPages = Math.max(1, Math.ceil(filteredLandlords.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filteredLandlords.length / pageSize));
   const currentPageData = filteredLandlords.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
   );
 
   // Summary stats
@@ -724,36 +724,16 @@ const LandlordPayments = ({ mode = "payments" }) => {
               </table>
             </div>
 
-            {/* Pagination */}
-            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-3 py-2 flex items-center justify-between text-xs text-slate-600">
-              <div className="text-xs text-slate-600">
-                Showing {currentPageData.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0}{" "}
-                to {Math.min(currentPage * ITEMS_PER_PAGE, filteredLandlords.length)} of{" "}
-                {filteredLandlords.length} landlords
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="px-3 py-1 text-xs border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <FaChevronLeft />
-                </button>
-
-                <span className="text-xs text-slate-700 font-semibold">
-                  Page {currentPage} of {totalPages}
-                </span>
-
-                <button
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="px-3 py-1 text-xs border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <FaChevronRight />
-                </button>
-              </div>
-            </div>
+            <PaginationBar
+              page={currentPage}
+              pages={totalPages}
+              total={filteredLandlords.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              loading={isFetching}
+              label="landlords"
+            />
           </div>
         </div>
       </div>

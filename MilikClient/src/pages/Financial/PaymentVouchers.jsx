@@ -40,6 +40,7 @@ import {
 } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { useTabState } from "../../hooks/useTabState";
+import PaginationBar from '../../components/PaginationBar';
 
 const DEFAULT_PAGE_SIZE = 50;
 const isRawObjectId = (s) => /^[a-f\d]{24}$/i.test(String(s || ""));
@@ -290,7 +291,6 @@ const PaymentVouchers = () => {
   const selectedRows = useMemo(() => filtered.filter((voucher) => selectedIds.includes(voucher._id)), [filtered, selectedIds]);
 
   const totalPages = Math.max(1, serverPages);
-  const safeCurrentPage = Math.min(currentPage, totalPages);
   const currentPageRows = vouchers;
 
   useEffect(() => {
@@ -1087,25 +1087,16 @@ const PaymentVouchers = () => {
                 </tbody>
               </table>
             </div>
-            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-1 text-xs text-slate-600">
-              <div className="font-semibold">
-                Showing <span className="font-bold text-slate-900">{vouchers.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1}</span> to <span className="font-bold text-slate-900">{Math.min(safeCurrentPage * pageSize, serverTotal)}</span> of <span className="font-bold text-slate-900">{serverTotal}</span> voucher(s)
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-semibold text-slate-500">Per page:</span>
-                  <AppSelect
-                    value={pageSize}
-                    onChange={(v) => { setPageSize(Number(v ?? 25)); setCurrentPage(1); }}
-                    options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))}
-                    size="sm"
-                  />
-                </div>
-                <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
-                <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
-                <button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
-              </div>
-            </div>
+            <PaginationBar
+              page={currentPage}
+              pages={totalPages}
+              total={serverTotal}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              loading={loading}
+              label="vouchers"
+            />
           </div>
         </div>
       </div>

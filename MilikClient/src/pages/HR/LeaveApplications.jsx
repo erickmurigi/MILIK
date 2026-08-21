@@ -21,16 +21,7 @@ const STATUS_BADGE = {
   Draft:     'border-indigo-200 bg-indigo-50 text-indigo-600',
 };
 
-const Pagination = ({ page, totalPages, total, onPage }) => (
-  <div className="flex-shrink-0 flex items-center justify-between border-t border-slate-200 bg-white px-4 py-2">
-    <span className="text-[11px] text-slate-500">{total} application{total !== 1 ? 's' : ''}</span>
-    <div className="flex items-center gap-1">
-      <button disabled={page <= 1} onClick={() => onPage(page - 1)} className="rounded border border-slate-200 px-2 py-1 text-[10px] font-bold disabled:opacity-40 hover:bg-slate-50">Prev</button>
-      <span className="px-2 text-[11px] font-semibold text-slate-600">{page} / {totalPages}</span>
-      <button disabled={page >= totalPages} onClick={() => onPage(page + 1)} className="rounded border border-slate-200 px-2 py-1 text-[10px] font-bold disabled:opacity-40 hover:bg-slate-50">Next</button>
-    </div>
-  </div>
-);
+import PaginationBar from '../../components/PaginationBar';
 
 // ── Apply Leave Modal ─────────────────────────────────────────────────────────
 function ApplyLeaveModal({ onClose, onSaved }) {
@@ -147,15 +138,16 @@ export default function LeaveApplications() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [page, setPage]         = useTabState('/hr/leave:page', 1);
+  const [pageSize, setPageSize] = useState(25);
   const [statusFilter, setStatusFilter] = useTabState('/hr/leave:statusFilter', '');
   const [typeFilter, setTypeFilter]     = useTabState('/hr/leave:typeFilter', '');
   const [showApply, setShowApply] = useState(false);
   const [confirm, setConfirm]   = useState({ isOpen: false });
 
   const { data: appData, isLoading: loading, error, refetch } = useQuery({
-    queryKey: ['hr-leave-applications', page, statusFilter, typeFilter],
+    queryKey: ['hr-leave-applications', page, pageSize, statusFilter, typeFilter],
     queryFn: async () => {
-      const params = { page, limit: 25 };
+      const params = { page, limit: pageSize };
       if (statusFilter) params.status = statusFilter;
       if (typeFilter)   params.leaveType = typeFilter;
       const res = await adminRequests.get('/hr/leave-applications', { params });
@@ -355,7 +347,16 @@ export default function LeaveApplications() {
           )}
         </div>
 
-        <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
+        <PaginationBar
+          page={page}
+          pages={totalPages}
+          total={total}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+          loading={loading}
+          label="applications"
+        />
       </div>
 
       {showApply && <ApplyLeaveModal onClose={() => setShowApply(false)} onSaved={() => { setShowApply(false); queryClient.invalidateQueries({ queryKey: ['hr-leave-applications'] }); }} />}

@@ -1,5 +1,6 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
+import PaginationBar from '../../components/PaginationBar';
 import { useDispatch, useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import { getProperties } from "../../redux/propertyRedux";
@@ -47,7 +48,6 @@ const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
-const ITEMS_PER_PAGE = 50;
 
 const normalizeList = (payload) => {
   if (Array.isArray(payload)) return payload;
@@ -244,6 +244,7 @@ const buildRegisterPrintHtml = ({ company, companyName, rows, totalAmount, filte
 };
 
 const MeterReadings = () => {
+  const [pageSize, setPageSize] = useState(50);
   const confirm = useConfirm();
   const dispatch = useDispatch();
   const currentCompany = useSelector(selectCurrentCompany);
@@ -550,10 +551,10 @@ const MeterReadings = () => {
     setCurrentPage(1);
   }, [appliedFilters, readings]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredReadings.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filteredReadings.length / pageSize));
   const currentSafePage = Math.min(currentPage, totalPages);
-  const startIndex = (currentSafePage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const startIndex = (currentSafePage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
   const currentPageReadings = filteredReadings.slice(startIndex, endIndex);
 
   const selectedRows = useMemo(
@@ -1476,32 +1477,16 @@ const MeterReadings = () => {
               </p>
             </div>
 
-            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-1 text-xs text-slate-700">
-              <p>
-                <span className="font-semibold">Per page:</span> {ITEMS_PER_PAGE}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                  disabled={currentSafePage <= 1}
-                  className="inline-flex items-center gap-1 rounded border border-slate-300 px-3 py-1 font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <FaArrowLeft size={10} /> Prev
-                </button>
-                <span className="rounded border border-slate-200 bg-slate-50 px-3 py-1 font-semibold">
-                  Page {currentSafePage} of {totalPages}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                  disabled={currentSafePage >= totalPages}
-                  className="inline-flex items-center gap-1 rounded border border-slate-300 px-3 py-1 font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Next <FaArrowRight size={10} />
-                </button>
-              </div>
-            </div>
+            <PaginationBar
+              page={currentSafePage}
+              pages={totalPages}
+              total={filteredReadings.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              loading={loading}
+              label="meter readings"
+            />
           </div>
         </div>
       </div>

@@ -115,7 +115,7 @@ const STATUS_STYLES = {
   reversed: "bg-zinc-200 text-zinc-700",
 };
 
-const ITEMS_PER_PAGE = 50;
+import PaginationBar from "../../components/PaginationBar";
 
 
 const TYPE_OPTIONS = [
@@ -218,6 +218,7 @@ const LandlordAdvancements = () => {
   const [serverTotal, setServerTotal] = useState(0);
   const [serverPages, setServerPages] = useState(1);
   const [cashbooks, setCashbooks] = useState([]);
+  const [pageSize, setPageSize] = useState(50);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [glAdvancement, setGlAdvancement] = useState(null);
@@ -284,7 +285,7 @@ const LandlordAdvancements = () => {
         advanceType: filters.advanceType,
         search: debouncedSearch,
         page: currentPage,
-        limit: ITEMS_PER_PAGE,
+        limit: pageSize,
       });
       setRows(Array.isArray(result.data) ? result.data : []);
       setServerTotal(result.total ?? 0);
@@ -294,7 +295,7 @@ const LandlordAdvancements = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentCompany?._id, debouncedSearch, filters.status, filters.landlordId, filters.advanceType, currentPage]);
+  }, [currentCompany?._id, debouncedSearch, filters.status, filters.landlordId, filters.advanceType, currentPage, pageSize]);
 
   useEffect(() => {
     loadRows();
@@ -748,19 +749,16 @@ const LandlordAdvancements = () => {
               </tbody>
             </table>
           </div>
-          {!loading && serverTotal > 0 && (
-            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
-              <div className="font-semibold">
-                Showing <span className="font-bold text-slate-900">{serverTotal === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE + 1}</span> to <span className="font-bold text-slate-900">{Math.min(safeCurrentPage * ITEMS_PER_PAGE, serverTotal)}</span> of <span className="font-bold text-slate-900">{serverTotal}</span> advancement record(s)
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
-                <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
-                <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {serverPages}</span>
-                <button onClick={() => setCurrentPage((prev) => Math.min(serverPages, prev + 1))} disabled={safeCurrentPage === serverPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
-              </div>
-            </div>
-          )}
+          <PaginationBar
+            page={safeCurrentPage}
+            pages={serverPages}
+            total={serverTotal}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+            loading={loading}
+            label="advances"
+          />
         </div>
       </div>
       </div>

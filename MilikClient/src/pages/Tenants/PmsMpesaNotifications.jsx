@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import PaginationBar from '../../components/PaginationBar';
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import {
@@ -21,7 +22,6 @@ import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
 import printTabularList from "../../utils/printList";
 
-const PAGE_SIZE   = 50;
 const AUTO_RELOAD = 30; // seconds
 
 const threeMonthsAgoISO = () => { const d = new Date(); d.setMonth(d.getMonth() - 3); return d.toISOString().slice(0, 10); };
@@ -578,6 +578,7 @@ function UploadModal({ businessId, paybills = [], onClose, onUploaded }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function PmsMpesaNotifications() {
+  const [pageSize, setPageSize] = useState(50);
   const confirm = useConfirm();
   const navigate       = useNavigate();
   const currentCompany = useSelector(selectCurrentCompany);
@@ -586,7 +587,7 @@ export default function PmsMpesaNotifications() {
 
   const [notifications, setNotifications] = useState([]);
   const [summary,       setSummary]       = useState([]);
-  const [pagination,    setPagination]    = useState({ page: 1, limit: PAGE_SIZE, total: 0, pages: 1 });
+  const [pagination,    setPagination]    = useState({ page: 1, limit: pageSize, total: 0, pages: 1 });
   const [loading,       setLoading]       = useState(false);
   const [expanded,      setExpanded]      = useState(null);
   const [assignTarget,  setAssignTarget]  = useState(null);
@@ -611,16 +612,16 @@ export default function PmsMpesaNotifications() {
           search:    applied.search    || applied.ref || undefined,
           dateFrom:  applied.dateFrom  || undefined,
           dateTo:    applied.dateTo    || undefined,
-          page, limit: PAGE_SIZE,
+          page, limit: pageSize,
         },
       });
       const payload = res?.data;
       setNotifications(payload?.data || []);
-      setPagination(payload?.pagination || { page: 1, limit: PAGE_SIZE, total: 0, pages: 1 });
+      setPagination(payload?.pagination || { page: 1, limit: pageSize, total: 0, pages: 1 });
       setSummary(Array.isArray(payload?.summary) ? payload.summary : []);
     } catch { if (!silent) toast.error("Failed to load M-Pesa collections"); }
     finally  { if (!silent) setLoading(false); }
-  }, [businessId, applied, page]);
+  }, [businessId, applied, page, pageSize]);
 
   // Initial + filter/page load
   useEffect(() => { load(); }, [load]);
@@ -956,23 +957,16 @@ export default function PmsMpesaNotifications() {
           }}
         />
 
-          {/* Pagination footer */}
-          <div className="flex-shrink-0 sticky bottom-0 z-20 bg-white border-t border-gray-200 px-2 py-1 flex items-center justify-between">
-            <div className="text-xs font-bold text-gray-600">
-              Showing <strong>{notifications.length}</strong> of <strong>{pagination.total}</strong> · {PAGE_SIZE} per page
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-slate-500">Page {pagination.page} of {pagination.pages || 1}</span>
-              <button disabled={page <= 1 || loading} onClick={() => setPage(p => p - 1)}
-                className="p-1 hover:bg-gray-100 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-gray-700">
-                <FaChevronLeft size={12} />
-              </button>
-              <button disabled={page >= (pagination.pages || 1) || loading} onClick={() => setPage(p => p + 1)}
-                className="p-1 hover:bg-gray-100 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-gray-700">
-                <FaChevronRight size={12} />
-              </button>
-            </div>
-          </div>
+          <PaginationBar
+            page={page}
+            pages={pagination.pages || 1}
+            total={pagination.total}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+            loading={loading}
+            label="notifications"
+          />
       </div>
     </DashboardLayout>
   );

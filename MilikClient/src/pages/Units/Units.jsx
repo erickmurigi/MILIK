@@ -10,8 +10,6 @@ import {
   FaFileExport,
   FaDownload,
   FaPrint,
-  FaChevronLeft,
-  FaChevronRight,
   FaGripVertical,
   FaTimes,
   FaSave,
@@ -47,7 +45,7 @@ const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
 
-const ITEMS_PER_PAGE = 500;
+import PaginationBar from "../../components/PaginationBar";
 
 const DEFAULT_COMPANY_UNIT_TYPES = ["studio", "1bed", "2bed", "3bed", "4bed", "commercial"];
 
@@ -110,6 +108,7 @@ const Units = () => {
   // ---------------------------
   // UI STATE
   // ---------------------------
+  const [pageSize, setPageSize] = useState(500);
   const [currentPage, setCurrentPage] = useTabState("/units:currentPage", 1);
   const [expandedUnits, setExpandedUnits] = useState([]); // Array to track multiple expanded units
 
@@ -202,14 +201,14 @@ const Units = () => {
 
   const buildUnitParams = useCallback((overridePage = 1, overrideFilters = null) => {
     const f = overrideFilters || appliedFilters;
-    const params = { business: currentCompany?._id, page: overridePage, limit: ITEMS_PER_PAGE };
+    const params = { business: currentCompany?._id, page: overridePage, limit: pageSize };
     if (f.property && f.property !== "any") params.property = f.property;
     if (f.status && f.status !== "active" && f.status !== "any") params.status = f.status;
     if (f.unitType && f.unitType !== "any") params.unitType = f.unitType;
     if (f.unitNo) params.unitNumber = f.unitNo.trim();
     if (f.tenant) params.tenantName = f.tenant.trim();
     return params;
-  }, [appliedFilters, currentCompany?._id]);
+  }, [appliedFilters, currentCompany?._id, pageSize]);
 
   const applySearch = () => {
     const newFilters = {
@@ -233,7 +232,7 @@ const Units = () => {
     setSelectAll(false);
     setSelectedUnits([]);
     setActionMenuOpen(false);
-    if (currentCompany?._id) dispatch(getUnits({ business: currentCompany._id, page: 1, limit: ITEMS_PER_PAGE }));
+    if (currentCompany?._id) dispatch(getUnits({ business: currentCompany._id, page: 1, limit: pageSize }));
   };
 
   const onFilterEnter = (e) => {
@@ -260,10 +259,10 @@ const Units = () => {
   // Fetch units on mount
   useEffect(() => {
     if (currentCompany?._id) {
-      dispatch(getUnits({ business: currentCompany._id, page: 1, limit: ITEMS_PER_PAGE }));
+      dispatch(getUnits({ business: currentCompany._id, page: 1, limit: pageSize }));
       dispatch(getProperties({ business: currentCompany._id }));
     }
-  }, [dispatch, currentCompany?._id]);
+  }, [dispatch, currentCompany?._id, pageSize]);
 
   // Transform units data to match the table structure
   const formatRentAmount = (amount) => {
@@ -398,8 +397,8 @@ const Units = () => {
   // Pagination driven by server response
   const totalPages = Math.max(1, unitPagination.pages || 1);
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
   // Server returns exactly the current page — no client slicing needed
   const currentUnits = transformedUnits;
 
@@ -1184,52 +1183,16 @@ const Units = () => {
               </table>
             </div>
 
-            {/* Footer */}
-            <div className="flex-shrink-0 sticky bottom-0 z-20 bg-white border-t border-gray-200">
-              <div className="flex items-center justify-between px-3 py-1">
-                <div className="text-xs text-gray-600 flex items-center gap-4">
-                  <span className="font-bold">
-                    Showing <span className="text-slate-900">{currentUnits.length > 0 ? startIndex + 1 : 0}</span> to <span className="text-slate-900">{Math.min(endIndex, unitPagination.total)}</span> of <span className="text-slate-900">{unitPagination.total}</span> unit(s) across <span className="text-slate-900">{propertiesGrouped.length}</span> propert{propertiesGrouped.length === 1 ? "y" : "ies"}
-                  </span>
-                  {selectedUnits.length > 0 && (
-                    <span className="bg-[#DDEFE1] text-gray-900 px-2 py-0.5 rounded-full text-xs font-bold border border-[#0B3B2E]/30">
-                      {selectedUnits.length} selected
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-slate-500 text-xs">Per page:</span>
-                  <AppSelect
-                    value={String(ITEMS_PER_PAGE)}
-                    onChange={() => {}}
-                    options={[{ value: String(ITEMS_PER_PAGE), label: String(ITEMS_PER_PAGE) }]}
-                    size="sm"
-                  />
-                  <button onClick={() => handlePageChange(safeCurrentPage - 1)} disabled={safeCurrentPage === 1}
-                    className="px-2.5 py-0.5 text-xs border border-gray-300 rounded flex items-center gap-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed font-bold">
-                    <FaChevronLeft size={10} /> Previous
-                  </button>
-                  <div className="flex items-center gap-1">
-                    {visiblePages.map((item) =>
-                      typeof item === 'number' ? (
-                        <button key={item} onClick={() => handlePageChange(item)}
-                          className={`px-2 py-0.5 min-w-[24px] text-xs rounded border transition-colors font-bold ${
-                            safeCurrentPage === item ? "bg-[#0B3B2E] text-white border-[#0B3B2E]" : "border-gray-300 hover:bg-gray-50"
-                          }`}>
-                          {item}
-                        </button>
-                      ) : (
-                        <span key={item} className="px-1 text-gray-400 text-xs">...</span>
-                      )
-                    )}
-                  </div>
-                  <button onClick={() => handlePageChange(safeCurrentPage + 1)} disabled={safeCurrentPage === totalPages}
-                    className="px-2.5 py-0.5 text-xs border border-gray-300 rounded flex items-center gap-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed font-bold">
-                    Next <FaChevronRight size={10} />
-                  </button>
-                </div>
-              </div>
-            </div>
+            <PaginationBar
+              page={safeCurrentPage}
+              pages={totalPages}
+              total={unitPagination.total}
+              pageSize={pageSize}
+              onPageChange={handlePageChange}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              loading={isFetching}
+              label="units"
+            />
           </div>
         </div>
 

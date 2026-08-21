@@ -15,6 +15,7 @@ import { adminRequests } from "../../utils/requestMethods";
 import { deleteTenantInvoice, getChartOfAccounts } from "../../redux/apiCalls";
 import { hasCompanyPermission } from "../../utils/permissions";
 import AppSelect from "../../components/common/AppSelect";
+import PaginationBar from '../../components/PaginationBar';
 import { fmtDate } from "../../utils/dates";
 import { formatMoney } from "../../utils/money";
 
@@ -586,41 +587,16 @@ const LedgerAccountActivity = () => {
           )}
 
           {/* ── Pagination footer ── */}
-          <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-2 flex items-center justify-between text-xs text-slate-600">
-            <span className="font-semibold">
-              Showing{" "}
-              <span className="text-slate-900 font-bold">{paginatedRows.length > 0 ? startIdx + 1 : 0}</span>
-              {" "}–{" "}
-              <span className="text-slate-900 font-bold">{Math.min(startIdx + pageSize, rows.length)}</span>
-              {" "}of{" "}
-              <span className="text-slate-900 font-bold">{rows.length}</span>
-              {" "}entries
-            </span>
-            <div className="flex items-center gap-2">
-              <span className="text-slate-500 font-semibold">Per page:</span>
-              <AppSelect
-                value={pageSize}
-                onChange={(v) => { setPageSize(Number(v ?? 25)); setCurrentPage(1); }}
-                options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))}
-                size="sm"
-              />
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={safePage === 1}
-                className="h-7 px-3 border border-slate-200 bg-white font-semibold hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Previous
-              </button>
-              <span className="font-semibold text-slate-700 px-1">Page {safePage} of {totalPages}</span>
-              <button
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={safePage === totalPages}
-                className="h-7 px-3 border border-slate-200 bg-white font-semibold hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Next
-              </button>
-            </div>
-          </div>
+          <PaginationBar
+            page={currentPage}
+            pages={totalPages}
+            total={rows.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+            loading={loading}
+            label="entries"
+          />
         </div>
 
         {/* ── Move ledger line modal ── */}

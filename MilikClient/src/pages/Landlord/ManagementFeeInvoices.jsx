@@ -13,10 +13,10 @@ import { useEntityCache } from "../../hooks/useEntityCache";
 import { getProperties } from "../../redux/propertyRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { useTabState } from "../../hooks/useTabState";
+import PaginationBar from '../../components/PaginationBar';
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
-const ITEMS_PER_PAGE = 50;
 
 const fmtMoney = (v) =>
   `KSh ${Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -55,11 +55,12 @@ const ManagementFeeInvoices = () => {
 
   const canEmail = hasCompanyPermission(currentUser || {}, currentCompany, "processedStatements", "read", "propertyManagement");
 
+  const [pageSize, setPageSize] = useState(50);
   const [draftFilters, setDraftFilters] = useState(emptyFilters);
   const [appliedFilters, setAppliedFilters] = useTabState("/landlord/management-fee-invoices:filters", emptyFilters);
   const [currentPage, setCurrentPage] = useTabState("/landlord/management-fee-invoices:page", 1);
   const [rows, setRows] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, limit: ITEMS_PER_PAGE, total: 0, pages: 1 });
+  const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, pages: 1 });
   const [loading, setLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [commModal, setCommModal] = useState(null);
@@ -106,7 +107,7 @@ const ManagementFeeInvoices = () => {
         const params = new URLSearchParams({
           tab: "management_fees",
           page: String(currentPage),
-          limit: String(ITEMS_PER_PAGE),
+          limit: String(pageSize),
         });
         const search = String(appliedFilters.search || "").trim();
         if (search) params.set("search", search);
@@ -122,7 +123,7 @@ const ManagementFeeInvoices = () => {
         setRows(Array.isArray(data.statements) ? data.statements : []);
         setPagination({
           page: Number(data.page || data.pagination?.page || currentPage),
-          limit: Number(data.limit || data.pagination?.limit || ITEMS_PER_PAGE),
+          limit: Number(data.limit || data.pagination?.limit || pageSize),
           total: Number(data.total || data.pagination?.total || 0),
           pages: Number(data.pages || data.pagination?.pages || 1),
         });
@@ -138,7 +139,7 @@ const ManagementFeeInvoices = () => {
     };
     load();
     return () => { cancelled = true; };
-  }, [businessId, currentPage, appliedFilters, refreshTick]);
+  }, [businessId, currentPage, appliedFilters, refreshTick, pageSize]);
 
   const handlePrintPdf = useCallback(async (statementId, invoiceNo) => {
     setPrintingId(statementId);
@@ -359,43 +360,16 @@ const ManagementFeeInvoices = () => {
           </div>
 
           {/* Pagination — always visible */}
-          <div className="flex-shrink-0 border-t border-slate-200 bg-white px-3 py-2">
-            <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
-              <div className="font-semibold">
-                Showing{" "}
-                <span className="font-bold text-slate-900">
-                  {pagination.total === 0 ? 0 : (pagination.page - 1) * ITEMS_PER_PAGE + 1}
-                </span>{" "}
-                to{" "}
-                <span className="font-bold text-slate-900">
-                  {Math.min(pagination.page * ITEMS_PER_PAGE, pagination.total)}
-                </span>{" "}
-                of{" "}
-                <span className="font-bold text-slate-900">{pagination.total}</span>{" "}
-                management fee invoices
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
-                <button
-                  onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                  disabled={pagination.page <= 1}
-                  className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Previous
-                </button>
-                <span className="font-semibold text-slate-700">
-                  Page {pagination.page} of {Math.max(1, pagination.pages)}
-                </span>
-                <button
-                  onClick={() => setCurrentPage((p) => Math.min(p + 1, pagination.pages))}
-                  disabled={pagination.page >= pagination.pages}
-                  className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          </div>
+          <PaginationBar
+            page={pagination.page}
+            pages={pagination.pages}
+            total={pagination.total}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+            loading={loading}
+            label="invoices"
+          />
         </div>
       </DashboardLayout>
 

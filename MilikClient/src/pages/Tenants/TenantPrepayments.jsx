@@ -1,4 +1,5 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
+import PaginationBar from '../../components/PaginationBar';
 import { formatMoney } from "../../utils/money";
 import { fmtDate } from "../../utils/dates";
 import { useDispatch, useSelector } from "react-redux";
@@ -17,7 +18,6 @@ import { getTenantName } from "../../utils/tenantUtils";
 import { safeId } from "../../utils/idUtils";
 import MilikTable from "../../components/common/MilikTable";
 
-const ITEMS_PER_PAGE = 50;
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 
@@ -55,6 +55,7 @@ const buildStatusParam = (statusFilter) => {
 };
 
 const TenantPrepayments = () => {
+  const [pageSize, setPageSize] = useState(50);
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const currentCompany = useSelector(selectCurrentCompany);
@@ -67,7 +68,7 @@ const TenantPrepayments = () => {
   const [rows, setRows] = useState([]);
   const [pagination, setPagination] = useState({
     page: 1,
-    limit: ITEMS_PER_PAGE,
+    limit: pageSize,
     totalItems: 0,
     totalPages: 1,
     hasPreviousPage: false,
@@ -100,7 +101,7 @@ const TenantPrepayments = () => {
         setRows([]);
         setPagination({
           page: 1,
-          limit: ITEMS_PER_PAGE,
+          limit: pageSize,
           totalItems: 0,
           totalPages: 1,
           hasPreviousPage: false,
@@ -121,7 +122,7 @@ const TenantPrepayments = () => {
         const response = await listRentPaymentsPage({
           business: currentCompany._id,
           page: currentPage,
-          limit: ITEMS_PER_PAGE,
+          limit: pageSize,
           hasUnapplied: true,
           includeTotals: true,
           status: buildStatusParam(statusFilter),
@@ -162,9 +163,9 @@ const TenantPrepayments = () => {
         setPagination(
           response?.pagination || {
             page: currentPage,
-            limit: ITEMS_PER_PAGE,
+            limit: pageSize,
             totalItems: nextRows.length,
-            totalPages: Math.max(1, Math.ceil(nextRows.length / ITEMS_PER_PAGE)),
+            totalPages: Math.max(1, Math.ceil(nextRows.length / pageSize)),
             hasPreviousPage: currentPage > 1,
             hasNextPage: false,
           }
@@ -181,7 +182,7 @@ const TenantPrepayments = () => {
         setRows([]);
         setPagination({
           page: 1,
-          limit: ITEMS_PER_PAGE,
+          limit: pageSize,
           totalItems: 0,
           totalPages: 1,
           hasPreviousPage: false,
@@ -206,7 +207,7 @@ const TenantPrepayments = () => {
     return () => {
       isMounted = false;
     };
-  }, [currentCompany?._id, currentPage, propertyFilter, search, statusFilter]);
+  }, [currentCompany?._id, currentPage, propertyFilter, search, statusFilter, pageSize]);
 
   const propertyOptions = useMemo(
     () =>
@@ -221,7 +222,7 @@ const TenantPrepayments = () => {
 
   const totalPages = Math.max(1, Number(pagination?.totalPages || 1));
   const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
-  const showingStart = rows.length === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE + 1;
+  const showingStart = rows.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1;
   const showingEnd = rows.length === 0 ? 0 : showingStart + rows.length - 1;
 
   return (
@@ -315,34 +316,16 @@ const TenantPrepayments = () => {
               )}
             />
 
-            <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
-              <p>
-                <span className="font-semibold">Showing:</span> {showingStart}
-                {" - "}
-                {showingEnd} of {pagination.totalItems || 0} prepayment row(s)
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                  disabled={!pagination.hasPreviousPage}
-                  className="rounded-md border border-slate-300 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Previous
-                </button>
-                <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1 font-semibold text-slate-700">
-                  Page {safeCurrentPage} of {totalPages} · {ITEMS_PER_PAGE} per page
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                  disabled={!pagination.hasNextPage}
-                  className="rounded-md border border-slate-300 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
+            <PaginationBar
+              page={safeCurrentPage}
+              pages={totalPages}
+              total={pagination.totalItems || 0}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              loading={isLoading}
+              label="prepayments"
+            />
           </div>
         </div>
       </div>

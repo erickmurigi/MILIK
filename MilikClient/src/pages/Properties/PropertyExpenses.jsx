@@ -23,6 +23,7 @@ import {
   getChartOfAccounts,
 } from '../../redux/apiCalls';
 import AppSelect from '../../components/common/AppSelect';
+import PaginationBar from '../../components/PaginationBar';
 
 // ─── constants ────────────────────────────────────────────────────────────────
 const CATEGORIES = ['maintenance', 'repair', 'utility', 'tax', 'insurance', 'supplies', 'other'];
@@ -259,8 +260,6 @@ const ExpenseModal = ({ open, editing, properties, units, businessId, onClose, o
 };
 
 // ─── Main page ────────────────────────────────────────────────────────────────
-const PAGE_SIZE = 20;
-
 const PropertyExpenses = () => {
   const confirm = useConfirm();
   const dispatch = useDispatch();
@@ -284,6 +283,7 @@ const PropertyExpenses = () => {
   // ─── filters ──────────────────────────────────────────────────────────────
   const [filters, setFilters] = useTabState("/property-expenses:filters", () => ({ startDate: defaultStart, endDate: today(), propertyId: '', category: '', search: '' }));
   const [page, setPage] = useTabState("/property-expenses:page", 1);
+  const [pageSize, setPageSize] = useState(20);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
@@ -323,8 +323,8 @@ const PropertyExpenses = () => {
     });
   }, [expenses, filters.search, propertyMap]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginated  = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   // ─── summary ──────────────────────────────────────────────────────────────
   const summary = useMemo(() => {
@@ -567,24 +567,16 @@ const PropertyExpenses = () => {
           </div>
 
           {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="shrink-0 flex items-center justify-between border-t border-slate-200 bg-white px-4 py-2">
-              <span className="text-[10px] font-semibold text-slate-400">
-                {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
-              </span>
-              <div className="flex items-center gap-1">
-                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
-                  className="inline-flex h-6 items-center rounded border border-slate-200 px-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40">
-                  ‹ Prev
-                </button>
-                <span className="px-2 text-xs font-semibold text-slate-500">{page} / {totalPages}</span>
-                <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                  className="inline-flex h-6 items-center rounded border border-slate-200 px-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40">
-                  Next ›
-                </button>
-              </div>
-            </div>
-          )}
+          <PaginationBar
+            page={page}
+            pages={totalPages}
+            total={filtered.length}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+            loading={loading}
+            label="expenses"
+          />
         </div>
 
       </div>

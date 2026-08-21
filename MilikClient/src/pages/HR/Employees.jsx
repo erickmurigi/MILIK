@@ -34,16 +34,7 @@ const initials = (s = '', o = '') => `${s.charAt(0)}${o.charAt(0)}`.toUpperCase(
 const STATUS_OPTIONS = ["Active", "Probation", "Suspended", "Terminated"].map((s) => ({ value: s, label: s }));
 const TYPE_OPTIONS   = ["Permanent", "Contract", "Casual", "Intern"].map((t) => ({ value: t, label: t }));
 
-const Pagination = ({ page, totalPages, total, onPage }) => (
-  <div className="flex-shrink-0 flex items-center justify-between border-t border-slate-200 bg-white px-4 py-2">
-    <span className="text-[11px] text-slate-500">{total} employee{total !== 1 ? 's' : ''}</span>
-    <div className="flex items-center gap-1">
-      <button disabled={page <= 1} onClick={() => onPage(page - 1)} className="rounded border border-slate-200 px-2 py-1 text-[10px] font-bold disabled:opacity-40 hover:bg-slate-50">Prev</button>
-      <span className="px-2 text-[11px] font-semibold text-slate-600">{page} / {totalPages}</span>
-      <button disabled={page >= totalPages} onClick={() => onPage(page + 1)} className="rounded border border-slate-200 px-2 py-1 text-[10px] font-bold disabled:opacity-40 hover:bg-slate-50">Next</button>
-    </div>
-  </div>
-);
+import PaginationBar from '../../components/PaginationBar';
 
 export default function Employees() {
   const navigate = useNavigate();
@@ -53,12 +44,13 @@ export default function Employees() {
   const [statusFilter, setStatusFilter] = useTabState('/hr/employees:statusFilter', '');
   const [typeFilter, setTypeFilter] = useTabState('/hr/employees:typeFilter', '');
   const [page, setPage] = useTabState('/hr/employees:page', 1);
+  const [pageSize, setPageSize] = useState(25);
   const [confirm, setConfirm] = useState({ isOpen: false });
 
   const { data: empData, isLoading: loading, error, refetch } = useQuery({
-    queryKey: ['hr-employees', page, search, deptFilter, statusFilter, typeFilter],
+    queryKey: ['hr-employees', page, pageSize, search, deptFilter, statusFilter, typeFilter],
     queryFn: async () => {
-      const params = { page, limit: 25 };
+      const params = { page, limit: pageSize };
       if (search) params.search = search;
       if (deptFilter) params.department = deptFilter;
       if (statusFilter) params.status = statusFilter;
@@ -378,7 +370,16 @@ export default function Employees() {
           )}
         </div>
 
-        <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
+        <PaginationBar
+          page={page}
+          pages={totalPages}
+          total={total}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+          loading={loading}
+          label="employees"
+        />
       </div>
 
       <MilikConfirmDialog {...confirm} onClose={() => setConfirm((p) => ({ ...p, isOpen: false }))} />

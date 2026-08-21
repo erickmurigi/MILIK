@@ -11,8 +11,6 @@ import {
   FaTrash,
   FaEye,
   FaFileExport,
-  FaChevronLeft,
-  FaChevronRight,
   FaChevronDown,
   FaChevronUp,
   FaBuilding,
@@ -38,6 +36,7 @@ import { printTabularList } from "../../utils/printList";
 import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 import { useTabState } from "../../hooks/useTabState";
 import { fmtDate } from "../../utils/dates";
+import PaginationBar from '../../components/PaginationBar';
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -462,18 +461,6 @@ const Properties = () => {
   }, [selectedProperties]);
 
   const totalPages = Math.max(1, Math.ceil((pagination?.total || 0) / pageSize));
-
-  const visiblePages = useMemo(() => {
-    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
-    const items = [1];
-    if (currentPage > 3) items.push('…');
-    const start = Math.max(2, currentPage - 1);
-    const end = Math.min(totalPages - 1, currentPage + 1);
-    for (let i = start; i <= end; i++) items.push(i);
-    if (currentPage < totalPages - 2) items.push('…end');
-    items.push(totalPages);
-    return items;
-  }, [currentPage, totalPages]);
 
   // Archive/Restore properties
   const archiveSelected = () => {
@@ -953,79 +940,15 @@ const Properties = () => {
                   </table>
                 </div>
 
-                {/* Pagination footer (Landlords-style inside card) */}
-                <div className="flex-shrink-0 sticky bottom-0 z-20 border-t border-gray-200 bg-white">
-                  <div className="flex items-center justify-between px-3 py-1">
-                    <div className="text-xs text-gray-600">
-                      <div className="flex items-center gap-4">
-                        <span className="font-bold">
-                          Showing{" "}
-                          <span className="font-bold">{properties?.length ? (currentPage - 1) * pageSize + 1 : 0}</span>{" "}
-                          to{" "}
-                          <span className="font-bold">
-                            {properties?.length ? Math.min(currentPage * pageSize, pagination?.total || 0) : 0}
-                          </span>{" "}
-                          of <span className="font-bold">{pagination?.total || 0}</span> properties
-                        </span>
-
-                        {selectedProperties.length > 0 && (
-                          <span className="bg-[#DDEFE1] text-gray-900 px-2 py-0.5 rounded-full text-xs font-bold border border-[#0B3B2E]/30">
-                            {selectedProperties.length} selected
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1">
-                        <span className="font-semibold text-slate-500 text-xs">Per page:</span>
-                        <AppSelect
-                          value={pageSize}
-                          onChange={(v) => { setPageSize(Number(v)); setCurrentPage(1); }}
-                          options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))}
-                          size="sm"
-                        />
-                      </div>
-                      <button
-                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                        disabled={currentPage === 1}
-                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg flex items-center gap-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-bold"
-                      >
-                        <FaChevronLeft size={10} />
-                        Previous
-                      </button>
-
-                      <div className="flex items-center gap-1">
-                        {visiblePages.map((item) =>
-                          typeof item === 'number' ? (
-                            <button
-                              key={item}
-                              onClick={() => setCurrentPage(item)}
-                              className={`px-3 py-1.5 min-w-[32px] text-xs rounded-lg border transition-colors font-bold ${
-                                currentPage === item
-                                  ? "bg-[#0B3B2E] text-white border-[#0B3B2E] hover:bg-[#0A3127]"
-                                  : "border-gray-300 hover:bg-gray-50"
-                              }`}
-                            >
-                              {item}
-                            </button>
-                          ) : (
-                            <span key={item} className="px-1 text-gray-400 text-xs">...</span>
-                          )
-                        )}
-                      </div>
-
-                      <button
-                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                        disabled={currentPage === totalPages}
-                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg flex items-center gap-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-bold"
-                      >
-                        Next
-                        <FaChevronRight size={10} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                <PaginationBar
+                  page={currentPage}
+                  pages={totalPages}
+                  total={pagination?.total}
+                  pageSize={pageSize}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+                  label="properties"
+                />
             </>
           </div>
         </div>

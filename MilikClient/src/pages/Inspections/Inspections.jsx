@@ -27,6 +27,7 @@ import { hasCompanyPermission } from "../../utils/permissions";
 import { buildTenantOptions } from "../../utils/tenantUtils";
 import { useConfirm } from "../../context/ConfirmContext";
 import { fmtDate } from "../../utils/dates";
+import PaginationBar from '../../components/PaginationBar';
 
 const DEFAULT_PAGE_SIZE = 25;
 
@@ -258,7 +259,6 @@ const Inspections = () => {
   ], [stats]);
 
   const totalPages = Math.max(1, serverPages);
-  const safePage = Math.min(currentPage, totalPages);
   const pageRows = inspections; // server returns the correct slice already
 
   const openCreateModal = () => {
@@ -526,21 +526,16 @@ const Inspections = () => {
               </table>
             </div>
 
-            {/* Pagination */}
-            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
-              <div className="font-semibold">
-                Showing <span className="font-bold text-slate-900">{serverTotal === 0 ? 0 : (safePage - 1) * pageSize + 1}</span> to <span className="font-bold text-slate-900">{Math.min(safePage * pageSize, serverTotal)}</span> of <span className="font-bold text-slate-900">{serverTotal}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-semibold text-slate-500">Per page:</span>
-                  <AppSelect value={pageSize} onChange={(v) => { setPageSize(Number(v ?? DEFAULT_PAGE_SIZE)); setCurrentPage(1); }} options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))} size="sm" />
-                </div>
-                <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
-                <span className="font-semibold text-slate-700">Page {safePage} of {totalPages}</span>
-                <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
-              </div>
-        </div>
+        <PaginationBar
+          page={currentPage}
+          pages={totalPages}
+          total={serverTotal}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+          loading={loading}
+          label="inspections"
+        />
       </div>
 
       {/* Modal */}

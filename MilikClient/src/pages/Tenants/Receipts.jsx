@@ -1,4 +1,5 @@
 ﻿import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
+import PaginationBar from '../../components/PaginationBar';
 import { useConfirm } from "../../context/ConfirmContext";
 import { formatMoney } from "../../utils/money";
 import { fmtDate } from "../../utils/dates";
@@ -76,7 +77,6 @@ const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
-const ITEMS_PER_PAGE = 50;
 
 const ensureArray = (value) => {
   if (Array.isArray(value)) return value;
@@ -339,8 +339,9 @@ const Receipts = ({ viewMode = "tenant" }) => {
     [unitsFromStore]
   );
 
+  const [pageSize, setPageSize] = useState(50);
   const [receipts, setReceipts] = useState([]);
-  const [recPagination, setRecPagination] = useState({ totalItems: 0, totalPages: 1, page: 1, limit: ITEMS_PER_PAGE });
+  const [recPagination, setRecPagination] = useState({ totalItems: 0, totalPages: 1, page: 1, limit: 50 });
 
   const fromLedger = location.state?.fromPropertyLedger;
   const initialFilters = {
@@ -437,7 +438,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
 
   const loadData = useCallback(async (page = 1, filters = {}) => {
     if (!currentCompany?._id) return;
-    const params = { business: currentCompany._id, page, limit: ITEMS_PER_PAGE };
+    const params = { business: currentCompany._id, page, limit: pageSize };
     if (filters.status && filters.status !== "all") params.status = filters.status;
     if (filters.paymentType && filters.paymentType !== "all") params.paymentType = filters.paymentType;
     if (filters.tenant && filters.tenant !== "all") params.tenant = filters.tenant;
@@ -462,7 +463,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
     } catch {
       toast.error("Failed to load receipts");
     }
-  }, [currentCompany?._id, dispatch, isLandlordReceiptView, isCompanyLandlordMode]);
+  }, [currentCompany?._id, dispatch, isLandlordReceiptView, isCompanyLandlordMode, pageSize]);
 
   const loadDataRef = useRef(loadData);
   useEffect(() => { loadDataRef.current = loadData; });
@@ -475,7 +476,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
     if (!currentCompany?._id) return;
     loadDataRef.current(1, appliedFiltersRef.current);
     loadInvoices();
-  }, [currentCompany?._id, loadInvoices]);
+  }, [currentCompany?._id, loadInvoices, pageSize]);
 
   // Load payments for the selected tenant when the receipt form opens (for balance calc)
   useEffect(() => {
@@ -503,8 +504,8 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const currentPageReceipts = receipts;
   const totalPages = Math.max(1, recPagination.totalPages);
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = recPagination.totalItems === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const startIndex = recPagination.totalItems === 0 ? 0 : (safeCurrentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
 
   const visibleReceiptIds = useMemo(
     () => currentPageReceipts.map((receipt) => receipt._id),
@@ -1950,34 +1951,16 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 </div>
               )}
             />
-            <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-1 text-xs text-slate-700">
-              <p>
-                <span className="font-semibold">Showing:</span> {recPagination.totalItems === 0 ? 0 : startIndex + 1}
-                {" - "}
-                {Math.min(endIndex, recPagination.totalItems)} of {recPagination.totalItems} receipt(s)
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handlePageChange(safeCurrentPage - 1)}
-                  disabled={safeCurrentPage === 1}
-                  className="rounded-md border border-slate-300 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Previous
-                </button>
-                <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1 font-semibold text-slate-700">
-                  Page {safeCurrentPage} of {totalPages} · {ITEMS_PER_PAGE} per page
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handlePageChange(safeCurrentPage + 1)}
-                  disabled={safeCurrentPage === totalPages}
-                  className="rounded-md border border-slate-300 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
+            <PaginationBar
+              page={safeCurrentPage}
+              pages={totalPages}
+              total={recPagination.totalItems}
+              pageSize={pageSize}
+              onPageChange={handlePageChange}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              loading={false}
+              label="receipts"
+            />
           </div>
         </div>
       </div>

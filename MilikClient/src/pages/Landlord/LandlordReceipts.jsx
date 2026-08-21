@@ -33,7 +33,7 @@ const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
-const ITEMS_PER_PAGE = 25;
+import PaginationBar from "../../components/PaginationBar";
 
 const CATEGORY_OPTIONS = [
   { value: "owner_float", label: "Owner Float / Expense Funding", accountHint: "Cr 2150 Landlord Funds Held" },
@@ -134,6 +134,7 @@ const LandlordReceipts = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [advancements, setAdvancements] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [pageSize, setPageSize] = useState(25);
   const [filters, setFilters] = useTabState("/receipts/landlord:filters", { search: "", status: "", category: "", landlord: "", property: "" });
   const [currentPage, setCurrentPage] = useTabState("/receipts/landlord:currentPage", 1);
   const debouncedSearch = useDebounce(filters.search, 400);
@@ -154,7 +155,7 @@ const LandlordReceipts = () => {
         getLandlordReceipts({
           business: currentCompany._id,
           page: currentPage,
-          limit: ITEMS_PER_PAGE,
+          limit: pageSize,
           ...(filters.status ? { status: filters.status } : {}),
           ...(filters.category ? { category: filters.category } : {}),
           ...(filters.landlord ? { landlord: filters.landlord } : {}),
@@ -174,7 +175,7 @@ const LandlordReceipts = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [currentCompany?._id, dispatch, currentPage, filters.status, filters.category, filters.landlord, filters.property, debouncedSearch]);
+  }, [currentCompany?._id, dispatch, currentPage, pageSize, filters.status, filters.category, filters.landlord, filters.property, debouncedSearch]);
 
   useEffect(() => {
     loadData();
@@ -613,17 +614,16 @@ const LandlordReceipts = () => {
               </table>
             </div>
 
-            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-1 text-xs text-slate-700">
-              <div className="font-semibold">
-                Showing <span className="font-bold text-slate-900">{totalReceipts === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1}</span>–<span className="font-bold text-slate-900">{Math.min(currentPage * ITEMS_PER_PAGE, totalReceipts)}</span> of <span className="font-bold text-slate-900">{totalReceipts}</span> landlord receipt(s)
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-slate-500">Per page: {ITEMS_PER_PAGE}</span>
-                <button type="button" disabled={currentPage <= 1} onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} className="rounded-md border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
-                <span className="font-semibold text-slate-700">Page {currentPage} of {totalPages}</span>
-                <button type="button" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} className="rounded-md border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
-              </div>
-            </div>
+            <PaginationBar
+              page={currentPage}
+              pages={totalPages}
+              total={totalReceipts}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              loading={isLoading}
+              label="receipts"
+            />
           </div>
         </div>
       </div>

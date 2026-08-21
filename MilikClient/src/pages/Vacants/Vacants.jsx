@@ -36,12 +36,12 @@ import { hasCompanyPermission } from "../../utils/permissions";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
 import AppSelect from "../../components/common/AppSelect";
 import { printTabularList } from "../../utils/printList";
+import PaginationBar from '../../components/PaginationBar';
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
-const ITEMS_PER_PAGE = 50;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_COMPANY_UNIT_TYPES = ["studio", "1bed", "2bed", "3bed", "4bed", "commercial"];
 
@@ -207,6 +207,7 @@ const Vacants = () => {
   const maintenances = useSelector(selectAllMaintenances);
 
   const [currentPage, setCurrentPage] = useTabState("/vacants:currentPage", 1);
+  const [pageSize, setPageSize] = useState(50);
   const [expandedRows, setExpandedRows] = useState([]);
   const [selectedRowId, setSelectedRowId] = useTabState("/vacants:selectedRowId", null);
   const [confirmDialog, setConfirmDialog] = useState({
@@ -542,10 +543,10 @@ const Vacants = () => {
       .sort((a, b) => String(a.propertyName).localeCompare(String(b.propertyName)));
   }, [filteredRows]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
   const currentRows = filteredRows.slice(startIndex, endIndex);
 
   const selectedRow = useMemo(
@@ -1092,62 +1093,16 @@ const Vacants = () => {
               </table>
             </div>
 
-            <div className="sticky bottom-0 z-20 flex-shrink-0 border-t border-gray-200 bg-white shadow-sm">
-              <div className="flex items-center justify-between px-3 py-1">
-                <div className="text-[11px] text-gray-600">
-                  <div className="flex items-center gap-4">
-                    <span className="font-bold">
-                      Showing <span className="font-bold text-slate-900">{currentRows.length > 0 ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredRows.length)}</span> of <span className="font-bold text-slate-900">{filteredRows.length}</span> unit(s) across <span className="font-bold text-slate-900">{groupedRows.length}</span> propert{groupedRows.length === 1 ? "y" : "ies"}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                  <button
-                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                    disabled={safeCurrentPage === 1}
-                    className="flex items-center gap-1 rounded border border-gray-300 px-2.5 py-0.5 text-[11px] font-bold transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <FaChevronLeft size={10} />
-                    Previous
-                  </button>
-
-                  <div className="flex items-center gap-1">
-                    {[...Array(totalPages)].map((_, index) => {
-                      const page = index + 1;
-                      if (page === 1 || page === totalPages || (page >= safeCurrentPage - 1 && page <= safeCurrentPage + 1)) {
-                        return (
-                          <button
-                            key={page}
-                            onClick={() => setCurrentPage(page)}
-                            className={`min-w-[24px] rounded border px-2 py-0.5 text-[11px] font-bold transition-colors ${
-                              safeCurrentPage === page
-                                ? "border-[#0B3B2E] bg-[#0B3B2E] text-white hover:bg-[#0A3127]"
-                                : "border-gray-300 hover:bg-gray-50"
-                            }`}
-                          >
-                            {page}
-                          </button>
-                        );
-                      }
-                      if (page === safeCurrentPage - 2 || page === safeCurrentPage + 2) {
-                        return <span key={page} className="px-1 text-[11px] text-gray-400">...</span>;
-                      }
-                      return null;
-                    })}
-                  </div>
-
-                  <button
-                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                    disabled={safeCurrentPage === totalPages}
-                    className="flex items-center gap-1 rounded border border-gray-300 px-2.5 py-0.5 text-[11px] font-bold transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Next
-                    <FaChevronRight size={10} />
-                  </button>
-                </div>
-              </div>
-            </div>
+            <PaginationBar
+              page={safeCurrentPage}
+              pages={totalPages}
+              total={filteredRows.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              loading={unitsLoading}
+              label="units"
+            />
           </div>
         </div>
 

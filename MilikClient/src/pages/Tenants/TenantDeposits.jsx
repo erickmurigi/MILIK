@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+import PaginationBar from '../../components/PaginationBar';
 import { useDispatch, useSelector } from "react-redux";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import AppSelect from "../../components/common/AppSelect";
@@ -55,8 +56,6 @@ const DEPOSIT_STATUS_FILTERS = [
 ];
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
-const ITEMS_PER_PAGE = 50;
-
 const emptyFilters = {
   status: "ACTIVE",
   invoiceNo: "",
@@ -189,6 +188,7 @@ const fallbackDepositType = {
 };
 
 const TenantDeposits = () => {
+  const [pageSize, setPageSize] = useState(50);
   const confirm = useConfirm();
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -493,10 +493,10 @@ const TenantDeposits = () => {
     [filteredRows]
   );
 
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, filteredRows.length);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, filteredRows.length);
   const currentPageRows = filteredRows.slice(startIndex, endIndex);
   const selectedCount = selectedInvoices.length;
 
@@ -930,48 +930,16 @@ const TenantDeposits = () => {
               }}
             />
 
-            <div className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-700">
-              <p>
-                <span className="font-semibold">Showing:</span> {totalFilteredCount === 0 ? 0 : startIndex + 1}
-                {" - "}
-                {endIndex} of {totalFilteredCount} deposit invoice(s)
-                {appliedFilters.status !== "ACTIVE" && ` - Status: ${appliedFilters.status}`}
-              </p>
-              <div className="flex items-center gap-3">
-                <p>
-                  <span className="font-semibold">Selected:</span> {selectedCount}
-                  {totalFilteredCount > 0 && (
-                    <>
-                      {" - "}
-                      <span className="font-semibold">Total:</span> {formatCurrency(totals.amount)}
-                    </>
-                  )}
-                </p>
-                <div className="h-4 w-px bg-slate-300" />
-                <span className="text-slate-500">Per page: {ITEMS_PER_PAGE}</span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                    disabled={safeCurrentPage === 1}
-                    className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Previous
-                  </button>
-                  <span className="rounded border border-slate-200 bg-white px-2.5 py-0.5 font-semibold text-slate-700">
-                    Page {safeCurrentPage} of {totalPages}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                    disabled={safeCurrentPage === totalPages}
-                    className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            </div>
+            <PaginationBar
+              page={safeCurrentPage}
+              pages={totalPages}
+              total={totalFilteredCount}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              loading={loading}
+              label="deposits"
+            />
           </div>
         </div>
       </div>

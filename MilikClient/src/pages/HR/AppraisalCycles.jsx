@@ -9,6 +9,7 @@ import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 import AppSelect from "../../components/common/AppSelect";
+import PaginationBar from '../../components/PaginationBar';
 import { fmtDate } from '../../utils/dates';
 import { useConfirm } from '../../context/ConfirmContext';
 
@@ -142,8 +143,6 @@ export default function AppraisalCycles() {
 
   const totalPages  = useMemo(() => Math.ceil(cycles.length / pageSize) || 1, [cycles.length, pageSize]);
   const pagedCycles = useMemo(() => cycles.slice((page - 1) * pageSize, page * pageSize), [cycles, page, pageSize]);
-  const fromRow     = useMemo(() => (cycles.length ? (page - 1) * pageSize + 1 : 0), [cycles.length, page, pageSize]);
-  const toRow       = useMemo(() => Math.min(page * pageSize, cycles.length), [cycles.length, page, pageSize]);
 
   return (
     <DashboardLayout lockContentScroll>
@@ -262,27 +261,16 @@ export default function AppraisalCycles() {
         </div>
 
         {/* ── Pagination ── */}
-        <div className="flex flex-none items-center justify-between border-t border-slate-200 bg-white px-4 py-1.5 text-[11px] text-slate-500">
-          <span>Showing {fromRow}–{toRow} of {cycles.length} cycle{cycles.length !== 1 ? 's' : ''}</span>
-          <div className="flex items-center gap-1.5">
-            <div className="flex items-center gap-1">
-              <span className="font-semibold text-slate-500 text-[10px]">Per page:</span>
-              <AppSelect value={pageSize} onChange={(v) => { setPageSize(Number(v ?? pageSize)); setPage(1); }} options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))} size="sm" />
-            </div>
-            <button disabled={page === 1} onClick={() => setPage(1)} className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] hover:bg-slate-50 disabled:opacity-30">«</button>
-            <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] hover:bg-slate-50 disabled:opacity-30">‹</button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
-              .reduce((acc, p, i, arr) => { if (i > 0 && p - arr[i - 1] > 1) acc.push('…'); acc.push(p); return acc; }, [])
-              .map((p, i) => p === '…'
-                ? <span key={`e${i}`} className="px-0.5 text-slate-300">…</span>
-                : <button key={p} onClick={() => setPage(p)} className={`h-5 w-5 rounded text-[10px] font-semibold ${page === p ? 'bg-[#0B3B2E] text-white' : 'border border-slate-200 text-slate-500 hover:bg-slate-50'}`}>{p}</button>
-              )
-            }
-            <button disabled={page === totalPages} onClick={() => setPage((p) => p + 1)} className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] hover:bg-slate-50 disabled:opacity-30">›</button>
-            <button disabled={page === totalPages} onClick={() => setPage(totalPages)} className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] hover:bg-slate-50 disabled:opacity-30">»</button>
-          </div>
-        </div>
+        <PaginationBar
+          page={page}
+          pages={totalPages}
+          total={cycles.length}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+          loading={loading}
+          label="cycles"
+        />
       </div>
 
       {/* ── Modal ── */}

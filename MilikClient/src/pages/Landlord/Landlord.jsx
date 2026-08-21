@@ -9,8 +9,6 @@ import {
   FaSearch,
   FaFileExport,
   FaEllipsisH,
-  FaChevronLeft,
-  FaChevronRight,
   FaGripVertical,
   FaTimes,
   FaSave,
@@ -41,6 +39,7 @@ import { printTabularList } from "../../utils/printList";
 import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 import { hasCompanyPermission } from "../../utils/permissions";
 import AppSelect from "../../components/common/AppSelect";
+import PaginationBar from '../../components/PaginationBar';
 
 const STORAGE_KEY = "milik_landlords_v1";
 const DEFAULT_PAGE_SIZE = 50;
@@ -218,21 +217,6 @@ const Landlords = () => {
 
   // Server handles all filtering; client just renders the current page from Redux
   const totalPages = Math.max(1, landlordPagination.pages ?? 1);
-  const safeCurrentPage = Math.min(currentPage, totalPages);
-
-  const visiblePages = useMemo(() => {
-    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
-    const items = [1];
-    if (safeCurrentPage > 3) items.push('…');
-    const start = Math.max(2, safeCurrentPage - 1);
-    const end = Math.min(totalPages - 1, safeCurrentPage + 1);
-    for (let i = start; i <= end; i++) items.push(i);
-    if (safeCurrentPage < totalPages - 2) items.push('…end');
-    items.push(totalPages);
-    return items;
-  }, [safeCurrentPage, totalPages]);
-
-  const startIndex = (safeCurrentPage - 1) * pageSize;
   const currentLandlords = landlords;
 
   const countLinkedProperties = (landlord = {}) =>
@@ -869,77 +853,16 @@ const Landlords = () => {
               </table>
             </div>
 
-            {/* Footer (STICKY bottom inside the card) */}
-            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-1 text-xs text-slate-700">
-              <div className="flex w-full flex-wrap items-center justify-between gap-2">
-                <div className="text-xs text-gray-600">
-                  <div className="flex items-center gap-4">
-                    <span className="font-bold">
-                      Showing{" "}
-                      <span className="font-bold">{landlords.length === 0 ? 0 : startIndex + 1}</span> to{" "}
-                      <span className="font-bold">{startIndex + landlords.length}</span> of{" "}
-                      <span className="font-bold">{landlordPagination.total || landlords.length}</span> landlords
-                    </span>
-
-                    {selectedLandlords.length > 0 && (
-                      <span className="bg-[#DDEFE1] text-gray-900 px-2 py-0.5 rounded-full text-xs font-bold border border-[#0B3B2E]/30">
-                        {selectedLandlords.length} selected
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Pagination */}
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1">
-                    <span className="font-semibold text-slate-500 text-xs">Per page:</span>
-                    <AppSelect
-                      value={pageSize}
-                      onChange={(v) => { setPageSize(Number(v)); setCurrentPage(1); }}
-                      options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))}
-                      size="sm"
-                    />
-                  </div>
-                  <button
-                    onClick={() => goToPage(safeCurrentPage - 1)}
-                    disabled={safeCurrentPage === 1}
-                    className="px-2.5 py-0.5 text-xs border border-gray-300 rounded flex items-center gap-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-bold"
-                  >
-                    <FaChevronLeft size={10} />
-                    Previous
-                  </button>
-
-                  <div className="flex items-center gap-1">
-                    {visiblePages.map((item) =>
-                      typeof item === 'number' ? (
-                        <button
-                          key={item}
-                          onClick={() => goToPage(item)}
-                          className={`px-2 py-0.5 min-w-[24px] text-xs rounded border transition-colors font-bold ${
-                            safeCurrentPage === item
-                              ? "bg-[#0B3B2E] text-white border-[#0B3B2E] hover:bg-[#0A3127]"
-                              : "border-gray-300 hover:bg-gray-50"
-                          }`}
-                        >
-                          {item}
-                        </button>
-                      ) : (
-                        <span key={item} className="px-1 text-gray-400 text-xs">...</span>
-                      )
-                    )}
-                  </div>
-
-                  <button
-                    onClick={() => goToPage(safeCurrentPage + 1)}
-                    disabled={safeCurrentPage === totalPages}
-                    className="px-2.5 py-0.5 text-xs border border-gray-300 rounded flex items-center gap-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-bold"
-                  >
-                    Next
-                    <FaChevronRight size={10} />
-                  </button>
-                </div>
-              </div>
-            </div>
+            <PaginationBar
+              page={currentPage}
+              pages={totalPages}
+              total={landlordPagination.total}
+              pageSize={pageSize}
+              onPageChange={goToPage}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              loading={isFetching}
+              label="landlords"
+            />
           </div>
         </div>
 

@@ -1,5 +1,6 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
+import PaginationBar from '../../components/PaginationBar';
 import { useConfirm } from "../../context/ConfirmContext";
 import { fmtDate } from "../../utils/dates";
 import { inputClass, labelClass } from "../../utils/formStyles";
@@ -49,8 +50,6 @@ const pillTabClass = (active, tone = "green") => {
     ? "border-[#0B3B2E] bg-[#E7F5EC] text-[#0B3B2E]"
     : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50";
 };
-const ITEMS_PER_PAGE = 50;
-
 const getErrorMessage = (error, fallback) =>
   error?.response?.data?.message || error?.message || fallback;
 
@@ -118,6 +117,7 @@ const batchDeleteSummary = (batch) => {
 };
 
 const LatePenalties = () => {
+  const [pageSize, setPageSize] = useState(50);
   const confirm = useConfirm();
   const currentCompany = useSelector(selectCurrentCompany);
   const businessId = currentCompany?._id || "";
@@ -321,20 +321,20 @@ const LatePenalties = () => {
     });
   }, [batches, batchSearch, batchStatusFilter]);
 
-  const processedPenaltyTotalPages = Math.max(1, Math.ceil(filteredProcessedPenaltyRows.length / ITEMS_PER_PAGE));
+  const processedPenaltyTotalPages = Math.max(1, Math.ceil(filteredProcessedPenaltyRows.length / pageSize));
   const safeProcessedPenaltyPage = Math.min(processedPenaltyPage, processedPenaltyTotalPages);
-  const processedPenaltyStartIndex = filteredProcessedPenaltyRows.length ? (safeProcessedPenaltyPage - 1) * ITEMS_PER_PAGE : 0;
+  const processedPenaltyStartIndex = filteredProcessedPenaltyRows.length ? (safeProcessedPenaltyPage - 1) * pageSize : 0;
   const currentProcessedPenaltyRows = filteredProcessedPenaltyRows.slice(
     processedPenaltyStartIndex,
-    processedPenaltyStartIndex + ITEMS_PER_PAGE
+    processedPenaltyStartIndex + pageSize
   );
 
-  const processedBatchTotalPages = Math.max(1, Math.ceil(filteredBatches.length / ITEMS_PER_PAGE));
+  const processedBatchTotalPages = Math.max(1, Math.ceil(filteredBatches.length / pageSize));
   const safeProcessedBatchPage = Math.min(processedBatchPage, processedBatchTotalPages);
-  const processedBatchStartIndex = filteredBatches.length ? (safeProcessedBatchPage - 1) * ITEMS_PER_PAGE : 0;
+  const processedBatchStartIndex = filteredBatches.length ? (safeProcessedBatchPage - 1) * pageSize : 0;
   const currentProcessedBatchRows = filteredBatches.slice(
     processedBatchStartIndex,
-    processedBatchStartIndex + ITEMS_PER_PAGE
+    processedBatchStartIndex + pageSize
   );
 
   const selectableProcessedRows = useMemo(
@@ -894,34 +894,16 @@ const LatePenalties = () => {
                   </table>
                 </div>
 
-                <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-1 text-xs text-slate-700">
-                  <p>
-                    <span className="font-semibold">Showing:</span> {filteredProcessedPenaltyRows.length === 0 ? 0 : processedPenaltyStartIndex + 1}
-                    {" - "}
-                    {Math.min(processedPenaltyStartIndex + ITEMS_PER_PAGE, filteredProcessedPenaltyRows.length)} of {filteredProcessedPenaltyRows.length} penalty row(s)
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setProcessedPenaltyPage((prev) => Math.max(1, prev - 1))}
-                      disabled={safeProcessedPenaltyPage === 1}
-                      className="rounded-md border border-slate-300 bg-white px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Previous
-                    </button>
-                    <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1 font-semibold text-slate-700">
-                      Page {safeProcessedPenaltyPage} of {processedPenaltyTotalPages} · {ITEMS_PER_PAGE} per page
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setProcessedPenaltyPage((prev) => Math.min(processedPenaltyTotalPages, prev + 1))}
-                      disabled={safeProcessedPenaltyPage === processedPenaltyTotalPages}
-                      className="rounded-md border border-slate-300 bg-white px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
+                <PaginationBar
+                  page={safeProcessedPenaltyPage}
+                  pages={processedPenaltyTotalPages}
+                  total={filteredProcessedPenaltyRows.length}
+                  pageSize={pageSize}
+                  onPageChange={setProcessedPenaltyPage}
+                  onPageSizeChange={(n) => { setPageSize(n); setProcessedPenaltyPage(1); }}
+                  loading={loading}
+                  label="penalties"
+                />
               </>
             ) : null}
 
@@ -1019,34 +1001,16 @@ const LatePenalties = () => {
                   </table>
                 </div>
 
-                <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-1 text-xs text-slate-700">
-                  <p>
-                    <span className="font-semibold">Showing:</span> {filteredBatches.length === 0 ? 0 : processedBatchStartIndex + 1}
-                    {" - "}
-                    {Math.min(processedBatchStartIndex + ITEMS_PER_PAGE, filteredBatches.length)} of {filteredBatches.length} batch(es)
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setProcessedBatchPage((prev) => Math.max(1, prev - 1))}
-                      disabled={safeProcessedBatchPage === 1}
-                      className="rounded-md border border-slate-300 bg-white px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Previous
-                    </button>
-                    <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1 font-semibold text-slate-700">
-                      Page {safeProcessedBatchPage} of {processedBatchTotalPages} · {ITEMS_PER_PAGE} per page
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setProcessedBatchPage((prev) => Math.min(processedBatchTotalPages, prev + 1))}
-                      disabled={safeProcessedBatchPage === processedBatchTotalPages}
-                      className="rounded-md border border-slate-300 bg-white px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
+                <PaginationBar
+                  page={safeProcessedBatchPage}
+                  pages={processedBatchTotalPages}
+                  total={filteredBatches.length}
+                  pageSize={pageSize}
+                  onPageChange={setProcessedBatchPage}
+                  onPageSizeChange={(n) => { setPageSize(n); setProcessedBatchPage(1); }}
+                  loading={loading}
+                  label="batches"
+                />
               </>
             ) : null}
 

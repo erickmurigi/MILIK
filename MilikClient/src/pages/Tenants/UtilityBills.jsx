@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useEntityCache } from "../../hooks/useEntityCache";
+import PaginationBar from '../../components/PaginationBar';
 import AppSelect from "../../components/common/AppSelect";
 import {
   selectCurrentCompany,
@@ -32,7 +33,6 @@ import { buildInvoiceNarration } from "../../utils/invoiceNarrationUtils";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
-const ITEMS_PER_PAGE = 50;
 
 const STATUS_FILTERS = [
   { val: "ACTIVE", label: "All" },
@@ -93,6 +93,7 @@ const resolveUtilityTypeLabel = (record) => {
 };
 
 const UtilityBills = () => {
+  const [pageSize, setPageSize] = useState(50);
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const currentCompany = useSelector(selectCurrentCompany);
@@ -245,10 +246,10 @@ const UtilityBills = () => {
     [filteredRows]
   );
 
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const currentPageRows = filteredRows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const currentPageRows = filteredRows.slice(startIndex, startIndex + pageSize);
   const selectedCount = selectedRows.length;
 
   useEffect(() => { setCurrentPage(1); setSelectedRows([]); setSelectAll(false); }, [appliedFilters]);
@@ -360,19 +361,16 @@ const UtilityBills = () => {
               )}
             />
 
-            {/* FOOTER */}
-            <div className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">
-              <p>
-                <span className="font-semibold">Showing:</span>{" "}
-                {filteredRows.length === 0 ? 0 : startIndex + 1} – {Math.min(startIndex + ITEMS_PER_PAGE, filteredRows.length)} of {filteredRows.length} bill{filteredRows.length !== 1 ? "s" : ""}
-              </p>
-              <div className="flex items-center gap-2">
-                <span className="text-slate-500">Selected: {selectedCount} · Total: {formatCurrency(totals.amount)} · O/S: {formatCurrency(totals.outstanding)}</span>
-                <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={safeCurrentPage <= 1} className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold disabled:opacity-40 hover:bg-slate-100">Previous</button>
-                <span className="text-[10px] text-slate-500">Page {safeCurrentPage} of {totalPages}</span>
-                <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={safeCurrentPage >= totalPages} className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold disabled:opacity-40 hover:bg-slate-100">Next</button>
-              </div>
-            </div>
+            <PaginationBar
+              page={safeCurrentPage}
+              pages={totalPages}
+              total={filteredRows.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              loading={loading}
+              label="bills"
+            />
 
           </div>
         </div>

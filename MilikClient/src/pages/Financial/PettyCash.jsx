@@ -21,6 +21,7 @@ import { getProperties } from "../../redux/propertyRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import PaginationBar from '../../components/PaginationBar';
 import { fmtDate } from "../../utils/dates";
 import Modal from "../../components/common/Modal";
 import { inputClass, labelClass } from "../../utils/formStyles";
@@ -782,56 +783,28 @@ const PettyCash = () => {
 
             {/* ── Pagination ──────────────────────────────────────────────── */}
             {activeTab === "disbursements" && filteredDisbursements.length > 0 && (
-              <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
-                <div className="font-semibold">
-                  Showing{" "}
-                  <span className="font-bold text-slate-900">{disbTotal === 0 ? 0 : (disbPage - 1) * pageSize + 1}</span>
-                  {" "}to{" "}
-                  <span className="font-bold text-slate-900">{Math.min(disbPage * pageSize, disbTotal)}</span>
-                  {" "}of{" "}
-                  <span className="font-bold text-slate-900">{disbTotal}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-semibold text-slate-500">Per page:</span>
-                    <AppSelect
-                      value={pageSize}
-                      onChange={(v) => { setPageSize(Number(v)); setDisbPage(1); setRepPage(1); }}
-                      options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))}
-                      size="sm"
-                    />
-                  </div>
-                  <button type="button" onClick={() => setDisbPage((p) => Math.max(1, p - 1))} disabled={disbPage === 1} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
-                  <span className="font-semibold text-slate-700">Page {disbPage} of {disbPages}</span>
-                  <button type="button" onClick={() => setDisbPage((p) => Math.min(disbPages, p + 1))} disabled={disbPage >= disbPages} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
-                </div>
-              </div>
+              <PaginationBar
+                page={disbPage}
+                pages={disbPages}
+                total={disbTotal}
+                pageSize={pageSize}
+                onPageChange={setDisbPage}
+                onPageSizeChange={(n) => { setPageSize(n); setDisbPage(1); setRepPage(1); }}
+                loading={loading}
+                label="disbursements"
+              />
             )}
             {activeTab === "replenishments" && repTotal > 0 && (
-              <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
-                <div className="font-semibold">
-                  Showing{" "}
-                  <span className="font-bold text-slate-900">{repTotal === 0 ? 0 : (repPage - 1) * pageSize + 1}</span>
-                  {" "}to{" "}
-                  <span className="font-bold text-slate-900">{Math.min(repPage * pageSize, repTotal)}</span>
-                  {" "}of{" "}
-                  <span className="font-bold text-slate-900">{repTotal}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-semibold text-slate-500">Per page:</span>
-                    <AppSelect
-                      value={pageSize}
-                      onChange={(v) => { setPageSize(Number(v)); setDisbPage(1); setRepPage(1); }}
-                      options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))}
-                      size="sm"
-                    />
-                  </div>
-                  <button type="button" onClick={() => setRepPage((p) => Math.max(1, p - 1))} disabled={repPage === 1} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
-                  <span className="font-semibold text-slate-700">Page {repPage} of {Math.max(1, Math.ceil(filteredReplenishments.length / pageSize))}</span>
-                  <button type="button" onClick={() => setRepPage((p) => Math.min(Math.ceil(filteredReplenishments.length / pageSize), p + 1))} disabled={repPage >= Math.ceil(filteredReplenishments.length / pageSize)} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
-                </div>
-              </div>
+              <PaginationBar
+                page={repPage}
+                pages={repPages}
+                total={repTotal}
+                pageSize={pageSize}
+                onPageChange={setRepPage}
+                onPageSizeChange={(n) => { setPageSize(n); setDisbPage(1); setRepPage(1); }}
+                loading={loading}
+                label="replenishments"
+              />
             )}
           </div>
         </div>

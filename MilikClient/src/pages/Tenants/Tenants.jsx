@@ -17,8 +17,6 @@ import {
   FaCheck,
   FaSearch,
   FaChevronDown,
-  FaChevronLeft,
-  FaChevronRight,
   FaExpandAlt,
   FaCompressAlt,
   FaFileExport,
@@ -68,6 +66,7 @@ import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import Spinner from "../../components/common/Spinner";
 import MilikTable from "../../components/common/MilikTable";
+import PaginationBar from "../../components/PaginationBar";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
@@ -2428,76 +2427,16 @@ const confirmTransferUnit = useCallback(async () => {
           )}
         />
 
-        {/* ===== COMPACT PAGINATION FOOTER ===== */}
-        <div className="flex-shrink-0 sticky bottom-0 z-20 bg-white border-t border-gray-200 px-2 py-1 flex items-center justify-between">
-          <div className="text-xs font-bold text-gray-600">
-            Showing {currentTenants.length > 0 ? startIndex + 1 : 0} to{" "}
-            {Math.min(endIndex, sortedFilteredTenants.length)} of {sortedFilteredTenants.length}{" "}
-            {isTerminatedView ? "terminated tenants" : "tenants"}
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <div className="flex items-center gap-1">
-              <span className="font-semibold text-slate-500 text-xs">Per page:</span>
-              <AppSelect
-                value={pageSize}
-                onChange={(v) => { setPageSize(Number(v)); setCurrentPage(1); }}
-                options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))}
-                size="sm"
-              />
-            </div>
-            <button
-              onClick={() => setCurrentPage(safeCurrentPage - 1)}
-              disabled={safeCurrentPage === 1}
-              className="p-1 hover:bg-gray-100 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-gray-700 text-xs"
-            >
-              <FaChevronLeft size={12} />
-            </button>
-
-            <div className="flex items-center gap-0.5">
-              {[...Array(totalPages)].map((_, i) => {
-                const page = i + 1;
-                if (
-                  page === 1 ||
-                  page === totalPages ||
-                  (page >= safeCurrentPage - 1 && page <= safeCurrentPage + 1)
-                ) {
-                  return (
-                    <button
-                      key={page}
-                      onClick={() => setCurrentPage(page)}
-                      className={`px-2 py-0.5 rounded text-xs font-bold transition-colors ${
-                        safeCurrentPage === page
-                          ? `${MILIK_ORANGE} text-white`
-                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  );
-                } else if (
-                  page === safeCurrentPage - 2 ||
-                  page === safeCurrentPage + 2
-                ) {
-                  return (
-                    <span key={page} className="px-1 text-gray-400 text-xs">
-                      ...
-                    </span>
-                  );
-                }
-                return null;
-              })}
-            </div>
-
-            <button
-              onClick={() => setCurrentPage(safeCurrentPage + 1)}
-              disabled={safeCurrentPage === totalPages}
-              className="p-1 hover:bg-gray-100 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-gray-700 text-xs"
-            >
-              <FaChevronRight size={12} />
-            </button>
-          </div>
-        </div>
+        <PaginationBar
+          page={safeCurrentPage}
+          pages={totalPages}
+          total={tenantPagination.total || sortedFilteredTenants.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+          loading={isFetchingTenants}
+          label="tenants"
+        />
       </div>
 
       {/* ===== DELETE CONFIRMATION MODAL ===== */}

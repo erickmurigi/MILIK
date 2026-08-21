@@ -32,13 +32,12 @@ import { adminRequests } from "../../utils/requestMethods";
 import { getChartOfAccounts } from "../../redux/apiCalls";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import AppSelect from "../../components/common/AppSelect";
+import PaginationBar from '../../components/PaginationBar';
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
-const ITEMS_PER_PAGE = 50;
-
 const money = (value) => Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const displayMoney = (value) => `KSh ${money(value)}`;
 const formatPaymentMethod = (method) => method ? method.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '—';
@@ -78,8 +77,10 @@ const ProcessedStatements = () => {
     canExportProcessedStatement: hasCompanyPermission(currentUser || {}, currentCompany, "processedStatements", "export", "accounts"),
     canSendCommunications: hasCompanyPermission(currentUser || {}, currentCompany, "processedStatements", "send", "accounts"),
   }), [currentUser, currentCompany]);
+  const [pageSize, setPageSize] = useState(50);
+  const pageSizeRef = useRef(50);
   const [statements, setStatements] = useState([]);
-  const [pagination, setPagination] = useState({ total: 0, page: 1, pages: 1, limit: ITEMS_PER_PAGE });
+  const [pagination, setPagination] = useState({ total: 0, page: 1, pages: 1, limit: 50 });
   const [loading, setLoading] = useState(false);
   const [glStatement, setGlStatement] = useState(null);
 
@@ -109,7 +110,7 @@ const ProcessedStatements = () => {
     if (!businessId) return;
     setLoading(true);
     try {
-      const params = { tab: tabRef.current, page, limit: ITEMS_PER_PAGE, sortBy: sortByRef.current };
+      const params = { tab: tabRef.current, page, limit: pageSizeRef.current, sortBy: sortByRef.current };
       if (searchRef.current) params.search = searchRef.current;
       const res = await adminRequests.get(`/processed-statements/business/${businessId}`, { params });
       setStatements(res.data.statements || []);
@@ -117,7 +118,7 @@ const ProcessedStatements = () => {
         total: res.data.total ?? 0,
         page: res.data.page ?? page,
         pages: res.data.pages ?? 1,
-        limit: ITEMS_PER_PAGE,
+        limit: pageSizeRef.current,
       });
       setCurrentPage(res.data.page ?? page);
     } catch {
@@ -151,8 +152,6 @@ const ProcessedStatements = () => {
   const paginatedStatements = statements;
   const totalPages = Math.max(1, pagination.pages);
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = pagination.total === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
 
   const handleTabChange = (tab) => {
     tabRef.current = tab;
@@ -919,17 +918,16 @@ const ProcessedStatements = () => {
                   </table>
                 </div>
               )}
-              <div className="flex-shrink-0 border-t border-slate-200 bg-white px-3 py-2">
-                <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
-                  <div className="font-semibold">Showing <span className="font-bold text-slate-900">{pagination.total === 0 ? 0 : startIndex + 1}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, pagination.total)}</span> of <span className="font-bold text-slate-900">{pagination.total}</span> processed statements</div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
-                    <button onClick={() => handlePageChange(safeCurrentPage - 1)} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
-                    <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
-                    <button onClick={() => handlePageChange(safeCurrentPage + 1)} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
-                  </div>
-                </div>
-              </div>
+              <PaginationBar
+                page={safeCurrentPage}
+                pages={totalPages}
+                total={pagination.total}
+                pageSize={pageSize}
+                onPageChange={handlePageChange}
+                onPageSizeChange={(n) => { pageSizeRef.current = n; setPageSize(n); setCurrentPage(1); }}
+                loading={loading}
+                label="statements"
+              />
             </div>
           </div>
         </div>

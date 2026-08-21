@@ -1,5 +1,6 @@
 ﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import PaginationBar from '../../components/PaginationBar';
 import { useEntityCache } from "../../hooks/useEntityCache";
 import AppSelect from "../../components/common/AppSelect";
 import {
@@ -59,7 +60,6 @@ const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
 const TERMINATED_STATUSES = new Set(["terminated", "moved_out", "evicted", "inactive"]);
 const isActiveTenant = (tenant) =>
   !TERMINATED_STATUSES.has(String(tenant?.status || "active").trim().toLowerCase());
-const ITEMS_PER_PAGE = 50;
 const AGREEMENT_STATUS_OPTIONS = [
   "draft",
   "pending_signature",
@@ -151,6 +151,7 @@ const buildInitialForm = () => ({
 });
 
 const TenantAgreements = () => {
+  const [pageSize, setPageSize] = useState(50);
   const confirm = useConfirm();
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -372,11 +373,11 @@ const TenantAgreements = () => {
     return sorted;
   }, [filteredRows]);
 
-  const totalPages = Math.max(1, Math.ceil(sortedFilteredRows.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(sortedFilteredRows.length / pageSize));
   const pageNumbers = useMemo(() => [...Array(totalPages)].map((_, i) => i + 1), [totalPages]);
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
   const pagedRows = sortedFilteredRows.slice(startIndex, endIndex);
 
   const uniqueProperties = useMemo(() => {
@@ -834,48 +835,16 @@ const TenantAgreements = () => {
               }}
             />
 
-            <div className="sticky bottom-0 z-20 flex flex-shrink-0 items-center justify-between border-t border-gray-200 bg-white px-2 py-2">
-              <div className="text-xs font-bold text-gray-600">
-                Showing {pagedRows.length > 0 ? startIndex + 1 : 0} to {Math.min(endIndex, sortedFilteredRows.length)} of {sortedFilteredRows.length} agreements
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setCurrentPage(safeCurrentPage - 1)}
-                  disabled={safeCurrentPage === 1}
-                  className="rounded p-1 text-xs text-gray-700 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <FaChevronLeft size={12} />
-                </button>
-                <div className="flex items-center gap-0.5">
-                  {pageNumbers.map((page) => {
-                    if (page === 1 || page === totalPages || (page >= safeCurrentPage - 1 && page <= safeCurrentPage + 1)) {
-                      return (
-                        <button
-                          key={page}
-                          onClick={() => setCurrentPage(page)}
-                          className={`rounded px-2 py-0.5 text-xs font-bold transition-colors ${
-                            safeCurrentPage === page ? `${MILIK_ORANGE} text-white` : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                          }`}
-                        >
-                          {page}
-                        </button>
-                      );
-                    }
-                    if (page === safeCurrentPage - 2 || page === safeCurrentPage + 2) {
-                      return <span key={page} className="px-1 text-xs text-gray-400">...</span>;
-                    }
-                    return null;
-                  })}
-                </div>
-                <button
-                  onClick={() => setCurrentPage(safeCurrentPage + 1)}
-                  disabled={safeCurrentPage === totalPages}
-                  className="rounded p-1 text-xs text-gray-700 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <FaChevronRight size={12} />
-                </button>
-              </div>
-            </div>
+            <PaginationBar
+              page={safeCurrentPage}
+              pages={totalPages}
+              total={sortedFilteredRows.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              loading={isFetchingLeases}
+              label="agreements"
+            />
 
         {modalOpen && (
           <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
