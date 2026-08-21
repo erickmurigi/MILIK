@@ -12,11 +12,13 @@ import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
 import { inputClass, labelClass } from "../../utils/formStyles";
 import { fmtDate } from "../../utils/dates";
+import PaginationBar from "../../components/PaginationBar";
+import MilikTable from "../../components/common/MilikTable";
 
 const fmtSvc  = (svc, fallback = "—") => svc ? (svc.category ? `${svc.category} — ${svc.name}` : svc.name) : fallback;
 const ic         = "h-7 border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const methods    = ["cash", "mpesa", "bank", "card", "other"];
-const PAGE_SIZE  = 30;
+const DEFAULT_PAGE_SIZE = 30;
 
 // Mirror of backend computeDamageInstallment — used for payout modal preview
 const r2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
@@ -57,6 +59,7 @@ const CarWashCommissionPayouts = () => {
   const [payableComms, setPayableComms] = useState([]);
   const [loading, setLoading]           = useState(false);
   const [page, setPage]                 = useTabState("/carwash/commissions/payouts:page", 1);
+  const [pageSize, setPageSize]         = useTabState("/carwash/commissions/payouts:pageSize", DEFAULT_PAGE_SIZE);
   const [pagination, setPagination]     = useState({ page: 1, total: 0, pages: 1 });
   const [filters, setFilters]           = useTabState("/carwash/commissions/payouts:filters", emptyFilters());
   const [applied, setApplied]           = useTabState("/carwash/commissions/payouts:applied", emptyFilters());
@@ -106,7 +109,7 @@ const CarWashCommissionPayouts = () => {
         dateFrom: applied.dateFrom || undefined,
         dateTo:   applied.dateTo   || undefined,
         page,
-        limit: PAGE_SIZE,
+        limit: pageSize,
       });
       setPayouts(normalizeListPayload(payload, "payouts"));
       setPagination(payload?.pagination || { page, total: payload?.payouts?.length || 0, pages: 1 });
@@ -115,7 +118,7 @@ const CarWashCommissionPayouts = () => {
     } finally {
       setLoading(false);
     }
-  }, [applied, page]);
+  }, [applied, page, pageSize]);
 
   useEffect(() => { loadPayouts(); }, [loadPayouts]);
 
@@ -287,101 +290,78 @@ const CarWashCommissionPayouts = () => {
           {loading && <span className="text-slate-400">Loading…</span>}
         </div>
 
-        <div className="flex-1 min-h-0 overflow-x-auto">
-          <table className="w-full min-w-[900px] text-xs">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Payout No.</th>
-                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Staff</th>
-                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Method</th>
-                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Cashbook</th>
-                <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide text-slate-500">Commission</th>
-                <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide text-slate-500">Savings Held</th>
-                <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide text-slate-500">Net Cash</th>
-                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Date</th>
-                {canPay && <th className="px-3 py-1.5 text-center font-bold uppercase tracking-wide text-slate-500">Actions</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {payouts.length ? payouts.map((row) => {
-                const reversed = Boolean(row.isReversed);
-                return (
-                  <tr key={row._id} className={`border-b border-slate-100 ${reversed ? "bg-rose-50/40" : "hover:bg-slate-50"}`}>
-                    <td className="px-3 py-2">
-                      <span className={`font-extrabold font-mono text-[11px] ${reversed ? "text-rose-400 line-through" : "text-[#0B3B2E]"}`}>{row.payoutNumber}</span>
-                      {reversed && (
-                        <span className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-rose-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-rose-600">
-                          <FaBan size={7} /> Reversed
-                        </span>
-                      )}
-                    </td>
-                    <td className={`px-3 py-2 font-extrabold ${reversed ? "text-slate-400" : "text-slate-900"}`}>{row.staff?.name || "—"}</td>
-                    <td className={`px-3 py-2 uppercase ${reversed ? "text-slate-400" : "text-slate-600"}`}>{row.method}</td>
-                    <td className={`px-3 py-2 ${reversed ? "text-slate-400" : "text-slate-500"}`}>{row.cashbookAccount?.code} {row.cashbookAccount?.name}</td>
-                    <td className={`px-3 py-2 text-right tabular-nums font-bold ${reversed ? "text-slate-400 line-through" : ""}`}>{formatMoney(row.amount)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">
-                      {row.savingsHeld > 0
-                        ? <span className={`inline-flex items-center gap-1 ${reversed ? "text-slate-400 line-through" : "text-amber-700"}`}><FaPiggyBank size={9} />{formatMoney(row.savingsHeld)}</span>
-                        : <span className="text-slate-300">—</span>}
-                    </td>
-                    <td className={`px-3 py-2 text-right tabular-nums font-extrabold ${reversed ? "text-slate-400 line-through" : "text-emerald-700"}`}>
-                      {formatMoney(row.netCash ?? row.amount)}
-                    </td>
-                    <td className={`px-3 py-2 ${reversed ? "text-slate-400" : "text-slate-500"}`}>
-                      {row.payoutDate ? new Date(row.payoutDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
-                    </td>
-                    {canPay && (
-                      <td className="px-3 py-2 text-center">
-                        {!reversed ? (
-                          <button
-                            type="button"
-                            onClick={() => openReverseModal(row)}
-                            title="Reverse this payout"
-                            className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-100 hover:border-rose-300"
-                          >
-                            <FaUndo size={8} /> Reverse
-                          </button>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                );
-              }) : (
-                <tr>
-                  <td colSpan={canPay ? 9 : 8} className="px-3 py-12 text-center text-xs font-semibold text-slate-400">
-                    No commission payouts found for the selected filters.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <MilikTable
+          columns={[
+            { label: "Payout No." },
+            { label: "Staff" },
+            { label: "Method" },
+            { label: "Cashbook" },
+            { label: "Commission", align: "right" },
+            { label: "Savings Held", align: "right" },
+            { label: "Net Cash", align: "right" },
+            { label: "Date" },
+          ]}
+          rows={payouts}
+          loading={loading}
+          empty="No commission payouts found for the selected filters."
+          minWidth="900px"
+          rowClassName={(row) => row.isReversed ? "bg-rose-50/40" : ""}
+          renderRow={(row) => {
+            const reversed = Boolean(row.isReversed);
+            return (
+              <>
+                <td className="px-3 py-2">
+                  <span className={`font-extrabold font-mono text-[11px] ${reversed ? "text-rose-400 line-through" : "text-[#0B3B2E]"}`}>{row.payoutNumber}</span>
+                  {reversed && (
+                    <span className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-rose-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-rose-600">
+                      <FaBan size={7} /> Reversed
+                    </span>
+                  )}
+                </td>
+                <td className={`px-3 py-2 font-extrabold ${reversed ? "text-slate-400" : "text-slate-900"}`}>{row.staff?.name || "—"}</td>
+                <td className={`px-3 py-2 uppercase ${reversed ? "text-slate-400" : "text-slate-600"}`}>{row.method}</td>
+                <td className={`px-3 py-2 ${reversed ? "text-slate-400" : "text-slate-500"}`}>{row.cashbookAccount?.code} {row.cashbookAccount?.name}</td>
+                <td className={`px-3 py-2 text-right tabular-nums font-bold ${reversed ? "text-slate-400 line-through" : ""}`}>{formatMoney(row.amount)}</td>
+                <td className="px-3 py-2 text-right tabular-nums">
+                  {row.savingsHeld > 0
+                    ? <span className={`inline-flex items-center gap-1 ${reversed ? "text-slate-400 line-through" : "text-amber-700"}`}><FaPiggyBank size={9} />{formatMoney(row.savingsHeld)}</span>
+                    : <span className="text-slate-300">—</span>}
+                </td>
+                <td className={`px-3 py-2 text-right tabular-nums font-extrabold ${reversed ? "text-slate-400 line-through" : "text-emerald-700"}`}>
+                  {formatMoney(row.netCash ?? row.amount)}
+                </td>
+                <td className={`px-3 py-2 ${reversed ? "text-slate-400" : "text-slate-500"}`}>
+                  {row.payoutDate ? new Date(row.payoutDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                </td>
+              </>
+            );
+          }}
+          renderActions={canPay ? (row) => {
+            const reversed = Boolean(row.isReversed);
+            return !reversed ? (
+              <button
+                type="button"
+                onClick={() => openReverseModal(row)}
+                title="Reverse this payout"
+                className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-100 hover:border-rose-300"
+              >
+                <FaUndo size={8} /> Reverse
+              </button>
+            ) : <span className="text-slate-300">—</span>;
+          } : undefined}
+        />
 
         {/* Pagination */}
-        <div className="flex-shrink-0 flex min-h-9 items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-          <span className="font-semibold normal-case text-slate-500">Per page: {PAGE_SIZE}</span>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.max(p - 1, 1))}
-              disabled={page <= 1 || loading}
-              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              Previous
-            </button>
-            <span>Page {pagination.page} of {pagination.pages}</span>
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.min(p + 1, pagination.pages))}
-              disabled={page >= pagination.pages || loading}
-              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        <PaginationBar
+          page={pagination.page}
+          pages={pagination.pages}
+          total={pagination.total}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+          loading={loading}
+          label="payouts"
+        />
       </div>
 
       {reverseTarget && (

@@ -11,11 +11,11 @@ import { getProperties } from '../../redux/propertyRedux';
 import { fetchCompanySettings, selectCompanySettings } from '../../redux/companySettingsRedux';
 import { adminRequests } from '../../utils/requestMethods';
 import { formatMoney } from '../../utils/money';
+import PaginationBar from '../../components/PaginationBar';
 
 const GREEN_BG = 'bg-[#0B3B2E]';
 const ORANGE = '#F97316';
 const DEFAULT_RATE = 16;
-const ITEMS_PER_PAGE = 50;
 
 const parseDate = (value) => {
   const date = value ? new Date(value) : null;
@@ -60,6 +60,7 @@ const TaxReports = () => {
   const [invoices, setInvoices] = useState([]);
   const [processedStatements, setProcessedStatements] = useState([]);
   const [currentPage, setCurrentPage] = useTabState("/accounts/tax-reports:currentPage", 1);
+  const [pageSize, setPageSize] = useState(50);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -176,10 +177,10 @@ const TaxReports = () => {
     [rows]
   );
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE)), [rows.length]);
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(rows.length / pageSize)), [rows.length, pageSize]);
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
   const paginatedRows = useMemo(() => rows.slice(startIndex, endIndex), [rows, startIndex, endIndex]);
 
   useEffect(() => {
@@ -430,15 +431,16 @@ const TaxReports = () => {
                 </tbody>
               </table>
             </div>
-            <div className="sticky bottom-0 z-20 flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              <div className="font-semibold">Showing <span className="font-bold text-slate-900">{rows.length ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, rows.length)}</span> of <span className="font-bold text-slate-900">{rows.length}</span> tax row(s)</div>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
-                <button type="button" onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 bg-white px-3 py-1 font-semibold transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
-                <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
-                <button type="button" onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 bg-white px-3 py-1 font-semibold transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
-              </div>
-            </div>
+            <PaginationBar
+              page={safeCurrentPage}
+              pages={totalPages}
+              total={rows.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              loading={loading}
+              label="tax rows"
+            />
           </div>
         </div>
       </div>

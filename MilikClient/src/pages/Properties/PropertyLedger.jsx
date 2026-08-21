@@ -9,6 +9,7 @@ import {
   FaFileAlt, FaFileInvoiceDollar, FaMoneyBillWave, FaWallet,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import PaginationBar from "../../components/PaginationBar";
 import DashboardCard, { DashboardStatCard } from "../../components/Dashboard/DashboardCard";
 import { getPropertyById } from "../../redux/propertyRedux";
 import {
@@ -71,15 +72,6 @@ const THead = ({ cols }) => (
   </thead>
 );
 
-const Pager = ({ page, pages, total, onPage }) => pages <= 1 ? null : (
-  <div className="flex items-center justify-between border-t border-slate-100 px-4 py-2">
-    <span className="text-[11px] text-slate-500">Page {page} of {pages} · {total} records</span>
-    <div className="flex gap-1">
-      <button disabled={page === 1}     onClick={() => onPage(page - 1)} className="rounded border border-slate-200 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-50 disabled:opacity-40">Prev</button>
-      <button disabled={page === pages} onClick={() => onPage(page + 1)} className="rounded border border-slate-200 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-50 disabled:opacity-40">Next</button>
-    </div>
-  </div>
-);
 
 // ─── Tab: Overview ────────────────────────────────────────────────────────────
 const OverviewTab = ({ propertyId, property, navigate }) => {
@@ -380,14 +372,14 @@ const JournalsTab = ({ propertyId, startDate, endDate }) => {
   const [loading, setLoading] = useState(false);
   const [entries, setEntries] = useState([]);
   const [total, setTotal]     = useState(0);
-  const [page, setPage]       = useState(1);
-  const limit = 30;
-  const pages = Math.ceil(total / limit) || 1;
+  const [page,     setPage]     = useState(1);
+  const [pageSize, setPageSize] = useState(30);
+  const pages = Math.max(1, Math.ceil(total / pageSize));
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getPropertyLedgerJournals(propertyId, { startDate, endDate, page, limit });
+      const data = await getPropertyLedgerJournals(propertyId, { startDate, endDate, page, limit: pageSize });
       setEntries(data.data || []);
       setTotal(data.total || 0);
     } catch (e) {
@@ -395,7 +387,7 @@ const JournalsTab = ({ propertyId, startDate, endDate }) => {
     } finally {
       setLoading(false);
     }
-  }, [propertyId, startDate, endDate, page]);
+  }, [propertyId, startDate, endDate, page, pageSize]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setPage(1); }, [startDate, endDate]);
@@ -426,7 +418,16 @@ const JournalsTab = ({ propertyId, startDate, endDate }) => {
           </tbody>
         </table>
       </div>
-      <Pager page={page} pages={pages} total={total} onPage={setPage} />
+      <PaginationBar
+        page={page}
+        pages={pages}
+        total={total}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+        loading={loading}
+        label="journal entries"
+      />
     </div>
   );
 };

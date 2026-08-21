@@ -14,6 +14,7 @@ import { getProperties } from "../../redux/propertyRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { useTabState } from "../../hooks/useTabState";
 import PaginationBar from '../../components/PaginationBar';
+import MilikTable from '../../components/common/MilikTable';
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";

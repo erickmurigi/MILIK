@@ -19,6 +19,8 @@ import CwSmsModal from "./CwSmsModal";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import PaginationBar from "../../components/PaginationBar";
+import MilikTable from "../../components/common/MilikTable";
 
 const GRN = "#0B3B2E";
 const fmt = formatMoney;
@@ -120,7 +122,7 @@ const STMT_TD = "px-3 py-1.5 text-[11px] text-slate-700";
 const FMT_DATE_OPTS = { day: "2-digit", month: "short", year: "numeric" };
 
 // ─── Expanded detail row ───────────────────────────────────────────────────────
-const CustomerDetail = React.memo(({ customer, program, colSpan = 10 }) => {
+const CustomerDetail = React.memo(({ customer, program }) => {
   const { data: stmtData, isLoading: loading, isError } = useQuery({
     queryKey: ["cw-customer-stmt", String(customer._id)],
     queryFn: () => carWashApi.getCustomerStatement(customer._id),
@@ -133,9 +135,8 @@ const CustomerDetail = React.memo(({ customer, program, colSpan = 10 }) => {
     (stmtData?.jobs || []).map((j) => ({ ...j, dateFmt: j.date ? new Date(j.date).toLocaleDateString("en-KE", FMT_DATE_OPTS) : "—" })),
   [stmtData]);
   return (
-    <tr>
-      <td colSpan={colSpan} className="bg-[#F4F7F5]/60 border-b border-slate-200 px-4 py-3">
-        <div className="mb-3 flex items-center justify-between">
+    <>
+      <div className="mb-3 flex items-center justify-between">
           <div className="flex flex-wrap items-center gap-3 text-[11px]">
             <span className="flex items-center gap-1 text-slate-500"><FaPhone size={9} className="text-slate-300" />{customer.phone || "No phone"}</span>
             <span className="flex flex-wrap gap-1">
@@ -195,8 +196,7 @@ const CustomerDetail = React.memo(({ customer, program, colSpan = 10 }) => {
             </table>
           </div>
         )}
-      </td>
-    </tr>
+    </>
   );
 });
 
@@ -915,195 +915,147 @@ export default function CarWashCustomers() {
 
           {/* Desktop table */}
           <div className="hidden sm:block min-w-full">
-            <table className="w-full text-xs">
-              <colgroup>
-                <col className="w-7" />
-                <col className="w-8" />
-                <col className="min-w-[160px]" />
-                <col className="hidden md:table-column min-w-[120px]" />
-                <col className="hidden md:table-column w-16" />
-                <col className="hidden lg:table-column w-28" />
-                <col className="hidden xl:table-column w-28" />
-                <col className="w-24" />
-                <col className="hidden xl:table-column min-w-[130px]" />
-                <col className="hidden xl:table-column w-24" />
-                <col className="w-28" />
-              </colgroup>
-              <thead className="sticky top-0 z-10">
-                <tr className="bg-[#0B3B2E] text-white text-[10px]">
-                  {/* Select-all checkbox */}
-                  <th className="px-2 py-1.5 w-7">
-                    <button type="button" onClick={() => toggleSelectAll(displayedIds)} className="text-white/70 hover:text-white transition-colors">
-                      {displayedIds.length > 0 && displayedIds.every((id) => selectedIds.has(id))
-                        ? <FaCheckSquare size={11} />
-                        : <FaSquare size={11} />}
-                    </button>
-                  </th>
-                  <th className="px-2 py-1.5 w-8" />
-                  <SortTh label="Customer"       field="name"        sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-                  <th className="hidden md:table-cell px-4 py-1.5 text-left font-bold uppercase tracking-wide">Plates</th>
-                  <SortTh label="Visits"         field="visits"      sortBy={sortBy} sortDir={sortDir} onSort={handleSort} className="hidden md:table-cell" />
-                  <SortTh label="Last Visit"     field="lastVisit"   sortBy={sortBy} sortDir={sortDir} onSort={handleSort} className="hidden lg:table-cell" />
-                  <SortTh label="Lifetime Spend" field="spend"       sortBy={sortBy} sortDir={sortDir} onSort={handleSort} className="hidden xl:table-cell" />
-                  <SortTh label="Outstanding"    field="outstanding" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} className="text-red-300" />
-                  <th className="hidden xl:table-cell px-4 py-1.5 text-left font-bold uppercase tracking-wide">Loyalty</th>
-                  <th className="hidden xl:table-cell px-4 py-1.5 text-left font-bold uppercase tracking-wide">Account</th>
-                  <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide text-white/70">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {loading && !customers.length ? (
-                  <tr><td colSpan={11} className="py-16 text-center text-sm text-slate-400">Loading customers…</td></tr>
-                ) : !displayed.length ? (
-                  <tr><td colSpan={11} className="py-16 text-center">
-                    <FaUser className="mx-auto mb-2 text-slate-300" size={24} />
-                    <p className="text-sm font-semibold text-slate-500">{search ? "No customers match your search" : "No customers yet"}</p>
-                    <p className="text-xs text-slate-400 mt-1">Customers are auto-created when jobs are opened</p>
-                  </td></tr>
-                ) : displayed.map((c, idx) => {
-                  const isExpanded     = expandedId === String(c._id);
-                  const isSelected     = selectedIds.has(String(c._id));
-                  const rowBg          = isSelected ? "bg-violet-50" : idx % 2 === 0 ? "bg-white" : "bg-slate-50/60";
-                  const hasOutstanding = c.outstanding > 0.01;
-                  const hasCreditBal   = (c.creditBalance || 0) > 0.01;
-                  const hasPlates      = (c.plates || []).length > 0;
-                  const card = c.loyaltyCard;
-                  const acc  = c.creditAccount;
-                  return (
-                    <React.Fragment key={String(c._id)}>
-                      <tr className={`${rowBg} transition-colors hover:bg-emerald-50/30 cursor-pointer group`} onClick={() => toggleExpand(String(c._id))}>
-                        {/* Checkbox */}
-                        <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
-                          <button type="button" onClick={() => toggleSelect(String(c._id))} className={`text-violet-400 hover:text-violet-600 transition-colors ${isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
-                            {isSelected ? <FaCheckSquare size={11} /> : <FaSquare size={11} className="text-slate-300" />}
+            <MilikTable
+              columns={[
+                { label: "Customer", sortKey: "name" },
+                { label: "Plates", className: "hidden md:table-cell" },
+                { label: "Visits", sortKey: "visits", className: "hidden md:table-cell" },
+                { label: "Last Visit", sortKey: "lastVisit", className: "hidden lg:table-cell" },
+                { label: "Lifetime Spend", sortKey: "spend", className: "hidden xl:table-cell" },
+                { label: "Outstanding", sortKey: "outstanding", className: "text-red-300" },
+                { label: "Loyalty", className: "hidden xl:table-cell" },
+                { label: "Account", className: "hidden xl:table-cell" },
+              ]}
+              rows={displayed}
+              loading={loading && !customers.length}
+              empty={search ? "No customers match your search." : "No customers yet."}
+              minWidth="900px"
+              checkboxes
+              allChecked={displayedIds.length > 0 && displayedIds.every((id) => selectedIds.has(id))}
+              someChecked={displayedIds.some((id) => selectedIds.has(id)) && !displayedIds.every((id) => selectedIds.has(id))}
+              onCheckAll={() => toggleSelectAll(displayedIds)}
+              isChecked={(c) => selectedIds.has(String(c._id))}
+              onCheckRow={(c) => toggleSelect(String(c._id))}
+              isSelected={(c) => selectedIds.has(String(c._id))}
+              sortKey={sortBy}
+              sortDir={sortDir}
+              onSort={handleSort}
+              renderExpanded={(c) => <CustomerDetail customer={c} program={loyaltyProgram} />}
+              renderRow={(c) => {
+                const hasOutstanding = c.outstanding > 0.01;
+                const hasCreditBal   = (c.creditBalance || 0) > 0.01;
+                const hasPlates      = (c.plates || []).length > 0;
+                const card = c.loyaltyCard;
+                const acc  = c.creditAccount;
+                return (
+                  <>
+                    {/* Customer */}
+                    <td className="px-4 py-2">
+                      <div className="flex items-center gap-1.5">
+                        {c.lastVisit && <div className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${lastVisitDot(c.lastVisit)}`} title={`Last visit: ${fmtDate(c.lastVisit)}`} />}
+                        <div className="font-semibold text-slate-800 truncate max-w-[180px]">
+                          {c.name || <span className="italic text-slate-400 font-normal">Unnamed</span>}
+                        </div>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+                        {c.phone ? <><FaPhone size={8} className="text-slate-300" /> {c.phone}</> : <span className="italic">No phone</span>}
+                      </div>
+                    </td>
+
+                    {/* Plates */}
+                    <td className="hidden md:table-cell px-4 py-2">
+                      <div className="flex flex-wrap gap-1">
+                        {(c.plates || []).slice(0, 2).map((p) => (
+                          <span key={p} className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-mono font-bold text-slate-700">{p}</span>
+                        ))}
+                        {(c.plates || []).length > 2 && (
+                          <span className="rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-500" title={(c.plates || []).slice(2).join(", ")}>+{c.plates.length - 2}</span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Visits */}
+                    <td className="hidden md:table-cell px-4 py-2 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <FaCarSide size={9} className="text-slate-300" />
+                        <span className="font-semibold tabular-nums text-slate-700">{c.totalJobs || 0}</span>
+                      </div>
+                    </td>
+
+                    {/* Last visit */}
+                    <td className="hidden lg:table-cell px-4 py-2 text-right">
+                      <div className={`flex items-center justify-end gap-1 text-[11px] ${lastVisitClass(c.lastVisit)}`}>
+                        <FaClock size={8} className="opacity-60 flex-shrink-0" />
+                        <span className="tabular-nums">{fmtDate(c.lastVisit)}</span>
+                      </div>
+                    </td>
+
+                    {/* Lifetime spend */}
+                    <td className="hidden xl:table-cell px-4 py-2 text-right tabular-nums font-medium text-slate-700 text-[11px]">
+                      {c.totalPaid > 0 ? fmt(c.totalPaid) : <span className="text-slate-300">—</span>}
+                    </td>
+
+                    {/* Outstanding / Credit */}
+                    <td className="px-4 py-2 text-right tabular-nums text-[11px]">
+                      <div className="flex flex-col items-end gap-0.5">
+                        {hasOutstanding
+                          ? <span className="font-bold text-red-600">{fmt(c.outstanding)}</span>
+                          : <span className="text-slate-200">—</span>}
+                        {hasCreditBal && (
+                          <button type="button" onClick={(e) => { e.stopPropagation(); navigate("/carwash/customers/credit-balances"); }}
+                            className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700 hover:bg-emerald-200">
+                            <FaPiggyBank size={7} />{fmt(c.creditBalance)}
                           </button>
-                        </td>
+                        )}
+                      </div>
+                    </td>
 
-                        {/* Expand */}
-                        <td className={`px-2 py-2 ${hasOutstanding ? "border-l-[3px] border-red-400" : hasCreditBal ? "border-l-[3px] border-emerald-400" : "border-l-[3px] border-transparent"}`}>
-                          <div className="flex items-center gap-1">
-                            {c.lastVisit && <div className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${lastVisitDot(c.lastVisit)}`} title={`Last visit: ${fmtDate(c.lastVisit)}`} />}
-                            <span className="text-slate-300 group-hover:text-slate-500 text-[10px] transition-colors">{isExpanded ? "▾" : "▸"}</span>
-                          </div>
-                        </td>
+                    {/* Loyalty */}
+                    <td className="hidden xl:table-cell px-4 py-2">
+                      <StampBar card={card} program={loyaltyProgram} />
+                    </td>
 
-                        {/* Customer */}
-                        <td className="px-4 py-2">
-                          <div className="font-semibold text-slate-800 truncate max-w-[180px]">
-                            {c.name || <span className="italic text-slate-400 font-normal">Unnamed</span>}
-                          </div>
-                          <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
-                            {c.phone ? <><FaPhone size={8} className="text-slate-300" /> {c.phone}</> : <span className="italic">No phone</span>}
-                          </div>
-                        </td>
-
-                        {/* Plates */}
-                        <td className="hidden md:table-cell px-4 py-2">
-                          <div className="flex flex-wrap gap-1">
-                            {(c.plates || []).slice(0, 2).map((p) => (
-                              <span key={p} className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-mono font-bold text-slate-700">{p}</span>
-                            ))}
-                            {(c.plates || []).length > 2 && (
-                              <span className="rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-500" title={(c.plates || []).slice(2).join(", ")}>+{c.plates.length - 2}</span>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Visits */}
-                        <td className="hidden md:table-cell px-4 py-2 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <FaCarSide size={9} className="text-slate-300" />
-                            <span className="font-semibold tabular-nums text-slate-700">{c.totalJobs || 0}</span>
-                          </div>
-                        </td>
-
-                        {/* Last visit — colour-coded */}
-                        <td className="hidden lg:table-cell px-4 py-2 text-right">
-                          <div className={`flex items-center justify-end gap-1 text-[11px] ${lastVisitClass(c.lastVisit)}`}>
-                            <FaClock size={8} className="opacity-60 flex-shrink-0" />
-                            <span className="tabular-nums">{fmtDate(c.lastVisit)}</span>
-                          </div>
-                        </td>
-
-                        {/* Lifetime spend */}
-                        <td className="hidden xl:table-cell px-4 py-2 text-right tabular-nums font-medium text-slate-700 text-[11px]">
-                          {c.totalPaid > 0 ? fmt(c.totalPaid) : <span className="text-slate-300">—</span>}
-                        </td>
-
-                        {/* Outstanding / Credit */}
-                        <td className="px-4 py-2 text-right tabular-nums text-[11px]">
-                          <div className="flex flex-col items-end gap-0.5">
-                            {hasOutstanding
-                              ? <span className="font-bold text-red-600">{fmt(c.outstanding)}</span>
-                              : <span className="text-slate-200">—</span>}
-                            {hasCreditBal && (
-                              <button type="button" onClick={(e) => { e.stopPropagation(); navigate("/carwash/customers/credit-balances"); }}
-                                className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700 hover:bg-emerald-200">
-                                <FaPiggyBank size={7} />{fmt(c.creditBalance)}
-                              </button>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Loyalty */}
-                        <td className="hidden xl:table-cell px-4 py-2">
-                          <StampBar card={card} program={loyaltyProgram} />
-                        </td>
-
-                        {/* Account */}
-                        <td className="hidden xl:table-cell px-4 py-2" onClick={(e) => e.stopPropagation()}>
-                          {acc ? (
-                            <button type="button" onClick={() => navigate("/carwash/customers/credit-accounts")}
-                              className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-semibold ${acctTypePill[acc.accountType] || "bg-slate-100 text-slate-600 border-slate-200"} hover:opacity-80`}>
-                              <FaIdCard size={8} />{acc.accountType}
-                            </button>
-                          ) : <span className="text-slate-200 text-[10px]">—</span>}
-                        </td>
-
-                        {/* Actions */}
-                        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-1">
-                            <ActionBtn icon={FaCar} title="View jobs" color="green" onClick={(e) => viewJobs(e, c)} disabled={!hasPlates} />
-                            {canManage && <ActionBtn icon={FaEdit} title="Edit customer" color="amber" onClick={(e) => openEdit(e, c)} />}
-                            {c.phone && <ActionBtn icon={FaCommentDots} title="Send SMS" color="blue" onClick={(e) => openSms(e, c)} />}
-                            {hasOutstanding && canManage && hasPlates && (
-                              <ActionBtn icon={FaMoneyBillWave} title={`Settle ${fmt(c.outstanding)}`} color="red" onClick={(e) => openSettle(e, c)} />
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                      {isExpanded && <CustomerDetail customer={c} program={loyaltyProgram} colSpan={11} />}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+                    {/* Account */}
+                    <td className="hidden xl:table-cell px-4 py-2" onClick={(e) => e.stopPropagation()}>
+                      {acc ? (
+                        <button type="button" onClick={() => navigate("/carwash/customers/credit-accounts")}
+                          className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-semibold ${acctTypePill[acc.accountType] || "bg-slate-100 text-slate-600 border-slate-200"} hover:opacity-80`}>
+                          <FaIdCard size={8} />{acc.accountType}
+                        </button>
+                      ) : <span className="text-slate-200 text-[10px]">—</span>}
+                    </td>
+                  </>
+                );
+              }}
+              renderActions={(c) => {
+                const hasPlates      = (c.plates || []).length > 0;
+                const hasOutstanding = c.outstanding > 0.01;
+                return (
+                  <div className="flex items-center justify-end gap-1">
+                    <ActionBtn icon={FaCar} title="View jobs" color="green" onClick={(e) => viewJobs(e, c)} disabled={!hasPlates} />
+                    {canManage && <ActionBtn icon={FaEdit} title="Edit customer" color="amber" onClick={(e) => openEdit(e, c)} />}
+                    {c.phone && <ActionBtn icon={FaCommentDots} title="Send SMS" color="blue" onClick={(e) => openSms(e, c)} />}
+                    {hasOutstanding && canManage && hasPlates && (
+                      <ActionBtn icon={FaMoneyBillWave} title={`Settle ${fmt(c.outstanding)}`} color="red" onClick={(e) => openSettle(e, c)} />
+                    )}
+                  </div>
+                );
+              }}
+            />
           </div>
         </div>
 
         {/* ── Pagination ─────────────────────────────────────────────────────── */}
-        <div className="flex-shrink-0 flex min-h-8 items-center justify-between border-t border-slate-200 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-slate-500 normal-case">Per page:</span>
-            <AppSelect
-              value={limit}
-              onChange={(v) => { setLimit(Number(v ?? 25)); setPage(1); }}
-              options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))}
-              size="sm"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setPage((p) => Math.max(p - 1, 1))} disabled={page <= 1}
-              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45">
-              Previous
-            </button>
-            <span>Page {page} of {pages}</span>
-            <button type="button" onClick={() => setPage((p) => Math.min(p + 1, pages))} disabled={page >= pages}
-              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45">
-              Next
-            </button>
-          </div>
-        </div>
+        <PaginationBar
+          page={page}
+          pages={pages}
+          total={total}
+          pageSize={limit}
+          onPageChange={setPage}
+          onPageSizeChange={(n) => { setLimit(Number(n)); setPage(1); }}
+          loading={loading}
+          label="customers"
+        />
       </div>
 
       {/* ── Bulk SMS modal ─────────────────────────────────────────────────── */}

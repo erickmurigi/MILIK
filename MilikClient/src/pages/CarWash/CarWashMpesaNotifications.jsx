@@ -14,8 +14,10 @@ import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { selectCurrentCompany } from "../../redux/selectors";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import PaginationBar from "../../components/PaginationBar";
+import MilikTable from "../../components/common/MilikTable";
 
-const PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE = 50;
 
 const STATUS_META = {
   matched:   { label: "Matched",   bg: "bg-emerald-50",  border: "border-emerald-200", text: "text-emerald-700", dot: "bg-emerald-500", icon: FaCheckCircle },
@@ -857,7 +859,7 @@ export default function CarWashMpesaNotifications() {
 
   const [notifications, setNotifications] = useState([]);
   const [summary, setSummary] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, limit: PAGE_SIZE, total: 0, pages: 1 });
+  const [pagination, setPagination] = useState({ page: 1, limit: DEFAULT_PAGE_SIZE, total: 0, pages: 1 });
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded]         = useState(null);
   const [assignTarget, setAssignTarget] = useState(null);
@@ -871,6 +873,7 @@ export default function CarWashMpesaNotifications() {
   const [filters, setFilters] = useTabState("/carwash/mpesa-notifications:filters", { status: "", shortCode: "", plate: "", search: "", dateFrom: todayISO(), dateTo: todayISO() });
   const [applied, setApplied] = useTabState("/carwash/mpesa-notifications:applied", { status: "", shortCode: "", plate: "", search: "", dateFrom: todayISO(), dateTo: todayISO() });
   const [page, setPage] = useTabState("/carwash/mpesa-notifications:page", 1);
+  const [pageSize, setPageSize] = useTabState("/carwash/mpesa-notifications:pageSize", DEFAULT_PAGE_SIZE);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -883,17 +886,17 @@ export default function CarWashMpesaNotifications() {
         dateFrom:  applied.dateFrom  || undefined,
         dateTo:    applied.dateTo    || undefined,
         page,
-        limit: PAGE_SIZE,
+        limit: pageSize,
       });
       setNotifications(res?.notifications || res?.data?.notifications || []);
-      setPagination(res?.pagination || res?.data?.pagination || { page: 1, limit: PAGE_SIZE, total: 0, pages: 1 });
+      setPagination(res?.pagination || res?.data?.pagination || { page: 1, limit: pageSize, total: 0, pages: 1 });
       setSummary(res?.summary || res?.data?.summary || []);
     } catch {
       toast.error("Failed to load M-Pesa notifications");
     } finally {
       setLoading(false);
     }
-  }, [applied, page]);
+  }, [applied, page, pageSize]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -1046,195 +1049,166 @@ export default function CarWashMpesaNotifications() {
       </form>
 
       {/* Table */}
-      <div className="overflow-x-auto border border-slate-200 bg-white shadow-sm">
+      <div className="border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center gap-4 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <span>Showing <strong className="text-[#0B3B2E]">{notifications.length}</strong> / {pagination.total}</span>
           <span>Page <strong className="text-[#0B3B2E]">{pagination.page}</strong> / {pagination.pages}</span>
         </div>
 
-        <table className="w-full min-w-[1000px] text-xs">
-          <thead className="bg-[#0B3B2E] text-white">
-            <tr>
-              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Time</th>
-              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Status</th>
-              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Plate (reference)</th>
-              <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide">Amount</th>
-              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Sender Name</th>
-              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Phone</th>
-              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Transaction Code</th>
-              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Matched Job</th>
-              <th className="px-2 py-1.5 text-center font-bold uppercase tracking-wide">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {!loading && notifications.length === 0 && (
-              <tr>
-                <td colSpan={9} className="px-3 py-12 text-center text-xs font-semibold text-slate-400">
-                  No notifications found for the selected filters.
-                </td>
-              </tr>
-            )}
-            {notifications.map((n) => {
-              const canAssign = canRecord && !n.isReversed && (n.status === "unmatched" || n.status === "error");
-              const rowBg = n.isReversed ? "bg-red-50/40" : (STATUS_META[n.status]?.bg || "");
-              return (
-                <React.Fragment key={n._id}>
-                  <tr className={`border-b border-slate-100 hover:bg-slate-50 ${rowBg}`}>
-                    <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{fmtDateTime(n.createdAt)}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex flex-col gap-0.5">
-                        <StatusBadge status={n.status} map={MPESA_STATUS_MAP} />
-                        {n.isReversed && <ReversedBadge />}
-                        {n.shortCode && paybills.length > 1 && (
-                          <span className="inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-500 tracking-wide">
-                            {paybills.find(pb => pb.shortCode === n.shortCode)?.name || n.shortCode}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="font-extrabold text-slate-900 tracking-wider">{n.plate || "—"}</div>
-                      {n.billRefNumber && n.billRefNumber !== n.plate && (
-                        <div className="text-[10px] text-slate-400">raw: {n.billRefNumber}</div>
-                      )}
-                    </td>
-                    <td className={`px-3 py-2 text-right font-extrabold ${n.status === "matched" ? "text-emerald-700" : "text-slate-700"}`}>
-                      {n.amount > 0 ? formatMoney(n.amount) : "—"}
-                    </td>
-                    <td className="px-3 py-2 font-semibold text-slate-700">
-                      {n.senderName || <span className="text-slate-400 italic font-normal">—</span>}
-                    </td>
-                    <td className="px-3 py-2 text-slate-600">
-                      {n.msisdn ? (
-                        <span className="inline-flex items-center gap-1 font-mono">
-                          <FaMobileAlt size={9} className="text-slate-400" />
-                          {n.msisdn.slice(0, 4)}{"***"}{n.msisdn.slice(-3)}
-                        </span>
-                      ) : "—"}
-                    </td>
-                    <td className="px-3 py-2 font-mono text-slate-700">{n.transactionCode || "—"}</td>
-                    <td className="px-3 py-2">
-                      {(() => {
-                        const isManual    = n.resultDesc?.toLowerCase().includes("manually assigned");
-                        const isAllocated = n.notes?.includes("multi-allocation");
-                        const actor       = extractActor(isManual ? n.resultDesc : n.notes);
-                        return n.matchedJob ? (
-                          <div>
-                            <div className="flex flex-wrap items-center gap-1">
-                              <p className={`font-bold ${n.isReversed ? "text-slate-400 line-through" : "text-[#0B3B2E]"}`}>{n.matchedJob.jobNumber}</p>
-                              {isManual && (
-                                <span className="inline-flex items-center border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-amber-700">Manual</span>
-                              )}
-                              {isAllocated && (
-                                <span className="inline-flex items-center border border-violet-300 bg-violet-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-700">Allocated</span>
-                              )}
-                            </div>
-                            <p className="text-[10px] text-slate-500">{n.matchedJob.customerName || n.matchedJob.plateNumber}</p>
-                            {actor && <p className="text-[9px] text-slate-400">by {actor}</p>}
-                            {n.isReversed && <p className="text-[9px] text-red-500 font-semibold">Payment reversed</p>}
-                          </div>
-                        ) : isAllocated ? (
-                          <div>
-                            <div className="flex flex-wrap items-center gap-1">
-                              <span className="text-[10px] text-slate-500 italic">{n.notes?.match(/Allocated to (\d+ job\(s\))/)?.[1] || "Multiple jobs"}</span>
-                              <span className="inline-flex items-center border border-violet-300 bg-violet-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-700">Allocated</span>
-                            </div>
-                            {actor && <p className="text-[9px] text-slate-400">by {actor}</p>}
-                          </div>
-                        ) : (
-                          <span className="text-[10px] text-slate-400 italic">{n.resultDesc || "—"}</span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-2 py-2 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        {canRecord && !n.isReversed && n.amount > 0 && (
-                          n.status === "unmatched" || n.status === "error" ||
-                          (n.allocatedAmount > 0 && n.allocatedAmount < n.amount)
-                        ) && (
-                          <button
-                            type="button"
-                            onClick={() => setAllocateTarget(n)}
-                            className="inline-flex items-center gap-1 border border-violet-300 bg-violet-50 px-2 py-1 text-[10px] font-bold text-violet-700 hover:bg-violet-100"
-                            title="Allocate payment across jobs"
-                          >
-                            <FaCodeBranch size={9} /> Allocate
-                          </button>
-                        )}
-                        {canAssign && (
-                          <button
-                            type="button"
-                            onClick={() => setAssignTarget(n)}
-                            className="inline-flex items-center gap-1 border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700 hover:bg-amber-100"
-                            title="Assign to correct job"
-                          >
-                            <FaLink size={9} /> Assign
-                          </button>
-                        )}
-                        {canEdit && !n.isReversed && n.status !== "matched" && (
-                          <button
-                            type="button"
-                            onClick={() => setReverseTarget(n)}
-                            className="inline-flex items-center gap-1 border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-bold text-red-600 hover:bg-red-100"
-                            title="Mark as reversed — blocks all allocation"
-                          >
-                            <FaBan size={9} /> Reversed
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setExpanded(expanded === n._id ? null : n._id)}
-                          className="text-[10px] font-bold text-slate-400 hover:text-slate-700 px-1"
-                          title="View raw payload"
-                        >
-                          {expanded === n._id ? "▲" : "▼"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  {expanded === n._id && (
-                    <tr className="border-b border-slate-100 bg-slate-50">
-                      <td colSpan={9} className="px-4 py-3">
-                        <div className="mb-1.5 flex items-center gap-2">
-                          <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Raw Safaricom Payload</span>
-                          {n.notes && (
-                            <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5">
-                              {n.notes}
-                            </span>
-                          )}
-                        </div>
-                        <pre className="max-h-48 overflow-auto rounded border border-slate-200 bg-white p-3 text-[10px] font-mono text-slate-700">
-                          {JSON.stringify(n.rawPayload, null, 2)}
-                        </pre>
-                      </td>
-                    </tr>
+        <MilikTable
+          columns={[
+            { label: "Time" },
+            { label: "Status" },
+            { label: "Plate (reference)" },
+            { label: "Amount", align: "right" },
+            { label: "Sender Name" },
+            { label: "Phone" },
+            { label: "Transaction Code" },
+            { label: "Matched Job" },
+          ]}
+          rows={notifications}
+          rowKey="_id"
+          loading={loading}
+          empty="No notifications found for the selected filters."
+          minWidth="1000px"
+          rowClassName={(n) => n.isReversed ? "!bg-red-50/40" : (STATUS_META[n.status]?.bg ? `!${STATUS_META[n.status].bg}` : "")}
+          renderRow={(n) => (
+            <>
+              <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{fmtDateTime(n.createdAt)}</td>
+              <td className="px-3 py-2">
+                <div className="flex flex-col gap-0.5">
+                  <StatusBadge status={n.status} map={MPESA_STATUS_MAP} />
+                  {n.isReversed && <ReversedBadge />}
+                  {n.shortCode && paybills.length > 1 && (
+                    <span className="inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-500 tracking-wide">
+                      {paybills.find(pb => pb.shortCode === n.shortCode)?.name || n.shortCode}
+                    </span>
                   )}
-                </React.Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+                </div>
+              </td>
+              <td className="px-3 py-2">
+                <div className="font-extrabold text-slate-900 tracking-wider">{n.plate || "—"}</div>
+                {n.billRefNumber && n.billRefNumber !== n.plate && (
+                  <div className="text-[10px] text-slate-400">raw: {n.billRefNumber}</div>
+                )}
+              </td>
+              <td className={`px-3 py-2 text-right font-extrabold ${n.status === "matched" ? "text-emerald-700" : "text-slate-700"}`}>
+                {n.amount > 0 ? formatMoney(n.amount) : "—"}
+              </td>
+              <td className="px-3 py-2 font-semibold text-slate-700">
+                {n.senderName || <span className="text-slate-400 italic font-normal">—</span>}
+              </td>
+              <td className="px-3 py-2 text-slate-600">
+                {n.msisdn ? (
+                  <span className="inline-flex items-center gap-1 font-mono">
+                    <FaMobileAlt size={9} className="text-slate-400" />
+                    {n.msisdn.slice(0, 4)}{"***"}{n.msisdn.slice(-3)}
+                  </span>
+                ) : "—"}
+              </td>
+              <td className="px-3 py-2 font-mono text-slate-700">{n.transactionCode || "—"}</td>
+              <td className="px-3 py-2">
+                {(() => {
+                  const isManual    = n.resultDesc?.toLowerCase().includes("manually assigned");
+                  const isAllocated = n.notes?.includes("multi-allocation");
+                  const actor       = extractActor(isManual ? n.resultDesc : n.notes);
+                  return n.matchedJob ? (
+                    <div>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <p className={`font-bold ${n.isReversed ? "text-slate-400 line-through" : "text-[#0B3B2E]"}`}>{n.matchedJob.jobNumber}</p>
+                        {isManual && (
+                          <span className="inline-flex items-center border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-amber-700">Manual</span>
+                        )}
+                        {isAllocated && (
+                          <span className="inline-flex items-center border border-violet-300 bg-violet-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-700">Allocated</span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-500">{n.matchedJob.customerName || n.matchedJob.plateNumber}</p>
+                      {actor && <p className="text-[9px] text-slate-400">by {actor}</p>}
+                      {n.isReversed && <p className="text-[9px] text-red-500 font-semibold">Payment reversed</p>}
+                    </div>
+                  ) : isAllocated ? (
+                    <div>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <span className="text-[10px] text-slate-500 italic">{n.notes?.match(/Allocated to (\d+ job\(s\))/)?.[1] || "Multiple jobs"}</span>
+                        <span className="inline-flex items-center border border-violet-300 bg-violet-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-700">Allocated</span>
+                      </div>
+                      {actor && <p className="text-[9px] text-slate-400">by {actor}</p>}
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-slate-400 italic">{n.resultDesc || "—"}</span>
+                  );
+                })()}
+              </td>
+            </>
+          )}
+          renderActions={(n) => {
+            const canAssign = canRecord && !n.isReversed && (n.status === "unmatched" || n.status === "error");
+            return (
+              <div className="flex items-center justify-center gap-1.5">
+                {canRecord && !n.isReversed && n.amount > 0 && (
+                  n.status === "unmatched" || n.status === "error" ||
+                  (n.allocatedAmount > 0 && n.allocatedAmount < n.amount)
+                ) && (
+                  <button
+                    type="button"
+                    onClick={() => setAllocateTarget(n)}
+                    className="inline-flex items-center gap-1 border border-violet-300 bg-violet-50 px-2 py-1 text-[10px] font-bold text-violet-700 hover:bg-violet-100"
+                    title="Allocate payment across jobs"
+                  >
+                    <FaCodeBranch size={9} /> Allocate
+                  </button>
+                )}
+                {canAssign && (
+                  <button
+                    type="button"
+                    onClick={() => setAssignTarget(n)}
+                    className="inline-flex items-center gap-1 border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700 hover:bg-amber-100"
+                    title="Assign to correct job"
+                  >
+                    <FaLink size={9} /> Assign
+                  </button>
+                )}
+                {canEdit && !n.isReversed && n.status !== "matched" && (
+                  <button
+                    type="button"
+                    onClick={() => setReverseTarget(n)}
+                    className="inline-flex items-center gap-1 border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-bold text-red-600 hover:bg-red-100"
+                    title="Mark as reversed — blocks all allocation"
+                  >
+                    <FaBan size={9} /> Reversed
+                  </button>
+                )}
+              </div>
+            );
+          }}
+          renderExpanded={(n) => (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Raw Safaricom Payload</span>
+                {n.notes && (
+                  <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5">
+                    {n.notes}
+                  </span>
+                )}
+              </div>
+              <pre className="max-h-48 overflow-auto rounded border border-slate-200 bg-white p-3 text-[10px] font-mono text-slate-700">
+                {JSON.stringify(n.rawPayload, null, 2)}
+              </pre>
+            </div>
+          )}
+        />
 
-        <div className="flex min-h-9 items-center justify-between border-t border-slate-200 px-3 py-1.5 text-[11px] font-bold text-slate-600">
-          <span>{PAGE_SIZE} per page</span>
-          <div className="flex items-center gap-2">
-            <button
-              disabled={page <= 1 || loading}
-              onClick={() => setPage(p => p - 1)}
-              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-45"
-            >
-              Previous
-            </button>
-            <span>Page {pagination.page} of {pagination.pages}</span>
-            <button
-              disabled={page >= pagination.pages || loading}
-              onClick={() => setPage(p => p + 1)}
-              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-45"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        <PaginationBar
+          page={pagination.page}
+          pages={pagination.pages}
+          total={pagination.total}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+          loading={loading}
+          label="notifications"
+        />
       </div>
     </CarWashShell>
   );

@@ -6,18 +6,20 @@ import {
   FaClipboardCheck, FaUser, FaBuilding, FaUserTie,
 } from 'react-icons/fa';
 import AppSelect from "../../components/common/AppSelect";
+import PaginationBar from "../../components/PaginationBar";
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 import { fmtDate } from '../../utils/dates';
+import MilikTable from '../../components/common/MilikTable';
 
 const STATUS_PILL = {
   Pending:    'border-slate-300 bg-slate-50 text-slate-500',
   InProgress: 'border-amber-300 bg-amber-50 text-amber-700',
   Submitted:  'border-emerald-300 bg-emerald-50 text-emerald-700',
 };
-const PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = 25;
 const F  = 'h-7 rounded border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]';
 const FW = `${F} w-full`;
 
@@ -39,7 +41,8 @@ export default function Appraisals() {
   const [cycleId, setCycleId]       = useTabState('/hr/appraisals:cycleId', '');
   const [statusFilter, setStatus]   = useTabState('/hr/appraisals:statusFilter', '');
   const [search, setSearch]         = useTabState('/hr/appraisals:search', '');
-  const [page, setPage]             = useTabState('/hr/appraisals:page', 1);
+  const [page,     setPage]     = useTabState('/hr/appraisals:page', 1);
+  const [pageSize, setPageSize] = useTabState('/hr/appraisals:pageSize', DEFAULT_PAGE_SIZE);
 
   const [selected, setSelected]       = useTabState('/hr/appraisals:selected', null);
   const [scores, setScores]           = useState([]);
@@ -56,9 +59,9 @@ export default function Appraisals() {
   });
 
   const { data: apprData, isLoading: loading, error, refetch } = useQuery({
-    queryKey: ['hr-appraisals', cycleId, statusFilter, search, page],
+    queryKey: ['hr-appraisals', cycleId, statusFilter, search, page, pageSize],
     queryFn: async () => {
-      const params = { page, limit: PAGE_SIZE };
+      const params = { page, limit: pageSize };
       if (cycleId)      params.cycleId = cycleId;
       if (statusFilter) params.status  = statusFilter;
       if (search)       params.search  = search;
@@ -119,7 +122,7 @@ export default function Appraisals() {
     finally { setSubmitting(false); }
   };
 
-  const totalPages = useMemo(() => Math.ceil(total / PAGE_SIZE), [total]);
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
   const nPending   = useMemo(() => appraisals.filter((a) => a.status === 'Pending').length,    [appraisals]);
   const nInProg    = useMemo(() => appraisals.filter((a) => a.status === 'InProgress').length, [appraisals]);
   const nSubmitted = useMemo(() => appraisals.filter((a) => a.status === 'Submitted').length,  [appraisals]);
@@ -188,72 +191,56 @@ export default function Appraisals() {
         </div>
 
         {/* ── Table ── */}
-        <div className="flex-1 overflow-auto">
-          <table className="min-w-full text-[11px] border-collapse">
-            <thead className="sticky top-0 z-10 shadow-sm">
-              <tr className="bg-[#0B3B2E] text-white">
-                <th className="px-3 py-1 text-left font-bold w-8 border-r border-white/10">#</th>
-                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Employee</th>
-                <th className="px-3 py-1 text-left font-bold w-36 border-r border-white/10">Department</th>
-                <th className="px-3 py-1 text-left font-bold w-40 border-r border-white/10">Designation</th>
-                <th className="px-3 py-1 text-left font-bold w-44 border-r border-white/10">Cycle</th>
-                <th className="px-3 py-1 text-center font-bold w-28 border-r border-white/10">Score</th>
-                <th className="px-3 py-1 text-center font-bold w-24 border-r border-white/10">Status</th>
-                <th className="px-3 py-1 text-center font-bold w-24 border-r border-white/10">Submitted</th>
-                <th className="px-3 py-1 w-6" />
-              </tr>
-            </thead>
-            <tbody>
-              {loading && <tr><td colSpan={9} className="py-8 text-center text-[11px] text-slate-400">Loading…</td></tr>}
-              {!loading && !appraisals.length && (
-                <tr><td colSpan={9} className="py-10 text-center text-[11px] text-slate-400">
-                  {cycleId ? 'No appraisals match the selected filters.' : 'Select a cycle above to view employee appraisals.'}
-                </td></tr>
-              )}
-              {!loading && appraisals.map((a, idx) => (
-                <tr key={a._id} onClick={() => openScoring(a)} className={`cursor-pointer border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
-                  <td className="px-3 py-1 text-slate-400 tabular-nums border-r border-gray-100">{(page - 1) * PAGE_SIZE + idx + 1}</td>
-                  <td className="px-3 py-1 border-r border-gray-100">
-                    <span className="font-semibold text-slate-800">{a.snapshot.name}</span>
-                    <span className="ml-1.5 text-[10px] text-slate-400 tabular-nums">{a.snapshot.employeeNumber}</span>
-                  </td>
-                  <td className="px-3 py-1 text-slate-600 border-r border-gray-100">{a.snapshot.department || '—'}</td>
-                  <td className="px-3 py-1 text-slate-500 border-r border-gray-100">{a.snapshot.designation || '—'}</td>
-                  <td className="px-3 py-1 text-slate-600 border-r border-gray-100">
-                    {a.cycle?.name} <span className="text-slate-400">({a.cycle?.year})</span>
-                  </td>
-                  <td className="px-3 py-1 border-r border-gray-100"><div className="flex justify-center"><MiniBar score={a.overallScore} maxScore={100} /></div></td>
-                  <td className="px-3 py-1 text-center border-r border-gray-100">
-                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${STATUS_PILL[a.status]}`}>
-                      {a.status === 'InProgress' ? 'In Progress' : a.status}
-                    </span>
-                  </td>
-                  <td className="px-3 py-1 text-center text-[10px] text-slate-400 tabular-nums border-r border-gray-100">{fmtDate(a.submittedAt)}</td>
-                  <td className="px-3 py-1 text-center"><FaChevronRight size={8} className="text-slate-300" /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <MilikTable
+          columns={[
+            { label: '#', width: '2rem' },
+            { label: 'Employee' },
+            { label: 'Department', width: '9rem' },
+            { label: 'Designation', width: '10rem' },
+            { label: 'Cycle', width: '11rem' },
+            { label: 'Score', align: 'center', width: '7rem' },
+            { label: 'Status', align: 'center', width: '6rem' },
+            { label: 'Submitted', align: 'center', width: '6rem' },
+          ]}
+          rows={appraisals}
+          loading={loading}
+          empty={cycleId ? 'No appraisals match the selected filters.' : 'Select a cycle above to view employee appraisals.'}
+          onRowClick={openScoring}
+          renderRow={(a, idx) => (
+            <>
+              <td className="px-3 py-1 text-slate-400 tabular-nums border-r border-gray-100">{(page - 1) * pageSize + idx + 1}</td>
+              <td className="px-3 py-1 border-r border-gray-100">
+                <span className="font-semibold text-slate-800">{a.snapshot.name}</span>
+                <span className="ml-1.5 text-[10px] text-slate-400 tabular-nums">{a.snapshot.employeeNumber}</span>
+              </td>
+              <td className="px-3 py-1 text-slate-600 border-r border-gray-100">{a.snapshot.department || '—'}</td>
+              <td className="px-3 py-1 text-slate-500 border-r border-gray-100">{a.snapshot.designation || '—'}</td>
+              <td className="px-3 py-1 text-slate-600 border-r border-gray-100">
+                {a.cycle?.name} <span className="text-slate-400">({a.cycle?.year})</span>
+              </td>
+              <td className="px-3 py-1 border-r border-gray-100"><div className="flex justify-center"><MiniBar score={a.overallScore} maxScore={100} /></div></td>
+              <td className="px-3 py-1 text-center border-r border-gray-100">
+                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${STATUS_PILL[a.status]}`}>
+                  {a.status === 'InProgress' ? 'In Progress' : a.status}
+                </span>
+              </td>
+              <td className="px-3 py-1 text-center text-[10px] text-slate-400 tabular-nums border-r border-gray-100">{fmtDate(a.submittedAt)}</td>
+            </>
+          )}
+          renderActions={() => <FaChevronRight size={8} className="text-slate-300" />}
+        />
 
         {/* ── Pagination ── */}
-        <div className="flex flex-none items-center justify-between border-t border-slate-200 bg-white px-4 py-1.5 text-[11px] text-slate-500">
-          <span>Showing {total ? (page - 1) * PAGE_SIZE + 1 : 0}–{Math.min(page * PAGE_SIZE, total)} of {total} appraisal{total !== 1 ? 's' : ''}</span>
-          <div className="flex items-center gap-1">
-            <button disabled={page === 1} onClick={() => setPage(1)} className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] hover:bg-slate-50 disabled:opacity-30">«</button>
-            <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] hover:bg-slate-50 disabled:opacity-30">‹</button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
-              .reduce((acc, p, i, arr) => { if (i > 0 && p - arr[i - 1] > 1) acc.push('…'); acc.push(p); return acc; }, [])
-              .map((p, i) => p === '…'
-                ? <span key={`e${i}`} className="px-0.5 text-slate-300">…</span>
-                : <button key={p} onClick={() => setPage(p)} className={`h-5 w-5 rounded text-[10px] font-semibold ${page === p ? 'bg-[#0B3B2E] text-white' : 'border border-slate-200 text-slate-500 hover:bg-slate-50'}`}>{p}</button>
-              )
-            }
-            <button disabled={page === totalPages} onClick={() => setPage((p) => p + 1)} className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] hover:bg-slate-50 disabled:opacity-30">›</button>
-            <button disabled={page === totalPages} onClick={() => setPage(totalPages)} className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] hover:bg-slate-50 disabled:opacity-30">»</button>
-          </div>
-        </div>
+        <PaginationBar
+          page={page}
+          pages={totalPages}
+          total={total}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+          loading={loading}
+          label="appraisals"
+        />
       </div>
 
       {/* ── Scoring Drawer ── */}

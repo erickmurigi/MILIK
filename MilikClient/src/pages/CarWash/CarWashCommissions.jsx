@@ -9,11 +9,13 @@ import useCarWashPermission from "../../hooks/useCarWashPermission";
 import CarWashShell from "./CarWashShell";
 import AppSelect from "../../components/common/AppSelect";
 import StatusBadge from "../../components/common/StatusBadge";
+import PaginationBar from "../../components/PaginationBar";
+import MilikTable from "../../components/common/MilikTable";
 
 const fmtSvc = (svc, fallback = "—") => svc ? (svc.category ? `${svc.category} — ${svc.name}` : svc.name) : fallback;
 const statuses     = ["earned", "payable", "paid", "cancelled"];
 const statusLabels = { earned: "Earned", payable: "Payable", paid: "Paid", cancelled: "Cancelled" };
-const PAGE_SIZE    = 30;
+const DEFAULT_PAGE_SIZE = 30;
 
 const getMonthBounds = () => {
   const now   = new Date();
@@ -43,6 +45,7 @@ const CarWashCommissions = () => {
   const [filters, setFilters]         = useTabState("/carwash/commissions:filters", emptyFilters);
   const [applied, setApplied]         = useTabState("/carwash/commissions:applied", emptyFilters);
   const [page, setPage]               = useTabState("/carwash/commissions:page", 1);
+  const [pageSize, setPageSize]       = useTabState("/carwash/commissions:pageSize", DEFAULT_PAGE_SIZE);
 
   // Reversal modal state
   const [reverseTarget, setReverseTarget] = useState(null);
@@ -50,14 +53,14 @@ const CarWashCommissions = () => {
   const [isReversing, setIsReversing]     = useState(false);
 
   const { data: commData, isLoading: loading, error, refetch } = useQuery({
-    queryKey: ["cw-commissions", applied, page],
+    queryKey: ["cw-commissions", applied, page, pageSize],
     queryFn: () => carWashApi.listCommissions({
       status:   applied.status   || undefined,
       staff:    applied.staff    || undefined,
       dateFrom: applied.dateFrom || undefined,
       dateTo:   applied.dateTo   || undefined,
       page,
-      limit: PAGE_SIZE,
+      limit: pageSize,
     }),
     placeholderData: (prev) => prev,
     staleTime: 30_000,
@@ -72,7 +75,7 @@ const CarWashCommissions = () => {
   useEffect(() => { if (error) toast.error("Failed to load commissions"); }, [error]);
 
   const commissions = normalizeListPayload(commData, "commissions");
-  const pagination = commData?.pagination || { page, limit: PAGE_SIZE, total: commissions.length, pages: 1 };
+  const pagination = commData?.pagination || { page, limit: pageSize, total: commissions.length, pages: 1 };
   const summary = commData?.summary || { total: { amount: 0, count: commissions.length } };
   const staff = normalizeListPayload(staffRaw, "staff");
 
@@ -180,90 +183,68 @@ const CarWashCommissions = () => {
           {loading && <span className="text-slate-400">Loading…</span>}
         </div>
 
-        <div className="flex-1 min-h-0 overflow-x-auto">
-          <table className="w-full min-w-[800px] text-xs">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Staff</th>
-                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Job</th>
-                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Service</th>
-                <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide text-slate-500">Base Price</th>
-                <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide text-slate-500">Rate</th>
-                <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide text-slate-500">Commission</th>
-                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Status</th>
-                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Earned On</th>
-                {showActionCol && <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Action</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {commissions.length ? commissions.map((row) => {
-                const isCancelled = row.status === "cancelled";
-                return (
-                  <tr key={row._id} className={`border-b border-slate-100 ${isCancelled ? "opacity-50" : "hover:bg-slate-50"}`}>
-                    <td className={`px-3 py-2 font-extrabold text-slate-900 ${isCancelled ? "line-through" : ""}`}>{row.staff?.name || "—"}</td>
-                    <td className="px-3 py-2 font-mono text-[11px] text-[#0B3B2E]">{row.jobNumber || row.job?.jobNumber || "—"}</td>
-                    <td className="px-3 py-2 text-slate-700">{fmtSvc(row.service, row.serviceName || "—")}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{formatMoney(row.baseAmount)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-500">
-                      {row.commissionType === "percentage" ? `${row.commissionRate}%` : formatMoney(row.commissionRate)}
-                    </td>
-                    <td className={`px-3 py-2 text-right font-extrabold tabular-nums text-slate-900 ${isCancelled ? "line-through" : ""}`}>{formatMoney(row.commissionAmount)}</td>
-                    <td className="px-3 py-2">
-                      <StatusBadge status={row.status} map={STATUS_MAP} />
-                    </td>
-                    <td className="px-3 py-2 text-slate-500">
-                      {row.earnedAt ? new Date(row.earnedAt).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
-                    </td>
-                    {showActionCol && (
-                      <td className="px-3 py-2">
-                        {(row.status === "earned" || row.status === "payable") && (
-                          <button
-                            type="button"
-                            onClick={() => openReverseModal(row)}
-                            className="inline-flex h-6 items-center gap-1 border border-rose-300 bg-rose-50 px-2 text-[10px] font-bold text-rose-700 hover:bg-rose-100"
-                            title="Reverse this commission"
-                          >
-                            <FaUndo size={8} /> Reverse
-                          </button>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                );
-              }) : (
-                <tr>
-                  <td colSpan={showActionCol ? 9 : 8} className="px-3 py-12 text-center text-xs font-semibold text-slate-400">
-                    No commissions found for the selected filters.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <MilikTable
+          columns={[
+            { label: "Staff" },
+            { label: "Job" },
+            { label: "Service" },
+            { label: "Base Price", align: "right" },
+            { label: "Rate", align: "right" },
+            { label: "Commission", align: "right" },
+            { label: "Status" },
+            { label: "Earned On" },
+          ]}
+          rows={commissions}
+          loading={loading}
+          empty="No commissions found for the selected filters."
+          minWidth="800px"
+          rowClassName={(row) => row.status === "cancelled" ? "opacity-50" : ""}
+          renderRow={(row) => {
+            const isCancelled = row.status === "cancelled";
+            return (
+              <>
+                <td className={`px-3 py-2 font-extrabold text-slate-900 ${isCancelled ? "line-through" : ""}`}>{row.staff?.name || "—"}</td>
+                <td className="px-3 py-2 font-mono text-[11px] text-[#0B3B2E]">{row.jobNumber || row.job?.jobNumber || "—"}</td>
+                <td className="px-3 py-2 text-slate-700">{fmtSvc(row.service, row.serviceName || "—")}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{formatMoney(row.baseAmount)}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-slate-500">
+                  {row.commissionType === "percentage" ? `${row.commissionRate}%` : formatMoney(row.commissionRate)}
+                </td>
+                <td className={`px-3 py-2 text-right font-extrabold tabular-nums text-slate-900 ${isCancelled ? "line-through" : ""}`}>{formatMoney(row.commissionAmount)}</td>
+                <td className="px-3 py-2">
+                  <StatusBadge status={row.status} map={STATUS_MAP} />
+                </td>
+                <td className="px-3 py-2 text-slate-500">
+                  {row.earnedAt ? new Date(row.earnedAt).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                </td>
+              </>
+            );
+          }}
+          renderActions={showActionCol ? (row) => (
+            (row.status === "earned" || row.status === "payable") ? (
+              <button
+                type="button"
+                onClick={() => openReverseModal(row)}
+                className="inline-flex h-6 items-center gap-1 border border-rose-300 bg-rose-50 px-2 text-[10px] font-bold text-rose-700 hover:bg-rose-100"
+                title="Reverse this commission"
+              >
+                <FaUndo size={8} /> Reverse
+              </button>
+            ) : null
+          ) : undefined}
+        />
 
         {/* Pagination */}
-        <div className="flex-shrink-0 flex min-h-9 items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-          <span className="font-semibold normal-case text-slate-500">Per page: {PAGE_SIZE}</span>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.max(p - 1, 1))}
-              disabled={page <= 1 || loading}
-              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              Previous
-            </button>
-            <span>Page {pagination.page} of {pagination.pages}</span>
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.min(p + 1, pagination.pages))}
-              disabled={page >= pagination.pages || loading}
-              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        <PaginationBar
+          page={pagination.page}
+          pages={pagination.pages}
+          total={pagination.total}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+          loading={loading}
+          label="commissions"
+        />
       </div>
 
       {/* Reversal confirmation modal */}

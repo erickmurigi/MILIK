@@ -5,7 +5,7 @@ import { useSelector } from 'react-redux';
 import { useTabState } from "../../hooks/useTabState";
 import {
   FaSearch, FaUserPlus, FaEdit, FaRedoAlt, FaUserTimes,
-  FaUserCheck, FaEye, FaFilter, FaPrint,
+  FaUserCheck, FaEye, FaPrint,
 } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
@@ -35,6 +35,7 @@ const STATUS_OPTIONS = ["Active", "Probation", "Suspended", "Terminated"].map((s
 const TYPE_OPTIONS   = ["Permanent", "Contract", "Casual", "Intern"].map((t) => ({ value: t, label: t }));
 
 import PaginationBar from '../../components/PaginationBar';
+import MilikTable from '../../components/common/MilikTable';
 
 export default function Employees() {
   const navigate = useNavigate();
@@ -288,87 +289,75 @@ export default function Employees() {
         </div>
 
         {/* Table */}
-        <div className="min-h-0 flex-1 overflow-auto">
-          {loading ? (
-            <div className="flex h-40 items-center justify-center text-sm text-slate-400">Loading employees...</div>
-          ) : employees.length === 0 ? (
-            <div className="flex h-40 flex-col items-center justify-center gap-2 text-slate-400">
-              <FaFilter size={24} />
-              <p className="text-sm font-semibold">No employees match the current filters</p>
-            </div>
-          ) : (
-            <table className="min-w-full text-[11px] border-collapse">
-              <thead className="sticky top-0 z-10">
-                <tr className="bg-[#0B3B2E] text-white">
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Employee</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Department</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Designation</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date Joined</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
-                  <th className="px-3 py-1 text-right font-bold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {employees.map((emp, idx) => (
-                  <tr key={emp._id} className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
-                    <td className="px-3 py-1 border-r border-gray-100">
-                      <div className="flex items-center gap-2">
-                        {emp.profilePicture ? (
-                          <img
-                            src={emp.profilePicture}
-                            alt={initials(emp.surname, emp.otherNames)}
-                            className="h-7 w-7 shrink-0 rounded object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-emerald-100 text-[10px] font-black text-emerald-800">
-                            {initials(emp.surname, emp.otherNames)}
-                          </div>
-                        )}
-                        <div>
-                          <div className="font-black text-slate-900">{emp.surname} {emp.otherNames}</div>
-                          <div className="text-[10px] text-slate-400">{emp.employeeNumber} {emp.phoneNumber ? `· ${emp.phoneNumber}` : ''}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-700">{emp.department?.name || <span className="text-slate-300">—</span>}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{emp.designation?.name || <span className="text-slate-300">—</span>}</td>
-                    <td className="px-3 py-1 border-r border-gray-100">
-                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${TYPE_BADGE[emp.employmentType] || 'border-slate-200 bg-slate-100 text-slate-600'}`}>
-                        {emp.employmentType}
-                      </span>
-                    </td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{fmtDate(emp.dateJoined)}</td>
-                    <td className="px-3 py-1 border-r border-gray-100">
-                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black ${STATUS_BADGE[emp.status] || 'border-slate-200 bg-slate-50 text-slate-600'}`}>
-                        {emp.status}
-                      </span>
-                    </td>
-                    <td className="px-3 py-1">
-                      <div className="flex flex-wrap justify-end gap-1">
-                        <button onClick={() => navigate(`/hr/employees/${emp._id}`)} className="inline-flex items-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-black text-indigo-700 hover:bg-indigo-100">
-                          <FaEye size={9} /> View
-                        </button>
-                        <button onClick={() => navigate(`/hr/employees/${emp._id}/edit`)} className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-black text-slate-700 hover:bg-slate-100">
-                          <FaEdit size={9} /> Edit
-                        </button>
-                        {emp.status !== 'Terminated' ? (
-                          <button onClick={() => handleTerminate(emp)} className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-700 hover:bg-rose-100">
-                            <FaUserTimes size={9} /> Terminate
-                          </button>
-                        ) : (
-                          <button onClick={() => handleReinstate(emp)} className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 hover:bg-emerald-100">
-                            <FaUserCheck size={9} /> Reinstate
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <MilikTable
+          columns={[
+            { label: 'Employee' },
+            { label: 'Department' },
+            { label: 'Designation' },
+            { label: 'Type' },
+            { label: 'Date Joined' },
+            { label: 'Status' },
+          ]}
+          rows={employees}
+          loading={loading}
+          empty="No employees match the current filters."
+          minWidth="700px"
+          renderRow={(emp) => (
+            <>
+              <td className="px-3 py-1 border-r border-gray-100">
+                <div className="flex items-center gap-2">
+                  {emp.profilePicture ? (
+                    <img
+                      src={emp.profilePicture}
+                      alt={initials(emp.surname, emp.otherNames)}
+                      className="h-7 w-7 shrink-0 rounded object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-emerald-100 text-[10px] font-black text-emerald-800">
+                      {initials(emp.surname, emp.otherNames)}
+                    </div>
+                  )}
+                  <div>
+                    <div className="font-black text-slate-900">{emp.surname} {emp.otherNames}</div>
+                    <div className="text-[10px] text-slate-400">{emp.employeeNumber} {emp.phoneNumber ? `· ${emp.phoneNumber}` : ''}</div>
+                  </div>
+                </div>
+              </td>
+              <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-700">{emp.department?.name || <span className="text-slate-300">—</span>}</td>
+              <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{emp.designation?.name || <span className="text-slate-300">—</span>}</td>
+              <td className="px-3 py-1 border-r border-gray-100">
+                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${TYPE_BADGE[emp.employmentType] || 'border-slate-200 bg-slate-100 text-slate-600'}`}>
+                  {emp.employmentType}
+                </span>
+              </td>
+              <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{fmtDate(emp.dateJoined)}</td>
+              <td className="px-3 py-1 border-r border-gray-100">
+                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black ${STATUS_BADGE[emp.status] || 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+                  {emp.status}
+                </span>
+              </td>
+            </>
           )}
-        </div>
+          renderActions={(emp) => (
+            <div className="flex flex-wrap justify-end gap-1">
+              <button onClick={() => navigate(`/hr/employees/${emp._id}`)} className="inline-flex items-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-black text-indigo-700 hover:bg-indigo-100">
+                <FaEye size={9} /> View
+              </button>
+              <button onClick={() => navigate(`/hr/employees/${emp._id}/edit`)} className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-black text-slate-700 hover:bg-slate-100">
+                <FaEdit size={9} /> Edit
+              </button>
+              {emp.status !== 'Terminated' ? (
+                <button onClick={() => handleTerminate(emp)} className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-700 hover:bg-rose-100">
+                  <FaUserTimes size={9} /> Terminate
+                </button>
+              ) : (
+                <button onClick={() => handleReinstate(emp)} className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 hover:bg-emerald-100">
+                  <FaUserCheck size={9} /> Reinstate
+                </button>
+              )}
+            </div>
+          )}
+        />
 
         <PaginationBar
           page={page}

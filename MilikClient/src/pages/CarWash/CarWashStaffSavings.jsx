@@ -22,6 +22,8 @@ import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import PaginationBar from "../../components/PaginationBar";
+import MilikTable from "../../components/common/MilikTable";
 import { fmtDate, todayISO } from "../../utils/dates";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -54,7 +56,7 @@ const typePillClass = (type) =>
   : type === "deduction"  ? "border-orange-200 bg-orange-50 text-[#C8511A]"
   :                         "border-slate-200 bg-slate-50 text-slate-400";
 
-const DETAIL_LIMIT = 30;
+const DEFAULT_DETAIL_LIMIT = 30;
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
 
@@ -88,7 +90,8 @@ const CarWashStaffSavings = () => {
   const [recordsLoading,  setRecordsLoading]  = useState(false);
   const [detailFrom,      setDetailFrom]      = useTabState("/carwash/commissions/savings:detailFrom", "");
   const [detailTo,        setDetailTo]        = useTabState("/carwash/commissions/savings:detailTo", todayISO());
-  const [detailPage,      setDetailPage]      = useTabState("/carwash/commissions/savings:detailPage", 1);
+  const [detailPage,     setDetailPage]     = useTabState("/carwash/commissions/savings:detailPage", 1);
+  const [detailPageSize, setDetailPageSize] = useTabState("/carwash/commissions/savings:detailPageSize", DEFAULT_DETAIL_LIMIT);
   const detailRef   = useRef(null);
   const prevStaffId = useRef(null);
 
@@ -142,10 +145,10 @@ const CarWashStaffSavings = () => {
     finally { setBalancesLoading(false); }
   }, [syncSelected]);
 
-  const loadRecords = useCallback(async (staffId, from, to, page) => {
+  const loadRecords = useCallback(async (staffId, from, to, page, limit) => {
     setRecordsLoading(true);
     try {
-      const res = await carWashApi.listSavings({ staff: staffId, dateFrom: from || undefined, dateTo: to, page, limit: DETAIL_LIMIT });
+      const res = await carWashApi.listSavings({ staff: staffId, dateFrom: from || undefined, dateTo: to, page, limit });
       setRecords(normalizeListPayload(res, "records"));
       setRecordsTotal(res?.pagination?.total ?? 0);
     } catch { setRecords([]); setRecordsTotal(0); }
@@ -155,8 +158,8 @@ const CarWashStaffSavings = () => {
   useEffect(() => { loadBalances(); }, [loadBalances]);
   useEffect(() => {
     if (!selectedStaff) return;
-    loadRecords(selectedStaff.staffId, detailFrom, detailTo, detailPage);
-  }, [selectedStaff, detailFrom, detailTo, detailPage, loadRecords]);
+    loadRecords(selectedStaff.staffId, detailFrom, detailTo, detailPage, detailPageSize);
+  }, [selectedStaff, detailFrom, detailTo, detailPage, detailPageSize, loadRecords]);
   useEffect(() => {
     prevStaffId.current = selectedStaff?.staffId ?? null;
   }, [selectedStaff]);
@@ -293,7 +296,7 @@ const CarWashStaffSavings = () => {
       toast.success(`Savings disbursed to ${disburseStaff.staffName}`);
       setShowDisburse(false);
       loadBalances();
-      if (selectedStaff?.staffId === disburseStaff.staffId) loadRecords(selectedStaff.staffId, detailFrom, detailTo, detailPage);
+      if (selectedStaff?.staffId === disburseStaff.staffId) loadRecords(selectedStaff.staffId, detailFrom, detailTo, detailPage, detailPageSize);
     } catch (err) { toast.error(err?.response?.data?.message || "Disbursement failed"); }
     finally { setDisbursing(false); }
   };
@@ -306,12 +309,12 @@ const CarWashStaffSavings = () => {
       toast.success("Savings payout reversed");
       setReverseTarget(null); setReverseNotes("");
       loadBalances();
-      loadRecords(selectedStaff.staffId, detailFrom, detailTo, detailPage);
+      loadRecords(selectedStaff.staffId, detailFrom, detailTo, detailPage, detailPageSize);
     } catch (err) { toast.error(err?.response?.data?.message || "Reversal failed"); }
     finally { setReversing(false); }
   };
 
-  const totalPages = Math.max(Math.ceil(recordsTotal / DETAIL_LIMIT), 1);
+  const totalPages = Math.max(Math.ceil(recordsTotal / detailPageSize), 1);
 
   return (
     <CarWashShell
@@ -372,144 +375,105 @@ const CarWashStaffSavings = () => {
             <span className="flex items-center gap-1 text-[9px] text-slate-500"><span className="inline-block h-2 w-3 rounded-sm bg-emerald-400" /> Paid out to staff</span>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-auto">
-            <table className="w-full min-w-[720px] text-xs">
-              <thead className="sticky top-0 z-10 bg-slate-100 text-slate-500">
-                <tr>
-                  <th className="px-3 py-2 text-left text-[9px] font-extrabold uppercase tracking-wider">Staff</th>
-                  <th className="px-3 py-2 text-right text-[9px] font-extrabold uppercase tracking-wider">Total Accrued</th>
-                  <th className="px-3 py-2 text-right text-[9px] font-extrabold uppercase tracking-wider">Deducted</th>
-                  <th className="px-3 py-2 text-right text-[9px] font-extrabold uppercase tracking-wider">Pending</th>
-                  <th className="px-3 py-2 text-right text-[9px] font-extrabold uppercase tracking-wider">Paid Out</th>
-                  <th className="px-3 py-2 text-right text-[9px] font-extrabold uppercase tracking-wider">Balance</th>
-                  <th className="px-3 py-2 text-right text-[9px] font-extrabold uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {balancesLoading ? (
-                  [...Array(5)].map((_, i) => (
-                    <tr key={i} className="border-b border-slate-100">
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className="h-8 w-8 animate-pulse rounded-full bg-slate-200" />
-                          <div className="h-3 w-24 animate-pulse rounded bg-slate-200" />
+          <MilikTable
+            columns={[
+              { label: "Staff" },
+              { label: "Total Accrued", align: "right" },
+              { label: "Deducted", align: "right" },
+              { label: "Pending", align: "right" },
+              { label: "Paid Out", align: "right" },
+              { label: "Balance", align: "right" },
+            ]}
+            rows={balances}
+            rowKey="staffId"
+            loading={balancesLoading}
+            empty="No savings data yet"
+            minWidth="720px"
+            isSelected={(b) => selectedStaff?.staffId === b.staffId}
+            renderRow={(b) => {
+              const palette    = avatarPalette(b.staffName);
+              const hasBalance = b.balance > 0;
+              return (
+                <>
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-black"
+                        style={{ backgroundColor: palette.bg, color: palette.fg }}
+                      >
+                        {getInitials(b.staffName)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-extrabold text-slate-900 truncate">{b.staffName}</p>
+                        {b.lastCoveredTo
+                          ? <p className="text-[9px] text-slate-400">Last deduction: {fmtDate(b.lastCoveredTo)}</p>
+                          : <p className="text-[9px] text-slate-300 italic">No deductions yet</p>}
+                        <div className="mt-1 w-28">
+                          <SavingsBar deducted={b.deducted} pending={b.pending} disbursed={b.disbursed} />
                         </div>
-                      </td>
-                      {[...Array(5)].map((_, j) => (
-                        <td key={j} className="px-3 py-3 text-right">
-                          <div className="ml-auto h-3 w-14 animate-pulse rounded bg-slate-200" />
-                        </td>
-                      ))}
-                      <td className="px-3 py-3" />
-                    </tr>
-                  ))
-                ) : balances.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-3 py-14 text-center">
-                      <FaPiggyBank size={28} className="mx-auto mb-3 text-slate-200" />
-                      <p className="text-xs font-semibold text-slate-400">No savings data yet</p>
-                      <p className="mt-1 text-[10px] text-slate-400">Deductions are captured automatically on each commission payout.</p>
-                    </td>
-                  </tr>
-                ) : balances.map((b) => {
-                  const isOpen    = selectedStaff?.staffId === b.staffId;
-                  const palette   = avatarPalette(b.staffName);
-                  const hasBalance = b.balance > 0;
-                  return (
-                    <tr
-                      key={b.staffId}
-                      className={`border-b border-slate-100 transition-colors ${isOpen ? "bg-[#EDF5F1]" : "hover:bg-slate-50/80"}`}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    <span className="font-bold tabular-nums text-[#C8511A]">
+                      {b.totalAccrued > 0 ? formatMoney(b.totalAccrued) : <span className="text-slate-300">—</span>}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    <span className="font-semibold tabular-nums text-[#0B3B2E]">
+                      {b.deducted > 0 ? formatMoney(b.deducted) : <span className="text-slate-300">—</span>}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    {(b.pending || 0) > 0
+                      ? <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 font-bold tabular-nums text-amber-700 border border-amber-200">
+                          <FaClock size={7} />{formatMoney(b.pending)}
+                        </span>
+                      : <span className="text-slate-300">—</span>}
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    <span className="font-semibold tabular-nums text-emerald-600">
+                      {b.disbursed > 0 ? formatMoney(b.disbursed) : <span className="text-slate-300">—</span>}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    <span className={`font-extrabold tabular-nums text-base ${hasBalance ? "text-slate-900" : "text-slate-300"}`}>
+                      {formatMoney(b.balance)}
+                    </span>
+                  </td>
+                </>
+              );
+            }}
+            renderActions={(b) => {
+              const isOpen     = selectedStaff?.staffId === b.staffId;
+              const hasBalance = b.balance > 0;
+              return (
+                <div className="inline-flex items-center gap-1.5">
+                  {hasBalance && canPay && (
+                    <button
+                      type="button"
+                      onClick={() => openDisburse(b)}
+                      className="inline-flex items-center gap-1 bg-[#C8511A] px-2.5 py-1 text-[10px] font-bold text-white hover:bg-[#b04616] transition-colors"
                     >
-                      {/* Staff column */}
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-2.5">
-                          <div
-                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-black"
-                            style={{ backgroundColor: palette.bg, color: palette.fg }}
-                          >
-                            {getInitials(b.staffName)}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="font-extrabold text-slate-900 truncate">{b.staffName}</p>
-                            {b.lastCoveredTo
-                              ? <p className="text-[9px] text-slate-400">Last deduction: {fmtDate(b.lastCoveredTo)}</p>
-                              : <p className="text-[9px] text-slate-300 italic">No deductions yet</p>}
-                            <div className="mt-1 w-28">
-                              <SavingsBar deducted={b.deducted} pending={b.pending} disbursed={b.disbursed} />
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Total accrued */}
-                      <td className="px-3 py-2.5 text-right">
-                        <span className="font-bold tabular-nums text-[#C8511A]">
-                          {b.totalAccrued > 0 ? formatMoney(b.totalAccrued) : <span className="text-slate-300">—</span>}
-                        </span>
-                      </td>
-
-                      {/* Deducted */}
-                      <td className="px-3 py-2.5 text-right">
-                        <span className="font-semibold tabular-nums text-[#0B3B2E]">
-                          {b.deducted > 0 ? formatMoney(b.deducted) : <span className="text-slate-300">—</span>}
-                        </span>
-                      </td>
-
-                      {/* Pending */}
-                      <td className="px-3 py-2.5 text-right">
-                        {(b.pending || 0) > 0
-                          ? <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 font-bold tabular-nums text-amber-700 border border-amber-200">
-                              <FaClock size={7} />{formatMoney(b.pending)}
-                            </span>
-                          : <span className="text-slate-300">—</span>}
-                      </td>
-
-                      {/* Paid out */}
-                      <td className="px-3 py-2.5 text-right">
-                        <span className="font-semibold tabular-nums text-emerald-600">
-                          {b.disbursed > 0 ? formatMoney(b.disbursed) : <span className="text-slate-300">—</span>}
-                        </span>
-                      </td>
-
-                      {/* Balance */}
-                      <td className="px-3 py-2.5 text-right">
-                        <span className={`font-extrabold tabular-nums text-base ${hasBalance ? "text-slate-900" : "text-slate-300"}`}>
-                          {formatMoney(b.balance)}
-                        </span>
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-3 py-2.5 text-right">
-                        <div className="inline-flex items-center gap-1.5">
-                          {hasBalance && canPay && (
-                            <button
-                              type="button"
-                              onClick={() => openDisburse(b)}
-                              className="inline-flex items-center gap-1 bg-[#C8511A] px-2.5 py-1 text-[10px] font-bold text-white hover:bg-[#b04616] transition-colors"
-                            >
-                              <FaHandHoldingUsd size={8} /> Pay Out
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleToggleStaff(b)}
-                            className={`inline-flex items-center gap-1 border px-2 py-1 text-[10px] font-bold transition-colors ${
-                              isOpen
-                                ? "border-[#0B3B2E] bg-[#0B3B2E] text-white"
-                                : "border-slate-200 text-slate-500 hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
-                            }`}
-                          >
-                            {isOpen ? <FaChevronUp size={7} /> : <FaChevronDown size={7} />}
-                            {isOpen ? "Hide" : "History"}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      <FaHandHoldingUsd size={8} /> Pay Out
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleToggleStaff(b)}
+                    className={`inline-flex items-center gap-1 border px-2 py-1 text-[10px] font-bold transition-colors ${
+                      isOpen
+                        ? "border-[#0B3B2E] bg-[#0B3B2E] text-white"
+                        : "border-slate-200 text-slate-500 hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
+                    }`}
+                  >
+                    {isOpen ? <FaChevronUp size={7} /> : <FaChevronDown size={7} />}
+                    {isOpen ? "Hide" : "History"}
+                  </button>
+                </div>
+              );
+            }}
+          />
 
           {canManage && (
             <div className="flex-shrink-0 flex items-center justify-between border-t border-slate-100 bg-slate-50/80 px-4 py-1.5">
@@ -520,7 +484,7 @@ const CarWashStaffSavings = () => {
                     const r = await carWashApi.cleanupLegacySavings();
                     toast.success(r?.message || "Legacy records removed");
                     loadBalances();
-                    if (selectedStaff) loadRecords(selectedStaff.staffId, detailFrom, detailTo, detailPage);
+                    if (selectedStaff) loadRecords(selectedStaff.staffId, detailFrom, detailTo, detailPage, detailPageSize);
                   } catch (err) {
                     toast.error(err?.response?.data?.message || "Cleanup failed");
                   }
@@ -701,17 +665,16 @@ const CarWashStaffSavings = () => {
               </table>
             </div>
 
-            {totalPages > 1 && (
-              <div className="flex-shrink-0 flex items-center justify-between border-t border-slate-100 bg-slate-50 px-4 py-2">
-                <span className="text-[10px] text-slate-400">Page {detailPage} of {totalPages}</span>
-                <div className="flex gap-1">
-                  <button disabled={detailPage <= 1} onClick={() => setDetailPage((p) => p - 1)}
-                    className="h-6 border border-slate-200 px-2.5 text-[10px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-40">← Prev</button>
-                  <button disabled={detailPage >= totalPages} onClick={() => setDetailPage((p) => p + 1)}
-                    className="h-6 border border-slate-200 px-2.5 text-[10px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-40">Next →</button>
-                </div>
-              </div>
-            )}
+            <PaginationBar
+              page={detailPage}
+              pages={totalPages}
+              total={recordsTotal}
+              pageSize={detailPageSize}
+              onPageChange={setDetailPage}
+              onPageSizeChange={(n) => { setDetailPageSize(n); setDetailPage(1); }}
+              loading={recordsLoading}
+              label="records"
+            />
           </div>
         )}
       </div>

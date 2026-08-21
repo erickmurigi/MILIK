@@ -9,6 +9,8 @@ import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 import AppSelect from "../../components/common/AppSelect";
+import PaginationBar from "../../components/PaginationBar";
+import MilikTable from '../../components/common/MilikTable';
 import { useConfirm } from '../../context/ConfirmContext';
 
 const CATEGORIES = ['Performance', 'Attendance', 'Skills', 'Leadership', 'Financial', 'Customer', 'Other'];
@@ -24,7 +26,7 @@ const CAT_COLORS = {
   Customer:    'bg-cyan-50 text-cyan-700 border-cyan-200',
   Other:       'bg-slate-50 text-slate-600 border-slate-200',
 };
-const PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = 25;
 const EMPTY = { name: '', description: '', category: 'Performance', unit: 'Score', maxScore: 100, isActive: true };
 // base field style — no w-full so explicit widths always win
 const F  = 'h-7 rounded border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]';
@@ -36,7 +38,8 @@ export default function KpiLibrary() {
   const [search, setSearch]         = useTabState('/hr/appraisals/kpis:search', '');
   const [catFilter, setCatFilter]   = useTabState('/hr/appraisals/kpis:catFilter', '');
   const [activeOnly, setActiveOnly] = useTabState('/hr/appraisals/kpis:activeOnly', false);
-  const [page, setPage]             = useTabState('/hr/appraisals/kpis:page', 1);
+  const [page,     setPage]     = useTabState('/hr/appraisals/kpis:page', 1);
+  const [pageSize, setPageSize] = useTabState('/hr/appraisals/kpis:pageSize', DEFAULT_PAGE_SIZE);
   const [modal, setModal]           = useState(null);
   const [form, setForm]             = useState(EMPTY);
   const [saving, setSaving]         = useState(false);
@@ -95,11 +98,11 @@ export default function KpiLibrary() {
     finally { setDeleting(null); }
   };
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(kpis.length / PAGE_SIZE)), [kpis.length]);
-  const pageKpis   = useMemo(() => kpis.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [kpis, page]);
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(kpis.length / pageSize)), [kpis.length, pageSize]);
+  const pageKpis   = useMemo(() => kpis.slice((page - 1) * pageSize, page * pageSize), [kpis, page, pageSize]);
   const nActive    = useMemo(() => kpis.filter((k) => k.isActive).length, [kpis]);
-  const from       = useMemo(() => (kpis.length ? (page - 1) * PAGE_SIZE + 1 : 0), [kpis.length, page]);
-  const to         = useMemo(() => Math.min(page * PAGE_SIZE, kpis.length), [kpis.length, page]);
+  const from       = useMemo(() => (kpis.length ? (page - 1) * pageSize + 1 : 0), [kpis.length, page, pageSize]);
+  const to         = useMemo(() => Math.min(page * pageSize, kpis.length), [kpis.length, page, pageSize]);
 
   return (
     <DashboardLayout lockContentScroll>
@@ -158,91 +161,65 @@ export default function KpiLibrary() {
         </div>
 
         {/* ── Scrollable table area ── */}
-        <div className="flex-1 overflow-auto">
-          <table className="min-w-full text-[11px] border-collapse">
-            <thead className="sticky top-0 z-10 shadow-sm">
-              <tr className="bg-[#0B3B2E] text-white">
-                <th className="w-8 px-3 py-1 text-left font-bold border-r border-white/10">#</th>
-                <th className="px-3 py-1 text-left font-bold border-r border-white/10">KPI Name</th>
-                <th className="w-32 px-3 py-1 text-left font-bold border-r border-white/10">Category</th>
-                <th className="w-24 px-3 py-1 text-left font-bold border-r border-white/10">Unit</th>
-                <th className="w-24 px-3 py-1 text-center font-bold border-r border-white/10">Max Score</th>
-                <th className="w-24 px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
-                <th className="w-20 px-3 py-1 text-right font-bold">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && <tr><td colSpan={7} className="py-10 text-center text-[11px] text-slate-400">Loading…</td></tr>}
-              {!loading && !pageKpis.length && (
-                <tr><td colSpan={7} className="py-10 text-center text-[11px] text-slate-400">
-                  {kpis.length ? 'No KPIs match the current filters.' : 'No KPIs yet — click "+ New KPI" to get started.'}
-                </td></tr>
-              )}
-              {!loading && pageKpis.map((kpi, idx) => (
-                <tr key={kpi._id} className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
-                  <td className="px-3 py-1 tabular-nums text-slate-400 border-r border-gray-100">{(page - 1) * PAGE_SIZE + idx + 1}</td>
-                  <td className="px-3 py-1 border-r border-gray-100">
-                    <span className="font-semibold text-slate-800">{kpi.name}</span>
-                    {kpi.description && <span className="ml-2 text-[10px] text-slate-400">{kpi.description}</span>}
-                  </td>
-                  <td className="px-3 py-1 border-r border-gray-100">
-                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${CAT_COLORS[kpi.category] || CAT_COLORS.Other}`}>
-                      {kpi.category}
-                    </span>
-                  </td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{kpi.unit}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-center font-semibold tabular-nums text-slate-700">{kpi.maxScore}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-center">
-                    <button onClick={() => toggleActive(kpi)}>
-                      {kpi.isActive
-                        ? <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700"><FaToggleOn size={10} /> Active</span>
-                        : <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-500"><FaToggleOff size={10} /> Inactive</span>
-                      }
-                    </button>
-                  </td>
-                  <td className="px-3 py-1 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => openEdit(kpi)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Edit"><FaEdit size={11} /></button>
-                      <button onClick={async () => { if (await confirm({ title: 'Delete KPI', message: `Delete "${kpi.name}"?`, confirmText: 'Delete', isDangerous: true })) handleDelete(kpi); }}
-                        disabled={deleting === kpi._id}
-                        className="rounded p-1 text-rose-300 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40" title="Delete">
-                        <FaTrash size={11} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <MilikTable
+          columns={[
+            { label: '#', width: '2rem' },
+            { label: 'KPI Name' },
+            { label: 'Category', width: '8rem' },
+            { label: 'Unit', width: '6rem' },
+            { label: 'Max Score', align: 'center', width: '6rem' },
+            { label: 'Status', align: 'center', width: '6rem' },
+          ]}
+          rows={pageKpis}
+          loading={loading}
+          empty={kpis.length ? 'No KPIs match the current filters.' : 'No KPIs yet — click "+ New KPI" to get started.'}
+          renderRow={(kpi, idx) => (
+            <>
+              <td className="px-3 py-1 tabular-nums text-slate-400 border-r border-gray-100">{(page - 1) * pageSize + idx + 1}</td>
+              <td className="px-3 py-1 border-r border-gray-100">
+                <span className="font-semibold text-slate-800">{kpi.name}</span>
+                {kpi.description && <span className="ml-2 text-[10px] text-slate-400">{kpi.description}</span>}
+              </td>
+              <td className="px-3 py-1 border-r border-gray-100">
+                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${CAT_COLORS[kpi.category] || CAT_COLORS.Other}`}>
+                  {kpi.category}
+                </span>
+              </td>
+              <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{kpi.unit}</td>
+              <td className="px-3 py-1 border-r border-gray-100 text-center font-semibold tabular-nums text-slate-700">{kpi.maxScore}</td>
+              <td className="px-3 py-1 border-r border-gray-100 text-center">
+                <button onClick={() => toggleActive(kpi)}>
+                  {kpi.isActive
+                    ? <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700"><FaToggleOn size={10} /> Active</span>
+                    : <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-500"><FaToggleOff size={10} /> Inactive</span>
+                  }
+                </button>
+              </td>
+            </>
+          )}
+          renderActions={(kpi) => (
+            <div className="flex items-center justify-end gap-1">
+              <button onClick={() => openEdit(kpi)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Edit"><FaEdit size={11} /></button>
+              <button onClick={async () => { if (await confirm({ title: 'Delete KPI', message: `Delete "${kpi.name}"?`, confirmText: 'Delete', isDangerous: true })) handleDelete(kpi); }}
+                disabled={deleting === kpi._id}
+                className="rounded p-1 text-rose-300 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40" title="Delete">
+                <FaTrash size={11} />
+              </button>
+            </div>
+          )}
+        />
 
         {/* ── Pagination footer — always visible ── */}
-        <div className="flex flex-none items-center justify-between border-t border-slate-200 bg-white px-4 py-1.5 text-[11px] text-slate-500">
-          <span className="tabular-nums">
-            {kpis.length === 0 ? 'No records' : `Showing ${from}–${to} of ${kpis.length} KPI${kpis.length !== 1 ? 's' : ''}`}
-          </span>
-          <div className="flex items-center gap-1">
-            <button disabled={page === 1} onClick={() => setPage(1)}
-              className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30">«</button>
-            <button disabled={page === 1} onClick={() => setPage((p) => p - 1)}
-              className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30">‹</button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
-              .reduce((acc, p, i, arr) => { if (i > 0 && p - arr[i - 1] > 1) acc.push('…'); acc.push(p); return acc; }, [])
-              .map((p, i) => p === '…'
-                ? <span key={`e${i}`} className="px-0.5 text-slate-300">…</span>
-                : <button key={p} onClick={() => setPage(p)}
-                    className={`h-5 min-w-[20px] rounded px-1 text-[10px] font-semibold ${page === p ? 'bg-[#0B3B2E] text-white' : 'border border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
-                    {p}
-                  </button>
-              )
-            }
-            <button disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}
-              className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30">›</button>
-            <button disabled={page === totalPages} onClick={() => setPage(totalPages)}
-              className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30">»</button>
-          </div>
-        </div>
+        <PaginationBar
+          page={page}
+          pages={totalPages}
+          total={kpis.length}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+          loading={loading}
+          label="KPIs"
+        />
       </div>
 
       {/* ── Modal ── */}

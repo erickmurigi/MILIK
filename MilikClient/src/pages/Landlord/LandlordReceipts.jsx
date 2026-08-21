@@ -34,6 +34,7 @@ const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
 import PaginationBar from "../../components/PaginationBar";
+import MilikTable from "../../components/common/MilikTable";
 
 const CATEGORY_OPTIONS = [
   { value: "owner_float", label: "Owner Float / Expense Funding", accountHint: "Cr 2150 Landlord Funds Held" },

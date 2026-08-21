@@ -13,7 +13,7 @@ import AppSelect from "../../components/common/AppSelect";
 import { fmtDate } from "../../utils/dates";
 import MilikTable from "../../components/common/MilikTable";
 
-const PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE = 50;
 
 const STATUS_BADGE = {
   upcoming: "border-blue-200  bg-blue-50  text-blue-700",
@@ -49,18 +49,19 @@ const SaleSchedule = () => {
   const [statusFilter, setStatusFilter] = useTabState("/sale/schedule:status", "overdue");
   const [dateFrom,     setDateFrom]     = useTabState("/sale/schedule:dateFrom", "");
   const [dateTo,       setDateTo]       = useTabState("/sale/schedule:dateTo", "");
-  const [page,         setPage]         = useTabState("/sale/schedule:page", 1);
+  const [page,     setPage]     = useTabState("/sale/schedule:page", 1);
+  const [pageSize, setPageSize] = useTabState("/sale/schedule:pageSize", DEFAULT_PAGE_SIZE);
 
   useEffect(() => setPage(1), [statusFilter, dateFrom, dateTo]);
 
   const { data, isLoading, isFetching, error } = useQuery({
-    queryKey: ["sale-all-schedule", biz, statusFilter, dateFrom, dateTo, page],
+    queryKey: ["sale-all-schedule", biz, statusFilter, dateFrom, dateTo, page, pageSize],
     queryFn:  () => saleApi.listAllSchedule({
       ...(statusFilter && { status: statusFilter }),
       ...(dateFrom     && { dateFrom }),
       ...(dateTo       && { dateTo }),
       page,
-      limit: PAGE_SIZE,
+      limit: pageSize,
     }),
     enabled:  !!biz,
     placeholderData: (prev) => prev,
@@ -84,7 +85,7 @@ const SaleSchedule = () => {
 
   const items      = data?.data  ?? [];
   const total      = data?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const overdueItems  = overdueData?.data  ?? [];
   const upcomingItems = upcomingData?.data ?? [];
@@ -228,16 +229,16 @@ const SaleSchedule = () => {
         />
       </div>
 
-      {total > PAGE_SIZE && (
-        <PaginationBar
-          page={page}
-          totalPages={totalPages}
-          total={total}
-          pageSize={PAGE_SIZE}
-          isFetching={isFetching}
-          onPageChange={setPage}
-        />
-      )}
+      <PaginationBar
+        page={page}
+        pages={totalPages}
+        total={total}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+        loading={isFetching}
+        label="schedule entries"
+      />
       {/* ── Send Reminders Modal ─────────────────────────────────────────────── */}
       {showReminderModal && (
         <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">

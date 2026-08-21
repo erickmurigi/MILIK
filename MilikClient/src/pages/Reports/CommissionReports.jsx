@@ -15,12 +15,12 @@ import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { fmtDate } from "../../utils/dates";
 import { adminRequests } from "../../utils/requestMethods";
+import PaginationBar from "../../components/PaginationBar";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
-const ITEMS_PER_PAGE = 50;
 
 const formatCurrency = (value = 0) =>
   `KES ${Number(value || 0).toLocaleString("en-KE", {
@@ -108,6 +108,7 @@ const CommissionReports = () => {
   const [appliedFilters, setAppliedFilters] = useTabState("/reports/commissions:appliedFilters", { monthFrom: currentMonth, monthTo: currentMonth, search: "", status: "recognized" });
   const setFilter = (key) => (e) => setAppliedFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [currentPage, setCurrentPage] = useTabState("/reports/commissions:currentPage", 1);
+  const [pageSize, setPageSize] = useState(50);
 
   const loadData = useCallback(async () => {
     if (!currentCompany?._id) {
@@ -218,10 +219,10 @@ const CommissionReports = () => {
       });
   }, [appliedFilters, statementRows]);
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE)), [filteredRows.length]);
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(filteredRows.length / pageSize)), [filteredRows.length, pageSize]);
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
   const paginatedRows = useMemo(() => filteredRows.slice(startIndex, endIndex), [filteredRows, startIndex, endIndex]);
 
   useEffect(() => {
@@ -508,15 +509,16 @@ const CommissionReports = () => {
                 )}
               </table>
             </div>
-            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
-              <div>Showing {filteredRows.length ? startIndex + 1 : 0}–{Math.min(endIndex, filteredRows.length)} of {filteredRows.length} commission row(s)</div>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
-                <button type="button" onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-md border border-slate-300 bg-white px-2 py-1 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
-                <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
-                <button type="button" onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-md border border-slate-300 bg-white px-2 py-1 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
-              </div>
-            </div>
+            <PaginationBar
+              page={safeCurrentPage}
+              pages={totalPages}
+              total={filteredRows.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              loading={loading}
+              label="commission rows"
+            />
           </div>
         </div>
       </div>

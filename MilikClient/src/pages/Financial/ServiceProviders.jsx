@@ -16,6 +16,7 @@ import { useTabState } from "../../hooks/useTabState";
 import useDebounce from "../../hooks/useDebounce";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from '../../components/PaginationBar';
+import MilikTable from '../../components/common/MilikTable';
 
 const blankForm = {
   name: "",

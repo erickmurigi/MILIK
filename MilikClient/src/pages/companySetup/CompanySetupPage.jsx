@@ -35,6 +35,7 @@ import {
 } from "react-icons/fa";
 import { getChartOfAccounts, getCompany, getSmsLogs, updateCompany } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
+import PaginationBar from "../../components/PaginationBar";
 import { carWashApi } from "../../services/carWashApi";
 import { COMPANY_OPERATING_MODES, MODULE_LABELS, hasCompanyModule, normalizeCompanyModules, normalizeCompanyOperatingMode } from "../../utils/companyModules";
 import { isCashbookAccount } from "../../utils/cashbookUtils";
@@ -409,39 +410,6 @@ const logStatusBadge = (status) => {
   if (status === "sent") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (status === "failed") return "border-red-200 bg-red-50 text-red-700";
   return "border-slate-200 bg-slate-50 text-slate-600";
-};
-
-const PaginationBar = ({ page, totalPages, total, pageSize, onPage, label }) => {
-  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const to = Math.min(page * pageSize, total);
-  const pages = [];
-  if (totalPages <= 7) {
-    for (let i = 1; i <= totalPages; i++) pages.push(i);
-  } else if (page <= 4) {
-    pages.push(1, 2, 3, 4, 5, "…", totalPages);
-  } else if (page >= totalPages - 3) {
-    pages.push(1, "…", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
-  } else {
-    pages.push(1, "…", page - 1, page, page + 1, "…", totalPages);
-  }
-  return (
-    <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/80 px-3 py-2">
-      <span className="text-[11px] text-slate-500">{total === 0 ? `No ${label}` : `${from}–${to} of ${total} ${label}`}</span>
-      <div className="flex items-center gap-1">
-        <button disabled={page <= 1} onClick={() => onPage(1)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">«</button>
-        <button disabled={page <= 1} onClick={() => onPage(page - 1)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">‹</button>
-        {pages.map((p, i) =>
-          p === "…" ? (
-            <span key={`e${i}`} className="px-1 text-[11px] text-slate-400">…</span>
-          ) : (
-            <button key={p} onClick={() => onPage(p)} className={`h-6 min-w-[24px] rounded border px-1 text-[11px] font-bold transition ${p === page ? "border-[#0B3B2E] bg-[#0B3B2E] text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>{p}</button>
-          )
-        )}
-        <button disabled={page >= totalPages} onClick={() => onPage(page + 1)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">›</button>
-        <button disabled={page >= totalPages} onClick={() => onPage(totalPages)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">»</button>
-      </div>
-    </div>
-  );
 };
 
 const buildEmailStatus = (config = {}) => {
@@ -2972,18 +2940,14 @@ export default function CompanySetupPage() {
                   </table>
                 </div>
                 {/* pagination footer */}
-                <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-                  <span className="font-semibold">
-                    Showing <span className="font-bold text-slate-900">{filteredEmailLogs.length === 0 ? 0 : emailLogsStart + 1}</span>–<span className="font-bold text-slate-900">{Math.min(emailLogsEnd, filteredEmailLogs.length)}</span> of <span className="font-bold text-slate-900">{filteredEmailLogs.length}</span>
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <button onClick={() => setEmailLogsPage(1)} disabled={emailLogsSafePage === 1} className="rounded border border-slate-300 px-2 py-1 font-semibold transition hover:bg-slate-50 disabled:opacity-40">«</button>
-                    <button onClick={() => setEmailLogsPage((p) => Math.max(1, p - 1))} disabled={emailLogsSafePage === 1} className="rounded border border-slate-300 px-2 py-1 font-semibold transition hover:bg-slate-50 disabled:opacity-40">‹</button>
-                    <span className="font-semibold text-slate-700">Page {emailLogsSafePage} of {emailLogsTotalPages}</span>
-                    <button onClick={() => setEmailLogsPage((p) => Math.min(emailLogsTotalPages, p + 1))} disabled={emailLogsSafePage === emailLogsTotalPages} className="rounded border border-slate-300 px-2 py-1 font-semibold transition hover:bg-slate-50 disabled:opacity-40">›</button>
-                    <button onClick={() => setEmailLogsPage(emailLogsTotalPages)} disabled={emailLogsSafePage === emailLogsTotalPages} className="rounded border border-slate-300 px-2 py-1 font-semibold transition hover:bg-slate-50 disabled:opacity-40">»</button>
-                  </div>
-                </div>
+                <PaginationBar
+                  page={emailLogsSafePage}
+                  pages={emailLogsTotalPages}
+                  total={filteredEmailLogs.length}
+                  pageSize={EMAIL_LOGS_PAGE_SIZE}
+                  onPageChange={setEmailLogsPage}
+                  label="email logs"
+                />
               </>
             )}
           </div>
@@ -3381,18 +3345,14 @@ export default function CompanySetupPage() {
                   </table>
                 </div>
                 {/* pagination footer */}
-                <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-                  <span className="font-semibold">
-                    Showing <span className="font-bold text-slate-900">{filteredSmsLogs.length === 0 ? 0 : smsLogsStart + 1}</span>–<span className="font-bold text-slate-900">{Math.min(smsLogsEnd, filteredSmsLogs.length)}</span> of <span className="font-bold text-slate-900">{filteredSmsLogs.length}</span>
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <button onClick={() => setSmsLogsPage(1)} disabled={smsLogsSafePage === 1} className="rounded border border-slate-300 px-2 py-1 font-semibold transition hover:bg-slate-50 disabled:opacity-40">«</button>
-                    <button onClick={() => setSmsLogsPage((p) => Math.max(1, p - 1))} disabled={smsLogsSafePage === 1} className="rounded border border-slate-300 px-2 py-1 font-semibold transition hover:bg-slate-50 disabled:opacity-40">‹</button>
-                    <span className="font-semibold text-slate-700">Page {smsLogsSafePage} of {smsLogsTotalPages}</span>
-                    <button onClick={() => setSmsLogsPage((p) => Math.min(smsLogsTotalPages, p + 1))} disabled={smsLogsSafePage === smsLogsTotalPages} className="rounded border border-slate-300 px-2 py-1 font-semibold transition hover:bg-slate-50 disabled:opacity-40">›</button>
-                    <button onClick={() => setSmsLogsPage(smsLogsTotalPages)} disabled={smsLogsSafePage === smsLogsTotalPages} className="rounded border border-slate-300 px-2 py-1 font-semibold transition hover:bg-slate-50 disabled:opacity-40">»</button>
-                  </div>
-                </div>
+                <PaginationBar
+                  page={smsLogsSafePage}
+                  pages={smsLogsTotalPages}
+                  total={filteredSmsLogs.length}
+                  pageSize={SMS_LOGS_PAGE_SIZE}
+                  onPageChange={setSmsLogsPage}
+                  label="SMS logs"
+                />
               </>
             )}
           </div>
@@ -3505,7 +3465,7 @@ export default function CompanySetupPage() {
                   </tbody>
                 </table>
               </div>
-              <PaginationBar page={actPage} totalPages={actTotalPages} total={filteredLogs.length} pageSize={ACTIVITIES_PAGE_SIZE} onPage={setActivitiesPage} label="events" />
+              <PaginationBar page={actPage} pages={actTotalPages} total={filteredLogs.length} pageSize={ACTIVITIES_PAGE_SIZE} onPageChange={setActivitiesPage} label="events" />
             </>
           ) : (
             <>
@@ -3547,7 +3507,7 @@ export default function CompanySetupPage() {
                   </tbody>
                 </table>
               </div>
-              <PaginationBar page={sesPage} totalPages={sesTotalPages} total={userSessions.length} pageSize={SESSIONS_PAGE_SIZE} onPage={setSessionsPage} label="users" />
+              <PaginationBar page={sesPage} pages={sesTotalPages} total={userSessions.length} pageSize={SESSIONS_PAGE_SIZE} onPageChange={setSessionsPage} label="users" />
             </>
           )}
         </div>

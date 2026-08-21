@@ -23,6 +23,7 @@ import { getProperties } from "../../redux/propertyRedux";
 // NOTE: getLandlords is a thunk creator — must be called via dispatch(getLandlords({...}))
 
 import PaginationBar from "../../components/PaginationBar";
+import MilikTable from "../../components/common/MilikTable";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 

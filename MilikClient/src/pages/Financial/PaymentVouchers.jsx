@@ -41,6 +41,7 @@ import {
 import { getProperties } from "../../redux/propertyRedux";
 import { useTabState } from "../../hooks/useTabState";
 import PaginationBar from '../../components/PaginationBar';
+import MilikTable from '../../components/common/MilikTable';
 
 const DEFAULT_PAGE_SIZE = 50;
 const isRawObjectId = (s) => /^[a-f\d]{24}$/i.test(String(s || ""));

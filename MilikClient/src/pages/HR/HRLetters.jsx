@@ -14,6 +14,7 @@ import { selectCurrentUser } from '../../redux/selectors';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 import AppSelect from "../../components/common/AppSelect";
+import PaginationBar from "../../components/PaginationBar";
 
 const STATUS_STYLE = {
   draft:   'bg-slate-100 text-slate-600',
@@ -238,7 +239,7 @@ function ComposeModal({ employees, letterMeta, onClose, onCreate }) {
   );
 }
 
-const LIMIT = 25;
+const DEFAULT_LIMIT = 25;
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function HRLetters() {
@@ -250,8 +251,9 @@ export default function HRLetters() {
   const [search, setSearch]         = useTabState('/hr/letters:search', '');
   const [filterType, setFilterType] = useTabState('/hr/letters:filterType', '');
   const [filterStatus, setFilterStatus] = useTabState('/hr/letters:filterStatus', '');
-  const [page, setPage]             = useTabState('/hr/letters:page', 1);
-  const [total, setTotal]           = useState(0);
+  const [page,      setPage]      = useTabState('/hr/letters:page', 1);
+  const [pageSize,  setPageSize]  = useTabState('/hr/letters:pageSize', DEFAULT_LIMIT);
+  const [total,     setTotal]     = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [showCompose, setShowCompose] = useState(false);
   const [issuing, setIssuing]       = useState(false);
@@ -390,7 +392,7 @@ export default function HRLetters() {
   const loadLetters = useCallback(async () => {
     setLoading(true);
     try {
-      const params = { page, limit: LIMIT };
+      const params = { page, limit: pageSize };
       if (filterType)     params.letterType = filterType;
       if (filterStatus)   params.status     = filterStatus;
       if (debouncedSearch) params.search    = debouncedSearch;
@@ -403,7 +405,7 @@ export default function HRLetters() {
     } finally {
       setLoading(false);
     }
-  }, [filterType, filterStatus, page, debouncedSearch]);
+  }, [filterType, filterStatus, page, pageSize, debouncedSearch]);
 
   useEffect(() => { loadLetters(); }, [loadLetters]);
   useEffect(() => { setPage(1); }, [filterType, filterStatus, debouncedSearch]);
@@ -552,14 +554,16 @@ export default function HRLetters() {
             </div>
 
             {/* Pagination */}
-            <div className="flex-shrink-0 flex items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5">
-              <span className="text-[10px] text-slate-500">{total} letter{total !== 1 ? 's' : ''}</span>
-              <div className="flex items-center gap-1">
-                <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] font-bold disabled:opacity-40 hover:bg-slate-50">‹</button>
-                <span className="px-1.5 text-[10px] font-semibold text-slate-600">{page}/{Math.max(1, totalPages)}</span>
-                <button disabled={page >= totalPages} onClick={() => setPage(page + 1)} className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] font-bold disabled:opacity-40 hover:bg-slate-50">›</button>
-              </div>
-            </div>
+            <PaginationBar
+              page={page}
+              pages={totalPages}
+              total={total}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+              loading={loading}
+              label="letters"
+            />
           </div>
 
           {/* Main — letter preview */}

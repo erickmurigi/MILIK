@@ -10,12 +10,13 @@ import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { FaEdit, FaTrash, FaPlus, FaCheck, FaTimes, FaSearch, FaArrowLeft, FaRedoAlt } from 'react-icons/fa';
 import { useConfirm } from '../../context/ConfirmContext';
 import AppSelect from '../../components/common/AppSelect';
+import PaginationBar from '../../components/PaginationBar';
+import MilikTable from '../../components/common/MilikTable';
 
 const MILIK_GREEN = "#0B3B2E";
 const MILIK_GREEN_BG = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "#FF8C00";
-const ITEMS_PER_PAGE = 50;
 
 const CommissionsList = () => {
   const confirm = useConfirm();
@@ -31,6 +32,7 @@ const CommissionsList = () => {
   const [filterMode, setFilterMode] = useTabState('/properties/commissions-list:filterMode', 'all');
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useTabState('/properties/commissions-list:currentPage', 1);
+  const [pageSize, setPageSize] = useState(50);
   const [expandedPropertyId, setExpandedPropertyId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState(null);
@@ -72,10 +74,10 @@ const CommissionsList = () => {
     unconfigured: (properties || []).filter(p => !(Number(p.commissionPercentage) > 0)).length,
   }), [properties]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredProperties.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filteredProperties.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
   const paginatedProperties = useMemo(
     () => filteredProperties.slice(startIndex, endIndex),
     [filteredProperties, startIndex, endIndex]
@@ -248,212 +250,177 @@ const CommissionsList = () => {
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-auto">
-              <table className="w-full min-w-[980px] text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className={`${MILIK_GREEN_BG} text-white`}>
-                    <th className="sticky left-0 z-20 bg-[#0B3B2E] px-2 py-2 text-left font-bold border-r border-white/10">Code</th>
-                    <th className="px-2 py-2 text-left font-bold border-r border-white/10">Property</th>
-                    <th className="px-2 py-2 text-left font-bold border-r border-white/10">Commission</th>
-                    <th className="px-2 py-2 text-left font-bold border-r border-white/10">Recognition Basis</th>
-                    <th className="px-2 py-2 text-left font-bold border-r border-white/10">Tenants Pay To</th>
-                    <th className="px-2 py-2 text-left font-bold border-r border-white/10">Deposits Held By</th>
-                    <th className="px-2 py-1 text-right text-[9px] font-black uppercase tracking-[0.12em]">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredProperties.length === 0 ? (
-                    <tr>
-                      <td colSpan="7" className="px-4 py-10 text-center text-slate-500">
-                        <FaSearch className="mx-auto mb-3 text-3xl text-slate-300" />
-                        <p className="text-[10px] font-semibold">No commission rows matched the current filters.</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    paginatedProperties.map((property, index) => (
-                      <React.Fragment key={property._id}>
-                        {editingId === property._id ? (
-                          <tr className="border-t border-slate-200 bg-slate-50/80">
-                            <td colSpan="7" className="px-4 py-4">
-                              <div className="rounded-md border border-slate-200 bg-white px-2 py-1 shadow-sm">
-                                <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                                  <div>
-                                    <p className="text-[10px] font-black text-slate-900">
-                                      {property.propertyCode || '—'} • {property.propertyName || property.name || 'Property'}
-                                    </p>
-                                    <p className="text-xs text-slate-500">Edit commission and collection settings for this property.</p>
-                                  </div>
-                                </div>
-
-                                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                                  <div>
-                                    <label className="mb-2 block text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">Commission %</label>
-                                    <input
-                                      type="number"
-                                      value={editFormData.commissionPercentage}
-                                      onChange={(e) => handleEditChange('commissionPercentage', e.target.value)}
-                                      min="0"
-                                      max="100"
-                                      step="0.01"
-                                      className="w-full rounded-xl border border-slate-300 px-2 py-1 text-[10px] focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                                    />
-                                  </div>
-
-                                  <div>
-                                    <label className="mb-2 block text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">Recognition Basis</label>
-                                    <AppSelect
-                                      value={editFormData.commissionRecognitionBasis || null}
-                                      onChange={(v) => handleEditChange('commissionRecognitionBasis', v ?? '')}
-                                      options={[
-                                        { value: 'received', label: 'Rent Collected (Cash)' },
-                                        { value: 'invoiced', label: 'Rent Expected (Accrual)' },
-                                      ]}
-                                      size="sm"
-                                    />
-                                  </div>
-
-                                  <div>
-                                    <label className="mb-2 block text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">Tenants Pay To</label>
-                                    <AppSelect
-                                      value={editFormData.tenantsPaysTo || null}
-                                      onChange={(v) => handleEditChange('tenantsPaysTo', v ?? '')}
-                                      options={[
-                                        { value: 'propertyManager', label: 'Manager' },
-                                        { value: 'landlord', label: 'Landlord' },
-                                      ]}
-                                      size="sm"
-                                    />
-                                  </div>
-
-                                  <div>
-                                    <label className="mb-2 block text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">Deposits Held By</label>
-                                    <AppSelect
-                                      value={editFormData.depositHeldBy || null}
-                                      onChange={(v) => handleEditChange('depositHeldBy', v ?? '')}
-                                      options={[
-                                        { value: 'propertyManager', label: 'Manager' },
-                                        { value: 'landlord', label: 'Landlord' },
-                                      ]}
-                                      size="sm"
-                                    />
-                                  </div>
-                                </div>
-
-                                <div className="mt-4 flex flex-wrap justify-end gap-2">
-                                  <button
-                                    onClick={() => {
-                                      setEditingId(null);
-                                      setEditFormData(null);
-                                    }}
-                                    className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-[10px] font-black text-slate-700 transition hover:bg-slate-100"
-                                  >
-                                    <FaTimes /> Cancel
-                                  </button>
-                                  <button
-                                    onClick={() => handleSaveEdit(property._id)}
-                                    className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[10px] font-black text-white transition ${MILIK_GREEN_BG} ${MILIK_GREEN_HOVER}`}
-                                  >
-                                    <FaCheck /> Save Changes
-                                  </button>
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        ) : (
-                          <>
-                            <tr onClick={() => setExpandedPropertyId((prev) => (prev === property._id ? null : property._id))} className={`cursor-pointer border-b border-gray-100 transition-colors ${index % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
-                              <td className="sticky left-0 z-10 bg-inherit px-2 py-1 border-r border-gray-100 font-semibold text-slate-900">{expandedPropertyId === property._id ? '▾' : '▸'} {property.propertyCode || '-'}</td>
-                              <td className="px-2 py-1 border-r border-gray-100 text-slate-700">
-                                <div className="font-semibold text-slate-900">{property.propertyName || property.name || '-'}</div>
-                              </td>
-                              <td className="px-2 py-1 border-r border-gray-100">
-                                {Number(property.commissionPercentage) > 0 ? (
-                                  <span className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-[10px] font-bold text-orange-700">
-                                    {property.commissionPercentage}%
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-400">Not set</span>
-                                )}
-                              </td>
-                              <td className="px-2 py-1 border-r border-gray-100 text-slate-700">
-                                {property.commissionRecognitionBasis
-                                  ? property.commissionRecognitionBasis === 'received'
-                                    ? 'Rent Collected (Cash)'
-                                    : 'Rent Expected (Accrual)'
-                                  : '-'}
-                              </td>
-                              <td className="px-2 py-1 border-r border-gray-100 text-slate-700">
-                                {property.tenantsPaysTo ? (property.tenantsPaysTo === 'propertyManager' ? 'Manager' : 'Landlord') : '-'}
-                              </td>
-                              <td className="px-2 py-1 border-r border-gray-100 text-slate-700">
-                                {property.depositHeldBy ? (property.depositHeldBy === 'propertyManager' ? 'Manager' : 'Landlord') : '-'}
-                              </td>
-                              <td className="px-2 py-1 text-right">
-                                <div className="inline-flex flex-wrap justify-end gap-2">
-                                  {canWrite && (
-                                  <button
-                                    onClick={(event) => { event.stopPropagation(); handleEdit(property); }}
-                                    className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-2 py-1.5 text-xs font-black text-blue-700 transition hover:bg-blue-100"
-                                  >
-                                    <FaEdit /> Edit
-                                  </button>
-                                  )}
-                                  {canWrite && (
-                                  <button
-                                    onClick={(event) => { event.stopPropagation(); handleDelete(property._id); }}
-                                    className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-2 py-1.5 text-xs font-black text-rose-700 transition hover:bg-rose-100"
-                                  >
-                                    <FaTrash /> Remove
-                                  </button>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                            {expandedPropertyId === property._id && editingId !== property._id && (
-                              <tr className="border-t border-slate-100 bg-slate-50">
-                                <td colSpan="7" className="px-2 py-1.5">
-                                  <div className="grid gap-2 text-[10px] md:grid-cols-4">
-                                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Property</span><p className="font-semibold text-slate-900">{property.propertyName || property.name || '-'}</p></div>
-                                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Commission</span><p className="font-semibold text-orange-700">{property.commissionPercentage ? `${property.commissionPercentage}%` : 'Not set'}</p></div>
-                                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Recognition</span><p className="font-semibold text-slate-900">{property.commissionRecognitionBasis === 'received' ? 'Rent Collected (Cash)' : property.commissionRecognitionBasis === 'invoiced' ? 'Rent Expected (Accrual)' : '-'}</p></div>
-                                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Collections / Deposits</span><p className="font-semibold text-slate-900">Tenants pay {property.tenantsPaysTo === 'landlord' ? 'Landlord' : 'Manager'} · Deposits held by {property.depositHeldBy === 'landlord' ? 'Landlord' : 'Manager'}</p></div>
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
-                          </>
-                        )}
-                      </React.Fragment>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-4 py-2">
-              <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
-                <div className="font-semibold">
-                  Showing <span className="font-bold text-slate-900">{paginatedProperties.length > 0 ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredProperties.length)}</span> of <span className="font-bold text-slate-900">{filteredProperties.length}</span> properties
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
-                  <button
-                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                    disabled={safeCurrentPage === 1}
-                    className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Previous
-                  </button>
-                  <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
-                  <button
-                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                    disabled={safeCurrentPage === totalPages}
-                    className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            </div>
+            <MilikTable
+              columns={[
+                { label: "Code" },
+                { label: "Property" },
+                { label: "Commission" },
+                { label: "Recognition Basis" },
+                { label: "Tenants Pay To" },
+                { label: "Deposits Held By" },
+              ]}
+              rows={paginatedProperties}
+              rowKey="_id"
+              loading={false}
+              empty="No commission rows matched the current filters."
+              minWidth="980px"
+              renderRow={(property) => {
+                if (editingId === property._id) {
+                  return (
+                    <td colSpan={6} className="px-4 py-4">
+                      <div className="rounded-md border border-slate-200 bg-white px-2 py-1 shadow-sm">
+                        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-[10px] font-black text-slate-900">
+                              {property.propertyCode || '—'} • {property.propertyName || property.name || 'Property'}
+                            </p>
+                            <p className="text-xs text-slate-500">Edit commission and collection settings for this property.</p>
+                          </div>
+                        </div>
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                          <div>
+                            <label className="mb-2 block text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">Commission %</label>
+                            <input
+                              type="number"
+                              value={editFormData.commissionPercentage}
+                              onChange={(e) => handleEditChange('commissionPercentage', e.target.value)}
+                              min="0"
+                              max="100"
+                              step="0.01"
+                              className="w-full rounded-xl border border-slate-300 px-2 py-1 text-[10px] focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-2 block text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">Recognition Basis</label>
+                            <AppSelect
+                              value={editFormData.commissionRecognitionBasis || null}
+                              onChange={(v) => handleEditChange('commissionRecognitionBasis', v ?? '')}
+                              options={[
+                                { value: 'received', label: 'Rent Collected (Cash)' },
+                                { value: 'invoiced', label: 'Rent Expected (Accrual)' },
+                              ]}
+                              size="sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-2 block text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">Tenants Pay To</label>
+                            <AppSelect
+                              value={editFormData.tenantsPaysTo || null}
+                              onChange={(v) => handleEditChange('tenantsPaysTo', v ?? '')}
+                              options={[
+                                { value: 'propertyManager', label: 'Manager' },
+                                { value: 'landlord', label: 'Landlord' },
+                              ]}
+                              size="sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-2 block text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">Deposits Held By</label>
+                            <AppSelect
+                              value={editFormData.depositHeldBy || null}
+                              onChange={(v) => handleEditChange('depositHeldBy', v ?? '')}
+                              options={[
+                                { value: 'propertyManager', label: 'Manager' },
+                                { value: 'landlord', label: 'Landlord' },
+                              ]}
+                              size="sm"
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-4 flex flex-wrap justify-end gap-2">
+                          <button
+                            onClick={() => { setEditingId(null); setEditFormData(null); }}
+                            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-[10px] font-black text-slate-700 transition hover:bg-slate-100"
+                          >
+                            <FaTimes /> Cancel
+                          </button>
+                          <button
+                            onClick={() => handleSaveEdit(property._id)}
+                            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[10px] font-black text-white transition ${MILIK_GREEN_BG} ${MILIK_GREEN_HOVER}`}
+                          >
+                            <FaCheck /> Save Changes
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+                  );
+                }
+                return (
+                  <>
+                    <td className="px-2 py-1 border-r border-gray-100 font-semibold text-slate-900">{property.propertyCode || '-'}</td>
+                    <td className="px-2 py-1 border-r border-gray-100 text-slate-700">
+                      <div className="font-semibold text-slate-900">{property.propertyName || property.name || '-'}</div>
+                    </td>
+                    <td className="px-2 py-1 border-r border-gray-100">
+                      {Number(property.commissionPercentage) > 0 ? (
+                        <span className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-[10px] font-bold text-orange-700">
+                          {property.commissionPercentage}%
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">Not set</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1 border-r border-gray-100 text-slate-700">
+                      {property.commissionRecognitionBasis
+                        ? property.commissionRecognitionBasis === 'received'
+                          ? 'Rent Collected (Cash)'
+                          : 'Rent Expected (Accrual)'
+                        : '-'}
+                    </td>
+                    <td className="px-2 py-1 border-r border-gray-100 text-slate-700">
+                      {property.tenantsPaysTo ? (property.tenantsPaysTo === 'propertyManager' ? 'Manager' : 'Landlord') : '-'}
+                    </td>
+                    <td className="px-2 py-1 border-r border-gray-100 text-slate-700">
+                      {property.depositHeldBy ? (property.depositHeldBy === 'propertyManager' ? 'Manager' : 'Landlord') : '-'}
+                    </td>
+                  </>
+                );
+              }}
+              renderActions={(property) => {
+                if (editingId === property._id) return null;
+                return (
+                  <div className="inline-flex flex-wrap justify-end gap-2">
+                    {canWrite && (
+                      <button
+                        onClick={(event) => { event.stopPropagation(); handleEdit(property); }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-2 py-1.5 text-xs font-black text-blue-700 transition hover:bg-blue-100"
+                      >
+                        <FaEdit /> Edit
+                      </button>
+                    )}
+                    {canWrite && (
+                      <button
+                        onClick={(event) => { event.stopPropagation(); handleDelete(property._id); }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-2 py-1.5 text-xs font-black text-rose-700 transition hover:bg-rose-100"
+                      >
+                        <FaTrash /> Remove
+                      </button>
+                    )}
+                  </div>
+                );
+              }}
+              renderExpanded={(property) => {
+                if (editingId === property._id) return null;
+                return (
+                  <div className="grid gap-2 text-[10px] md:grid-cols-4">
+                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Property</span><p className="font-semibold text-slate-900">{property.propertyName || property.name || '-'}</p></div>
+                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Commission</span><p className="font-semibold text-orange-700">{property.commissionPercentage ? `${property.commissionPercentage}%` : 'Not set'}</p></div>
+                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Recognition</span><p className="font-semibold text-slate-900">{property.commissionRecognitionBasis === 'received' ? 'Rent Collected (Cash)' : property.commissionRecognitionBasis === 'invoiced' ? 'Rent Expected (Accrual)' : '-'}</p></div>
+                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Collections / Deposits</span><p className="font-semibold text-slate-900">Tenants pay {property.tenantsPaysTo === 'landlord' ? 'Landlord' : 'Manager'} · Deposits held by {property.depositHeldBy === 'landlord' ? 'Landlord' : 'Manager'}</p></div>
+                  </div>
+                );
+              }}
+            />
+            <PaginationBar
+              page={safeCurrentPage}
+              pages={totalPages}
+              total={filteredProperties.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              loading={false}
+              label="properties"
+            />
           </div>
         </div>
       </div>

@@ -14,6 +14,8 @@ import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
 import { inputClass, labelClass } from "../../utils/formStyles";
+import PaginationBar from "../../components/PaginationBar";
+import MilikTable from "../../components/common/MilikTable";
 
 // ─── Stamp dots ───────────────────────────────────────────────────────────────
 const StampDots = React.memo(({ current, required }) => {
@@ -823,95 +825,127 @@ const CarWashLoyalty = () => {
               </div>
 
               {/* Table */}
-              <div className="overflow-x-auto border border-slate-200 bg-white shadow-sm">
-                <table className="w-full min-w-[760px] text-xs">
-                  <thead>
-                    <tr className="bg-[#0B3B2E] text-white">
-                      <th className="w-8 px-2 py-2 text-center">
-                        <input
-                          type="checkbox"
-                          checked={allPageSelected}
-                          onChange={handleSelectAll}
-                          className="accent-emerald-400"
-                          title="Select all on this page"
-                        />
-                      </th>
-                      <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.15em]">Customer</th>
-                      <th className="w-40 px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.15em]">Plates</th>
-                      <th className="w-20 px-3 py-2 text-center text-[10px] font-black uppercase tracking-[0.15em]">Visits</th>
-                      <th className="w-28 px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.15em]">Last Visit</th>
-                      <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.15em]">Stamps</th>
-                      <th className="w-40 px-3 py-2 text-right text-[10px] font-black uppercase tracking-[0.15em]">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {isLoading ? (
-                      <tr><td colSpan={7} className="py-10 text-center text-xs text-slate-400">Loading…</td></tr>
-                    ) : error ? (
-                      <tr><td colSpan={7} className="py-10 text-center text-xs text-rose-400">Failed to load customers</td></tr>
-                    ) : customers.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="py-16 text-center">
-                          <FaStar className="mx-auto mb-2 text-3xl text-slate-200" />
-                          <div className="text-sm font-semibold text-slate-400">No customers found</div>
-                          <div className="mt-1 text-xs text-slate-400">
-                            {debouncedSearch ? "Try a different search term" : "Register a customer or create a job — plates enrol automatically"}
+              <MilikTable
+                columns={[
+                  { label: "Customer" },
+                  { label: "Plates", width: "10rem" },
+                  { label: "Visits", align: "center", width: "5rem" },
+                  { label: "Last Visit", width: "7rem" },
+                  { label: "Stamps" },
+                ]}
+                rows={customers}
+                rowKey="_id"
+                loading={isLoading}
+                empty={error ? "Failed to load customers" : debouncedSearch ? "Try a different search term" : "Register a customer or create a job — plates enrol automatically"}
+                minWidth="760px"
+                checkboxes
+                allChecked={allPageSelected}
+                someChecked={selectedIds.size > 0 && !allPageSelected}
+                onCheckAll={handleSelectAll}
+                isChecked={(c) => selectedIds.has(c._id)}
+                onCheckRow={(c) => handleSelect(c._id)}
+                rowClassName={(c) => (c.loyaltyCard?.pendingRewards ?? 0) > 0 ? "!bg-amber-50/40" : ""}
+                renderExpanded={(c) => (
+                  <CardDetail customerId={c._id} businessId={businessId} stampsRequired={stampsRequired} />
+                )}
+                renderRow={(c) => {
+                  const card = c.loyaltyCard;
+                  const pendingRewards = card?.pendingRewards ?? 0;
+                  return (
+                    <>
+                      <td className="px-3 py-2">
+                        <div className="font-extrabold text-slate-900 leading-tight">{c.name}</div>
+                        {c.phone
+                          ? <div className="mt-0.5 text-[10px] text-slate-500">{c.phone}</div>
+                          : c.maskedMsisdn
+                          ? <div className="mt-0.5 text-[10px] font-semibold text-emerald-600">M-Pesa · SMS ready</div>
+                          : <div className="mt-0.5 text-[10px] italic text-slate-400">No phone</div>
+                        }
+                      </td>
+                      <td className="w-40 px-3 py-2">
+                        <div className="flex flex-wrap gap-1">
+                          {(c.plates || []).map(p => (
+                            <span key={p} className="inline-flex items-center gap-1 border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold font-mono text-slate-700">
+                              <FaCar className="text-[8px] text-emerald-600" />{p}
+                            </span>
+                          ))}
+                          {!c.plates?.length && <span className="text-[10px] text-slate-400">—</span>}
+                        </div>
+                      </td>
+                      <td className="w-20 px-3 py-2 text-center tabular-nums text-xs text-slate-600">
+                        {c.stats?.totalJobs ?? 0}
+                      </td>
+                      <td className="w-28 px-3 py-2 text-xs text-slate-500">
+                        {c.stats?.lastVisit
+                          ? new Date(c.stats.lastVisit).toLocaleDateString("en-KE", { day: "2-digit", month: "short" })
+                          : <span className="italic text-slate-300">—</span>}
+                      </td>
+                      <td className="px-3 py-2">
+                        {card ? (
+                          <div className="space-y-1">
+                            <StampDots current={card.currentStamps} required={stampsRequired} />
+                            {pendingRewards > 0 && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-700 border border-amber-200">
+                                <FaGift className="text-[7px]" /> {pendingRewards}× ready
+                              </span>
+                            )}
                           </div>
-                        </td>
-                      </tr>
-                    ) : customers.map(c => (
-                      <CustomerRow
-                        key={c._id}
-                        customer={c}
-                        isExpanded={expandedId === c._id}
-                        isSelected={selectedIds.has(c._id)}
-                        stampsRequired={stampsRequired}
-                        canManage={canManage}
-                        businessId={businessId}
-                        onExpand={handleExpand}
-                        onSelect={handleSelect}
-                        onEdit={handleEdit}
-                        onSms={handleSms}
-                        onStamp={handleStamp}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                        ) : (
+                          <span className="text-[10px] italic text-slate-400">No card</span>
+                        )}
+                      </td>
+                    </>
+                  );
+                }}
+                renderActions={(c) => {
+                  const hasContact = Boolean(c.phone || c.maskedMsisdn);
+                  return (
+                    <div className="inline-flex items-center gap-1">
+                      {canManage && (
+                        <button
+                          onClick={() => handleStamp(c)}
+                          className="inline-flex items-center gap-1 border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-bold text-violet-700 hover:bg-violet-100"
+                          title="Award manual stamp"
+                        >
+                          <FaStamp className="text-[8px]" /> Stamp
+                        </button>
+                      )}
+                      {hasContact && (
+                        <button
+                          onClick={() => handleSms(c)}
+                          className="p-1 text-slate-400 hover:text-emerald-700"
+                          title="Send SMS"
+                        >
+                          <FaSms />
+                        </button>
+                      )}
+                      {canManage && (
+                        <button
+                          onClick={() => handleEdit(c)}
+                          className="p-1 text-slate-400 hover:text-emerald-700"
+                          title="Edit customer"
+                        >
+                          <FaEdit />
+                        </button>
+                      )}
+                    </div>
+                  );
+                }}
+              />
             </div>
           </div>
 
           {/* Pagination */}
-          <div className="flex-shrink-0 flex min-h-9 items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-            <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-slate-500 normal-case">Per page:</span>
-              <AppSelect
-                value={pageSize}
-                onChange={(v) => { setPageSize(Number(v ?? 25)); setPage(1); }}
-                options={[25, 50, 100].map(n => ({ value: n, label: String(n) }))}
-                size="sm"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setPage(p => Math.max(p - 1, 1))}
-                disabled={page <= 1 || isLoading}
-                className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                Previous
-              </button>
-              <span>Page {page} of {totalPages}</span>
-              <button
-                type="button"
-                onClick={() => setPage(p => Math.min(p + 1, totalPages))}
-                disabled={page >= totalPages || isLoading}
-                className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                Next
-              </button>
-            </div>
-          </div>
+          <PaginationBar
+            page={page}
+            pages={totalPages}
+            total={total}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(n) => { setPageSize(Number(n)); setPage(1); }}
+            loading={isLoading}
+            label="loyalty customers"
+          />
         </div>
       )}
 

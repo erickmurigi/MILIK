@@ -33,6 +33,7 @@ import { hasCompanyPermission } from "../../utils/permissions";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from '../../components/PaginationBar';
+import MilikTable from '../../components/common/MilikTable';
 
 const DEFAULT_PAGE_SIZE = 50;
 

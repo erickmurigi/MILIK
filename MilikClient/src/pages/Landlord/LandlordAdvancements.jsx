@@ -116,6 +116,7 @@ const STATUS_STYLES = {
 };
 
 import PaginationBar from "../../components/PaginationBar";
+import MilikTable from "../../components/common/MilikTable";
 
 
 const TYPE_OPTIONS = [

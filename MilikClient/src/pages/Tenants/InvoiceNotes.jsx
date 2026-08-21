@@ -40,13 +40,13 @@ import { adminRequests } from "../../utils/requestMethods";
 import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
 import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
+import PaginationBar from "../../components/PaginationBar";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 
 const todayInput = () => new Date().toISOString().split("T")[0];
 
-const ITEMS_PER_PAGE = 50;
 
 const normalizeList = (payload) => {
   if (Array.isArray(payload)) return payload;
@@ -298,6 +298,7 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
   const noteType = invoiceNotesDraft.noteType || initialNoteType;
   const setNoteType = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, noteType: typeof value === "function" ? value(prev.noteType || initialNoteType) : value }));
   const [currentPage, setCurrentPage] = useTabState("/invoices/notes:currentPage", 1);
+  const [pageSize, setPageSize] = useState(50);
   const filters = invoiceNotesDraft.filters || { propertyId: "", tenantId: "", tenantScope: "active", noteType: initialNoteType, search: "", status: "active" };
   const effectiveFilters = isLocked ? { ...filters, noteType: "DEBIT_NOTE" } : filters;
   const setFilters = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, filters: typeof value === "function" ? value(prev.filters || filters) : value }));
@@ -616,10 +617,10 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
     });
   }, [notes, effectiveFilters, isLocked, lockedBillItemKey, propertyMap, tenantMap]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredNotes.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filteredNotes.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = filteredNotes.length === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const startIndex = filteredNotes.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
   const paginatedNotes = filteredNotes.slice(startIndex, endIndex);
 
   useEffect(() => {
@@ -1051,49 +1052,16 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
             />
 
             {/* ── FOOTER PAGINATION ── */}
-            <div className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">
-              <p>
-                <span className="font-semibold">Showing:</span>{" "}
-                {filteredNotes.length === 0 ? 0 : startIndex + 1}
-                {" – "}
-                {Math.min(endIndex, filteredNotes.length)} of {filteredNotes.length} note{filteredNotes.length === 1 ? "" : "s"}
-                {filters.status !== "all" ? ` · Status: ${filters.status}` : ""}
-              </p>
-              <div className="flex items-center gap-3">
-                <p>
-                  <span className="font-semibold">Selected:</span> {selectedNotes.length}
-                  {filteredNotes.length > 0 && (
-                    <>
-                      {" · "}
-                      <span className="font-semibold">Total:</span> {formatCurrency(summaryCards.totalValue)}
-                    </>
-                  )}
-                </p>
-                <div className="h-4 w-px bg-slate-300" />
-                <span className="text-slate-500">Per page: {ITEMS_PER_PAGE}</span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                    disabled={safeCurrentPage === 1}
-                    className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Previous
-                  </button>
-                  <span className="rounded border border-slate-200 bg-white px-2.5 py-0.5 font-semibold text-slate-700">
-                    Page {safeCurrentPage} of {totalPages}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                    disabled={safeCurrentPage === totalPages}
-                    className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            </div>
+            <PaginationBar
+              page={safeCurrentPage}
+              pages={totalPages}
+              total={filteredNotes.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              loading={false}
+              label="notes"
+            />
           </div>
         </div>
       </div>

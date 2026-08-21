@@ -18,11 +18,11 @@ import AppSelect from '../../components/common/AppSelect';
 import { adminRequests } from '../../utils/requestMethods';
 import { fmtDate } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
+import PaginationBar from '../../components/PaginationBar';
 
 const formatPercent = (value) => (value === null || value === undefined ? '—' : `${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}%`);
 const toDateInputValue = (value) => new Date(value).toISOString().split('T')[0];
 const formatMethod = (value) => (value ? String(value).replace(/_/g, ' ') : 'All methods');
-const ITEMS_PER_PAGE = 50;
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
   .map((label, i) => ({ value: String(i + 1), label }));
@@ -61,6 +61,7 @@ const RentalCollectionReport = () => {
   };
   const [report, setReport] = useState({ summary: {}, byProperty: [], rows: [], allUtilityTypes: [] });
   const [currentPage, setCurrentPage] = useTabState("/reports/rental-collection:currentPage", 1);
+  const [pageSize, setPageSize] = useState(50);
 
   useEffect(() => {
     if (!businessId) return;
@@ -134,11 +135,11 @@ const RentalCollectionReport = () => {
 
   const paginatedRows = useMemo(() => {
     const rows = Array.isArray(report.rows) ? report.rows : [];
-    const startIndex = (Math.max(currentPage, 1) - 1) * ITEMS_PER_PAGE;
-    return rows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [report.rows, currentPage]);
+    const startIndex = (Math.max(currentPage, 1) - 1) * pageSize;
+    return rows.slice(startIndex, startIndex + pageSize);
+  }, [report.rows, currentPage, pageSize]);
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil((report.rows?.length || 0) / ITEMS_PER_PAGE)), [report.rows]);
+  const totalPages = useMemo(() => Math.max(1, Math.ceil((report.rows?.length || 0) / pageSize)), [report.rows, pageSize]);
 
   useEffect(() => { setCurrentPage(1); }, [filters.startDate, filters.endDate, filters.propertyId, filters.tenantId, filters.unitId, filters.landlordId, filters.paymentMethod, filters.cashbook, filters.zone]);
   useEffect(() => { if (currentPage > totalPages) setCurrentPage(totalPages); }, [currentPage, totalPages]);
@@ -520,15 +521,16 @@ const RentalCollectionReport = () => {
                     </tbody>
                   </table>
                 </div>
-                <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] text-slate-600">
-                  <div>Showing {report.rows?.length ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0}–{Math.min(currentPage * ITEMS_PER_PAGE, report.rows?.length || 0)} of {report.rows?.length || 0} receipt row(s)</div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-slate-700">50 items per page</span>
-                    <button type="button" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} className="rounded-md border border-slate-300 bg-white px-2 py-1 font-semibold text-slate-700 disabled:opacity-50">Previous</button>
-                    <span className="font-semibold text-slate-700">Page {currentPage} of {totalPages}</span>
-                    <button type="button" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} className="rounded-md border border-slate-300 bg-white px-2 py-1 font-semibold text-slate-700 disabled:opacity-50">Next</button>
-                  </div>
-                </div>
+                <PaginationBar
+                  page={currentPage}
+                  pages={totalPages}
+                  total={report.rows?.length || 0}
+                  pageSize={pageSize}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+                  loading={loading}
+                  label="receipt rows"
+                />
               </div>
             </div>
           </div>

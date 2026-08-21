@@ -14,10 +14,10 @@ import { hasCompanyPermission } from '../../utils/permissions';
 import { fmtDate } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 import useDebounce from '../../hooks/useDebounce';
+import PaginationBar from '../../components/PaginationBar';
 
 const toDateInputValue = (value) => new Date(value).toISOString().split('T')[0];
 const formatPercent = (value) => (value === null || value === undefined ? '—' : `${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}%`);
-const ITEMS_PER_PAGE = 50;
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
   .map((label, i) => ({ value: String(i + 1), label }));
@@ -93,6 +93,7 @@ const PaidBalanceReport = () => {
   };
   const [report, setReport] = useState({ summary: {}, rows: [], allUtilityTypes: [] });
   const [currentPage, setCurrentPage] = useTabState("/reports/paid-balance:currentPage", 1);
+  const [pageSize, setPageSize] = useState(50);
 
   useEffect(() => {
     if (!businessId) return;
@@ -152,11 +153,11 @@ const PaidBalanceReport = () => {
   }, [report.rows, debouncedSearch]);
 
   const paginatedRows = useMemo(() => {
-    const startIndex = (Math.max(currentPage, 1) - 1) * ITEMS_PER_PAGE;
-    return searchFilteredRows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [searchFilteredRows, currentPage]);
+    const startIndex = (Math.max(currentPage, 1) - 1) * pageSize;
+    return searchFilteredRows.slice(startIndex, startIndex + pageSize);
+  }, [searchFilteredRows, currentPage, pageSize]);
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(searchFilteredRows.length / ITEMS_PER_PAGE)), [searchFilteredRows]);
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(searchFilteredRows.length / pageSize)), [searchFilteredRows, pageSize]);
 
   useEffect(() => { setCurrentPage(1); }, [filters.startDate, filters.asOfDate, filters.propertyId, filters.status, debouncedSearch]);
   useEffect(() => { if (currentPage > totalPages) setCurrentPage(totalPages); }, [currentPage, totalPages]);
@@ -468,15 +469,16 @@ const PaidBalanceReport = () => {
                 </div>
 
                 {/* ── Pagination ── */}
-                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
-                  <div>Showing {searchFilteredRows.length ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0}–{Math.min(currentPage * ITEMS_PER_PAGE, searchFilteredRows.length)} of {searchFilteredRows.length} tenant row(s)</div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-slate-700">50 items per page</span>
-                    <button type="button" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} className="rounded-md border border-slate-300 bg-white px-2 py-1 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
-                    <span className="font-semibold text-slate-700">Page {currentPage} of {totalPages}</span>
-                    <button type="button" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} className="rounded-md border border-slate-300 bg-white px-2 py-1 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
-                  </div>
-                </div>
+                <PaginationBar
+                  page={currentPage}
+                  pages={totalPages}
+                  total={searchFilteredRows.length}
+                  pageSize={pageSize}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+                  loading={loading}
+                  label="tenant rows"
+                />
               </div>
             </div>
           </div>

@@ -5,9 +5,11 @@ import { FaPlus, FaSearch, FaTimes, FaUser } from 'react-icons/fa';
 import ClientsShell from './ClientsShell';
 import { clientsApi } from '../../services/clientsApi';
 import AppSelect from '../../components/common/AppSelect';
+import PaginationBar from '../../components/PaginationBar';
 import Modal from '../../components/common/Modal';
 import { inputClass, labelClass } from '../../utils/formStyles';
 import StatusBadge from '../../components/common/StatusBadge';
+import MilikTable from '../../components/common/MilikTable';
 
 const STATUS_TABS = [
   { value: 'all',      label: 'All' },
@@ -189,7 +191,7 @@ const ClientsList = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [page, setPage]             = useState(1);
-  const limit                       = 20;
+  const [limit, setLimit]           = useState(20);
   const [showAddModal, setShowAddModal] = useState(false);
 
   const fetchClients = useCallback(async () => {
@@ -296,102 +298,60 @@ const ClientsList = () => {
         </div>
 
         {/* ── Table ─────────────────────────────────────────────────────────── */}
-        <div className="flex-1 min-h-0 overflow-auto">
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 z-10">
-              <tr className="bg-[#0B3B2E] text-white text-[10px]">
-                {['Code', 'Name', 'Category', 'Email', 'Phone', 'Status', 'Action'].map((h) => (
-                  <th
-                    key={h}
-                    className={`px-3 py-2 text-left font-black uppercase tracking-widest whitespace-nowrap ${h === 'Action' ? 'text-right' : ''}`}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="py-16 text-center text-sm text-slate-400">
-                    Loading clients…
-                  </td>
-                </tr>
-              ) : !clients.length ? (
-                <tr>
-                  <td colSpan={7} className="py-16 text-center">
-                    <FaUser className="mx-auto mb-2 text-slate-300" size={24} />
-                    <p className="text-sm font-semibold text-slate-500">
-                      {debouncedSearch ? 'No clients match your search' : 'No clients yet'}
-                    </p>
-                    <p className="text-xs text-slate-400 mt-1">
-                      {debouncedSearch ? 'Try a different search term' : 'Click "+ Add Client" to get started'}
-                    </p>
-                  </td>
-                </tr>
-              ) : (
-                clients.map((cl, idx) => (
-                  <tr
-                    key={cl._id}
-                    className={`hover:bg-emerald-50/30 cursor-pointer transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}
-                    onClick={() => navigate(`/clients/${cl._id}`)}
-                  >
-                    <td className="px-3 py-2.5 font-mono text-[11px] text-slate-500">
-                      {cl.clientCode || '—'}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <p className="font-semibold text-slate-800">{cl.name}</p>
-                      {cl.companyRegistration && (
-                        <p className="text-[10px] text-slate-400">{cl.companyRegistration}</p>
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5 text-slate-600">{cl.category || '—'}</td>
-                    <td className="px-3 py-2.5 text-slate-600">{cl.email || '—'}</td>
-                    <td className="px-3 py-2.5 text-slate-600">{cl.phone || '—'}</td>
-                    <td className="px-3 py-2.5">
-                      <StatusBadge status={cl.status} map={CLIENT_STATUS_MAP} />
-                    </td>
-                    <td className="px-3 py-2.5 text-right">
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); navigate(`/clients/${cl._id}`); }}
-                        className="border border-slate-200 text-slate-700 hover:bg-slate-50 px-2.5 py-1 rounded text-[11px] font-semibold"
-                      >
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <MilikTable
+          columns={[
+            { label: 'Code' },
+            { label: 'Name' },
+            { label: 'Category' },
+            { label: 'Email' },
+            { label: 'Phone' },
+            { label: 'Status' },
+          ]}
+          rows={clients}
+          loading={loading}
+          empty={debouncedSearch ? 'No clients match your search' : 'No clients yet'}
+          onRowClick={(cl) => navigate(`/clients/${cl._id}`)}
+          renderRow={(cl) => (
+            <>
+              <td className="px-3 py-2.5 font-mono text-[11px] text-slate-500">
+                {cl.clientCode || '—'}
+              </td>
+              <td className="px-3 py-2.5">
+                <p className="font-semibold text-slate-800">{cl.name}</p>
+                {cl.companyRegistration && (
+                  <p className="text-[10px] text-slate-400">{cl.companyRegistration}</p>
+                )}
+              </td>
+              <td className="px-3 py-2.5 text-slate-600">{cl.category || '—'}</td>
+              <td className="px-3 py-2.5 text-slate-600">{cl.email || '—'}</td>
+              <td className="px-3 py-2.5 text-slate-600">{cl.phone || '—'}</td>
+              <td className="px-3 py-2.5">
+                <StatusBadge status={cl.status} map={CLIENT_STATUS_MAP} />
+              </td>
+            </>
+          )}
+          renderActions={(cl) => (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); navigate(`/clients/${cl._id}`); }}
+              className="border border-slate-200 text-slate-700 hover:bg-slate-50 px-2.5 py-1 rounded text-[11px] font-semibold"
+            >
+              View
+            </button>
+          )}
+        />
 
         {/* ── Pagination ─────────────────────────────────────────────────────── */}
-        <div className="flex-shrink-0 flex min-h-8 items-center justify-between border-t border-slate-200 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-          <span className="normal-case text-slate-500 font-normal text-xs">
-            {pagination.total || 0} total
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.max(p - 1, 1))}
-              disabled={page <= 1}
-              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              Previous
-            </button>
-            <span>Page {page} of {pages}</span>
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.min(p + 1, pages))}
-              disabled={page >= pages}
-              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        <PaginationBar
+          page={page}
+          pages={pages}
+          total={pagination.total || 0}
+          pageSize={limit}
+          onPageChange={setPage}
+          onPageSizeChange={(n) => { setLimit(n); setPage(1); }}
+          loading={loading}
+          label="clients"
+        />
       </div>
 
       {showAddModal && (

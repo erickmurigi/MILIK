@@ -18,9 +18,10 @@ import { useTabState } from "../../hooks/useTabState";
 import useDebounce from "../../hooks/useDebounce";
 import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
+import PaginationBar from "../../components/PaginationBar";
 
-const PAGE_SIZE   = 50;
-const AUTO_RELOAD = 30;
+const DEFAULT_PAGE_SIZE = 50;
+const AUTO_RELOAD       = 30;
 
 
 const STATUS_MAP = {
@@ -152,6 +153,7 @@ export default function CoopCollections() {
   const [summary,  setSummary]  = useState({ unmatched: 0, matched_tenant: 0, captured: 0, ignored: 0, totalAmount: 0 });
   const [page,     setPage]     = useTabState("/receipts/coop-collections:page", 1);
   const [pages,    setPages]    = useState(1);
+  const [pageSize, setPageSize] = useTabState("/receipts/coop-collections:pageSize", DEFAULT_PAGE_SIZE);
   const [loading,  setLoading]  = useState(false);
   const [statusFilter, setStatusFilter] = useTabState("/receipts/coop-collections:statusFilter", "");
   const [search,   setSearch]   = useTabState("/receipts/coop-collections:search", "");
@@ -169,7 +171,7 @@ export default function CoopCollections() {
     if (!businessId) return;
     setLoading(true);
     try {
-      const params = { business: businessId, page: pg, limit: PAGE_SIZE };
+      const params = { business: businessId, page: pg, limit: pageSize };
       if (statusFilter) params.status = statusFilter;
       if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
       if (dateFrom) params.dateFrom = dateFrom;
@@ -185,7 +187,7 @@ export default function CoopCollections() {
     } finally {
       setLoading(false);
     }
-  }, [businessId, statusFilter, debouncedSearch, dateFrom, dateTo]);
+  }, [businessId, statusFilter, debouncedSearch, dateFrom, dateTo, pageSize]);
 
   useEffect(() => { fetchData(1); }, [fetchData]);
 
@@ -367,19 +369,16 @@ export default function CoopCollections() {
         </div>
 
         {/* Pagination */}
-        {pages > 1 && (
-          <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-            <span>{total} total collection{total !== 1 ? "s" : ""}</span>
-            <div className="flex gap-1">
-              {Array.from({ length: pages }, (_, i) => i + 1).map(p => (
-                <button key={p} onClick={() => fetchData(p)}
-                  className={`h-7 w-7 border text-[11px] font-bold ${p === page ? "border-[#0B3B2E] bg-[#0B3B2E] text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
-                  {p}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        <PaginationBar
+          page={page}
+          pages={pages}
+          total={total}
+          pageSize={pageSize}
+          onPageChange={(p) => fetchData(p)}
+          onPageSizeChange={(n) => { setPageSize(n); fetchData(1); }}
+          loading={loading}
+          label="collections"
+        />
       </div>
 
       {/* Assign Tenant Modal */}

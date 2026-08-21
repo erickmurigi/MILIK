@@ -33,6 +33,7 @@ import { buildTenantOptions } from "../../utils/tenantUtils";
 import { useConfirm } from "../../context/ConfirmContext";
 import { fmtDate } from "../../utils/dates";
 import PaginationBar from '../../components/PaginationBar';
+import MilikTable from '../../components/common/MilikTable';
 
 const DEFAULT_PAGE_SIZE = 25;
 
@@ -425,122 +426,104 @@ const Maintenances = () => {
         </div>
 
         {/* Table */}
-        <div className="flex-1 min-h-0 overflow-auto">
-              <table className="w-full min-w-[900px] text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className="bg-[#0B3B2E] text-white">
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Request</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Location</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Assigned To</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Costs</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Dates</th>
-                    <th className="px-3 py-1 border-r border-gray-100 text-right font-bold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-400">Loading maintenance requests…</td></tr>
-                  ) : requests.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="px-4 py-14 text-center">
-                        <div className="mx-auto flex w-fit flex-col items-center gap-2 text-slate-400">
-                          <FaTools className="text-3xl opacity-30" />
-                          <p className="text-sm font-semibold">No maintenance requests found</p>
-                          <p className="text-xs">Try adjusting your filters or create a new request.</p>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    pageRows.map((item, idx) => {
-                      const isEmergency = item?.priority === "emergency";
-                      const rowBg = isEmergency
-                        ? "bg-rose-50/60"
-                        : idx % 2 === 0 ? "bg-white" : "bg-slate-50/50";
-                      const busy = updatingId.startsWith(item._id);
-
-                      return (
-                        <tr key={item._id} className={`border-b border-gray-100 ${rowBg} hover:bg-blue-50/40 align-top`}>
-                          <td className="px-3 py-1 border-r border-gray-100 max-w-[240px]">
-                            <div className="flex items-start gap-2">
-                              <div className={`mt-0.5 flex-shrink-0 rounded-lg p-2 text-xs ${isEmergency ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-500"}`}>
-                                {isEmergency ? <FaExclamationTriangle /> : <FaTools />}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="font-black text-slate-900 truncate">{item?.title || "Untitled"}</p>
-                                <p className="mt-0.5 text-[10px] leading-4 text-slate-500 line-clamp-2">{item?.description || "—"}</p>
-                                <div className="mt-1.5 flex flex-wrap gap-1">
-                                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${STATUS_BADGE[item?.status] || STATUS_BADGE.pending}`}>
-                                    {String(item?.status || "pending").replace(/_/g, " ")}
-                                  </span>
-                                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${PRIORITY_BADGE[item?.priority] || PRIORITY_BADGE.medium}`}>
-                                    {item?.priority || "medium"}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100">
-                            <p className="font-semibold text-slate-900">{getRequestPropertyName(item) || "—"}</p>
-                            <p className="text-[10px] text-slate-500 mt-0.5">Unit {item?.unit?.unitNumber || "—"}</p>
-                            <p className="text-[10px] text-slate-500 mt-0.5">{item?.tenant?.name || "No tenant"}</p>
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100">
-                            <p className="font-semibold text-slate-900">{item?.assignedTo || <span className="text-slate-400 italic">Unassigned</span>}</p>
-                            <p className="text-[10px] text-slate-500 mt-0.5">Created {fmtDate(item?.createdAt)}</p>
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100">
-                            <p className="font-semibold text-slate-900">Est {money(item?.estimatedCost)}</p>
-                            <p className="text-[10px] text-slate-500 mt-0.5">Actual {money(item?.actualCost)}</p>
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100">
-                            <p className="font-semibold text-slate-900">Sched. {fmtDate(item?.scheduledDate)}</p>
-                            <p className="text-[10px] text-slate-500 mt-0.5">Done {fmtDate(item?.completedDate)}</p>
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-right">
-                            <div className="inline-flex flex-wrap justify-end gap-1.5">
-                              {canUpdate && item?.status === "pending" && (
-                                <button
-                                  onClick={() => quickUpdateStatus(item, "in_progress")}
-                                  disabled={busy}
-                                  className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-black text-blue-700 hover:bg-blue-100 disabled:opacity-50"
-                                >
-                                  Start
-                                </button>
-                              )}
-                              {canUpdate && (item?.status === "pending" || item?.status === "in_progress") && (
-                                <button
-                                  onClick={() => quickUpdateStatus(item, "completed")}
-                                  disabled={busy}
-                                  className="rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
-                                >
-                                  Complete
-                                </button>
-                              )}
-                              {canUpdate && (
-                                <button
-                                  onClick={() => openEditModal(item)}
-                                  className="rounded border border-slate-300 bg-white px-2 py-1 text-[10px] font-black text-slate-700 hover:bg-slate-50"
-                                >
-                                  <FaEdit />
-                                </button>
-                              )}
-                              {canDelete && (
-                                <button
-                                  onClick={() => handleDelete(item)}
-                                  className="rounded border border-rose-300 bg-white px-2 py-1 text-[10px] font-black text-rose-600 hover:bg-rose-50"
-                                >
-                                  <FaTrash />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+        <MilikTable
+          columns={[
+            { label: 'Request' },
+            { label: 'Location' },
+            { label: 'Assigned To' },
+            { label: 'Costs' },
+            { label: 'Dates' },
+          ]}
+          rows={pageRows}
+          loading={loading}
+          empty="No maintenance requests found."
+          minWidth="900px"
+          rowClassName={(item) => `align-top${item?.priority === 'emergency' ? ' !bg-rose-50/60' : ''}`}
+          renderRow={(item) => {
+            const isEmergency = item?.priority === 'emergency';
+            return (
+              <>
+                <td className="px-3 py-1 border-r border-gray-100 max-w-[240px]">
+                  <div className="flex items-start gap-2">
+                    <div className={`mt-0.5 flex-shrink-0 rounded-lg p-2 text-xs ${isEmergency ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-500"}`}>
+                      {isEmergency ? <FaExclamationTriangle /> : <FaTools />}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-black text-slate-900 truncate">{item?.title || "Untitled"}</p>
+                      <p className="mt-0.5 text-[10px] leading-4 text-slate-500 line-clamp-2">{item?.description || "—"}</p>
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${STATUS_BADGE[item?.status] || STATUS_BADGE.pending}`}>
+                          {String(item?.status || "pending").replace(/_/g, " ")}
+                        </span>
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${PRIORITY_BADGE[item?.priority] || PRIORITY_BADGE.medium}`}>
+                          {item?.priority || "medium"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-3 py-1 border-r border-gray-100">
+                  <p className="font-semibold text-slate-900">{getRequestPropertyName(item) || "—"}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Unit {item?.unit?.unitNumber || "—"}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">{item?.tenant?.name || "No tenant"}</p>
+                </td>
+                <td className="px-3 py-1 border-r border-gray-100">
+                  <p className="font-semibold text-slate-900">{item?.assignedTo || <span className="text-slate-400 italic">Unassigned</span>}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Created {fmtDate(item?.createdAt)}</p>
+                </td>
+                <td className="px-3 py-1 border-r border-gray-100">
+                  <p className="font-semibold text-slate-900">Est {money(item?.estimatedCost)}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Actual {money(item?.actualCost)}</p>
+                </td>
+                <td className="px-3 py-1 border-r border-gray-100">
+                  <p className="font-semibold text-slate-900">Sched. {fmtDate(item?.scheduledDate)}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Done {fmtDate(item?.completedDate)}</p>
+                </td>
+              </>
+            );
+          }}
+          renderActions={(item) => {
+            const busy = updatingId.startsWith(item._id);
+            return (
+              <div className="inline-flex flex-wrap justify-end gap-1.5">
+                {canUpdate && item?.status === "pending" && (
+                  <button
+                    onClick={() => quickUpdateStatus(item, "in_progress")}
+                    disabled={busy}
+                    className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-black text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                  >
+                    Start
+                  </button>
+                )}
+                {canUpdate && (item?.status === "pending" || item?.status === "in_progress") && (
+                  <button
+                    onClick={() => quickUpdateStatus(item, "completed")}
+                    disabled={busy}
+                    className="rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                  >
+                    Complete
+                  </button>
+                )}
+                {canUpdate && (
+                  <button
+                    onClick={() => openEditModal(item)}
+                    className="rounded border border-slate-300 bg-white px-2 py-1 text-[10px] font-black text-slate-700 hover:bg-slate-50"
+                  >
+                    <FaEdit />
+                  </button>
+                )}
+                {canDelete && (
+                  <button
+                    onClick={() => handleDelete(item)}
+                    className="rounded border border-rose-300 bg-white px-2 py-1 text-[10px] font-black text-rose-600 hover:bg-rose-50"
+                  >
+                    <FaTrash />
+                  </button>
+                )}
+              </div>
+            );
+          }}
+        />
 
         <PaginationBar
           page={currentPage}

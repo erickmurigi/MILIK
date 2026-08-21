@@ -24,6 +24,7 @@ import {
 } from '../../redux/apiCalls';
 import AppSelect from '../../components/common/AppSelect';
 import PaginationBar from '../../components/PaginationBar';
+import MilikTable from '../../components/common/MilikTable';
 
 // ─── constants ────────────────────────────────────────────────────────────────
 const CATEGORIES = ['maintenance', 'repair', 'utility', 'tax', 'insurance', 'supplies', 'other'];

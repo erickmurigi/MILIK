@@ -28,6 +28,7 @@ import { buildTenantOptions } from "../../utils/tenantUtils";
 import { useConfirm } from "../../context/ConfirmContext";
 import { fmtDate } from "../../utils/dates";
 import PaginationBar from '../../components/PaginationBar';
+import MilikTable from '../../components/common/MilikTable';
 
 const DEFAULT_PAGE_SIZE = 25;
 
@@ -423,108 +424,90 @@ const Inspections = () => {
         </div>
 
         {/* Table */}
-        <div className="flex-1 min-h-0 overflow-auto">
-              <table className="w-full min-w-[960px] text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className="bg-[#0B3B2E] text-white">
-                    {["Inspection", "Location", "Schedule", "Score & Findings", "Next Inspection", "Actions"].map((h, i) => (
-                      <th key={h} className={`px-3 py-1 font-bold ${i === 5 ? "text-right" : "text-left border-r border-white/10"}`}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-400">Loading inspections…</td></tr>
-                  ) : inspections.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="px-4 py-14 text-center">
-                        <div className="mx-auto flex w-fit flex-col items-center gap-2 text-slate-400">
-                          <FaClipboardCheck className="text-3xl opacity-30" />
-                          <p className="text-sm font-semibold">No inspections found</p>
-                          <p className="text-xs">Try adjusting filters or schedule a new inspection.</p>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    pageRows.map((item, idx) => {
-                      const isEmergency = item?.type === "emergency";
-                      const rowBg = isEmergency
-                        ? "bg-rose-50/60"
-                        : idx % 2 === 0 ? "bg-white" : "bg-slate-50/50";
-                      const scoreNum = Number.isFinite(Number(item?.score)) ? Number(item.score) : null;
-
-                      return (
-                        <tr key={item._id} className={`border-b border-gray-100 ${rowBg} hover:bg-blue-50/40 align-top`}>
-                          <td className="px-3 py-1 border-r border-gray-100 max-w-[220px]">
-                            <div className="flex items-start gap-2">
-                              <div className={`mt-0.5 flex-shrink-0 rounded-lg p-2 text-xs ${item?.status === "completed" ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>
-                                {item?.status === "completed" ? <FaCheckCircle /> : <FaClipboardCheck />}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="font-black text-slate-900 truncate">{item?.inspectionNumber || "—"}</p>
-                                <p className="text-[10px] text-slate-500 mt-0.5 truncate">Inspector: {item?.inspectorName || "—"}</p>
-                                <div className="mt-1.5 flex flex-wrap gap-1">
-                                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${STATUS_BADGE[item?.status] || STATUS_BADGE.scheduled}`}>
-                                    {String(item?.status || "scheduled").replace(/_/g, " ")}
-                                  </span>
-                                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${TYPE_BADGE[item?.type] || TYPE_BADGE.routine}`}>
-                                    {formatTypeLabel(item?.type)}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100">
-                            <p className="font-semibold text-slate-900">{getInspectionPropertyName(item) || "—"}</p>
-                            <p className="text-[10px] text-slate-500 mt-0.5">Unit {item?.unit?.unitNumber || "Common / Property"}</p>
-                            <p className="text-[10px] text-slate-500 mt-0.5">{item?.tenant?.name || "No tenant"}</p>
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100">
-                            <p className="font-semibold text-slate-900">{fmtDate(item?.scheduledDate)}</p>
-                            <p className="text-[10px] text-slate-500 mt-0.5">Completed {fmtDate(item?.completedDate)}</p>
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100">
-                            <div className="flex items-center gap-2">
-                              <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black ${scoreColor(item?.score)}`}>
-                                {scoreNum !== null ? `${scoreNum}/100` : "N/A"}
-                              </span>
-                            </div>
-                            <p className="text-[10px] text-slate-500 mt-1.5">{Number(item?.issuesFound || 0)} issue(s) · {Number(item?.photosCount || 0)} photo(s)</p>
-                            {item?.recommendations && (
-                              <p className="text-[10px] text-slate-400 mt-1 line-clamp-2 leading-4">{item.recommendations}</p>
-                            )}
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100">
-                            <p className="font-semibold text-slate-900">{fmtDate(item?.nextInspectionDate)}</p>
-                            <p className="text-[10px] text-slate-500 mt-0.5">Tenant present: {item?.tenantPresent ? "Yes" : "No"}</p>
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-right">
-                            <div className="inline-flex flex-wrap justify-end gap-1.5">
-                              {canUpdate && (
-                                <button
-                                  onClick={() => openEditModal(item)}
-                                  className="rounded border border-slate-300 bg-white px-2 py-1 text-[10px] font-black text-slate-700 hover:bg-slate-50"
-                                >
-                                  <FaEdit />
-                                </button>
-                              )}
-                              {canDelete && (
-                                <button
-                                  onClick={() => handleDelete(item)}
-                                  className="rounded border border-rose-300 bg-white px-2 py-1 text-[10px] font-black text-rose-600 hover:bg-rose-50"
-                                >
-                                  <FaTrash />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
+        <MilikTable
+          columns={[
+            { label: 'Inspection' },
+            { label: 'Location' },
+            { label: 'Schedule' },
+            { label: 'Score & Findings' },
+            { label: 'Next Inspection' },
+          ]}
+          rows={pageRows}
+          loading={loading}
+          empty="No inspections found."
+          minWidth="960px"
+          rowClassName={(item) => `align-top${item?.type === 'emergency' ? ' !bg-rose-50/60' : ''}`}
+          renderRow={(item) => {
+            const scoreNum = Number.isFinite(Number(item?.score)) ? Number(item.score) : null;
+            return (
+              <>
+                <td className="px-3 py-1 border-r border-gray-100 max-w-[220px]">
+                  <div className="flex items-start gap-2">
+                    <div className={`mt-0.5 flex-shrink-0 rounded-lg p-2 text-xs ${item?.status === "completed" ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>
+                      {item?.status === "completed" ? <FaCheckCircle /> : <FaClipboardCheck />}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-black text-slate-900 truncate">{item?.inspectionNumber || "—"}</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5 truncate">Inspector: {item?.inspectorName || "—"}</p>
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${STATUS_BADGE[item?.status] || STATUS_BADGE.scheduled}`}>
+                          {String(item?.status || "scheduled").replace(/_/g, " ")}
+                        </span>
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${TYPE_BADGE[item?.type] || TYPE_BADGE.routine}`}>
+                          {formatTypeLabel(item?.type)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-3 py-1 border-r border-gray-100">
+                  <p className="font-semibold text-slate-900">{getInspectionPropertyName(item) || "—"}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Unit {item?.unit?.unitNumber || "Common / Property"}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">{item?.tenant?.name || "No tenant"}</p>
+                </td>
+                <td className="px-3 py-1 border-r border-gray-100">
+                  <p className="font-semibold text-slate-900">{fmtDate(item?.scheduledDate)}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Completed {fmtDate(item?.completedDate)}</p>
+                </td>
+                <td className="px-3 py-1 border-r border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black ${scoreColor(item?.score)}`}>
+                      {scoreNum !== null ? `${scoreNum}/100` : "N/A"}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1.5">{Number(item?.issuesFound || 0)} issue(s) · {Number(item?.photosCount || 0)} photo(s)</p>
+                  {item?.recommendations && (
+                    <p className="text-[10px] text-slate-400 mt-1 line-clamp-2 leading-4">{item.recommendations}</p>
                   )}
-                </tbody>
-              </table>
+                </td>
+                <td className="px-3 py-1 border-r border-gray-100">
+                  <p className="font-semibold text-slate-900">{fmtDate(item?.nextInspectionDate)}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Tenant present: {item?.tenantPresent ? "Yes" : "No"}</p>
+                </td>
+              </>
+            );
+          }}
+          renderActions={(item) => (
+            <div className="inline-flex flex-wrap justify-end gap-1.5">
+              {canUpdate && (
+                <button
+                  onClick={() => openEditModal(item)}
+                  className="rounded border border-slate-300 bg-white px-2 py-1 text-[10px] font-black text-slate-700 hover:bg-slate-50"
+                >
+                  <FaEdit />
+                </button>
+              )}
+              {canDelete && (
+                <button
+                  onClick={() => handleDelete(item)}
+                  className="rounded border border-rose-300 bg-white px-2 py-1 text-[10px] font-black text-rose-600 hover:bg-rose-50"
+                >
+                  <FaTrash />
+                </button>
+              )}
             </div>
+          )}
+        />
 
         <PaginationBar
           page={currentPage}

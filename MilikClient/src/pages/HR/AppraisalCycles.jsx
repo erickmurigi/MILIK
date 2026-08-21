@@ -10,6 +10,7 @@ import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from '../../components/PaginationBar';
+import MilikTable from '../../components/common/MilikTable';
 import { fmtDate } from '../../utils/dates';
 import { useConfirm } from '../../context/ConfirmContext';
 
@@ -182,83 +183,70 @@ export default function AppraisalCycles() {
         </div>
 
         {/* ── Table ── */}
-        <div className="flex-1 overflow-auto">
-          <table className="min-w-full text-[11px] border-collapse">
-            <thead className="sticky top-0 z-10 shadow-sm">
-              <tr className="bg-[#0B3B2E] text-white">
-                <th className="px-3 py-1 text-left font-bold w-8 border-r border-white/10">#</th>
-                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Cycle Name</th>
-                <th className="px-3 py-1 text-left font-bold w-36 border-r border-white/10">Period</th>
-                <th className="px-3 py-1 text-left font-bold w-52 border-r border-white/10">Date Range</th>
-                <th className="px-3 py-1 text-left font-bold border-r border-white/10">KPI Assignments</th>
-                <th className="px-3 py-1 text-center font-bold w-20 border-r border-white/10">Employees</th>
-                <th className="px-3 py-1 text-center font-bold w-20 border-r border-white/10">Status</th>
-                <th className="px-3 py-1 text-right font-bold w-36">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && <tr><td colSpan={8} className="py-8 text-center text-[11px] text-slate-400">Loading…</td></tr>}
-              {!loading && !cycles.length && (
-                <tr>
-                  <td colSpan={8} className="py-12 text-center">
-                    <FaCalendarAlt size={22} className="mx-auto mb-2 text-slate-200" />
-                    <p className="text-[11px] text-slate-400">No appraisal cycles found — click "+ New Cycle" to create one.</p>
-                  </td>
-                </tr>
+        <MilikTable
+          columns={[
+            { label: '#', width: '2rem' },
+            { label: 'Cycle Name' },
+            { label: 'Period', width: '9rem' },
+            { label: 'Date Range', width: '13rem' },
+            { label: 'KPI Assignments' },
+            { label: 'Employees', align: 'center', width: '5rem' },
+            { label: 'Status', align: 'center', width: '5rem' },
+          ]}
+          rows={pagedCycles}
+          loading={loading}
+          empty="No appraisal cycles found — click &quot;+ New Cycle&quot; to create one."
+          renderRow={(c, i) => (
+            <>
+              <td className="px-3 py-1 text-slate-400 tabular-nums border-r border-gray-100">{(page - 1) * pageSize + i + 1}</td>
+              <td className="px-3 py-1 border-r border-gray-100">
+                <span className="font-semibold text-slate-800">{c.name}</span>
+                {c.notes && <span className="ml-2 text-[10px] text-slate-400 italic">{c.notes}</span>}
+              </td>
+              <td className="px-3 py-1 text-slate-600 tabular-nums border-r border-gray-100">{c.year} · {c.periodType}</td>
+              <td className="px-3 py-1 text-slate-500 tabular-nums border-r border-gray-100">
+                {fmtDate(c.startDate)} – {fmtDate(c.endDate)}
+              </td>
+              <td className="px-3 py-1 border-r border-gray-100">
+                <div className="flex flex-wrap gap-1">
+                  {c.kpis?.length
+                    ? c.kpis.map((ck) => (
+                        <span key={ck.kpi?._id || ck.kpi} className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-500 whitespace-nowrap">
+                          {ck.kpi?.name || '—'} <span className="font-bold text-[#0B3B2E]">{ck.weight}%</span>
+                        </span>
+                      ))
+                    : <span className="text-[10px] text-slate-300">No KPIs assigned</span>
+                  }
+                </div>
+              </td>
+              <td className="px-3 py-1 text-center font-semibold tabular-nums text-slate-700 border-r border-gray-100">{c.employeeCount || 0}</td>
+              <td className="px-3 py-1 text-center border-r border-gray-100">
+                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${STATUS_PILL[c.status]}`}>{c.status}</span>
+              </td>
+            </>
+          )}
+          renderActions={(c) => (
+            <div className="flex items-center justify-end gap-1">
+              {c.status === 'Draft' && (
+                <>
+                  <button onClick={() => openEdit(c)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Edit"><FaEdit size={11} /></button>
+                  <button onClick={() => doOpen(c)} disabled={acting === c._id}
+                    className="flex items-center gap-0.5 rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 whitespace-nowrap">
+                    <FaUnlock size={9} /> Open
+                  </button>
+                  <button onClick={() => doDelete(c)} disabled={acting === c._id} className="rounded p-1 text-rose-300 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40" title="Delete"><FaTrash size={11} /></button>
+                </>
               )}
-              {!loading && pagedCycles.map((c, idx) => (
-                <tr key={c._id} className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
-                  <td className="px-3 py-1 text-slate-400 tabular-nums border-r border-gray-100">{(page - 1) * pageSize + idx + 1}</td>
-                  <td className="px-3 py-1 border-r border-gray-100">
-                    <span className="font-semibold text-slate-800">{c.name}</span>
-                    {c.notes && <span className="ml-2 text-[10px] text-slate-400 italic">{c.notes}</span>}
-                  </td>
-                  <td className="px-3 py-1 text-slate-600 tabular-nums border-r border-gray-100">{c.year} · {c.periodType}</td>
-                  <td className="px-3 py-1 text-slate-500 tabular-nums border-r border-gray-100">
-                    {fmtDate(c.startDate)} – {fmtDate(c.endDate)}
-                  </td>
-                  <td className="px-3 py-1 border-r border-gray-100">
-                    <div className="flex flex-wrap gap-1">
-                      {c.kpis?.length
-                        ? c.kpis.map((ck) => (
-                            <span key={ck.kpi?._id || ck.kpi} className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-500 whitespace-nowrap">
-                              {ck.kpi?.name || '—'} <span className="font-bold text-[#0B3B2E]">{ck.weight}%</span>
-                            </span>
-                          ))
-                        : <span className="text-[10px] text-slate-300">No KPIs assigned</span>
-                      }
-                    </div>
-                  </td>
-                  <td className="px-3 py-1 text-center font-semibold tabular-nums text-slate-700 border-r border-gray-100">{c.employeeCount || 0}</td>
-                  <td className="px-3 py-1 text-center border-r border-gray-100">
-                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${STATUS_PILL[c.status]}`}>{c.status}</span>
-                  </td>
-                  <td className="px-3 py-1 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {c.status === 'Draft' && (
-                        <>
-                          <button onClick={() => openEdit(c)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Edit"><FaEdit size={11} /></button>
-                          <button onClick={() => doOpen(c)} disabled={acting === c._id}
-                            className="flex items-center gap-0.5 rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 whitespace-nowrap">
-                            <FaUnlock size={9} /> Open
-                          </button>
-                          <button onClick={() => doDelete(c)} disabled={acting === c._id} className="rounded p-1 text-rose-300 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40" title="Delete"><FaTrash size={11} /></button>
-                        </>
-                      )}
-                      {c.status === 'Open' && (
-                        <button onClick={() => doClose(c)} disabled={acting === c._id}
-                          className="flex items-center gap-0.5 rounded border border-slate-300 bg-slate-50 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-40 whitespace-nowrap">
-                          <FaLock size={9} /> Close
-                        </button>
-                      )}
-                      {c.status === 'Closed' && <span className="text-[10px] text-slate-300 pr-1">Closed</span>}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              {c.status === 'Open' && (
+                <button onClick={() => doClose(c)} disabled={acting === c._id}
+                  className="flex items-center gap-0.5 rounded border border-slate-300 bg-slate-50 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-40 whitespace-nowrap">
+                  <FaLock size={9} /> Close
+                </button>
+              )}
+              {c.status === 'Closed' && <span className="text-[10px] text-slate-300 pr-1">Closed</span>}
+            </div>
+          )}
+        />
 
         {/* ── Pagination ── */}
         <PaginationBar

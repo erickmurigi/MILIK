@@ -6,10 +6,12 @@ import { adminRequests } from "../../utils/requestMethods";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
+import PaginationBar from "../../components/PaginationBar";
+import MilikTable from "../../components/common/MilikTable";
 import {
   FaSearch, FaCalendarAlt, FaExchangeAlt, FaHistory, FaShieldAlt,
   FaTimes, FaCheck, FaInfoCircle, FaMoneyBillWave, FaFileInvoice,
-  FaReceipt, FaFileAlt, FaChevronLeft, FaChevronRight, FaRedoAlt,
+  FaReceipt, FaFileAlt, FaRedoAlt,
   FaUser, FaPlus, FaChevronDown, FaChevronUp, FaWrench,
 } from "react-icons/fa";
 import { fmtDate } from "../../utils/dates";
@@ -806,62 +808,43 @@ export default function LandlordStatementAllocations() {
               {/* History tab */}
               {activeTab === "history" ? (
                 <>
-                  {histLoading ? (
-                    <div className="flex flex-1 items-center justify-center p-12">
-                      <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#0B3B2E] border-t-transparent" />
-                    </div>
-                  ) : history.length === 0 ? (
-                    <div className="flex flex-1 items-center justify-center p-12 text-center">
-                      <div><FaHistory className="mx-auto mb-3 text-slate-300" size={32} /><p className="text-sm text-slate-500">No adjustments recorded yet</p></div>
-                    </div>
-                  ) : (
-                    <div className="flex-1 min-h-0 overflow-auto">
-                      <table className="w-full text-[11px] border-collapse">
-                        <thead className="sticky top-0 z-10 shadow-sm">
-                          <tr className="bg-[#0B3B2E] text-white">
-                            <th className="px-2 py-1.5 text-left font-bold border-r border-white/10 whitespace-nowrap">Date</th>
-                            <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Admin</th>
-                            <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Action</th>
-                            <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Reference</th>
-                            <th className="px-2 py-1.5 text-left font-bold">Reason</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {history.map((h, i) => (
-                            <tr key={h._id} className={`border-b border-slate-100 ${i % 2 === 0 ? "bg-white" : "bg-slate-50/60"}`}>
-                              <td className="px-2 py-1 text-[11px] text-slate-500">{fmtDate(h.createdAt)}</td>
-                              <td className="px-2 py-1 text-[11px] font-semibold text-slate-800">
-                                {h.actor?.firstName ? `${h.actor.firstName} ${h.actor.lastName || ""}`.trim() : h.actor?.username || "-"}
-                              </td>
-                              <td className="px-2 py-1">
-                                <span className={`inline-block rounded-full px-1.5 py-px text-[9px] font-bold ${h.action === "booking_date_adjusted" ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-blue-50 text-blue-700 border border-blue-200"}`}>
-                                  {h.action === "booking_date_adjusted" ? "Date Adjusted" : "Reallocated"}
-                                </span>
-                              </td>
-                              <td className="px-2 py-1 text-[11px] font-mono text-slate-700">{h.targetName || "-"}</td>
-                              <td className="px-2 py-1 text-[11px] text-slate-500 max-w-xs truncate" title={h.metadata?.reason}>{h.metadata?.reason || "-"}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  <div className="flex-shrink-0 border-t border-slate-200 bg-white px-3 py-2">
-                    <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
-                      <span className="font-semibold">{histTotal} adjustment{histTotal !== 1 ? "s" : ""} total</span>
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => loadHistory(histPage - 1)} disabled={histPage <= 1}
-                          className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
-                          <FaChevronLeft size={9} /> Previous
-                        </button>
-                        <span className="font-semibold text-slate-700">Page {histPage} of {histTotalPages}</span>
-                        <button onClick={() => loadHistory(histPage + 1)} disabled={histPage >= histTotalPages}
-                          className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
-                          Next <FaChevronRight size={9} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  <MilikTable
+                    columns={[
+                      { label: "Date" },
+                      { label: "Admin" },
+                      { label: "Action" },
+                      { label: "Reference" },
+                      { label: "Reason" },
+                    ]}
+                    rows={history}
+                    rowKey="_id"
+                    loading={histLoading}
+                    empty="No adjustments recorded yet"
+                    renderRow={(h) => (
+                      <>
+                        <td className="px-2 py-1 text-[11px] text-slate-500">{fmtDate(h.createdAt)}</td>
+                        <td className="px-2 py-1 text-[11px] font-semibold text-slate-800">
+                          {h.actor?.firstName ? `${h.actor.firstName} ${h.actor.lastName || ""}`.trim() : h.actor?.username || "-"}
+                        </td>
+                        <td className="px-2 py-1">
+                          <span className={`inline-block rounded-full px-1.5 py-px text-[9px] font-bold ${h.action === "booking_date_adjusted" ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-blue-50 text-blue-700 border border-blue-200"}`}>
+                            {h.action === "booking_date_adjusted" ? "Date Adjusted" : "Reallocated"}
+                          </span>
+                        </td>
+                        <td className="px-2 py-1 text-[11px] font-mono text-slate-700">{h.targetName || "-"}</td>
+                        <td className="px-2 py-1 text-[11px] text-slate-500 max-w-xs truncate" title={h.metadata?.reason}>{h.metadata?.reason || "-"}</td>
+                      </>
+                    )}
+                  />
+                  <PaginationBar
+                    page={histPage}
+                    pages={histTotalPages}
+                    total={histTotal}
+                    pageSize={50}
+                    onPageChange={(p) => loadHistory(p)}
+                    loading={histLoading}
+                    label="adjustments"
+                  />
                 </>
               ) : !searched && !loading ? (
                 <div className="flex flex-1 items-center justify-center p-12 text-center">
@@ -1100,53 +1083,16 @@ export default function LandlordStatementAllocations() {
               )}
 
               {activeTab !== "history" && searched && !loading && totalLedgerRows > 0 && (
-                <div className="flex-shrink-0 border-t border-slate-200 bg-white px-3 py-2">
-                  <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
-                    <div className="font-semibold">
-                      Showing <span className="font-bold text-slate-900">{paginatedGroups.length === 0 ? 0 : (safePage - 1) * groupsPerPage + 1}</span> to{" "}
-                      <span className="font-bold text-slate-900">{Math.min(safePage * groupsPerPage, tenantGroups.length)}</span> of{" "}
-                      <span className="font-bold text-slate-900">{tenantGroups.length}</span> tenants ·{" "}
-                      <span className="font-bold text-slate-900">{totalLedgerRows}</span> ledger entries
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <div className="flex items-center gap-1">
-                        <span className="font-semibold text-slate-500">Per page:</span>
-                        <AppSelect
-                          size="sm"
-                          value={String(groupsPerPage)}
-                          onChange={(v) => { setGroupsPerPage(Number(v ?? 20)); setCurrentPage(1); }}
-                          options={[10, 20, 50, 100, 200, 500].map((n) => ({ value: String(n), label: String(n) }))}
-                        />
-                      </div>
-                      <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={safePage === 1}
-                        className="p-1 rounded hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition text-slate-700">
-                        <FaChevronLeft size={11} />
-                      </button>
-                      <div className="flex items-center gap-0.5">
-                        {[...Array(totalPages)].map((_, i) => {
-                          const page = i + 1;
-                          if (page === 1 || page === totalPages || (page >= safePage - 1 && page <= safePage + 1)) {
-                            return (
-                              <button key={page} onClick={() => setCurrentPage(page)}
-                                className={`px-2 py-0.5 rounded text-xs font-bold transition-colors ${
-                                  safePage === page ? "bg-[#0B3B2E] text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                                }`}>
-                                {page}
-                              </button>
-                            );
-                          } else if (page === safePage - 2 || page === safePage + 2) {
-                            return <span key={page} className="px-1 text-slate-400 text-xs">…</span>;
-                          }
-                          return null;
-                        })}
-                      </div>
-                      <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}
-                        className="p-1 rounded hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition text-slate-700">
-                        <FaChevronRight size={11} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                <PaginationBar
+                  page={safePage}
+                  pages={totalPages}
+                  total={tenantGroups.length}
+                  pageSize={groupsPerPage}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={(n) => { setGroupsPerPage(Number(n)); setCurrentPage(1); }}
+                  loading={loading}
+                  label="tenants"
+                />
               )}
             </div>
           </div>

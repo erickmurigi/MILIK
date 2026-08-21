@@ -9,8 +9,9 @@ import { toast } from "react-toastify";
 import { carWashApi, formatMoney } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import PaginationBar from "../../components/PaginationBar";
+import MilikTable from "../../components/common/MilikTable";
 
-const PAGE_SIZE = 30;
+const DEFAULT_PAGE_SIZE = 30;
 const defaultFilters = { search: "" };
 
 const isCashbookAccount = (account = {}) =>
@@ -22,7 +23,8 @@ const CarWashCashbooks = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const [filters, setFilters] = useTabState("/carwash/cashbooks:filters", defaultFilters);
   const [appliedFilters, setAppliedFilters] = useTabState("/carwash/cashbooks:appliedFilters", defaultFilters);
-  const [page, setPage] = useTabState("/carwash/cashbooks:page", 1);
+  const [page, setPage]         = useTabState("/carwash/cashbooks:page", 1);
+  const [pageSize, setPageSize] = useTabState("/carwash/cashbooks:pageSize", DEFAULT_PAGE_SIZE);
 
   const { data: rawAccounts, isLoading: loading, error, refetch } = useQuery({
     queryKey: ["cw-cashbooks", currentCompany?._id],
@@ -48,8 +50,8 @@ const CarWashCashbooks = () => {
     );
   }, [accounts, appliedFilters.search]);
 
-  const pageCount = Math.max(Math.ceil(filteredAccounts.length / PAGE_SIZE), 1);
-  const pagedAccounts = filteredAccounts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageCount = Math.max(Math.ceil(filteredAccounts.length / pageSize), 1);
+  const pagedAccounts = filteredAccounts.slice((page - 1) * pageSize, page * pageSize);
   const totalBalance = filteredAccounts.reduce((sum, account) => sum + Number(account.balance || 0), 0);
 
   const applyFilters = (event) => {
@@ -92,35 +94,37 @@ const CarWashCashbooks = () => {
           <span>Combined Balance: <strong className="text-[#0B3B2E]">{formatMoney(totalBalance)}</strong></span>
           <span>Source: <strong className="text-[#0B3B2E]">Company Chart of Accounts</strong></span>
         </div>
-        <table className="w-full min-w-[820px] text-xs">
-          <thead className="bg-[#0B3B2E] text-white">
-            <tr>
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Code</th>
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Cashbook</th>
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Subgroup</th>
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Posting</th>
-              <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Balance</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pagedAccounts.length ? pagedAccounts.map((account) => (
-              <tr key={account._id || account.code} className="border-b border-slate-200 hover:bg-slate-50">
-                <td className="px-2 py-1 font-extrabold text-slate-900">{account.code}</td>
-                <td className="px-2 py-1 font-semibold text-slate-800">{account.name}</td>
-                <td className="px-2 py-1 text-slate-600">{account.subGroup || "-"}</td>
-                <td className="px-2 py-1 font-bold uppercase text-[#0B3B2E]">{account.isPosting === false ? "No" : "Yes"}</td>
-                <td className="px-2 py-1 text-right font-extrabold text-slate-900">{formatMoney(account.balance)}</td>
-              </tr>
-            )) : (
-              <tr><td colSpan={5} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">No cashbook accounts found.</td></tr>
-            )}
-          </tbody>
-        </table>
+        <MilikTable
+          columns={[
+            { label: "Code" },
+            { label: "Cashbook" },
+            { label: "Subgroup" },
+            { label: "Posting" },
+            { label: "Balance", align: "right" },
+          ]}
+          rows={pagedAccounts}
+          loading={loading}
+          empty="No cashbook accounts found."
+          minWidth="820px"
+          renderRow={(account) => (
+            <>
+              <td className="px-2 py-1 font-extrabold text-slate-900">{account.code}</td>
+              <td className="px-2 py-1 font-semibold text-slate-800">{account.name}</td>
+              <td className="px-2 py-1 text-slate-600">{account.subGroup || "-"}</td>
+              <td className="px-2 py-1 font-bold uppercase text-[#0B3B2E]">{account.isPosting === false ? "No" : "Yes"}</td>
+              <td className="px-2 py-1 text-right font-extrabold text-slate-900">{formatMoney(account.balance)}</td>
+            </>
+          )}
+        />
         <PaginationBar
           page={page}
           pages={pageCount}
           total={filteredAccounts.length}
+          pageSize={pageSize}
           onPageChange={setPage}
+          onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+          loading={loading}
+          label="cashbooks"
         />
       </div>
     </CarWashShell>

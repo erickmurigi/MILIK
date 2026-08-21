@@ -8,6 +8,8 @@ import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import AppSelect from "../../components/common/AppSelect";
 import { useTabState } from "../../hooks/useTabState";
+import PaginationBar from "../../components/PaginationBar";
+import MilikTable from "../../components/common/MilikTable";
 
 const icc = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const lc  = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
@@ -47,13 +49,14 @@ const emptyForm = (settings) => ({
   deductionValue: settings?.damageDeductionValue != null ? String(settings.damageDeductionValue) : "",
 });
 
-const PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE = 50;
 
 export default function CarWashStaffDamages() {
   const queryClient = useQueryClient();
   const canManage = useCarWashPermission("carwash-commissions", "manage");
 
   const [page,         setPage]         = useTabState("/carwash/commissions/damages:page", 1);
+  const [pageSize,     setPageSize]     = useTabState("/carwash/commissions/damages:pageSize", DEFAULT_PAGE_SIZE);
   const [filterStaff,  setFilterStaff]  = useTabState("/carwash/commissions/damages:filterStaff", "");
   const [filterStatus, setFilterStatus] = useTabState("/carwash/commissions/damages:filterStatus", "all");
   const [dateFrom,     setDateFrom]     = useTabState("/carwash/commissions/damages:dateFrom", "");
@@ -73,12 +76,12 @@ export default function CarWashStaffDamages() {
     staleTime: 5 * 60_000,
   });
 
-  const damagesQueryKey = ["cw-damages", page, filterStaff, filterStatus, dateFrom, dateTo];
+  const damagesQueryKey = ["cw-damages", page, pageSize, filterStaff, filterStatus, dateFrom, dateTo];
 
   const { data: damagesData, isLoading: loading } = useQuery({
     queryKey: damagesQueryKey,
     queryFn: () => {
-      const params = { page, limit: PAGE_SIZE };
+      const params = { page, limit: pageSize };
       if (filterStaff)            params.staff    = filterStaff;
       if (filterStatus !== "all") params.status   = filterStatus;
       if (dateFrom)               params.dateFrom = dateFrom;
@@ -178,7 +181,7 @@ export default function CarWashStaffDamages() {
     });
   };
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
     <CarWashShell
@@ -255,118 +258,107 @@ export default function CarWashStaffDamages() {
         </div>
 
         {/* Table */}
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          {loading ? (
-            <div className="py-12 text-center text-xs text-slate-400">Loading…</div>
-          ) : damages.length === 0 ? (
-            <div className="py-12 text-center text-xs text-slate-400">No damage records found</div>
-          ) : (
-            <table className="w-full min-w-[820px] text-xs">
-              <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-                <tr>
-                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.15em]">Date</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.15em]">Staff</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.15em]">Description</th>
-                  <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-[0.15em]">Amount</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.15em]">Recovery</th>
-                  <th className="px-3 py-2 text-center text-[10px] font-black uppercase tracking-[0.15em]">Status</th>
-                  <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-[0.15em]">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {damages.map((d) => {
-                  const recovered  = r2(d.amountRecovered || 0);
-                  const remaining  = r2(d.amount - recovered);
-                  const pct        = d.amount > 0 ? Math.min(100, Math.round((recovered / d.amount) * 100)) : 0;
-                  const installment = computeInstallment(d);
-                  const isInstallment = d.deductionMode && d.deductionMode !== "full";
-                  return (
-                    <tr key={d._id} className="hover:bg-slate-50">
-                      <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{fmtDate(d.damageDate)}</td>
-                      <td className="px-3 py-2 font-bold text-slate-800 whitespace-nowrap">{d.staff?.name || "—"}</td>
-                      <td className="px-3 py-2 text-slate-700 max-w-[180px] truncate" title={d.description}>{d.description}</td>
-                      <td className="px-3 py-2 text-right font-black text-red-600 whitespace-nowrap">{formatMoney(d.amount)}</td>
-                      <td className="px-3 py-2 min-w-[150px]">
-                        {d.status === "waived" ? (
-                          <span className="text-slate-400">Written off</span>
-                        ) : d.status === "deducted" ? (
+        <MilikTable
+          columns={[
+            { label: "Date" },
+            { label: "Staff" },
+            { label: "Description" },
+            { label: "Amount", align: "right" },
+            { label: "Recovery" },
+            { label: "Status", align: "center" },
+          ]}
+          rows={damages}
+          rowKey="_id"
+          loading={loading}
+          empty="No damage records found"
+          minWidth="820px"
+          renderRow={(d) => {
+            const recovered   = r2(d.amountRecovered || 0);
+            const remaining   = r2(d.amount - recovered);
+            const pct         = d.amount > 0 ? Math.min(100, Math.round((recovered / d.amount) * 100)) : 0;
+            const installment = computeInstallment(d);
+            const isInstallment = d.deductionMode && d.deductionMode !== "full";
+            return (
+              <>
+                <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{fmtDate(d.damageDate)}</td>
+                <td className="px-3 py-2 font-bold text-slate-800 whitespace-nowrap">{d.staff?.name || "—"}</td>
+                <td className="px-3 py-2 text-slate-700 max-w-[180px] truncate" title={d.description}>{d.description}</td>
+                <td className="px-3 py-2 text-right font-black text-red-600 whitespace-nowrap">{formatMoney(d.amount)}</td>
+                <td className="px-3 py-2 min-w-[150px]">
+                  {d.status === "waived" ? (
+                    <span className="text-slate-400">Written off</span>
+                  ) : d.status === "deducted" ? (
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-emerald-100">
+                        <div className="h-full bg-emerald-500" style={{ width: "100%" }} />
+                      </div>
+                      <span className="text-[10px] font-bold text-emerald-600">100%</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-0.5">
+                      {recovered > 0 ? (
+                        <>
                           <div className="flex items-center gap-1.5">
-                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-emerald-100">
-                              <div className="h-full bg-emerald-500" style={{ width: "100%" }} />
+                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                              <div className="h-full bg-amber-400" style={{ width: `${pct}%` }} />
                             </div>
-                            <span className="text-[10px] font-bold text-emerald-600">100%</span>
+                            <span className="text-[10px] text-slate-500">{pct}%</span>
                           </div>
-                        ) : (
-                          <div className="space-y-0.5">
-                            {recovered > 0 ? (
-                              <>
-                                <div className="flex items-center gap-1.5">
-                                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
-                                    <div className="h-full bg-amber-400" style={{ width: `${pct}%` }} />
-                                  </div>
-                                  <span className="text-[10px] text-slate-500">{pct}%</span>
-                                </div>
-                                <div className="text-[10px] text-slate-500">
-                                  {formatMoney(recovered)} paid · {formatMoney(remaining)} left
-                                </div>
-                              </>
-                            ) : null}
-                            <div className="text-[10px] font-semibold text-red-600">
-                              Next: −{formatMoney(installment)}
-                              {isInstallment && (
-                                <span className="ml-1 font-normal text-slate-400">({modeLabel(d.deductionMode)}{d.deductionMode === "percent" ? ` ${d.deductionValue}%` : ""})</span>
-                              )}
-                            </div>
+                          <div className="text-[10px] text-slate-500">
+                            {formatMoney(recovered)} paid · {formatMoney(remaining)} left
                           </div>
+                        </>
+                      ) : null}
+                      <div className="text-[10px] font-semibold text-red-600">
+                        Next: −{formatMoney(installment)}
+                        {isInstallment && (
+                          <span className="ml-1 font-normal text-slate-400">({modeLabel(d.deductionMode)}{d.deductionMode === "percent" ? ` ${d.deductionValue}%` : ""})</span>
                         )}
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-black ${statusPill(d.status)}`}>
-                          {statusLabel(d.status)}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        {canManage && d.status === "pending" && (
-                          <div className="inline-flex items-center gap-1">
-                            <button
-                              onClick={() => { setWaiveTarget(d); setWaiveNotes(""); }}
-                              title="Waive — write off this damage"
-                              className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-100"
-                            >
-                              <FaUndo className="text-[9px]" /> Waive
-                            </button>
-                            <button
-                              onClick={() => setDeleteTarget(d)}
-                              title="Delete record"
-                              className="border border-red-200 bg-red-50 px-2 py-0.5 text-red-600 hover:bg-red-100"
-                            >
-                              <FaTrash className="text-[9px]" />
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
+                      </div>
+                    </div>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-center">
+                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-black ${statusPill(d.status)}`}>
+                    {statusLabel(d.status)}
+                  </span>
+                </td>
+              </>
+            );
+          }}
+          renderActions={(d) =>
+            canManage && d.status === "pending" ? (
+              <div className="inline-flex items-center gap-1">
+                <button
+                  onClick={() => { setWaiveTarget(d); setWaiveNotes(""); }}
+                  title="Waive — write off this damage"
+                  className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-100"
+                >
+                  <FaUndo className="text-[9px]" /> Waive
+                </button>
+                <button
+                  onClick={() => setDeleteTarget(d)}
+                  title="Delete record"
+                  className="border border-red-200 bg-red-50 px-2 py-0.5 text-red-600 hover:bg-red-100"
+                >
+                  <FaTrash className="text-[9px]" />
+                </button>
+              </div>
+            ) : null
+          }
+        />
 
         {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex-shrink-0 flex items-center justify-end gap-2 border-t border-slate-200 bg-white px-4 py-2 text-[11px]">
-            <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}
-              className="border border-slate-300 bg-white px-3 py-1 text-slate-600 hover:bg-slate-50 disabled:opacity-40">
-              Previous
-            </button>
-            <span className="font-semibold text-slate-600">Page {page} of {totalPages}</span>
-            <button disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}
-              className="border border-slate-300 bg-white px-3 py-1 text-slate-600 hover:bg-slate-50 disabled:opacity-40">
-              Next
-            </button>
-          </div>
-        )}
+        <PaginationBar
+          page={page}
+          pages={totalPages}
+          total={total}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+          loading={loading}
+          label="damages"
+        />
       </div>
 
       {/* Add Damage Modal */}

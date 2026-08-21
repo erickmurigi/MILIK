@@ -36,6 +36,7 @@ import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScope
 import { useConfirm } from "../../context/ConfirmContext";
 import { useTabState } from "../../hooks/useTabState";
 import PaginationBar from '../../components/PaginationBar';
+import MilikTable from '../../components/common/MilikTable';
 
 const JOURNAL_TYPES = [
   {

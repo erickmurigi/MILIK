@@ -37,6 +37,7 @@ import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
 import AppSelect from "../../components/common/AppSelect";
 import { printTabularList } from "../../utils/printList";
 import PaginationBar from '../../components/PaginationBar';
+import MilikTable from '../../components/common/MilikTable';
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -908,190 +909,115 @@ const Vacants = () => {
 
         <div className="min-h-0 flex-1 overflow-hidden px-2 pb-2">
           <div className="flex h-full min-h-0 flex-col rounded-lg border border-gray-200 bg-white shadow-sm">
-            <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full min-w-[980px] border-collapse bg-white text-[11px]" style={{ tableLayout: "fixed" }}>
-                <colgroup>
-                  <col style={{ width: "32px" }} />
-                  <col style={{ width: "130px" }} />
-                  <col style={{ width: "75px" }} />
-                  <col style={{ width: "75px" }} />
-                  <col style={{ width: "105px" }} />
-                  <col style={{ width: "110px" }} />
-                  <col style={{ width: "120px" }} />
-                  <col style={{ width: "100px" }} />
-                  <col style={{ width: "70px" }} />
-                  <col style={{ width: "90px" }} />
-                </colgroup>
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className="border-b border-gray-300 bg-[#0B3B2E]">
-                    <th className="border-r border-white/10 px-1 py-1 text-center font-bold text-white"></th>
-                    <th className="sticky left-[32px] z-20 border-r border-white/10 bg-[#0B3B2E] px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Property</th>
-                    <th className="border-r border-white/10 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Unit No</th>
-                    <th className="border-r border-white/10 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Code</th>
-                    <th className="border-r border-white/10 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Unit Type</th>
-                    <th className="border-r border-white/10 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Availability</th>
-                    <th className="border-r border-white/10 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Current Tenant</th>
-                    <th className="border-r border-white/10 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Available From</th>
-                    <th className="border-r border-white/10 px-1.5 py-1 text-right font-bold text-white whitespace-nowrap">Days</th>
-                    <th className="px-1.5 py-1 text-right font-bold text-white whitespace-nowrap">Rent</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {currentRows.length > 0 ? (
-                    currentRows.map((row, index) => {
-                      const isFirstInProperty = index === 0 || currentRows[index - 1].propertyId !== row.propertyId;
-                      const group = groupedRows.find((item) => item.propertyId === row.propertyId);
-                      const isExpanded = expandedRows.includes(row.id);
+            <MilikTable
+              columns={[
+                { label: 'Property', width: '130px' },
+                { label: 'Unit No', width: '75px' },
+                { label: 'Code', width: '75px' },
+                { label: 'Unit Type', width: '105px' },
+                { label: 'Availability', width: '110px' },
+                { label: 'Current Tenant', width: '120px' },
+                { label: 'Available From', width: '100px' },
+                { label: 'Days', width: '70px', align: 'right' },
+                { label: 'Rent', width: '90px', align: 'right' },
+              ]}
+              rows={currentRows}
+              rowKey="id"
+              loading={unitsLoading}
+              empty={unitsLoading ? "Loading availability status..." : "No availability records found. Try adjusting the filters or add units to start tracking availability."}
+              minWidth="980px"
+              groupBy={(row) => row.propertyName}
+              onRowClick={(row) => setSelectedRowId((prev) => (prev === row.id ? null : row.id))}
+              isSelected={(row) => selectedRowId === row.id}
+              renderRow={(row) => (
+                <>
+                  <td className="border-r border-gray-100 px-1.5 py-0.5 font-semibold text-slate-800">
+                    <div className="truncate whitespace-nowrap" title={row.propertyName}>{row.propertyName}</div>
+                  </td>
+                  <td className="border-r border-gray-100 px-1.5 py-0.5 font-bold text-slate-900 whitespace-nowrap">{row.unitNo}</td>
+                  <td className="border-r border-gray-100 px-1.5 py-0.5 font-medium text-slate-500 whitespace-nowrap">{row.unitCode}</td>
+                  <td className="border-r border-gray-100 px-1.5 py-0.5">
+                    <span className="inline-flex max-w-full truncate whitespace-nowrap rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">{row.unitTypeLabel}</span>
+                  </td>
+                  <td className="border-r border-gray-100 px-1.5 py-0.5">
+                    <span className={`inline-flex max-w-full truncate whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${getAvailabilityTone(row.status)}`}>{row.statusLabel}</span>
+                  </td>
+                  <td className="border-r border-gray-100 px-1.5 py-0.5 text-slate-600">
+                    <div className="truncate whitespace-nowrap" title={row.tenantName}>{row.tenantName}</div>
+                  </td>
+                  <td className="border-r border-gray-100 px-1.5 py-0.5 text-slate-600 whitespace-nowrap">{row.availableFromLabel}</td>
+                  <td className="border-r border-gray-100 px-1.5 py-0.5 text-right font-bold text-slate-700 whitespace-nowrap">{row.daysVacantLabel}</td>
+                  <td className="px-1.5 py-0.5 text-right font-bold text-slate-900 whitespace-nowrap">{row.rentLabel}</td>
+                </>
+              )}
+              renderExpanded={(row) => (
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+                  <div className="space-y-3 rounded-lg border-2 border-[#0B3B2E]/20 bg-white p-4 shadow-md">
+                    <h4 className="border-b-2 border-[#0B3B2E] pb-2 text-sm font-black text-gray-900">🏢 Inventory Snapshot</h4>
+                    <div>
+                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Property</span>
+                      <p className="mt-2 text-sm font-black text-gray-900">{row.propertyName}</p>
+                    </div>
+                    <div>
+                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Unit / Space</span>
+                      <p className="mt-2 text-sm font-black text-gray-900">{row.unitNo}</p>
+                    </div>
+                    <div>
+                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Unit Type</span>
+                      <p className="mt-2 text-sm font-black text-gray-900">{row.unitTypeLabel}</p>
+                    </div>
+                  </div>
 
-                      return (
-                        <React.Fragment key={row.id}>
-                          {isFirstInProperty && group && (
-                            <tr className="bg-[#eef5f1]">
-                              <td colSpan={10} className="border-b border-t border-[#d7e6df] px-3 py-2">
-                                <div className="flex flex-wrap items-center justify-between gap-3">
-                                  <div>
-                                    <div className="text-sm font-black uppercase tracking-[0.18em] text-[#0B3B2E]">
-                                      {group.propertyCode ? `${group.propertyCode} • ${group.propertyName}` : group.propertyName}
-                                    </div>
-                                    <div className="mt-1 text-[11px] font-semibold text-slate-600">
-                                      {group.counts.total} unit(s) in current result set
-                                    </div>
-                                  </div>
-                                  {renderPropertySummary(group)}
-                                </div>
-                              </td>
-                            </tr>
-                          )}
+                  <div className="space-y-3 rounded-lg border-2 border-orange-200 bg-white p-4 shadow-md">
+                    <h4 className="border-b-2 border-[#FF8C00] pb-2 text-sm font-black text-gray-900">📍 Availability Details</h4>
+                    <div>
+                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Availability Status</span>
+                      <p className="mt-2 text-sm font-black text-gray-900">{row.statusLabel}</p>
+                    </div>
+                    <div>
+                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Available From</span>
+                      <p className="mt-2 text-sm font-black text-gray-900">{row.availableFromLabel}</p>
+                    </div>
+                    <div>
+                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Days Vacant</span>
+                      <p className="mt-2 text-sm font-black text-gray-900">{row.daysVacantLabel}</p>
+                    </div>
+                  </div>
 
-                          <tr
-                            className={`border-b border-gray-100 cursor-pointer select-none transition-colors ${
-                              selectedRowId === row.id
-                                ? "bg-[#e8f4ef] ring-1 ring-inset ring-[#0B3B2E]/30"
-                                : isExpanded
-                                ? "bg-[#fcfdfc] hover:bg-blue-50/30"
-                                : "bg-white hover:bg-blue-50/30"
-                            }`}
-                            onClick={() => setSelectedRowId((prev) => (prev === row.id ? null : row.id))}
-                          >
-                            <td
-                              className="border-r border-gray-100 px-1 py-0.5 text-center"
-                              onClick={(e) => { e.stopPropagation(); toggleRow(row.id); }}
-                            >
-                              <button
-                                className="rounded border border-gray-300 bg-white p-0.5 text-slate-500 transition-colors hover:bg-gray-50"
-                                title={isExpanded ? "Collapse" : "Expand"}
-                              >
-                                {isExpanded ? <FaChevronUp size={9} /> : <FaChevronDown size={9} />}
-                              </button>
-                            </td>
-                            <td className="border-r border-gray-100 px-1.5 py-0.5 font-semibold text-slate-800">
-                              <div className="truncate whitespace-nowrap" title={row.propertyName}>{row.propertyName}</div>
-                            </td>
-                            <td className="border-r border-gray-100 px-1.5 py-0.5 font-bold text-slate-900 whitespace-nowrap">{row.unitNo}</td>
-                            <td className="border-r border-gray-100 px-1.5 py-0.5 font-medium text-slate-500 whitespace-nowrap">{row.unitCode}</td>
-                            <td className="border-r border-gray-100 px-1.5 py-0.5">
-                              <span className="inline-flex max-w-full truncate whitespace-nowrap rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">{row.unitTypeLabel}</span>
-                            </td>
-                            <td className="border-r border-gray-100 px-1.5 py-0.5">
-                              <span className={`inline-flex max-w-full truncate whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${getAvailabilityTone(row.status)}`}>{row.statusLabel}</span>
-                            </td>
-                            <td className="border-r border-gray-100 px-1.5 py-0.5 text-slate-600">
-                              <div className="truncate whitespace-nowrap" title={row.tenantName}>{row.tenantName}</div>
-                            </td>
-                            <td className="border-r border-gray-100 px-1.5 py-0.5 text-slate-600 whitespace-nowrap">{row.availableFromLabel}</td>
-                            <td className="border-r border-gray-100 px-1.5 py-0.5 text-right font-bold text-slate-700 whitespace-nowrap">{row.daysVacantLabel}</td>
-                            <td className="px-1.5 py-0.5 text-right font-bold text-slate-900 whitespace-nowrap">{row.rentLabel}</td>
-                          </tr>
+                  <div className="space-y-3 rounded-lg border-2 border-blue-200 bg-white p-4 shadow-md">
+                    <h4 className="border-b-2 border-blue-600 pb-2 text-sm font-black text-gray-900">👥 Occupancy Context</h4>
+                    <div>
+                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Current Tenant</span>
+                      <p className="mt-2 text-sm font-black text-gray-900">{row.tenantName}</p>
+                    </div>
+                    <div>
+                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Move-out Date</span>
+                      <p className="mt-2 text-sm font-black text-gray-900">{fmtDate(row.moveOutDate)}</p>
+                    </div>
+                    <div>
+                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Operational Notes</span>
+                      <p className="mt-2 text-sm font-black text-gray-900">{row.notes}</p>
+                    </div>
+                  </div>
 
-                          {isExpanded && (
-                            <tr className="bg-[#f9fbfa]">
-                              <td colSpan={10} className="px-3 py-3">
-                                <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
-                                  <div className="space-y-3 rounded-lg border-2 border-[#0B3B2E]/20 bg-white p-4 shadow-md">
-                                    <h4 className="border-b-2 border-[#0B3B2E] pb-2 text-sm font-black text-gray-900">🏢 Inventory Snapshot</h4>
-                                    <div>
-                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Property</span>
-                                      <p className="mt-2 text-sm font-black text-gray-900">{row.propertyName}</p>
-                                    </div>
-                                    <div>
-                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Unit / Space</span>
-                                      <p className="mt-2 text-sm font-black text-gray-900">{row.unitNo}</p>
-                                    </div>
-                                    <div>
-                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Unit Type</span>
-                                      <p className="mt-2 text-sm font-black text-gray-900">{row.unitTypeLabel}</p>
-                                    </div>
-                                  </div>
-
-                                  <div className="space-y-3 rounded-lg border-2 border-orange-200 bg-white p-4 shadow-md">
-                                    <h4 className="border-b-2 border-[#FF8C00] pb-2 text-sm font-black text-gray-900">📍 Availability Details</h4>
-                                    <div>
-                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Availability Status</span>
-                                      <p className="mt-2 text-sm font-black text-gray-900">{row.statusLabel}</p>
-                                    </div>
-                                    <div>
-                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Available From</span>
-                                      <p className="mt-2 text-sm font-black text-gray-900">{row.availableFromLabel}</p>
-                                    </div>
-                                    <div>
-                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Days Vacant</span>
-                                      <p className="mt-2 text-sm font-black text-gray-900">{row.daysVacantLabel}</p>
-                                    </div>
-                                  </div>
-
-                                  <div className="space-y-3 rounded-lg border-2 border-blue-200 bg-white p-4 shadow-md">
-                                    <h4 className="border-b-2 border-blue-600 pb-2 text-sm font-black text-gray-900">👥 Occupancy Context</h4>
-                                    <div>
-                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Current Tenant</span>
-                                      <p className="mt-2 text-sm font-black text-gray-900">{row.tenantName}</p>
-                                    </div>
-                                    <div>
-                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Move-out Date</span>
-                                      <p className="mt-2 text-sm font-black text-gray-900">{fmtDate(row.moveOutDate)}</p>
-                                    </div>
-                                    <div>
-                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Operational Notes</span>
-                                      <p className="mt-2 text-sm font-black text-gray-900">{row.notes}</p>
-                                    </div>
-                                  </div>
-
-                                  <div className="space-y-3 rounded-lg border-2 border-green-200 bg-white p-4 shadow-md">
-                                    <h4 className="border-b-2 border-green-600 pb-2 text-sm font-black text-gray-900">💰 Letting Snapshot</h4>
-                                    <div>
-                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Monthly Rent</span>
-                                      <p className="mt-2 text-sm font-black text-gray-900">{row.rentLabel}</p>
-                                    </div>
-                                    <div>
-                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Unit Code</span>
-                                      <p className="mt-2 text-sm font-black text-gray-900">{row.unitCode}</p>
-                                    </div>
-                                    <div>
-                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Open Maintenance</span>
-                                      <p className="mt-2 text-sm font-black text-gray-900">{row.maintenanceCount}</p>
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={10} className="px-4 py-10 text-center">
-                        <div className="flex flex-col items-center justify-center gap-2">
-                          <div className="text-lg font-bold text-slate-400">No availability records found</div>
-                          <div className="text-sm text-slate-500">
-                            {unitsLoading ? "Loading availability status..." : "Try adjusting the filters or add units to start tracking availability."}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  <div className="space-y-3 rounded-lg border-2 border-green-200 bg-white p-4 shadow-md">
+                    <h4 className="border-b-2 border-green-600 pb-2 text-sm font-black text-gray-900">💰 Letting Snapshot</h4>
+                    <div>
+                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Monthly Rent</span>
+                      <p className="mt-2 text-sm font-black text-gray-900">{row.rentLabel}</p>
+                    </div>
+                    <div>
+                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Unit Code</span>
+                      <p className="mt-2 text-sm font-black text-gray-900">{row.unitCode}</p>
+                    </div>
+                    <div>
+                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Open Maintenance</span>
+                      <p className="mt-2 text-sm font-black text-gray-900">{row.maintenanceCount}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            />
 
             <PaginationBar
               page={safeCurrentPage}

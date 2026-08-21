@@ -1,6 +1,7 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import PaginationBar from '../../components/PaginationBar';
+import MilikTable from '../../components/common/MilikTable';
 import { useDispatch, useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import { getProperties } from "../../redux/propertyRedux";
@@ -1248,216 +1249,130 @@ const MeterReadings = () => {
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-auto">
-              <table className="w-full min-w-[1540px] text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className={`${MILIK_GREEN} text-white`}>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">
-                      <input
-                        type="checkbox"
-                        checked={currentPageReadings.length > 0 && selectAll}
-                        onChange={toggleSelectAll}
-                      />
-                    </th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Period</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Tenant</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Unit</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Utility</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Previous</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Current</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Consumed</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Rate</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
-                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
-                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Created</th>
-                    <th className="px-3 py-1 text-right font-bold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan="14" className="px-4 py-8 text-center text-gray-500">
-                        Loading meter readings...
-                      </td>
-                    </tr>
-                  ) : filteredReadings.length === 0 ? (
-                    <tr>
-                      <td colSpan="14" className="px-4 py-8 text-center text-gray-500">
-                        <FaTint className="mb-2 inline-block text-4xl text-gray-300" />
-                        <p className="mt-1 text-sm font-semibold">No meter readings found</p>
-                        <p className="mt-1 text-xs text-gray-400">
-                          Add a new reading or adjust the filters to view more results.
-                        </p>
-                      </td>
-                    </tr>
-                  ) : (
-                    currentPageReadings.map((reading, idx) => {
-                      const isSelected = selectedReadingIds.includes(reading._id);
-                      const isDraft = reading.status === "draft";
-                      const isBilled = reading.status === "billed";
-                      const isVoid = reading.status === "void";
-                      const deleteBusy = rowActionKey === `delete-${reading._id}`;
-                      const billBusy = rowActionKey === `bill-${reading._id}`;
-                      const voidBusy = rowActionKey === `void-${reading._id}`;
-
-                      return (
-                        <tr
-                          key={reading._id}
-                          className={`border-b border-gray-100 transition-colors ${
-                            isSelected
-                              ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50"
-                              : idx % 2 === 0
-                              ? "bg-white hover:bg-blue-50/40"
-                              : "bg-slate-50/60 hover:bg-blue-50/40"
-                          }`}
-                          onClick={() => handleRowClick(reading)}
-                        >
-                          <td className="px-3 py-1 border-r border-gray-100">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleRowSelection(reading._id)}
-                              onClick={(e) => e.stopPropagation()}
-                              disabled={reading.status === "deleted"}
-                            />
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100">
-                            <div className="font-bold text-blue-700">{reading.billingPeriod || "-"}</div>
-                            <div className="text-[10px] text-slate-500">{fmtDate(reading.readingDate)}</div>
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900">
-                            {reading?.tenant?.name || "Auto / Not linked"}
-                            <div className="text-[10px] font-normal text-slate-500">
-                              {reading?.tenant?.tenantCode || "No tenant code"}
-                            </div>
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">
-                            {reading?.property?.propertyName || "-"}
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">
-                            {reading?.unit?.unitNumber || "-"}
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100">
-                            <div className="font-semibold text-orange-700">{reading.utilityType || "-"}</div>
-                            <div className="text-[10px] text-slate-500">
-                              Meter {reading.meterNumber || "-"}
-                            </div>
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">
-                            {formatNumber(reading.previousReading)}
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">
-                            {formatNumber(reading.currentReading)}
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">
-                            {formatNumber(reading.unitsConsumed)}
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">
-                            {formatNumber(reading.rate)}
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">
-                            {formatMoney(reading.amount)}
-                            {reading?.billedInvoice?.invoiceNumber && (
-                              <div className="text-[10px] font-semibold text-emerald-700">
-                                Invoice {reading.billedInvoice.invoiceNumber}
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-center">
-                            <StatusBadge status={reading.status || "draft"} map={METER_STATUS_MAP} />
-                            {reading.isMeterReset && (
-                              <div className="mt-0.5 text-[10px] font-semibold text-purple-700">Reset</div>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-center text-gray-600">
-                            {fmtDate(reading.createdAt || reading.readingDate)}
-                          </td>
-                          <td className="px-3 py-2 text-right">
-                            <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                              {isDraft && (
-                                <button
-                                  onClick={() => handleEdit(reading)}
-                                  className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800"
-                                  title="Edit meter reading"
-                                  disabled={!canUpdateReading}
-                                >
-                                  <FaEdit size={12} />
-                                </button>
-                              )}
-
-                              {isDraft && (
-                                <button
-                                  onClick={() => handleBillSingle(reading)}
-                                  className="rounded p-1 text-green-600 hover:bg-green-50 hover:text-green-800"
-                                  title="Bill meter reading"
-                                  disabled={!canProcessReading || billBusy}
-                                >
-                                  <FaFileInvoice size={12} />
-                                </button>
-                              )}
-
-                              {isDraft && (
-                                <button
-                                  onClick={() => handleVoidSingle(reading)}
-                                  className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800"
-                                  title="Void meter reading"
-                                  disabled={!canDeleteReading || voidBusy}
-                                >
-                                  <FaBan size={12} />
-                                </button>
-                              )}
-
-                              {reading?.tenant && reading.status !== "deleted" && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setCommunicationModal({
-                                      contextType: "meter_reading",
-                                      recordIds: [reading._id],
-                                      title: "Notify Affected Tenant",
-                                      subtitle:
-                                        "Preview the final meter or usage notification before sending.",
-                                      allowedChannels: ["sms", "email"],
-                                      defaultChannel: "sms",
-                                    })
-                                  }
-                                  className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800"
-                                  title="Notify tenant"
-                                >
-                                  <FaSms size={12} />
-                                </button>
-                              )}
-
-                              <button
-                                onClick={() => handleDeleteSingle(reading)}
-                                className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800"
-                                title={
-                                  isBilled
-                                    ? "Delete meter reading and reverse linked invoice"
-                                    : isVoid
-                                    ? "Delete voided meter reading"
-                                    : "Delete meter reading"
-                                }
-                                disabled={!canDeleteReading || deleteBusy}
-                              >
-                                <FaTrash size={12} />
-                              </button>
-
-                              {isBilled && (
-                                <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                                  <FaCheckCircle size={10} /> Posted
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <MilikTable
+              columns={[
+                { label: 'Period' },
+                { label: 'Tenant' },
+                { label: 'Property' },
+                { label: 'Unit' },
+                { label: 'Utility' },
+                { label: 'Previous', align: 'right' },
+                { label: 'Current', align: 'right' },
+                { label: 'Consumed', align: 'right' },
+                { label: 'Rate', align: 'right' },
+                { label: 'Amount', align: 'right' },
+                { label: 'Status', align: 'center' },
+                { label: 'Created', align: 'center' },
+              ]}
+              rows={currentPageReadings}
+              loading={loading}
+              empty="No meter readings found. Add a new reading or adjust the filters."
+              minWidth="1540px"
+              checkboxes
+              allChecked={currentPageReadings.length > 0 && selectAll}
+              someChecked={selectedReadingIds.length > 0 && !selectAll}
+              onCheckAll={toggleSelectAll}
+              isChecked={(reading) => selectedReadingIds.includes(reading._id)}
+              onCheckRow={(reading) => toggleRowSelection(reading._id)}
+              onRowClick={(reading) => handleRowClick(reading)}
+              isSelected={(reading) => selectedReadingIds.includes(reading._id)}
+              renderRow={(reading) => {
+                const isBilled = reading.status === "billed";
+                return (
+                  <>
+                    <td className="px-3 py-1 border-r border-gray-100">
+                      <div className="font-bold text-blue-700">{reading.billingPeriod || "-"}</div>
+                      <div className="text-[10px] text-slate-500">{fmtDate(reading.readingDate)}</div>
+                    </td>
+                    <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900">
+                      {reading?.tenant?.name || "Auto / Not linked"}
+                      <div className="text-[10px] font-normal text-slate-500">
+                        {reading?.tenant?.tenantCode || "No tenant code"}
+                      </div>
+                    </td>
+                    <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">
+                      {reading?.property?.propertyName || "-"}
+                    </td>
+                    <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">
+                      {reading?.unit?.unitNumber || "-"}
+                    </td>
+                    <td className="px-3 py-1 border-r border-gray-100">
+                      <div className="font-semibold text-orange-700">{reading.utilityType || "-"}</div>
+                      <div className="text-[10px] text-slate-500">Meter {reading.meterNumber || "-"}</div>
+                    </td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">
+                      {formatNumber(reading.previousReading)}
+                    </td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">
+                      {formatNumber(reading.currentReading)}
+                    </td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">
+                      {formatNumber(reading.unitsConsumed)}
+                    </td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">
+                      {formatNumber(reading.rate)}
+                    </td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">
+                      {formatMoney(reading.amount)}
+                      {reading?.billedInvoice?.invoiceNumber && (
+                        <div className="text-[10px] font-semibold text-emerald-700">
+                          Invoice {reading.billedInvoice.invoiceNumber}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-center">
+                      <StatusBadge status={reading.status || "draft"} map={METER_STATUS_MAP} />
+                      {reading.isMeterReset && (
+                        <div className="mt-0.5 text-[10px] font-semibold text-purple-700">Reset</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-center text-gray-600">
+                      {fmtDate(reading.createdAt || reading.readingDate)}
+                    </td>
+                  </>
+                );
+              }}
+              renderActions={(reading) => {
+                const isDraft = reading.status === "draft";
+                const isBilled = reading.status === "billed";
+                const isVoid = reading.status === "void";
+                const deleteBusy = rowActionKey === `delete-${reading._id}`;
+                const billBusy = rowActionKey === `bill-${reading._id}`;
+                const voidBusy = rowActionKey === `void-${reading._id}`;
+                return (
+                  <div className="flex justify-end gap-1">
+                    {isDraft && (
+                      <button onClick={() => handleEdit(reading)} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800" title="Edit meter reading" disabled={!canUpdateReading}>
+                        <FaEdit size={12} />
+                      </button>
+                    )}
+                    {isDraft && (
+                      <button onClick={() => handleBillSingle(reading)} className="rounded p-1 text-green-600 hover:bg-green-50 hover:text-green-800" title="Bill meter reading" disabled={!canProcessReading || billBusy}>
+                        <FaFileInvoice size={12} />
+                      </button>
+                    )}
+                    {isDraft && (
+                      <button onClick={() => handleVoidSingle(reading)} className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800" title="Void meter reading" disabled={!canDeleteReading || voidBusy}>
+                        <FaBan size={12} />
+                      </button>
+                    )}
+                    {reading?.tenant && reading.status !== "deleted" && (
+                      <button type="button" onClick={() => setCommunicationModal({ contextType: "meter_reading", recordIds: [reading._id], title: "Notify Affected Tenant", subtitle: "Preview the final meter or usage notification before sending.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })} className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800" title="Notify tenant">
+                        <FaSms size={12} />
+                      </button>
+                    )}
+                    <button onClick={() => handleDeleteSingle(reading)} className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800" title={isBilled ? "Delete meter reading and reverse linked invoice" : isVoid ? "Delete voided meter reading" : "Delete meter reading"} disabled={!canDeleteReading || deleteBusy}>
+                      <FaTrash size={12} />
+                    </button>
+                    {isBilled && (
+                      <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                        <FaCheckCircle size={10} /> Posted
+                      </span>
+                    )}
+                  </div>
+                );
+              }}
+            />
 
             <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">
               <p>

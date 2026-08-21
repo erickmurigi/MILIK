@@ -22,6 +22,7 @@ const STATUS_BADGE = {
 };
 
 import PaginationBar from '../../components/PaginationBar';
+import MilikTable from '../../components/common/MilikTable';
 
 // ── Apply Leave Modal ─────────────────────────────────────────────────────────
 function ApplyLeaveModal({ onClose, onSaved }) {
@@ -274,78 +275,65 @@ export default function LeaveApplications() {
         </div>
 
         {/* Table */}
-        <div className="min-h-0 flex-1 overflow-auto">
-          {loading ? (
-            <div className="flex h-40 items-center justify-center text-sm text-slate-400">Loading...</div>
-          ) : applications.length === 0 ? (
-            <div className="flex h-40 flex-col items-center justify-center gap-2 text-slate-400">
-              <FaFilter size={22} />
-              <p className="text-sm font-semibold">No applications match the current filters</p>
-            </div>
-          ) : (
-            <table className="min-w-full text-[11px] border-collapse">
-              <thead className="sticky top-0 z-10">
-                <tr className="bg-[#0B3B2E] text-white">
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Employee</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Leave Type</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Period</th>
-                  <th className="px-3 py-1 text-center font-bold border-r border-white/10">Days</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
-                  <th className="px-3 py-1 text-right font-bold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {applications.map((app, idx) => (
-                  <tr key={app._id} className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
-                    <td className="px-3 py-1 border-r border-gray-100">
-                      <div className="font-black text-slate-900">{app.employee?.surname} {app.employee?.otherNames}</div>
-                      <div className="text-[10px] text-slate-400">{app.employee?.employeeNumber}</div>
-                    </td>
-                    <td className="px-3 py-1 border-r border-gray-100">
-                      <div className="flex items-center gap-1.5 font-semibold text-slate-700">
-                        <FaTag size={9} className="text-slate-400" />{app.leaveType?.name}
-                      </div>
-                      {app.leaveType?.isPaid === false && (
-                        <span className="text-[10px] text-rose-500 font-semibold">Unpaid</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-slate-600">
-                      <div className="flex items-center gap-1"><FaCalendarAlt size={9} className="text-slate-400" />{fmtDate(app.startDate)}</div>
-                      <div className="text-[10px] text-slate-400">to {fmtDate(app.endDate)}</div>
-                    </td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-center">
-                      <span className="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-700">{app.days}</span>
-                    </td>
-                    <td className="px-3 py-1 border-r border-gray-100">
-                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black ${STATUS_BADGE[app.status] || 'border-slate-200 bg-slate-50 text-slate-500'}`}>
-                        {app.status}
-                      </span>
-                    </td>
-                    <td className="px-3 py-1">
-                      <div className="flex flex-wrap justify-end gap-1">
-                        {app.status === 'Pending' && (
-                          <>
-                            <button onClick={() => handleApprove(app)} className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 hover:bg-emerald-100">
-                              <FaCheck size={8} /> Approve
-                            </button>
-                            <button onClick={() => handleReject(app)} className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-700 hover:bg-rose-100">
-                              <FaTimes size={8} /> Reject
-                            </button>
-                          </>
-                        )}
-                        {['Pending', 'Approved'].includes(app.status) && (
-                          <button onClick={() => handleCancel(app)} className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-black text-slate-600 hover:bg-slate-100">
-                            <FaBan size={8} /> Cancel
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <MilikTable
+          columns={[
+            { label: 'Employee' },
+            { label: 'Leave Type' },
+            { label: 'Period' },
+            { label: 'Days', align: 'center' },
+            { label: 'Status' },
+          ]}
+          rows={applications}
+          loading={loading}
+          empty="No applications match the current filters."
+          renderRow={(app) => (
+            <>
+              <td className="px-3 py-1 border-r border-gray-100">
+                <div className="font-black text-slate-900">{app.employee?.surname} {app.employee?.otherNames}</div>
+                <div className="text-[10px] text-slate-400">{app.employee?.employeeNumber}</div>
+              </td>
+              <td className="px-3 py-1 border-r border-gray-100">
+                <div className="flex items-center gap-1.5 font-semibold text-slate-700">
+                  <FaTag size={9} className="text-slate-400" />{app.leaveType?.name}
+                </div>
+                {app.leaveType?.isPaid === false && (
+                  <span className="text-[10px] text-rose-500 font-semibold">Unpaid</span>
+                )}
+              </td>
+              <td className="px-3 py-1 border-r border-gray-100 text-slate-600">
+                <div className="flex items-center gap-1"><FaCalendarAlt size={9} className="text-slate-400" />{fmtDate(app.startDate)}</div>
+                <div className="text-[10px] text-slate-400">to {fmtDate(app.endDate)}</div>
+              </td>
+              <td className="px-3 py-1 border-r border-gray-100 text-center">
+                <span className="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-700">{app.days}</span>
+              </td>
+              <td className="px-3 py-1 border-r border-gray-100">
+                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black ${STATUS_BADGE[app.status] || 'border-slate-200 bg-slate-50 text-slate-500'}`}>
+                  {app.status}
+                </span>
+              </td>
+            </>
           )}
-        </div>
+          renderActions={(app) => (
+            <div className="flex flex-wrap justify-end gap-1">
+              {app.status === 'Pending' && (
+                <>
+                  <button onClick={() => handleApprove(app)} className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 hover:bg-emerald-100">
+                    <FaCheck size={8} /> Approve
+                  </button>
+                  <button onClick={() => handleReject(app)} className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-700 hover:bg-rose-100">
+                    <FaTimes size={8} /> Reject
+                  </button>
+                </>
+              )}
+              {['Pending', 'Approved'].includes(app.status) && (
+                <button onClick={() => handleCancel(app)} className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-black text-slate-600 hover:bg-slate-100">
+                  <FaBan size={8} /> Cancel
+                </button>
+              )}
+            </div>
+          )}
+        />
 
         <PaginationBar
           page={page}

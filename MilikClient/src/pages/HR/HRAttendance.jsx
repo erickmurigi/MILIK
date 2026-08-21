@@ -2,14 +2,16 @@ import React, { useCallback, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTabState } from "../../hooks/useTabState";
 import {
-  FaPlus, FaRedoAlt, FaSearch, FaTimes, FaEdit, FaTrash, FaClock,
+  FaPlus, FaRedoAlt, FaSearch, FaTimes, FaEdit, FaTrash,
 } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import AppSelect from '../../components/common/AppSelect';
+import PaginationBar from "../../components/PaginationBar";
 import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 import { fmtDate } from '../../utils/dates';
+import MilikTable from '../../components/common/MilikTable';
 
 const fmtTime = (d) => d ? new Date(d).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—';
 const fmtDur  = (min) => {
@@ -132,7 +134,7 @@ function RecordModal({ record, employees, onClose, onSaved }) {
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
-const PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE = 50;
 
 export default function HRAttendance() {
   const queryClient = useQueryClient();
@@ -141,6 +143,7 @@ export default function HRAttendance() {
   const [yearFilter,  setYearFilter]  = useTabState('/hr/attendance:yearFilter', String(thisYear));
   const [search,      setSearch]      = useTabState('/hr/attendance:search', '');
   const [page,        setPage]        = useTabState('/hr/attendance:page', 1);
+  const [pageSize,    setPageSize]    = useTabState('/hr/attendance:pageSize', DEFAULT_PAGE_SIZE);
   const [modal,       setModal]       = useState(null); // null | 'add' | record object
   const [delTarget,   setDelTarget]   = useState(null);
 
@@ -152,7 +155,7 @@ export default function HRAttendance() {
 
   const params = {
     page,
-    limit: PAGE_SIZE,
+    limit: pageSize,
     ...(empFilter && { employee: empFilter }),
     ...(monthFilter && yearFilter && { month: monthFilter, year: yearFilter }),
   };
@@ -250,78 +253,65 @@ export default function HRAttendance() {
         )}
 
         {/* Table */}
-        <div className="min-h-0 flex-1 overflow-auto">
-          {isLoading ? (
-            <div className="flex h-32 items-center justify-center text-xs text-slate-400">Loading…</div>
-          ) : filteredRecords.length === 0 ? (
-            <div className="flex h-32 flex-col items-center justify-center gap-1 text-slate-400">
-              <FaClock size={20} className="text-slate-300" />
-              <span className="text-xs">No attendance records found</span>
-            </div>
-          ) : (
-            <table className="w-full text-[11px] border-collapse">
-              <thead className="sticky top-0 z-10">
-                <tr className="bg-[#0B3B2E] text-white">
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Employee</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Check-in</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Check-out</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Duration</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Note</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Source</th>
-                  <th className="px-3 py-1 w-10" />
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRecords.map((r, idx) => (
-                  <tr key={r._id} className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
-                    <td className="px-3 py-1 border-r border-gray-100">
-                      <div className="font-semibold text-slate-800">{r.employee?.surname} {r.employee?.otherNames}</div>
-                      <div className="text-[10px] text-slate-400">{r.employee?.employeeNumber}</div>
-                    </td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{fmtDate(r.checkIn)}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-700">{fmtTime(r.checkIn)}</td>
-                    <td className="px-3 py-1 border-r border-gray-100">
-                      {r.checkOut
-                        ? <span className="font-mono text-slate-700">{fmtTime(r.checkOut)}</span>
-                        : <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600">Still in</span>
-                      }
-                    </td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{fmtDur(r.duration)}</td>
-                    <td className="max-w-[140px] truncate px-3 py-1 border-r border-gray-100 text-slate-500">{r.note || '—'}</td>
-                    <td className="px-3 py-1 border-r border-gray-100">
-                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${r.source === 'ess' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                        {r.source}
-                      </span>
-                    </td>
-                    <td className="px-3 py-1">
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => setModal(r)} className="rounded p-1 text-slate-400 hover:text-[#0B3B2E]" title="Edit">
-                          <FaEdit size={11} />
-                        </button>
-                        <button onClick={() => setDelTarget(r)} className="rounded p-1 text-slate-400 hover:text-rose-600" title="Delete">
-                          <FaTrash size={11} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <MilikTable
+          columns={[
+            { label: 'Employee' },
+            { label: 'Date' },
+            { label: 'Check-in' },
+            { label: 'Check-out' },
+            { label: 'Duration' },
+            { label: 'Note' },
+            { label: 'Source' },
+          ]}
+          rows={filteredRecords}
+          loading={isLoading}
+          empty="No attendance records found"
+          renderRow={(r) => (
+            <>
+              <td className="px-3 py-1 border-r border-gray-100">
+                <div className="font-semibold text-slate-800">{r.employee?.surname} {r.employee?.otherNames}</div>
+                <div className="text-[10px] text-slate-400">{r.employee?.employeeNumber}</div>
+              </td>
+              <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{fmtDate(r.checkIn)}</td>
+              <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-700">{fmtTime(r.checkIn)}</td>
+              <td className="px-3 py-1 border-r border-gray-100">
+                {r.checkOut
+                  ? <span className="font-mono text-slate-700">{fmtTime(r.checkOut)}</span>
+                  : <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600">Still in</span>
+                }
+              </td>
+              <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{fmtDur(r.duration)}</td>
+              <td className="max-w-[140px] truncate px-3 py-1 border-r border-gray-100 text-slate-500">{r.note || '—'}</td>
+              <td className="px-3 py-1 border-r border-gray-100">
+                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${r.source === 'ess' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                  {r.source}
+                </span>
+              </td>
+            </>
           )}
-        </div>
+          renderActions={(r) => (
+            <div className="flex items-center gap-1">
+              <button onClick={() => setModal(r)} className="rounded p-1 text-slate-400 hover:text-[#0B3B2E]" title="Edit">
+                <FaEdit size={11} />
+              </button>
+              <button onClick={() => setDelTarget(r)} className="rounded p-1 text-slate-400 hover:text-rose-600" title="Delete">
+                <FaTrash size={11} />
+              </button>
+            </div>
+          )}
+        />
 
         {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex flex-none items-center justify-between border-t border-slate-200 bg-white px-4 py-2">
-            <span className="text-[11px] text-slate-500">{total} records</span>
-            <div className="flex items-center gap-1">
-              <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="rounded border border-slate-200 px-2 py-1 text-[10px] font-bold disabled:opacity-40 hover:bg-slate-50">Prev</button>
-              <span className="px-2 text-[11px] font-semibold text-slate-600">{page} / {totalPages}</span>
-              <button disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="rounded border border-slate-200 px-2 py-1 text-[10px] font-bold disabled:opacity-40 hover:bg-slate-50">Next</button>
-            </div>
-          </div>
-        )}
+        <PaginationBar
+          page={page}
+          pages={totalPages}
+          total={total}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+          loading={isLoading}
+          label="attendance records"
+        />
       </div>
 
       {/* Modal */}

@@ -11,8 +11,8 @@ import { getTenantInvoices } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
 import { fmtDate } from "../../utils/dates";
 import { formatMoney } from "../../utils/money";
+import PaginationBar from "../../components/PaginationBar";
 
-const ITEMS_PER_PAGE = 50;
 
 const RentalInvoiceVATReport = () => {
   const currentCompany = useSelector(selectCurrentCompany);
@@ -26,6 +26,7 @@ const RentalInvoiceVATReport = () => {
   const [filters, setFilters] = useTabState("/invoices/vat:filters", { propertyId: "", category: "", search: "" });
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [currentPage, setCurrentPage] = useTabState("/invoices/vat:currentPage", 1);
+  const [pageSize, setPageSize] = useState(50);
 
   const loadData = useCallback(async () => {
     if (!businessId) return;
@@ -81,10 +82,10 @@ const RentalInvoiceVATReport = () => {
   }, [rows, filters]);
 
 
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
   const paginatedRows = filteredRows.slice(startIndex, endIndex);
 
   useEffect(() => {
@@ -352,19 +353,16 @@ const RentalInvoiceVATReport = () => {
                 </tbody>
               </table>
             </div>
-            <div className="sticky bottom-0 z-20 flex-shrink-0 border-t border-slate-200 bg-white px-3 py-1">
-              <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
-                <div className="font-semibold">
-                  Showing <span className="font-bold text-slate-900">{paginatedRows.length > 0 ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredRows.length)}</span> of <span className="font-bold text-slate-900">{filteredRows.length}</span> taxable invoice rows
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
-                  <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
-                  <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
-                  <button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
-                </div>
-              </div>
-            </div>
+            <PaginationBar
+              page={safeCurrentPage}
+              pages={totalPages}
+              total={filteredRows.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              loading={loading}
+              label="invoice rows"
+            />
           </div>
         </div>
       </div>

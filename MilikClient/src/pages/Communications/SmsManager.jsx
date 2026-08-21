@@ -18,10 +18,12 @@ import { carWashApi } from "../../services/carWashApi";
 import { saleApi } from "../../services/propertySaleApi";
 import { inventoryApi } from "../../services/inventoryApi";
 import AppSelect from "../../components/common/AppSelect";
+import PaginationBar from "../../components/PaginationBar";
+import MilikTable from "../../components/common/MilikTable";
 import { useConfirm } from "../../context/ConfirmContext";
 import { fmtDateTime } from "../../utils/dates";
 
-const PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE = 50;
 
 const TABS = [
   { key: "",        label: "All",     countKey: "all" },
@@ -432,9 +434,10 @@ const SmsManager = () => {
   const [loading,        setLoading]        = useState(false);
   const [deletingId,     setDeletingId]     = useState(null);
   const [resendingId,    setResendingId]    = useState(null);
+  const [pageSize,       setPageSize]       = useTabState("/communications/sms:pageSize", DEFAULT_PAGE_SIZE);
   const [data, setData] = useState({
     logs: [],
-    pagination: { page: 1, limit: PAGE_SIZE, total: 0, pages: 1 },
+    pagination: { page: 1, limit: DEFAULT_PAGE_SIZE, total: 0, pages: 1 },
     counts: { all: 0, sent: 0, failed: 0, pending: 0 },
   });
 
@@ -452,7 +455,7 @@ const SmsManager = () => {
     if (!businessId) return;
     setLoading(true);
     try {
-      const params = new URLSearchParams({ business: businessId, channel: "sms", limit: PAGE_SIZE, page: urlPage });
+      const params = new URLSearchParams({ business: businessId, channel: "sms", limit: pageSize, page: urlPage });
       if (activeStatus)    params.set("status", activeStatus);
       if (debouncedSearch) params.set("search", debouncedSearch);
       const res = await adminRequests.get(`/communications/sms-logs?${params}`);
@@ -469,7 +472,7 @@ const SmsManager = () => {
     } finally {
       setLoading(false);
     }
-  }, [businessId, urlPage, activeStatus, debouncedSearch]);
+  }, [businessId, urlPage, activeStatus, debouncedSearch, pageSize]);
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
@@ -504,8 +507,8 @@ const SmsManager = () => {
   const { logs, pagination, counts } = data;
   const { page: currentPage, total, pages } = pagination;
 
-  const fromRow = total === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
-  const toRow   = Math.min(currentPage * PAGE_SIZE, total);
+  const fromRow = total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const toRow   = Math.min(currentPage * pageSize, total);
 
   return (
     <DashboardLayout lockContentScroll>
@@ -578,178 +581,118 @@ const SmsManager = () => {
         </div>{/* end header */}
         
         {/* ── Table ────────────────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-auto">
-          {loading ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-24 text-slate-400">
-              <Spinner size="lg" />
-              <p className="text-xs font-semibold">Loading SMS logs…</p>
-            </div>
-          ) : logs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-24">
-              <div className="flex h-14 w-14 items-center justify-center bg-slate-100">
-                <FaInbox size={24} className="text-slate-300" />
+        <MilikTable
+          columns={[
+            { label: "Recipient" },
+            { label: "Phone" },
+            { label: "Type" },
+            { label: "Message" },
+            { label: "Status", align: "center" },
+            { label: "Sent", align: "right" },
+          ]}
+          rows={logs}
+          rowKey="_id"
+          loading={loading}
+          empty={debouncedSearch ? `No messages match "${debouncedSearch}"` : "No SMS messages yet."}
+          minWidth="700px"
+          renderRow={(log) => (
+            <>
+              <td className="px-3 py-2">
+                <span className="font-bold text-slate-900">{log.recipientName || "—"}</span>
+              </td>
+              <td className="px-3 py-2 text-slate-500 font-mono text-[11px]">
+                {log.to || log.recipient || "—"}
+              </td>
+              <td className="px-3 py-2">
+                <span className="border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                  {fmtTemplate(log.templateKey || log.templateName || log.type)}
+                </span>
+              </td>
+              <td className="px-3 py-2 max-w-[260px]">
+                <p className="truncate text-slate-600">{log.body || log.message || "—"}</p>
+              </td>
+              <td className="px-3 py-2 text-center">
+                <StatusBadge status={log.status} map={STATUS_MAP} />
+              </td>
+              <td className="px-3 py-2 text-right">
+                <p className="font-semibold text-slate-700">{fmtRel(log.sentAt || log.createdAt)}</p>
+                <p className="text-[10px] text-slate-400">{fmtDateTime(log.sentAt || log.createdAt)}</p>
+              </td>
+            </>
+          )}
+          renderExpanded={(log) => (
+            <div className="border border-[#B7C9C0] bg-white p-4 shadow-sm">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4 mb-4">
+                {[
+                  { label: "Recipient",  value: log.recipientName || "—" },
+                  { label: "Phone",      value: log.to || log.recipient || "—" },
+                  { label: "Provider",   value: log.provider || log.profileName || "—" },
+                  { label: "Cost",       value: log.costLabel || "—" },
+                  { label: "Template",   value: fmtTemplate(log.templateKey || log.type) },
+                  { label: "Context",    value: log.contextType || "—" },
+                  { label: "Message ID", value: log.providerMessageId || "—" },
+                  { label: "Sent at",    value: fmtDateTime(log.sentAt || log.createdAt) },
+                ].map(({ label, value }) => (
+                  <div key={label}>
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">{label}</p>
+                    <p className="mt-0.5 text-[11px] font-semibold text-slate-800 break-all">{value}</p>
+                  </div>
+                ))}
               </div>
-              <p className="text-xs font-semibold text-slate-400">
-                {debouncedSearch ? `No messages match "${debouncedSearch}"` : "No SMS messages yet."}
-              </p>
-              {debouncedSearch && (
-                <button onClick={() => { setSearch(""); setDebouncedSearch(""); }}
-                  className="text-[11px] font-bold text-[#0B3B2E] hover:underline">
-                  Clear search
-                </button>
+              <div>
+                <p className="mb-1 text-[9px] font-bold uppercase tracking-wide text-slate-400">Full Message</p>
+                <p className="rounded border border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] leading-relaxed text-slate-700 whitespace-pre-wrap">
+                  {log.body || log.message || "—"}
+                </p>
+              </div>
+              {log.error && (
+                <div className="mt-3 flex items-start gap-2 border border-rose-200 bg-rose-50 px-3 py-2.5">
+                  <FaExclamationTriangle size={11} className="mt-0.5 shrink-0 text-rose-500" />
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-rose-500">Error</p>
+                    <p className="mt-0.5 text-[11px] text-rose-700">{log.error}</p>
+                  </div>
+                </div>
+              )}
+              {(log.status === "failed" || (log.status !== "sent" || log.isTest)) && (
+                <div className="mt-3 flex items-center justify-end gap-2">
+                  {log.status === "failed" && (
+                    <button
+                      onClick={e => { e.stopPropagation(); handleResend(log._id); }}
+                      disabled={resendingId === log._id}
+                      className="inline-flex items-center gap-1.5 border border-[#31694E] bg-[#ECF6F1] px-3 py-1.5 text-[10px] font-bold text-[#1f4a35] transition hover:bg-[#d4ede2] disabled:opacity-50"
+                    >
+                      {resendingId === log._id ? <Spinner size="sm" /> : <FaRedo size={9} />}
+                      {resendingId === log._id ? "Resending…" : "Resend"}
+                    </button>
+                  )}
+                  {(log.status !== "sent" || log.isTest) && (
+                    <button
+                      onClick={e => { e.stopPropagation(); handleDeleteLog(log._id); }}
+                      disabled={deletingId === log._id}
+                      className="inline-flex items-center gap-1.5 border border-rose-300 bg-rose-50 px-3 py-1.5 text-[10px] font-bold text-rose-600 transition hover:bg-rose-100 disabled:opacity-50"
+                    >
+                      {deletingId === log._id ? <Spinner size="sm" /> : <FaTrash size={9} />}
+                      {deletingId === log._id ? "Deleting…" : "Delete Entry"}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
-          ) : (
-            <table className="w-full min-w-[700px] text-xs">
-              <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-                <tr>
-                  <th className="w-6 px-3 py-2.5" />
-                  <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide">Recipient</th>
-                  <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide">Phone</th>
-                  <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide">Type</th>
-                  <th className="px-3 py-2.5 text-left font-bold uppercase tracking-wide">Message</th>
-                  <th className="px-3 py-2.5 text-center font-bold uppercase tracking-wide">Status</th>
-                  <th className="px-3 py-2.5 text-right font-bold uppercase tracking-wide">Sent</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {logs.map((log, i) => {
-                  const rowKey   = log._id || i;
-                  const expanded = expandedId === rowKey;
-                  return (
-                    <React.Fragment key={rowKey}>
-                      <tr
-                        onClick={() => setExpanded(expanded ? null : rowKey)}
-                        className={`cursor-pointer transition ${expanded ? "bg-[#EDF5F1]" : "bg-white hover:bg-slate-50"}`}
-                      >
-                        <td className="px-3 py-2 text-slate-400">
-                          {expanded ? <FaChevronDown size={9} /> : <FaChevronRight size={9} />}
-                        </td>
-                        <td className="px-3 py-2">
-                          <span className="font-bold text-slate-900">{log.recipientName || "—"}</span>
-                        </td>
-                        <td className="px-3 py-2 text-slate-500 font-mono text-[11px]">
-                          {log.to || log.recipient || "—"}
-                        </td>
-                        <td className="px-3 py-2">
-                          <span className="border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                            {fmtTemplate(log.templateKey || log.templateName || log.type)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 max-w-[260px]">
-                          <p className="truncate text-slate-600">{log.body || log.message || "—"}</p>
-                        </td>
-                        <td className="px-3 py-2 text-center">
-                          <StatusBadge status={log.status} map={STATUS_MAP} />
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          <p className="font-semibold text-slate-700">{fmtRel(log.sentAt || log.createdAt)}</p>
-                          <p className="text-[10px] text-slate-400">{fmtDateTime(log.sentAt || log.createdAt)}</p>
-                        </td>
-                      </tr>
-
-                      {expanded && (
-                        <tr className="bg-[#EDF5F1]">
-                          <td colSpan={7} className="px-4 pb-4 pt-1">
-                            <div className="border border-[#B7C9C0] bg-white p-4 shadow-sm">
-                              <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4 mb-4">
-                                {[
-                                  { label: "Recipient",  value: log.recipientName || "—" },
-                                  { label: "Phone",      value: log.to || log.recipient || "—" },
-                                  { label: "Provider",   value: log.provider || log.profileName || "—" },
-                                  { label: "Cost",       value: log.costLabel || "—" },
-                                  { label: "Template",   value: fmtTemplate(log.templateKey || log.type) },
-                                  { label: "Context",    value: log.contextType || "—" },
-                                  { label: "Message ID", value: log.providerMessageId || "—" },
-                                  { label: "Sent at",    value: fmtDateTime(log.sentAt || log.createdAt) },
-                                ].map(({ label, value }) => (
-                                  <div key={label}>
-                                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">{label}</p>
-                                    <p className="mt-0.5 text-[11px] font-semibold text-slate-800 break-all">{value}</p>
-                                  </div>
-                                ))}
-                              </div>
-                              <div>
-                                <p className="mb-1 text-[9px] font-bold uppercase tracking-wide text-slate-400">Full Message</p>
-                                <p className="rounded border border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] leading-relaxed text-slate-700 whitespace-pre-wrap">
-                                  {log.body || log.message || "—"}
-                                </p>
-                              </div>
-                              {log.error && (
-                                <div className="mt-3 flex items-start gap-2 border border-rose-200 bg-rose-50 px-3 py-2.5">
-                                  <FaExclamationTriangle size={11} className="mt-0.5 shrink-0 text-rose-500" />
-                                  <div>
-                                    <p className="text-[9px] font-bold uppercase tracking-wide text-rose-500">Error</p>
-                                    <p className="mt-0.5 text-[11px] text-rose-700">{log.error}</p>
-                                  </div>
-                                </div>
-                              )}
-                              {/* Actions row */}
-                              {(log.status === "failed" || (log.status !== "sent" || log.isTest)) && (
-                                <div className="mt-3 flex items-center justify-end gap-2">
-                                  {log.status === "failed" && (
-                                    <button
-                                      onClick={e => { e.stopPropagation(); handleResend(log._id); }}
-                                      disabled={resendingId === log._id}
-                                      className="inline-flex items-center gap-1.5 border border-[#31694E] bg-[#ECF6F1] px-3 py-1.5 text-[10px] font-bold text-[#1f4a35] transition hover:bg-[#d4ede2] disabled:opacity-50"
-                                    >
-                                      {resendingId === log._id
-                                        ? <Spinner size="sm" />
-                                        : <FaRedo size={9} />}
-                                      {resendingId === log._id ? "Resending…" : "Resend"}
-                                    </button>
-                                  )}
-                                  {(log.status !== "sent" || log.isTest) && (
-                                    <button
-                                      onClick={e => { e.stopPropagation(); handleDeleteLog(log._id); }}
-                                      disabled={deletingId === log._id}
-                                      className="inline-flex items-center gap-1.5 border border-rose-300 bg-rose-50 px-3 py-1.5 text-[10px] font-bold text-rose-600 transition hover:bg-rose-100 disabled:opacity-50"
-                                    >
-                                      {deletingId === log._id
-                                        ? <Spinner size="sm" />
-                                        : <FaTrash size={9} />}
-                                      {deletingId === log._id ? "Deleting…" : "Delete Entry"}
-                                    </button>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
           )}
-        </div>
+        />
 
         {/* ── Pagination footer ─────────────────────────────────────────────── */}
-        <div className="flex-shrink-0 flex min-h-9 items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-slate-500 normal-case">
-              {loading ? "Loading…" : `Showing ${fromRow.toLocaleString()}–${toRow.toLocaleString()} of ${total.toLocaleString()}`}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPage(currentPage - 1)}
-              disabled={currentPage <= 1 || loading}
-              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45">
-              Previous
-            </button>
-            <span>Page {currentPage} of {pages}</span>
-            <button
-              type="button"
-              onClick={() => setPage(currentPage + 1)}
-              disabled={currentPage >= pages || loading}
-              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45">
-              Next
-            </button>
-          </div>
-        </div>
+        <PaginationBar
+          page={currentPage}
+          pages={pages}
+          total={total}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(n) => { setPageSize(n); setSearchParams({ status: activeStatus, page: "1" }, { replace: true }); }}
+          loading={loading}
+          label="messages"
+        />
       </div>
 
       <ComposePanel

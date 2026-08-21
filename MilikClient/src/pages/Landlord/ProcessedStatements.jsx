@@ -33,6 +33,7 @@ import { getChartOfAccounts } from "../../redux/apiCalls";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from '../../components/PaginationBar';
+import MilikTable from '../../components/common/MilikTable';
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";

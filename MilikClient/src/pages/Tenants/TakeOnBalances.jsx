@@ -36,12 +36,12 @@ import { adminRequests } from "../../utils/requestMethods";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
+import PaginationBar from "../../components/PaginationBar";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
-const ITEMS_PER_PAGE = 50;
 
 const billItemOptions = [
   { value: "rent", label: "Rent", category: "RENT_CHARGE", defaultLabel: "Rent" },
@@ -531,6 +531,7 @@ const TakeOnBalances = () => {
   const [selectedRow, setSelectedRow] = useTabState("/tenants/take-on-balances:selectedRow", null);
   const [rowToDelete, setRowToDelete] = useState(null);
   const [currentPage, setCurrentPage] = useTabState("/tenants/take-on-balances:currentPage", 1);
+  const [pageSize, setPageSize] = useState(50);
   const [expandedBalanceId, setExpandedBalanceId] = useState(null);
   const [chartAccounts, setChartAccounts] = useState([]);
   const [fixingDeposits, setFixingDeposits] = useState(false);
@@ -887,10 +888,10 @@ const TakeOnBalances = () => {
   };
 
 
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
   const paginatedRows = filteredRows.slice(startIndex, endIndex);
 
   useEffect(() => {
@@ -1099,17 +1100,16 @@ const TakeOnBalances = () => {
                 </div>
               )}
             />
-            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-1.5 py-1">
-              <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
-                <div className="font-semibold">Showing <span className="font-bold text-slate-900">{paginatedRows.length > 0 ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredRows.length)}</span> of <span className="font-bold text-slate-900">{filteredRows.length}</span> take-on balance rows</div>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
-                  <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
-                  <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
-                  <button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
-                </div>
-              </div>
-            </div>
+            <PaginationBar
+              page={safeCurrentPage}
+              pages={totalPages}
+              total={filteredRows.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              loading={false}
+              label="take-on balance rows"
+            />
           </div>
         </div>
       </div>

@@ -40,6 +40,7 @@ import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/
 import { hasCompanyPermission } from "../../utils/permissions";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from '../../components/PaginationBar';
+import MilikTable from '../../components/common/MilikTable';
 
 const STORAGE_KEY = "milik_landlords_v1";
 const DEFAULT_PAGE_SIZE = 50;

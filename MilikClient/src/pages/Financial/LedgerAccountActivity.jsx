@@ -16,6 +16,7 @@ import { deleteTenantInvoice, getChartOfAccounts } from "../../redux/apiCalls";
 import { hasCompanyPermission } from "../../utils/permissions";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from '../../components/PaginationBar';
+import MilikTable from '../../components/common/MilikTable';
 import { fmtDate } from "../../utils/dates";
 import { formatMoney } from "../../utils/money";
 

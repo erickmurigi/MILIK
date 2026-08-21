@@ -41,8 +41,9 @@ import { selectCurrentCompany, selectCurrentUser, selectAllLandlords, selectAllP
 import { hasCompanyPermission } from "../../utils/permissions";
 import { isCashbookAccount } from "../../utils/cashbookUtils";
 import AppSelect from "../../components/common/AppSelect";
+import PaginationBar from "../../components/PaginationBar";
+import MilikTable from "../../components/common/MilikTable";
 
-const ITEMS_PER_PAGE = 50;
 const todayIso = () => new Date().toISOString().split("T")[0];
 
 const blankForm = {
@@ -216,6 +217,7 @@ const LandlordStandingOrders = () => {
   const [cashbooks, setCashbooks] = useState([]);
   const [reversingRunId, setReversingRunId] = useState("");
   const [currentPage, setCurrentPage] = useTabState("/landlords/standing-orders:currentPage", 1);
+  const [pageSize, setPageSize] = useState(50);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -250,7 +252,7 @@ const LandlordStandingOrders = () => {
         ...filters,
         search: debouncedSearch,
         page: currentPage,
-        limit: ITEMS_PER_PAGE,
+        limit: pageSize,
       });
       setRows(Array.isArray(result.data) ? result.data : []);
       setServerTotal(result.total ?? 0);
@@ -260,7 +262,7 @@ const LandlordStandingOrders = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentCompany?._id, debouncedSearch, filters.status, filters.landlordId, filters.propertyId, currentPage]);
+  }, [currentCompany?._id, debouncedSearch, filters.status, filters.landlordId, filters.propertyId, currentPage, pageSize]);
 
   useEffect(() => {
     loadRows();
@@ -644,306 +646,259 @@ const LandlordStandingOrders = () => {
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full min-w-[1340px] text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className="bg-[#0B3B2E] text-white">
-                    <th className="w-9 px-3 py-2 text-center font-bold border-r border-white/10">
-                      <input
-                        type="checkbox"
-                        checked={allSelectableChecked}
-                        onChange={toggleSelectAll}
-                        disabled={selectableRowIds.length === 0}
-                        className="h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
-                      />
-                    </th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Order</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Landlord / Property</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Schedule</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Payment Setup</th>
-                    <th className="px-3 py-2 text-right font-bold border-r border-white/10">Amount</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Status</th>
-                    <th className="px-3 py-2 text-right font-bold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {!loading && rows.length === 0 && (
-                    <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
-                        No standing orders found.
-                      </td>
-                    </tr>
-                  )}
-                  {rows.map((row, index) => {
-                    const expanded = expandedId === row._id;
-                    const runnable = row.status === "active" && (row.eligiblePeriods || []).length > 0;
-                    return (
-                      <React.Fragment key={row._id}>
-                        <tr className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
-                          <td className="w-9 px-3 py-1 text-center align-top border-r border-gray-100">
-                            <input
-                              type="checkbox"
-                              checked={selectedIds.includes(String(row._id))}
-                              onChange={() => toggleRowSelection(row._id)}
-                              disabled={!runnable}
-                              className="mt-1 h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E] disabled:cursor-not-allowed disabled:opacity-50"
-                              title={!runnable ? "Only active standing orders with eligible periods can be bulk run" : "Select this standing order for bulk run"}
-                            />
-                          </td>
-                          <td className="px-3 py-1 align-top border-r border-gray-100">
-                            <div className="font-black text-slate-900">{row.standingOrderNo || row.referenceNo}</div>
-                            <div className="text-[10px] text-slate-500">{row.title}</div>
-                            <button
-                              type="button"
-                              onClick={() => setExpandedId((prev) => (prev === row._id ? "" : row._id))}
-                              className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-[#0B3B2E]"
-                            >
-                              <FaChevronDown className={`transition ${expanded ? "rotate-180" : ""}`} />
-                              {expanded ? "Hide" : "Details"}
-                            </button>
-                          </td>
-                          <td className="px-3 py-1 align-top border-r border-gray-100 text-slate-700">
-                            <div className="font-semibold text-slate-900">{getLandlordLabel(row.landlord)}</div>
-                            <div className="text-[10px] text-slate-500">{row.property?.propertyName || row.property?.name || "No property"}</div>
-                          </td>
-                          <td className="px-3 py-1 align-top border-r border-gray-100 text-slate-700">
-                            <div className="font-semibold">{frequencyLabel(row.frequency)}</div>
-                            <div className="text-[10px] text-slate-500">
-                              Runs {canUseDayOfMonth(row.frequency) ? `on day ${row.dayOfMonth || new Date(row.startDate || Date.now()).getDate()}` : "every week"}
-                            </div>
-                            <div className="text-[10px] text-slate-500">Next: {row.nextEligiblePeriod?.periodLabel || "No open period"}</div>
-                            <div className="text-[10px] text-slate-500">
-                              Done {row.processedPeriodsCount || 0} • Pending {row.unprocessedPeriodsCount || 0}
-                            </div>
-                          </td>
-                          <td className="px-3 py-1 align-top border-r border-gray-100 text-slate-700">
-                            <div className="font-semibold">
-                              {paymentMethodOptions.find((item) => item.value === normalizePaymentMethod(row.paymentMethod))?.label || frequencyLabel(row.paymentMethod)}
-                            </div>
-                            <div className="text-[10px] text-slate-500">{getCashbookLabel(row.cashbook)}</div>
-                            <div className="text-[10px] text-slate-500">{getPaymentDestinationSummary(row)}</div>
-                          </td>
-                          <td className="px-3 py-1 text-right align-top border-r border-gray-100 font-black text-slate-900">{money(row.amount)}</td>
-                          <td className="px-3 py-1 align-top border-r border-gray-100">
-                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${
-                              row.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : row.status === "paused" ? "bg-amber-50 text-amber-700 border-amber-200"
-                              : row.status === "stopped" ? "bg-red-50 text-red-700 border-red-200"
-                              : "bg-slate-100 text-slate-600 border-slate-200"
-                            }`}>
-                              {row.status}
-                            </span>
-                          </td>
-                          <td className="px-3 py-1 text-right align-top">
-                            <div className="inline-flex flex-wrap justify-end gap-2">
-                              <button
-                                onClick={() => openEdit(row)}
-                                disabled={!canWrite}
-                                className="inline-flex h-7 items-center gap-1 rounded border border-blue-300 bg-blue-50 px-2.5 text-[11px] font-bold text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                <FaEdit /> Edit
-                              </button>
-                              {row.status !== "active" && (
-                                <button
-                                  onClick={() => handleStatus(row, "active")}
-                                  className="inline-flex h-7 items-center gap-1 rounded border border-emerald-300 bg-emerald-50 px-2.5 text-[11px] font-bold text-emerald-700"
-                                >
-                                  <FaPlay /> Activate
-                                </button>
-                              )}
-                              {row.status === "active" && (
-                                <button
-                                  onClick={() => handleStatus(row, "paused")}
-                                  className="inline-flex h-7 items-center gap-1 rounded border border-amber-300 bg-amber-50 px-2.5 text-[11px] font-bold text-amber-700"
-                                >
-                                  <FaPause /> Pause
-                                </button>
-                              )}
-                              {row.status !== "stopped" && (
-                                <button
-                                  onClick={() => handleStatus(row, "stopped")}
-                                  className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-slate-100 px-2.5 text-[11px] font-bold text-slate-700"
-                                >
-                                  <FaStop /> Stop
-                                </button>
-                              )}
-                              <button
-                                onClick={() => openRunModal(row)}
-                                className={`inline-flex h-7 items-center gap-1 rounded border px-2.5 text-[11px] font-bold ${
-                                  runnable
-                                    ? "border-indigo-300 bg-indigo-50 text-indigo-700"
-                                    : "border-slate-300 bg-slate-100 text-slate-400"
-                                }`}
-                              >
-                                <FaCalendarAlt /> Run
-                              </button>
-                              <button
-                                onClick={() => handleDelete(row)}
-                                disabled={!canWrite}
-                                className="inline-flex h-7 items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2.5 text-[11px] font-bold text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                <FaTrash /> Delete
-                              </button>
-                              <button
-                                onClick={() => setGlOrder(row)}
-                                className="inline-flex h-7 items-center gap-1 rounded border border-teal-300 bg-teal-50 px-2.5 text-[11px] font-bold text-teal-700"
-                                title="View GL Entries"
-                              >
-                                <FaBook /> GL
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                        {expanded && (
-                          <tr className="border-b border-gray-100 bg-slate-50/80">
-                            <td colSpan={8} className="px-3 py-3">
-                              <div className="mb-4 grid gap-4 xl:grid-cols-3">
-                                <div className="rounded-xl border border-slate-200 bg-white p-3">
-                                  <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Payment destination</p>
-                                  <div className="mt-3 space-y-2 text-sm text-slate-700">
-                                    <div><span className="font-bold text-slate-900">Method:</span> {paymentMethodOptions.find((item) => item.value === normalizePaymentMethod(row.paymentMethod))?.label || frequencyLabel(row.paymentMethod)}</div>
-                                    <div><span className="font-bold text-slate-900">Cashbook:</span> {getCashbookLabel(row.cashbook)}</div>
-                                    <div><span className="font-bold text-slate-900">Destination:</span> {getPaymentDestinationSummary(row)}</div>
-                                    <div><span className="font-bold text-slate-900">Narration:</span> {row.narration || row.title || "-"}</div>
-                                    <div><span className="font-bold text-slate-900">Internal notes:</span> {row.notes || "-"}</div>
-                                  </div>
-                                </div>
-                                <div className="rounded-xl border border-slate-200 bg-white p-3">
-                                  <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Current schedule</p>
-                                  <div className="mt-3 space-y-2 text-sm text-slate-700">
-                                    <div><span className="font-bold text-slate-900">Start:</span> {fmtDate(row.startDate)}</div>
-                                    <div><span className="font-bold text-slate-900">End:</span> {fmtDate(row.endDate)}</div>
-                                    <div><span className="font-bold text-slate-900">Frequency:</span> {frequencyLabel(row.frequency)}</div>
-                                    <div><span className="font-bold text-slate-900">Run rule:</span> {canUseDayOfMonth(row.frequency) ? `Day ${row.dayOfMonth || new Date(row.startDate || Date.now()).getDate()}` : "Weekly cycle"}</div>
-                                    <div><span className="font-bold text-slate-900">Last processed:</span> {fmtDate(row.lastRunDate || row.lastRunAt)}</div>
-                                  </div>
-                                </div>
-                                <div className="rounded-xl border border-slate-200 bg-white p-3">
-                                  <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Controls</p>
-                                  <div className="mt-3 space-y-3 text-sm text-slate-700">
-                                    <div>Processed runs can be reversed only while the related landlord statement period is still open.</div>
-                                    <div>Once runs exist, the property, landlord, schedule day, frequency, and start date are locked for audit safety.</div>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="grid gap-4 lg:grid-cols-2">
-                                <div className="rounded-xl border border-slate-200 bg-white p-3">
-                                  <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Eligible periods to run</p>
-                                  <div className="mt-3 space-y-2">
-                                    {(row.eligiblePeriods || []).length === 0 && (
-                                      <p className="text-sm text-slate-500">
-                                        No eligible periods. Already processed periods, future periods, and closed statement periods are blocked.
-                                      </p>
-                                    )}
-                                    {(row.eligiblePeriods || []).map((item) => (
-                                      <div key={item.periodKey} className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-sm">
-                                        <div>
-                                          <div className="font-bold text-slate-800">{item.periodLabel}</div>
-                                          <div className="text-xs text-slate-500">Due {fmtDate(item.dueDate)}</div>
-                                        </div>
-                                        <button
-                                          onClick={() =>
-                                            openRunModal({
-                                              ...row,
-                                              eligiblePeriods: [item, ...(row.eligiblePeriods || []).filter((entry) => entry.periodKey !== item.periodKey)],
-                                            })
-                                          }
-                                          className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-black text-indigo-700"
-                                        >
-                                          Run this period
-                                        </button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                                <div className="rounded-xl border border-slate-200 bg-white p-3">
-                                  <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Processed periods</p>
-                                  <div className="mt-3 max-h-80 space-y-2 overflow-y-auto">
-                                    {(row.processedPeriods || []).length === 0 && (
-                                      <p className="text-sm text-slate-500">No processed periods yet.</p>
-                                    )}
-                                    {(row.processedPeriods || []).map((item) => (
-                                      <div
-                                        key={item.referenceNo || item.periodKey}
-                                        className={`rounded-xl border px-3 py-2 text-sm ${
-                                          item.isCancelled
-                                            ? "border-slate-200 bg-slate-100"
-                                            : "border-emerald-200 bg-emerald-50"
-                                        }`}
-                                      >
-                                        <div className="flex items-start justify-between gap-3">
-                                          <div>
-                                            <div className={`font-bold ${item.isCancelled ? "text-slate-700" : "text-emerald-800"}`}>
-                                              {item.periodLabel || item.periodKey}
-                                            </div>
-                                            <div className={`mt-1 text-xs ${item.isCancelled ? "text-slate-500" : "text-emerald-700"}`}>
-                                              Processed {fmtDate(item.runDate)} • Ref {item.referenceNo || "-"}
-                                            </div>
-                                            {item.isCancelled && (
-                                              <div className="mt-1 text-xs text-rose-600">
-                                                Reversed {fmtDate(item.cancelledAt)} • {item.cancellationReason || "No reason recorded"}
-                                              </div>
-                                            )}
-                                          </div>
-                                          <div className="flex flex-col items-end gap-2">
-                                            <div className={`font-black ${item.isCancelled ? "text-slate-700" : "text-emerald-900"}`}>
-                                              {money(item.amount)}
-                                            </div>
-                                            {item.isCancelled ? (
-                                              <span className="rounded-full bg-slate-200 px-2.5 py-1 text-[11px] font-black text-slate-700">
-                                                Reversed
-                                              </span>
-                                            ) : (
-                                              <button
-                                                onClick={() => handleReverseRun(row, item)}
-                                                disabled={reversingRunId === String(item.id)}
-                                                className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
-                                              >
-                                                <FaUndo /> {reversingRunId === String(item.id) ? "Reversing..." : "Reverse run"}
-                                              </button>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
+            <MilikTable
+              columns={[
+                { label: "Order" },
+                { label: "Landlord / Property" },
+                { label: "Schedule" },
+                { label: "Payment Setup" },
+                { label: "Amount", align: "right" },
+                { label: "Status" },
+              ]}
+              rows={rows}
+              rowKey="_id"
+              loading={loading}
+              empty="No standing orders found."
+              minWidth="1340px"
+              checkboxes
+              allChecked={allSelectableChecked}
+              someChecked={selectedIds.length > 0 && !allSelectableChecked}
+              onCheckAll={toggleSelectAll}
+              isChecked={(row) => selectedIds.includes(String(row._id))}
+              onCheckRow={(row) => {
+                const runnable = row.status === "active" && (row.eligiblePeriods || []).length > 0;
+                if (runnable) toggleRowSelection(row._id);
+              }}
+              renderRow={(row) => {
+                const runnable = row.status === "active" && (row.eligiblePeriods || []).length > 0;
+                return (
+                  <>
+                    <td className="px-3 py-1 align-top border-r border-gray-100">
+                      <div className="font-black text-slate-900">{row.standingOrderNo || row.referenceNo}</div>
+                      <div className="text-[10px] text-slate-500">{row.title}</div>
+                    </td>
+                    <td className="px-3 py-1 align-top border-r border-gray-100 text-slate-700">
+                      <div className="font-semibold text-slate-900">{getLandlordLabel(row.landlord)}</div>
+                      <div className="text-[10px] text-slate-500">{row.property?.propertyName || row.property?.name || "No property"}</div>
+                    </td>
+                    <td className="px-3 py-1 align-top border-r border-gray-100 text-slate-700">
+                      <div className="font-semibold">{frequencyLabel(row.frequency)}</div>
+                      <div className="text-[10px] text-slate-500">
+                        Runs {canUseDayOfMonth(row.frequency) ? `on day ${row.dayOfMonth || new Date(row.startDate || Date.now()).getDate()}` : "every week"}
+                      </div>
+                      <div className="text-[10px] text-slate-500">Next: {row.nextEligiblePeriod?.periodLabel || "No open period"}</div>
+                      <div className="text-[10px] text-slate-500">
+                        Done {row.processedPeriodsCount || 0} • Pending {row.unprocessedPeriodsCount || 0}
+                      </div>
+                    </td>
+                    <td className="px-3 py-1 align-top border-r border-gray-100 text-slate-700">
+                      <div className="font-semibold">
+                        {paymentMethodOptions.find((item) => item.value === normalizePaymentMethod(row.paymentMethod))?.label || frequencyLabel(row.paymentMethod)}
+                      </div>
+                      <div className="text-[10px] text-slate-500">{getCashbookLabel(row.cashbook)}</div>
+                      <div className="text-[10px] text-slate-500">{getPaymentDestinationSummary(row)}</div>
+                    </td>
+                    <td className="px-3 py-1 text-right align-top border-r border-gray-100 font-black text-slate-900">{money(row.amount)}</td>
+                    <td className="px-3 py-1 align-top border-r border-gray-100">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                        row.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : row.status === "paused" ? "bg-amber-50 text-amber-700 border-amber-200"
+                        : row.status === "stopped" ? "bg-red-50 text-red-700 border-red-200"
+                        : "bg-slate-100 text-slate-600 border-slate-200"
+                      }`}>
+                        {row.status}
+                      </span>
+                    </td>
+                  </>
+                );
+              }}
+              renderActions={(row) => {
+                const runnable = row.status === "active" && (row.eligiblePeriods || []).length > 0;
+                return (
+                  <div className="inline-flex flex-wrap justify-end gap-2">
+                    <button
+                      onClick={() => openEdit(row)}
+                      disabled={!canWrite}
+                      className="inline-flex h-7 items-center gap-1 rounded border border-blue-300 bg-blue-50 px-2.5 text-[11px] font-bold text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <FaEdit /> Edit
+                    </button>
+                    {row.status !== "active" && (
+                      <button
+                        onClick={() => handleStatus(row, "active")}
+                        className="inline-flex h-7 items-center gap-1 rounded border border-emerald-300 bg-emerald-50 px-2.5 text-[11px] font-bold text-emerald-700"
+                      >
+                        <FaPlay /> Activate
+                      </button>
+                    )}
+                    {row.status === "active" && (
+                      <button
+                        onClick={() => handleStatus(row, "paused")}
+                        className="inline-flex h-7 items-center gap-1 rounded border border-amber-300 bg-amber-50 px-2.5 text-[11px] font-bold text-amber-700"
+                      >
+                        <FaPause /> Pause
+                      </button>
+                    )}
+                    {row.status !== "stopped" && (
+                      <button
+                        onClick={() => handleStatus(row, "stopped")}
+                        className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-slate-100 px-2.5 text-[11px] font-bold text-slate-700"
+                      >
+                        <FaStop /> Stop
+                      </button>
+                    )}
+                    <button
+                      onClick={() => openRunModal(row)}
+                      className={`inline-flex h-7 items-center gap-1 rounded border px-2.5 text-[11px] font-bold ${
+                        runnable
+                          ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                          : "border-slate-300 bg-slate-100 text-slate-400"
+                      }`}
+                    >
+                      <FaCalendarAlt /> Run
+                    </button>
+                    <button
+                      onClick={() => handleDelete(row)}
+                      disabled={!canWrite}
+                      className="inline-flex h-7 items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2.5 text-[11px] font-bold text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <FaTrash /> Delete
+                    </button>
+                    <button
+                      onClick={() => setGlOrder(row)}
+                      className="inline-flex h-7 items-center gap-1 rounded border border-teal-300 bg-teal-50 px-2.5 text-[11px] font-bold text-teal-700"
+                      title="View GL Entries"
+                    >
+                      <FaBook /> GL
+                    </button>
+                  </div>
+                );
+              }}
+              renderExpanded={(row) => (
+                <>
+                  <div className="mb-4 grid gap-4 xl:grid-cols-3">
+                    <div className="rounded-xl border border-slate-200 bg-white p-3">
+                      <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Payment destination</p>
+                      <div className="mt-3 space-y-2 text-sm text-slate-700">
+                        <div><span className="font-bold text-slate-900">Method:</span> {paymentMethodOptions.find((item) => item.value === normalizePaymentMethod(row.paymentMethod))?.label || frequencyLabel(row.paymentMethod)}</div>
+                        <div><span className="font-bold text-slate-900">Cashbook:</span> {getCashbookLabel(row.cashbook)}</div>
+                        <div><span className="font-bold text-slate-900">Destination:</span> {getPaymentDestinationSummary(row)}</div>
+                        <div><span className="font-bold text-slate-900">Narration:</span> {row.narration || row.title || "-"}</div>
+                        <div><span className="font-bold text-slate-900">Internal notes:</span> {row.notes || "-"}</div>
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-white p-3">
+                      <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Current schedule</p>
+                      <div className="mt-3 space-y-2 text-sm text-slate-700">
+                        <div><span className="font-bold text-slate-900">Start:</span> {fmtDate(row.startDate)}</div>
+                        <div><span className="font-bold text-slate-900">End:</span> {fmtDate(row.endDate)}</div>
+                        <div><span className="font-bold text-slate-900">Frequency:</span> {frequencyLabel(row.frequency)}</div>
+                        <div><span className="font-bold text-slate-900">Run rule:</span> {canUseDayOfMonth(row.frequency) ? `Day ${row.dayOfMonth || new Date(row.startDate || Date.now()).getDate()}` : "Weekly cycle"}</div>
+                        <div><span className="font-bold text-slate-900">Last processed:</span> {fmtDate(row.lastRunDate || row.lastRunAt)}</div>
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-white p-3">
+                      <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Controls</p>
+                      <div className="mt-3 space-y-3 text-sm text-slate-700">
+                        <div>Processed runs can be reversed only while the related landlord statement period is still open.</div>
+                        <div>Once runs exist, the property, landlord, schedule day, frequency, and start date are locked for audit safety.</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-xl border border-slate-200 bg-white p-3">
+                      <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Eligible periods to run</p>
+                      <div className="mt-3 space-y-2">
+                        {(row.eligiblePeriods || []).length === 0 && (
+                          <p className="text-sm text-slate-500">
+                            No eligible periods. Already processed periods, future periods, and closed statement periods are blocked.
+                          </p>
                         )}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        {(row.eligiblePeriods || []).map((item) => (
+                          <div key={item.periodKey} className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                            <div>
+                              <div className="font-bold text-slate-800">{item.periodLabel}</div>
+                              <div className="text-xs text-slate-500">Due {fmtDate(item.dueDate)}</div>
+                            </div>
+                            <button
+                              onClick={() =>
+                                openRunModal({
+                                  ...row,
+                                  eligiblePeriods: [item, ...(row.eligiblePeriods || []).filter((entry) => entry.periodKey !== item.periodKey)],
+                                })
+                              }
+                              className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-black text-indigo-700"
+                            >
+                              Run this period
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-white p-3">
+                      <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Processed periods</p>
+                      <div className="mt-3 max-h-80 space-y-2 overflow-y-auto">
+                        {(row.processedPeriods || []).length === 0 && (
+                          <p className="text-sm text-slate-500">No processed periods yet.</p>
+                        )}
+                        {(row.processedPeriods || []).map((item) => (
+                          <div
+                            key={item.referenceNo || item.periodKey}
+                            className={`rounded-xl border px-3 py-2 text-sm ${item.isCancelled ? "border-slate-200 bg-slate-100" : "border-emerald-200 bg-emerald-50"}`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className={`font-bold ${item.isCancelled ? "text-slate-700" : "text-emerald-800"}`}>
+                                  {item.periodLabel || item.periodKey}
+                                </div>
+                                <div className={`mt-1 text-xs ${item.isCancelled ? "text-slate-500" : "text-emerald-700"}`}>
+                                  Processed {fmtDate(item.runDate)} • Ref {item.referenceNo || "-"}
+                                </div>
+                                {item.isCancelled && (
+                                  <div className="mt-1 text-xs text-rose-600">
+                                    Reversed {fmtDate(item.cancelledAt)} • {item.cancellationReason || "No reason recorded"}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex flex-col items-end gap-2">
+                                <div className={`font-black ${item.isCancelled ? "text-slate-700" : "text-emerald-900"}`}>
+                                  {money(item.amount)}
+                                </div>
+                                {item.isCancelled ? (
+                                  <span className="rounded-full bg-slate-200 px-2.5 py-1 text-[11px] font-black text-slate-700">
+                                    Reversed
+                                  </span>
+                                ) : (
+                                  <button
+                                    onClick={() => handleReverseRun(row, item)}
+                                    disabled={reversingRunId === String(item.id)}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    <FaUndo /> {reversingRunId === String(item.id) ? "Reversing..." : "Reverse run"}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            />
           </div>
 
-          <div className="flex items-center justify-between gap-3 border border-slate-200 border-t-0 bg-white px-4 py-2 text-xs text-slate-600 rounded-b-lg">
-            <div className="font-semibold">
-              Showing <span className="font-bold text-slate-900">{serverTotal === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE + 1}</span> to <span className="font-bold text-slate-900">{Math.min(safeCurrentPage * ITEMS_PER_PAGE, serverTotal)}</span> of <span className="font-bold text-slate-900">{serverTotal}</span> standing orders
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
-              <button
-                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                disabled={safeCurrentPage === 1}
-                className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {serverPages}</span>
-              <button
-                onClick={() => setCurrentPage((prev) => Math.min(serverPages, prev + 1))}
-                disabled={safeCurrentPage === serverPages}
-                className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
-          </div>
+          <PaginationBar
+            page={safeCurrentPage}
+            pages={serverPages}
+            total={serverTotal}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+            loading={loading}
+            label="standing orders"
+          />
         </div>
       </div>
 

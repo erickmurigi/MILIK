@@ -52,8 +52,8 @@ import { selectCurrentUser, selectCurrentCompany, selectAllCompanies, selectComp
 import AppSelect from "../../components/common/AppSelect";
 import StatusBadge from "../../components/common/StatusBadge";
 import { fmtDate } from "../../utils/dates";
+import PaginationBar from "../../components/PaginationBar";
 
-const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const DEFAULT_PAGE_SIZE = 25;
 const SECTION_ALIASES = { rights: "users", database: "overview", sessions: "trials" };
 const VALID_SECTIONS = ["overview", "companies", "users", "trials", "audit"];
@@ -239,35 +239,6 @@ const StatCard = ({ label, value, icon: Icon, accent = "emerald", sub }) => {
   );
 };
 
-const Pagination = ({ page, totalPages, total, pageSize, onPage, onPageSize }) => {
-  const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const end = Math.min(page * pageSize, total);
-  return (
-    <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-white px-4 py-2 text-xs text-slate-600">
-      <span className="font-semibold">
-        Showing <span className="font-bold text-slate-900">{start}</span> to <span className="font-bold text-slate-900">{end}</span> of <span className="font-bold text-slate-900">{total}</span>
-      </span>
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1.5">
-          <span className="font-semibold text-slate-500">Per page:</span>
-          <AppSelect
-            value={pageSize}
-            onChange={(v) => onPageSize(Number(v ?? DEFAULT_PAGE_SIZE))}
-            options={PAGE_SIZE_OPTIONS.map((n) => ({ value: n, label: String(n) }))}
-            size="sm"
-          />
-        </div>
-        {totalPages > 1 && (
-          <div className="flex items-center gap-1.5">
-            <button onClick={() => onPage(page - 1)} disabled={page === 1} className="rounded-lg border border-slate-200 bg-white px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 transition">Previous</button>
-            <span className="font-semibold text-slate-700">Page {page} of {totalPages}</span>
-            <button onClick={() => onPage(page + 1)} disabled={page >= totalPages} className="rounded-lg border border-slate-200 bg-white px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 transition">Next</button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
 
 const EmptyState = ({ icon: Icon, title, body }) => (
   <div className="flex flex-col items-center justify-center gap-2 py-16 text-slate-400">
@@ -612,7 +583,7 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, pendin
         </table>
       </div>
 
-      <Pagination page={safePage} totalPages={totalPages} total={filtered.length} pageSize={pageSize} onPage={setPage} onPageSize={(n) => { setPageSize(n); setPage(1); }} />
+      <PaginationBar page={safePage} pages={totalPages} total={filtered.length} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(n) => { setPageSize(n); setPage(1); }} />
     </div>
   );
 };
@@ -742,7 +713,7 @@ const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelecte
         </table>
       </div>
 
-      <Pagination page={safePage} totalPages={totalPages} total={filtered.length} pageSize={pageSize} onPage={setPage} onPageSize={(n) => { setPageSize(n); setPage(1); }} />
+      <PaginationBar page={safePage} pages={totalPages} total={filtered.length} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(n) => { setPageSize(n); setPage(1); }} />
     </div>
   );
 };
@@ -837,7 +808,7 @@ const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWor
         </table>
       </div>
 
-      <Pagination page={safePage} totalPages={totalPages} total={spotlightCompanies.length} pageSize={pageSize} onPage={setPage} onPageSize={(n) => { setPageSize(n); setPage(1); }} />
+      <PaginationBar page={safePage} pages={totalPages} total={spotlightCompanies.length} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(n) => { setPageSize(n); setPage(1); }} />
     </div>
   );
 };
@@ -931,7 +902,7 @@ const AuditPanel = ({ companies, users, companyMap }) => {
         </table>
       </div>
 
-      <Pagination page={safePage} totalPages={totalPages} total={filtered.length} pageSize={pageSize} onPage={setPage} onPageSize={(n) => { setPageSize(n); setPage(1); }} />
+      <PaginationBar page={safePage} pages={totalPages} total={filtered.length} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(n) => { setPageSize(n); setPage(1); }} />
     </div>
   );
 };

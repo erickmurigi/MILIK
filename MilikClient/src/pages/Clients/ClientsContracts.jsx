@@ -6,6 +6,8 @@ import ClientsShell from './ClientsShell';
 import { clientsApi } from '../../services/clientsApi';
 import { fmtDate } from '../../utils/dates';
 import StatusBadge from '../../components/common/StatusBadge';
+import PaginationBar from '../../components/PaginationBar';
+import MilikTable from '../../components/common/MilikTable';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -50,10 +52,10 @@ const ClientsContracts = () => {
   const [search, setSearch]               = useState('');
   const [searchInput, setSearchInput]     = useState('');
   const [page, setPage]                   = useState(1);
+  const [limit, setLimit]                 = useState(25);
   const [activating, setActivating]       = useState({});
   const [terminating, setTerminating]     = useState({});
   const searchTimerRef                    = useRef(null);
-  const limit                             = 25;
 
   const fetchContracts = useCallback(async () => {
     setLoading(true);
@@ -187,135 +189,107 @@ const ClientsContracts = () => {
         </div>
 
         {/* ── Table ─────────────────────────────────────────────────────────── */}
-        <div className="flex-1 min-h-0 overflow-auto">
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 z-10">
-              <tr className="bg-[#0B3B2E] text-white text-[10px]">
-                {['Contract #', 'Client', 'Description', 'Period', 'Value (KES)', 'Billing', 'Expires', 'Status', 'Actions'].map((h) => (
-                  <th key={h} className="px-3 py-2 text-left font-black uppercase tracking-widest whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {loading ? (
-                <tr>
-                  <td colSpan={9} className="py-16 text-center text-sm text-slate-400">Loading contracts…</td>
-                </tr>
-              ) : !contracts.length ? (
-                <tr>
-                  <td colSpan={9} className="py-16 text-center">
-                    <FaFileContract className="mx-auto mb-2 text-slate-300" size={24} />
-                    <p className="text-sm font-semibold text-slate-500">No contracts found</p>
-                  </td>
-                </tr>
-              ) : (
-                contracts.map((c, idx) => {
-                  const days = c.endDate ? daysUntil(c.endDate) : null;
-                  return (
-                    <tr
-                      key={c._id}
-                      className={`hover:bg-emerald-50/30 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}
-                    >
-                      <td className="px-3 py-2.5 font-mono text-[11px] text-[#0B3B2E]">
-                        {c.contractNumber || c._id?.slice(-6).toUpperCase()}
-                      </td>
-                      <td
-                        className="px-3 py-2.5 font-semibold text-slate-800 cursor-pointer hover:text-[#0B3B2E]"
-                        onClick={() => navigate(`/clients/${c.client?._id || c.client}`)}
-                      >
-                        {c.client?.name || '—'}
-                      </td>
-                      <td className="px-3 py-2.5 max-w-[160px] truncate text-slate-600">
-                        {c.description || '—'}
-                      </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap text-slate-500">
-                        {fmtDate(c.startDate)} –{' '}
-                        {c.openEnded || !c.endDate
-                          ? <span className="font-semibold text-emerald-700">Ongoing</span>
-                          : fmtDate(c.endDate)}
-                      </td>
-                      <td className="px-3 py-2.5 tabular-nums font-semibold text-slate-700">
-                        {fmtKES(c.currentValue || c.baseValue)}
-                      </td>
-                      <td className="px-3 py-2.5 capitalize text-slate-500">{c.billingCycle || '—'}</td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        {(c.status === 'active' || c.status === 'pending_renewal') && days !== null ? (
-                          <span className={`tabular-nums text-[11px] ${daysColor(days)}`}>
-                            {days < 0 ? `${Math.abs(days)}d overdue` : `${days}d`}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <StatusBadge status={c.status} map={CONTRACT_STATUS_MAP} />
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex flex-wrap items-center gap-1">
-                          {c.status === 'draft' && (
-                            <button
-                              type="button"
-                              onClick={() => handleActivate(c)}
-                              disabled={activating[c._id]}
-                              className="border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-2 py-0.5 rounded text-[10px] font-semibold disabled:opacity-50"
-                            >
-                              {activating[c._id] ? '…' : 'Activate'}
-                            </button>
-                          )}
-                          {(c.status === 'active' || c.status === 'draft' || c.status === 'pending_renewal') && (
-                            <button
-                              type="button"
-                              onClick={() => navigate(`/clients/${c.client?._id || c.client}`)}
-                              className="border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 px-2 py-0.5 rounded text-[10px] font-semibold"
-                            >
-                              View
-                            </button>
-                          )}
-                          {(c.status === 'active' || c.status === 'draft' || c.status === 'pending_renewal') && (
-                            <button
-                              type="button"
-                              onClick={() => handleTerminate(c)}
-                              disabled={terminating[c._id]}
-                              className="border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 px-2 py-0.5 rounded text-[10px] font-semibold disabled:opacity-50"
-                            >
-                              {terminating[c._id] ? '…' : 'Terminate'}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
+        <MilikTable
+          columns={[
+            { label: 'Contract #' },
+            { label: 'Client' },
+            { label: 'Description' },
+            { label: 'Period' },
+            { label: 'Value (KES)' },
+            { label: 'Billing' },
+            { label: 'Expires' },
+            { label: 'Status' },
+          ]}
+          rows={contracts}
+          loading={loading}
+          empty="No contracts found"
+          renderRow={(c) => {
+            const days = c.endDate ? daysUntil(c.endDate) : null;
+            return (
+              <>
+                <td className="px-3 py-2.5 font-mono text-[11px] text-[#0B3B2E]">
+                  {c.contractNumber || c._id?.slice(-6).toUpperCase()}
+                </td>
+                <td
+                  className="px-3 py-2.5 font-semibold text-slate-800 cursor-pointer hover:text-[#0B3B2E]"
+                  onClick={() => navigate(`/clients/${c.client?._id || c.client}`)}
+                >
+                  {c.client?.name || '—'}
+                </td>
+                <td className="px-3 py-2.5 max-w-[160px] truncate text-slate-600">
+                  {c.description || '—'}
+                </td>
+                <td className="px-3 py-2.5 whitespace-nowrap text-slate-500">
+                  {fmtDate(c.startDate)} –{' '}
+                  {c.openEnded || !c.endDate
+                    ? <span className="font-semibold text-emerald-700">Ongoing</span>
+                    : fmtDate(c.endDate)}
+                </td>
+                <td className="px-3 py-2.5 tabular-nums font-semibold text-slate-700">
+                  {fmtKES(c.currentValue || c.baseValue)}
+                </td>
+                <td className="px-3 py-2.5 capitalize text-slate-500">{c.billingCycle || '—'}</td>
+                <td className="px-3 py-2.5 whitespace-nowrap">
+                  {(c.status === 'active' || c.status === 'pending_renewal') && days !== null ? (
+                    <span className={`tabular-nums text-[11px] ${daysColor(days)}`}>
+                      {days < 0 ? `${Math.abs(days)}d overdue` : `${days}d`}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">—</span>
+                  )}
+                </td>
+                <td className="px-3 py-2.5">
+                  <StatusBadge status={c.status} map={CONTRACT_STATUS_MAP} />
+                </td>
+              </>
+            );
+          }}
+          renderActions={(c) => (
+            <div className="flex flex-wrap items-center gap-1">
+              {c.status === 'draft' && (
+                <button
+                  type="button"
+                  onClick={() => handleActivate(c)}
+                  disabled={activating[c._id]}
+                  className="border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-2 py-0.5 rounded text-[10px] font-semibold disabled:opacity-50"
+                >
+                  {activating[c._id] ? '…' : 'Activate'}
+                </button>
               )}
-            </tbody>
-          </table>
-        </div>
+              {(c.status === 'active' || c.status === 'draft' || c.status === 'pending_renewal') && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/clients/${c.client?._id || c.client}`)}
+                  className="border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 px-2 py-0.5 rounded text-[10px] font-semibold"
+                >
+                  View
+                </button>
+              )}
+              {(c.status === 'active' || c.status === 'draft' || c.status === 'pending_renewal') && (
+                <button
+                  type="button"
+                  onClick={() => handleTerminate(c)}
+                  disabled={terminating[c._id]}
+                  className="border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 px-2 py-0.5 rounded text-[10px] font-semibold disabled:opacity-50"
+                >
+                  {terminating[c._id] ? '…' : 'Terminate'}
+                </button>
+              )}
+            </div>
+          )}
+        />
 
         {/* ── Pagination ─────────────────────────────────────────────────────── */}
-        <div className="flex-shrink-0 flex min-h-8 items-center justify-between border-t border-slate-200 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-          <span className="normal-case text-slate-500 font-normal text-xs">{pagination.total || 0} total</span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.max(p - 1, 1))}
-              disabled={page <= 1}
-              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              Previous
-            </button>
-            <span>Page {page} of {pages}</span>
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.min(p + 1, pages))}
-              disabled={page >= pages}
-              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        <PaginationBar
+          page={page}
+          pages={pages}
+          total={pagination.total || 0}
+          pageSize={limit}
+          onPageChange={setPage}
+          onPageSizeChange={(n) => { setLimit(n); setPage(1); }}
+          loading={loading}
+          label="contracts"
+        />
       </div>
     </ClientsShell>
   );

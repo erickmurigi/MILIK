@@ -8,6 +8,7 @@ import { toast } from 'react-hot-toast';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import AppSelect from '../../components/common/AppSelect';
 import { adminRequests } from '../../utils/requestMethods';
+import PaginationBar from '../../components/PaginationBar';
 
 // ── constants ────────────────────────────────────────────────────────────────
 const ZONE_COLORS = [
@@ -33,8 +34,6 @@ const STATUS_OPTIONS = [
   { value: 'active',   label: 'Active'   },
   { value: 'inactive', label: 'Inactive' },
 ];
-
-const PAGE_SIZES = [25, 50, 100];
 
 const EMPTY_FORM = {
   name: '', code: '', description: '', type: 'geographic',
@@ -527,41 +526,16 @@ export default function Zones() {
             </div>
 
             {/* Pagination footer */}
-            <div className="flex-shrink-0 sticky bottom-0 z-20 border-t border-gray-200 bg-white">
-              <div className="flex items-center justify-between px-3 py-1 text-xs">
-                <span className="text-slate-600">
-                  Showing{' '}
-                  <strong>{zones.length ? (page - 1) * pageSize + 1 : 0}</strong>
-                  {' '}to{' '}
-                  <strong>{zones.length ? Math.min(page * pageSize, total) : 0}</strong>
-                  {' '}of <strong>{total}</strong> zones
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-500 font-semibold">Per page:</span>
-                  <AppSelect
-                    value={pageSize}
-                    onChange={(v) => { setPageSize(Number(v)); setPage(1); }}
-                    options={PAGE_SIZES.map((n) => ({ value: n, label: String(n) }))}
-                    size="sm"
-                  />
-                  <button
-                    onClick={() => setPage((p) => Math.max(p - 1, 1))}
-                    disabled={page <= 1 || loading}
-                    className="border border-[#B7C9C0] bg-white px-3 py-1 font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    Previous
-                  </button>
-                  <span className="font-bold text-slate-600">Page {page} of {pages}</span>
-                  <button
-                    onClick={() => setPage((p) => Math.min(p + 1, pages))}
-                    disabled={page >= pages || loading}
-                    className="border border-[#B7C9C0] bg-white px-3 py-1 font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            </div>
+            <PaginationBar
+              page={page}
+              pages={pages}
+              total={total}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+              loading={loading}
+              label="zones"
+            />
           </div>
         </div>
       </div>

@@ -12,8 +12,8 @@ import { adminRequests } from "../../utils/requestMethods";
 import { fmtDate } from "../../utils/dates";
 import { formatMoney } from "../../utils/money";
 import useDebounce from "../../hooks/useDebounce";
+import PaginationBar from "../../components/PaginationBar";
 
-const ITEMS_PER_PAGE = 50;
 const normalizeArray = (value) => (Array.isArray(value) ? value : Array.isArray(value?.data) ? value.data : []);
 
 const RentalAgedAnalysisReport = () => {
@@ -30,6 +30,7 @@ const RentalAgedAnalysisReport = () => {
   const [filters, setFilters] = useTabState("/reports/rental-aged-analysis:filters", { propertyId: "", category: "", search: "", zone: "" });
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [currentPage, setCurrentPage] = useTabState("/reports/rental-aged-analysis:currentPage", 1);
+  const [pageSize, setPageSize] = useState(50);
 
   // Fetch properties once for the filter dropdown
   useEffect(() => {
@@ -88,10 +89,10 @@ const RentalAgedAnalysisReport = () => {
     });
   }, [rows, debouncedSearch]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
   const paginatedRows = filteredRows.slice(startIndex, endIndex);
 
   useEffect(() => {
@@ -377,17 +378,16 @@ const RentalAgedAnalysisReport = () => {
                 </tbody>
               </table>
             </div>
-            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-2 py-1">
-              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600">
-                <div className="font-semibold">Showing <span className="font-bold text-slate-900">{paginatedRows.length > 0 ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredRows.length)}</span> of <span className="font-bold text-slate-900">{filteredRows.length}</span> tenant ageing rows</div>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
-                  <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-md border border-slate-300 bg-white px-2 py-1 font-semibold transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
-                  <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
-                  <button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-md border border-slate-300 bg-white px-2 py-1 font-semibold transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
-                </div>
-              </div>
-            </div>
+            <PaginationBar
+              page={safeCurrentPage}
+              pages={totalPages}
+              total={filteredRows.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              loading={loading}
+              label="tenant ageing rows"
+            />
           </div>
         </div>
       </div>
