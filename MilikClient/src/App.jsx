@@ -199,7 +199,6 @@ const CarWashStaffSavings        = lazy(() => import("./pages/CarWash/CarWashSta
 const CarWashStaffDamages        = lazy(() => import("./pages/CarWash/CarWashStaffDamages"));
 const CarWashLoyalty             = lazy(() => import("./pages/CarWash/CarWashLoyalty"));
 const CarWashBranches       = lazy(() => import("./pages/CarWash/CarWashBranches"));
-const CarWashSettings            = lazy(() => import("./pages/CarWash/CarWashSettings"));
 const CarWashMpesaNotifications  = lazy(() => import("./pages/CarWash/CarWashMpesaNotifications"));
 const CarWashQueueDisplay        = lazy(() => import("./pages/CarWash/CarWashQueueDisplay"));
 
@@ -222,7 +221,6 @@ const POSSessions           = lazy(() => import("./pages/Inventory/POSSessions")
 const InvTaxGroups          = lazy(() => import("./pages/Inventory/InvTaxGroups"));
 const InvUnitsOfMeasure     = lazy(() => import("./pages/Inventory/InvUnitsOfMeasure"));
 const InvPaymentMethods     = lazy(() => import("./pages/Inventory/InvPaymentMethods"));
-const InvPOSSettings        = lazy(() => import("./pages/Inventory/InvPOSSettings"));
 
 // HR module
 const HRFinancials       = lazy(() => import("./pages/HR/HRFinancials"));
@@ -272,7 +270,6 @@ const SaleAgentPerformance       = lazy(() => import("./pages/PropertySale/SaleA
 const SaleAgentsPerformance      = lazy(() => import("./pages/PropertySale/SaleAgentsPerformance"));
 const SaleSchedule               = lazy(() => import("./pages/PropertySale/SaleSchedule"));
 const SaleCashFlow               = lazy(() => import("./pages/PropertySale/SaleCashFlow"));
-const SaleSettings               = lazy(() => import("./pages/PropertySale/SaleSettings"));
 const SaleConversionFunnel       = lazy(() => import("./pages/PropertySale/SaleConversionFunnel"));
 
 // Client Management module
@@ -681,7 +678,6 @@ function App() {
             <Route path="/carwash/commissions/damages"        element={<Guard moduleKey="carwash" resource="carwash-commissions"><CarWashStaffDamages /></Guard>} />
             <Route path="/carwash/loyalty"                    element={<Guard moduleKey="carwash" resource="carwash-loyalty"><CarWashLoyalty /></Guard>} />
             <Route path="/carwash/branches"                   element={<Guard moduleKey="carwash" resource="carwash-branches"><CarWashBranches /></Guard>} />
-            <Route path="/carwash/settings"                   element={<Guard moduleKey="carwash" resource="carwash-settings"><CarWashSettings /></Guard>} />
             <Route path="/carwash/mpesa-notifications"        element={<Guard moduleKey="carwash" resource="carwash-payments"><CarWashMpesaNotifications /></Guard>} />
 
             {/* ── Inventory & POS module ────────────────────────────────── */}
@@ -703,7 +699,6 @@ function App() {
             <Route path="/inventory/setup/tax-groups"      element={<Guard moduleKey="inventory" resource="inv-locations"><InvTaxGroups /></Guard>} />
             <Route path="/inventory/setup/units"           element={<Guard moduleKey="inventory" resource="inv-locations"><InvUnitsOfMeasure /></Guard>} />
             <Route path="/inventory/setup/payment-methods" element={<Guard moduleKey="inventory" resource="inv-locations"><InvPaymentMethods /></Guard>} />
-            <Route path="/inventory/setup/receipt-settings" element={<Guard moduleKey="inventory" resource="inv-locations"><InvPOSSettings /></Guard>} />
 
             {/* ── HR module ─────────────────────────────────────────────── */}
             <Route path="/hr/dashboard"                        element={<Guard moduleKey="hr"><HRDashboard /></Guard>} />
@@ -757,7 +752,6 @@ function App() {
             <Route path="/sale/agents/performance"           element={<Guard moduleKey="propertySale" resource="saleAgents"><SaleAgentsPerformance /></Guard>} />
             <Route path="/sale/agents/:id/performance"       element={<Guard moduleKey="propertySale" resource="saleAgents"><SaleAgentPerformance /></Guard>} />
             <Route path="/sale/schedule"                     element={<Guard moduleKey="propertySale" resource="saleDeals"><SaleSchedule /></Guard>} />
-            <Route path="/sale/settings"                     element={<Guard moduleKey="propertySale" resource="companySettings"><SaleSettings /></Guard>} />
             <Route path="/sale/chart-of-accounts"            element={<Guard moduleKey={GL_ACCESS_MODULES} resource="chartOfAccounts"><ChartOfAccounts /></Guard>} />
             <Route path="/sale/chart-of-accounts/:accountId/activity" element={<Guard moduleKey="propertySale" resource="chartOfAccounts"><LedgerAccountActivity /></Guard>} />
 

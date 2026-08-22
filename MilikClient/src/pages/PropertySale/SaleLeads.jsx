@@ -17,16 +17,12 @@ import SaleFilterBar, { FilterSearch } from "./SaleFilterBar";
 import MilikTable from "../../components/common/MilikTable";
 import { labelClass } from "../../utils/formStyles";
 
-const LEAD_STATUSES  = ["new", "contacted", "qualified", "site_visited", "proposal_sent", "negotiating", "converted", "lost"];
-const LEAD_SOURCES   = ["walk_in", "referral", "online", "social_media", "agent", "cold_call", "other"];
 const ACTIVITY_TYPES = ["call", "email", "meeting", "site_visit", "whatsapp", "note", "follow_up"];
 const OUTCOMES       = ["positive", "neutral", "negative", "no_answer", "not_applicable"];
+const ACTIVITY_TYPE_OPTIONS = ACTIVITY_TYPES.map((t) => ({ value: t, label: t.replace(/_/g, " ") }));
+const OUTCOME_OPTIONS       = OUTCOMES.map((o) => ({ value: o, label: o.replace(/_/g, " ") }));
 
-const LEAD_STATUS_OPTIONS      = LEAD_STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }));
-const LEAD_STATUS_FORM_OPTIONS = LEAD_STATUSES.filter((s) => s !== "converted").map((s) => ({ value: s, label: s.replace(/_/g, " ") }));
-const LEAD_SOURCE_OPTIONS      = LEAD_SOURCES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }));
-const ACTIVITY_TYPE_OPTIONS    = ACTIVITY_TYPES.map((t) => ({ value: t, label: t.replace(/_/g, " ") }));
-const OUTCOME_OPTIONS          = OUTCOMES.map((o) => ({ value: o, label: o.replace(/_/g, " ") }));
+const nameToValue = (name) => String(name || "").toLowerCase().replace(/\s+/g, "_");
 
 const STATUS_COLORS = {
   new:           "border-blue-200 bg-blue-50 text-blue-700",
@@ -113,6 +109,24 @@ export default function SaleLeads() {
     staleTime: 30_000,
   });
 
+  const { data: saleSettings } = useQuery({
+    queryKey: ["sale-settings", biz],
+    queryFn:  () => saleApi.getSettings(),
+    enabled:  !!biz,
+    staleTime: 10 * 60_000,
+  });
+
+  const settingStages  = (saleSettings?.pipelineStages ?? []).filter((s) => s.isActive !== false).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const settingSources = (saleSettings?.leadSources    ?? []).filter((s) => s.isActive !== false);
+
+  const LEAD_STATUS_OPTIONS      = settingStages.length
+    ? settingStages.map((s) => ({ value: nameToValue(s.name), label: s.name }))
+    : ["new","contacted","qualified","site_visited","proposal_sent","negotiating","converted","lost"].map((v) => ({ value: v, label: v.replace(/_/g, " ") }));
+  const LEAD_STATUS_FORM_OPTIONS = LEAD_STATUS_OPTIONS.filter((o) => o.value !== "converted");
+  const LEAD_SOURCE_OPTIONS      = settingSources.length
+    ? settingSources.map((s) => ({ value: nameToValue(s.name), label: s.name }))
+    : ["walk_in","referral","online","social_media","agent","cold_call","other"].map((v) => ({ value: v, label: v.replace(/_/g, " ") }));
+
   const { data: agentsData } = useQuery({
     queryKey: ["sale-agents-ref", biz],
     queryFn:  () => saleApi.listAgents({ business: biz, limit: 500 }),
@@ -164,7 +178,13 @@ export default function SaleLeads() {
   }, [qc, biz]);
 
   // ── Lead CRUD ─────────────────────────────────────────────────────────────
-  const openCreate = () => { setEditingId(""); setForm(blankLead); setShowModal(true); };
+  const openCreate = () => {
+    const firstSource = LEAD_SOURCE_OPTIONS[0]?.value ?? "walk_in";
+    const firstStatus = LEAD_STATUS_OPTIONS[0]?.value ?? "new";
+    setEditingId("");
+    setForm({ ...blankLead, source: firstSource, status: firstStatus });
+    setShowModal(true);
+  };
   const openEdit   = (lead) => {
     setEditingId(lead._id);
     setForm({
@@ -307,7 +327,7 @@ export default function SaleLeads() {
           {/* Pipeline funnel */}
           {pipeline.length > 0 && (
             <div className="flex flex-shrink-0 gap-1 px-2 py-1.5 bg-white border-b border-slate-200 overflow-x-auto">
-              {LEAD_STATUSES.map((s) => {
+              {LEAD_STATUS_OPTIONS.map(({ value: s, label: stageLabel }) => {
                 const count = pipeline.find((p) => p._id === s)?.count ?? 0;
                 return (
                   <button
@@ -315,12 +335,12 @@ export default function SaleLeads() {
                     onClick={() => setStatus(statusFilter === s ? "" : s)}
                     className={`flex-shrink-0 text-center border px-3 py-1 text-xs transition-colors ${
                       statusFilter === s
-                        ? `${STATUS_COLORS[s]} font-black`
+                        ? `${STATUS_COLORS[s] ?? "border-[#0B3B2E] bg-[#0B3B2E] text-white"} font-black`
                         : "border-slate-200 bg-white text-slate-600 hover:bg-[#F1F6F3] hover:border-[#B7C9C0]"
                     }`}
                   >
                     <div className="font-black text-sm leading-tight">{count}</div>
-                    <div className="text-[9px] capitalize leading-tight">{s.replace(/_/g, " ")}</div>
+                    <div className="text-[9px] capitalize leading-tight">{stageLabel}</div>
                   </button>
                 );
               })}

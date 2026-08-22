@@ -12,6 +12,8 @@ import { createLatePenaltyRule, getChartOfAccounts, getLatePenaltyRules, updateL
 import { inputClass, labelClass } from "../../utils/formStyles";
 import { hasCompanyModule } from "../../utils/companyModules";
 import { toast } from "react-toastify";
+import { inventoryApi } from "../../services/inventoryApi";
+import { carWashApi, normalizeListPayload } from "../../services/carWashApi";
 import {
   FaArchive,
   FaCheck,
@@ -29,10 +31,24 @@ import {
   FaCalendarAlt,
   FaPlay,
   FaBalanceScale,
+  FaMoneyBillWave,
+  FaPiggyBank,
+  FaSms,
+  FaTag,
+  FaTools,
+  FaTv,
+  FaToggleOn,
+  FaToggleOff,
+  FaChevronDown,
+  FaChevronUp,
+  FaImage,
+  FaTrash,
 } from "react-icons/fa";
 import Spinner from "../../components/common/Spinner";
 
 const MILIK_GREEN = "#0B3B2E";
+const CW_METHODS = ["cash", "mpesa", "bank", "card", "other"];
+const CW_METHOD_LABELS = { cash: "Cash", mpesa: "M-Pesa (manual)", bank: "Bank Transfer", card: "Card / POS", other: "Other" };
 
 // requiredModules: OR semantics — tab visible if company has ANY of the listed modules.
 // Omit or set null to always show the tab.
@@ -114,6 +130,41 @@ const TAB_CONFIG = {
     icon: FaClock,
     requiredModules: ["propertyManagement"],
   },
+  saleStages: {
+    label: "Pipeline Stages",
+    icon: FaCog,
+    requiredModules: ["propertySale"],
+  },
+  saleSources: {
+    label: "Lead Sources",
+    icon: FaCog,
+    requiredModules: ["propertySale"],
+  },
+  salePropertyTypes: {
+    label: "Property Types",
+    icon: FaCog,
+    requiredModules: ["propertySale"],
+  },
+  saleCommDefaults: {
+    label: "Commission Defaults",
+    icon: FaCog,
+    requiredModules: ["propertySale"],
+  },
+  invPOSSettings: {
+    label: "POS & Receipt",
+    icon: FaReceipt,
+    requiredModules: ["inventory"],
+  },
+  cwOperations: {
+    label: "Operations",
+    icon: FaTv,
+    requiredModules: ["carwash"],
+  },
+  cwSMS: {
+    label: "SMS Templates",
+    icon: FaSms,
+    requiredModules: ["carwash"],
+  },
 };
 
 const SIDEBAR_GROUPS = [
@@ -121,6 +172,9 @@ const SIDEBAR_GROUPS = [
   { label: "Utilities & Maintenance",  items: ["utilities", "maintenanceCategories"] },
   { label: "Financial & Accounting",   items: ["tax", "accounting", "incomeRules", "expenses"] },
   { label: "Billing Rules",            items: ["penaltyRules", "autoInvoicing"] },
+  { label: "Property Sales",           items: ["saleStages", "saleSources", "salePropertyTypes", "saleCommDefaults"] },
+  { label: "Inventory & POS",          items: ["invPOSSettings"] },
+  { label: "Car Wash",                 items: ["cwOperations", "cwSMS"] },
 ];
 
 const emptyForms = {
@@ -130,6 +184,15 @@ const emptyForms = {
   deposits: { name: "", description: "", code: "", defaultAmount: 0, refundable: true, isActive: true },
   unitTypes: { name: "", description: "", category: "residential", isActive: true },
   maintenanceCategories: { name: "", description: "", priority: "medium", isActive: true },
+  saleStages:        { name: "" },
+  saleSources:       { name: "" },
+  salePropertyTypes: { name: "" },
+};
+
+const SALE_TAB_ENDPOINTS = {
+  saleStages:        "pipeline-stages",
+  saleSources:       "lead-sources",
+  salePropertyTypes: "property-types",
 };
 
 const toClientTaxCodeId = (value, fallback) => {
@@ -544,7 +607,40 @@ const CompanySettings = () => {
 
   const firstVisibleTab = visibleTabEntries[0]?.[0] || "expenses";
 
+  const hasCW  = hasCompanyModule(currentCompany, "carwash");
+
   const [settings, setSettings] = useState(null);
+  const [saleSettings, setSaleSettings] = useState(null);
+  const [saleCommForm, setSaleCommForm] = useState({ rate: 3, commissionType: "percentage", whtRate: 5 });
+  const [savingSaleComm, setSavingSaleComm] = useState(false);
+
+  const INV_POS_DEFAULTS = {
+    receiptHeader: "", receiptFooter: "Thank you for your business!",
+    showVATBreakdown: true, showCashierName: true, showReceiptNumber: true,
+    autoReceiptPrint: false, currency: "KES", currencySymbol: "Ksh",
+    vatPIN: "", kraETIMSEnabled: false, decimalPlaces: 2,
+  };
+  const [invPOSForm, setInvPOSForm] = useState(INV_POS_DEFAULTS);
+  const [loadingInvPOS, setLoadingInvPOS] = useState(false);
+  const [savingInvPOS, setSavingInvPOS] = useState(false);
+  const [dirtyInvPOS, setDirtyInvPOS] = useState(false);
+
+  const [cwCashbooks, setCwCashbooks] = useState([]);
+  const [cwDefaults, setCwDefaults] = useState(CW_METHODS.reduce((a, m) => { a[m] = ""; return a; }, {}));
+  const [cwSavingsEnabled, setCwSavingsEnabled] = useState(true);
+  const [cwSavingsAmount, setCwSavingsAmount] = useState(100);
+  const [cwQueueDisplayName, setCwQueueDisplayName] = useState("");
+  const [cwQueueBgImage, setCwQueueBgImage] = useState("");
+  const [cwBgUploading, setCwBgUploading] = useState(false);
+  const [cwDiscountMinJobPrice, setCwDiscountMinJobPrice] = useState("");
+  const [cwDiscountMaxPercent, setCwDiscountMaxPercent] = useState("");
+  const [cwDmgMode, setCwDmgMode] = useState("full");
+  const [cwDmgValue, setCwDmgValue] = useState("");
+  const [cwSmsTemplates, setCwSmsTemplates] = useState([]);
+  const [cwExpandedSms, setCwExpandedSms] = useState(null);
+  const [loadingCW, setLoadingCW] = useState(false);
+  const [savingCW, setSavingCW] = useState(false);
+  const [dirtyCW, setDirtyCW] = useState(false);
   const [taxConfig, setTaxConfig] = useState(normalizeTaxConfiguration());
   const [accountingDefaults, setAccountingDefaults] = useState(normalizeAccountingDefaults());
   const [hrAccountingDefaults, setHrAccountingDefaults] = useState(normalizeHrAccountingDefaults());
@@ -669,9 +765,115 @@ const CompanySettings = () => {
     }
   }, [currentCompany?._id, loadedChartAccountCompanyId]);
 
+  const loadSaleSettings = useCallback(async () => {
+    if (!hasSale || !currentCompany?._id) return;
+    try {
+      const res = await adminRequests.get("/sale/settings");
+      const s = res.data?.settings;
+      setSaleSettings(s || null);
+      if (s?.commissionDefaults) {
+        setSaleCommForm({
+          rate:           s.commissionDefaults.rate           ?? 3,
+          commissionType: s.commissionDefaults.commissionType ?? "percentage",
+          whtRate:        s.commissionDefaults.whtRate        ?? 5,
+        });
+      }
+    } catch { /* noop */ }
+  }, [hasSale, currentCompany?._id]);
+
+  const loadInvPOSSettings = useCallback(async () => {
+    if (!hasInv || !currentCompany?._id) return;
+    setLoadingInvPOS(true);
+    try {
+      const d = await inventoryApi.getPOSSettings();
+      if (d) {
+        setInvPOSForm({
+          receiptHeader:     d.receiptHeader     ?? "",
+          receiptFooter:     d.receiptFooter     ?? "Thank you for your business!",
+          showVATBreakdown:  d.showVATBreakdown  ?? true,
+          showCashierName:   d.showCashierName   ?? true,
+          showReceiptNumber: d.showReceiptNumber ?? true,
+          autoReceiptPrint:  d.autoReceiptPrint  ?? false,
+          currency:          d.currency          ?? "KES",
+          currencySymbol:    d.currencySymbol    ?? "Ksh",
+          vatPIN:            d.vatPIN            ?? "",
+          kraETIMSEnabled:   d.kraETIMSEnabled   ?? false,
+          decimalPlaces:     d.decimalPlaces     ?? 2,
+        });
+        setDirtyInvPOS(false);
+      }
+    } catch { /* noop */ }
+    finally { setLoadingInvPOS(false); }
+  }, [hasInv, currentCompany?._id]);
+
+  const loadCWSettings = useCallback(async () => {
+    if (!hasCW || !currentCompany?._id) return;
+    setLoadingCW(true);
+    try {
+      const [cbRes, s] = await Promise.all([
+        carWashApi.listCashbooks(),
+        carWashApi.getCarWashSettings(),
+      ]);
+      setCwCashbooks(normalizeListPayload(cbRes, "accounts"));
+      const saved = s?.defaultCashbooks || {};
+      setCwDefaults(CW_METHODS.reduce((a, m) => { a[m] = saved[m]?._id || saved[m] || ""; return a; }, {}));
+      setCwSavingsEnabled(s?.savingsEnabled !== false);
+      setCwSavingsAmount(Number(s?.savingsDeductionPerJob ?? 100));
+      setCwSmsTemplates(Array.isArray(s?.smsTemplates) ? s.smsTemplates : []);
+      setCwQueueDisplayName(s?.queueDisplayName || "");
+      setCwQueueBgImage(s?.queueBgImage || "");
+      setCwDiscountMinJobPrice(String(s?.discountMinJobPrice ?? 0));
+      setCwDiscountMaxPercent(String(s?.discountMaxPercent  ?? 0));
+      setCwDmgMode(s?.damageDeductionMode || "full");
+      setCwDmgValue(s?.damageDeductionValue != null ? String(s.damageDeductionValue) : "");
+      setDirtyCW(false);
+    } catch { toast.error("Failed to load Car Wash settings"); }
+    finally { setLoadingCW(false); }
+  }, [hasCW, currentCompany?._id]);
+
+  const saveCWSettings = async () => {
+    setSavingCW(true);
+    try {
+      await carWashApi.updateCarWashSettings({
+        defaultCashbooks: cwDefaults,
+        savingsEnabled: cwSavingsEnabled,
+        savingsDeductionPerJob: Number(cwSavingsAmount),
+        smsTemplates: cwSmsTemplates.map(({ key, enabled, messageBody }) => ({ key, enabled, messageBody })),
+        queueDisplayName: cwQueueDisplayName,
+        queueBgImage: cwQueueBgImage,
+        discountMinJobPrice: Number(cwDiscountMinJobPrice) || 0,
+        discountMaxPercent:  Number(cwDiscountMaxPercent)  || 0,
+        damageDeductionMode:  cwDmgMode,
+        damageDeductionValue: cwDmgMode !== "full" ? Number(cwDmgValue) || null : null,
+      });
+      toast.success("Car Wash settings saved.");
+      setDirtyCW(false);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to save Car Wash settings");
+    } finally { setSavingCW(false); }
+  };
+
+  const saveInvPOSSettings = async () => {
+    setSavingInvPOS(true);
+    try {
+      await inventoryApi.updatePOSSettings({ ...invPOSForm, decimalPlaces: Number(invPOSForm.decimalPlaces) });
+      toast.success("POS settings saved.");
+      setDirtyInvPOS(false);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to save POS settings");
+    } finally { setSavingInvPOS(false); }
+  };
+
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
+
+  useEffect(() => {
+    loadSaleSettings();
+  }, [loadSaleSettings]);
+
+  useEffect(() => { loadInvPOSSettings(); }, [loadInvPOSSettings]);
+  useEffect(() => { loadCWSettings(); }, [loadCWSettings]);
 
   const loadPenaltyRules = useCallback(async () => {
     if (!currentCompany?._id) return;
@@ -703,13 +905,15 @@ const CompanySettings = () => {
     () => ({
       utilities: (settings?.utilityTypes || []).filter((item) => item?.isActive !== false).length,
       periods: (settings?.billingPeriods || []).filter((item) => item?.isActive !== false).length,
-
       expenses: (settings?.expenseItems || []).filter((item) => item?.isActive !== false).length,
       deposits: (settings?.depositTypes || []).filter((item) => item?.isActive !== false).length,
       unitTypes: (settings?.unitTypes || []).filter((item) => item?.isActive !== false).length,
       maintenanceCategories: (settings?.maintenanceCategories || []).filter((item) => item?.isActive !== false).length,
+      saleStages:        (saleSettings?.pipelineStages || []).filter((i) => i.isActive !== false).length,
+      saleSources:       (saleSettings?.leadSources    || []).filter((i) => i.isActive !== false).length,
+      salePropertyTypes: (saleSettings?.propertyTypes  || []).filter((i) => i.isActive !== false).length,
     }),
-    [settings]
+    [settings, saleSettings]
   );
 
   const chartAccountOptionsByType = useMemo(() => {
@@ -770,6 +974,9 @@ const CompanySettings = () => {
     deposits: settings?.depositTypes || [],
     unitTypes: settings?.unitTypes || [],
     maintenanceCategories: settings?.maintenanceCategories || [],
+    saleStages:        [...(saleSettings?.pipelineStages || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    saleSources:       saleSettings?.leadSources    || [],
+    salePropertyTypes: saleSettings?.propertyTypes  || [],
   };
 
   const visibleItems = useMemo(() => {
@@ -779,6 +986,25 @@ const CompanySettings = () => {
 
   const saveItem = async () => {
     if (!currentCompany?._id) return;
+
+    if (SALE_TAB_ENDPOINTS[modalTab]) {
+      const endpoint = SALE_TAB_ENDPOINTS[modalTab];
+      const name = String(formData?.name || "").trim();
+      if (!name) { toast.error("Name is required before saving."); return; }
+      setSaving(true);
+      try {
+        if (editingItem?._id) {
+          await adminRequests.put(`/sale/settings/${endpoint}/${editingItem._id}`, { name });
+        } else {
+          await adminRequests.post(`/sale/settings/${endpoint}`, { name });
+        }
+        toast.success(editingItem?._id ? "Setting updated successfully" : "Setting added successfully");
+        closeModal();
+        await loadSaleSettings();
+      } catch (err) { toast.error(extractErrorMessage(err)); }
+      finally { setSaving(false); }
+      return;
+    }
 
     const endpoint = TAB_CONFIG[modalTab]?.endpoint;
     if (!endpoint) return;
@@ -826,14 +1052,21 @@ const CompanySettings = () => {
 
   const toggleItemStatus = async (tabKey, item, nextActive) => {
     if (!currentCompany?._id || !item?._id) return;
+
+    if (SALE_TAB_ENDPOINTS[tabKey]) {
+      const endpoint = SALE_TAB_ENDPOINTS[tabKey];
+      try {
+        await adminRequests.put(`/sale/settings/${endpoint}/${item._id}`, { isActive: nextActive });
+        toast.success(nextActive ? "Setting reactivated successfully" : "Setting disabled successfully");
+        await loadSaleSettings();
+      } catch (err) { toast.error(extractErrorMessage(err)); }
+      return;
+    }
+
     const endpoint = TAB_CONFIG[tabKey]?.endpoint;
     if (!endpoint) return;
-
     try {
-      await adminRequests.put(`/company-settings/${currentCompany._id}/${endpoint}/${item._id}`, {
-        ...item,
-        isActive: nextActive,
-      });
+      await adminRequests.put(`/company-settings/${currentCompany._id}/${endpoint}/${item._id}`, { ...item, isActive: nextActive });
       toast.success(nextActive ? "Setting reactivated successfully" : "Setting disabled successfully");
       await loadSettings({ silent: true });
     } catch (error) {
@@ -843,8 +1076,6 @@ const CompanySettings = () => {
 
   const archiveItem = async (tabKey, item) => {
     if (!currentCompany?._id || !item?._id) return;
-    const endpoint = TAB_CONFIG[tabKey]?.endpoint;
-    if (!endpoint) return;
 
     const confirmed = await confirm({
       title: "Archive Setting",
@@ -853,6 +1084,18 @@ const CompanySettings = () => {
     });
     if (!confirmed) return;
 
+    if (SALE_TAB_ENDPOINTS[tabKey]) {
+      const endpoint = SALE_TAB_ENDPOINTS[tabKey];
+      try {
+        await adminRequests.delete(`/sale/settings/${endpoint}/${item._id}`);
+        toast.success("Setting archived successfully");
+        await loadSaleSettings();
+      } catch (err) { toast.error(extractErrorMessage(err)); }
+      return;
+    }
+
+    const endpoint = TAB_CONFIG[tabKey]?.endpoint;
+    if (!endpoint) return;
     try {
       const response = await adminRequests.delete(`/company-settings/${currentCompany._id}/${endpoint}/${item._id}`);
       toast.success(response?.data?.message || "Setting archived successfully");
@@ -1052,12 +1295,18 @@ const CompanySettings = () => {
     deposits: ["Name", "Code", "Default Amount", "Refundable", "Description", "Status", "Actions"],
     unitTypes: ["Name", "Category", "Description", "Status", "Actions"],
     maintenanceCategories: ["Name", "Priority", "Description", "Status", "Actions"],
+    saleStages:        ["#", "Stage Name", "Status", "Actions"],
+    saleSources:       ["Source Name", "Status", "Actions"],
+    salePropertyTypes: ["Type Name", "Status", "Actions"],
   };
 
   const renderCollectionRow = (tabKey, item, idx = 0) => {
     const isActive = item?.isActive !== false;
     return (
       <tr key={item._id} className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+        {tabKey === "saleStages" && (
+          <td className="w-8 px-3 py-1 border-r border-gray-100 text-center text-slate-400 font-bold">{(item.order ?? idx) + 1}</td>
+        )}
         <td className="px-3 py-1 border-r border-gray-100 font-medium text-slate-900">{item.name || "—"}</td>
         {tabKey === "utilities" && (
           <>
@@ -1175,6 +1424,24 @@ const CompanySettings = () => {
                 Load Defaults
               </button>
             )}
+            {SALE_TAB_ENDPOINTS[tabKey] && list.length === 0 && (
+              <button
+                onClick={async () => {
+                  setLoadingDefaults(true);
+                  try {
+                    await adminRequests.post(`/sale/settings/load-defaults/${SALE_TAB_ENDPOINTS[tabKey]}`);
+                    toast.success("Defaults loaded.");
+                    await loadSaleSettings();
+                  } catch (err) { toast.error(extractErrorMessage(err)); }
+                  finally { setLoadingDefaults(false); }
+                }}
+                disabled={loadingDefaults}
+                className="inline-flex items-center gap-1.5 border border-[#0B3B2E] px-3 py-1.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#EDF5F1] disabled:opacity-50"
+              >
+                {loadingDefaults ? <Spinner size="sm" /> : null}
+                Load Defaults
+              </button>
+            )}
             <button onClick={() => openCreateModal(tabKey)} className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#0A3127]">
               <FaPlus className="text-[10px]" /> Add {tab.label.replace(/ies$/, "y").replace(/s$/, "")}
             </button>
@@ -1182,7 +1449,7 @@ const CompanySettings = () => {
         </div>
         <div className="min-h-0 flex-1 overflow-auto">
           {visibleItems.length === 0 ? (
-            <div className="flex h-40 items-center justify-center text-sm text-slate-500">{tab.empty}</div>
+            <div className="flex h-40 items-center justify-center text-sm text-slate-500">{tab.empty || `No ${tab.label.toLowerCase()} configured yet.`}</div>
           ) : (
             <table className="w-full text-[11px] border-collapse">
               <thead className="sticky top-0 z-10">
@@ -1858,6 +2125,397 @@ const CompanySettings = () => {
     finally { setSavingPenaltyRule(false); }
   };
 
+  const renderSaleCommDefaultsTab = () => (
+    <div className="space-y-4">
+      <Card
+        title="Commission Defaults"
+        subtitle="Pre-fill values when registering a new agent. Each agent can override these individually."
+        action={
+          <ActionButton variant="primary" onClick={async () => {
+            setSavingSaleComm(true);
+            try {
+              await adminRequests.put("/sale/settings/commission-defaults", saleCommForm);
+              toast.success("Commission defaults saved.");
+              await loadSaleSettings();
+            } catch (err) { toast.error(extractErrorMessage(err)); }
+            finally { setSavingSaleComm(false); }
+          }} disabled={savingSaleComm}>
+            {savingSaleComm ? <Spinner size="sm" /> : <FaSave />} Save Defaults
+          </ActionButton>
+        }
+      >
+        <p className="mb-4 text-[11px] leading-5 text-slate-500">These defaults pre-fill when creating a new agent. Each agent can be overridden individually.</p>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Default Commission Rate (%)</label>
+            <Input type="number" min="0" step="0.1" value={saleCommForm.rate}
+              onChange={(e) => setSaleCommForm((p) => ({ ...p, rate: Number(e.target.value || 0) }))} />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Default Commission Type</label>
+            <AppSelect value={saleCommForm.commissionType}
+              onChange={(v) => setSaleCommForm((p) => ({ ...p, commissionType: v ?? "percentage" }))}
+              options={[{ value: "percentage", label: "Percentage of sale price" }, { value: "flat", label: "Flat Amount (KES)" }]}
+              size="md" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Default WHT Rate (%)</label>
+            <Input type="number" min="0" max="100" step="0.1" value={saleCommForm.whtRate}
+              onChange={(e) => setSaleCommForm((p) => ({ ...p, whtRate: Number(e.target.value || 0) }))} />
+            <p className="mt-1 text-[10px] text-slate-400">Withholding tax deducted from commission payouts (Kenya statutory rate: 5%).</p>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+
+  const setInvPOS = (key) => (val) => { setInvPOSForm((f) => ({ ...f, [key]: val })); setDirtyInvPOS(true); };
+  const setInvPOSVal = (key) => (e) => setInvPOS(key)(e.target.type === "checkbox" ? e.target.checked : e.target.value);
+
+  const renderInvPOSTab = () => (
+    <div className="space-y-4">
+      {dirtyInvPOS && (
+        <div className="flex items-center justify-between gap-3 border border-amber-200 bg-amber-50 px-3 py-2">
+          <span className="text-[11px] font-semibold text-amber-700">You have unsaved changes</span>
+          <button onClick={saveInvPOSSettings} disabled={savingInvPOS}
+            className="inline-flex items-center gap-1.5 bg-[#FF8C00] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#E67E00] disabled:opacity-60">
+            {savingInvPOS ? <Spinner size="sm" /> : <FaSave />} Save Changes
+          </button>
+        </div>
+      )}
+
+      {loadingInvPOS ? (
+        <div className="flex h-32 items-center justify-center text-sm text-slate-400">Loading…</div>
+      ) : (
+        <>
+          <Card title="Currency & Formatting"
+            action={
+              <ActionButton variant="primary" onClick={saveInvPOSSettings} disabled={savingInvPOS}>
+                {savingInvPOS ? <Spinner size="sm" /> : <FaSave />} Save
+              </ActionButton>
+            }
+          >
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-bold text-slate-700">Currency Code</label>
+                <Input value={invPOSForm.currency} onChange={setInvPOSVal("currency")} placeholder="KES" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-bold text-slate-700">Currency Symbol</label>
+                <Input value={invPOSForm.currencySymbol} onChange={setInvPOSVal("currencySymbol")} placeholder="Ksh" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-bold text-slate-700">Decimal Places</label>
+                <select className="w-full border border-slate-300 bg-white px-3 py-2 text-[12px] text-slate-800 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                  value={invPOSForm.decimalPlaces} onChange={setInvPOSVal("decimalPlaces")}>
+                  <option value={0}>0</option>
+                  <option value={2}>2</option>
+                  <option value={4}>4</option>
+                </select>
+              </div>
+            </div>
+          </Card>
+
+          <Card title="Receipt Printing">
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-bold text-slate-700">Receipt Header</label>
+                <textarea rows={3} className="w-full resize-none border border-slate-300 bg-white px-3 py-2 text-[12px] text-slate-800 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                  value={invPOSForm.receiptHeader} onChange={setInvPOSVal("receiptHeader")}
+                  placeholder="Business name, address, phone — appears at top of receipt" />
+                <p className="mt-0.5 text-[10px] text-slate-400">Leave blank to use company name from settings.</p>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-bold text-slate-700">Receipt Footer</label>
+                <textarea rows={2} className="w-full resize-none border border-slate-300 bg-white px-3 py-2 text-[12px] text-slate-800 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                  value={invPOSForm.receiptFooter} onChange={setInvPOSVal("receiptFooter")}
+                  placeholder="e.g. Thank you for your business!" />
+              </div>
+              <div className="space-y-3 pt-1">
+                {[
+                  ["showVATBreakdown", "Show VAT breakdown on receipt", "Displays tax subtotals per rate line"],
+                  ["showCashierName", "Show cashier name on receipt", null],
+                  ["showReceiptNumber", "Show receipt number on receipt", null],
+                  ["autoReceiptPrint", "Auto-print receipt after sale", "Sends to default printer automatically"],
+                ].map(([key, label, hint]) => (
+                  <ToggleRow key={key} checked={invPOSForm[key]}
+                    onChange={(e) => { setInvPOSForm((f) => ({ ...f, [key]: e.target.checked })); setDirtyInvPOS(true); }}
+                    title={label} description={hint || ""} />
+                ))}
+              </div>
+            </div>
+          </Card>
+
+          <Card title="Tax / Fiscal Compliance">
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-bold text-slate-700">VAT Registration PIN</label>
+                <Input value={invPOSForm.vatPIN} onChange={setInvPOSVal("vatPIN")} placeholder="e.g. P051234567B" />
+                <p className="mt-0.5 text-[10px] text-slate-400">Printed on receipts and invoices as required by KRA.</p>
+              </div>
+              <ToggleRow checked={invPOSForm.kraETIMSEnabled}
+                onChange={(e) => { setInvPOSForm((f) => ({ ...f, kraETIMSEnabled: e.target.checked })); setDirtyInvPOS(true); }}
+                title="Enable KRA eTIMS integration"
+                description="Electronic Tax Invoice Management System — required for VAT-registered businesses in Kenya" />
+              {invPOSForm.kraETIMSEnabled && (
+                <div className="border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                  eTIMS integration requires additional configuration. Contact your system administrator.
+                </div>
+              )}
+            </div>
+          </Card>
+        </>
+      )}
+    </div>
+  );
+
+  const setCwField = (setter) => (val) => { setter(val); setDirtyCW(true); };
+
+  const renderCWOperationsTab = () => (
+    <div className="space-y-4">
+      {dirtyCW && (
+        <div className="flex items-center justify-between gap-3 border border-amber-200 bg-amber-50 px-3 py-2">
+          <span className="text-[11px] font-semibold text-amber-700">You have unsaved changes</span>
+          <button onClick={saveCWSettings} disabled={savingCW}
+            className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#0A3127] disabled:opacity-60">
+            {savingCW ? <Spinner size="sm" /> : <FaSave />} Save Changes
+          </button>
+        </div>
+      )}
+
+      {loadingCW ? (
+        <div className="flex h-32 items-center justify-center text-sm text-slate-400">Loading…</div>
+      ) : (
+        <>
+          <Card title="Queue Display" subtitle="Name shown on the customer-facing TV screen."
+            action={<ActionButton variant="primary" onClick={saveCWSettings} disabled={savingCW}>{savingCW ? <Spinner size="sm" /> : <FaSave />} Save</ActionButton>}
+          >
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-bold text-slate-700">Display name (max 60 chars)</label>
+                <Input value={cwQueueDisplayName} maxLength={60}
+                  onChange={(e) => { setCwQueueDisplayName(e.target.value.slice(0, 60)); setDirtyCW(true); }}
+                  placeholder="e.g. ABC CAR WASH" />
+                <p className="mt-0.5 text-[10px] text-slate-400">{cwQueueDisplayName.length}/60 · Shown as heading on the queue display screen.</p>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold text-slate-700">Queue screen background image</label>
+                {cwQueueBgImage ? (
+                  <div className="relative mt-1 h-28 w-full overflow-hidden border border-slate-200 bg-slate-900">
+                    <img src={`${(import.meta.env.VITE_API_URL || "").replace(/\/api\/?$/, "")}${cwQueueBgImage}`}
+                      alt="Queue background" className="h-full w-full object-cover"
+                      onError={(e) => { e.currentTarget.style.opacity = "0.3"; }} />
+                    <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom,rgba(0,0,0,0.55),rgba(0,0,0,0.42) 50%,rgba(0,0,0,0.58))" }} />
+                    <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
+                      <label className="cursor-pointer border border-white/30 bg-black/50 px-2 py-1 text-[9px] font-bold text-white hover:bg-white/20 transition">
+                        <input type="file" accept="image/jpeg,image/jpg,image/png,image/webp" className="hidden" disabled={cwBgUploading}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0]; if (!file) return;
+                            setCwBgUploading(true);
+                            try { const r = await carWashApi.uploadQueueBgImage(file); setCwQueueBgImage(r.url); setDirtyCW(true); toast.success("Background uploaded"); }
+                            catch (err) { toast.error(err?.response?.data?.message || "Upload failed"); }
+                            finally { setCwBgUploading(false); e.target.value = ""; }
+                          }} />
+                        {cwBgUploading ? "Uploading…" : "Replace"}
+                      </label>
+                      <button type="button" onClick={() => { setCwQueueBgImage(""); setDirtyCW(true); }}
+                        className="border border-red-400/40 bg-red-600/60 px-2 py-1 text-[9px] font-bold text-white hover:bg-red-600/80 transition">
+                        <FaTrash size={8} className="inline" /> Remove
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <label className={`mt-1 flex h-24 w-full cursor-pointer flex-col items-center justify-center gap-1.5 border-2 border-dashed transition ${cwBgUploading ? "border-blue-400 bg-blue-50/60" : "border-slate-300 bg-slate-50 hover:border-[#0B3B2E]/50"}`}>
+                    <input type="file" accept="image/jpeg,image/jpg,image/png,image/webp" className="hidden" disabled={cwBgUploading}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0]; if (!file) return;
+                        setCwBgUploading(true);
+                        try { const r = await carWashApi.uploadQueueBgImage(file); setCwQueueBgImage(r.url); setDirtyCW(true); toast.success("Background uploaded"); }
+                        catch (err) { toast.error(err?.response?.data?.message || "Upload failed"); }
+                        finally { setCwBgUploading(false); e.target.value = ""; }
+                      }} />
+                    {cwBgUploading ? <><div className="h-4 w-4 animate-spin border-2 border-blue-400 border-t-transparent rounded-full" /><span className="text-[11px] text-blue-600">Uploading…</span></> : <><FaImage size={18} className="text-slate-300" /><span className="text-[11px] text-slate-500">Click to upload (JPG · PNG · WebP)</span></>}
+                  </label>
+                )}
+              </div>
+            </div>
+          </Card>
+
+          <Card title="Discount Policy" subtitle="Controls when and how much discount staff can apply on a job.">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-bold text-slate-700">Minimum job price for discount (KES)</label>
+                <Input type="number" min="0" step="1" value={cwDiscountMinJobPrice}
+                  onChange={(e) => { setCwDiscountMinJobPrice(e.target.value); setDirtyCW(true); }} placeholder="0" />
+                <p className="mt-0.5 text-[10px] text-slate-400">Set to 0 to always allow discounts.</p>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-bold text-slate-700">Maximum discount allowed (%)</label>
+                <Input type="number" min="0" max="100" step="1" value={cwDiscountMaxPercent}
+                  onChange={(e) => { setCwDiscountMaxPercent(e.target.value); setDirtyCW(true); }} placeholder="0" />
+                <p className="mt-0.5 text-[10px] text-slate-400">Staff can reduce it but not exceed this cap. Set to 0 for no cap.</p>
+              </div>
+            </div>
+          </Card>
+
+          <Card title="Default Cashbooks by Payment Method" subtitle="Auto-selected when recording a payment.">
+            <div className="grid gap-4 sm:grid-cols-2">
+              {CW_METHODS.map((method) => (
+                <AppSelect key={method} label={CW_METHOD_LABELS[method]}
+                  value={cwDefaults[method]}
+                  onChange={(v) => { setCwDefaults((p) => ({ ...p, [method]: v ?? "" })); setDirtyCW(true); }}
+                  options={cwCashbooks.map((cb) => ({ value: cb._id, label: `${cb.code} – ${cb.name}` }))}
+                  placeholder="— No default —" clearable searchable size="md" />
+              ))}
+            </div>
+          </Card>
+
+          <Card title="Damage Recovery" subtitle="Default mode for recovering staff damages through commission payouts.">
+            <div className="space-y-4">
+              <AppSelect label="Default recovery mode" value={cwDmgMode}
+                onChange={(v) => { setCwDmgMode(v ?? "full"); setCwDmgValue(""); setDirtyCW(true); }}
+                options={[
+                  { value: "full", label: "Full — deduct entire remaining balance at next payout" },
+                  { value: "percent", label: "Installment % — deduct a percentage of original damage each payout" },
+                  { value: "fixed", label: "Fixed amount — deduct a fixed Ksh amount each payout" },
+                ]} size="md" />
+              {cwDmgMode === "percent" && (
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-700">Default deduction rate (%)</label>
+                  <Input type="number" min="1" max="100" step="1" value={cwDmgValue}
+                    onChange={(e) => { setCwDmgValue(e.target.value); setDirtyCW(true); }} placeholder="e.g. 10" />
+                </div>
+              )}
+              {cwDmgMode === "fixed" && (
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-700">Default deduction amount (Ksh)</label>
+                  <Input type="number" min="1" step="1" value={cwDmgValue}
+                    onChange={(e) => { setCwDmgValue(e.target.value); setDirtyCW(true); }} placeholder="e.g. 50" />
+                </div>
+              )}
+              {cwDmgMode === "full" && <p className="text-[10px] text-slate-400">Entire outstanding balance deducted at next commission payout.</p>}
+            </div>
+          </Card>
+
+          <Card title="Staff Savings Scheme" subtitle="Fixed deduction from each commission payout, held in savings.">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border border-slate-200 bg-slate-50 px-4 py-3">
+                <div>
+                  <p className="text-xs font-bold text-slate-800">Savings scheme</p>
+                  <p className="text-[10px] text-slate-400">{cwSavingsEnabled ? "Active — deductions run on each payout" : "Disabled — no deductions will be made"}</p>
+                </div>
+                <button type="button" onClick={() => { setCwSavingsEnabled((v) => !v); setDirtyCW(true); }}>
+                  {cwSavingsEnabled ? <FaToggleOn size={28} className="text-emerald-500" /> : <FaToggleOff size={28} className="text-slate-300" />}
+                </button>
+              </div>
+              {cwSavingsEnabled && (
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-700">Deduction per day (Ksh)</label>
+                  <Input type="number" min="0" step="10" value={cwSavingsAmount}
+                    onChange={(e) => { setCwSavingsAmount(e.target.value); setDirtyCW(true); }} />
+                  <p className="mt-0.5 text-[10px] text-slate-400">Posted once per staff member per calendar day.</p>
+                </div>
+              )}
+            </div>
+          </Card>
+        </>
+      )}
+    </div>
+  );
+
+  const renderCWSMSTab = () => (
+    <div className="space-y-4">
+      {dirtyCW && (
+        <div className="flex items-center justify-between gap-3 border border-amber-200 bg-amber-50 px-3 py-2">
+          <span className="text-[11px] font-semibold text-amber-700">You have unsaved changes</span>
+          <button onClick={saveCWSettings} disabled={savingCW}
+            className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#0A3127] disabled:opacity-60">
+            {savingCW ? <Spinner size="sm" /> : <FaSave />} Save Changes
+          </button>
+        </div>
+      )}
+      <Card title="Automatic SMS Templates"
+        subtitle="Customise messages for each event. Toggle off to disable an SMS entirely."
+        action={<ActionButton variant="primary" onClick={saveCWSettings} disabled={savingCW}>{savingCW ? <Spinner size="sm" /> : <FaSave />} Save</ActionButton>}
+      >
+        {loadingCW ? (
+          <div className="flex h-28 items-center justify-center text-slate-400 text-sm">Loading…</div>
+        ) : cwSmsTemplates.length === 0 ? (
+          <div className="flex h-28 items-center justify-center text-slate-400 text-sm">No SMS templates configured for this company.</div>
+        ) : (
+          <div className="divide-y divide-slate-100 border border-slate-200">
+            {cwSmsTemplates.map((tpl) => {
+              const isOpen = cwExpandedSms === tpl.key;
+              const charCount = (tpl.messageBody || "").length;
+              const smsCount = Math.ceil(charCount / 160) || 1;
+              return (
+                <div key={tpl.key} className={!tpl.enabled ? "bg-slate-50/60" : "bg-white"}>
+                  <button type="button"
+                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-50 transition"
+                    onClick={() => setCwExpandedSms(isOpen ? null : tpl.key)}>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <button type="button"
+                        onClick={(e) => { e.stopPropagation(); setCwSmsTemplates((p) => p.map((t) => t.key === tpl.key ? { ...t, enabled: !t.enabled } : t)); setDirtyCW(true); }}>
+                        {tpl.enabled ? <FaToggleOn size={22} className="text-emerald-500" /> : <FaToggleOff size={22} className="text-slate-300" />}
+                      </button>
+                      <div className="min-w-0">
+                        <p className={`truncate text-xs font-bold ${tpl.enabled ? "text-slate-800" : "text-slate-400"}`}>{tpl.name}</p>
+                        {tpl.description && <p className="truncate text-[10px] text-slate-400">{tpl.description}</p>}
+                      </div>
+                    </div>
+                    <div className="flex flex-shrink-0 items-center gap-2">
+                      {!isOpen && charCount > 0 && <span className="hidden text-[10px] tabular-nums text-slate-400 sm:block">{charCount}c</span>}
+                      <span className={`text-[9px] font-black uppercase tracking-wide px-2 py-0.5 border ${tpl.enabled ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-100 text-slate-400"}`}>
+                        {tpl.enabled ? "ON" : "OFF"}
+                      </span>
+                      {isOpen ? <FaChevronUp size={9} className="text-slate-400" /> : <FaChevronDown size={9} className="text-slate-400" />}
+                    </div>
+                  </button>
+                  {isOpen && (
+                    <div className="border-t border-slate-100 bg-slate-50/80 px-4 py-4 space-y-3">
+                      {(tpl.placeholders || []).length > 0 && (
+                        <div>
+                          <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Placeholders — click to insert</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {tpl.placeholders.map((p) => (
+                              <button key={p.token} type="button" title={p.hint}
+                                onClick={() => { setCwSmsTemplates((prev) => prev.map((t) => t.key !== tpl.key ? t : { ...t, messageBody: (t.messageBody || "") + p.token })); setDirtyCW(true); }}
+                                className="border border-slate-200 bg-white px-2 py-0.5 font-mono text-[10px] font-bold text-[#0B3B2E] hover:border-[#0B3B2E] hover:bg-[#EDF5F1] transition">
+                                {p.token}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <div>
+                        <div className="mb-1.5 flex items-center justify-between">
+                          <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Message body</label>
+                          <div className="flex items-center gap-2 text-[10px] tabular-nums">
+                            <span className={charCount > 320 ? "font-bold text-red-500" : "text-slate-400"}>{charCount} chars</span>
+                            <span className={`border px-1.5 py-0.5 font-bold ${smsCount > 1 ? "border-amber-200 bg-amber-50 text-amber-700" : "border-slate-200 bg-slate-100 text-slate-500"}`}>
+                              {smsCount} SMS
+                            </span>
+                          </div>
+                        </div>
+                        <textarea rows={4}
+                          className="w-full border border-slate-200 bg-white px-3 py-2.5 font-mono text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20 resize-y"
+                          value={tpl.messageBody || ""}
+                          onChange={(e) => { setCwSmsTemplates((prev) => prev.map((t) => t.key !== tpl.key ? t : { ...t, messageBody: e.target.value })); setDirtyCW(true); }}
+                          placeholder="Enter message text…" />
+                        {smsCount > 1 && <p className="mt-1 text-[10px] text-amber-600">Messages over 160 characters are sent as {smsCount} SMS parts and may incur extra cost.</p>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+
   const renderPenaltyRulesTab = () => {
     const active = penaltyRules.filter(r => r.active !== false).length;
     return (
@@ -2139,7 +2797,7 @@ const CompanySettings = () => {
                         >
                           <Icon size={10} className="shrink-0" />
                           <span className="flex-1 truncate">{tab.label}</span>
-                          {!["tax", "accounting", "autoInvoicing", "incomeRules", "penaltyRules"].includes(key) && (
+                          {!["tax", "accounting", "autoInvoicing", "incomeRules", "penaltyRules", "saleCommDefaults", "invPOSSettings", "cwOperations", "cwSMS"].includes(key) && (
                             <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${isActive ? "bg-white/20 text-white" : "bg-slate-200 text-slate-500"}`}>
                               {activeCounts[key] ?? 0}
                             </span>
@@ -2173,6 +2831,14 @@ const CompanySettings = () => {
                 <div className="flex-1 overflow-auto px-4 py-4">{renderIncomeRulesTab()}</div>
               ) : activeTab === "penaltyRules" ? (
                 renderPenaltyRulesTab()
+              ) : activeTab === "saleCommDefaults" ? (
+                <div className="flex-1 overflow-auto px-4 py-4">{renderSaleCommDefaultsTab()}</div>
+              ) : activeTab === "invPOSSettings" ? (
+                <div className="flex-1 overflow-auto px-4 py-4">{renderInvPOSTab()}</div>
+              ) : activeTab === "cwOperations" ? (
+                <div className="flex-1 overflow-auto px-4 py-4">{renderCWOperationsTab()}</div>
+              ) : activeTab === "cwSMS" ? (
+                <div className="flex-1 overflow-auto px-4 py-4">{renderCWSMSTab()}</div>
               ) : (
                 renderCollectionTab(activeTab)
               )}

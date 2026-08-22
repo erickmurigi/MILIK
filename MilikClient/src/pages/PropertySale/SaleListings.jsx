@@ -28,14 +28,13 @@ const imgSrc = (url) => {
   try { return new URL(url).pathname; } catch { return url; }
 };
 
-const PROPERTY_TYPES = ["plot", "house", "apartment", "commercial", "land", "other"];
+const FALLBACK_PROPERTY_TYPES = ["plot", "house", "apartment", "commercial", "land", "other"];
 const SIZE_UNITS     = ["sqm", "sqft", "acres", "hectares"];
 const STATUSES       = ["available", "reserved", "under_contract", "sold", "withdrawn"];
 const PAGE_SIZE      = 50;
 
-const PROPERTY_TYPE_OPTIONS = PROPERTY_TYPES.map((t) => ({ value: t, label: t }));
-const SIZE_UNIT_OPTIONS     = SIZE_UNITS.map((u) => ({ value: u, label: u }));
-const STATUS_OPTIONS        = STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }));
+const SIZE_UNIT_OPTIONS = SIZE_UNITS.map((u) => ({ value: u, label: u }));
+const STATUS_OPTIONS    = STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }));
 
 const LISTING_TABLE_COLS = [
   { label: "Listing No." },
@@ -94,6 +93,18 @@ const SaleListings = () => {
     staleTime: 30_000,
   });
 
+  const { data: saleSettings } = useQuery({
+    queryKey: ["sale-settings", biz],
+    queryFn:  () => saleApi.getSettings(),
+    enabled:  !!biz,
+    staleTime: 10 * 60_000,
+  });
+
+  const activePropertyTypes = (saleSettings?.propertyTypes ?? []).filter((t) => t.isActive !== false);
+  const PROPERTY_TYPE_OPTIONS = activePropertyTypes.length
+    ? activePropertyTypes.map((t) => ({ value: t.name.toLowerCase(), label: t.name }))
+    : FALLBACK_PROPERTY_TYPES.map((t) => ({ value: t, label: t }));
+
   const { data: agentsData } = useQuery({
     queryKey: ["sale-agents-ref", biz],
     queryFn:  () => saleApi.listAgents({ business: biz, status: "active", limit: 500 }),
@@ -140,7 +151,12 @@ const SaleListings = () => {
     queryClient.invalidateQueries({ queryKey: ["sale-dashboard"] }),
   ]);
 
-  const openCreate = () => { setEditingId(""); setForm(blankForm); setShowModal(true); };
+  const openCreate = () => {
+    const firstType = PROPERTY_TYPE_OPTIONS[0]?.value ?? "plot";
+    setEditingId("");
+    setForm({ ...blankForm, propertyType: firstType });
+    setShowModal(true);
+  };
   const openEdit = (row) => {
     setEditingId(row._id);
     setForm({

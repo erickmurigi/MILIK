@@ -111,6 +111,9 @@ export const saleApi = {
   createActivity:   async (payload)     => unwrap(await adminRequests.post("/sale/activities",            payload)),
   updateActivity:   async (id, payload) => unwrap(await adminRequests.put(`/sale/activities/${id}`,      payload)),
   deleteActivity:   async (id)          => unwrap(await adminRequests.delete(`/sale/activities/${id}`)),
+
+  // Settings
+  getSettings: async () => (await adminRequests.get("/sale/settings"))?.data?.settings,
 };
 
 export { todayISO } from "../utils/dates.js";

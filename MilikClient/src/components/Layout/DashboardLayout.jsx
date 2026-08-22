@@ -698,7 +698,7 @@ const TopToolbar = ({
         "carwash-credit-balances": "/carwash/customers/credit-balances",
         "carwash-accounts": "/carwash/accounts",
         "carwash-branches": "/carwash/branches",
-        "carwash-settings": "/carwash/settings",
+        "carwash-settings": "/settings?tab=cwOperations",
         "carwash-cashbooks": "/carwash/cashbooks",
         "carwash-chart-of-accounts": "/carwash/chart-of-accounts",
         documentation: "/help/documentation",
@@ -723,7 +723,7 @@ const TopToolbar = ({
         "inv-tax-groups":        "/inventory/setup/tax-groups",
         "inv-units":             "/inventory/setup/units",
         "inv-payment-methods":   "/inventory/setup/payment-methods",
-        "inv-pos-settings":      "/inventory/setup/receipt-settings",
+        "inv-pos-settings":      "/settings?tab=invPOSSettings",
         "pos-terminal":        "/pos/terminal",
         "pos-sales":           "/pos/sales",
         "pos-sessions":        "/pos/sessions",
@@ -750,7 +750,7 @@ const TopToolbar = ({
         "sale-agent-perf":     "/sale/agents/performance",
         "sale-crm-leads":      "/sale/crm/leads",
         "sale-crm-activities": "/sale/crm/activities",
-        "sale-settings":       "/sale/settings",
+        "sale-settings":       "/settings?tab=saleStages",
         documentation: "/help/documentation",
         support: "/help/support",
         about: "/help/about",
@@ -1952,10 +1952,10 @@ const TopToolbar = ({
         <button
           onClick={() => {
             const settingsRoutes = {
-              carwash:          "/carwash/settings",
-              inventory:        "/inventory/setup/receipt-settings",
+              carwash:          "/settings?tab=cwOperations",
+              inventory:        "/settings?tab=invPOSSettings",
               "human-resource": "/hr/setup",
-              "property-sale":  "/sale/settings",
+              "property-sale":  "/settings?tab=saleStages",
             };
             navigate(settingsRoutes[currentWorkspace] ?? "/settings");
           }}

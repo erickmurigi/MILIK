@@ -53,13 +53,25 @@ const SaleAgents = () => {
 
   useEffect(() => { if (error) toast.error("Failed to load agents"); }, [error]);
 
+  const { data: saleSettings } = useQuery({
+    queryKey: ["sale-settings", biz],
+    queryFn:  () => saleApi.getSettings(),
+    enabled:  !!biz,
+    staleTime: 10 * 60_000,
+  });
+
   const agents     = agentsData?.data   ?? [];
   const total      = agentsData?.total  ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["sale-agents", biz] });
 
-  const openCreate = () => { setEditingId(""); setForm(blankForm); setShowModal(true); };
+  const openCreate = () => {
+    const def = saleSettings?.commissionDefaults;
+    setEditingId("");
+    setForm({ ...blankForm, commissionRate: def?.rate ?? 3, commissionType: def?.commissionType ?? "percentage" });
+    setShowModal(true);
+  };
   const openEdit   = (row) => {
     setEditingId(row._id);
     setForm({
