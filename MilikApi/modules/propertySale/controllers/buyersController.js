@@ -1,6 +1,7 @@
 import { createError } from "../../../utils/error.js";
 import SaleBuyer from "../models/SaleBuyer.js";
 import SaleDeal from "../models/SaleDeal.js";
+import SaleLead from "../models/SaleLead.js";
 import SaleOffer from "../models/SaleOffer.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
@@ -88,6 +89,13 @@ export const deleteBuyer = async (req, res, next) => {
     }
 
     await buyer.deleteOne();
+
+    // Unlink the parent lead so it re-enters the pipeline
+    await SaleLead.updateOne(
+      { business, convertedBuyer: buyer._id },
+      { $set: { convertedBuyer: null, convertedAt: null, status: "negotiating" } }
+    );
+
     res.status(200).json({ message: "Buyer deleted" });
   } catch (err) {
     next(err);

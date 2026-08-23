@@ -75,7 +75,6 @@ const MODULE_KEY_MAP = {
   crm:                'crm',
   incidentManagement: 'incidentManagement',
   sacco:              'sacco',
-  securityServices:   'securityServices',
   billing:            'billing',
   pos:                'inventory',
 };

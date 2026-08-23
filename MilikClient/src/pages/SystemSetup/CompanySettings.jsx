@@ -2709,6 +2709,40 @@ const CompanySettings = () => {
       );
     }
 
+    if (tabKey === "saleStages") {
+      return (
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Stage Name *</label>
+            <Input value={formData.name || ""} onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))} placeholder="e.g. Qualified" />
+          </div>
+        </div>
+      );
+    }
+
+    if (tabKey === "saleSources") {
+      return (
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Source Name *</label>
+            <Input value={formData.name || ""} onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))} placeholder="e.g. Walk In" />
+          </div>
+        </div>
+      );
+    }
+
+    if (tabKey === "salePropertyTypes") {
+      return (
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Property Type *</label>
+            <Input value={formData.name || ""} onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))} placeholder="e.g. Apartment" />
+          </div>
+        </div>
+      );
+    }
+
+    // expenses and any other future tabs
     return (
       <div className="space-y-4">
         <div>

@@ -3,9 +3,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import {
   FaCamera, FaChevronLeft, FaChevronRight,
-  FaEdit, FaPlus, FaPrint, FaRedoAlt,
+  FaEdit, FaFileImport, FaPlus, FaPrint, FaRedoAlt,
   FaTimes, FaTrash,
 } from "react-icons/fa";
+import SaleImportModal from "../../components/Modals/SaleImportModal";
+import { parseSaleListingsExcel, downloadSaleListingsTemplate } from "../../utils/excelTemplates";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterSearch } from "./SaleFilterBar";
@@ -67,11 +69,16 @@ const SaleListings = () => {
   const queryClient    = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const fileInputRef   = useRef(null);
+  const modalFileRef   = useRef(null);
 
-  const [saving,     setSaving]     = useState(false);
-  const [showModal,  setShowModal]  = useState(false);
-  const [editingId,  setEditingId]  = useState("");
-  const [form,       setForm]       = useState(blankForm);
+  const [saving,         setSaving]         = useState(false);
+  const [showModal,      setShowModal]      = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [editingId,      setEditingId]      = useState("");
+  const [justCreated,    setJustCreated]    = useState(false);
+  const [form,           setForm]           = useState(blankForm);
+  const [modalUploading, setModalUploading] = useState(false);
+  const [stagedFiles,    setStagedFiles]    = useState([]); // Array<{ file: File, preview: string }>
   const [search,     setSearch]     = useTabState("/sale/listings:search", "");
   const [statusFilt, setStatusFilt] = useTabState("/sale/listings:statusFilt", "");
   const [typeFilt,   setTypeFilt]   = useTabState("/sale/listings:typeFilt", "");
@@ -117,6 +124,11 @@ const SaleListings = () => {
   const agents     = agentsData?.data ?? [];
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
+  const modalSavedImgs = useMemo(
+    () => (editingId ? (listings.find((l) => l._id === editingId)?.images ?? []) : []),
+    [editingId, listings],
+  );
+
   // sync panel with fresh data after mutations
   useEffect(() => {
     if (!selected) return;
@@ -154,11 +166,15 @@ const SaleListings = () => {
   const openCreate = () => {
     const firstType = PROPERTY_TYPE_OPTIONS[0]?.value ?? "plot";
     setEditingId("");
+    setJustCreated(false);
+    setStagedFiles([]);
     setForm({ ...blankForm, propertyType: firstType });
     setShowModal(true);
   };
   const openEdit = (row) => {
     setEditingId(row._id);
+    setJustCreated(false);
+    setStagedFiles([]);
     setForm({
       title: row.title || "", propertyType: row.propertyType || "plot",
       description: row.description || "", size: row.size || "",
@@ -187,11 +203,27 @@ const SaleListings = () => {
         amenities: form.amenities ? form.amenities.split(",").map((s) => s.trim()).filter(Boolean) : [],
         assignedAgent: form.assignedAgent || undefined,
       };
-      if (editingId) await saleApi.updateListing(editingId, payload);
-      else await saleApi.createListing(payload);
-      await invalidate();
-      setShowModal(false);
-      toast.success(`Listing ${editingId ? "updated" : "created"}`);
+      if (editingId) {
+        await saleApi.updateListing(editingId, payload);
+        await invalidate();
+        setShowModal(false);
+        toast.success("Listing updated");
+      } else {
+        const created = await saleApi.createListing(payload);
+        const newId = created?._id || "";
+        // Upload any staged photos immediately
+        if (stagedFiles.length && newId) {
+          const fd = new FormData();
+          stagedFiles.forEach(({ file }) => fd.append("images", file));
+          try { await saleApi.uploadListingImages(newId, fd); } catch { /* non-fatal */ }
+          stagedFiles.forEach(({ preview }) => URL.revokeObjectURL(preview));
+          setStagedFiles([]);
+        }
+        await invalidate();
+        setEditingId(newId);
+        setJustCreated(true);
+        toast.success("Listing saved — add more photos below or click Done");
+      }
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to save listing");
     } finally {
@@ -254,6 +286,51 @@ const SaleListings = () => {
       setUploading(false);
     }
   };
+
+  // Single handler for both Add (stage locally) and Edit (upload immediately)
+  const handleModalFileChange = useCallback(async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (!files.length) return;
+    const oversized = files.filter((f) => f.size > 10 * 1024 * 1024);
+    if (oversized.length) toast.warning(`${oversized.length} file(s) exceed 10 MB and were skipped`);
+    const valid = files.filter((f) => f.size <= 10 * 1024 * 1024);
+    if (!valid.length) return;
+    if (editingId) {
+      setModalUploading(true);
+      try {
+        const fd = new FormData();
+        valid.forEach((f) => fd.append("images", f));
+        await saleApi.uploadListingImages(editingId, fd);
+        await queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] });
+        toast.success(`${valid.length} photo${valid.length > 1 ? "s" : ""} uploaded`);
+      } catch (err) {
+        toast.error(err?.response?.data?.message || "Upload failed");
+      } finally {
+        setModalUploading(false);
+      }
+    } else {
+      setStagedFiles((prev) => [...prev, ...valid.map((f) => ({ file: f, preview: URL.createObjectURL(f) }))]);
+    }
+  }, [editingId, biz, queryClient]);
+
+  const handleModalDeleteImage = useCallback(async (url) => {
+    setModalUploading(true);
+    try {
+      await saleApi.deleteListingImage(editingId, url);
+      await queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] });
+      toast.success("Photo removed");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to remove photo");
+    } finally {
+      setModalUploading(false);
+    }
+  }, [editingId, biz, queryClient]);
+
+  const removeStagedFile = useCallback((preview) => {
+    URL.revokeObjectURL(preview);
+    setStagedFiles((prev) => prev.filter((f) => f.preview !== preview));
+  }, []);
 
   const printListing = (row) => {
     const co = currentCompany || {};
@@ -322,6 +399,13 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
               className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
             >
               <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowImportModal(true)}
+              className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+            >
+              <FaFileImport size={9} /> Import
             </button>
             <button
               type="button"
@@ -603,13 +687,21 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
         <Modal
           title={editingId ? "Edit Sale Listing" : "New Sale Listing"}
           extraWide
-          onClose={() => setShowModal(false)}
+          onClose={() => {
+            stagedFiles.forEach(({ preview }) => URL.revokeObjectURL(preview));
+            setStagedFiles([]);
+            setShowModal(false);
+          }}
           footer={
             <>
-              <button type="button" onClick={() => setShowModal(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button type="button" onClick={handleSave} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-                {saving ? "Saving…" : editingId ? "Update Listing" : "Save Listing"}
+              <button type="button" onClick={() => setShowModal(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                {justCreated ? "Done" : "Cancel"}
               </button>
+              {!justCreated && (
+                <button type="button" onClick={handleSave} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+                  {saving ? "Saving…" : editingId ? "Update Listing" : "Save Listing"}
+                </button>
+              )}
             </>
           }
         >
@@ -677,16 +769,79 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
               <label className={labelClass}>Internal Notes</label>
               <textarea rows={2} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
             </div>
-            {editingId && (
-              <div className="md:col-span-2 xl:col-span-3">
-                <p className="text-[10px] text-slate-400 border border-dashed border-slate-200 px-3 py-2 bg-slate-50">
-                  To add or remove photos, close this modal and click the listing row to open the Photos panel.
-                </p>
+            {/* ── Photos section — shown for both Add and Edit ── */}
+            <div className="md:col-span-2 xl:col-span-3">
+              {justCreated && (
+                <div className="mb-2 flex items-center gap-2 border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-700">
+                  ✓ Listing saved — add more photos below (optional), then click Done.
+                </div>
+              )}
+              <div className="flex items-center justify-between mb-1.5">
+                <label className={labelClass}>Photos</label>
+                <button
+                  type="button"
+                  onClick={() => modalFileRef.current?.click()}
+                  disabled={modalUploading}
+                  className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-50"
+                >
+                  <FaCamera size={9} /> {modalUploading ? "Uploading…" : "Add Photos"}
+                </button>
+                <input ref={modalFileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleModalFileChange} />
               </div>
-            )}
+              {(modalSavedImgs.length > 0 || stagedFiles.length > 0) ? (
+                <div className="flex flex-wrap gap-2">
+                  {modalSavedImgs.map((url) => (
+                    <div key={url} className="group relative h-20 w-20 shrink-0">
+                      <img src={imgSrc(url)} alt="" className="h-full w-full object-cover border border-slate-200" />
+                      <button type="button" onClick={() => handleModalDeleteImage(url)} disabled={modalUploading}
+                        className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center bg-black/50 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 disabled:cursor-not-allowed transition-opacity">
+                        <FaTimes size={7} />
+                      </button>
+                    </div>
+                  ))}
+                  {stagedFiles.map(({ file, preview }) => (
+                    <div key={preview} className="group relative h-20 w-20 shrink-0">
+                      <img src={preview} alt={file.name} className="h-full w-full object-cover border border-slate-200 opacity-80" />
+                      <div className="absolute inset-0 flex items-end justify-center pb-1">
+                        <span className="bg-black/50 px-1 text-[8px] text-white">pending</span>
+                      </div>
+                      <button type="button" onClick={() => removeStagedFile(preview)}
+                        className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center bg-black/50 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-opacity">
+                        <FaTimes size={7} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[10px] text-slate-400 border border-dashed border-slate-200 px-3 py-2 bg-slate-50">
+                  {editingId ? "No photos yet — click Add Photos to upload" : "Optional — select photos now and they will upload when you save"}
+                </p>
+              )}
+            </div>
           </div>
         </Modal>
       )}
+
+      <SaleImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        title="Import Sale Listings"
+        entityName="listing"
+        parseFile={parseSaleListingsExcel}
+        downloadTemplate={downloadSaleListingsTemplate}
+        onImport={async (rows) => {
+          const res = await saleApi.bulkImportListings(rows);
+          await queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] });
+          return res;
+        }}
+        previewCols={[
+          { header: "Title",        render: (r) => <span className="font-semibold">{r.title}</span> },
+          { header: "Type",         render: (r) => r.propertyType },
+          { header: "Location",     render: (r) => [r.town, r.county].filter(Boolean).join(", ") || "—" },
+          { header: "Asking Price", render: (r) => <span className="font-mono">{Number(r.askingPrice).toLocaleString()}</span> },
+          { header: "Status",       render: (r) => r.status },
+        ]}
+      />
     </PropertySaleShell>
   );
 };

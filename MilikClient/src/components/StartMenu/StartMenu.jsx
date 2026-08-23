@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   FaAddressBook, FaBoxes, FaFolderOpen,
   FaEnvelope, FaSms, FaUserCircle, FaSignOutAlt, FaThLarge,
-  FaBuilding, FaCheckCircle, FaSearch, FaUserShield, FaShieldAlt,
+  FaBuilding, FaCheckCircle, FaSearch, FaUserShield,
   FaStore, FaChartLine, FaBriefcase, FaLock, FaCog, FaCar,
   FaUserTie, FaCity, FaChevronRight, FaSync,
 } from "react-icons/fa";
@@ -36,7 +36,6 @@ const MODULE_ACCENT = {
   clients:     { bg: "bg-[#0B3B2E]",    text: "text-white" },
   procurement: { bg: "bg-slate-500",    text: "text-white" },
   pos:         { bg: "bg-orange-600",   text: "text-white" },
-  securityServices: { bg: "bg-gray-700", text: "text-white" },
   dms:         { bg: "bg-teal-700",     text: "text-white" },
 };
 
@@ -50,7 +49,6 @@ const moduleRegistry = [
   { id: "clients",      moduleKey: "clients",            label: "Contract Management", icon: <FaAddressBook />, to: "/clients/dashboard",  status: "active" },
   { id: "procurement",  moduleKey: "procurement",        label: "Ven-Door",            icon: <FaBriefcase />,                             status: "coming" },
   { id: "pos",          moduleKey: "pos",                label: "POS & Billing",       icon: <FaStore />,                                 status: "coming" },
-  { id: "securityServices", moduleKey: "securityServices", label: "Security",          icon: <FaShieldAlt />,                             status: "coming" },
   { id: "dms",          moduleKey: "dms",                label: "Document Management", icon: <FaFolderOpen />,                            status: "coming" },
 ];
 

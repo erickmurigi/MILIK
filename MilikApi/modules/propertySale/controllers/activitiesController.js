@@ -45,6 +45,14 @@ export const listActivities = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const nullifyEmptyRefs = (body) => {
+  const out = { ...body };
+  for (const key of ["relatedLead", "relatedBuyer", "relatedDeal", "relatedListing"]) {
+    if (out[key] === "" || out[key] === null) out[key] = null;
+  }
+  return out;
+};
+
 export const createActivity = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -52,7 +60,7 @@ export const createActivity = async (req, res, next) => {
     const activityNumber = await generateSequentialNumber(SaleActivity, business, "ACT");
 
     const activity = await SaleActivity.create({
-      ...req.body,
+      ...nullifyEmptyRefs(req.body),
       business,
       activityNumber,
       createdBy: userId,
@@ -81,7 +89,7 @@ export const updateActivity = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
-    const { business: _b, activityNumber: _n, createdBy: _c, ...updates } = req.body;
+    const { business: _b, activityNumber: _n, createdBy: _c, ...updates } = nullifyEmptyRefs(req.body);
 
     const activity = await SaleActivity.findOneAndUpdate(
       { _id: req.params.id, business },

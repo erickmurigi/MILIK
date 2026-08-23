@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
-import { FaBan, FaCheck, FaEdit, FaEnvelope, FaFileAlt, FaHandshake, FaHistory, FaMoneyBillWave, FaPlus, FaPrint, FaRedoAlt, FaSms, FaTimes, FaTrash } from "react-icons/fa";
+import { FaBan, FaCheck, FaEdit, FaEnvelope, FaFileAlt, FaFileImport, FaHandshake, FaHistory, FaMoneyBillWave, FaPlus, FaPrint, FaRedoAlt, FaSms, FaTimes, FaTrash } from "react-icons/fa";
+import SaleImportModal from "../../components/Modals/SaleImportModal";
+import { parseSaleBuyersExcel, downloadSaleBuyersTemplate } from "../../utils/excelTemplates";
 import CwSmsModal from "../CarWash/CwSmsModal";
 import SaleEmailModal from "./SaleEmailModal";
 import { toast } from "react-toastify";
@@ -41,6 +43,7 @@ const SaleBuyers = () => {
 
   const [saving,        setSaving]        = useState(false);
   const [showModal,     setShowModal]     = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [editingId,     setEditingId]     = useState("");
   const [form,          setForm]          = useState(blankForm);
   const [docModalInput, setDocModalInput] = useState("");
@@ -304,6 +307,9 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
           <>
             <button type="button" onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-buyers", biz] })} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
               <FaRedoAlt size={8} className={isFetching ? "animate-spin" : ""} /> Refresh
+            </button>
+            <button type="button" onClick={() => setShowImportModal(true)} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+              <FaFileImport size={9} /> Import
             </button>
             <button type="button" onClick={openCreate} className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]">
               <FaPlus size={8} /> New Buyer
@@ -793,6 +799,27 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
           </div>
         </Modal>
       )}
+
+      <SaleImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        title="Import Buyers"
+        entityName="buyer"
+        parseFile={parseSaleBuyersExcel}
+        downloadTemplate={downloadSaleBuyersTemplate}
+        onImport={async (rows) => {
+          const res = await saleApi.bulkImportBuyers(rows);
+          await queryClient.invalidateQueries({ queryKey: ["sale-buyers", biz] });
+          return res;
+        }}
+        previewCols={[
+          { header: "Full Name",   render: (r) => <span className="font-semibold">{r.fullName}</span> },
+          { header: "Phone",       render: (r) => r.phone || "—" },
+          { header: "ID / Passport", render: (r) => r.idNumber || "—" },
+          { header: "Source",      render: (r) => r.source },
+          { header: "KYC Status",  render: (r) => r.kycStatus },
+        ]}
+      />
     </PropertySaleShell>
   );
 };

@@ -1961,6 +1961,322 @@ export const parseTenantsExcel = (file) => {
 };
 
 // ============================================
+// PROPERTY SALE — LISTINGS IMPORT TEMPLATE
+// ============================================
+
+const strip = (v) => {
+  const s = String(v ?? "").trim();
+  return /^-+$|^n\/a$|^na$|^none$/i.test(s) ? "" : s;
+};
+const num = (v) => {
+  const n = Number(String(v ?? "").replace(/,/g, "").trim());
+  return isNaN(n) ? null : n;
+};
+const boolCell = (v) => {
+  const s = String(v ?? "").trim().toLowerCase();
+  return ["yes", "true", "1"].includes(s);
+};
+
+export const downloadSaleListingsTemplate = () => {
+  const headers = [
+    "Title *", "Property Type", "Size", "Size Unit", "Location", "Town",
+    "County", "Country", "Asking Price *", "Negotiable", "Status",
+    "Title Deed Available", "Title Deed Number", "Amenities", "Notes",
+  ];
+
+  const dataSheet = XLSX.utils.aoa_to_sheet([headers]);
+  dataSheet["!cols"] = [
+    { wch: 30 }, { wch: 16 }, { wch: 10 }, { wch: 12 }, { wch: 25 }, { wch: 18 },
+    { wch: 18 }, { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 18 },
+    { wch: 20 }, { wch: 22 }, { wch: 35 }, { wch: 40 },
+  ];
+
+  const instructionsSheet = XLSX.utils.aoa_to_sheet([
+    ["SALE LISTINGS IMPORT INSTRUCTIONS"],
+    [""],
+    ["REQUIRED FIELDS (marked with *)"],
+    ["• Title: Listing title, e.g. 'Prime 50x100 Plot - Kitengela'"],
+    ["• Asking Price: KES amount — numbers only, no currency symbols"],
+    [""],
+    ["OPTIONAL FIELDS (leave blank or use – if not available)"],
+    ["• Property Type: plot, house, apartment, commercial, land, other (default: plot)"],
+    ["• Size: numeric value only (e.g. 50 or 0.5)"],
+    ["• Size Unit: sqm, sqft, acres, hectares (default: sqm)"],
+    ["• Location: Estate or area name"],
+    ["• Town: Nearest town or city"],
+    ["• County: Kenya county"],
+    ["• Country: defaults to Kenya"],
+    ["• Negotiable: Yes or No (default: Yes)"],
+    ["• Status: available, reserved, under_contract, sold, withdrawn (default: available)"],
+    ["• Title Deed Available: Yes or No (default: No)"],
+    ["• Title Deed Number: LR No. or title deed reference"],
+    ["• Amenities: comma-separated — e.g. Borehole, Electricity, Tarmac Road"],
+    ["• Notes: Additional remarks"],
+    [""],
+    ["EXAMPLE DATA"],
+    [""],
+    headers,
+    [
+      "Prime 50x100 Plot - Kitengela", "plot", "5000", "sqm", "Acacia Estate", "Kitengela",
+      "Kajiado", "Kenya", "850000", "Yes", "available",
+      "Yes", "LR/12345/678", "Borehole, Electricity, Tarmac Road", "Corner plot",
+    ],
+    [
+      "3BR House - Ruiru", "house", "120", "sqm", "Greenpark", "Ruiru",
+      "Kiambu", "Kenya", "5500000", "No", "available",
+      "No", "", "Parking, Borehole", "Gated community",
+    ],
+    [""],
+    ["IMPORTANT NOTES"],
+    ["• Do not rename columns in the Data sheet"],
+    ["• Title and Asking Price are the only required fields"],
+    ["• Maximum 1000 listings per import"],
+    ["• Images can be added after import from the listing detail panel"],
+  ]);
+  instructionsSheet["!cols"] = [{ wch: 70 }];
+
+  const dropdownSheet = XLSX.utils.aoa_to_sheet([
+    ["VALID VALUES"],
+    [""],
+    ["Property Type:"], ["plot"], ["house"], ["apartment"], ["commercial"], ["land"], ["other"],
+    [""],
+    ["Size Unit:"], ["sqm"], ["sqft"], ["acres"], ["hectares"],
+    [""],
+    ["Status:"], ["available"], ["reserved"], ["under_contract"], ["sold"], ["withdrawn"],
+    [""],
+    ["Negotiable / Title Deed Available:"], ["Yes"], ["No"],
+  ]);
+  dropdownSheet["!cols"] = [{ wch: 40 }];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, dataSheet, "Data");
+  XLSX.utils.book_append_sheet(wb, instructionsSheet, "Instructions & Examples");
+  XLSX.utils.book_append_sheet(wb, dropdownSheet, "Valid Values");
+
+  const buf  = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = `MILIK_Sale_Listings_Import_Template_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+export const parseSaleListingsExcel = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const wb      = XLSX.read(new Uint8Array(e.target.result), { type: "array" });
+        const ws      = wb.Sheets[wb.SheetNames[0]];
+        const rows    = XLSX.utils.sheet_to_json(ws, { raw: false, defval: "" });
+
+        if (!rows.length) { reject(new Error("No data found in file")); return; }
+
+        const VALID_TYPES    = ["plot", "house", "apartment", "commercial", "land", "other"];
+        const VALID_UNITS    = ["sqm", "sqft", "acres", "hectares"];
+        const VALID_STATUSES = ["available", "reserved", "under_contract", "sold", "withdrawn"];
+
+        const seenTitles = new Set();
+        const valid = [], errors = [];
+
+        rows.forEach((row, i) => {
+          const get   = (...keys) => { for (const k of keys) { const v = strip(row[k]); if (v) return v; } return ""; };
+          const title = get("Title *", "Title", "title");
+          const priceRaw = get("Asking Price *", "Asking Price", "askingPrice");
+          const price    = num(priceRaw);
+          const rowErrors = [];
+
+          if (!title) rowErrors.push("Title is required");
+          if (!priceRaw) rowErrors.push("Asking Price is required");
+          else if (price === null || price < 0) rowErrors.push("Asking Price must be a valid number ≥ 0");
+
+          const propertyType = get("Property Type", "propertyType") || "plot";
+          const sizeUnit     = get("Size Unit", "sizeUnit") || "sqm";
+          const status       = get("Status", "status") || "available";
+          const sizeRaw      = get("Size", "size");
+          const sizeVal      = sizeRaw ? num(sizeRaw) : null;
+
+          if (!VALID_TYPES.includes(propertyType))    rowErrors.push(`Invalid Property Type: ${propertyType}`);
+          if (!VALID_UNITS.includes(sizeUnit))        rowErrors.push(`Invalid Size Unit: ${sizeUnit}`);
+          if (!VALID_STATUSES.includes(status))       rowErrors.push(`Invalid Status: ${status}`);
+          if (sizeRaw && sizeVal === null)             rowErrors.push("Size must be a number when provided");
+
+          if (title && seenTitles.has(title.toLowerCase()))
+            rowErrors.push("Duplicate Title within file");
+          if (title) seenTitles.add(title.toLowerCase());
+
+          if (rowErrors.length) {
+            errors.push({ row: i + 2, title, errors: rowErrors });
+          } else {
+            const amenitiesRaw = get("Amenities", "amenities");
+            valid.push({
+              title,
+              propertyType,
+              size:               sizeVal,
+              sizeUnit,
+              location:           get("Location", "location"),
+              town:               get("Town", "town"),
+              county:             get("County", "county"),
+              country:            get("Country", "country") || "Kenya",
+              askingPrice:        price,
+              negotiable:         get("Negotiable", "negotiable").toLowerCase() !== "no",
+              status,
+              titleDeedAvailable: boolCell(get("Title Deed Available", "titleDeedAvailable")),
+              titleDeedNumber:    get("Title Deed Number", "titleDeedNumber"),
+              amenities:          amenitiesRaw ? amenitiesRaw.split(",").map(s => s.trim()).filter(Boolean) : [],
+              notes:              get("Notes", "notes"),
+            });
+          }
+        });
+
+        resolve({ valid, errors, total: rows.length, validCount: valid.length, errorCount: errors.length });
+      } catch (err) {
+        reject(new Error(`Failed to parse file: ${err.message}`));
+      }
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsArrayBuffer(file);
+  });
+
+// ============================================
+// PROPERTY SALE — BUYERS IMPORT TEMPLATE
+// ============================================
+
+export const downloadSaleBuyersTemplate = () => {
+  const headers = [
+    "Full Name *", "National ID / Passport", "Phone", "Email",
+    "Address", "Nationality", "Source", "KYC Status", "Notes",
+  ];
+
+  const dataSheet = XLSX.utils.aoa_to_sheet([headers]);
+  dataSheet["!cols"] = [
+    { wch: 28 }, { wch: 22 }, { wch: 18 }, { wch: 30 },
+    { wch: 30 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 40 },
+  ];
+
+  const instructionsSheet = XLSX.utils.aoa_to_sheet([
+    ["SALE BUYERS IMPORT INSTRUCTIONS"],
+    [""],
+    ["REQUIRED FIELDS (marked with *)"],
+    ["• Full Name: Buyer's full legal name"],
+    [""],
+    ["OPTIONAL FIELDS (leave blank or use – if not available)"],
+    ["• National ID / Passport: ID or passport number"],
+    ["• Phone: Contact phone number"],
+    ["• Email: Email address"],
+    ["• Address: Physical or postal address"],
+    ["• Nationality: defaults to Kenyan"],
+    ["• Source: walk_in, referral, online, agent, other (default: walk_in)"],
+    ["• KYC Status: pending, verified, rejected (default: pending)"],
+    ["• Notes: Remarks"],
+    [""],
+    ["EXAMPLE DATA"],
+    [""],
+    headers,
+    ["James Kariuki", "12345678", "+254712345678", "james@email.com", "P.O. Box 123, Nairobi", "Kenyan", "referral", "verified", "Cash buyer"],
+    ["Fatuma Hassan", "A1234567", "+254722345678", "", "Mombasa", "Kenyan", "online", "pending", ""],
+    [""],
+    ["IMPORTANT NOTES"],
+    ["• Full Name is the only required field"],
+    ["• KYC documents can be added after import from the buyer detail panel"],
+    ["• Maximum 1000 buyers per import"],
+  ]);
+  instructionsSheet["!cols"] = [{ wch: 70 }];
+
+  const dropdownSheet = XLSX.utils.aoa_to_sheet([
+    ["VALID VALUES"],
+    [""],
+    ["Source:"], ["walk_in"], ["referral"], ["online"], ["agent"], ["other"],
+    [""],
+    ["KYC Status:"], ["pending"], ["verified"], ["rejected"],
+  ]);
+  dropdownSheet["!cols"] = [{ wch: 30 }];
+
+  const wb   = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, dataSheet, "Data");
+  XLSX.utils.book_append_sheet(wb, instructionsSheet, "Instructions & Examples");
+  XLSX.utils.book_append_sheet(wb, dropdownSheet, "Valid Values");
+
+  const buf  = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = `MILIK_Sale_Buyers_Import_Template_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+export const parseSaleBuyersExcel = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const wb   = XLSX.read(new Uint8Array(e.target.result), { type: "array" });
+        const ws   = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { raw: false, defval: "" });
+
+        if (!rows.length) { reject(new Error("No data found in file")); return; }
+
+        const VALID_SOURCES  = ["walk_in", "referral", "online", "agent", "other"];
+        const VALID_KYC      = ["pending", "verified", "rejected"];
+
+        const seenNames = new Set();
+        const valid = [], errors = [];
+
+        rows.forEach((row, i) => {
+          const get     = (...keys) => { for (const k of keys) { const v = strip(row[k]); if (v) return v; } return ""; };
+          const fullName = get("Full Name *", "Full Name", "fullName");
+          const rowErrors = [];
+
+          if (!fullName) rowErrors.push("Full Name is required");
+
+          const source    = get("Source", "source") || "walk_in";
+          const kycStatus = get("KYC Status", "kycStatus") || "pending";
+          const email     = get("Email", "email").toLowerCase();
+
+          if (!VALID_SOURCES.includes(source))    rowErrors.push(`Invalid Source: ${source}`);
+          if (!VALID_KYC.includes(kycStatus))     rowErrors.push(`Invalid KYC Status: ${kycStatus}`);
+          if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+            rowErrors.push("Invalid email format");
+
+          if (fullName && seenNames.has(fullName.toLowerCase()))
+            rowErrors.push("Duplicate Full Name within file");
+          if (fullName) seenNames.add(fullName.toLowerCase());
+
+          if (rowErrors.length) {
+            errors.push({ row: i + 2, fullName, errors: rowErrors });
+          } else {
+            valid.push({
+              fullName,
+              idNumber:    get("National ID / Passport", "idNumber"),
+              phone:       get("Phone", "phone"),
+              email,
+              address:     get("Address", "address"),
+              nationality: get("Nationality", "nationality") || "Kenyan",
+              source,
+              kycStatus,
+              notes:       get("Notes", "notes"),
+            });
+          }
+        });
+
+        resolve({ valid, errors, total: rows.length, validCount: valid.length, errorCount: errors.length });
+      } catch (err) {
+        reject(new Error(`Failed to parse file: ${err.message}`));
+      }
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsArrayBuffer(file);
+  });
+
+// ============================================
 // INVOICE NOTES (DEBIT / CREDIT) EXCEL TEMPLATES
 // ============================================
 

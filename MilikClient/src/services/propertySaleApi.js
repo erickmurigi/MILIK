@@ -14,6 +14,7 @@ export const saleApi = {
   updateListing: async (id, payload) => unwrap(await adminRequests.put(`/sale/listings/${id}`, payload)),
   updateListingStatus: async (id, status) => unwrap(await adminRequests.patch(`/sale/listings/${id}/status`, { status })),
   deleteListing: async (id) => unwrap(await adminRequests.delete(`/sale/listings/${id}`)),
+  bulkImportListings: async (rows) => (await adminRequests.post("/sale/listings/bulk", rows))?.data,
   uploadListingImages: async (id, formData) => (await adminRequests.post(`/sale/listings/${id}/images`, formData))?.data,
   deleteListingImage: async (id, url) => (await adminRequests.delete(`/sale/listings/${id}/images`, { data: { url } }))?.data,
 
@@ -23,6 +24,7 @@ export const saleApi = {
   createBuyer: async (payload) => unwrap(await adminRequests.post("/sale/buyers", payload)),
   updateBuyer: async (id, payload) => unwrap(await adminRequests.put(`/sale/buyers/${id}`, payload)),
   deleteBuyer: async (id) => unwrap(await adminRequests.delete(`/sale/buyers/${id}`)),
+  bulkImportBuyers: async (rows) => (await adminRequests.post("/sale/buyers/bulk", rows))?.data,
   sendBuyerSms:   async (id, payload) => unwrap(await adminRequests.post(`/sale/buyers/${id}/sms`,   payload)),
   sendBuyerEmail: async (id, payload) => unwrap(await adminRequests.post(`/sale/buyers/${id}/email`, payload)),
 
