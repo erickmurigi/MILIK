@@ -8,7 +8,7 @@ export const listActivities = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const {
       relatedLead = "", relatedBuyer = "", relatedDeal = "",
-      type = "", outcome = "", from = "", to = "",
+      type = "", outcome = "", from = "", to = "", search = "",
       page = 1, limit = 50,
     } = req.query;
 
@@ -25,6 +25,10 @@ export const listActivities = async (req, res, next) => {
       filter.date = {};
       if (from) filter.date.$gte = new Date(from);
       if (to)   filter.date.$lte = new Date(new Date(to).setHours(23, 59, 59, 999));
+    }
+    if (search.trim()) {
+      const re = new RegExp(search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+      filter.$or = [{ subject: re }, { notes: re }];
     }
 
     const [activities, total] = await Promise.all([
@@ -67,12 +71,11 @@ export const createActivity = async (req, res, next) => {
       updatedBy: userId,
     });
 
-    // Update lead's lastContactDate when an activity is logged against it
+    // Sync lastContactDate + nextFollowUpDate to lead
     if (req.body.relatedLead) {
-      await SaleLead.findOneAndUpdate(
-        { _id: req.body.relatedLead, business },
-        { lastContactDate: activity.date, updatedBy: userId }
-      );
+      const leadUpdate = { lastContactDate: activity.date, updatedBy: userId };
+      if (activity.nextActionDate) leadUpdate.nextFollowUpDate = activity.nextActionDate;
+      await SaleLead.findOneAndUpdate({ _id: req.body.relatedLead, business }, leadUpdate);
     }
 
     const populated = await SaleActivity.findById(activity._id)
@@ -100,6 +103,30 @@ export const updateActivity = async (req, res, next) => {
       .populate("relatedBuyer", "buyerNumber fullName")
       .populate("relatedDeal",  "dealNumber");
 
+    if (!activity) return next(createError(404, "Activity not found"));
+
+    // Sync lastContactDate + nextFollowUpDate to lead
+    if (activity.relatedLead) {
+      const leadId = activity.relatedLead._id || activity.relatedLead;
+      const leadUpdate = { lastContactDate: activity.date, updatedBy: userId };
+      if (activity.nextActionDate) leadUpdate.nextFollowUpDate = activity.nextActionDate;
+      await SaleLead.findOneAndUpdate({ _id: leadId, business }, leadUpdate);
+    }
+
+    res.status(200).json(activity);
+  } catch (err) { next(err); }
+};
+
+export const getActivity = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const activity = await SaleActivity.findOne({ _id: req.params.id, business })
+      .populate("relatedLead",    "leadNumber fullName")
+      .populate("relatedBuyer",   "buyerNumber fullName")
+      .populate("relatedDeal",    "dealNumber")
+      .populate("relatedListing", "listingNumber title")
+      .populate("createdBy",      "name fullName")
+      .lean();
     if (!activity) return next(createError(404, "Activity not found"));
     res.status(200).json(activity);
   } catch (err) { next(err); }

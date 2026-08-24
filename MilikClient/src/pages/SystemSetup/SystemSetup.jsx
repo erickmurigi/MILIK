@@ -501,15 +501,15 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, pendin
         <table className="min-w-full text-[11px] border-collapse">
           <thead className="sticky top-0 z-10 shadow-sm">
             <tr className="bg-[#0B3B2E] text-white">
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Company</th>
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Mode</th>
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Status</th>
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Readiness</th>
-              <th className="px-3 py-2 text-center font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Users</th>
-              <th className="px-3 py-2 text-center font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Mods</th>
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Contact</th>
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Updated</th>
-              <th className="px-3 py-2 text-right font-black text-[10px] uppercase tracking-wider whitespace-nowrap">Actions</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Company</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Mode</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Status</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Readiness</th>
+              <th className="px-3 py-1.5 text-center font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Users</th>
+              <th className="px-3 py-1.5 text-center font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Mods</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Contact</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Updated</th>
+              <th className="px-3 py-1.5 text-right font-black text-[10px] uppercase tracking-wider whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -522,7 +522,7 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, pendin
               const statusLabel = getCompanyStatusLabel(company);
               const isPending = pendingId === companyId;
               return (
-                <tr key={companyId} className={`group border-b border-slate-100 transition ${isPending ? "opacity-60 bg-white" : "odd:bg-white even:bg-slate-50/50 hover:bg-[#EDF5F1]/70"}`}>
+                <tr key={companyId} className={`group border-b border-slate-100 transition ${isPending ? "opacity-60 bg-white" : "odd:bg-white even:bg-slate-50/60 hover:bg-blue-50/40"}`}>
                   <td className="px-3 py-1.5 border-r border-gray-100">
                     <div className="flex items-center gap-2.5">
                       <CompanyAvatar company={company} />
@@ -661,14 +661,14 @@ const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelecte
         <table className="min-w-full text-[11px] border-collapse">
           <thead className="sticky top-0 z-10 shadow-sm">
             <tr className="bg-[#0B3B2E] text-white">
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">User</th>
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Email</th>
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Role</th>
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Primary Company</th>
-              <th className="px-3 py-2 text-center font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Companies</th>
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Status</th>
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Created</th>
-              <th className="px-3 py-2 text-right font-black text-[10px] uppercase tracking-wider whitespace-nowrap">Actions</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">User</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Email</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Role</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Primary Company</th>
+              <th className="px-3 py-1.5 text-center font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Companies</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Status</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Created</th>
+              <th className="px-3 py-1.5 text-right font-black text-[10px] uppercase tracking-wider whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -680,7 +680,7 @@ const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelecte
               const assignedCompanyIds = getUserAssignedCompanyIds(user);
               const lockState = user?.locked ? "Locked" : user?.isActive === false ? "Inactive" : "Active";
               return (
-                <tr key={userId} className="group border-b border-slate-100 odd:bg-white even:bg-slate-50/50 hover:bg-[#EDF5F1]/70 transition">
+                <tr key={userId} className="group border-b border-slate-100 odd:bg-white even:bg-slate-50/60 hover:bg-blue-50/40 transition">
                   <td className="px-3 py-1.5 border-r border-gray-100">
                     <div className="flex items-center gap-2.5">
                       <UserAvatar user={user} />
@@ -755,14 +755,14 @@ const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWor
         <table className="min-w-full text-[11px] border-collapse">
           <thead className="sticky top-0 z-10 shadow-sm">
             <tr className="bg-[#0B3B2E] text-white">
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Company</th>
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Type</th>
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Mode</th>
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Readiness</th>
-              <th className="px-3 py-2 text-center font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Users</th>
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Missing Setup</th>
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Updated</th>
-              <th className="px-3 py-2 text-right font-black text-[10px] uppercase tracking-wider whitespace-nowrap">Actions</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Company</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Type</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Mode</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Readiness</th>
+              <th className="px-3 py-1.5 text-center font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Users</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Missing Setup</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Updated</th>
+              <th className="px-3 py-1.5 text-right font-black text-[10px] uppercase tracking-wider whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -774,7 +774,7 @@ const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWor
               const userCount = companyUserCounts.get(companyId) || 0;
               const spotlightLabel = !isCompanyActive(company) ? "Inactive" : "Needs Attention";
               return (
-                <tr key={companyId} className="group border-b border-slate-100 odd:bg-white even:bg-slate-50/50 hover:bg-[#EDF5F1]/70 transition">
+                <tr key={companyId} className="group border-b border-slate-100 odd:bg-white even:bg-slate-50/60 hover:bg-blue-50/40 transition">
                   <td className="px-3 py-1.5 border-r border-gray-100">
                     <div className="flex items-center gap-2.5">
                       <CompanyAvatar company={company} />
@@ -876,17 +876,17 @@ const AuditPanel = ({ companies, users, companyMap }) => {
         <table className="min-w-full text-[11px] border-collapse">
           <thead className="sticky top-0 z-10 shadow-sm">
             <tr className="bg-[#0B3B2E] text-white">
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Date</th>
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Event</th>
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Type</th>
-              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider whitespace-nowrap">Detail</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Date</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Event</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Type</th>
+              <th className="px-3 py-1.5 text-left font-black text-[10px] uppercase tracking-wider whitespace-nowrap">Detail</th>
             </tr>
           </thead>
           <tbody>
             {pageRows.length === 0 ? (
               <tr><td colSpan={4}><EmptyState icon={FaHistory} title="No platform activity found" body="Events will appear here as the system is used" /></td></tr>
             ) : pageRows.map((event) => (
-              <tr key={event.id} className="group border-b border-slate-100 odd:bg-white even:bg-slate-50/50 hover:bg-[#EDF5F1]/70 transition">
+              <tr key={event.id} className="group border-b border-slate-100 odd:bg-white even:bg-slate-50/60 hover:bg-blue-50/40 transition">
                 <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-400 whitespace-nowrap">{fmtDate(event.timestamp)}</td>
                 <td className="px-3 py-1.5 border-r border-gray-100 font-black text-slate-900">{event.title}</td>
                 <td className="px-3 py-1.5 border-r border-gray-100">

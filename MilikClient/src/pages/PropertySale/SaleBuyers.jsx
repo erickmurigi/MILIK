@@ -707,6 +707,14 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
           sending={emailSending}
           onSend={handleSendEmail}
           onClose={() => setEmailTarget(null)}
+          context="buyer"
+          vars={{
+            buyerName:   emailTarget.fullName    || "",
+            buyerNumber: emailTarget.buyerNumber || "",
+            phone:       emailTarget.phone       || "",
+            email:       emailTarget.email       || "",
+            companyName: currentCompany?.companyName || currentCompany?.name || "",
+          }}
         />
       )}
 

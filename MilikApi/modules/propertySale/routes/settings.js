@@ -7,6 +7,7 @@ import {
   addPropertyType,  updatePropertyType,  archivePropertyType,
   updateCommissionDefaults,
   loadDefaults,
+  addCommTemplate, updateCommTemplate, deleteCommTemplate,
 } from "../controllers/settingsController.js";
 
 const router = express.Router();
@@ -29,5 +30,9 @@ router.delete("/property-types/:itemId",  archivePropertyType);
 router.put("/commission-defaults",        updateCommissionDefaults);
 
 router.post("/load-defaults/:collection", loadDefaults);
+
+router.post("/comm-templates",           addCommTemplate);
+router.put("/comm-templates/:itemId",    updateCommTemplate);
+router.delete("/comm-templates/:itemId", deleteCommTemplate);
 
 export default router;

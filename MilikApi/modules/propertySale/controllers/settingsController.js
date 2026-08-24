@@ -102,6 +102,51 @@ export const updateCommissionDefaults = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// Communication templates CRUD
+export const addCommTemplate = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const { name, channel, context, subject = "", body } = req.body;
+    if (!name || !channel || !context || !body) return next(createError(400, "name, channel, context and body are required"));
+    const settings = await ensureSettings(business);
+    settings.commTemplates.push({ name: String(name).trim(), channel, context, subject: String(subject).trim(), body: String(body).trim() });
+    await settings.save();
+    res.status(201).json({ settings });
+  } catch (err) { next(err); }
+};
+
+export const updateCommTemplate = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const settings = await SaleSettings.findOne({ business });
+    if (!settings) return next(createError(404, "Settings not found"));
+    const tpl = settings.commTemplates.id(req.params.itemId);
+    if (!tpl) return next(createError(404, "Template not found"));
+    const { name, channel, context, subject, body, isActive } = req.body;
+    if (name     !== undefined) tpl.name     = String(name).trim();
+    if (channel  !== undefined) tpl.channel  = channel;
+    if (context  !== undefined) tpl.context  = context;
+    if (subject  !== undefined) tpl.subject  = String(subject).trim();
+    if (body     !== undefined) tpl.body     = String(body).trim();
+    if (isActive !== undefined) tpl.isActive = Boolean(isActive);
+    await settings.save();
+    res.json({ settings });
+  } catch (err) { next(err); }
+};
+
+export const deleteCommTemplate = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const settings = await SaleSettings.findOne({ business });
+    if (!settings) return next(createError(404, "Settings not found"));
+    const tpl = settings.commTemplates.id(req.params.itemId);
+    if (!tpl) return next(createError(404, "Template not found"));
+    tpl.deleteOne();
+    await settings.save();
+    res.json({ settings, message: "Template deleted" });
+  } catch (err) { next(err); }
+};
+
 const ENDPOINT_TO_KEY = {
   "pipeline-stages": "pipelineStages",
   "lead-sources":    "leadSources",

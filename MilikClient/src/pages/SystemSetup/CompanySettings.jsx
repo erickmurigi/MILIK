@@ -1305,54 +1305,54 @@ const CompanySettings = () => {
     return (
       <tr key={item._id} className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
         {tabKey === "saleStages" && (
-          <td className="w-8 px-3 py-1 border-r border-gray-100 text-center text-slate-400 font-bold">{(item.order ?? idx) + 1}</td>
+          <td className="w-8 px-3 py-1.5 border-r border-gray-100 text-center text-slate-400 font-bold">{(item.order ?? idx) + 1}</td>
         )}
-        <td className="px-3 py-1 border-r border-gray-100 font-medium text-slate-900">{item.name || "—"}</td>
+        <td className="px-3 py-1.5 border-r border-gray-100 font-medium text-slate-900">{item.name || "—"}</td>
         {tabKey === "utilities" && (
           <>
-            <td className="px-3 py-1 border-r border-gray-100 capitalize text-slate-600">{String(item.category || "").replace(/_/g, " ") || "—"}</td>
-            <td className="max-w-[200px] truncate px-3 py-1 border-r border-gray-100 text-slate-500">{item.description || "—"}</td>
+            <td className="px-3 py-1.5 border-r border-gray-100 capitalize text-slate-600">{String(item.category || "").replace(/_/g, " ") || "—"}</td>
+            <td className="max-w-[200px] truncate px-3 py-1.5 border-r border-gray-100 text-slate-500">{item.description || "—"}</td>
           </>
         )}
         {tabKey === "periods" && (
           <>
-            <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-600">{item.durationInMonths ?? "—"}</td>
-            <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-600">{item.durationInDays ?? "—"}</td>
+            <td className="px-3 py-1.5 border-r border-gray-100 text-center text-slate-600">{item.durationInMonths ?? "—"}</td>
+            <td className="px-3 py-1.5 border-r border-gray-100 text-center text-slate-600">{item.durationInDays ?? "—"}</td>
           </>
         )}
         {tabKey === "expenses" && (
           <>
-            <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{item.code || "—"}</td>
-            <td className="px-3 py-1 border-r border-gray-100 capitalize text-slate-600">{String(item.category || "").replace(/_/g, " ") || "—"}</td>
-            <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-600">{Number(item.defaultAmount || 0).toLocaleString()}</td>
+            <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{item.code || "—"}</td>
+            <td className="px-3 py-1.5 border-r border-gray-100 capitalize text-slate-600">{String(item.category || "").replace(/_/g, " ") || "—"}</td>
+            <td className="px-3 py-1.5 border-r border-gray-100 text-right text-slate-600">{Number(item.defaultAmount || 0).toLocaleString()}</td>
           </>
         )}
         {tabKey === "deposits" && (
           <>
-            <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{item.code || "—"}</td>
-            <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-600">{Number(item.defaultAmount || 0).toLocaleString()}</td>
-            <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{item.refundable === false ? "No" : "Yes"}</td>
-            <td className="max-w-[180px] truncate px-3 py-1 border-r border-gray-100 text-slate-500">{item.description || "—"}</td>
+            <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{item.code || "—"}</td>
+            <td className="px-3 py-1.5 border-r border-gray-100 text-right text-slate-600">{Number(item.defaultAmount || 0).toLocaleString()}</td>
+            <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{item.refundable === false ? "No" : "Yes"}</td>
+            <td className="max-w-[180px] truncate px-3 py-1.5 border-r border-gray-100 text-slate-500">{item.description || "—"}</td>
           </>
         )}
         {tabKey === "unitTypes" && (
           <>
-            <td className="px-3 py-1 border-r border-gray-100 capitalize text-slate-600">{String(item.category || "").replace(/_/g, " ") || "—"}</td>
-            <td className="max-w-[200px] truncate px-3 py-1 border-r border-gray-100 text-slate-500">{item.description || "—"}</td>
+            <td className="px-3 py-1.5 border-r border-gray-100 capitalize text-slate-600">{String(item.category || "").replace(/_/g, " ") || "—"}</td>
+            <td className="max-w-[200px] truncate px-3 py-1.5 border-r border-gray-100 text-slate-500">{item.description || "—"}</td>
           </>
         )}
         {tabKey === "maintenanceCategories" && (
           <>
-            <td className="px-3 py-1 border-r border-gray-100 capitalize text-slate-600">{item.priority || "medium"}</td>
-            <td className="max-w-[200px] truncate px-3 py-1 border-r border-gray-100 text-slate-500">{item.description || "—"}</td>
+            <td className="px-3 py-1.5 border-r border-gray-100 capitalize text-slate-600">{item.priority || "medium"}</td>
+            <td className="max-w-[200px] truncate px-3 py-1.5 border-r border-gray-100 text-slate-500">{item.description || "—"}</td>
           </>
         )}
-        <td className="px-3 py-1 border-r border-gray-100">
-          <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${isActive ? "border-emerald-200 bg-emerald-100 text-emerald-700" : "border-slate-200 bg-slate-100 text-slate-500"}`}>
+        <td className="px-3 py-1.5 border-r border-gray-100">
+          <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-black ${isActive ? "border-emerald-200 bg-emerald-100 text-emerald-700" : "border-slate-200 bg-slate-100 text-slate-500"}`}>
             {isActive ? "Active" : "Archived"}
           </span>
         </td>
-        <td className="px-3 py-1">
+        <td className="px-3 py-1.5">
           <div className="flex items-center gap-1">
             <button onClick={() => openEditModal(tabKey, item)} className="rounded px-2 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-100">Edit</button>
             <button
@@ -1455,7 +1455,7 @@ const CompanySettings = () => {
               <thead className="sticky top-0 z-10">
                 <tr className="bg-[#0B3B2E] text-white">
                   {(COLLECTION_COLUMNS[tabKey] || []).map((h, i, arr) => (
-                    <th key={h} className={`px-3 py-1 text-left font-bold ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
+                    <th key={h} className={`px-3 py-1.5 text-left font-bold ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -1744,11 +1744,11 @@ const CompanySettings = () => {
               <table className="w-full border-collapse text-[11px]">
                 <thead>
                   <tr className="bg-[#0B3B2E] text-white">
-                    <th className="border-r border-white/10 px-3 py-1 text-left font-bold">Run At</th>
-                    <th className="border-r border-white/10 px-3 py-1 text-center font-bold">Created</th>
-                    <th className="border-r border-white/10 px-3 py-1 text-center font-bold">Skipped</th>
-                    <th className="border-r border-white/10 px-3 py-1 text-center font-bold">Errors</th>
-                    <th className="px-3 py-1 text-left font-bold">Source</th>
+                    <th className="border-r border-white/10 px-3 py-1.5 text-left font-bold">Run At</th>
+                    <th className="border-r border-white/10 px-3 py-1.5 text-center font-bold">Created</th>
+                    <th className="border-r border-white/10 px-3 py-1.5 text-center font-bold">Skipped</th>
+                    <th className="border-r border-white/10 px-3 py-1.5 text-center font-bold">Errors</th>
+                    <th className="px-3 py-1.5 text-left font-bold">Source</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1757,7 +1757,7 @@ const CompanySettings = () => {
                       key={i}
                       className={`border-b border-slate-100 ${i % 2 === 0 ? "bg-white" : "bg-slate-50"}`}
                     >
-                      <td className="border-r border-slate-100 px-3 py-1 text-slate-700">
+                      <td className="border-r border-slate-100 px-3 py-1.5 text-slate-700">
                         {run.runAt
                           ? new Date(run.runAt).toLocaleString("en-GB", {
                               day: "2-digit", month: "short", year: "numeric",
@@ -1765,16 +1765,16 @@ const CompanySettings = () => {
                             })
                           : "—"}
                       </td>
-                      <td className="border-r border-slate-100 px-3 py-1 text-center font-bold text-emerald-700">
+                      <td className="border-r border-slate-100 px-3 py-1.5 text-center font-bold text-emerald-700">
                         {run.created ?? 0}
                       </td>
-                      <td className="border-r border-slate-100 px-3 py-1 text-center text-slate-500">
+                      <td className="border-r border-slate-100 px-3 py-1.5 text-center text-slate-500">
                         {run.skipped ?? 0}
                       </td>
-                      <td className={`border-r border-slate-100 px-3 py-1 text-center font-bold ${Number(run.errors) > 0 ? "text-rose-600" : "text-slate-400"}`}>
+                      <td className={`border-r border-slate-100 px-3 py-1.5 text-center font-bold ${Number(run.errors) > 0 ? "text-rose-600" : "text-slate-400"}`}>
                         {run.errors ?? 0}
                       </td>
-                      <td className="px-3 py-1 capitalize text-slate-500">
+                      <td className="px-3 py-1.5 capitalize text-slate-500">
                         {run.triggeredBy || "cron"}
                       </td>
                     </tr>

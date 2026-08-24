@@ -179,6 +179,7 @@ const MENU_PERMISSION_MAP = {
   "sale-schedule":        { resource: "sale-schedule",        action: "view", moduleKey: "propertySale" },
   "sale-agent-perf":      { resource: "saleAgents",           action: "view", moduleKey: "propertySale" },
   "sale-settings":        { resource: "companySettings",      action: "view", moduleKey: "propertySale" },
+  "sale-comm-templates":  { resource: "companySettings",      action: "view", moduleKey: "propertySale" },
 };
 
 const filterMenuByPermissions = (items = [], currentUser = {}, activeCompany = null) =>
@@ -454,12 +455,14 @@ const MENU_COLOR_MAP = {
   "carwash-commissions-group":  { color: "#0B3B2E", label: "Commissions", icon: FaHandshake },
   "carwash-reporting":          { color: "#0B3B2E", label: "Reports",     icon: FaChartBar },
   "carwash-setup":              { color: "#0B3B2E", label: "Setup",       icon: FaCog },
-  "sale-operations":  { color: "#027333", label: "Pipeline",  icon: FaHandshake },
-  "sale-clients":     { color: "#027333", label: "Clients",   icon: FaUsers },
-  "sale-finance":     { color: "#027333", label: "Finance",   icon: FaMoneyBillWave },
-  "sale-reporting":   { color: "#027333", label: "Reports",   icon: FaFileAlt },
-  "sale-crm":         { color: "#027333", label: "CRM",       icon: FaUserClock },
-  "sale-setup":       { color: "#027333", label: "Setup",     icon: FaCog },
+  "sale-listings-grp": { color: "#027333", label: "Listings",  icon: FaBuilding },
+  "sale-crm":          { color: "#027333", label: "CRM",       icon: FaUserClock },
+  "sale-clients":      { color: "#027333", label: "Buyers",    icon: FaUsers },
+  "sale-pipeline":     { color: "#027333", label: "Deals",     icon: FaHandshake },
+  "sale-finance":      { color: "#027333", label: "Finance",   icon: FaMoneyBillWave },
+  "sale-reporting":    { color: "#027333", label: "Reports",   icon: FaFileAlt },
+  "sale-agents-grp":   { color: "#027333", label: "Agents",    icon: FaUser },
+  "sale-setup":        { color: "#027333", label: "Setup",     icon: FaCog },
   "clients-main":            { color: "#0B3B2E", label: "Clients",   icon: FaUsers },
   "clients-contracts-group": { color: "#0B3B2E", label: "Contracts", icon: FaHandshake },
   "clients-billing":         { color: "#0B3B2E", label: "Billing",   icon: FaFileInvoice },
@@ -751,6 +754,7 @@ const TopToolbar = ({
         "sale-crm-leads":      "/sale/crm/leads",
         "sale-crm-activities": "/sale/crm/activities",
         "sale-settings":       "/settings?tab=saleStages",
+        "sale-comm-templates": "/sale/templates",
         documentation: "/help/documentation",
         support: "/help/support",
         about: "/help/about",
@@ -976,34 +980,37 @@ const TopToolbar = ({
     if (isPropertySaleWorkspace) {
       const saleItems = [
         {
-          id: "sale-operations",
-          label: "Pipeline",
-          icon: FaHandshake,
+          id: "sale-listings-grp",
+          label: "Listings",
+          icon: FaBuilding,
           submenu: [
-            { id: "sale-dashboard", label: "Dashboard", icon: FaChartBar },
-            { id: "sale-listings",  label: "Listings",  icon: FaBuilding },
-            { id: "sale-offers",    label: "Offers",    icon: FaTag },
-            { id: "sale-deals",     label: "Deals",     icon: FaHandshake },
+            { id: "sale-listings", label: "Listings", icon: FaBuilding },
+          ],
+        },
+        {
+          id: "sale-crm",
+          label: "CRM",
+          icon: FaUserClock,
+          submenu: [
+            { id: "sale-crm-leads",      label: "Leads",      icon: FaUserFriends },
+            { id: "sale-crm-activities", label: "Activities", icon: FaClipboard },
           ],
         },
         {
           id: "sale-clients",
-          label: "Clients",
+          label: "Buyers",
           icon: FaUsers,
           submenu: [
-            { id: "sale-buyers", label: "Buyers",  icon: FaUsers },
-            { id: "sale-agents", label: "Agents",  icon: FaUser },
+            { id: "sale-buyers", label: "Buyers", icon: FaUsers },
           ],
         },
         {
-          id: "sale-reporting",
-          label: "Reports",
-          icon: FaFileAlt,
+          id: "sale-pipeline",
+          label: "Deals",
+          icon: FaHandshake,
           submenu: [
-            { id: "sale-reports",         label: "Sales Report",       icon: FaChartLine },
-            { id: "sale-cash-flow",       label: "Cash Flow Forecast", icon: FaCalendarAlt },
-            { id: "sale-funnel",          label: "Conversion Funnel",  icon: FaChartLine },
-            { id: "sale-agent-perf",      label: "Agent Performance",  icon: FaUser },
+            { id: "sale-offers", label: "Offers", icon: FaTag },
+            { id: "sale-deals",  label: "Deals",  icon: FaHandshake },
           ],
         },
         {
@@ -1017,12 +1024,22 @@ const TopToolbar = ({
           ],
         },
         {
-          id: "sale-crm",
-          label: "CRM",
-          icon: FaUserClock,
+          id: "sale-reporting",
+          label: "Reports",
+          icon: FaFileAlt,
           submenu: [
-            { id: "sale-crm-leads",      label: "Leads",      icon: FaUserFriends },
-            { id: "sale-crm-activities", label: "Activities", icon: FaClipboard },
+            { id: "sale-reports",    label: "Sales Report",       icon: FaChartLine },
+            { id: "sale-cash-flow",  label: "Cash Flow Forecast", icon: FaCalendarAlt },
+            { id: "sale-funnel",     label: "Conversion Funnel",  icon: FaChartLine },
+            { id: "sale-agent-perf", label: "Agent Performance",  icon: FaUser },
+          ],
+        },
+        {
+          id: "sale-agents-grp",
+          label: "Agents",
+          icon: FaUser,
+          submenu: [
+            { id: "sale-agents", label: "Agents", icon: FaUser },
           ],
         },
         {
@@ -1030,7 +1047,8 @@ const TopToolbar = ({
           label: "Setup",
           icon: FaCog,
           submenu: [
-            { id: "sale-settings", label: "Operational Settings", icon: FaCog },
+            { id: "sale-settings",       label: "Operational Settings",   icon: FaCog },
+            { id: "sale-comm-templates", label: "SMS & Email Templates",  icon: FaEnvelope },
           ],
         },
       ];

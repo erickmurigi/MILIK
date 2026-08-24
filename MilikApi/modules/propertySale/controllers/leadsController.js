@@ -9,7 +9,7 @@ import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from
 export const listLeads = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const { search = "", status = "", source = "", agent = "", overdueOnly = "", page = 1, limit = 50 } = req.query;
+    const { search = "", status = "", source = "", agent = "", overdueOnly = "", createdFrom = "", createdTo = "", page = 1, limit = 50 } = req.query;
     const pageNum  = Math.max(parseInt(page,  10) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
 
@@ -20,7 +20,12 @@ export const listLeads = async (req, res, next) => {
     else if (agent) filter.assignedAgent = agent;
     if (overdueOnly === "1") {
       filter.nextFollowUpDate = { $lt: new Date() };
-      filter.status = { $nin: ["converted", "lost"] };
+      if (!status) filter.status = { $nin: ["converted", "lost"] };
+    }
+    if (createdFrom || createdTo) {
+      filter.createdAt = {};
+      if (createdFrom) filter.createdAt.$gte = new Date(createdFrom);
+      if (createdTo)   filter.createdAt.$lte = new Date(new Date(createdTo).setHours(23, 59, 59, 999));
     }
     if (search.trim()) filter.$text = { $search: search.trim() };
 

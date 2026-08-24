@@ -110,12 +110,18 @@ export const saleApi = {
 
   // CRM — Activities
   listActivities:   async (params = {}) => unwrapPage(await adminRequests.get("/sale/activities",         { params })),
+  getActivity:      async (id)          => unwrap(await adminRequests.get(`/sale/activities/${id}`)),
   createActivity:   async (payload)     => unwrap(await adminRequests.post("/sale/activities",            payload)),
   updateActivity:   async (id, payload) => unwrap(await adminRequests.put(`/sale/activities/${id}`,      payload)),
   deleteActivity:   async (id)          => unwrap(await adminRequests.delete(`/sale/activities/${id}`)),
 
   // Settings
   getSettings: async () => (await adminRequests.get("/sale/settings"))?.data?.settings,
+
+  // Communication templates (under settings)
+  addCommTemplate:    async (payload) => (await adminRequests.post("/sale/settings/comm-templates", payload))?.data?.settings,
+  updateCommTemplate: async (id, payload) => (await adminRequests.put(`/sale/settings/comm-templates/${id}`, payload))?.data?.settings,
+  deleteCommTemplate: async (id) => (await adminRequests.delete(`/sale/settings/comm-templates/${id}`))?.data?.settings,
 };
 
 export { todayISO } from "../utils/dates.js";

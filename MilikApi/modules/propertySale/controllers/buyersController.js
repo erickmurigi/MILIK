@@ -3,8 +3,12 @@ import SaleBuyer from "../models/SaleBuyer.js";
 import SaleDeal from "../models/SaleDeal.js";
 import SaleLead from "../models/SaleLead.js";
 import SaleOffer from "../models/SaleOffer.js";
+import Company from "../../../models/Company.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
+
+const fillPlaceholders = (text, vars) =>
+  String(text || "").replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => vars[k] ?? `{${k}}`);
 
 export const listBuyers = async (req, res, next) => {
   try {
@@ -121,7 +125,10 @@ export const sendBuyerSms = async (req, res, next) => {
 export const sendBuyerEmail = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const buyer = await SaleBuyer.findOne({ _id: req.params.id, business }).lean();
+    const [buyer, company] = await Promise.all([
+      SaleBuyer.findOne({ _id: req.params.id, business }).lean(),
+      Company.findById(business).select("companyName name phoneNo email").lean(),
+    ]);
     if (!buyer) return next(createError(404, "Buyer not found"));
     const to      = String(req.body.to      || buyer.email || "").trim();
     const subject = String(req.body.subject || "").trim();
@@ -129,7 +136,21 @@ export const sendBuyerEmail = async (req, res, next) => {
     if (!to)      return next(createError(400, "Buyer has no email address"));
     if (!subject) return next(createError(400, "Email subject is required"));
     if (!body)    return next(createError(400, "Email body is required"));
-    await sendAdHocEmail({ businessId: business, to, subject, bodyText: body });
+    const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "";
+    const vars = {
+      buyerName:        buyer.fullName    || "Buyer",
+      buyerNumber:      buyer.buyerNumber || "",
+      phone:            buyer.phone       || "",
+      email:            buyer.email       || "",
+      idNumber:         buyer.idNumber    || "",
+      kycStatus:        buyer.kycStatus   || "",
+      source:           buyer.source      || "",
+      registrationDate: fmtDate(buyer.createdAt),
+      companyName:      company?.companyName || company?.name || "",
+      companyPhone:     company?.phoneNo  || "",
+      companyEmail:     company?.email    || "",
+    };
+    await sendAdHocEmail({ businessId: business, to, subject: fillPlaceholders(subject, vars), bodyText: fillPlaceholders(body, vars) });
     res.json({ success: true, message: "Email sent" });
   } catch (err) {
     next(err);

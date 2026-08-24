@@ -16,8 +16,12 @@ import {
   postStampDutyEntry,
 } from "../services/propertySaleAccountingService.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
+import Company from "../../../models/Company.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
 import { deleteDocumentFile } from "../middleware/dealDocumentUpload.js";
+
+const fillPlaceholders = (text, vars) =>
+  String(text || "").replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => vars[k] ?? `{${k}}`);
 
 const calcWHT = (commissionAmount, whtRate = 5) => {
   const rate = Math.min(Math.max(Number(whtRate) || 5, 0), 100);
@@ -382,8 +386,14 @@ export const sendDealSms = async (req, res, next) => {
 export const sendDealEmail = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const deal = await SaleDeal.findOne({ _id: req.params.id, business })
-      .populate("buyer", "fullName email").lean();
+    const [deal, company] = await Promise.all([
+      SaleDeal.findOne({ _id: req.params.id, business })
+        .populate("buyer",   "fullName email phone buyerNumber")
+        .populate("listing", "title listingNumber propertyType location town county askingPrice size sizeUnit")
+        .populate("agent",   "fullName")
+        .lean(),
+      Company.findById(business).select("companyName name phoneNo email").lean(),
+    ]);
     if (!deal) return next(createError(404, "Deal not found"));
     const to      = String(req.body.to      || deal.buyer?.email || "").trim();
     const subject = String(req.body.subject || "").trim();
@@ -391,7 +401,40 @@ export const sendDealEmail = async (req, res, next) => {
     if (!to)      return next(createError(400, "Buyer has no email address on this deal"));
     if (!subject) return next(createError(400, "Email subject is required"));
     if (!body)    return next(createError(400, "Email body is required"));
-    await sendAdHocEmail({ businessId: business, to, subject, bodyText: body });
+    const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "";
+    const fmtNum  = (n) => n != null ? Number(n).toLocaleString() : "";
+    const vars = {
+      // Buyer
+      buyerName:            deal.buyer?.fullName      || "Buyer",
+      buyerNumber:          deal.buyer?.buyerNumber   || "",
+      phone:                deal.buyer?.phone         || "",
+      email:                deal.buyer?.email         || "",
+      // Deal
+      dealNumber:           deal.dealNumber           || "",
+      dealStatus:           deal.status               || "",
+      salePrice:            fmtNum(deal.agreedPrice),
+      dealDate:             fmtDate(deal.dealDate),
+      expectedClosingDate:  fmtDate(deal.expectedClosingDate),
+      actualClosingDate:    fmtDate(deal.actualClosingDate),
+      titleTransferDate:    fmtDate(deal.titleTransferDate),
+      stampDuty:            fmtNum(deal.stampDutyAmount),
+      // Listing / Property
+      listingTitle:         deal.listing?.title          || "",
+      listingNumber:        deal.listing?.listingNumber  || "",
+      propertyType:         deal.listing?.propertyType   || "",
+      propertyLocation:     deal.listing?.location       || "",
+      propertyTown:         deal.listing?.town           || "",
+      propertyCounty:       deal.listing?.county         || "",
+      propertySize:         deal.listing?.size != null ? `${deal.listing.size} ${deal.listing.sizeUnit || ""}`.trim() : "",
+      askingPrice:          fmtNum(deal.listing?.askingPrice),
+      // Agent
+      agentName:            deal.agent?.fullName         || "",
+      // Company
+      companyName:          company?.companyName || company?.name || "",
+      companyPhone:         company?.phoneNo     || "",
+      companyEmail:         company?.email       || "",
+    };
+    await sendAdHocEmail({ businessId: business, to, subject: fillPlaceholders(subject, vars), bodyText: fillPlaceholders(body, vars) });
     res.json({ success: true, message: "Email sent" });
   } catch (err) {
     next(err);

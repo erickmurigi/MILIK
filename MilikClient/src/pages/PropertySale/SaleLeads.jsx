@@ -13,7 +13,7 @@ import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
-import SaleFilterBar, { FilterSearch } from "./SaleFilterBar";
+import SaleFilterBar, { FilterSearch, FilterDateRange } from "./SaleFilterBar";
 import MilikTable from "../../components/common/MilikTable";
 import { labelClass } from "../../utils/formStyles";
 
@@ -77,6 +77,8 @@ export default function SaleLeads() {
   const [sourceFilter, setSource]     = useTabState("/sale/crm/leads:sourceFilter", "");
   const [agentFilter,  setAgent]      = useTabState("/sale/crm/leads:agentFilter", "");
   const [overdueOnly,  setOverdue]    = useTabState("/sale/crm/leads:overdueOnly", false);
+  const [createdFrom,  setCreatedFrom] = useTabState("/sale/crm/leads:createdFrom", "");
+  const [createdTo,    setCreatedTo]   = useTabState("/sale/crm/leads:createdTo", "");
   const [page,         setPage]       = useTabState("/sale/crm/leads:page", 1);
   const [pageSize,     setPageSize]   = useTabState("/sale/crm/leads:pageSize", LIMIT);
 
@@ -99,11 +101,11 @@ export default function SaleLeads() {
   const [offerForm,        setOfferForm]        = useState(blankOfferForm);
   const [convertingOffer,  setConvertingOffer]  = useState(false);
 
-  useEffect(() => setPage(1), [debSearch, statusFilter, sourceFilter, agentFilter, overdueOnly]);
+  useEffect(() => setPage(1), [debSearch, statusFilter, sourceFilter, agentFilter, overdueOnly, createdFrom, createdTo]);
 
   const { data: leadsData, isLoading, isFetching } = useQuery({
-    queryKey: ["sale-leads", biz, debSearch, statusFilter, sourceFilter, agentFilter, overdueOnly, page, pageSize],
-    queryFn:  () => saleApi.listLeads({ business: biz, search: debSearch, status: statusFilter, source: sourceFilter, agent: agentFilter, overdueOnly: overdueOnly ? "1" : "", page, limit: pageSize }),
+    queryKey: ["sale-leads", biz, debSearch, statusFilter, sourceFilter, agentFilter, overdueOnly, createdFrom, createdTo, page, pageSize],
+    queryFn:  () => saleApi.listLeads({ business: biz, search: debSearch, status: statusFilter, source: sourceFilter, agent: agentFilter, overdueOnly: overdueOnly ? "1" : "", createdFrom, createdTo, page, limit: pageSize }),
     enabled:  !!biz,
     placeholderData: (p) => p,
     staleTime: 30_000,
@@ -253,6 +255,7 @@ export default function SaleLeads() {
       if (editingAct) await saleApi.updateActivity(editingAct._id, payload);
       else await saleApi.createActivity(payload);
       qc.invalidateQueries({ queryKey: ["sale-activities-lead", biz, selected._id] });
+      qc.invalidateQueries({ queryKey: ["sale-lead-detail", biz, selected._id] });
       invalidate();
       setActModal(false);
       toast.success(`Activity ${editingAct ? "updated" : "logged"}`);
@@ -316,6 +319,8 @@ export default function SaleLeads() {
     }
   };
 
+  const panelLead = leadDetail ?? selected;
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <PropertySaleShell>
@@ -350,8 +355,8 @@ export default function SaleLeads() {
           {/* Filter bar */}
           <SaleFilterBar
             leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} lead{total !== 1 ? "s" : ""}</span>}
-            onReset={() => { setSearch(""); setStatus(""); setSource(""); setAgent(""); setOverdue(false); setPage(1); }}
-            activeCount={[search, statusFilter, sourceFilter, agentFilter, overdueOnly ? "1" : ""].filter(Boolean).length}
+            onReset={() => { setSearch(""); setStatus(""); setSource(""); setAgent(""); setOverdue(false); setCreatedFrom(""); setCreatedTo(""); setPage(1); }}
+            activeCount={[search, statusFilter, sourceFilter, agentFilter, overdueOnly ? "1" : "", createdFrom, createdTo].filter(Boolean).length}
             trailing={
               <button
                 onClick={openCreate}
@@ -373,6 +378,11 @@ export default function SaleLeads() {
               <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdue(e.target.checked)} className="accent-[#0B3B2E]" />
               Overdue
             </label>
+            <FilterDateRange
+              from={createdFrom} to={createdTo}
+              onFromChange={(e) => setCreatedFrom(e.target.value)}
+              onToChange={(e) => setCreatedTo(e.target.value)}
+            />
           </SaleFilterBar>
 
           {/* Table container */}
@@ -455,12 +465,12 @@ export default function SaleLeads() {
             {/* Panel header */}
             <div className="flex flex-shrink-0 items-start justify-between gap-2 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
               <div className="min-w-0">
-                <div className="font-extrabold text-sm leading-tight truncate">{selected.fullName}</div>
+                <div className="font-extrabold text-sm leading-tight truncate">{panelLead.fullName}</div>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${STATUS_COLORS[selected.status] || "border-white/30 text-white"}`}>
-                    {(selected.status || "").replace(/_/g, " ")}
+                  <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${STATUS_COLORS[panelLead.status] || "border-white/30 text-white"}`}>
+                    {(panelLead.status || "").replace(/_/g, " ")}
                   </span>
-                  <span className="text-[10px] font-mono text-white/60">{selected.leadNumber}</span>
+                  <span className="text-[10px] font-mono text-white/60">{panelLead.leadNumber}</span>
                 </div>
               </div>
               <button onClick={() => setSelected(null)} className="flex-shrink-0 p-1 text-white/70 hover:bg-white/10 hover:text-white">
@@ -470,20 +480,20 @@ export default function SaleLeads() {
 
             {/* Info */}
             <div className="flex-shrink-0 border-b border-slate-100 px-4 py-3 space-y-1.5 text-xs">
-              {selected.phone && <div className="flex items-center gap-2 text-slate-600"><FaPhone size={9} className="text-slate-400 flex-shrink-0" />{selected.phone}</div>}
-              {selected.email && <div className="flex items-center gap-2 text-slate-500"><FaEnvelope size={9} className="text-slate-400 flex-shrink-0" />{selected.email}</div>}
-              {selected.assignedAgent && <div className="text-slate-500">Agent: <span className="font-semibold text-slate-700">{selected.assignedAgent?.fullName || selected.assignedAgent}</span></div>}
-              {(selected.budgetMin || selected.budgetMax) && (
-                <div className="text-slate-500">Budget: <span className="font-semibold text-slate-700">{selected.budgetMin ? fmtKES(selected.budgetMin) : "?"} – {selected.budgetMax ? fmtKES(selected.budgetMax) : "?"}</span></div>
+              {panelLead.phone && <div className="flex items-center gap-2 text-slate-600"><FaPhone size={9} className="text-slate-400 flex-shrink-0" />{panelLead.phone}</div>}
+              {panelLead.email && <div className="flex items-center gap-2 text-slate-500"><FaEnvelope size={9} className="text-slate-400 flex-shrink-0" />{panelLead.email}</div>}
+              {panelLead.assignedAgent && <div className="text-slate-500">Agent: <span className="font-semibold text-slate-700">{panelLead.assignedAgent?.fullName || panelLead.assignedAgent}</span></div>}
+              {(panelLead.budgetMin || panelLead.budgetMax) && (
+                <div className="text-slate-500">Budget: <span className="font-semibold text-slate-700">{panelLead.budgetMin ? fmtKES(panelLead.budgetMin) : "?"} – {panelLead.budgetMax ? fmtKES(panelLead.budgetMax) : "?"}</span></div>
               )}
-              {selected.nextFollowUpDate && (
-                <div className={`flex items-center gap-1 ${isOld(selected.nextFollowUpDate, selected.status) ? "text-rose-600 font-semibold" : "text-slate-500"}`}>
-                  <FaCalendarAlt size={9} />Next follow-up: {fmt(selected.nextFollowUpDate)}{isOld(selected.nextFollowUpDate, selected.status) ? " — overdue!" : ""}
+              {panelLead.nextFollowUpDate && (
+                <div className={`flex items-center gap-1 ${isOld(panelLead.nextFollowUpDate, panelLead.status) ? "text-rose-600 font-semibold" : "text-slate-500"}`}>
+                  <FaCalendarAlt size={9} />Next follow-up: {fmt(panelLead.nextFollowUpDate)}{isOld(panelLead.nextFollowUpDate, panelLead.status) ? " — overdue!" : ""}
                 </div>
               )}
-              {selected.lastContactDate && <div className="text-slate-400">Last contact: {fmt(selected.lastContactDate)}</div>}
-              {selected.notes && <div className="italic text-slate-500">{selected.notes}</div>}
-              {selected.lostReason && <div className="text-rose-500">Lost: {selected.lostReason}</div>}
+              {panelLead.lastContactDate && <div className="text-slate-400">Last contact: {fmt(panelLead.lastContactDate)}</div>}
+              {panelLead.notes && <div className="italic text-slate-500">{panelLead.notes}</div>}
+              {panelLead.lostReason && <div className="text-rose-500">Lost: {panelLead.lostReason}</div>}
             </div>
 
             {/* Interested Listings */}
@@ -517,10 +527,10 @@ export default function SaleLeads() {
 
             {/* Actions */}
             <div className="flex flex-shrink-0 gap-1.5 border-b border-slate-100 px-4 py-2">
-              <button onClick={() => openEdit(selected)} className="flex-1 inline-flex items-center justify-center gap-1 border border-[#B7C9C0] bg-white px-3 py-1.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+              <button onClick={() => openEdit(panelLead)} className="flex-1 inline-flex items-center justify-center gap-1 border border-[#B7C9C0] bg-white px-3 py-1.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
                 <FaEdit size={9} /> Edit
               </button>
-              {selected.status !== "converted" && selected.status !== "lost" ? (
+              {panelLead.status !== "converted" && panelLead.status !== "lost" ? (
                 <>
                   <button onClick={() => { setConvertId(""); setShowConvert(true); }} className="flex-1 inline-flex items-center justify-center gap-1 border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100">
                     <FaExchangeAlt size={9} /> Buyer
@@ -529,7 +539,7 @@ export default function SaleLeads() {
                     <FaExchangeAlt size={9} /> → Offer
                   </button>
                 </>
-              ) : selected.convertedBuyer ? (
+              ) : panelLead.convertedBuyer ? (
                 <span className="flex-1 border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-center text-emerald-700">✓ Buyer Created</span>
               ) : null}
             </div>
@@ -537,7 +547,7 @@ export default function SaleLeads() {
             {/* Activity log header */}
             <div className="flex flex-shrink-0 items-center justify-between border-b border-slate-100 px-4 py-2">
               <span className="text-[11px] font-black uppercase tracking-wide text-slate-600">Activity Log</span>
-              <button onClick={() => openLogAct(selected)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+              <button onClick={() => openLogAct(panelLead)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
                 <FaPlus size={8} /> Log
               </button>
             </div>
@@ -802,7 +812,7 @@ export default function SaleLeads() {
                 <AppSelect
                   value={offerForm.agent}
                   onChange={(v) => setOfferForm((f) => ({ ...f, agent: v ?? "" }))}
-                  options={agents.map((a) => ({ value: a._id, label: a.name }))}
+                  options={agents.map((a) => ({ value: a._id, label: a.fullName }))}
                   placeholder="Select agent…"
                   size="md"
                 />

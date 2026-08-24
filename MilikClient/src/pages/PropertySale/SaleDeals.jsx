@@ -965,6 +965,27 @@ const SaleDeals = () => {
           sending={emailSending}
           onSend={handleSendDealEmail}
           onClose={() => setEmailTarget(null)}
+          context="deal"
+          vars={{
+            buyerName:           emailTarget.buyer?.fullName       || "",
+            buyerNumber:         emailTarget.buyer?.buyerNumber    || "",
+            phone:               emailTarget.buyer?.phone          || "",
+            email:               emailTarget.buyer?.email          || "",
+            dealNumber:          emailTarget.dealNumber            || "",
+            dealStatus:          emailTarget.status                || "",
+            salePrice:           emailTarget.agreedPrice != null   ? Number(emailTarget.agreedPrice).toLocaleString() : "",
+            dealDate:            emailTarget.dealDate              ? new Date(emailTarget.dealDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "",
+            expectedClosingDate: emailTarget.expectedClosingDate   ? new Date(emailTarget.expectedClosingDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "",
+            actualClosingDate:   emailTarget.actualClosingDate     ? new Date(emailTarget.actualClosingDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "",
+            listingTitle:        emailTarget.listing?.title        || "",
+            listingNumber:       emailTarget.listing?.listingNumber|| "",
+            propertyType:        emailTarget.listing?.propertyType || "",
+            propertyLocation:    emailTarget.listing?.location     || "",
+            propertyTown:        emailTarget.listing?.town         || "",
+            askingPrice:         emailTarget.listing?.askingPrice != null ? Number(emailTarget.listing.askingPrice).toLocaleString() : "",
+            agentName:           emailTarget.agent?.fullName       || "",
+            companyName:         currentCompany?.companyName || currentCompany?.name || "",
+          }}
         />
       )}
 

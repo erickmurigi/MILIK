@@ -7,9 +7,10 @@ import PropertySaleShell from "./PropertySaleShell";
 import PaginationBar from "../../components/PaginationBar";
 import { saleApi } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
+import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
-import SaleFilterBar, { FilterDateRange } from "./SaleFilterBar";
+import SaleFilterBar, { FilterDateRange, FilterSearch } from "./SaleFilterBar";
 import { labelClass } from "../../utils/formStyles";
 
 const ACTIVITY_TYPES = ["call", "email", "meeting", "site_visit", "whatsapp", "note", "follow_up"];
@@ -48,8 +49,12 @@ export default function SaleActivities() {
   const qc      = useQueryClient();
   const biz     = useSelector((s) => s.company?.currentCompany?._id);
 
+  const [search,        setSearch]    = useTabState("/sale/crm/activities:search", "");
+  const debSearch                     = useDebounce(search, 400);
   const [typeFilter,    setType]      = useTabState("/sale/crm/activities:typeFilter", "");
   const [outcomeFilter, setOutcome]   = useTabState("/sale/crm/activities:outcomeFilter", "");
+  const [leadFilter,    setLead]      = useTabState("/sale/crm/activities:leadFilter", "");
+  const [buyerFilter,   setBuyer]     = useTabState("/sale/crm/activities:buyerFilter", "");
   const [from,          setFrom]      = useTabState("/sale/crm/activities:from", "");
   const [to,            setTo]        = useTabState("/sale/crm/activities:to", "");
   const [page,          setPage]      = useTabState("/sale/crm/activities:page", 1);
@@ -60,11 +65,11 @@ export default function SaleActivities() {
   const [form,      setForm]          = useState(blankForm);
   const [saving,    setSaving]        = useState(false);
 
-  useEffect(() => setPage(1), [typeFilter, outcomeFilter, from, to]);
+  useEffect(() => setPage(1), [debSearch, typeFilter, outcomeFilter, leadFilter, buyerFilter, from, to]);
 
   const { data: activitiesData, isLoading, isFetching } = useQuery({
-    queryKey: ["sale-activities-all", biz, typeFilter, outcomeFilter, from, to, page, pageSize],
-    queryFn:  () => saleApi.listActivities({ business: biz, type: typeFilter, outcome: outcomeFilter, from, to, page, limit: pageSize }),
+    queryKey: ["sale-activities-all", biz, debSearch, typeFilter, outcomeFilter, leadFilter, buyerFilter, from, to, page, pageSize],
+    queryFn:  () => saleApi.listActivities({ business: biz, search: debSearch, type: typeFilter, outcome: outcomeFilter, relatedLead: leadFilter, relatedBuyer: buyerFilter, from, to, page, limit: pageSize }),
     enabled:  !!biz,
     placeholderData: (p) => p,
     staleTime: 30_000,
@@ -142,7 +147,7 @@ export default function SaleActivities() {
     return null;
   };
 
-  const hasFilters = !!(typeFilter || outcomeFilter || from || to);
+  const hasFilters = !!(search || typeFilter || outcomeFilter || leadFilter || buyerFilter || from || to);
 
   return (
     <PropertySaleShell>
@@ -151,8 +156,8 @@ export default function SaleActivities() {
         {/* Filter bar */}
         <SaleFilterBar
           leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} activit{total === 1 ? "y" : "ies"}</span>}
-          onReset={() => { setType(""); setOutcome(""); setFrom(""); setTo(""); }}
-          activeCount={[typeFilter, outcomeFilter, from, to].filter(Boolean).length}
+          onReset={() => { setSearch(""); setType(""); setOutcome(""); setLead(""); setBuyer(""); setFrom(""); setTo(""); }}
+          activeCount={[search, typeFilter, outcomeFilter, leadFilter, buyerFilter, from, to].filter(Boolean).length}
           trailing={
             <button
               onClick={openCreate}
@@ -162,8 +167,11 @@ export default function SaleActivities() {
             </button>
           }
         >
+          <FilterSearch value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search activities…" />
           <AppSelect value={typeFilter} onChange={(v) => setType(v ?? "")} options={ACTIVITY_TYPE_OPTIONS} placeholder="All Types" size="sm" clearable />
           <AppSelect value={outcomeFilter} onChange={(v) => setOutcome(v ?? "")} options={OUTCOME_OPTIONS} placeholder="All Outcomes" size="sm" clearable />
+          <AppSelect value={leadFilter} onChange={(v) => setLead(v ?? "")} options={leads.map((l) => ({ value: l._id, label: `${l.fullName} (${l.leadNumber})` }))} placeholder="All Leads" size="sm" searchable clearable />
+          <AppSelect value={buyerFilter} onChange={(v) => setBuyer(v ?? "")} options={buyers.map((b) => ({ value: b._id, label: `${b.fullName} (${b.buyerNumber})` }))} placeholder="All Buyers" size="sm" searchable clearable />
           <FilterDateRange
             from={from} to={to}
             onFromChange={(e) => setFrom(e.target.value)}
@@ -205,6 +213,7 @@ export default function SaleActivities() {
                             </div>
                           </div>
                           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-slate-400">
+                            {act.activityNumber && <span className="font-mono font-bold text-slate-400">{act.activityNumber}</span>}
                             <span>{fmt(act.date)}</span>
                             {act.durationMinutes > 0 && <span>{act.durationMinutes} min</span>}
                             {act.outcome && act.outcome !== "not_applicable" && (
