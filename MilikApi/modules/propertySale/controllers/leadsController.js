@@ -4,7 +4,12 @@ import SaleBuyer   from "../models/SaleBuyer.js";
 import SaleOffer   from "../models/SaleOffer.js";
 import SaleListing from "../models/SaleListing.js";
 import SaleActivity from "../models/SaleActivity.js";
+import Company from "../../../models/Company.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
+import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
+
+const fillPlaceholders = (text, vars) =>
+  String(text || "").replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => vars[k] ?? `{${k}}`);
 
 export const listLeads = async (req, res, next) => {
   try {
@@ -141,6 +146,63 @@ export const convertLead = async (req, res, next) => {
     });
 
     res.status(200).json({ message: "Lead converted to buyer", buyer });
+  } catch (err) { next(err); }
+};
+
+export const sendLeadSms = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const lead = await SaleLead.findOne({ _id: req.params.id, business }).lean();
+    if (!lead) return next(createError(404, "Lead not found"));
+    const phone = String(req.body.phone || lead.phone || "").trim();
+    const body  = String(req.body.body  || "").trim();
+    if (!phone) return next(createError(400, "Lead has no phone number"));
+    if (!body)  return next(createError(400, "Message body is required"));
+    await sendAdHocSms({ businessId: business, phone, body, templateKey: "sale_lead_manual" });
+    res.json({ success: true, message: "SMS sent" });
+  } catch (err) { next(err); }
+};
+
+export const sendLeadEmail = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const [lead, company] = await Promise.all([
+      SaleLead.findOne({ _id: req.params.id, business }).populate("assignedAgent", "fullName").lean(),
+      Company.findById(business).select("companyName name phoneNo email").lean(),
+    ]);
+    if (!lead) return next(createError(404, "Lead not found"));
+    const to      = String(req.body.to      || lead.email || "").trim();
+    const subject = String(req.body.subject || "").trim();
+    const body    = String(req.body.body    || "").trim();
+    if (!to)      return next(createError(400, "Lead has no email address"));
+    if (!subject) return next(createError(400, "Email subject is required"));
+    if (!body)    return next(createError(400, "Email body is required"));
+    const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "";
+    const fmtNum  = (n) => n != null ? Number(n).toLocaleString() : "";
+    const vars = {
+      leadName:         lead.fullName               || "",
+      leadNumber:       lead.leadNumber             || "",
+      phone:            lead.phone                  || "",
+      email:            lead.email                  || "",
+      source:           lead.source                 || "",
+      status:           lead.status                 || "",
+      budgetMin:        fmtNum(lead.budgetMin),
+      budgetMax:        fmtNum(lead.budgetMax),
+      nextFollowUpDate: fmtDate(lead.nextFollowUpDate),
+      lastContactDate:  fmtDate(lead.lastContactDate),
+      assignedAgent:    lead.assignedAgent?.fullName || "",
+      notes:            lead.notes                  || "",
+      companyName:      company?.companyName || company?.name || "",
+      companyPhone:     company?.phoneNo             || "",
+      companyEmail:     company?.email               || "",
+    };
+    await sendAdHocEmail({
+      businessId: business,
+      to,
+      subject: fillPlaceholders(subject, vars),
+      bodyText: fillPlaceholders(body, vars),
+    });
+    res.json({ success: true, message: "Email sent" });
   } catch (err) { next(err); }
 };
 

@@ -262,7 +262,7 @@ export const closeDeal = async (req, res, next) => {
       deal.updatedBy = userId;
       await deal.save();
       await SaleListing.findByIdAndUpdate(deal.listing, { status: "under_contract" });
-      return next(createError(500, `GL posting failed during deal close: ${glErr.message}. Deal has been rolled back to active.`));
+      return next(createError(422, `GL posting failed during deal close: ${glErr.message}. Deal has been rolled back to active.`));
     }
     await SaleCommission.updateMany({ business, deal: deal._id, status: "pending" }, { status: "approved" });
 
@@ -322,7 +322,7 @@ export const cancelDeal = async (req, res, next) => {
       deal.updatedBy = userId;
       await deal.save();
       await SaleListing.findByIdAndUpdate(deal.listing, { status: "under_contract" });
-      return next(createError(500, `GL reversal failed during deal cancellation: ${glErr.message}. Deal has been rolled back to active.`));
+      return next(createError(422, `GL reversal failed during deal cancellation: ${glErr.message}. Deal has been rolled back to active.`));
     }
     await SaleCommission.updateMany({ business, deal: deal._id, status: { $in: ["pending", "approved"] } }, { status: "cancelled" });
 
@@ -336,7 +336,7 @@ export const cancelDeal = async (req, res, next) => {
       } catch (glErr) {
         // Forfeit posting failed — log but don't roll back; deal is already cancelled
         // User can post a manual journal entry to fix the GL
-        return next(createError(500, `Deal cancelled but deposit forfeit GL posting failed: ${glErr.message}. Post a manual journal entry to transfer deposits from "Buyer Deposit Held" to "Forfeited Deposit Income".`));
+        return next(createError(422, `Deal cancelled but deposit forfeit GL posting failed: ${glErr.message}. Post a manual journal entry to transfer deposits from "Buyer Deposit Held" to "Forfeited Deposit Income".`));
       }
     }
 

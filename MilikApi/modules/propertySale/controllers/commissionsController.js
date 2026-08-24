@@ -131,14 +131,14 @@ export const updateCommissionStatus = async (req, res, next) => {
         await postPropertySaleCommissionAccrual({ businessId: business, commission: oldCommission, userId });
       } catch (glErr) {
         await SaleCommission.findByIdAndUpdate(req.params.id, { status: oldCommission.status, updatedBy: userId });
-        return next(createError(500, `GL accrual failed: ${glErr.message}. Commission status not changed.`));
+        return next(createError(422, `GL accrual failed: ${glErr.message}. Commission status not changed.`));
       }
     } else if (status === "paid") {
       try {
         await postPropertySaleCommissionPayout({ businessId: business, commission: oldCommission, userId, payoutDate, cashbookAccountId: cashbookAcc?._id || null });
       } catch (glErr) {
         await SaleCommission.findByIdAndUpdate(req.params.id, { status: oldCommission.status, updatedBy: userId });
-        return next(createError(500, `GL posting failed: ${glErr.message}. Commission status not changed.`));
+        return next(createError(422, `GL posting failed: ${glErr.message}. Commission status not changed.`));
       }
     } else if (status === "reversed" && oldCommission.status === "paid") {
       // Reverse payout entries only; accrual stays — commission returns to approved-but-unpaid state
@@ -151,7 +151,7 @@ export const updateCommissionStatus = async (req, res, next) => {
         });
       } catch (glErr) {
         await SaleCommission.findByIdAndUpdate(req.params.id, { status: oldCommission.status, updatedBy: userId });
-        return next(createError(500, `GL reversal failed: ${glErr.message}. Commission status not changed.`));
+        return next(createError(422, `GL reversal failed: ${glErr.message}. Commission status not changed.`));
       }
     } else if (status === "cancelled" && (oldCommission.status === "approved" || oldCommission.status === "reversed")) {
       // Finding 4 & 7: await the reversal and roll back on failure
@@ -165,7 +165,7 @@ export const updateCommissionStatus = async (req, res, next) => {
         });
       } catch (glErr) {
         await SaleCommission.findByIdAndUpdate(req.params.id, { status: oldCommission.status, updatedBy: userId });
-        return next(createError(500, `GL reversal failed: ${glErr.message}. Commission status not changed.`));
+        return next(createError(422, `GL reversal failed: ${glErr.message}. Commission status not changed.`));
       }
     }
 

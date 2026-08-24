@@ -97,6 +97,8 @@ export const saleApi = {
   convertLead:         async (id, payload) => unwrap(await adminRequests.patch(`/sale/leads/${id}/convert`,       payload)),
   convertLeadToOffer:  async (id, payload) => unwrap(await adminRequests.post(`/sale/leads/${id}/convert-to-offer`, payload)),
   getLeadsPipeline:    async (params = {}) => unwrap(await adminRequests.get("/sale/leads/pipeline",              { params })),
+  sendLeadSms:         async (id, payload) => unwrap(await adminRequests.post(`/sale/leads/${id}/sms`,            payload)),
+  sendLeadEmail:       async (id, payload) => unwrap(await adminRequests.post(`/sale/leads/${id}/email`,          payload)),
 
   // Payment Schedule
   listAllSchedule:      async (params = {}) => unwrapPage(await adminRequests.get("/sale/schedule/all", { params })),

@@ -2,9 +2,11 @@ import React, { useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import {
-  FaCalendarAlt, FaClipboardList, FaEdit, FaEnvelope, FaExchangeAlt,
+  FaCalendarAlt, FaClipboardList, FaCommentAlt, FaEdit, FaEnvelope, FaExchangeAlt,
   FaPhone, FaPlus, FaTimes, FaTrash, FaUserFriends,
 } from "react-icons/fa";
+import CwSmsModal from "../CarWash/CwSmsModal";
+import SaleEmailModal from "./SaleEmailModal";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
 import PaginationBar from "../../components/PaginationBar";
@@ -70,6 +72,7 @@ export default function SaleLeads() {
   const confirm = useConfirm();
   const qc      = useQueryClient();
   const biz     = useSelector((s) => s.company?.currentCompany?._id);
+  const currentCompany = useSelector((s) => s.company?.currentCompany);
 
   const [search, setSearch]           = useTabState("/sale/crm/leads:search", "");
   const debSearch                     = useDebounce(search, 400);
@@ -100,6 +103,13 @@ export default function SaleLeads() {
   const [showConvertOffer, setShowConvertOffer] = useState(false);
   const [offerForm,        setOfferForm]        = useState(blankOfferForm);
   const [convertingOffer,  setConvertingOffer]  = useState(false);
+
+  const [smsTarget,   setSmsTarget]   = useState(null);
+  const [emailTarget, setEmailTarget] = useState(null);
+  const [smsForm,     setSmsForm]     = useState({ phone: "", body: "" });
+  const [emailForm,   setEmailForm]   = useState({ to: "", subject: "", body: "" });
+  const [sendingSms,  setSendingSms]  = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   useEffect(() => setPage(1), [debSearch, statusFilter, sourceFilter, agentFilter, overdueOnly, createdFrom, createdTo]);
 
@@ -272,6 +282,34 @@ export default function SaleLeads() {
     } catch (err) { toast.error("Delete failed"); }
   };
 
+  // ── Communication ──────────────────────────────────────────────────────────
+  const openSms = (lead) => {
+    setSmsTarget(lead);
+    setSmsForm({ phone: lead.phone || "", body: "" });
+  };
+  const openEmail = (lead) => {
+    setEmailTarget(lead);
+    setEmailForm({ to: lead.email || "", subject: "", body: "" });
+  };
+  const handleSendSms = async () => {
+    setSendingSms(true);
+    try {
+      await saleApi.sendLeadSms(smsTarget._id, smsForm);
+      toast.success("SMS sent");
+      setSmsTarget(null);
+    } catch (err) { toast.error(err?.response?.data?.message || "Failed to send SMS"); }
+    finally { setSendingSms(false); }
+  };
+  const handleSendEmail = async () => {
+    setSendingEmail(true);
+    try {
+      await saleApi.sendLeadEmail(emailTarget._id, emailForm);
+      toast.success("Email sent");
+      setEmailTarget(null);
+    } catch (err) { toast.error(err?.response?.data?.message || "Failed to send email"); }
+    finally { setSendingEmail(false); }
+  };
+
   // ── Conversion ─────────────────────────────────────────────────────────────
   const handleConvert = async () => {
     setConverting(true);
@@ -429,6 +467,16 @@ export default function SaleLeads() {
               }}
               renderActions={(row) => (
                 <div className="inline-flex items-center gap-1">
+                  {row.phone && (
+                    <button onClick={() => openSms(row)} title="Send SMS" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                      <FaCommentAlt size={9} />
+                    </button>
+                  )}
+                  {row.email && (
+                    <button onClick={() => openEmail(row)} title="Send Email" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                      <FaEnvelope size={9} />
+                    </button>
+                  )}
                   <button onClick={() => openLogAct(row)} title="Log Activity" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
                     <FaClipboardList size={9} />
                   </button>
@@ -526,22 +574,36 @@ export default function SaleLeads() {
             </div>
 
             {/* Actions */}
-            <div className="flex flex-shrink-0 gap-1.5 border-b border-slate-100 px-4 py-2">
-              <button onClick={() => openEdit(panelLead)} className="flex-1 inline-flex items-center justify-center gap-1 border border-[#B7C9C0] bg-white px-3 py-1.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                <FaEdit size={9} /> Edit
-              </button>
-              {panelLead.status !== "converted" && panelLead.status !== "lost" ? (
-                <>
-                  <button onClick={() => { setConvertId(""); setShowConvert(true); }} className="flex-1 inline-flex items-center justify-center gap-1 border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100">
-                    <FaExchangeAlt size={9} /> Buyer
+            <div className="flex-shrink-0 border-b border-slate-100 px-4 py-2 space-y-1.5">
+              <div className="flex gap-1.5">
+                <button onClick={() => openEdit(panelLead)} className="flex-1 inline-flex items-center justify-center gap-1 border border-[#B7C9C0] bg-white px-3 py-1.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                  <FaEdit size={9} /> Edit
+                </button>
+                {panelLead.status !== "converted" && panelLead.status !== "lost" ? (
+                  <>
+                    <button onClick={() => { setConvertId(""); setShowConvert(true); }} className="flex-1 inline-flex items-center justify-center gap-1 border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100">
+                      <FaExchangeAlt size={9} /> Buyer
+                    </button>
+                    <button onClick={() => { setOfferForm(blankOfferForm); setShowConvertOffer(true); }} className="flex-1 inline-flex items-center justify-center gap-1 border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-100">
+                      <FaExchangeAlt size={9} /> → Offer
+                    </button>
+                  </>
+                ) : panelLead.convertedBuyer ? (
+                  <span className="flex-1 border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-center text-emerald-700">✓ Buyer Created</span>
+                ) : null}
+              </div>
+              <div className="flex gap-1.5">
+                {panelLead.phone && (
+                  <button onClick={() => openSms(panelLead)} className="flex-1 inline-flex items-center justify-center gap-1 border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100">
+                    <FaCommentAlt size={9} /> SMS
                   </button>
-                  <button onClick={() => { setOfferForm(blankOfferForm); setShowConvertOffer(true); }} className="flex-1 inline-flex items-center justify-center gap-1 border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-100">
-                    <FaExchangeAlt size={9} /> → Offer
+                )}
+                {panelLead.email && (
+                  <button onClick={() => openEmail(panelLead)} className="flex-1 inline-flex items-center justify-center gap-1 border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                    <FaEnvelope size={9} /> Email
                   </button>
-                </>
-              ) : panelLead.convertedBuyer ? (
-                <span className="flex-1 border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-center text-emerald-700">✓ Buyer Created</span>
-              ) : null}
+                )}
+              </div>
             </div>
 
             {/* Activity log header */}
@@ -830,6 +892,47 @@ export default function SaleLeads() {
             </div>
           </form>
         </div>
+      )}
+
+      {/* ── SMS Modal ─────────────────────────────────────────────────────────── */}
+      {smsTarget && (
+        <CwSmsModal
+          title={`SMS to ${smsTarget.fullName}`}
+          subtitle={smsTarget.leadNumber}
+          phoneValue={smsForm.phone}
+          bodyValue={smsForm.body}
+          onPhoneChange={(v) => setSmsForm((f) => ({ ...f, phone: v }))}
+          onBodyChange={(v) => setSmsForm((f) => ({ ...f, body: v }))}
+          sending={sendingSms}
+          onSend={handleSendSms}
+          onClose={() => setSmsTarget(null)}
+        />
+      )}
+
+      {/* ── Email Modal ───────────────────────────────────────────────────────── */}
+      {emailTarget && (
+        <SaleEmailModal
+          title={`Email to ${emailTarget.fullName}`}
+          subtitle={emailTarget.leadNumber}
+          emailForm={emailForm}
+          setEmailForm={setEmailForm}
+          sending={sendingEmail}
+          onSend={handleSendEmail}
+          onClose={() => setEmailTarget(null)}
+          context="lead"
+          vars={{
+            leadName:     emailTarget.fullName    || "",
+            leadNumber:   emailTarget.leadNumber  || "",
+            phone:        emailTarget.phone       || "",
+            email:        emailTarget.email       || "",
+            source:       emailTarget.source      || "",
+            status:       emailTarget.status      || "",
+            budgetMin:    emailTarget.budgetMin   ? Number(emailTarget.budgetMin).toLocaleString()  : "",
+            budgetMax:    emailTarget.budgetMax   ? Number(emailTarget.budgetMax).toLocaleString()  : "",
+            assignedAgent: emailTarget.assignedAgent?.fullName || "",
+            companyName:  currentCompany?.companyName || currentCompany?.name || "",
+          }}
+        />
       )}
     </PropertySaleShell>
   );

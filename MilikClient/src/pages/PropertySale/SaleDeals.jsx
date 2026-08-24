@@ -428,29 +428,37 @@ const SaleDeals = () => {
     <PropertySaleShell>
       <div className="relative flex flex-col flex-1 min-h-0 overflow-hidden">
 
+      {/* ── Page header ──────────────────────────────────────────────────── */}
+      <div className="flex-shrink-0 flex items-center justify-between bg-[#0B3B2E] px-4 py-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <FaHandshake size={13} className="text-[#B7C9C0]" />
+            <span className="font-black text-sm text-white tracking-tight">Sale Deals</span>
+          </div>
+          <div className="text-[10px] text-[#B7C9C0] mt-0.5 font-mono">{total} deal{total !== 1 ? "s" : ""}</div>
+        </div>
+        <button
+          type="button"
+          onClick={openCreate}
+          className="inline-flex items-center gap-1.5 border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-black text-white hover:bg-white/20"
+        >
+          <FaPlus size={9} /> New Deal
+        </button>
+      </div>
+
       {/* ── Filter bar ───────────────────────────────────────────────────── */}
       <SaleFilterBar
-        leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} deal{total !== 1 ? "s" : ""}</span>}
         onSubmit={applySearch}
         onReset={resetFilters}
         activeCount={[appliedSearch, statusFilter, agentFilt, buyerFilt, listingFilt, dateFrom, dateTo].filter(Boolean).length}
         trailing={
-          <>
-            <button
-              type="button"
-              onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] })}
-              className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-            >
-              <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
-            </button>
-            <button
-              type="button"
-              onClick={openCreate}
-              className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
-            >
-              <FaPlus size={9} /> New Deal
-            </button>
-          </>
+          <button
+            type="button"
+            onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] })}
+            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+          >
+            <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
+          </button>
         }
       >
         <FilterSearch

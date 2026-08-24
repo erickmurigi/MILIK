@@ -36,6 +36,9 @@ const LEDGER_CATEGORIES = [
   "PROPERTY_SALE_PAYMENT",
   "PROPERTY_SALE_COMMISSION_ACCRUAL",
   "PROPERTY_SALE_COMMISSION_PAYOUT",
+  "PROPERTY_SALE_DEPOSIT_TRANSFER",
+  "PROPERTY_SALE_DEPOSIT_FORFEIT",
+  "PROPERTY_SALE_STAMP_DUTY",
   "PAYROLL_JOURNAL",
   "DEPRECIATION",
   "DISPOSAL",
@@ -75,6 +78,9 @@ const SOURCE_TYPES = [
   "property_sale_payment",
   "property_sale_commission",
   "property_sale_commission_payout",
+  "property_sale_deposit_transfer",
+  "property_sale_deposit_forfeit",
+  "property_sale_stamp_duty",
   "payroll_period",
   "fixed_asset_depreciation",
   "fixed_asset_disposal",
@@ -242,7 +248,7 @@ const FinancialLedgerEntrySchema = new mongoose.Schema(
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      default: null,
     },
     approvedBy: {
       type: mongoose.Schema.Types.ObjectId,

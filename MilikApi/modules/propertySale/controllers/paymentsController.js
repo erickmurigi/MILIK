@@ -130,7 +130,7 @@ export const createPayment = async (req, res, next) => {
     } catch (glErr) {
       // GL failed — delete the payment so DB and ledger stay in sync
       await SalePayment.deleteOne({ _id: payment._id });
-      return next(createError(500, `Payment saved but GL posting failed: ${glErr.message}. Payment has been rolled back.`));
+      return next(createError(422, `Payment saved but GL posting failed: ${glErr.message}. Payment has been rolled back.`));
     }
 
     const populated = await populatePayment(SalePayment.findById(payment._id)).lean();
@@ -171,7 +171,7 @@ export const updatePayment = async (req, res, next) => {
       try {
         await reversePropertySalePaymentLedger({ businessId: business, payment: old, userId });
       } catch (glErr) {
-        return next(createError(500, `GL reversal failed: ${glErr.message}. Payment not updated.`));
+        return next(createError(422, `GL reversal failed: ${glErr.message}. Payment not updated.`));
       }
     }
 
@@ -200,7 +200,7 @@ export const updatePayment = async (req, res, next) => {
           userId,
           cashbookAccountId: old.cashbook || null,
         }).catch(() => {});
-        return next(createError(500, `GL re-posting failed: ${glErr.message}. Old GL has been restored.`));
+        return next(createError(422, `GL re-posting failed: ${glErr.message}. Old GL has been restored.`));
       }
     }
 
@@ -229,7 +229,7 @@ export const voidPayment = async (req, res, next) => {
       // GL reversal failed — restore payment status so records are consistent
       payment.status = "paid";
       await payment.save();
-      return next(createError(500, `GL reversal failed: ${glErr.message}. Payment void has been rolled back.`));
+      return next(createError(422, `GL reversal failed: ${glErr.message}. Payment void has been rolled back.`));
     }
 
     const populated = await populatePayment(SalePayment.findById(payment._id)).lean();

@@ -28,7 +28,6 @@ const validatePayload = (payload) => {
     "category",
     "amount",
     "direction",
-    "createdBy",
   ];
 
   const missing = requiredFields.filter(
@@ -164,8 +163,8 @@ export const postEntry = async (payload = {}) => {
 };
 
 export const postReversal = async ({ entryId, reason, userId, session = null }) => {
-  if (!entryId || !userId) {
-    throw new Error("postReversal requires entryId and userId");
+  if (!entryId) {
+    throw new Error("postReversal requires entryId");
   }
 
   const originalEntry = await FinancialLedgerEntry.findById(entryId).session(session || null);

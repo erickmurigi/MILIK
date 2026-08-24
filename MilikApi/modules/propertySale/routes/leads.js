@@ -1,6 +1,6 @@
 import express from "express";
 import { verifyUser, requireCompanyModule, requireCompanyPermission } from "../../../controllers/verifyToken.js";
-import { listLeads, getPipeline, getLead, createLead, updateLead, deleteLead, convertLead, convertLeadToOffer } from "../controllers/leadsController.js";
+import { listLeads, getPipeline, getLead, createLead, updateLead, deleteLead, convertLead, convertLeadToOffer, sendLeadSms, sendLeadEmail } from "../controllers/leadsController.js";
 import { attachAgentScope } from "../middleware/agentScope.js";
 
 const router = express.Router();
@@ -15,5 +15,7 @@ router.put("/:id",      requireCompanyPermission("sale-crm-leads", "update", "pr
 router.delete("/:id",   requireCompanyPermission("sale-crm-leads", "update", "propertySale"), deleteLead);
 router.patch("/:id/convert",          requireCompanyPermission("sale-crm-leads", "update", "propertySale"), convertLead);
 router.post("/:id/convert-to-offer",  requireCompanyPermission("sale-crm-leads", "update", "propertySale"), convertLeadToOffer);
+router.post("/:id/sms",               requireCompanyPermission("sale-crm-leads", "update", "propertySale"), sendLeadSms);
+router.post("/:id/email",             requireCompanyPermission("sale-crm-leads", "update", "propertySale"), sendLeadEmail);
 
 export default router;
