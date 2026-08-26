@@ -7,14 +7,12 @@ import { selectCurrentUser, selectCurrentCompany, selectAllProperties } from '..
 import { getTenantPaidBalanceReport } from '../../redux/apiCalls';
 import { getProperties } from '../../redux/propertyRedux';
 import { FaFileDownload, FaPrint, FaSyncAlt } from 'react-icons/fa';
-import printTabularList from '../../utils/printList';
 import ResetFiltersButton from '../../components/common/ResetFiltersButton';
 import { toast } from 'react-toastify';
 import { hasCompanyPermission } from '../../utils/permissions';
 import { fmtDate } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 import useDebounce from '../../hooks/useDebounce';
-import PaginationBar from '../../components/PaginationBar';
 
 const toDateInputValue = (value) => new Date(value).toISOString().split('T')[0];
 const formatPercent = (value) => (value === null || value === undefined ? '—' : `${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}%`);
@@ -30,33 +28,84 @@ const fmtCompact = (v) => {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 };
 
-const buildBreakdownParts = ({ rent, utilityBreakdown, utility, penalty, deposit, other }) => {
-  const parts = [];
-  if (Number(rent || 0) > 0) parts.push({ label: 'Rent', value: fmtCompact(rent) });
-  const utMap = utilityBreakdown || {};
-  const utKeys = Object.keys(utMap).filter((k) => utMap[k] > 0).sort();
-  if (utKeys.length > 0) {
-    utKeys.forEach((k) => parts.push({ label: k, value: fmtCompact(utMap[k]) }));
-  } else if (Number(utility || 0) > 0) {
-    parts.push({ label: 'Utility', value: fmtCompact(utility) });
-  }
-  if (Number(penalty || 0) > 0) parts.push({ label: 'Penalty', value: fmtCompact(penalty) });
-  if (Number(deposit || 0) > 0) parts.push({ label: 'Deposit', value: fmtCompact(deposit) });
-  if (Number(other || 0) > 0) parts.push({ label: 'Other', value: fmtCompact(other) });
-  return parts;
+const calcOtherExpd = (row) =>
+  Number(row.utilityInvoiced || 0) +
+  Number(row.penaltyInvoiced || 0) +
+  Number(row.depositInvoiced || 0) +
+  Number(row.otherInvoiced || 0);
+
+// Rent paid = (previous rent arrears + rent invoiced) − rent outstanding
+const calcRentPaid = (row) => {
+  const totalRentCharged = Number(row.previousArrearsRent || 0) + Number(row.rentInvoiced || 0);
+  return Math.max(0, totalRentCharged - Number(row.rentBalance || 0));
 };
 
-const buildInvoicedBreakdownParts = (row) => buildBreakdownParts({
-  rent: row.rentInvoiced, utilityBreakdown: row.utilityInvoicedBreakdown,
-  utility: row.utilityInvoiced, penalty: row.penaltyInvoiced,
-  deposit: row.depositInvoiced, other: row.otherInvoiced,
-});
+// Other paid = (previous other arrears + other invoiced) − other outstanding
+const calcOtherPaid = (row) => {
+  const prevOtherArrears =
+    Number(row.previousArrearsUtility || 0) +
+    Number(row.previousArrearsPenalty || 0) +
+    Number(row.previousArrearsDeposit || 0) +
+    Number(row.previousArrearsOther || 0);
+  const totalOtherCharged = prevOtherArrears + calcOtherExpd(row);
+  const otherOutstanding =
+    Number(row.utilityBalance || 0) +
+    Number(row.penaltyBalance || 0) +
+    Number(row.depositBalance || 0) +
+    Number(row.otherBalance || 0);
+  return Math.max(0, totalOtherCharged - otherOutstanding);
+};
 
-const buildArrearsBreakdownParts = (row) => buildBreakdownParts({
-  rent: row.previousArrearsRent, utilityBreakdown: row.previousArrearsUtilityBreakdown,
-  utility: row.previousArrearsUtility, penalty: row.previousArrearsPenalty,
-  deposit: row.previousArrearsDeposit, other: row.previousArrearsOther,
-});
+const buildOtherExpdTooltip = (row) => {
+  const parts = [];
+  const utMap = row.utilityInvoicedBreakdown || {};
+  const utKeys = Object.keys(utMap).filter((k) => utMap[k] > 0).sort();
+  if (utKeys.length > 0) utKeys.forEach((k) => parts.push(`${k}: ${fmtCompact(utMap[k])}`));
+  else if (Number(row.utilityInvoiced || 0) > 0) parts.push(`Utility: ${fmtCompact(row.utilityInvoiced)}`);
+  if (Number(row.penaltyInvoiced || 0) > 0) parts.push(`Penalty: ${fmtCompact(row.penaltyInvoiced)}`);
+  if (Number(row.depositInvoiced || 0) > 0) parts.push(`Deposit: ${fmtCompact(row.depositInvoiced)}`);
+  if (Number(row.otherInvoiced || 0) > 0) parts.push(`Other: ${fmtCompact(row.otherInvoiced)}`);
+  return parts.join('  ·  ');
+};
+
+const buildOtherPaidTooltip = (row) => {
+  const parts = [];
+  const invMap = row.utilityInvoicedBreakdown || {};
+  const balMap = row.utilityBreakdown || {};
+  // Use invoiced keys — fully-paid utilities have bal=0 and would be missed if we used balance keys
+  const utKeys = Object.keys(invMap).filter((k) => Number(invMap[k] || 0) > 0).sort();
+  if (utKeys.length > 0) {
+    utKeys.forEach((k) => {
+      const paid = Math.max(0, Number(invMap[k] || 0) - Number(balMap[k] || 0));
+      if (paid > 0) parts.push(`${k}: ${fmtCompact(paid)}`);
+    });
+  } else {
+    const utilPaid = Math.max(0, Number(row.utilityInvoiced || 0) + Number(row.previousArrearsUtility || 0) - Number(row.utilityBalance || 0));
+    if (utilPaid > 0) parts.push(`Utility: ${fmtCompact(utilPaid)}`);
+  }
+  const penPaid = Math.max(0, Number(row.previousArrearsPenalty || 0) + Number(row.penaltyInvoiced || 0) - Number(row.penaltyBalance || 0));
+  const depPaid = Math.max(0, Number(row.previousArrearsDeposit || 0) + Number(row.depositInvoiced || 0) - Number(row.depositBalance || 0));
+  const othPaid = Math.max(0, Number(row.previousArrearsOther || 0) + Number(row.otherInvoiced || 0) - Number(row.otherBalance || 0));
+  if (penPaid > 0) parts.push(`Penalty: ${fmtCompact(penPaid)}`);
+  if (depPaid > 0) parts.push(`Deposit: ${fmtCompact(depPaid)}`);
+  if (othPaid > 0) parts.push(`Other: ${fmtCompact(othPaid)}`);
+  return parts.join('  ·  ');
+};
+
+const sumRows = (rows, key) => rows.reduce((s, r) => s + Number(r[key] || 0), 0);
+const sumOtherExpd = (rows) => rows.reduce((s, r) => s + calcOtherExpd(r), 0);
+const sumRentPaid = (rows) => rows.reduce((s, r) => s + calcRentPaid(r), 0);
+const sumOtherPaid = (rows) => rows.reduce((s, r) => s + calcOtherPaid(r), 0);
+
+const statusStyle = (s) =>
+  s === 'owing'
+    ? 'border-red-200 bg-red-50 text-red-700'
+    : s === 'credit'
+    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+    : 'border-slate-200 bg-slate-100 text-slate-500';
+
+const balCfStyle = (v) =>
+  v > 0 ? 'text-red-700 font-bold' : v < 0 ? 'text-emerald-700 font-bold' : 'text-slate-500';
 
 const PaidBalanceReport = () => {
   const dispatch = useDispatch();
@@ -66,7 +115,7 @@ const PaidBalanceReport = () => {
   const properties = useSelector(selectAllProperties);
 
   const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company || '';
-  const companyName = currentCompany?.name || currentCompany?.companyName || currentCompany?.businessName || currentUser?.company?.name || currentUser?.company?.companyName || 'Milik';
+  const companyName = currentCompany?.name || currentCompany?.companyName || currentCompany?.businessName || currentUser?.company?.name || 'Milik';
 
   const [loading, setLoading] = useState(false);
   const filtersInitialized = useRef(false);
@@ -92,8 +141,6 @@ const PaidBalanceReport = () => {
     });
   };
   const [report, setReport] = useState({ summary: {}, rows: [], allUtilityTypes: [] });
-  const [currentPage, setCurrentPage] = useTabState("/reports/paid-balance:currentPage", 1);
-  const [pageSize, setPageSize] = useState(50);
 
   useEffect(() => {
     if (!businessId) return;
@@ -127,10 +174,8 @@ const PaidBalanceReport = () => {
     return () => controller.abort();
   }, [businessId]);
 
-  // Keep a ref to the latest loadReport so the auto-fetch effect doesn't need it as a dep
   useEffect(() => { loadReportRef.current = loadReport; }, [loadReport]);
 
-  // Auto-fetch when date/property/status filters change (debounced for date typing)
   const debouncedFilterTrigger = useDebounce(
     `${filters.startDate}|${filters.asOfDate}|${filters.propertyId}|${filters.status}`,
     500
@@ -142,7 +187,6 @@ const PaidBalanceReport = () => {
     return () => controller.abort();
   }, [debouncedFilterTrigger]);
 
-  // Debounce search so the filter useMemo doesn't fire on every keystroke
   const debouncedSearch = useDebounce(filters.search, 300);
 
   const searchFilteredRows = useMemo(() => {
@@ -152,21 +196,20 @@ const PaidBalanceReport = () => {
     return rows.filter((row) => [row.tenantName, row.propertyName, row.unitNumber].join(' ').toLowerCase().includes(term));
   }, [report.rows, debouncedSearch]);
 
-  const paginatedRows = useMemo(() => {
-    const startIndex = (Math.max(currentPage, 1) - 1) * pageSize;
-    return searchFilteredRows.slice(startIndex, startIndex + pageSize);
-  }, [searchFilteredRows, currentPage, pageSize]);
-
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(searchFilteredRows.length / pageSize)), [searchFilteredRows, pageSize]);
-
-  useEffect(() => { setCurrentPage(1); }, [filters.startDate, filters.asOfDate, filters.propertyId, filters.status, debouncedSearch]);
-  useEffect(() => { if (currentPage > totalPages) setCurrentPage(totalPages); }, [currentPage, totalPages]);
+  // Group rows by property
+  const propertyGroups = useMemo(() => {
+    const groups = new Map();
+    for (const row of searchFilteredRows) {
+      const key = String(row.propertyId || row.propertyName || 'Unknown');
+      if (!groups.has(key)) {
+        groups.set(key, { propertyId: key, propertyName: row.propertyName || 'Unknown Property', rows: [] });
+      }
+      groups.get(key).rows.push(row);
+    }
+    return [...groups.values()];
+  }, [searchFilteredRows]);
 
   const summary = report.summary || {};
-  const allUtilityTypes = report.allUtilityTypes || [];
-  const hasUtilityBreakdown = allUtilityTypes.length > 0;
-
-  const propertyNameMap = useMemo(() => new Map(properties.map((p) => [String(p?._id), p?.propertyName || p?.name || 'Unnamed Property'])), [properties]);
 
   const balanceInsights = useMemo(() => {
     const rows = Array.isArray(report.rows) ? report.rows : [];
@@ -178,11 +221,9 @@ const PaidBalanceReport = () => {
     const earliestArrear = [...owingRows].filter((r) => r?.oldestDueDate).sort((a, b) => new Date(a.oldestDueDate) - new Date(b.oldestDueDate))[0] || null;
     const tenantCount = Number(summary.tenantCount || rows.length || 0);
     const settlementRate = tenantCount > 0 ? (settledRows.length / tenantCount) * 100 : null;
-    const averageOutstanding = owingRows.length > 0 ? Number(summary.totalOutstanding || 0) / owingRows.length : 0;
-    return { largestOwing, largestCredit, earliestArrear, settlementRate, averageOutstanding };
-  }, [report.rows, summary.tenantCount, summary.totalOutstanding]);
+    return { largestOwing, largestCredit, earliestArrear, settlementRate };
+  }, [report.rows, summary.tenantCount]);
 
-  // ── Month / Year period selector ──────────────────────────────────────────
   const yearOptions = useMemo(() => { const y = new Date().getFullYear(); return [y + 1, y, y - 1, y - 2, y - 3].map(String); }, []);
   const { selMonth, selYear } = useMemo(() => {
     const fallbackYear = String(new Date().getFullYear());
@@ -195,6 +236,7 @@ const PaidBalanceReport = () => {
     }
     return { selMonth: null, selYear: String(e.getFullYear()) };
   }, [filters.asOfDate, filters.startDate]);
+
   const applyMonthYear = (month, year) => {
     const m = Number(month); const y = Number(year);
     if (!m || !y) return;
@@ -207,21 +249,18 @@ const PaidBalanceReport = () => {
 
   const handleExportCSV = () => {
     if (!canExportReports) { toast.error("You do not have permission to export reports"); return; }
-    const utilityCols = hasUtilityBreakdown ? allUtilityTypes : ['Utility Balance'];
-    const utilInvCols = hasUtilityBreakdown ? allUtilityTypes.map((ut) => `${ut} Invoiced`) : ['Utility Invoiced'];
-    const header = ['Tenant', 'Property', 'Unit', 'Prev. Arrears', 'Rent Invoiced', ...utilInvCols, 'Penalty Invoiced', 'Deposit Invoiced', 'Other Invoiced', 'Paid Applied', 'Outstanding', 'Unapplied Credit', 'Net Balance', 'Rent Balance', ...utilityCols, 'Penalty Balance', 'Deposit Balance', 'Other Balance', 'Oldest Due', 'Last Payment', 'Status'];
+    const header = ['Property', 'Tenant', 'Unit', 'BAL B/F', 'Rent', 'Other Exp\'d', 'Amt Paid', 'Other$ Paid', 'BAL C/F', 'Oldest Due', 'Status'];
     const rows = (report.rows || []).map((row) => [
-      row.tenantName || '', row.propertyName || '', row.unitNumber || '',
+      row.propertyName || '',
+      row.tenantName || '',
+      row.unitNumber || '',
       row.previousArrears || 0,
       row.rentInvoiced || 0,
-      ...(hasUtilityBreakdown ? allUtilityTypes.map((ut) => row.utilityInvoicedBreakdown?.[ut] || 0) : [row.utilityInvoiced || 0]),
-      row.penaltyInvoiced || 0, row.depositInvoiced || 0, row.otherInvoiced || 0,
-      row.totalPaidApplied || 0, row.outstanding || 0,
-      row.unappliedCredit || 0, row.netBalance || 0, row.rentBalance || 0,
-      ...(hasUtilityBreakdown ? allUtilityTypes.map((ut) => row.utilityBreakdown?.[ut] || 0) : [row.utilityBalance || 0]),
-      row.penaltyBalance || 0, row.depositBalance || 0, row.otherBalance || 0,
+      calcOtherExpd(row),
+      calcRentPaid(row),
+      calcOtherPaid(row),
+      row.netBalance || 0,
       row.oldestDueDate ? new Date(row.oldestDueDate).toLocaleDateString() : '',
-      row.lastPaymentDate ? new Date(row.lastPaymentDate).toLocaleDateString() : '',
       row.status || '',
     ]);
     const csv = [header, ...rows].map((line) => line.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -229,7 +268,7 @@ const PaidBalanceReport = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `paid_balance_report_${filters.asOfDate}.csv`;
+    a.download = `paid_balance_${filters.asOfDate}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -237,88 +276,189 @@ const PaidBalanceReport = () => {
   const handlePrint = useCallback(() => {
     if (!canExportReports) { toast.error("You do not have permission to print reports"); return; }
 
-    const rows   = searchFilteredRows;
-    const summ   = report.summary || {};
-    const utTypes = allUtilityTypes;
-    const hasUt  = utTypes.length > 0;
+    const GRN = "#0B3B2E";
+    const allRows = searchFilteredRows;
+    const summ = report.summary || {};
+    const dateRange = [filters.startDate && fmtDate(filters.startDate), filters.asOfDate && fmtDate(filters.asOfDate)].filter(Boolean).join(" – ");
 
-    const dateRange = [filters.startDate && fmtDate(filters.startDate), filters.asOfDate && fmtDate(filters.asOfDate)]
-      .filter(Boolean).join(" – ");
-    const propLabel = filters.propertyId ? (propertyNameMap.get(String(filters.propertyId)) || "Selected property") : "All properties";
-    const statusLabel = !filters.status || filters.status === "all" ? "All positions" : filters.status;
+    const co = {
+      name: companyName,
+      logo: currentCompany?.logo || "",
+      phone: currentCompany?.phone || currentCompany?.phoneNo || currentCompany?.phoneNumber || "",
+      email: currentCompany?.email || currentCompany?.companyEmail || "",
+      address: [currentCompany?.address || currentCompany?.postalAddress || "", currentCompany?.town || currentCompany?.city || ""].filter(Boolean).join(", "),
+    };
+    const infoLine = [co.address, co.phone, co.email].filter(Boolean).join(" · ");
 
-    const summaryLine = [
-      `Invoiced: ${formatMoney(summ.totalInvoiced)}`,
-      `Paid: ${formatMoney(summ.totalPaidApplied)}`,
-      `Outstanding: ${formatMoney(summ.totalOutstanding)}`,
-      `Unapplied Credit: ${formatMoney(summ.totalUnappliedCredit)}`,
-      `Net Balance: ${formatMoney(summ.netBalance)}`,
-      `Owing: ${summ.owingCount || 0}  ·  Credit: ${summ.creditCount || 0}  ·  Settled: ${summ.settledCount || 0}`,
-      `${propLabel}  ·  ${statusLabel}`,
-    ].join("     ");
+    const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const mon = (v) => esc(formatMoney(v));
+    const dash = (v) => Number(v || 0) === 0 ? "—" : mon(v);
+    const cfStyle = (v) => Number(v || 0) > 0 ? "color:#dc2626;font-weight:700" : Number(v || 0) < 0 ? "color:#059669;font-weight:700" : "color:#94a3b8";
+    const statusColor = (s) => s === "owing" ? "#dc2626" : s === "credit" ? "#059669" : "#64748b";
 
-    // Compute column totals
-    const sum = (key) => rows.reduce((s, r) => s + Number(r[key] || 0), 0);
-    const utTotals = hasUt
-      ? utTypes.reduce((m, ut) => { m[ut] = rows.reduce((s, r) => s + Number(r.utilityBreakdown?.[ut] || 0), 0); return m; }, {})
-      : {};
+    // Build grouped rows
+    const groups = (() => {
+      const map = new Map();
+      for (const row of allRows) {
+        const key = String(row.propertyId || row.propertyName || "Unknown");
+        if (!map.has(key)) map.set(key, { name: row.propertyName || "Unknown Property", rows: [] });
+        map.get(key).rows.push(row);
+      }
+      return [...map.values()];
+    })();
 
-    const utCols = hasUt
-      ? utTypes.map((ut) => ({ label: ut, align: "right", value: (r) => formatMoney(r.utilityBreakdown?.[ut] || 0) }))
-      : [{ label: "Utility Bal", align: "right", value: (r) => formatMoney(r.utilityBalance || 0) }];
+    let rowsHtml = "";
+    let grandBF = 0, grandRent = 0, grandOther = 0, grandAmtPaid = 0, grandOtherPaid = 0, grandBalance = 0;
 
-    const columns = [
-      { label: "Tenant",      value: (r) => r.tenantName || "—" },
-      { label: "Property",    value: (r) => r.propertyName || "—" },
-      { label: "Unit",        value: (r) => r.unitNumber || "—" },
-      { label: "B/F Arrears",     align: "right", value: (r) => Number(r.previousArrears || 0) > 0 ? `${formatMoney(r.previousArrears)} (${buildArrearsBreakdownParts(r).map((p) => `${p.label} ${p.value}`).join(" · ")})` : "—" },
-      { label: "Period Charges",  value: (r) => buildInvoicedBreakdownParts(r).map((p) => `${p.label} ${p.value}`).join(" · ") || "—" },
-      { label: "Applied",   align: "right", value: (r) => formatMoney(r.totalPaidApplied) },
-      { label: "Outstanding", align: "right", value: (r) => formatMoney(r.outstanding) },
-      { label: "Unapplied Credit", align: "right", value: (r) => formatMoney(r.unappliedCredit) },
-      { label: "Net Balance", align: "right", value: (r) => formatMoney(r.netBalance) },
-      { label: "Rent O/S",   align: "right", value: (r) => formatMoney(r.rentBalance) },
-      ...utCols,
-      { label: "Penalty O/S", align: "right", value: (r) => formatMoney(r.penaltyBalance) },
-      { label: "Deposit O/S", align: "right", value: (r) => formatMoney(r.depositBalance) },
-      { label: "Other O/S",   align: "right", value: (r) => formatMoney(r.otherBalance) },
-      { label: "Oldest Due",  value: (r) => r.oldestDueDate ? fmtDate(r.oldestDueDate) : "—" },
-      { label: "Status",      value: (r) => (r.status || "").charAt(0).toUpperCase() + (r.status || "").slice(1) },
-    ];
+    groups.forEach((group) => {
+      const gr = group.rows;
+      const gBF = sumRows(gr, 'previousArrears');
+      const gRent = sumRows(gr, 'rentInvoiced');
+      const gOther = sumOtherExpd(gr);
+      const gAmtPaid = sumRentPaid(gr);
+      const gOtherPaid = sumOtherPaid(gr);
+      const gBalance = sumRows(gr, 'netBalance');
+      grandBF += gBF; grandRent += gRent; grandOther += gOther;
+      grandAmtPaid += gAmtPaid; grandOtherPaid += gOtherPaid; grandBalance += gBalance;
 
-    const totalsRow = [
-      `TOTALS — ${rows.length} rows`,
-      "", "",
-      formatMoney(sum("previousArrears")),
-      "",
-      formatMoney(sum("totalPaidApplied")),
-      formatMoney(sum("outstanding")),
-      formatMoney(sum("unappliedCredit")),
-      formatMoney(sum("netBalance")),
-      formatMoney(sum("rentBalance")),
-      ...(hasUt ? utTypes.map((ut) => formatMoney(utTotals[ut])) : [formatMoney(sum("utilityBalance"))]),
-      formatMoney(sum("penaltyBalance")),
-      formatMoney(sum("depositBalance")),
-      formatMoney(sum("otherBalance")),
-      "", "",
-    ];
+      const gOwing = gr.filter((r) => r.status === 'owing').length;
+      const gCredit = gr.filter((r) => r.status === 'credit').length;
+      const gSettled = gr.filter((r) => r.status === 'settled').length;
+      const badges = [
+        gOwing > 0 ? `<span style="color:#dc2626">${gOwing} owing</span>` : "",
+        gCredit > 0 ? `<span style="color:#059669">${gCredit} credit</span>` : "",
+        gSettled > 0 ? `<span style="color:#94a3b8">${gSettled} settled</span>` : "",
+      ].filter(Boolean).join(" &nbsp;&middot;&nbsp; ");
 
-    printTabularList({
-      title:     "Paid & Balance Report",
-      subtitle:  `Tenant receivables snapshot — ${dateRange}`,
-      company:   currentCompany,
-      summary:   summaryLine,
-      columns,
-      rows,
-      totalsRow,
+      rowsHtml += `<tr class="prop-hdr">
+        <td colspan="2"><span class="prop-name">${esc(group.name)}</span> <span class="prop-meta">${gr.length} unit${gr.length !== 1 ? "s" : ""} &nbsp;&middot;&nbsp; ${badges}</span></td>
+        <td style="text-align:right">${dash(gBF)}</td>
+        <td style="text-align:right">${mon(gRent)}</td>
+        <td style="text-align:right">${dash(gOther)}</td>
+        <td style="text-align:right;color:#059669;font-weight:700">${mon(gAmtPaid)}</td>
+        <td style="text-align:right;${gOtherPaid > 0 ? "color:#059669;font-weight:700" : "color:#94a3b8"}">${dash(gOtherPaid)}</td>
+        <td style="text-align:right;${cfStyle(gBalance)}">${mon(gBalance)}</td>
+        <td></td><td></td>
+      </tr>`;
+
+      gr.forEach((row, i) => {
+        const bf = Number(row.previousArrears || 0);
+        const otherExpd = calcOtherExpd(row);
+        const amtPaid = calcRentPaid(row);
+        const otherPaid = calcOtherPaid(row);
+        const cf = Number(row.netBalance || 0);
+        const st = row.status || "";
+        rowsHtml += `<tr class="${i % 2 === 1 ? "alt" : ""}">
+          <td>${esc(row.tenantName || "—")}</td>
+          <td>${esc(row.unitNumber || "—")}</td>
+          <td style="text-align:right;${bf > 0 ? "color:#ea580c;font-weight:600" : "color:#cbd5e1"}">${dash(bf)}</td>
+          <td style="text-align:right">${mon(row.rentInvoiced)}</td>
+          <td style="text-align:right;${otherExpd > 0 ? "" : "color:#cbd5e1"}">${dash(otherExpd)}</td>
+          <td style="text-align:right;color:#059669">${mon(amtPaid)}</td>
+          <td style="text-align:right;${otherPaid > 0 ? "color:#059669" : "color:#cbd5e1"}">${dash(otherPaid)}</td>
+          <td style="text-align:right;${cfStyle(cf)}">${mon(cf)}</td>
+          <td>${row.oldestDueDate ? esc(fmtDate(row.oldestDueDate)) : "—"}</td>
+          <td style="color:${statusColor(st)};font-weight:700">${esc(st.charAt(0).toUpperCase() + st.slice(1))}</td>
+        </tr>`;
+      });
     });
-  }, [canExportReports, currentCompany, searchFilteredRows, report.summary, filters, allUtilityTypes, propertyNameMap]);
+
+    rowsHtml += `<tr class="grand-total">
+      <td>GRAND TOTAL</td>
+      <td style="color:rgba(255,255,255,.6)">${allRows.length} tenants</td>
+      <td style="text-align:right">${dash(grandBF)}</td>
+      <td style="text-align:right">${mon(grandRent)}</td>
+      <td style="text-align:right">${dash(grandOther)}</td>
+      <td style="text-align:right">${mon(grandAmtPaid)}</td>
+      <td style="text-align:right">${dash(grandOtherPaid)}</td>
+      <td style="text-align:right;${grandBalance > 0 ? "color:#fca5a5" : grandBalance < 0 ? "color:#6ee7b7" : ""}">${mon(grandBalance)}</td>
+      <td></td><td></td>
+    </tr>`;
+
+    const css = `
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; background: #fff; padding: 22px 26px; font-size: 11px; }
+      .hdr { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding-bottom: 14px; gap: 16px; }
+      .hdr-center { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+      .logo-fallback { width: 52px; height: 52px; background: ${GRN}; color: #fff; font-size: 20px; font-weight: 900; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
+      .logo-img { max-height: 52px; max-width: 140px; object-fit: contain; border-radius: 6px; }
+      .co-name { font-size: 16px; font-weight: 900; color: #0f172a; margin-top: 5px; }
+      .co-sub { font-size: 9px; color: #64748b; }
+      .rpt-title { font-size: 13px; font-weight: 800; color: #1e293b; margin-top: 5px; }
+      .rpt-sub { font-size: 10px; color: #475569; margin-top: 2px; }
+      .hdr-right { text-align: right; align-self: flex-start; }
+      .print-date { font-size: 9px; color: #64748b; line-height: 1.7; }
+      .divider { height: 2px; background: ${GRN}; margin: 12px 0; }
+      .summary-bar { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 10px; color: #334155; background: #f8fafc; border-left: 3px solid ${GRN}; padding: 7px 10px; margin-bottom: 12px; border-radius: 0 4px 4px 0; }
+      table { width: 100%; border-collapse: collapse; font-size: 10px; }
+      thead tr { background: ${GRN}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      thead th { color: #fff; padding: 7px 8px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; border-right: 1px solid rgba(255,255,255,.15); white-space: nowrap; }
+      tbody td { padding: 6px 8px; border: 1px solid #e2e8f0; vertical-align: middle; white-space: nowrap; }
+      tbody tr.alt td { background: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      tr.prop-hdr td { background: #f0faf5; border-top: 2px solid ${GRN}; border-bottom: 1px solid #b7c9c0; padding: 6px 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .prop-name { font-weight: 900; color: ${GRN}; text-transform: uppercase; letter-spacing: .06em; font-size: 9px; }
+      .prop-meta { font-size: 8.5px; color: #64748b; margin-left: 8px; }
+      tr.grand-total td { background: ${GRN}; color: #fff; font-weight: 700; font-size: 10px; padding: 7px 8px; border: 1px solid rgba(255,255,255,.15); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      @media print { body { padding: 10px 12px; } @page { size: A4 landscape; margin: 8mm; } }
+    `;
+
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/><title>Paid &amp; Balance Report</title><style>${css}</style></head>
+<body>
+<div class="hdr">
+  <div></div>
+  <div class="hdr-center">
+    ${co.logo ? `<img src="${esc(co.logo)}" class="logo-img" alt="logo"/>` : `<div class="logo-fallback">${esc(co.name.slice(0,1).toUpperCase())}</div>`}
+    <div class="co-name">${esc(co.name)}</div>
+    ${infoLine ? `<div class="co-sub">${esc(infoLine)}</div>` : ""}
+    <div class="rpt-title">Paid &amp; Balance Report</div>
+    <div class="rpt-sub">Tenant receivables &mdash; ${esc(dateRange)}</div>
+  </div>
+  <div class="hdr-right"><div class="print-date">Printed: ${new Date().toLocaleDateString("en-KE", { day:"2-digit", month:"long", year:"numeric", hour:"2-digit", minute:"2-digit" })}<br/>${groups.length} ${groups.length === 1 ? "property" : "properties"} &middot; ${allRows.length} tenants</div></div>
+</div>
+<div class="divider"></div>
+<div class="summary-bar">
+  <span>Invoiced: <b>${mon(summ.totalInvoiced)}</b></span>
+  <span>Paid: <b style="color:#059669">${mon(summ.totalPaidApplied)}</b></span>
+  <span>Outstanding: <b style="color:#dc2626">${mon(summ.totalOutstanding)}</b></span>
+  <span>Net Balance: <b>${mon(summ.netBalance)}</b></span>
+  <span>Owing: <b style="color:#dc2626">${summ.owingCount || 0}</b></span>
+  <span>Credit: <b style="color:#059669">${summ.creditCount || 0}</b></span>
+  <span>Settled: <b>${summ.settledCount || 0}</b></span>
+</div>
+<table>
+  <thead><tr>
+    <th style="text-align:left">Tenant</th>
+    <th style="text-align:left">Unit</th>
+    <th style="text-align:right">BAL B/F</th>
+    <th style="text-align:right">Rent</th>
+    <th style="text-align:right">Other Exp'd</th>
+    <th style="text-align:right">Amt Paid</th>
+    <th style="text-align:right">Other$ Paid</th>
+    <th style="text-align:right">BAL C/F</th>
+    <th style="text-align:left">Oldest Due</th>
+    <th style="text-align:left">Status</th>
+  </tr></thead>
+  <tbody>${rowsHtml}</tbody>
+</table>
+</body></html>`;
+
+    const win = window.open("", "_blank", "width=1200,height=800");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    setTimeout(() => { win.focus(); win.print(); }, 450);
+  }, [canExportReports, companyName, currentCompany, searchFilteredRows, report.summary, filters, propertyGroups]);
+
+  const COLS = ['Tenant', 'Unit', 'BAL B/F', 'Rent', 'Other Exp\'d', 'Amt Paid', 'Other$ Paid', 'BAL C/F', 'Oldest Due', 'Status'];
 
   return (
     <DashboardLayout lockContentScroll>
       <div className="no-print milik-report-page flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-1.5">
         <style>{`
           .milik-report-page select:focus, .milik-report-page input:focus { border-color: #0B3B2E; box-shadow: 0 0 0 1px rgba(11,59,46,0.2); outline: none; }
+          .pb-tooltip { position: relative; cursor: default; }
+          .pb-tooltip:hover::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 4px); transform: translateX(-50%); white-space: nowrap; background: #1e293b; color: #fff; font-size: 9px; padding: 3px 7px; border-radius: 3px; z-index: 50; pointer-events: none; }
         `}</style>
         <div className="mx-auto flex w-full max-w-none min-h-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -326,18 +466,8 @@ const PaidBalanceReport = () => {
             {/* ── Toolbar ── */}
             <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
               <div className="grid gap-1.5 md:grid-cols-3 xl:grid-cols-6">
-                <AppSelect
-                  value={selMonth}
-                  onChange={(v) => applyMonthYear(v, selYear)}
-                  options={MONTHS}
-                  placeholder="Month"
-                  clearable size="sm"
-                />
-                <select
-                  value={selYear}
-                  onChange={(e) => applyMonthYear(selMonth, e.target.value)}
-                  className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-                >
+                <AppSelect value={selMonth} onChange={(v) => applyMonthYear(v, selYear)} options={MONTHS} placeholder="Month" clearable size="sm" />
+                <select value={selYear} onChange={(e) => applyMonthYear(selMonth, e.target.value)} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:border-[#0B3B2E] focus:outline-none">
                   {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
                 </select>
                 <div className="flex items-center gap-1">
@@ -345,37 +475,25 @@ const PaidBalanceReport = () => {
                   <span className="flex-shrink-0 text-[10px] font-semibold text-slate-400">–</span>
                   <input type="date" value={filters.asOfDate} onChange={setFilter("asOfDate")} className="h-7 flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </div>
-                <AppSelect
-                  value={filters.propertyId}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))}
-                  options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
-                  placeholder="All properties" searchable clearable size="sm"
-                />
-                <AppSelect
-                  value={filters.status}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))}
-                  options={[{ value: "owing", label: "Owing" }, { value: "credit", label: "Credit" }, { value: "settled", label: "Settled" }]}
-                  placeholder="All tenant positions" clearable size="sm"
-                />
+                <AppSelect value={filters.propertyId} onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))} options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))} placeholder="All properties" searchable clearable size="sm" />
+                <AppSelect value={filters.status} onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))} options={[{ value: "owing", label: "Owing" }, { value: "credit", label: "Credit" }, { value: "settled", label: "Settled" }]} placeholder="All tenant positions" clearable size="sm" />
                 <input value={filters.search} onChange={setFilter("search")} placeholder="Search tenant, property, unit" className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </div>
             </div>
 
             {/* ── Stats + Actions bar ── */}
             <div className="flex-shrink-0 flex items-stretch border-b border-slate-200 bg-white">
-              {/* Scrollable stats */}
               <div className="flex-1 overflow-x-auto">
                 <div className="flex h-full min-w-max divide-x divide-slate-100">
                   {[
-                    { label: 'Period Invoiced', value: formatMoney(summary.totalInvoiced),        accent: 'text-slate-800',   sub: null },
-                    { label: 'Applied',         value: formatMoney(summary.totalPaidApplied),     accent: 'text-emerald-700', sub: null },
-                    { label: 'Outstanding',      value: formatMoney(summary.totalOutstanding),     accent: 'text-red-600',     sub: Number(summary.totalOutstanding || 0) > 0 ? `${summary.owingCount || 0} owing` : null },
-                    { label: 'Unapplied',        value: formatMoney(summary.totalUnappliedCredit), accent: 'text-amber-600',   sub: Number(summary.totalUnappliedCredit || 0) > 0 ? `${summary.creditCount || 0} credit` : null },
-                    { label: 'Net Balance',      value: formatMoney(summary.netBalance),           accent: 'text-slate-800',   sub: null },
-                    { label: 'Tenant Rows',      value: Number(summary.tenantCount || 0).toLocaleString(), accent: 'text-slate-800', sub: null },
-                    { label: 'Largest Debtor',   value: balanceInsights.largestOwing?.tenantName || '—',   accent: 'text-red-600',     sub: balanceInsights.largestOwing ? formatMoney(balanceInsights.largestOwing.netBalance) : null },
-                    { label: 'Largest Credit',   value: balanceInsights.largestCredit?.tenantName || '—',  accent: 'text-emerald-700', sub: balanceInsights.largestCredit ? formatMoney(Math.abs(Number(balanceInsights.largestCredit.netBalance || 0))) : null },
-                    { label: 'Settlement Rate',  value: formatPercent(balanceInsights.settlementRate),     accent: 'text-slate-800',   sub: 'Fully settled' },
+                    { label: 'Period Invoiced', value: formatMoney(summary.totalInvoiced),        accent: 'text-slate-800' },
+                    { label: 'Total Paid',       value: formatMoney(summary.totalPaidApplied),     accent: 'text-emerald-700' },
+                    { label: 'Outstanding',       value: formatMoney(summary.totalOutstanding),     accent: 'text-red-600',     sub: summary.owingCount ? `${summary.owingCount} owing` : null },
+                    { label: 'Unapplied Credit',  value: formatMoney(summary.totalUnappliedCredit), accent: 'text-amber-600',   sub: summary.creditCount ? `${summary.creditCount} credit` : null },
+                    { label: 'Net Balance',       value: formatMoney(summary.netBalance),           accent: 'text-slate-800' },
+                    { label: 'Largest Debtor',    value: balanceInsights.largestOwing?.tenantName || '—', accent: 'text-red-600', sub: balanceInsights.largestOwing ? formatMoney(balanceInsights.largestOwing.netBalance) : null },
+                    { label: 'Largest Credit',    value: balanceInsights.largestCredit?.tenantName || '—', accent: 'text-emerald-700', sub: balanceInsights.largestCredit ? formatMoney(Math.abs(Number(balanceInsights.largestCredit.netBalance || 0))) : null },
+                    { label: 'Settlement Rate',   value: formatPercent(balanceInsights.settlementRate), accent: 'text-slate-800', sub: 'Fully settled' },
                   ].map((item) => (
                     <div key={item.label} className="flex flex-col justify-center px-3 py-1.5">
                       <p className="whitespace-nowrap text-[8.5px] font-bold uppercase tracking-widest text-slate-400">{item.label}</p>
@@ -385,7 +503,6 @@ const PaidBalanceReport = () => {
                   ))}
                 </div>
               </div>
-              {/* Action buttons */}
               <div className="flex flex-shrink-0 items-center gap-1.5 border-l border-slate-200 px-2">
                 <button onClick={handleExportCSV} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaFileDownload /> Export CSV</button>
                 <button onClick={handlePrint} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint /> Print</button>
@@ -395,12 +512,15 @@ const PaidBalanceReport = () => {
             </div>
 
             {/* ── Info strip ── */}
-            <div className="flex-shrink-0 flex flex-wrap gap-2 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 border-b border-slate-100">
-              <span>Owing: {summary.owingCount || 0}</span>
-              <span>Credit: {summary.creditCount || 0}</span>
-              <span>Settled: {summary.settledCount || 0}</span>
-              {hasUtilityBreakdown && <span className="text-[#0B3B2E]">Utilities: {allUtilityTypes.join(' · ')}</span>}
-              {balanceInsights.earliestArrear?.tenantName && <span>Oldest due: {balanceInsights.earliestArrear.tenantName} ({fmtDate(balanceInsights.earliestArrear.oldestDueDate)})</span>}
+            <div className="flex-shrink-0 flex flex-wrap gap-3 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] border-b border-slate-100">
+              <span className="text-red-600">Owing: {summary.owingCount || 0}</span>
+              <span className="text-emerald-700">Credit: {summary.creditCount || 0}</span>
+              <span className="text-slate-500">Settled: {summary.settledCount || 0}</span>
+              <span className="text-slate-400">·</span>
+              <span className="text-slate-500">{propertyGroups.length} {propertyGroups.length === 1 ? 'property' : 'properties'} · {searchFilteredRows.length} tenants</span>
+              {balanceInsights.earliestArrear?.tenantName && (
+                <span className="text-orange-600">Oldest due: {balanceInsights.earliestArrear.tenantName} ({fmtDate(balanceInsights.earliestArrear.oldestDueDate)})</span>
+              )}
             </div>
 
             {/* ── Table ── */}
@@ -410,77 +530,124 @@ const PaidBalanceReport = () => {
                   <table className="min-w-full text-[10px] border-collapse">
                     <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                       <tr>
-                        {['Tenant', 'Property', 'Unit', 'B/F Arrears', 'Period Charges', 'Applied', 'Outstanding', 'Unapplied Credit', 'Net Balance', 'Rent O/S',
-                          ...(hasUtilityBreakdown ? allUtilityTypes.map(u => `${u} O/S`) : ['Utility O/S']),
-                          'Penalty O/S', 'Deposit O/S', 'Other O/S', 'Oldest Due', 'Status'
-                        ].map((h, i, arr) => (
-                          <th key={h} className={`whitespace-nowrap px-2 py-1 text-left font-bold text-[9px] tracking-wide ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
+                        {COLS.map((h, i) => (
+                          <th key={h} className={`whitespace-nowrap px-2 py-1.5 text-left font-bold text-[9px] tracking-wide ${i >= 2 && i <= 6 ? 'text-right' : ''} ${i < COLS.length - 1 ? 'border-r border-white/10' : ''}`}>
+                            {h}
+                          </th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {paginatedRows.length === 0 ? (
-                        <tr><td colSpan={13 + (hasUtilityBreakdown ? allUtilityTypes.length : 1) + 1} className="px-2 py-4 text-center text-slate-500">No tenants matched the selected filters.</td></tr>
-                      ) : paginatedRows.map((row, i) => (
-                        <tr key={`${row.tenantId}-${row.unitId || i}`} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-emerald-50/30' : 'bg-slate-50/50 hover:bg-emerald-50/30'}`}>
-                          <td className="px-2 py-1 border-r border-gray-100 font-semibold text-slate-900 whitespace-nowrap">{row.tenantName}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-slate-600 whitespace-nowrap">{row.propertyName}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-slate-600">{row.unitNumber}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-[8.5px] text-orange-500 whitespace-nowrap">
-                            {(() => {
-                              const parts = buildArrearsBreakdownParts(row);
-                              if (parts.length === 0) return <span className="text-slate-300">—</span>;
-                              return parts.map(({ label, value }, idx) => (
-                                <span key={label}>{idx > 0 && <span className="mx-0.5 text-orange-200">·</span>}<span className="font-semibold text-orange-600">{label}</span> {value}</span>
-                              ));
-                            })()}
-                          </td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-[8.5px] text-slate-500 whitespace-nowrap">
-                            {(() => {
-                              const parts = buildInvoicedBreakdownParts(row);
-                              if (parts.length === 0) return <span className="text-slate-300">—</span>;
-                              return parts.map(({ label, value }, idx) => (
-                                <span key={label}>{idx > 0 && <span className="mx-0.5 text-slate-300">·</span>}<span className="font-semibold text-slate-600">{label}</span> {value}</span>
-                              ));
-                            })()}
-                          </td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-right text-emerald-700">{formatMoney(row.totalPaidApplied)}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-right text-red-600">{formatMoney(row.outstanding)}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-right text-amber-700">{formatMoney(row.unappliedCredit)}</td>
-                          <td className={`px-2 py-1 border-r border-gray-100 text-right font-bold ${Number(row.netBalance || 0) > 0 ? 'text-red-700' : Number(row.netBalance || 0) < 0 ? 'text-emerald-700' : 'text-slate-600'}`}>{formatMoney(row.netBalance)}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-right text-slate-700">{formatMoney(row.rentBalance)}</td>
-                          {hasUtilityBreakdown
-                            ? allUtilityTypes.map((ut) => <td key={ut} className="px-2 py-1 border-r border-gray-100 text-right text-slate-700">{formatMoney(row.utilityBreakdown?.[ut] || 0)}</td>)
-                            : <td className="px-2 py-1 border-r border-gray-100 text-right text-slate-700">{formatMoney(row.utilityBalance)}</td>
-                          }
-                          <td className="px-2 py-1 border-r border-gray-100 text-right text-slate-700">{formatMoney(row.penaltyBalance)}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-right text-slate-700">{formatMoney(row.depositBalance)}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-right text-slate-700">{formatMoney(row.otherBalance)}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-slate-600 whitespace-nowrap">{fmtDate(row.oldestDueDate)}</td>
-                          <td className="px-2 py-1">
-                            <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[9px] font-black ${row.status === 'owing' ? 'border-red-200 bg-red-50 text-red-700' : row.status === 'credit' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-100 text-slate-600'}`}>
-                              {row.status}
-                            </span>
+                      {propertyGroups.length === 0 ? (
+                        <tr>
+                          <td colSpan={COLS.length} className="px-3 py-6 text-center text-slate-400 text-[11px]">
+                            {loading ? 'Loading...' : 'No tenants matched the selected filters.'}
                           </td>
                         </tr>
-                      ))}
+                      ) : propertyGroups.map((group) => {
+                        const gRows = group.rows;
+                        const gBF = sumRows(gRows, 'previousArrears');
+                        const gRent = sumRows(gRows, 'rentInvoiced');
+                        const gOther = sumOtherExpd(gRows);
+                        const gPaid = sumRows(gRows, 'totalPaidApplied');
+                        const gBalance = sumRows(gRows, 'netBalance');
+                        const gOwing = gRows.filter((r) => r.status === 'owing').length;
+                        const gCredit = gRows.filter((r) => r.status === 'credit').length;
+                        const gSettled = gRows.filter((r) => r.status === 'settled').length;
+
+                        return (
+                          <React.Fragment key={group.propertyId}>
+                            {/* Property header row */}
+                            <tr className="bg-[#0B3B2E]/8 border-y border-[#0B3B2E]/20">
+                              <td colSpan={2} className="px-2 py-1.5 border-r border-[#0B3B2E]/20">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-black text-[10px] text-[#0B3B2E] uppercase tracking-wide">{group.propertyName}</span>
+                                  <span className="text-[8px] text-slate-500 font-semibold">{gRows.length} unit{gRows.length !== 1 ? 's' : ''}</span>
+                                  {gOwing > 0 && <span className="text-[8px] text-red-600 font-bold">{gOwing} owing</span>}
+                                  {gCredit > 0 && <span className="text-[8px] text-emerald-700 font-bold">{gCredit} credit</span>}
+                                  {gSettled > 0 && <span className="text-[8px] text-slate-400 font-bold">{gSettled} settled</span>}
+                                </div>
+                              </td>
+                              <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-orange-600">{gBF > 0 ? formatMoney(gBF) : <span className="text-slate-300">—</span>}</td>
+                              <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-slate-700">{formatMoney(gRent)}</td>
+                              <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-slate-700">{gOther > 0 ? formatMoney(gOther) : <span className="text-slate-300">—</span>}</td>
+                              <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-emerald-700">{formatMoney(sumRentPaid(gRows))}</td>
+                              <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-emerald-700">{sumOtherPaid(gRows) > 0 ? formatMoney(sumOtherPaid(gRows)) : <span className="text-white/30">—</span>}</td>
+                              <td className={`px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] ${balCfStyle(gBalance)}`}>{formatMoney(gBalance)}</td>
+                              <td colSpan={2} />
+                            </tr>
+
+                            {/* Tenant rows */}
+                            {gRows.map((row, i) => {
+                              const otherExpd = calcOtherExpd(row);
+                              const otherTip = buildOtherExpdTooltip(row);
+                              const balCf = Number(row.netBalance || 0);
+                              return (
+                                <tr key={`${row.tenantId}-${row.unitId || i}`} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-emerald-50/30' : 'bg-slate-50/40 hover:bg-emerald-50/30'}`}>
+                                  <td className="px-2 py-1 border-r border-gray-100 font-semibold text-slate-900 whitespace-nowrap">{row.tenantName}</td>
+                                  <td className="px-2 py-1 border-r border-gray-100 text-slate-500 whitespace-nowrap">{row.unitNumber || '—'}</td>
+                                  <td className="px-2 py-1 border-r border-gray-100 text-right">
+                                    {Number(row.previousArrears || 0) > 0
+                                      ? <span className="text-orange-600 font-semibold">{formatMoney(row.previousArrears)}</span>
+                                      : <span className="text-slate-300">—</span>}
+                                  </td>
+                                  <td className="px-2 py-1 border-r border-gray-100 text-right text-slate-700">{formatMoney(row.rentInvoiced)}</td>
+                                  <td className="px-2 py-1 border-r border-gray-100 text-right">
+                                    {otherExpd > 0
+                                      ? <span className={`pb-tooltip text-slate-700 underline decoration-dotted decoration-slate-400`} data-tip={otherTip || undefined}>{formatMoney(otherExpd)}</span>
+                                      : <span className="text-slate-300">—</span>}
+                                  </td>
+                                  <td className="px-2 py-1 border-r border-gray-100 text-right text-emerald-700">{formatMoney(calcRentPaid(row))}</td>
+                                  <td className="px-2 py-1 border-r border-gray-100 text-right">
+                                    {calcOtherPaid(row) > 0
+                                      ? <span className="pb-tooltip text-emerald-700 underline decoration-dotted decoration-emerald-400" data-tip={buildOtherPaidTooltip(row) || undefined}>{formatMoney(calcOtherPaid(row))}</span>
+                                      : <span className="text-slate-300">—</span>}
+                                  </td>
+                                  <td className={`px-2 py-1 border-r border-gray-100 text-right ${balCfStyle(balCf)}`}>{formatMoney(balCf)}</td>
+                                  <td className="px-2 py-1 border-r border-gray-100 text-slate-500 whitespace-nowrap text-[9px]">
+                                    {row.oldestDueDate ? fmtDate(row.oldestDueDate) : <span className="text-slate-300">—</span>}
+                                  </td>
+                                  <td className="px-2 py-1">
+                                    <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[9px] font-black ${statusStyle(row.status)}`}>
+                                      {row.status}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </React.Fragment>
+                        );
+                      })}
+
+                      {/* Grand total row */}
+                      {propertyGroups.length > 0 && (() => {
+                        const allRows = searchFilteredRows;
+                        const totalBF = sumRows(allRows, 'previousArrears');
+                        const totalRent = sumRows(allRows, 'rentInvoiced');
+                        const totalOther = sumOtherExpd(allRows);
+                        const totalRentPaid = sumRentPaid(allRows);
+                        const totalOtherPaid = sumOtherPaid(allRows);
+                        const totalBalance = sumRows(allRows, 'netBalance');
+                        return (
+                          <tr className="border-t-2 border-[#0B3B2E] bg-[#0B3B2E] text-white">
+                            <td className="px-2 py-1.5 font-black text-[9px] tracking-wide uppercase">Grand Total</td>
+                            <td className="px-2 py-1.5 text-[9px] text-white/60 border-r border-white/10">{allRows.length} tenants</td>
+                            <td className="px-2 py-1.5 border-r border-white/10 text-right font-bold text-[9px]">{totalBF > 0 ? formatMoney(totalBF) : '—'}</td>
+                            <td className="px-2 py-1.5 border-r border-white/10 text-right font-bold text-[9px]">{formatMoney(totalRent)}</td>
+                            <td className="px-2 py-1.5 border-r border-white/10 text-right font-bold text-[9px]">{totalOther > 0 ? formatMoney(totalOther) : '—'}</td>
+                            <td className="px-2 py-1.5 border-r border-white/10 text-right font-bold text-[9px]">{formatMoney(totalRentPaid)}</td>
+                            <td className="px-2 py-1.5 border-r border-white/10 text-right font-bold text-[9px]">{totalOtherPaid > 0 ? formatMoney(totalOtherPaid) : '—'}</td>
+                            <td className={`px-2 py-1.5 border-r border-white/10 text-right font-black text-[9px] ${totalBalance > 0 ? 'text-red-300' : totalBalance < 0 ? 'text-emerald-300' : ''}`}>{formatMoney(totalBalance)}</td>
+                            <td colSpan={2} />
+                          </tr>
+                        );
+                      })()}
                     </tbody>
                   </table>
                 </div>
-
-                {/* ── Pagination ── */}
-                <PaginationBar
-                  page={currentPage}
-                  pages={totalPages}
-                  total={searchFilteredRows.length}
-                  pageSize={pageSize}
-                  onPageChange={setCurrentPage}
-                  onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
-                  loading={loading}
-                  label="tenant rows"
-                />
               </div>
             </div>
+
           </div>
         </div>
       </div>

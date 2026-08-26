@@ -18,7 +18,6 @@ import AppSelect from '../../components/common/AppSelect';
 import { adminRequests } from '../../utils/requestMethods';
 import { fmtDate } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
-import PaginationBar from '../../components/PaginationBar';
 
 const formatPercent = (value) => (value === null || value === undefined ? '—' : `${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}%`);
 const toDateInputValue = (value) => new Date(value).toISOString().split('T')[0];
@@ -60,8 +59,6 @@ const RentalCollectionReport = () => {
     });
   };
   const [report, setReport] = useState({ summary: {}, byProperty: [], rows: [], allUtilityTypes: [] });
-  const [currentPage, setCurrentPage] = useTabState("/reports/rental-collection:currentPage", 1);
-  const [pageSize, setPageSize] = useState(50);
 
   useEffect(() => {
     if (!businessId) return;
@@ -128,41 +125,17 @@ const RentalCollectionReport = () => {
   const allUtilityTypes = report.allUtilityTypes || [];
   const hasUtilityBreakdown = allUtilityTypes.length > 0;
 
-  const propertyNameMap = useMemo(() => new Map(properties.map((p) => [String(p?._id), p?.propertyName || p?.name || 'Unnamed Property'])), [properties]);
-  const tenantNameMap = useMemo(() => new Map(tenants.map((t) => [String(t?._id), t?.tenantName || t?.name || 'Unnamed Tenant'])), [tenants]);
-  const landlordNameMap = useMemo(() => new Map(landlords.map((l) => [String(l?._id), l?.landlordName || l?.name || 'Unnamed Landlord'])), [landlords]);
-  const unitNameMap = useMemo(() => new Map(units.map((u) => [String(u?._id), u?.unitNumber || 'Unit'])), [units]);
 
-  const paginatedRows = useMemo(() => {
-    const rows = Array.isArray(report.rows) ? report.rows : [];
-    const startIndex = (Math.max(currentPage, 1) - 1) * pageSize;
-    return rows.slice(startIndex, startIndex + pageSize);
-  }, [report.rows, currentPage, pageSize]);
+  const detailGroups = useMemo(() => {
+    const groups = new Map();
+    for (const row of (report.rows || [])) {
+      const key = String(row.propertyId || row.propertyName || 'Unknown');
+      if (!groups.has(key)) groups.set(key, { propertyId: key, propertyName: row.propertyName || 'Unknown Property', rows: [] });
+      groups.get(key).rows.push(row);
+    }
+    return [...groups.values()];
+  }, [report.rows]);
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil((report.rows?.length || 0) / pageSize)), [report.rows, pageSize]);
-
-  useEffect(() => { setCurrentPage(1); }, [filters.startDate, filters.endDate, filters.propertyId, filters.tenantId, filters.unitId, filters.landlordId, filters.paymentMethod, filters.cashbook, filters.zone]);
-  useEffect(() => { if (currentPage > totalPages) setCurrentPage(totalPages); }, [currentPage, totalPages]);
-
-  // ── Month period selector ─────────────────────────────────────────────────
-  const recentMonths = useMemo(() => {
-    const today = new Date();
-    return Array.from({ length: 18 }, (_, i) => {
-      const d = new Date(today.getFullYear(), today.getMonth() - (17 - i), 1);
-      const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-      const isCurrent = d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth();
-      const startStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-      const endStr = isCurrent
-        ? toDateInputValue(today)
-        : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
-      return {
-        key: `${d.getFullYear()}-${d.getMonth()}`,
-        label: d.toLocaleString('default', { month: 'short' }) + " '" + String(d.getFullYear()).slice(2),
-        startDate: startStr,
-        endDate: endStr,
-      };
-    });
-  }, []);
 
   // ── Month / Year period selector ──────────────────────────────────────────
   const yearOptions = useMemo(() => { const y = new Date().getFullYear(); return [y + 1, y, y - 1, y - 2, y - 3].map(String); }, []);
@@ -186,8 +159,6 @@ const RentalCollectionReport = () => {
     setFilters(prev => ({ ...prev, startDate, endDate }));
     loadReport(undefined, { startDate, endDate });
   };
-  const applyPeriod = (startDate, endDate) =>
-    setFilters((prev) => ({ ...prev, startDate, endDate }));
 
   const handleExportCSV = () => {
     if (!canExportReports) { toast.error("You do not have permission to export reports"); return; }
@@ -210,98 +181,105 @@ const RentalCollectionReport = () => {
 
   const handlePrint = useCallback(() => {
     if (!canExportReports) { toast.error("You do not have permission to print reports"); return; }
-    const co = currentCompany || {};
-    const name = co.companyName || co.name || co.businessName || 'Milik';
-    const logo = co.logo || '';
+
+    const GRN = "#0B3B2E";
+    const co = {
+      name: currentCompany?.companyName || currentCompany?.name || currentCompany?.businessName || 'Milik',
+      logo: currentCompany?.logo || '',
+      phone: currentCompany?.phone || currentCompany?.phoneNo || currentCompany?.phoneNumber || '',
+      email: currentCompany?.email || currentCompany?.companyEmail || '',
+      address: [currentCompany?.address || currentCompany?.postalAddress || '', currentCompany?.town || currentCompany?.city || ''].filter(Boolean).join(', '),
+    };
+    const infoLine = [co.address, co.phone, co.email].filter(Boolean).join(' · ');
     const by = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || '';
+
     const win = window.open('', '_blank', 'width=1200,height=900');
     if (!win) { toast.error('Pop-up blocked. Please allow pop-ups to print.'); return; }
-    const fmt = (v) => `KES ${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+
+    const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const fmt = (v) => esc(`KES ${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`);
     const rows = Array.isArray(report.rows) ? report.rows : [];
     const byProp = Array.isArray(report.byProperty) ? report.byProperty : [];
     const utTypes = allUtilityTypes;
     const hasUt = utTypes.length > 0;
 
-    // Totals
     const totCollected = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
     const totAllocated = rows.reduce((s, r) => s + Number(r.allocatedAmount || 0), 0);
     const totRent = rows.reduce((s, r) => s + Number(r.rentApplied || 0), 0);
     const totUnapplied = rows.reduce((s, r) => s + Number(r.unappliedAmount || 0), 0);
+    const totPenalty = rows.reduce((s, r) => s + Number(r.penaltyApplied || 0), 0);
+    const totUtility = rows.reduce((s, r) => s + Number(r.utilityApplied || 0), 0);
     const utTotals = hasUt
       ? utTypes.reduce((m, ut) => { m[ut] = rows.reduce((s, r) => s + Number(r.utilityBreakdown?.[ut] || 0), 0); return m; }, {})
       : {};
-    const totUtility = rows.reduce((s, r) => s + Number(r.utilityApplied || 0), 0);
-    const totPenalty = rows.reduce((s, r) => s + Number(r.penaltyApplied || 0), 0);
-
-    const utDetailHeader = hasUt
-      ? utTypes.map((ut) => `<th class="r">${ut}</th>`).join('')
-      : `<th class="r">Utilities</th>`;
-    const utPropHeader = hasUt
-      ? utTypes.map((ut) => `<th class="r">${ut}</th>`).join('')
-      : `<th class="r">Utilities</th>`;
-
     const propByUtTotals = hasUt
       ? utTypes.reduce((m, ut) => { m[ut] = byProp.reduce((s, r) => s + Number(r.utilityBreakdown?.[ut] || 0), 0); return m; }, {})
       : {};
 
-    win.document.write(`<!DOCTYPE html><html><head><title>Rental Collection Report — ${name}</title><style>
-      @page{size:A4 landscape;margin:10mm 12mm}
+    const utHeader = hasUt ? utTypes.map((ut) => `<th class="r">${esc(ut)}</th>`).join('') : `<th class="r">Utilities</th>`;
+
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Rental Collection — ${esc(co.name)}</title><style>
+      @page{size:A4 landscape;margin:8mm 10mm}
       *{box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
-      body{font-family:'Arial Narrow',Arial,sans-serif;color:#0f172a;font-size:8px;margin:0;line-height:1.3}
-      .hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:6px;margin-bottom:8px;border-bottom:2.5px solid #0B3B2E}
-      .hdr-left .co{font-size:10px;font-weight:900;color:#0B3B2E;letter-spacing:.04em;text-transform:uppercase}
-      .hdr-left .ttl{font-size:15px;font-weight:900;color:#0f172a;margin:1px 0 2px}
-      .hdr-left .sub{font-size:8px;color:#64748b}
-      .hdr-right{text-align:right;font-size:7.5px;color:#64748b;line-height:1.7}
-      .logo{max-height:36px;max-width:100px;object-fit:contain;margin-bottom:3px;display:block}
-      .cards{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;margin-bottom:8px}
-      .card{border:1px solid #dbe2ea;border-radius:4px;background:#f8fafc;padding:5px 7px}
+      body{font-family:'Arial Narrow',Arial,sans-serif;color:#0f172a;font-size:7.5px;margin:0;line-height:1.3}
+      .hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:5px;margin-bottom:6px}
+      .hdr-left .logo{max-height:32px;max-width:90px;object-fit:contain;display:block;margin-bottom:2px}
+      .hdr-left .co{font-size:9.5px;font-weight:900;color:${GRN};letter-spacing:.04em;text-transform:uppercase}
+      .hdr-left .ttl{font-size:14px;font-weight:900;color:#0f172a;margin:1px 0}
+      .hdr-left .sub{font-size:7px;color:#64748b}
+      .hdr-right{text-align:right;font-size:7px;color:#64748b;line-height:1.7}
+      .divider{height:2px;background:${GRN};margin-bottom:6px}
+      .cards{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-bottom:7px}
+      .card{border:1px solid #dbe2ea;background:#f8fafc;padding:4px 6px}
       .card.grn{border-color:#d1fae5;background:#f0fdf4}.card.amb{border-color:#fef3c7;background:#fffbeb}
-      .cl{font-size:6.5px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:800}
-      .cv{font-size:10.5px;font-weight:900;color:#0f172a;margin-top:2px;white-space:nowrap}
-      .cv.grn{color:#047857}.cv.amb{color:#b45309}.cv.red{color:#b91c1c}
-      table{width:100%;border-collapse:collapse;font-size:7.5px;margin-bottom:8px}
-      thead th{background:#0B3B2E;color:#fff;padding:3px 5px;font-size:6.8px;text-transform:uppercase;letter-spacing:.09em;font-weight:800;white-space:nowrap}
+      .cl{font-size:6px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:800}
+      .cv{font-size:10px;font-weight:900;color:#0f172a;margin-top:1px;white-space:nowrap}
+      .cv.grn{color:#047857}.cv.amb{color:#b45309}
+      .sec{font-size:7.5px;text-transform:uppercase;letter-spacing:.12em;color:${GRN};font-weight:900;margin:7px 0 3px;border-bottom:1px solid #dbe2ea;padding-bottom:2px}
+      table{width:100%;border-collapse:collapse;font-size:7px;margin-bottom:7px}
+      thead th{background:${GRN};color:#fff;padding:2.5px 4px;font-size:6.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:800;white-space:nowrap;text-align:left}
       thead th.r{text-align:right}
-      tbody td{border-bottom:1px solid #e2e8f0;padding:2.5px 5px;vertical-align:middle}
+      tbody td{border-bottom:1px solid #e2e8f0;padding:2px 4px;vertical-align:middle}
       tbody td.r{text-align:right}
-      tbody td.name{font-weight:700}
+      tbody td.nm{font-weight:700}
       tbody tr:nth-child(even){background:#f8fafc}
-      tfoot td{border-top:2px solid #0B3B2E;padding:3px 5px;font-weight:900;background:#edf5f1;font-size:7px}
+      .prop-row td{background:#f0fdf4;border-top:1.5px solid rgba(11,59,46,.2);border-bottom:1px solid rgba(11,59,46,.12)}
+      .prop-row td{font-weight:800;font-size:7px;color:${GRN}}
+      tfoot td{border-top:2px solid ${GRN};padding:2.5px 4px;font-weight:900;background:#edf5f1;font-size:7px;color:#0f172a}
       tfoot td.r{text-align:right}
-      .sec-title{font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:#0B3B2E;font-weight:900;margin:8px 0 4px;border-bottom:1px solid #dbe2ea;padding-bottom:3px}
-      .page-break{page-break-before:always}
+      .pb{page-break-before:always}
     </style></head><body>
     <div class="hdr">
       <div class="hdr-left">
-        ${logo ? `<img src="${logo}" class="logo" alt="">` : ''}
-        <div class="co">${name}</div>
+        ${co.logo ? `<img src="${esc(co.logo)}" class="logo" alt="">` : ''}
+        <div class="co">${esc(co.name)}</div>
         <div class="ttl">Rental Collection Report</div>
-        <div class="sub">Cash received, allocation efficiency and unapplied balances — ${fmtDate(filters.startDate)} to ${fmtDate(filters.endDate)}</div>
+        <div class="sub">${infoLine ? `${esc(infoLine)} &nbsp;·&nbsp; ` : ''}${esc(fmtDate(filters.startDate))} to ${esc(fmtDate(filters.endDate))}</div>
       </div>
       <div class="hdr-right">
-        <div><strong>Period:</strong> ${fmtDate(filters.startDate)} to ${fmtDate(filters.endDate)}</div>
-        <div><strong>Generated:</strong> ${new Date().toLocaleString()}</div>
-        <div><strong>Prepared by:</strong> ${by}</div>
+        <div><strong>Period:</strong> ${esc(fmtDate(filters.startDate))} to ${esc(fmtDate(filters.endDate))}</div>
+        <div><strong>Generated:</strong> ${esc(new Date().toLocaleString())}</div>
+        <div><strong>Prepared by:</strong> ${esc(by)}</div>
         <div><strong>Receipts:</strong> ${rows.length}</div>
       </div>
     </div>
+    <div class="divider"></div>
     <div class="cards">
-      <div class="card grn"><div class="cl">Operational Income</div><div class="cv grn">${fmt(summary.operationalCollected ?? summary.totalCollected)}</div></div>
+      <div class="card grn"><div class="cl">Op. Income</div><div class="cv grn">${fmt(summary.operationalCollected ?? summary.totalCollected)}</div></div>
       <div class="card"><div class="cl">Total Collected</div><div class="cv">${fmt(summary.totalCollected)}</div></div>
       <div class="card"><div class="cl">Allocated</div><div class="cv">${fmt(summary.allocatedAmount)}</div></div>
       <div class="card amb"><div class="cl">Unapplied</div><div class="cv amb">${fmt(summary.unappliedAmount)}</div></div>
       <div class="card"><div class="cl">Receipts</div><div class="cv">${Number(summary.totalPayments || rows.length)}</div></div>
-      <div class="card"><div class="cl">Collection Rate</div><div class="cv">${formatPercent(summary.collectionRate)}</div></div>
+      <div class="card"><div class="cl">Collection Rate</div><div class="cv">${esc(formatPercent(summary.collectionRate))}</div></div>
     </div>
-    <div class="sec-title">Collection Summary by Property</div>
+    <div class="sec">Collection Summary by Property</div>
     <table><thead><tr>
-      <th>Property</th><th>Receipts</th><th>Tenants</th><th class="r">Collected</th><th class="r">Rent</th>${utPropHeader}<th class="r">Penalty</th><th class="r">Unapplied</th>
+      <th>Property</th><th class="r">Receipts</th><th class="r">Tenants</th><th class="r">Collected</th><th class="r">Rent</th>${utHeader}<th class="r">Penalty</th><th class="r">Unapplied</th>
     </tr></thead>
     <tbody>${byProp.map((row) => `<tr>
-      <td class="name">${row.propertyName}</td>
-      <td>${row.paymentCount}</td>
-      <td>${row.tenantCount}</td>
+      <td class="nm">${esc(row.propertyName)}</td>
+      <td class="r">${row.paymentCount}</td>
+      <td class="r">${row.tenantCount}</td>
       <td class="r" style="color:#047857;font-weight:700">${fmt(row.totalCollected)}</td>
       <td class="r">${fmt(row.rentApplied)}</td>
       ${hasUt ? utTypes.map((ut) => `<td class="r">${fmt(row.utilityBreakdown?.[ut] || 0)}</td>`).join('') : `<td class="r">${fmt(row.utilityApplied)}</td>`}
@@ -309,51 +287,81 @@ const RentalCollectionReport = () => {
       <td class="r" style="color:${Number(row.unappliedAmount || 0) > 0 ? '#b45309' : 'inherit'}">${fmt(row.unappliedAmount)}</td>
     </tr>`).join('')}</tbody>
     <tfoot><tr>
-      <td><strong>TOTAL</strong></td><td>${byProp.reduce((s, r) => s + r.paymentCount, 0)}</td><td></td>
-      <td class="r"><strong>${fmt(byProp.reduce((s, r) => s + Number(r.totalCollected || 0), 0))}</strong></td>
+      <td><strong>TOTAL</strong></td>
+      <td class="r"><strong>${byProp.reduce((s, r) => s + Number(r.paymentCount || 0), 0)}</strong></td>
+      <td></td>
+      <td class="r" style="color:#047857"><strong>${fmt(byProp.reduce((s, r) => s + Number(r.totalCollected || 0), 0))}</strong></td>
       <td class="r"><strong>${fmt(byProp.reduce((s, r) => s + Number(r.rentApplied || 0), 0))}</strong></td>
       ${hasUt ? utTypes.map((ut) => `<td class="r"><strong>${fmt(propByUtTotals[ut] || 0)}</strong></td>`).join('') : `<td class="r"><strong>${fmt(byProp.reduce((s, r) => s + Number(r.utilityApplied || 0), 0))}</strong></td>`}
       <td class="r"><strong>${fmt(byProp.reduce((s, r) => s + Number(r.penaltyApplied || 0), 0))}</strong></td>
-      <td class="r"><strong>${fmt(byProp.reduce((s, r) => s + Number(r.unappliedAmount || 0), 0))}</strong></td>
-    </tr></tfoot>
-    </table>
-    <div class="sec-title page-break">Detailed Receipts</div>
+      <td class="r" style="color:#b45309"><strong>${fmt(byProp.reduce((s, r) => s + Number(r.unappliedAmount || 0), 0))}</strong></td>
+    </tr></tfoot></table>
+    <div class="sec pb">Receipts by Property</div>
     <table><thead><tr>
-      <th>Date</th><th>Receipt #</th><th>Property</th><th>Tenant</th><th>Unit</th><th>Method</th>
+      <th>Date</th><th>Receipt #</th><th>Tenant</th><th>Unit</th><th>Method</th>
       <th class="r">Collected</th><th class="r">Allocated</th><th class="r">Rent</th>
-      ${utDetailHeader}<th class="r">Penalty</th><th class="r">Unapplied</th><th>Cashbook</th>
+      ${utHeader}<th class="r">Penalty</th><th class="r">Unapplied</th><th>Cashbook</th>
     </tr></thead>
-    <tbody>${rows.map((row) => {
-      const utCells = hasUt
-        ? utTypes.map((ut) => `<td class="r">${fmt(row.utilityBreakdown?.[ut] || 0)}</td>`).join('')
-        : `<td class="r">${fmt(row.utilityApplied)}</td>`;
-      return `<tr>
-        <td style="white-space:nowrap">${row.paymentDate ? new Date(row.paymentDate).toLocaleDateString() : '—'}</td>
-        <td>${row.receiptNumber || '—'}</td>
-        <td>${row.propertyName || '—'}</td>
-        <td class="name">${row.tenantName || '—'}</td>
-        <td>${row.unitNumber || '—'}</td>
-        <td style="text-transform:capitalize">${formatMethod(row.paymentMethod)}</td>
-        <td class="r" style="color:#047857;font-weight:700">${fmt(row.amount)}</td>
-        <td class="r">${fmt(row.allocatedAmount)}</td>
-        <td class="r">${fmt(row.rentApplied)}</td>
-        ${utCells}
-        <td class="r">${fmt(row.penaltyApplied)}</td>
-        <td class="r" style="color:${Number(row.unappliedAmount || 0) > 0 ? '#b45309' : 'inherit'}">${fmt(row.unappliedAmount)}</td>
-        <td>${row.cashbook || '—'}</td>
-      </tr>`;
-    }).join('')}</tbody>
+    <tbody>${(() => {
+      const pGroups = new Map();
+      rows.forEach((r) => {
+        const key = String(r.propertyId || r.propertyName || 'Unknown');
+        if (!pGroups.has(key)) pGroups.set(key, { name: r.propertyName || 'Unknown', rows: [] });
+        pGroups.get(key).rows.push(r);
+      });
+      let html = '';
+      for (const [, g] of pGroups) {
+        const gC = g.rows.reduce((s, r) => s + Number(r.amount || 0), 0);
+        const gA = g.rows.reduce((s, r) => s + Number(r.allocatedAmount || 0), 0);
+        const gR = g.rows.reduce((s, r) => s + Number(r.rentApplied || 0), 0);
+        const gP = g.rows.reduce((s, r) => s + Number(r.penaltyApplied || 0), 0);
+        const gU = g.rows.reduce((s, r) => s + Number(r.unappliedAmount || 0), 0);
+        const gUt = g.rows.reduce((s, r) => s + Number(r.utilityApplied || 0), 0);
+        const gUtMap = hasUt ? utTypes.reduce((m, ut) => { m[ut] = g.rows.reduce((s, r) => s + Number(r.utilityBreakdown?.[ut] || 0), 0); return m; }, {}) : {};
+        const utSubtotals = hasUt ? utTypes.map((ut) => `<td class="r" style="font-weight:700">${fmt(gUtMap[ut] || 0)}</td>`).join('') : `<td class="r" style="font-weight:700">${fmt(gUt)}</td>`;
+        html += `<tr style="background:#f0fdf4;border-top:1.5px solid rgba(11,59,46,.2);border-bottom:1px solid rgba(11,59,46,.12)">
+          <td colspan="5" style="padding:2.5px 4px;font-weight:900;font-size:7.5px;color:#0B3B2E;text-transform:uppercase;letter-spacing:.04em">${esc(g.name)} <span style="font-weight:500;font-size:6.5px;color:#64748b;text-transform:none">${g.rows.length} receipt${g.rows.length !== 1 ? 's' : ''}</span></td>
+          <td class="r" style="color:#047857;font-weight:800">${fmt(gC)}</td>
+          <td class="r" style="font-weight:700">${fmt(gA)}</td>
+          <td class="r" style="font-weight:700">${fmt(gR)}</td>
+          ${utSubtotals}
+          <td class="r" style="font-weight:700">${fmt(gP)}</td>
+          <td class="r" style="color:${gU > 0 ? '#b45309' : 'inherit'};font-weight:700">${fmt(gU)}</td>
+          <td></td>
+        </tr>`;
+        g.rows.forEach((row, idx) => {
+          const utCells = hasUt
+            ? utTypes.map((ut) => `<td class="r">${fmt(row.utilityBreakdown?.[ut] || 0)}</td>`).join('')
+            : `<td class="r">${fmt(row.utilityApplied)}</td>`;
+          html += `<tr style="${idx % 2 === 1 ? 'background:#f8fafc' : ''}">
+            <td style="white-space:nowrap">${row.paymentDate ? esc(new Date(row.paymentDate).toLocaleDateString()) : '—'}</td>
+            <td>${esc(row.receiptNumber || '—')}</td>
+            <td class="nm">${esc(row.tenantName || '—')}</td>
+            <td>${esc(row.unitNumber || '—')}</td>
+            <td style="text-transform:capitalize">${esc(formatMethod(row.paymentMethod))}</td>
+            <td class="r" style="color:#047857;font-weight:700">${fmt(row.amount)}</td>
+            <td class="r">${fmt(row.allocatedAmount)}</td>
+            <td class="r">${fmt(row.rentApplied)}</td>
+            ${utCells}
+            <td class="r">${fmt(row.penaltyApplied)}</td>
+            <td class="r" style="color:${Number(row.unappliedAmount || 0) > 0 ? '#b45309' : 'inherit'}">${fmt(row.unappliedAmount)}</td>
+            <td>${esc(row.cashbook || '—')}</td>
+          </tr>`;
+        });
+      }
+      return html;
+    })()}</tbody>
     <tfoot><tr>
-      <td colspan="6"><strong>TOTALS — ${rows.length} receipts</strong></td>
+      <td colspan="5"><strong>GRAND TOTAL — ${rows.length} receipts</strong></td>
       <td class="r" style="color:#047857"><strong>${fmt(totCollected)}</strong></td>
       <td class="r"><strong>${fmt(totAllocated)}</strong></td>
       <td class="r"><strong>${fmt(totRent)}</strong></td>
-      ${hasUt ? utTypes.map((ut) => `<td class="r"><strong>${fmt(utTotals[ut])}</strong></td>`).join('') : `<td class="r"><strong>${fmt(totUtility)}</strong></td>`}
+      ${hasUt ? utTypes.map((ut) => `<td class="r"><strong>${fmt(utTotals[ut] || 0)}</strong></td>`).join('') : `<td class="r"><strong>${fmt(totUtility)}</strong></td>`}
       <td class="r"><strong>${fmt(totPenalty)}</strong></td>
       <td class="r" style="color:#b45309"><strong>${fmt(totUnapplied)}</strong></td>
       <td></td>
-    </tr></tfoot>
-    </table></body></html>`);
+    </tr></tfoot></table>
+    </body></html>`);
     win.document.close();
     win.onload = () => { win.focus(); win.print(); };
   }, [canExportReports, currentCompany, currentUser, report, filters, allUtilityTypes, summary]);
@@ -368,169 +376,160 @@ const RentalCollectionReport = () => {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 
             {/* ── Toolbar ── */}
-            <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-white shadow-sm">
-              <div className="flex flex-wrap items-end gap-x-3 gap-y-2.5 px-3 py-2.5">
-                <div>
-                  <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Period</p>
-                  <div className="flex items-center gap-1">
-                    <div className="w-[130px]">
-                      <AppSelect
-                        value={selMonth}
-                        onChange={(v) => applyMonthYear(v, selYear)}
-                        options={MONTHS}
-                        placeholder="Month"
-                        clearable size="sm"
-                      />
+            <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
+              <div className="grid gap-1.5 md:grid-cols-4 xl:grid-cols-8">
+                <AppSelect value={selMonth} onChange={(v) => applyMonthYear(v, selYear)} options={MONTHS} placeholder="Month" clearable size="sm" />
+                <select value={selYear} onChange={(e) => applyMonthYear(selMonth, e.target.value)} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:border-[#0B3B2E] focus:outline-none">
+                  {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+                <div className="flex items-center gap-1">
+                  <input type="date" value={filters.startDate} onChange={setFilter("startDate")} className="h-7 flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                  <span className="flex-shrink-0 text-[10px] font-semibold text-slate-400">–</span>
+                  <input type="date" value={filters.endDate} onChange={setFilter("endDate")} className="h-7 flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                </div>
+                <AppSelect value={filters.zone || null} onChange={(v) => setFilters((p) => ({ ...p, zone: v ?? "", propertyId: "" }))} options={zoneOptions} placeholder="Zone" searchable clearable size="sm" />
+                <AppSelect value={filters.propertyId || null} onChange={(v) => setFilters((p) => ({ ...p, propertyId: v ?? "", zone: "" }))} options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))} placeholder="Property" searchable clearable size="sm" />
+                <AppSelect value={filters.tenantId || null} onChange={(v) => setFilters((p) => ({ ...p, tenantId: v ?? "", unitId: "" }))} options={tenants.map((t) => buildTenantOption(t))} placeholder="Tenant" searchable clearable size="sm" />
+                <AppSelect value={filters.paymentMethod || null} onChange={(v) => setFilters((p) => ({ ...p, paymentMethod: v ?? "" }))} options={[{ value: "cash", label: "Cash" }, { value: "mobile_money", label: "Mobile money" }, { value: "bank_transfer", label: "Bank transfer" }, { value: "check", label: "Cheque" }, { value: "credit_card", label: "Card" }]} placeholder="Method" clearable size="sm" />
+                <input value={filters.cashbook} onChange={setFilter("cashbook")} placeholder="Cashbook..." className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+              </div>
+              {(!isLandlordMode || units.length > 0) && (
+                <div className="mt-1.5 grid gap-1.5 md:grid-cols-3 xl:grid-cols-6">
+                  <AppSelect value={filters.unitId || null} onChange={(v) => setFilters((p) => ({ ...p, unitId: v ?? "" }))} options={units.map((u) => ({ value: u._id, label: u.unitNumber }))} placeholder="Unit" searchable clearable size="sm" />
+                  {!isLandlordMode && (
+                    <AppSelect value={filters.landlordId || null} onChange={(v) => setFilters((p) => ({ ...p, landlordId: v ?? "" }))} options={landlords.map((l) => ({ value: l._id, label: l.landlordName || l.name }))} placeholder="Landlord" searchable clearable size="sm" />
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* ── Stats + Actions bar ── */}
+            <div className="flex-shrink-0 flex items-stretch border-b border-slate-200 bg-white">
+              <div className="flex-1 overflow-x-auto">
+                <div className="flex h-full min-w-max divide-x divide-slate-100">
+                  {[
+                    { label: 'Op. Income',      value: formatMoney(summary.operationalCollected ?? summary.totalCollected), accent: 'text-emerald-700' },
+                    { label: 'Total Collected', value: formatMoney(summary.totalCollected),  accent: 'text-slate-800' },
+                    { label: 'Allocated',        value: formatMoney(summary.allocatedAmount), accent: 'text-slate-800' },
+                    { label: 'Unapplied',        value: formatMoney(summary.unappliedAmount), accent: 'text-amber-600' },
+                    { label: 'Receipts',         value: String(Number(summary.totalPayments || report.rows?.length || 0)), accent: 'text-slate-800' },
+                    { label: 'Collection Rate',  value: formatPercent(summary.collectionRate), accent: 'text-slate-800' },
+                  ].map((item) => (
+                    <div key={item.label} className="flex flex-col justify-center px-3 py-1.5">
+                      <p className="whitespace-nowrap text-[8.5px] font-bold uppercase tracking-widest text-slate-400">{item.label}</p>
+                      <p className={`whitespace-nowrap text-[11px] font-black leading-tight ${item.accent}`}>{item.value}</p>
                     </div>
-                    <select
-                      value={selYear}
-                      onChange={(e) => applyMonthYear(selMonth, e.target.value)}
-                      className="h-7 w-[72px] rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-                    >
-                      {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-                    </select>
-                    <span className="h-4 w-px bg-slate-200 mx-0.5" />
-                    <input type="date" value={filters.startDate} onChange={setFilter("startDate")} className="h-7 w-[110px] rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                    <span className="text-[10px] font-semibold text-slate-400">–</span>
-                    <input type="date" value={filters.endDate} onChange={setFilter("endDate")} className="h-7 w-[110px] rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                  </div>
+                  ))}
                 </div>
-                <div className="w-[140px]">
-                  <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Zone</p>
-                  <AppSelect value={filters.zone || null} onChange={(v) => setFilters((p) => ({ ...p, zone: v ?? "", propertyId: "" }))} options={zoneOptions} placeholder="All zones" searchable clearable size="sm" />
-                </div>
-                <div className="w-[165px]">
-                  <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Property</p>
-                  <AppSelect value={filters.propertyId || null} onChange={(v) => setFilters((p) => ({ ...p, propertyId: v ?? "", zone: "" }))} options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))} placeholder="All properties" searchable clearable size="sm" />
-                </div>
-                <div className="w-[155px]">
-                  <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Tenant</p>
-                  <AppSelect value={filters.tenantId || null} onChange={(v) => setFilters((p) => ({ ...p, tenantId: v ?? "", unitId: "" }))} options={tenants.map((t) => buildTenantOption(t))} placeholder="All tenants" searchable clearable size="sm" />
-                </div>
-                <div className="w-[110px]">
-                  <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Unit</p>
-                  <AppSelect value={filters.unitId || null} onChange={(v) => setFilters((p) => ({ ...p, unitId: v ?? "" }))} options={units.map((u) => ({ value: u._id, label: u.unitNumber }))} placeholder="All units" searchable clearable size="sm" />
-                </div>
-                {!isLandlordMode && (
-                  <div className="w-[155px]">
-                    <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Landlord</p>
-                    <AppSelect value={filters.landlordId || null} onChange={(v) => setFilters((p) => ({ ...p, landlordId: v ?? "" }))} options={landlords.map((l) => ({ value: l._id, label: l.landlordName || l.name }))} placeholder="All landlords" searchable clearable size="sm" />
-                  </div>
-                )}
-                <div className="w-[130px]">
-                  <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Method</p>
-                  <AppSelect value={filters.paymentMethod || null} onChange={(v) => setFilters((p) => ({ ...p, paymentMethod: v ?? "" }))}
-                    options={[{ value: "cash", label: "Cash" }, { value: "mobile_money", label: "Mobile money" }, { value: "bank_transfer", label: "Bank transfer" }, { value: "check", label: "Cheque" }, { value: "credit_card", label: "Card" }]}
-                    placeholder="All methods" clearable size="sm" />
-                </div>
-                <div>
-                  <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Cashbook</p>
-                  <input value={filters.cashbook} onChange={setFilter("cashbook")} placeholder="Contains..." className="h-7 w-[140px] rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-700 placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                </div>
-                <div className="flex-1" />
-                <div className="flex items-end gap-1.5">
-                  <button onClick={handleExportCSV} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaFileDownload size={10} /> Export</button>
-                  <button onClick={handlePrint} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint size={10} /> Print</button>
-                  <ResetFiltersButton onReset={resetFilters} disabled={loading} />
-                  <button onClick={() => loadReport()} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaSyncAlt size={10} className={loading ? 'animate-spin' : ''} /> Refresh</button>
-                </div>
+              </div>
+              <div className="flex flex-shrink-0 items-center gap-1.5 border-l border-slate-200 px-2">
+                <button onClick={handleExportCSV} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaFileDownload /> Export</button>
+                <button onClick={handlePrint} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint /> Print</button>
+                <ResetFiltersButton onReset={resetFilters} disabled={loading} />
+                <button onClick={() => loadReport()} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaSyncAlt className={loading ? 'animate-spin' : ''} /> Refresh</button>
               </div>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden bg-white p-1.5">
-
-              {/* ── Property summary ── */}
-              <div className="flex min-h-0 max-h-[32%] flex-col overflow-hidden rounded-lg border border-slate-200">
-                <div className="flex-shrink-0 bg-[#0B3B2E] px-2 py-1.5 text-[10px] font-bold text-white">Collection Summary by Property</div>
-                <div className="min-h-0 flex-1 overflow-auto">
-                  <table className="min-w-full text-[10px] border-collapse">
-                    <thead className="sticky top-0 z-10">
-                      <tr className="bg-[#0B3B2E] text-white">
-                        {['Property', 'Receipts', 'Tenants', 'Collected', 'Rent',
-                          ...(hasUtilityBreakdown ? allUtilityTypes : ['Utilities']),
-                          'Penalty', 'Unapplied'
-                        ].map((h, i, arr) => (
-                          <th key={h} className={`whitespace-nowrap px-2 py-1 text-left font-bold text-[9px] tracking-wide ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(report.byProperty || []).length === 0 ? (
-                        <tr><td colSpan={6 + (hasUtilityBreakdown ? allUtilityTypes.length : 1)} className="px-2 py-4 text-center text-slate-500">No collection rows found.</td></tr>
-                      ) : (report.byProperty || []).map((row, idx) => (
-                        <tr key={row.propertyId || row.propertyName} className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white hover:bg-emerald-50/30' : 'bg-slate-50/50 hover:bg-emerald-50/30'}`}>
-                          <td className="px-2 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.propertyName}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{row.paymentCount}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{row.tenantCount}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 font-semibold text-emerald-700">{formatMoney(row.totalCollected)}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.rentApplied)}</td>
-                          {hasUtilityBreakdown
-                            ? allUtilityTypes.map((ut) => <td key={ut} className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.utilityBreakdown?.[ut] || 0)}</td>)
-                            : <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.utilityApplied)}</td>
-                          }
-                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.penaltyApplied)}</td>
-                          <td className="px-2 py-1 text-amber-700">{formatMoney(row.unappliedAmount)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* ── Detailed receipts ── */}
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white p-1.5">
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200">
-                <div className="flex-shrink-0 bg-[#0B3B2E] px-2 py-1.5 text-[10px] font-bold text-white">
-                  Detailed Receipts
-                  {hasUtilityBreakdown && <span className="ml-2 font-normal opacity-70">Utilities: {allUtilityTypes.join(' · ')}</span>}
-                </div>
                 <div className="min-h-0 flex-1 overflow-auto">
                   <table className="min-w-full text-[10px] border-collapse">
-                    <thead className="sticky top-0 z-10">
-                      <tr className="bg-[#0B3B2E] text-white">
-                        {['Date', 'Receipt #', 'Property', 'Tenant', 'Unit', 'Method', 'Collected', 'Allocated', 'Rent',
+                    <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                      <tr>
+                        {['Date', 'Receipt #', 'Tenant', 'Unit', 'Method', 'Collected', 'Allocated', 'Rent',
                           ...(hasUtilityBreakdown ? allUtilityTypes : ['Utilities']),
                           'Penalty', 'Unapplied', 'Cashbook'
                         ].map((h, i, arr) => (
-                          <th key={h} className={`whitespace-nowrap px-2 py-1 text-left font-bold text-[9px] tracking-wide ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
+                          <th key={h} className={`whitespace-nowrap px-2 py-1.5 text-left font-bold text-[9px] tracking-wide ${i >= 5 && i <= arr.length - 2 ? 'text-right' : ''} ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {(report.rows || []).length === 0 ? (
-                        <tr><td colSpan={11 + (hasUtilityBreakdown ? allUtilityTypes.length : 1)} className="px-2 py-4 text-center text-slate-500">No receipts found for the current filters.</td></tr>
-                      ) : paginatedRows.map((row, idx) => (
-                        <tr key={row.receiptId} className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white hover:bg-emerald-50/30' : 'bg-slate-50/50 hover:bg-emerald-50/30'}`}>
-                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700 whitespace-nowrap">{fmtDate(row.paymentDate)}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.receiptNumber || '—'}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{row.propertyName}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{row.tenantName}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{row.unitNumber}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 capitalize text-slate-700">{formatMethod(row.paymentMethod)}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 font-semibold text-emerald-700">{formatMoney(row.amount)}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.allocatedAmount)}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.rentApplied)}</td>
-                          {hasUtilityBreakdown
-                            ? allUtilityTypes.map((ut) => <td key={ut} className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.utilityBreakdown?.[ut] || 0)}</td>)
-                            : <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.utilityApplied)}</td>
-                          }
-                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.penaltyApplied)}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 font-semibold text-amber-700">{formatMoney(row.unappliedAmount)}</td>
-                          <td className="px-2 py-1 text-slate-700">{row.cashbook || '—'}</td>
-                        </tr>
-                      ))}
+                      {detailGroups.length === 0 ? (
+                        <tr><td colSpan={10 + (hasUtilityBreakdown ? allUtilityTypes.length : 1)} className="px-3 py-6 text-center text-slate-400 text-[11px]">
+                          {loading ? 'Loading...' : 'No receipts found for the selected filters.'}
+                        </td></tr>
+                      ) : detailGroups.map((group) => {
+                        const gC = group.rows.reduce((s, r) => s + Number(r.amount || 0), 0);
+                        const gA = group.rows.reduce((s, r) => s + Number(r.allocatedAmount || 0), 0);
+                        const gR = group.rows.reduce((s, r) => s + Number(r.rentApplied || 0), 0);
+                        const gP = group.rows.reduce((s, r) => s + Number(r.penaltyApplied || 0), 0);
+                        const gU = group.rows.reduce((s, r) => s + Number(r.unappliedAmount || 0), 0);
+                        const gUt = group.rows.reduce((s, r) => s + Number(r.utilityApplied || 0), 0);
+                        const gUtMap = hasUtilityBreakdown
+                          ? allUtilityTypes.reduce((m, ut) => { m[ut] = group.rows.reduce((s, r) => s + Number(r.utilityBreakdown?.[ut] || 0), 0); return m; }, {})
+                          : {};
+                        return (
+                          <React.Fragment key={group.propertyId}>
+                            {/* Property header row */}
+                            <tr className="bg-[#0B3B2E]/8 border-y border-[#0B3B2E]/20">
+                              <td colSpan={5} className="px-2 py-1.5 border-r border-[#0B3B2E]/20">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-black text-[10px] text-[#0B3B2E] uppercase tracking-wide">{group.propertyName}</span>
+                                  <span className="text-[8px] text-slate-500 font-semibold">{group.rows.length} receipt{group.rows.length !== 1 ? 's' : ''}</span>
+                                </div>
+                              </td>
+                              <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-emerald-700">{formatMoney(gC)}</td>
+                              <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-slate-600">{formatMoney(gA)}</td>
+                              <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-slate-600">{formatMoney(gR)}</td>
+                              {hasUtilityBreakdown
+                                ? allUtilityTypes.map((ut) => <td key={ut} className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-slate-600">{gUtMap[ut] > 0 ? formatMoney(gUtMap[ut]) : <span className="text-slate-300">—</span>}</td>)
+                                : <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-slate-600">{gUt > 0 ? formatMoney(gUt) : <span className="text-slate-300">—</span>}</td>
+                              }
+                              <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-slate-600">{gP > 0 ? formatMoney(gP) : <span className="text-slate-300">—</span>}</td>
+                              <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-amber-700">{gU > 0 ? formatMoney(gU) : <span className="text-slate-300">—</span>}</td>
+                              <td className="px-2 py-1.5"></td>
+                            </tr>
+                            {/* Detail rows */}
+                            {group.rows.map((row, idx) => (
+                              <tr key={row.receiptId || `${group.propertyId}-${idx}`} className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white hover:bg-emerald-50/30' : 'bg-slate-50/50 hover:bg-emerald-50/30'}`}>
+                                <td className="px-2 py-1 border-r border-gray-100 text-slate-700 whitespace-nowrap">{fmtDate(row.paymentDate)}</td>
+                                <td className="px-2 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.receiptNumber || '—'}</td>
+                                <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{row.tenantName}</td>
+                                <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{row.unitNumber}</td>
+                                <td className="px-2 py-1 border-r border-gray-100 capitalize text-slate-700">{formatMethod(row.paymentMethod)}</td>
+                                <td className="px-2 py-1 border-r border-gray-100 text-right font-semibold text-emerald-700">{formatMoney(row.amount)}</td>
+                                <td className="px-2 py-1 border-r border-gray-100 text-right text-slate-700">{formatMoney(row.allocatedAmount)}</td>
+                                <td className="px-2 py-1 border-r border-gray-100 text-right text-slate-700">{formatMoney(row.rentApplied)}</td>
+                                {hasUtilityBreakdown
+                                  ? allUtilityTypes.map((ut) => <td key={ut} className="px-2 py-1 border-r border-gray-100 text-right text-slate-700">{formatMoney(row.utilityBreakdown?.[ut] || 0)}</td>)
+                                  : <td className="px-2 py-1 border-r border-gray-100 text-right text-slate-700">{formatMoney(row.utilityApplied)}</td>
+                                }
+                                <td className="px-2 py-1 border-r border-gray-100 text-right text-slate-700">{formatMoney(row.penaltyApplied)}</td>
+                                <td className="px-2 py-1 border-r border-gray-100 text-right font-semibold text-amber-700">{formatMoney(row.unappliedAmount)}</td>
+                                <td className="px-2 py-1 text-slate-700">{row.cashbook || '—'}</td>
+                              </tr>
+                            ))}
+                          </React.Fragment>
+                        );
+                      })}
+                      {/* Grand total */}
+                      {(report.rows || []).length > 0 && (() => {
+                        const allRows = report.rows || [];
+                        const utMap = hasUtilityBreakdown
+                          ? allUtilityTypes.reduce((m, ut) => { m[ut] = allRows.reduce((s, r) => s + Number(r.utilityBreakdown?.[ut] || 0), 0); return m; }, {})
+                          : {};
+                        return (
+                          <tr className="sticky bottom-0 bg-[#0B3B2E] text-white">
+                            <td colSpan={5} className="px-2 py-1.5 font-black text-[9px] uppercase tracking-wide">
+                              Grand Total · {allRows.length} receipts · {detailGroups.length} {detailGroups.length === 1 ? 'property' : 'properties'}
+                            </td>
+                            <td className="px-2 py-1.5 text-right font-black text-[9px] text-emerald-300">{formatMoney(allRows.reduce((s, r) => s + Number(r.amount || 0), 0))}</td>
+                            <td className="px-2 py-1.5 text-right font-black text-[9px]">{formatMoney(allRows.reduce((s, r) => s + Number(r.allocatedAmount || 0), 0))}</td>
+                            <td className="px-2 py-1.5 text-right font-black text-[9px]">{formatMoney(allRows.reduce((s, r) => s + Number(r.rentApplied || 0), 0))}</td>
+                            {hasUtilityBreakdown
+                              ? allUtilityTypes.map((ut) => <td key={ut} className="px-2 py-1.5 text-right font-black text-[9px]">{formatMoney(utMap[ut] || 0)}</td>)
+                              : <td className="px-2 py-1.5 text-right font-black text-[9px]">{formatMoney(allRows.reduce((s, r) => s + Number(r.utilityApplied || 0), 0))}</td>
+                            }
+                            <td className="px-2 py-1.5 text-right font-black text-[9px]">{formatMoney(allRows.reduce((s, r) => s + Number(r.penaltyApplied || 0), 0))}</td>
+                            <td className="px-2 py-1.5 text-right font-black text-[9px] text-amber-300">{formatMoney(allRows.reduce((s, r) => s + Number(r.unappliedAmount || 0), 0))}</td>
+                            <td className="px-2 py-1.5"></td>
+                          </tr>
+                        );
+                      })()}
                     </tbody>
                   </table>
                 </div>
-                <PaginationBar
-                  page={currentPage}
-                  pages={totalPages}
-                  total={report.rows?.length || 0}
-                  pageSize={pageSize}
-                  onPageChange={setCurrentPage}
-                  onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
-                  loading={loading}
-                  label="receipt rows"
-                />
               </div>
             </div>
           </div>
