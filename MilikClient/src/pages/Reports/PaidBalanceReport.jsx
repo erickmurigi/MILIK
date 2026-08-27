@@ -258,11 +258,14 @@ const PaidBalanceReport = () => {
       const _rentPaid  = calcRentPaid(row);
       const _otherPaid = calcOtherPaid(row);
       const _balBF     = calcBalBF(row);
+      // Gross cash received in period — drives Total Paid column so BAL B/F + Charged − Total Paid = BAL C/F
+      const _totalPaid = Number(row.periodReceiptTotal || 0);
       return {
         ...row,
         _otherExpd,
         _rentPaid,
         _otherPaid,
+        _totalPaid,
         _balBF,
         _otherExpdTip: _otherExpd > 0 ? buildOtherExpdTooltip(row) : '',
         _otherPaidTip: _otherPaid > 0 ? buildOtherPaidTooltip(row) : '',
@@ -277,6 +280,7 @@ const PaidBalanceReport = () => {
     totalOther:     sumOtherExpd(searchFilteredRows),
     totalRentPaid:  sumRentPaid(searchFilteredRows),
     totalOtherPaid: sumOtherPaid(searchFilteredRows),
+    totalPaidGross: sumRows(searchFilteredRows, 'periodReceiptTotal'),
     totalBalance:   sumRows(searchFilteredRows, 'netBalance'),
   }), [searchFilteredRows]);
 
@@ -315,7 +319,7 @@ const PaidBalanceReport = () => {
       calcOtherExpd(row),
       calcRentPaid(row),
       calcOtherPaid(row),
-      calcRentPaid(row) + calcOtherPaid(row),
+      Number(row.periodReceiptTotal || 0),
       row.netBalance || 0,
       row.oldestDueDate ? new Date(row.oldestDueDate).toLocaleDateString() : '',
       row.status || '',
@@ -365,7 +369,7 @@ const PaidBalanceReport = () => {
     })();
 
     let rowsHtml = "";
-    let grandBF = 0, grandRent = 0, grandOther = 0, grandAmtPaid = 0, grandOtherPaid = 0, grandBalance = 0;
+    let grandBF = 0, grandRent = 0, grandOther = 0, grandAmtPaid = 0, grandOtherPaid = 0, grandTotalPaid = 0, grandBalance = 0;
 
     groups.forEach((group) => {
       const gr = group.rows;
@@ -374,9 +378,10 @@ const PaidBalanceReport = () => {
       const gOther = sumOtherExpd(gr);
       const gAmtPaid = sumRentPaid(gr);
       const gOtherPaid = sumOtherPaid(gr);
+      const gTotalPaid = sumRows(gr, 'periodReceiptTotal');
       const gBalance = sumRows(gr, 'netBalance');
       grandBF += gBF; grandRent += gRent; grandOther += gOther;
-      grandAmtPaid += gAmtPaid; grandOtherPaid += gOtherPaid; grandBalance += gBalance;
+      grandAmtPaid += gAmtPaid; grandOtherPaid += gOtherPaid; grandTotalPaid += gTotalPaid; grandBalance += gBalance;
 
       const gOwing = gr.filter((r) => r.status === 'owing').length;
       const gCredit = gr.filter((r) => r.status === 'credit').length;
@@ -394,7 +399,7 @@ const PaidBalanceReport = () => {
         <td style="text-align:right">${dash(gOther)}</td>
         <td style="text-align:right;color:#059669;font-weight:700">${mon(gAmtPaid)}</td>
         <td style="text-align:right;${gOtherPaid > 0 ? "color:#059669;font-weight:700" : "color:#94a3b8"}">${dash(gOtherPaid)}</td>
-        <td style="text-align:right;color:#059669;font-weight:900">${mon(gAmtPaid + gOtherPaid)}</td>
+        <td style="text-align:right;color:#059669;font-weight:900">${mon(gTotalPaid)}</td>
         <td style="text-align:right;${cfStyle(gBalance)}">${mon(gBalance)}</td>
         <td></td><td></td>
       </tr>`;
@@ -404,6 +409,7 @@ const PaidBalanceReport = () => {
         const otherExpd = calcOtherExpd(row);
         const amtPaid = calcRentPaid(row);
         const otherPaid = calcOtherPaid(row);
+        const totalPaid = Number(row.periodReceiptTotal || 0);
         const cf = Number(row.netBalance || 0);
         const st = row.status || "";
         rowsHtml += `<tr class="${i % 2 === 1 ? "alt" : ""}">
@@ -414,7 +420,7 @@ const PaidBalanceReport = () => {
           <td style="text-align:right;${otherExpd > 0 ? "" : "color:#cbd5e1"}">${dash(otherExpd)}</td>
           <td style="text-align:right;color:#059669">${mon(amtPaid)}</td>
           <td style="text-align:right;${otherPaid > 0 ? "color:#059669" : "color:#cbd5e1"}">${dash(otherPaid)}</td>
-          <td style="text-align:right;color:#059669;font-weight:700">${mon(amtPaid + otherPaid)}</td>
+          <td style="text-align:right;color:#059669;font-weight:700">${mon(totalPaid)}</td>
           <td style="text-align:right;${cfStyle(cf)}">${mon(cf)}</td>
           <td>${row.oldestDueDate ? esc(fmtDate(row.oldestDueDate)) : "—"}</td>
           <td style="color:${statusColor(st)};font-weight:700">${esc(STATUS_LABEL[st] || (st.charAt(0).toUpperCase() + st.slice(1)))}</td>
@@ -430,7 +436,7 @@ const PaidBalanceReport = () => {
       <td style="text-align:right">${dash(grandOther)}</td>
       <td style="text-align:right">${mon(grandAmtPaid)}</td>
       <td style="text-align:right">${dash(grandOtherPaid)}</td>
-      <td style="text-align:right;font-weight:900">${mon(grandAmtPaid + grandOtherPaid)}</td>
+      <td style="text-align:right;font-weight:900">${mon(grandTotalPaid)}</td>
       <td style="text-align:right;${grandBalance > 0 ? "color:#fca5a5" : grandBalance < 0 ? "color:#6ee7b7" : ""}">${mon(grandBalance)}</td>
       <td></td><td></td>
     </tr>`;
@@ -479,7 +485,7 @@ const PaidBalanceReport = () => {
 <div class="divider"></div>
 <div class="summary-bar">
   <span>Invoiced: <b>${mon(summ.totalInvoiced)}</b></span>
-  <span>Paid: <b style="color:#059669">${mon(summ.totalPaidApplied)}</b></span>
+  <span>Paid: <b style="color:#059669">${mon(grandTotalPaid)}</b></span>
   <span>Outstanding: <b style="color:#dc2626">${mon(summ.totalOutstanding)}</b></span>
   <span>Net Balance: <b>${mon(summ.netBalance)}</b></span>
   <span>Arrears: <b style="color:#dc2626">${summ.owingCount || 0}</b></span>
@@ -543,7 +549,7 @@ const PaidBalanceReport = () => {
                 <div className="flex h-full min-w-max divide-x divide-slate-100">
                   {[
                     { label: 'Period Invoiced', value: formatMoney(summary.totalInvoiced),        accent: 'text-slate-800' },
-                    { label: 'Total Paid',       value: formatMoney(summary.totalPaidApplied),     accent: 'text-emerald-700' },
+                    { label: 'Total Paid',       value: formatMoney(grandTotals.totalPaidGross),    accent: 'text-emerald-700' },
                     { label: 'Outstanding',       value: formatMoney(summary.totalOutstanding),     accent: 'text-red-600',     sub: summary.owingCount ? `${summary.owingCount} in arrears` : null },
                     { label: 'Unapplied Credit',  value: formatMoney(summary.totalUnappliedCredit), accent: 'text-amber-600',   sub: summary.creditCount ? `${summary.creditCount} overpaid` : null },
                     { label: 'Net Balance',       value: formatMoney(summary.netBalance),           accent: 'text-slate-800' },
@@ -608,6 +614,7 @@ const PaidBalanceReport = () => {
                         const gOther   = gRows.reduce((s, r) => s + r._otherExpd,  0);
                         const gRentP   = gRows.reduce((s, r) => s + r._rentPaid,   0);
                         const gOtherP  = gRows.reduce((s, r) => s + r._otherPaid,  0);
+                        const gTotalP  = gRows.reduce((s, r) => s + r._totalPaid,  0);
                         const gBalance = sumRows(gRows, 'netBalance');
                         const gOwing   = gRows.filter((r) => r.status === 'owing').length;
                         const gCredit  = gRows.filter((r) => r.status === 'credit').length;
@@ -631,7 +638,7 @@ const PaidBalanceReport = () => {
                               <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-slate-700">{gOther > 0 ? formatMoney(gOther) : <span className="text-slate-300">—</span>}</td>
                               <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-emerald-700">{formatMoney(gRentP)}</td>
                               <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-emerald-700">{gOtherP > 0 ? formatMoney(gOtherP) : <span className="text-white/30">—</span>}</td>
-                              <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-black text-emerald-700">{formatMoney(gRentP + gOtherP)}</td>
+                              <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-black text-emerald-700">{formatMoney(gTotalP)}</td>
                               <td className={`px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] ${balCfStyle(gBalance)}`}>{formatMoney(gBalance)}</td>
                               <td colSpan={2} />
                             </tr>
@@ -658,7 +665,7 @@ const PaidBalanceReport = () => {
                                       ? <span className="pb-tooltip text-emerald-700 underline decoration-dotted decoration-emerald-400" data-tip={row._otherPaidTip || undefined}>{formatMoney(row._otherPaid)}</span>
                                       : <span className="text-slate-300">—</span>}
                                   </td>
-                                  <td className="px-2 py-1 border-r border-gray-100 text-right font-bold text-emerald-700">{formatMoney(row._rentPaid + row._otherPaid)}</td>
+                                  <td className="px-2 py-1 border-r border-gray-100 text-right font-bold text-emerald-700">{formatMoney(row._totalPaid)}</td>
                                   <td className={`px-2 py-1 border-r border-gray-100 text-right ${balCfStyle(balCf)}`}>{formatMoney(balCf)}</td>
                                   <td className="px-2 py-1 border-r border-gray-100 text-slate-500 whitespace-nowrap text-[9px]">
                                     {row.oldestDueDate ? fmtDate(row.oldestDueDate) : <span className="text-slate-300">—</span>}
@@ -685,7 +692,7 @@ const PaidBalanceReport = () => {
                           <td className="px-2 py-1.5 border-r border-white/10 text-right font-bold text-[9px]">{grandTotals.totalOther > 0 ? formatMoney(grandTotals.totalOther) : '—'}</td>
                           <td className="px-2 py-1.5 border-r border-white/10 text-right font-bold text-[9px]">{formatMoney(grandTotals.totalRentPaid)}</td>
                           <td className="px-2 py-1.5 border-r border-white/10 text-right font-bold text-[9px]">{grandTotals.totalOtherPaid > 0 ? formatMoney(grandTotals.totalOtherPaid) : '—'}</td>
-                          <td className="px-2 py-1.5 border-r border-white/10 text-right font-black text-[9px] text-emerald-300">{formatMoney(grandTotals.totalRentPaid + grandTotals.totalOtherPaid)}</td>
+                          <td className="px-2 py-1.5 border-r border-white/10 text-right font-black text-[9px] text-emerald-300">{formatMoney(grandTotals.totalPaidGross)}</td>
                           <td className={`px-2 py-1.5 border-r border-white/10 text-right font-black text-[9px] ${grandTotals.totalBalance > 0 ? 'text-red-300' : grandTotals.totalBalance < 0 ? 'text-emerald-300' : ''}`}>{formatMoney(grandTotals.totalBalance)}</td>
                           <td colSpan={2} />
                         </tr>

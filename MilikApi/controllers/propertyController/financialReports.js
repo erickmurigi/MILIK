@@ -918,7 +918,7 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
     const unitMap = new Map(allUnits.map((u) => [String(u._id), u]));
     const propMap = new Map(allProperties.map((p) => [String(p._id), p]));
 
-    // ── Step 2: build base rows — one row per tenant-unit pair ──
+    // ── Step 2: build base rows — one row per tenant (all units combined) ──
     const baseRows = [];
     for (const tenant of allTenants) {
       const primaryUnit = unitMap.get(String(tenant.unit || "")) || {};
@@ -927,25 +927,22 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
       const allTenantUnits = [primaryUnit, ...additionalUnits].filter((u) => u._id);
       const property = propMap.get(String(primaryUnit.property || "")) || {};
       const landlord = pickPrimaryLandlord(property);
-      const unitsToExpand = allTenantUnits.length > 0 ? allTenantUnits : [primaryUnit];
-      for (let ui = 0; ui < unitsToExpand.length; ui++) {
-        const unit = unitsToExpand[ui];
-        const row = {
-          tenantId: String(tenant._id),
-          tenantName: tenant.tenantName || tenant.name || "Unknown Tenant",
-          unitId: String(unit._id || tenant.unit || ""),
-          unitNumber: unit.unitNumber || unit.name || "N/A",
-          isPrimary: ui === 0,
-          propertyId: String(property._id || primaryUnit.property || ""),
-          propertyName: property.propertyName || property.name || "N/A",
-          landlordId: String(landlord?.landlordId || ""),
-          landlordName: landlord?.name || "N/A",
-        };
-        if (filterPropertyId && row.propertyId !== filterPropertyId) continue;
-        if (filterLandlordId && row.landlordId !== filterLandlordId) continue;
-        if (filterSearch && !`${row.tenantName} ${row.propertyName} ${row.unitNumber}`.toLowerCase().includes(filterSearch)) continue;
-        baseRows.push(row);
-      }
+      // Combine all unit numbers into a single display string
+      const unitNumbers = allTenantUnits.map((u) => u.unitNumber || u.name).filter(Boolean).join(", ") || (primaryUnit.unitNumber || primaryUnit.name || "N/A");
+      const row = {
+        tenantId: String(tenant._id),
+        tenantName: tenant.tenantName || tenant.name || "Unknown Tenant",
+        unitId: String(primaryUnit._id || tenant.unit || ""),
+        unitNumber: unitNumbers,
+        propertyId: String(property._id || primaryUnit.property || ""),
+        propertyName: property.propertyName || property.name || "N/A",
+        landlordId: String(landlord?.landlordId || ""),
+        landlordName: landlord?.name || "N/A",
+      };
+      if (filterPropertyId && row.propertyId !== filterPropertyId) continue;
+      if (filterLandlordId && row.landlordId !== filterLandlordId) continue;
+      if (filterSearch && !`${row.tenantName} ${row.propertyName} ${row.unitNumber}`.toLowerCase().includes(filterSearch)) continue;
+      baseRows.push(row);
     }
 
     // ── Step 3: snapshot computation in chunks of 500 ──
@@ -973,18 +970,12 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
           const d = inv.invoiceDate ? new Date(inv.invoiceDate).getTime() : 0;
           return d >= fromDateMs;
         });
-        // Previous arrears: outstanding on invoices dated before the period start, broken down by category
+        // Previous arrears: outstanding on invoices dated before the period start, all units combined
         const priorInvoices = fromDateMs
-          ? allSnapshotInvoices
-              .filter((inv) => {
-                const d = inv.invoiceDate ? new Date(inv.invoiceDate).getTime() : 0;
-                return d < fromDateMs;
-              })
-              .filter((inv) => {
-                if (!row.unitId) return true;
-                const invUnit = String(inv.unit || "");
-                return invUnit === row.unitId || (!invUnit && row.isPrimary);
-              })
+          ? allSnapshotInvoices.filter((inv) => {
+              const d = inv.invoiceDate ? new Date(inv.invoiceDate).getTime() : 0;
+              return d < fromDateMs;
+            })
           : [];
         let previousArrears = 0;
         let priorInvoiceTotal = 0;
@@ -1015,15 +1006,10 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
           }
         }
         previousArrears = round2(previousArrears);
-        // Filter invoices to this specific unit; invoices without a unit fall back to primary row
-        const invoices = row.unitId
-          ? allInvoices.filter((inv) => {
-              const invUnit = String(inv.unit || "");
-              return invUnit === row.unitId || (!invUnit && row.isPrimary);
-            })
-          : allInvoices;
-        // Unapplied credit is a tenant-level concept; only include on primary unit row to avoid double-counting
-        const receipts = row.isPrimary ? normalizeArray(snapshot.receiptAllocations) : [];
+        // All invoices across all units combined — no per-unit split
+        const invoices = allInvoices;
+        // Receipts are always tenant-level
+        const receipts = normalizeArray(snapshot.receiptAllocations);
 
         let totalInvoiced = 0;
         let totalPaidApplied = 0;
@@ -1081,13 +1067,18 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
 
         let unappliedCredit = 0;
         let priorReceiptTotal = 0;
+        let periodReceiptTotal = 0;
         let lastPaymentDateMs = null;
         for (const receipt of receipts) {
           unappliedCredit += Number(receipt?.unappliedAmount || 0);
           if (receipt?.paymentDate) {
             const ms = new Date(receipt.paymentDate).getTime();
             if (!lastPaymentDateMs || ms > lastPaymentDateMs) lastPaymentDateMs = ms;
-            if (fromDateMs && ms < fromDateMs) priorReceiptTotal += Number(receipt?.amount || 0);
+            if (fromDateMs && ms < fromDateMs) {
+              priorReceiptTotal += Number(receipt?.amount || 0);
+            } else {
+              periodReceiptTotal += Number(receipt?.amount || 0);
+            }
           }
         }
 
@@ -1126,6 +1117,7 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
           penaltyInvoiced: round2(penaltyInvoiced),
           depositInvoiced: round2(depositInvoiced),
           otherInvoiced: round2(otherInvoiced),
+          periodReceiptTotal: round2(periodReceiptTotal),
           oldestDueDate: oldestDueDateMs ? new Date(oldestDueDateMs).toISOString() : null,
           lastPaymentDate: lastPaymentDateMs ? new Date(lastPaymentDateMs).toISOString() : null,
           status,
@@ -1133,11 +1125,11 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
       }
     }
 
-    // Sort by property name, then by unit number with natural numeric ordering (1, 2, 10 not 1, 10, 2)
+    // Sort by property name, then by tenant name
     allRows.sort((a, b) => {
       const propCmp = (a.propertyName || "").localeCompare(b.propertyName || "");
       if (propCmp !== 0) return propCmp;
-      return (a.unitNumber || "").localeCompare(b.unitNumber || "", undefined, { numeric: true, sensitivity: "base" });
+      return (a.tenantName || "").localeCompare(b.tenantName || "");
     });
 
     const rows = allRows;
@@ -1147,8 +1139,7 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
       acc.totalInvoiced += row.totalInvoiced;
       acc.totalPaidApplied += row.totalPaidApplied;
       acc.totalOutstanding += row.outstanding;
-      // Only add unapplied credit from primary unit rows to avoid double-counting
-      if (row.isPrimary !== false) acc.totalUnappliedCredit += row.unappliedCredit;
+      acc.totalUnappliedCredit += row.unappliedCredit;
       acc.netBalance += row.netBalance;
       if (row.status === "owing") acc.owingCount += 1;
       if (row.status === "credit") acc.creditCount += 1;
