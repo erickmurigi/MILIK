@@ -14,7 +14,7 @@
  *  allocationTracePanel  – JSX to render below the table (from parent)
  */
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import AppSelect from "../../components/common/AppSelect";
 import { FaLink } from "react-icons/fa";
 import { fmtDate } from "../../utils/dates";
@@ -64,22 +64,43 @@ export default function TenantStatementTab({
   onOpenAllocationTrace,
   onOpenReceiptWorkspace,
   allocationTracePanel,
+  // Controlled filter state (lifted to TenantStatement.jsx)
+  from: fromProp,
+  to: toProp,
+  typeFilter: typeFilterProp,
+  onFromChange,
+  onToChange,
+  onTypeFilterChange,
 }) {
-  const [from,     setFrom]    = useState(ytdStart);
-  const [to,       setTo]      = useState(todayStr);
-  const [typeFilter, setTypeFilter] = useState("ALL");
+  // Fall back to local state when not controlled (defensive — parent always passes these now)
+  const [localFrom,       setLocalFrom]       = useState("2000-01-01");
+  const [localTo,         setLocalTo]         = useState(todayStr);
+  const [localTypeFilter, setLocalTypeFilter] = useState("ALL");
+
+  const from       = fromProp       !== undefined ? fromProp       : localFrom;
+  const to         = toProp         !== undefined ? toProp         : localTo;
+  const typeFilter = typeFilterProp  !== undefined ? typeFilterProp : localTypeFilter;
+  const setFrom       = useCallback((v) => onFromChange       ? onFromChange(v)       : setLocalFrom(v),       [onFromChange]);
+  const setTo         = useCallback((v) => onToChange         ? onToChange(v)         : setLocalTo(v),         [onToChange]);
+  const setTypeFilter = useCallback((v) => onTypeFilterChange ? onTypeFilterChange(v) : setLocalTypeFilter(v), [onTypeFilterChange]);
 
   // ── Derived ────────────────────────────────────────────────────────────────
-  const allTx = statementData?.transactions || [];
+  const allTx = useMemo(() => statementData?.transactions || [], [statementData?.transactions]);
 
-  const fromBoundary = from ? new Date(`${from}T00:00:00`) : null;
-  const toBoundary   = to   ? new Date(`${to}T23:59:59`)   : null;
+  const fromBoundary = useMemo(() => from ? new Date(`${from}T00:00:00`) : null, [from]);
+  const toBoundary   = useMemo(() => to   ? new Date(`${to}T23:59:59`)   : null, [to]);
 
   // Balance brought forward (sum of transactions before the from-date)
-  const bbf = fromBoundary
-    ? allTx.filter((t) => new Date(t.date) < fromBoundary).reduce((s, t) => s + t.amount, 0)
-    : 0;
-  const hasBbf = fromBoundary !== null && allTx.some((t) => new Date(t.date) < fromBoundary);
+  const bbf = useMemo(() =>
+    fromBoundary
+      ? allTx.filter((t) => new Date(t.date) < fromBoundary).reduce((s, t) => s + t.amount, 0)
+      : 0,
+    [allTx, fromBoundary]
+  );
+  const hasBbf = useMemo(() =>
+    fromBoundary !== null && allTx.some((t) => new Date(t.date) < fromBoundary),
+    [allTx, fromBoundary]
+  );
 
   const visibleTx = useMemo(() =>
     allTx
@@ -89,16 +110,19 @@ export default function TenantStatementTab({
         return (!fromBoundary || d >= fromBoundary) && (!toBoundary || d <= toBoundary);
       })
       .map((t) => ({ ...t, balance: t.balance + bbf })),
-    [allTx, from, to, typeFilter, bbf]
+    [allTx, fromBoundary, toBoundary, typeFilter, bbf]
   );
 
-  const openingBalance  = hasBbf ? bbf : null;
-  const closingBalance  = visibleTx.length > 0
-    ? visibleTx[visibleTx.length - 1].balance
-    : hasBbf ? bbf : null;
+  const openingBalance = hasBbf ? bbf : null;
+  const closingBalance = useMemo(() =>
+    visibleTx.length > 0 ? visibleTx[visibleTx.length - 1].balance : hasBbf ? bbf : null,
+    [visibleTx, hasBbf, bbf]
+  );
 
-  const periodDebits  = visibleTx.reduce((s, t) => ["CHARGE","DEBIT_NOTE"].includes(t.type)  ? s + Math.abs(t.amount) : s, 0);
-  const periodCredits = visibleTx.reduce((s, t) => ["PAYMENT","CREDIT_NOTE"].includes(t.type) ? s + Math.abs(t.amount) : s, 0);
+  const { periodDebits, periodCredits } = useMemo(() => ({
+    periodDebits:  visibleTx.reduce((s, t) => ["CHARGE","DEBIT_NOTE"].includes(t.type)  ? s + Math.abs(t.amount) : s, 0),
+    periodCredits: visibleTx.reduce((s, t) => ["PAYMENT","CREDIT_NOTE"].includes(t.type) ? s + Math.abs(t.amount) : s, 0),
+  }), [visibleTx]);
 
   // Balance hero values (all-time, not period-filtered)
   const netBalance   = statementData?.currentBalance ?? 0;
@@ -111,23 +135,31 @@ export default function TenantStatementTab({
   const rent = tenantLease?.rentAmount || tenant?.rent || 0;
 
   // Active preset detection
-  const _today = todayStr();
-  const activePreset =
-    from === _today       && to === _today  ? "Today"      :
-    from === monthStart() && to === _today  ? "This Month" :
-    from === ago3m()      && to === _today  ? "3 Months"   :
-    from === ytdStart()   && to === _today  ? "YTD"        :
-    from === "2000-01-01" && to === _today  ? "All Time"   : null;
+  const activePreset = useMemo(() => {
+    const _today = todayStr();
+    if (from === _today        && to === _today) return "Today";
+    if (from === monthStart()  && to === _today) return "This Month";
+    if (from === ago3m()       && to === _today) return "3 Months";
+    if (from === ytdStart()    && to === _today) return "YTD";
+    if (from === "2000-01-01"  && to === _today) return "All Time";
+    return null;
+  }, [from, to]);
 
-  const isFiltered = from !== ytdStart() || to !== _today || typeFilter !== "ALL";
+  const isFiltered = useMemo(() => {
+    const _today = todayStr();
+    return from !== "2000-01-01" || to !== _today || typeFilter !== "ALL";
+  }, [from, to, typeFilter]);
 
-  const presets = [
-    { label: "Today",      fn: () => { setFrom(_today);       setTo(_today); } },
-    { label: "This Month", fn: () => { setFrom(monthStart()); setTo(_today); } },
-    { label: "3 Months",   fn: () => { setFrom(ago3m());      setTo(_today); } },
-    { label: "YTD",        fn: () => { setFrom(ytdStart());   setTo(_today); } },
-    { label: "All Time",   fn: () => { setFrom("2000-01-01"); setTo(_today); } },
-  ];
+  const presets = useMemo(() => {
+    const _today = todayStr();
+    return [
+      { label: "Today",      fn: () => { setFrom(_today);       setTo(_today); } },
+      { label: "This Month", fn: () => { setFrom(monthStart()); setTo(_today); } },
+      { label: "3 Months",   fn: () => { setFrom(ago3m());      setTo(_today); } },
+      { label: "YTD",        fn: () => { setFrom(ytdStart());   setTo(_today); } },
+      { label: "All Time",   fn: () => { setFrom("2000-01-01"); setTo(_today); } },
+    ];
+  }, [setFrom, setTo]);
 
   const heroVariant = isSettled
     ? { bg: "bg-emerald-700", label: "Account Settled", valueColor: "text-white", subColor: "text-emerald-200" }
@@ -245,7 +277,7 @@ export default function TenantStatementTab({
           {isFiltered && (
             <button
               type="button"
-              onClick={() => { setFrom(ytdStart()); setTo(todayStr()); setTypeFilter("ALL"); }}
+              onClick={() => { setFrom("2000-01-01"); setTo(todayStr()); setTypeFilter("ALL"); }}
               className="h-7 shrink-0 border border-red-200 bg-red-50 px-2.5 text-[10px] font-bold text-red-600 hover:bg-red-100 transition-colors"
             >↺ Reset</button>
           )}

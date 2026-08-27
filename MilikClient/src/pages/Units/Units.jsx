@@ -51,6 +51,18 @@ import PaginationBar from "../../components/PaginationBar";
 
 const DEFAULT_COMPANY_UNIT_TYPES = ["studio", "1bed", "2bed", "3bed", "4bed", "commercial"];
 
+// Module-scope constants — avoids re-allocating on every render
+const EMPTY_FILTERS = {
+  property: "any",
+  status: "active",
+  unitType: "any",
+  unitNo: "",
+  tenant: "",
+};
+
+const PROPERTIES_FOR_DROPDOWN = ["A1, KH KENYA", "AAA, PARKLANDS KENYA", "ALL PURPOSE APARTMENT", "ALPHA APARTMENT", "BASIL TOWERS", "BLUE SKY PLAZA"];
+const CHARGE_FREQUENCIES = ["Monthly", "Quarterly", "Semi-Annually", "Annually", "One-time"];
+
 const formatUnitTypeLabel = (value = "") => {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -87,6 +99,13 @@ const sanitizeCompanyUnitTypes = (value = []) => {
     )
   );
   return normalized.length ? normalized : [...DEFAULT_COMPANY_UNIT_TYPES];
+};
+
+// Pure helper — moved out of component so it's not re-declared every render
+const formatRentAmount = (amount) => {
+  const numericAmount = Number(amount);
+  if (!Number.isFinite(numericAmount)) return "Ksh 0";
+  return `Ksh ${numericAmount.toLocaleString("en-KE")}`;
 };
 
 
@@ -192,15 +211,7 @@ const Units = () => {
   // ---------------------------
   // FILTERS (Draft -> Apply with Search button)
   // ---------------------------
-  const emptyFilters = {
-    property: "any",
-    status: "active",
-    unitType: "any",
-    unitNo: "",
-    tenant: "",
-  };
-
-  const [appliedFilters, setAppliedFilters] = useTabState("/units:appliedFilters", emptyFilters);
+  const [appliedFilters, setAppliedFilters] = useTabState("/units:appliedFilters", EMPTY_FILTERS);
   const [draftFilters, setDraftFilters] = useState(appliedFilters);
 
   const buildUnitParams = useCallback((overridePage = 1, overrideFilters = null) => {
@@ -214,7 +225,7 @@ const Units = () => {
     return params;
   }, [appliedFilters, currentCompany?._id, pageSize]);
 
-  const applySearch = () => {
+  const applySearch = useCallback(() => {
     const newFilters = {
       ...draftFilters,
       unitNo: draftFilters.unitNo.trim(),
@@ -226,25 +237,25 @@ const Units = () => {
     setSelectedUnits([]);
     setExpandedUnits([]);
     if (currentCompany?._id) dispatch(getUnits(buildUnitParams(1, newFilters)));
-  };
+  }, [draftFilters, setAppliedFilters, setCurrentPage, currentCompany?._id, dispatch, buildUnitParams]);
 
-  const resetFilters = () => {
-    setDraftFilters(emptyFilters);
-    setAppliedFilters(emptyFilters);
+  const resetFilters = useCallback(() => {
+    setDraftFilters(EMPTY_FILTERS);
+    setAppliedFilters(EMPTY_FILTERS);
     setCurrentPage(1);
     setExpandedUnits([]);
     setSelectAll(false);
     setSelectedUnits([]);
     setActionMenuOpen(false);
     if (currentCompany?._id) dispatch(getUnits({ business: currentCompany._id, page: 1, limit: pageSize }));
-  };
+  }, [setAppliedFilters, setCurrentPage, currentCompany?._id, dispatch, pageSize]);
 
-  const onFilterEnter = (e) => {
+  const onFilterEnter = useCallback((e) => {
     if (e.key === "Enter") {
       e.preventDefault();
       applySearch();
     }
-  };
+  }, [applySearch]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -272,13 +283,7 @@ const Units = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dispatch, currentCompany?._id]);
 
-  // Transform units data to match the table structure
-  const formatRentAmount = (amount) => {
-    const numericAmount = Number(amount);
-    if (!Number.isFinite(numericAmount)) return "Ksh 0";
-    return `Ksh ${numericAmount.toLocaleString("en-KE")}`;
-  };
-
+  // Transform units data to match the table structure (formatRentAmount moved to module scope)
   const propertyById = useMemo(() => {
     const m = new Map();
     (properties || []).forEach(p => { if (p?._id) m.set(String(p._id), p); });
@@ -427,11 +432,11 @@ const Units = () => {
     return currentUnits.map((u) => u.id);
   }, [currentUnits]);
 
-  const handleSelectUnit = (id) => {
+  const handleSelectUnit = useCallback((id) => {
     setSelectedUnits((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  };
+  }, []);
 
-  const handleSelectAll = () => {
+  const handleSelectAll = useCallback(() => {
     if (selectAll) {
       const visibleSet = new Set(visibleUnitIds);
       setSelectedUnits((prev) => prev.filter((id) => !visibleSet.has(id)));
@@ -440,32 +445,34 @@ const Units = () => {
       setSelectedUnits((prev) => Array.from(new Set([...prev, ...visibleUnitIds])));
       setSelectAll(true);
     }
-  };
+  }, [selectAll, visibleUnitIds]);
 
-  const handleCheckboxClick = (e) => e.stopPropagation();
+  const handleCheckboxClick = useCallback((e) => e.stopPropagation(), []);
 
   // Toggle expand for a specific unit
-  const toggleUnitExpand = (unitId) => {
+  const toggleUnitExpand = useCallback((unitId) => {
     setExpandedUnits((prev) =>
       prev.includes(unitId) ? prev.filter((id) => id !== unitId) : [...prev, unitId]
     );
-  };
+  }, []);
 
   // Expand all visible units on current page
-  const expandAllUnits = () => {
+  const expandAllUnits = useCallback(() => {
     if (currentUnits && currentUnits.length > 0) {
       setExpandedUnits(currentUnits.map((u) => u.id));
     }
-  };
+  }, [currentUnits]);
 
   // Collapse all units
-  const collapseAllUnits = () => {
+  const collapseAllUnits = useCallback(() => {
     setExpandedUnits([]);
-  };
+  }, []);
 
   // Check if all visible units are expanded
-  const allUnitsExpanded =
-    currentUnits.length > 0 && currentUnits.every((unit) => expandedUnits.includes(unit.id));
+  const allUnitsExpanded = useMemo(
+    () => currentUnits.length > 0 && currentUnits.every((unit) => expandedUnits.includes(unit.id)),
+    [currentUnits, expandedUnits]
+  );
 
   // Row click now selects the unit (not expands)
   const handleRowClick = (unitId, e) => {
@@ -807,8 +814,7 @@ const Units = () => {
     setExtraMeters([{ meterNo: "", readingSetup: false }]);
   };
 
-  const propertiesForDropdown = ["A1, KH KENYA", "AAA, PARKLANDS KENYA", "ALL PURPOSE APARTMENT", "ALPHA APARTMENT", "BASIL TOWERS", "BLUE SKY PLAZA"];
-  const chargeFrequencies = ["Monthly", "Quarterly", "Semi-Annually", "Annually", "One-time"];
+  // propertiesForDropdown and chargeFrequencies are now module-scope constants (PROPERTIES_FOR_DROPDOWN, CHARGE_FREQUENCIES)
   const unitTypeOptions = useMemo(() => {
     const apiTypes = configuredUnitTypes.length
       ? configuredUnitTypes.map((t) => t.name.toLowerCase().replace(/\s+/g, ""))
@@ -1118,7 +1124,7 @@ const Units = () => {
                         <AppSelect
                           value={formData.property}
                           onChange={(v) => setFormData((p) => ({ ...p, property: v ?? "" }))}
-                          options={propertiesForDropdown.map((p) => ({ value: p, label: p }))}
+                          options={PROPERTIES_FOR_DROPDOWN.map((p) => ({ value: p, label: p }))}
                           placeholder="Select Property"
                           searchable
                           clearable
@@ -1242,7 +1248,7 @@ const Units = () => {
                         <AppSelect
                           value={formData.chargeFreq}
                           onChange={(v) => setFormData((p) => ({ ...p, chargeFreq: v ?? "" }))}
-                          options={chargeFrequencies.map((f) => ({ value: f, label: f }))}
+                          options={CHARGE_FREQUENCIES.map((f) => ({ value: f, label: f }))}
                           placeholder="Select Frequency"
                           clearable
                           size="md"

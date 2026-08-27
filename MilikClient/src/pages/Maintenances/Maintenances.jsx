@@ -125,7 +125,7 @@ const Maintenances = () => {
 
   // Form-dropdown data — read from Redux so re-visiting the page hits no extra API calls
   const properties = useSelector(selectAllProperties);
-  const units = useSelector((s) => s.unit?.units || []);
+  const units = useSelector(selectAllUnits);
   const tenants = useSelector(selectAllTenants);
   const { propertiesLoaded, unitsLoaded, tenantsLoaded } = useEntityCache(currentCompany?._id);
 

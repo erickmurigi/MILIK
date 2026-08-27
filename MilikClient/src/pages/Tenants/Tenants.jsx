@@ -17,8 +17,6 @@ import {
   FaCheck,
   FaSearch,
   FaChevronDown,
-  FaExpandAlt,
-  FaCompressAlt,
   FaFileExport,
   FaRedoAlt,
   FaEdit,
@@ -697,7 +695,6 @@ const Tenants = ({ listingMode = "active" }) => {
   // ===== UI STATE =====
   const [pageSize, setPageSize] = useTabState("/tenants:pageSize", DEFAULT_PAGE_SIZE);
   const [currentPage, setCurrentPage] = useTabState("/tenants:currentPage", 1);
-  const [expandedTenants, setExpandedTenants] = useState([]);
   const [selectedTenants, setSelectedTenants] = useState([]);
   const selectedTenantsSet = useMemo(() => new Set(selectedTenants), [selectedTenants]);
   const [selectAll, setSelectAll] = useState(false);
@@ -1095,7 +1092,11 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
   const startIndex = (safeCurrentPage - 1) * pageSize;
   const endIndex = startIndex + pageSize;
   // Tenants from server are already the current page; local sort/filter on the page subset
-  const currentTenants = sortedFilteredTenants.slice(0, endIndex - startIndex);
+  // useMemo: stable identity prevents propertyTenantCounts from recomputing on unrelated state changes
+  const currentTenants = useMemo(
+    () => sortedFilteredTenants.slice(0, endIndex - startIndex),
+    [sortedFilteredTenants, endIndex, startIndex]
+  );
 
   const propertyTenantCounts = useMemo(() => {
     const map = {};
@@ -1520,14 +1521,6 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
         ? prev.filter((id) => id !== tenantId)
         : [...prev, tenantId]
     );
-  };
-
-  const expandAllTenants = () => {
-    setExpandedTenants(sortedFilteredTenants.map((t) => t.id));
-  };
-
-  const collapseAllTenants = () => {
-    setExpandedTenants([]);
   };
 
   // ===== ACTION MENU HANDLERS =====
@@ -2017,13 +2010,13 @@ const confirmTransferUnit = useCallback(async () => {
       company: currentCompany || {},
       summary: `Records: ${printRows.length} • Printed on ${new Date().toLocaleString()}`,
       columns: [
-        { label: "Tenant Code", value: (row) => row?.tenantCode || row?.code || "-" },
-        { label: "Tenant Name", value: (row) => row?.name || row?.tenantName || "-" },
-        { label: "Property", value: (row) => resolveTenantPropertyName(row) },
         { label: "Unit", value: (row) => row?.unit?.unitNumber || row?.unitNumber || "-" },
-        { label: "VAT / Tax", value: (row) => resolveTenantPrintTaxLabel(row) },
+        { label: "A/C #", value: (row) => row?.tenantCode || row?.code || "-" },
+        { label: "Tenant Name", value: (row) => row?.name || row?.tenantName || "-" },
+        { label: "Phone", value: (row) => row?.phone || row?.phoneNumber || "-" },
         { label: "Rent", value: (row) => row?.rent || "-", align: "right" },
         { label: "Balance", value: (row) => Number(row?.balance || 0).toLocaleString(), align: "right" },
+        { label: "Lease Period", value: (row) => [row?.leaseStartDate || row?.startDate, row?.leaseEndDate || row?.endDate].filter(Boolean).join(" – ") || "-" },
         { label: "Status", value: (row) => computeOperationalStatus({ tenant: row }) },
       ],
       rows: printRows,
@@ -2107,13 +2100,7 @@ const confirmTransferUnit = useCallback(async () => {
               <button onClick={handleResetFilters} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-gray-500 px-1.5 text-[9px] font-semibold text-white hover:bg-gray-600">
                 <FaRedoAlt size={7} /> Reset
               </button>
-              <button onClick={expandAllTenants} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-slate-200 px-1.5 text-[9px] text-gray-600 hover:bg-gray-50" title="Expand all">
-                <FaExpandAlt size={7} /> Expand
-              </button>
-              <button onClick={collapseAllTenants} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-slate-200 px-1.5 text-[9px] text-gray-600 hover:bg-gray-50" title="Collapse all">
-                <FaCompressAlt size={7} /> Collapse
-              </button>
-              {canUpdateTenant && (
+{canUpdateTenant && (
                 <button onClick={handleEditTenant} disabled={selectedTenants.length !== 1}
                   className="h-[20px] shrink-0 flex items-center gap-0.5 bg-blue-500 px-1.5 text-[9px] font-semibold text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed">
                   <FaEdit size={7} /> Edit
@@ -2275,9 +2262,9 @@ const confirmTransferUnit = useCallback(async () => {
         {/* ===== TENANTS TABLE ===== */}
         <MilikTable
           columns={[
-            { label: "Code", width: "82px" },
+            { label: "Unit", width: "80px" },
+            { label: "A/C #", width: "82px" },
             { label: "Tenant" },
-            { label: "Unit", width: "72px" },
             ...(isTerminatedView ? [
               { label: "Terminated", width: "108px" },
               { label: "Move-out", width: "100px" },
@@ -2286,11 +2273,11 @@ const confirmTransferUnit = useCallback(async () => {
               { label: "Settlement", align: "center", width: "110px" },
               { label: "Held By", width: "130px" },
             ] : [
-              { label: "Lease Period", width: "188px" },
+              { label: "Phone", width: "120px" },
               { label: "Rent", align: "right", width: "100px" },
               { label: "Balance", align: "right", width: "112px" },
+              { label: "Lease Period", width: "188px" },
               { label: "Status", align: "center", width: "92px" },
-              { label: "Contact", width: "155px" },
             ]),
           ]}
           rows={currentTenants}
@@ -2310,14 +2297,21 @@ const confirmTransferUnit = useCallback(async () => {
           renderRow={(tenant) => (
             <>
               <td className="px-3 py-1.5 border-r border-gray-100 overflow-hidden">
+                <span className="font-medium text-slate-700 truncate block">{toListingCaps(tenant.unitNumber)}</span>
+              </td>
+              <td className="px-3 py-1.5 border-r border-gray-100 overflow-hidden">
                 <span className="font-mono text-[10px] text-slate-500 tracking-wide truncate block">{toListingCaps(tenant.tenantCode)}</span>
               </td>
-              <td className="px-3 py-1.5 border-r border-gray-100 overflow-hidden">
-                <div className="font-semibold text-slate-900 leading-tight truncate" title={toListingCaps(tenant.tenantName)}>{toListingCaps(tenant.tenantName)}</div>
+              <td className="px-3 py-1.5 border-r border-gray-100 overflow-hidden group/name">
+                <div className="flex items-center gap-1 min-w-0">
+                  <span className="font-semibold text-slate-900 leading-tight truncate" title={toListingCaps(tenant.tenantName)}>{toListingCaps(tenant.tenantName)}</span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); const firstName = (tenant.tenantName || "Tenant").split(" ")[0]; navigate(`/tenant/${tenant.id}/statement`, { state: { tabTitle: `${firstName}-${tenant.tenantCode || "TT0000"}` } }); }}
+                    className="flex-shrink-0 opacity-0 group-hover/name:opacity-100 rounded p-0.5 text-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white transition-all"
+                    title="Open statement"
+                  ><FaChartLine size={9} /></button>
+                </div>
                 {tenant.expiryWarning?.hasWarning && <div className="text-[10px] font-semibold text-red-600 leading-tight truncate">{tenant.expiryWarning.summary}</div>}
-              </td>
-              <td className="px-3 py-1.5 border-r border-gray-100 overflow-hidden">
-                <span className="font-medium text-slate-700 truncate block">{toListingCaps(tenant.unitNumber)}</span>
               </td>
               {isTerminatedView ? (
                 <>
@@ -2343,10 +2337,10 @@ const confirmTransferUnit = useCallback(async () => {
                 </>
               ) : (
                 <>
-                  <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap">
-                    <span className="text-slate-600">{tenant.startDate}</span>
-                    <span className="text-slate-300 mx-1.5">→</span>
-                    {tenant.endDate === "-" ? <span className="text-slate-400 italic text-[10px]">open</span> : <span className={tenant.expiryWarning?.hasWarning ? "font-semibold text-red-600" : "text-slate-600"}>{tenant.endDate}</span>}
+                  <td className="px-3 py-1.5 border-r border-gray-100 overflow-hidden">
+                    {tenant.phone && tenant.phone !== "-"
+                      ? <span className="text-[11px] font-medium text-slate-700 truncate block">{tenant.phone}</span>
+                      : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold text-slate-700 whitespace-nowrap">{tenant.rent}</td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-right whitespace-nowrap">
@@ -2356,7 +2350,12 @@ const confirmTransferUnit = useCallback(async () => {
                       <span className="font-bold text-red-600">KES {tenant.balance.toLocaleString()}</span>
                     ) : <span className="text-slate-300">—</span>}
                   </td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 text-center">
+                  <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap">
+                    <span className="text-slate-600">{tenant.startDate}</span>
+                    <span className="text-slate-300 mx-1.5">→</span>
+                    {tenant.endDate === "-" ? <span className="text-slate-400 italic text-[10px]">open</span> : <span className={tenant.expiryWarning?.hasWarning ? "font-semibold text-red-600" : "text-slate-600"}>{tenant.endDate}</span>}
+                  </td>
+                  <td className="px-3 py-1.5 text-center">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                       tenant.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                       : tenant.status === "terminated" ? "bg-red-50 text-red-700 border-red-200"
@@ -2364,67 +2363,9 @@ const confirmTransferUnit = useCallback(async () => {
                     }`}>{tenant.status}</span>
                     {tenant.expiryWarning?.hasWarning && <div className="mt-0.5"><span className="inline-flex items-center rounded-full bg-red-50 border border-red-200 px-1.5 py-0.5 text-[9px] font-bold text-red-600">Expiring</span></div>}
                   </td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 overflow-hidden">
-                    {tenant.phone && tenant.phone !== "-" && <div className="text-[11px] font-medium text-slate-700 leading-tight truncate">{tenant.phone}</div>}
-                    {tenant.email && tenant.email !== "-" ? (
-                      <a href={`mailto:${tenant.email}`} onClick={(e) => e.stopPropagation()} className="block text-[10px] text-blue-500 hover:text-blue-700 hover:underline truncate leading-tight mt-0.5" title={tenant.email}>{tenant.email}</a>
-                    ) : (!tenant.phone || tenant.phone === "-" ? <span className="text-slate-300">—</span> : null)}
-                  </td>
                 </>
               )}
             </>
-          )}
-          renderExpanded={(tenant) => (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
-              <div>
-                <h4 className="mb-2 border-b border-slate-200 pb-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">Tenant Details</h4>
-                <div className="space-y-1 text-xs">
-                  <div><span className="font-bold text-gray-700 block text-xs">Email:</span><p className="text-gray-600 text-xs">{tenant.email}</p></div>
-                  <div><span className="font-bold text-gray-700 block text-xs">Phone:</span><p className="text-gray-600 text-xs">{tenant.phone}</p></div>
-                  <div><span className="font-bold text-gray-700 block text-xs">Property:</span><p className="text-gray-600 text-xs">{toListingCaps(tenant.propertyName)}</p></div>
-                </div>
-              </div>
-              <div>
-                <h4 className="mb-2 border-b border-slate-200 pb-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">Billing Info</h4>
-                <div className="space-y-1 text-xs">
-                  <div><span className="font-bold text-gray-700 block text-xs">Monthly Rent:</span><p className="text-gray-600 font-bold">{tenant.rent}</p></div>
-                  <div>
-                    <span className="font-bold text-gray-700 block text-xs">Balance:</span>
-                    {tenant.balance < -0.009 ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">CR&nbsp;{Math.abs(tenant.balance).toLocaleString("en-KE", { minimumFractionDigits: 2 })}</span>
-                    ) : <p className={`font-bold ${tenant.balance > 0 ? "text-red-600" : "text-gray-400"}`}>{tenant.balance > 0 ? `KES ${tenant.balance.toLocaleString()}` : "—"}</p>}
-                  </div>
-                  <div><span className="font-bold text-gray-700 block text-xs">Status:</span><p className={`text-xs font-bold ${tenant.status === "any" ? "text-green-700" : "text-gray-700"}`}>{tenant.status.toUpperCase()}</p></div>
-                </div>
-              </div>
-              <div>
-                <h4 className="mb-2 border-b border-slate-200 pb-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">Lease Details</h4>
-                <div className="space-y-1 text-xs">
-                  <div><span className="font-bold text-gray-700 block text-xs">Unit:</span><p className="text-gray-600 text-xs">{toListingCaps(tenant.unitNumber)}</p></div>
-                  <div><span className="font-bold text-gray-700 block text-xs">Lease Start Date:</span><p className="text-gray-600 font-bold text-xs">{tenant.startDate}</p></div>
-                  <div><span className="font-bold text-gray-700 block text-xs">Lease End Date:</span><p className={`${tenant.expiryWarning?.hasWarning ? "text-red-700" : "text-gray-600"} font-bold text-xs`}>{tenant.endDate}</p></div>
-                  {tenant.expiryWarning?.hasWarning && <div className="rounded-lg border border-red-200 bg-red-50 px-2 py-2"><span className="font-bold text-red-700 block text-xs">Expiry Warning:</span><p className="text-red-700 text-xs font-semibold">{tenant.expiryWarning.summary}</p></div>}
-                </div>
-              </div>
-              <div>
-                <h4 className="mb-2 border-b border-slate-200 pb-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">Actions</h4>
-                <div className="flex flex-col gap-1">
-                  <button onClick={() => { const firstName = (tenant.tenantName || "Tenant").split(" ")[0]; navigate(`/tenant/${tenant.id}/statement`, { state: { tabTitle: `${firstName}-${tenant.tenantCode || "TT0000"}` } }); }} className="rounded px-2 py-1 text-xs font-semibold text-white transition-colors bg-[#0B3B2E] hover:bg-[#0A3127]">View Statement</button>
-                  {isTerminatedView && (
-                    <>
-                      <button onClick={() => navigate(`/invoices/rental/${tenant.id}`, { state: { openSingleBooking: true } })} className="rounded px-2 py-1 text-xs font-semibold text-white transition-colors bg-emerald-600 hover:bg-emerald-700">Final Billing</button>
-                      <button onClick={() => openDepositSettlementModal(tenant.id)} className="rounded px-2 py-1 text-xs font-semibold text-white transition-colors bg-amber-600 hover:bg-amber-700">Deposit Settlement</button>
-                      <button onClick={() => handleMoveOutInspection(tenant.id)} className="rounded px-2 py-1 text-xs font-semibold text-white transition-colors bg-slate-600 hover:bg-slate-700">Move-out Inspection</button>
-                    </>
-                  )}
-                  {canDeleteTenant && (
-                    <button onClick={() => { setSelectedTenants([tenant.id]); setShowDeleteModal(true); }} disabled={!tenant.canDelete} title={tenant.canDelete ? "Delete unused tenant record" : tenant.deleteBlockedReason} className={`px-2 py-1 text-white font-bold rounded text-xs transition-colors ${tenant.canDelete ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}>
-                      Delete
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
           )}
         />
 

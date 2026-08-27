@@ -15,6 +15,7 @@ export const getAccountingPeriods = async (req, res, next) => {
       .populate("lockedBy", "name email")
       .populate("reopenedBy", "name email")
       .sort({ startDate: -1 })
+      .limit(120)
       .lean();
 
     return res.status(200).json(periods);

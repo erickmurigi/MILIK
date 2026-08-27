@@ -65,6 +65,10 @@ const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
 const getErrorMessage = (error, fallback) =>
   error?.response?.data?.message || error?.message || fallback;
 
+// Module-scope — pure function, no component state needed
+const countLinkedProperties = (landlord = {}) =>
+  Number(landlord?.activeProperties || 0) + Number(landlord?.archivedProperties || 0);
+
 const Landlords = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -185,7 +189,7 @@ const Landlords = () => {
 
 
   // --- APPLY SEARCH (button) ---
-  const applySearch = () => {
+  const applySearch = useCallback(() => {
     setAppliedFilters({
       ...draftFilters,
       code: draftFilters.code.trim(),
@@ -198,30 +202,27 @@ const Landlords = () => {
     setCurrentPage(1);
     setSelectedLandlords([]);
     setSelectAll(false);
-  };
+  }, [draftFilters, setAppliedFilters, setCurrentPage]);
 
-  const resetFilters = () => {
+  const resetFilters = useCallback(() => {
     setDraftFilters(emptyFilters);
     setAppliedFilters(emptyFilters);
     setSelectedLandlords([]);
     setSelectAll(false);
     setCurrentPage(1);
     setActionMenuOpen(false);
-  };
+  }, [setAppliedFilters, setCurrentPage]);
 
-  const onFilterEnter = (e) => {
+  const onFilterEnter = useCallback((e) => {
     if (e.key === "Enter") {
       e.preventDefault();
       applySearch();
     }
-  };
+  }, [applySearch]);
 
   // Server handles all filtering; client just renders the current page from Redux
   const totalPages = Math.max(1, landlordPagination.pages ?? 1);
   const currentLandlords = landlords;
-
-  const countLinkedProperties = (landlord = {}) =>
-    Number(landlord?.activeProperties || 0) + Number(landlord?.archivedProperties || 0);
 
   const selectedLandlordRows = useMemo(
     () => landlords.filter((landlord) => selectedLandlords.includes(landlord._id)),
@@ -250,11 +251,11 @@ const Landlords = () => {
 
 
   // Selection
-  const handleSelectLandlord = (id) => {
+  const handleSelectLandlord = useCallback((id) => {
     setSelectedLandlords((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  };
+  }, []);
 
-  const handleSelectAll = () => {
+  const handleSelectAll = useCallback(() => {
     if (selectAll) {
       const currentIds = currentLandlords.map((l) => l._id);
       setSelectedLandlords((prev) => prev.filter((id) => !currentIds.includes(id)));
@@ -264,15 +265,15 @@ const Landlords = () => {
       setSelectedLandlords((prev) => Array.from(new Set([...prev, ...currentIds])));
       setSelectAll(true);
     }
-  };
+  }, [selectAll, currentLandlords]);
 
-  const handleCheckboxClick = (e) => e.stopPropagation();
+  const handleCheckboxClick = useCallback((e) => e.stopPropagation(), []);
 
   // Zebra + selection styling
-  const getRowClass = (index, landlordId) => {
+  const getRowClass = useCallback((index, landlordId) => {
     if (selectedLandlords.includes(landlordId)) return "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50";
     return index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50 hover:bg-blue-50/40";
-  };
+  }, [selectedLandlords]);
 
   // Column resizing
   const startResizing = (columnKey, e) => {
@@ -310,12 +311,12 @@ const Landlords = () => {
     document.addEventListener("mouseup", handleMouseUp);
   };
 
-  const goToPage = (page) => {
+  const goToPage = useCallback((page) => {
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page);
       dispatch(getLandlords(buildLandlordParams(page)));
     }
-  };
+  }, [totalPages, dispatch, buildLandlordParams, setCurrentPage]);
 
   // Delete selected landlords
   const deleteSelected = async () => {
@@ -465,12 +466,12 @@ const Landlords = () => {
   };
 
   // --- MODAL / FORM ---
-  const openAddModal = () => {
+  const openAddModal = useCallback(() => {
     if (!canCreate) { toast.warning("You don't have permission to create landlords"); return; }
     navigate('/landlords/new');
-  };
+  }, [canCreate, navigate]);
 
-  const openEditModal = () => {
+  const openEditModal = useCallback(() => {
     if (selectedLandlords.length !== 1) return;
     const id = selectedLandlords[0];
     const l = landlords.find((x) => x._id === id || x.id === id);
@@ -484,7 +485,7 @@ const Landlords = () => {
         landlordData: l,
       },
     });
-  };
+  }, [selectedLandlords, landlords, navigate]);
 
   const selectedCount = selectedLandlords.length;
   const { canCreate, canUpdate, canDelete } = useMemo(() => ({

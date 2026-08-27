@@ -53,6 +53,7 @@ import {
   resolveTaxSelectionPayload,
 } from "./invoiceTaxUtils";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { INV_STATUS_BADGE, INV_STATUS_BADGE_DEFAULT, fmtAmountKE } from "../../utils/invoiceStatus";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
@@ -342,11 +343,11 @@ const mapInvoiceStatusLabel = ({ rawStatus = "", outstanding = 0, appliedAmount 
   if (normalizedStatus === "reversed") return "Reversed";
   if (normalizedStatus === "pending") {
     if (outstanding <= 0) return "Paid";
-    return appliedAmount > 0 ? "Partially Paid" : "Issued";
+    return appliedAmount > 0 ? "Partially Paid" : "Unpaid";
   }
 
   if (outstanding <= 0) return "Paid";
-  return appliedAmount > 0 ? "Partially Paid" : "Issued";
+  return appliedAmount > 0 ? "Partially Paid" : "Unpaid";
 };
 
 
@@ -673,6 +674,10 @@ const InvoiceTableRow = React.memo(InvoiceTableRowBase, areEqual);
 
 const EMPTY_ARRAY = [];
 
+// Pure helper — defined at module scope so it never creates a new reference inside the component
+const actionBtnCls = (enabled, activeCls) =>
+  `h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white ${enabled ? activeCls : "bg-gray-400 cursor-not-allowed"}`;
+
 const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const [pageSize, setPageSize] = useState(50);
   const { id: tenantId } = useParams();
@@ -687,9 +692,11 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const [refreshTick, setRefreshTick] = useState(0);
   const [appliedFilters, setAppliedFilters] = useTabState("/invoices/rental:appliedFilters", initialFilters);
   const [draftFilters, setDraftFilters] = useState(appliedFilters);
-  const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
-  const actionBtnCls = (enabled, activeCls) =>
-    `h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white ${enabled ? activeCls : "bg-gray-400 cursor-not-allowed"}`;
+  // useCallback: prevents new function identity on every render so filter inputs don't re-render
+  const setFilter = useCallback(
+    (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value })),
+    []
+  );
   const [selectedInvoices, setSelectedInvoices] = useState([]);
   const selectedInvoicesSet = useMemo(() => new Set(selectedInvoices), [selectedInvoices]);
   const [selectAll, setSelectAll] = useState(false);
@@ -1228,10 +1235,11 @@ const visibleInvoiceKeys = useMemo(
     canDeleteInvoice &&
     !["paid", "partially_paid"].includes(String(activeInvoice?.status || "").toLowerCase());
 
-  const closeInvoiceDetail = () => {
+  // useCallback: stable reference so the keydown useEffect below doesn't re-register on every render
+  const closeInvoiceDetail = useCallback(() => {
     setInvoiceDetailOpen(false);
     setActiveInvoice(null);
-  };
+  }, []);
 
   useEffect(() => {
     if (!invoiceDetailOpen) return undefined;
@@ -1244,7 +1252,8 @@ const visibleInvoiceKeys = useMemo(
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [invoiceDetailOpen]);
+  // closeInvoiceDetail is now stable (useCallback), so adding it doesn't cause extra re-registers
+  }, [invoiceDetailOpen, closeInvoiceDetail]);
 
   useEffect(() => {
     const previousBodyOverflow = document.body.style.overflow;
@@ -1262,20 +1271,21 @@ const visibleInvoiceKeys = useMemo(
     };
   }, []);
 
-  const applySearch = () => {
+  // useCallback: stable references so toolbar buttons don't trigger child re-renders
+  const applySearch = useCallback(() => {
     setAppliedFilters({ ...draftFilters });
     setSelectedInvoices([]);
     setSelectAll(false);
     setCurrentPage(1);
-  };
+  }, [draftFilters, setAppliedFilters, setCurrentPage]);
 
-  const resetFilters = () => {
+  const resetFilters = useCallback(() => {
     setDraftFilters(emptyFilters);
     setAppliedFilters(emptyFilters);
     setSelectedInvoices([]);
     setSelectAll(false);
     setCurrentPage(1);
-  };
+  }, [setAppliedFilters, setCurrentPage]);
 
   const fetchAllFilteredInvoiceRows = async (filters = appliedFilters) => {
     if (!currentCompany?._id) return [];
@@ -1300,7 +1310,8 @@ const visibleInvoiceKeys = useMemo(
     }).filter((invoice) => !deletingInvoiceIds.includes(invoice._id));
   };
 
-  const toggleSelectAll = () => {
+  // useCallback: stable so the header checkbox doesn't cause table row re-renders via prop change
+  const toggleSelectAll = useCallback(() => {
     if (selectAll) {
       setSelectedInvoices((prev) => prev.filter((id) => !visibleInvoiceKeys.includes(id)));
       setSelectAll(false);
@@ -1309,7 +1320,7 @@ const visibleInvoiceKeys = useMemo(
 
     setSelectedInvoices((prev) => Array.from(new Set([...prev, ...visibleInvoiceKeys])));
     setSelectAll(true);
-  };
+  }, [selectAll, visibleInvoiceKeys]);
 
   const toggleRowSelection = useCallback((rowKey) => {
     setSelectedInvoices((prev) => {
@@ -1403,8 +1414,8 @@ const visibleInvoiceKeys = useMemo(
     const tenantCode = escapeHtml(sourceInvoice?.tenant?.tenantCode || '');
     const tenantEmail = escapeHtml(sourceInvoice?.tenant?.email || invoice?.tenantEmail || '');
     const statusRaw = String(invoice?.status || 'Issued').toLowerCase().replace(/\s+/g, '_');
-    const statusColors = { paid:'#16a34a', partially_paid:'#d97706', issued:'#2563eb', cancelled:'#6b7280', reversed:'#dc2626' };
-    const statusBg = { paid:'#dcfce7', partially_paid:'#fef3c7', issued:'#dbeafe', cancelled:'#f1f5f9', reversed:'#fee2e2' };
+    const statusColors = { paid:'#16a34a', partially_paid:'#d97706', issued:'#dc2626', unpaid:'#dc2626', cancelled:'#6b7280', reversed:'#dc2626' };
+    const statusBg = { paid:'#dcfce7', partially_paid:'#fef3c7', issued:'#fee2e2', unpaid:'#fee2e2', cancelled:'#f1f5f9', reversed:'#fee2e2' };
     const statusColor = statusColors[statusRaw] || '#475569';
     const statusBgColor = statusBg[statusRaw] || '#f1f5f9';
     const formatAmt = (n) => Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1532,10 +1543,11 @@ const visibleInvoiceKeys = useMemo(
   <td>${escapeHtml(inv.propertyName)}</td>
   <td>${escapeHtml(inv.unitName)}</td>
   <td>${escapeHtml(inv.invoiceDescription || inv.period)}</td>
-  <td>${escapeHtml(inv.chargeTypeLabel || getInvoiceChargeTypeLabel(inv.chargeType))}</td>
   <td>${escapeHtml(inv.invoiceDateLabel || "-")}</td>
   <td>${escapeHtml(inv.dueDateLabel || "-")}</td>
   <td style="text-align:right;">KES ${Number(inv.amount || 0).toLocaleString()}</td>
+  <td style="text-align:right;">${Number(inv.appliedAmount || 0) > 0 ? `KES ${Number(inv.appliedAmount).toLocaleString()}` : "—"}</td>
+  <td style="text-align:right;">${Number(inv.outstandingAmount || 0) > 0.005 ? Number(inv.outstandingAmount).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</td>
   <td>${escapeHtml(inv.status)}</td>
 </tr>`
       )
@@ -1588,11 +1600,12 @@ const visibleInvoiceKeys = useMemo(
         <th>Tenant</th>
         <th>Property</th>
         <th>Unit</th>
-        <th>Inv Desc</th>
-        <th>Type</th>
-        <th>Booking / Invoice Date</th>
+        <th>Description</th>
+        <th>Invoice Date</th>
         <th>Due Date</th>
         <th style="text-align:right;">Amount</th>
+        <th style="text-align:right;">Paid</th>
+        <th style="text-align:right;">Balance</th>
         <th>Status</th>
       </tr>
     </thead>
@@ -1603,6 +1616,7 @@ const visibleInvoiceKeys = useMemo(
       <tr>
         <td colspan="8" style="font-weight:800;">Total</td>
         <td style="text-align:right; font-weight:800;">KES ${total.toLocaleString()}</td>
+        <td></td>
         <td></td>
       </tr>
     </tfoot>
@@ -2517,7 +2531,7 @@ const createInvoiceForTenant = async (
                 <AppSelect
                   value={draftFilters.status}
                   onChange={(v) => setDraftFilters((prev) => ({ ...prev, status: v ?? "ACTIVE" }))}
-                  options={[{ value: "ACTIVE", label: "All" }, { value: "Issued", label: "Issued" }, { value: "Paid", label: "Paid" }]}
+                  options={[{ value: "ACTIVE", label: "All" }, { value: "Issued", label: "Unpaid" }, { value: "Paid", label: "Paid" }]}
                   compact
                 />
                 <div className="mx-0.5 h-3 w-px shrink-0 bg-slate-200" />
@@ -2583,11 +2597,11 @@ const createInvoiceForTenant = async (
                 ...(!tenantId ? [{ label: "Tenant" }, { label: "Property" }] : []),
                 { label: "Unit" },
                 { label: "Description" },
-                { label: "Type" },
-                { label: "Booking / Invoice Date", align: "center" },
+                { label: "Invoice Date", align: "center" },
                 { label: "Due Date", align: "center" },
                 { label: "Amount", align: "right" },
                 { label: "Paid", align: "right" },
+                { label: "Balance", align: "right" },
                 { label: "Status", align: "center" },
               ]}
               rows={currentPageInvoices}
@@ -2611,21 +2625,17 @@ const createInvoiceForTenant = async (
                   {!tenantId && <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{invoice.propertyName}</td>}
                   <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{invoice.unitName}</td>
                   <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-orange-700">{invoice.invoiceDescription || invoice.period}</td>
-                  <td className="px-3 py-1.5 border-r border-gray-100">
-                    <span className="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-700">{invoice.chargeTypeLabel || getInvoiceChargeTypeLabel(invoice.chargeType)}</span>
-                  </td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-center text-gray-700">{invoice.invoiceDateLabel}</td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-center text-gray-700">{invoice.dueDateLabel}</td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-slate-900">KES {Number(invoice.amount || 0).toLocaleString()}</td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold text-emerald-700">
-                    {Number(invoice.appliedAmount || 0) > 0 ? `KES ${Number(invoice.appliedAmount).toLocaleString()}` : <span className="text-slate-400">—</span>}
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-slate-900 tabular-nums">{fmtAmountKE(invoice.amount)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold tabular-nums">
+                    {Number(invoice.appliedAmount || 0) > 0.005 ? <span className="text-emerald-700">{fmtAmountKE(invoice.appliedAmount)}</span> : <span className="text-slate-400">—</span>}
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold tabular-nums">
+                    {invoice.outstandingAmount > 0.005 ? <span className="text-red-600">{fmtAmountKE(invoice.outstandingAmount)}</span> : <span className="text-slate-400">—</span>}
                   </td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-center">
-                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${
-                      invoice.status === "Paid" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
-                      invoice.status === "Cancelled" || invoice.status === "Reversed" ? "bg-slate-100 text-slate-600 border-slate-200" :
-                      "bg-amber-50 text-amber-700 border-amber-200"
-                    }`}>{invoice.status}</span>
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${INV_STATUS_BADGE[invoice.status] || INV_STATUS_BADGE_DEFAULT}`}>{invoice.status}</span>
                   </td>
                 </>
               )}

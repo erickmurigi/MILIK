@@ -3,7 +3,13 @@ import { useTabState } from "../../hooks/useTabState";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
 import { useDispatch, useSelector } from "react-redux";
-import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
+import {
+  selectCurrentCompany,
+  selectCurrentUser,
+  selectAllProperties,
+  selectAllUnits,
+  selectAllTenants,
+} from "../../redux/selectors";
 import { getProperties } from "../../redux/propertyRedux";
 import { getUnits, getTenants } from "../../redux/apiCalls";
 import { fetchCompanySettings, selectCompanySettings } from "../../redux/companySettingsRedux";
@@ -13,10 +19,8 @@ import {
   FaArrowRight,
   FaBan,
   FaBolt,
-  FaCheckCircle,
   FaEdit,
   FaEnvelope,
-  FaFileInvoice,
   FaPlus,
   FaPrint,
   FaRedoAlt,
@@ -28,7 +32,6 @@ import {
   FaTrash,
 } from "react-icons/fa";
 import AppSelect from "../../components/common/AppSelect";
-import StatusBadge from "../../components/common/StatusBadge";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { hasCompanyPermission } from "../../utils/permissions";
@@ -85,6 +88,28 @@ const emptyFilters = {
 
 const ACTIVE_TENANT_STATUSES = new Set(["active", "overdue"]);
 
+const getMeterPaymentStatus = (reading) => {
+  if (reading.status === "void") return "voided";
+  const s = String(reading?.billedInvoice?.status || "").toLowerCase();
+  if (s === "paid") return "paid";
+  if (s === "partial") return "partial";
+  return "unpaid";
+};
+
+const PAYMENT_BADGE = {
+  paid:    "border border-green-200 bg-green-50 text-green-700",
+  partial: "border border-amber-200 bg-amber-50 text-amber-700",
+  unpaid:  "border border-red-200 bg-red-50 text-red-700",
+  voided:  "border border-slate-200 bg-slate-100 text-slate-500",
+};
+
+const PAYMENT_LABEL = {
+  paid:    "Paid",
+  partial: "Partially Paid",
+  unpaid:  "Unpaid",
+  voided:  "Voided",
+};
+
 const METER_STATUS_MAP = {
   draft:   "border-orange-200 bg-orange-100 text-orange-700",
   billed:  "border-green-200 bg-green-100 text-green-700",
@@ -118,12 +143,11 @@ const inferUnitsConsumed = (form) => {
   return Math.max(current - previous, 0);
 };
 
-const getStatusLabel = (status) => {
-  const normalized = String(status || "draft").trim().toLowerCase();
-  if (normalized === "billed") return "Billed";
-  if (normalized === "void") return "Voided";
-  if (normalized === "deleted") return "Deleted";
-  return "Draft";
+const getStatusLabel = (reading) => {
+  if (!reading || typeof reading !== "object") return "Unknown";
+  if (String(reading.status || "").toLowerCase() === "deleted") return "Deleted";
+  const ps = getMeterPaymentStatus(reading);
+  return PAYMENT_LABEL[ps] || "Unknown";
 };
 
 const escapeHtml = (v) =>
@@ -156,7 +180,7 @@ const buildRegisterPrintHtml = ({ company, companyName, rows, totalAmount, filte
           <td style="text-align:right;font-family:monospace;font-weight:700">${formatNumber(row.unitsConsumed)}</td>
           <td style="text-align:right;font-family:monospace">${formatNumber(row.rate)}</td>
           <td style="text-align:right;font-family:monospace;font-weight:700">${formatMoney(row.amount)}</td>
-          <td>${escapeHtml(getStatusLabel(row.status))}</td>
+          <td>${escapeHtml(getStatusLabel(row))}</td>
           <td>${escapeHtml(fmtDate(row.readingDate))}</td>
         </tr>
       `
@@ -253,9 +277,9 @@ const MeterReadings = () => {
   const currentUser = useSelector(selectCurrentUser);
 
   const companySettings = useSelector(selectCompanySettings);
-  const reduxProperties = useSelector((s) => s.property?.properties || []);
-  const reduxUnits = useSelector((s) => s.unit?.units || []);
-  const reduxTenants = useSelector((s) => s.tenant?.tenants || []);
+  const reduxProperties = useSelector(selectAllProperties);
+  const reduxUnits      = useSelector(selectAllUnits);
+  const reduxTenants    = useSelector(selectAllTenants);
 
   const canCreateReading = hasCompanyPermission(
     currentUser || {},
@@ -514,7 +538,7 @@ const MeterReadings = () => {
         .join(" ")
         .toLowerCase();
 
-      if (appliedFilters.status !== "ALL" && String(reading?.status || "") !== appliedFilters.status) {
+      if (appliedFilters.status !== "ALL" && getMeterPaymentStatus(reading) !== appliedFilters.status) {
         return false;
       }
       if (
@@ -568,7 +592,7 @@ const MeterReadings = () => {
   const selectedCount = selectedRows.length;
   const selectedDraftCount = selectedDraftRows.length;
   const canEditSelected =
-    canUpdateReading && selectedRows.length === 1 && String(selectedRows[0]?.status || "") === "draft";
+    canUpdateReading && selectedRows.length === 1 && String(selectedRows[0]?.status || "") !== "void";
 
   const visibleSelectableRows = currentPageReadings.filter((row) => row.status !== "deleted");
   const selectAll =
@@ -576,11 +600,11 @@ const MeterReadings = () => {
     visibleSelectableRows.every((row) => selectedReadingSet.has(row._id));
 
   const totalAmount = filteredReadings.reduce((sum, item) => sum + Number(item?.amount || 0), 0);
-  const draftAmount = filteredReadings
-    .filter((item) => item.status === "draft")
+  const unpaidAmount = filteredReadings
+    .filter((item) => getMeterPaymentStatus(item) === "unpaid")
     .reduce((sum, item) => sum + Number(item?.amount || 0), 0);
-  const billedAmount = filteredReadings
-    .filter((item) => item.status === "billed")
+  const paidAmount = filteredReadings
+    .filter((item) => getMeterPaymentStatus(item) === "paid")
     .reduce((sum, item) => sum + Number(item?.amount || 0), 0);
 
   const resetForm = () => {
@@ -696,8 +720,16 @@ const MeterReadings = () => {
         await updateMeterReading(editingId, payload);
         toast.success("Meter reading updated successfully.");
       } else {
-        await createMeterReading(payload);
-        toast.success("Meter reading created successfully.");
+        const created = await createMeterReading(payload);
+        const newId = created?._id || created?.reading?._id || created?.data?._id;
+        if (newId) {
+          try {
+            await billMeterReading(newId, { invoiceDate: payload.readingDate, dueDate: payload.readingDate });
+          } catch {
+            toast.warn("Reading saved but invoice generation failed — check utility billing setup.");
+          }
+        }
+        toast.success("Meter reading saved and invoiced.");
       }
 
       await refreshReadings();
@@ -978,11 +1010,11 @@ const MeterReadings = () => {
             <div className="flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
               <span className="opacity-70">Readings</span> <span className="font-black text-blue-900">{filteredReadings.length}</span>
             </div>
-            <div className="flex items-center gap-1 rounded border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
-              <span className="opacity-70">Draft</span> <span className="font-black text-orange-900">KES {draftAmount.toLocaleString()}</span>
+            <div className="flex items-center gap-1 rounded border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+              <span className="opacity-70">Unpaid</span> <span className="font-black text-red-900">KES {unpaidAmount.toLocaleString()}</span>
             </div>
             <div className="flex items-center gap-1 rounded border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-semibold text-green-700">
-              <span className="opacity-70">Billed</span> <span className="font-black text-green-900">KES {billedAmount.toLocaleString()}</span>
+              <span className="opacity-70">Paid</span> <span className="font-black text-green-900">KES {paidAmount.toLocaleString()}</span>
             </div>
             <div className="ml-auto rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
               {currentCompany?.companyName || currentCompany?.name || "No company selected"}
@@ -1218,7 +1250,7 @@ const MeterReadings = () => {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
             <div className="flex-none sticky top-0 z-20 border-b border-gray-200 bg-white shadow-sm">
               <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
-                {[{val:"ALL",label:"All"},{val:"draft",label:"Draft"},{val:"billed",label:"Billed"},{val:"void",label:"Voided"}].map(({val,label}) => (
+                {[{val:"ALL",label:"All"},{val:"paid",label:"Paid"},{val:"unpaid",label:"Unpaid"},{val:"partial",label:"Partial"},{val:"voided",label:"Voided"}].map(({val,label}) => (
                   <button key={val} onClick={() => setDraftFilters((prev) => ({ ...prev, status: val }))} className={`h-[20px] shrink-0 px-1.5 text-[9px] font-semibold ${draftFilters.status === val ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}>{label}</button>
                 ))}
                 <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
@@ -1231,7 +1263,6 @@ const MeterReadings = () => {
                 <button onClick={resetFilters} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={7} /> Reset</button>
                 <button onClick={handleEditSelected} disabled={!canEditSelected} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white shadow-sm ${canEditSelected ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaEdit size={7} /> Edit</button>
                 <button onClick={handleDeleteSelected} disabled={selectedDeletableRows.length === 0 || bulkDeleting || !canDeleteReading} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white shadow-sm ${selectedDeletableRows.length > 0 && !bulkDeleting && canDeleteReading ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}><FaTrash size={7} /> Delete</button>
-                <button onClick={handleBulkBill} disabled={selectedDraftCount === 0 || bulkBilling || !canProcessReading} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white shadow-sm ${selectedDraftCount > 0 && !bulkBilling && canProcessReading ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaFileInvoice size={7} /> {bulkBilling ? "…" : "Bill"}</button>
                 <button
                   onClick={() => setCommunicationModal({ contextType: "meter_reading", recordIds: selectedReadingIds, title: `Notify ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, subtitle: "Send meter reading notification via SMS.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })}
                   disabled={selectedCount === 0}
@@ -1263,7 +1294,6 @@ const MeterReadings = () => {
                 { label: 'Rate', align: 'right' },
                 { label: 'Amount', align: 'right' },
                 { label: 'Status', align: 'center' },
-                { label: 'Created', align: 'center' },
               ]}
               rows={currentPageReadings}
               loading={loading}
@@ -1278,81 +1308,67 @@ const MeterReadings = () => {
               onRowClick={(reading) => handleRowClick(reading)}
               isSelected={(reading) => selectedReadingSet.has(reading._id)}
               renderRow={(reading) => {
-                const isBilled = reading.status === "billed";
                 return (
                   <>
+                    <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap">
+                      <span className="font-bold text-blue-700">{reading.billingPeriod || "-"}</span>
+                      <span className="ml-1.5 text-[10px] text-slate-400">{fmtDate(reading.readingDate)}</span>
+                    </td>
                     <td className="px-3 py-1 border-r border-gray-100">
-                      <div className="font-bold text-blue-700">{reading.billingPeriod || "-"}</div>
-                      <div className="text-[10px] text-slate-500">{fmtDate(reading.readingDate)}</div>
+                      <span className="font-bold text-slate-900">{reading?.tenant?.name || "Auto / Not linked"}</span>
+                      {reading?.tenant?.tenantCode && <span className="ml-1.5 text-[10px] text-slate-400">{reading.tenant.tenantCode}</span>}
                     </td>
-                    <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900">
-                      {reading?.tenant?.name || "Auto / Not linked"}
-                      <div className="text-[10px] font-normal text-slate-500">
-                        {reading?.tenant?.tenantCode || "No tenant code"}
-                      </div>
-                    </td>
-                    <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">
+                    <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900 whitespace-nowrap">
                       {reading?.property?.propertyName || "-"}
                     </td>
                     <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">
                       {reading?.unit?.unitNumber || "-"}
                     </td>
-                    <td className="px-3 py-1 border-r border-gray-100">
-                      <div className="font-semibold text-orange-700">{reading.utilityType || "-"}</div>
-                      <div className="text-[10px] text-slate-500">Meter {reading.meterNumber || "-"}</div>
+                    <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap">
+                      <span className="font-semibold text-orange-700">{reading.utilityType || "-"}</span>
+                      {reading.meterNumber && <span className="ml-1.5 text-[10px] text-slate-400">· {reading.meterNumber}</span>}
                     </td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">
+                    <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700 tabular-nums">
                       {formatNumber(reading.previousReading)}
                     </td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">
+                    <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700 tabular-nums">
                       {formatNumber(reading.currentReading)}
                     </td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900 tabular-nums">
                       {formatNumber(reading.unitsConsumed)}
                     </td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">
+                    <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700 tabular-nums">
                       {formatNumber(reading.rate)}
                     </td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900 tabular-nums whitespace-nowrap">
                       {formatMoney(reading.amount)}
-                      {reading?.billedInvoice?.invoiceNumber && (
-                        <div className="text-[10px] font-semibold text-emerald-700">
-                          Invoice {reading.billedInvoice.invoiceNumber}
-                        </div>
-                      )}
                     </td>
                     <td className="px-3 py-1 border-r border-gray-100 text-center">
-                      <StatusBadge status={reading.status || "draft"} map={METER_STATUS_MAP} />
-                      {reading.isMeterReset && (
-                        <div className="mt-0.5 text-[10px] font-semibold text-purple-700">Reset</div>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-center text-gray-600">
-                      {fmtDate(reading.createdAt || reading.readingDate)}
+                      {(() => {
+                        const ps = getMeterPaymentStatus(reading);
+                        return (
+                          <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${PAYMENT_BADGE[ps]}`}>
+                            {PAYMENT_LABEL[ps]}
+                            {reading.isMeterReset && <span className="ml-1 opacity-70">· Reset</span>}
+                          </span>
+                        );
+                      })()}
                     </td>
                   </>
                 );
               }}
               renderActions={(reading) => {
-                const isDraft = reading.status === "draft";
-                const isBilled = reading.status === "billed";
                 const isVoid = reading.status === "void";
                 const deleteBusy = rowActionKey === `delete-${reading._id}`;
-                const billBusy = rowActionKey === `bill-${reading._id}`;
                 const voidBusy = rowActionKey === `void-${reading._id}`;
                 return (
                   <div className="flex justify-end gap-1">
-                    {isDraft && (
+                    {!isVoid && (
                       <button onClick={() => handleEdit(reading)} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800" title="Edit meter reading" disabled={!canUpdateReading}>
                         <FaEdit size={12} />
                       </button>
                     )}
-                    {isDraft && (
-                      <button onClick={() => handleBillSingle(reading)} className="rounded p-1 text-green-600 hover:bg-green-50 hover:text-green-800" title="Bill meter reading" disabled={!canProcessReading || billBusy}>
-                        <FaFileInvoice size={12} />
-                      </button>
-                    )}
-                    {isDraft && (
+                    {!isVoid && (
                       <button onClick={() => handleVoidSingle(reading)} className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800" title="Void meter reading" disabled={!canDeleteReading || voidBusy}>
                         <FaBan size={12} />
                       </button>
@@ -1362,14 +1378,9 @@ const MeterReadings = () => {
                         <FaSms size={12} />
                       </button>
                     )}
-                    <button onClick={() => handleDeleteSingle(reading)} className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800" title={isBilled ? "Delete meter reading and reverse linked invoice" : isVoid ? "Delete voided meter reading" : "Delete meter reading"} disabled={!canDeleteReading || deleteBusy}>
+                    <button onClick={() => handleDeleteSingle(reading)} className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800" title={isVoid ? "Delete voided meter reading" : "Delete meter reading and reverse linked invoice"} disabled={!canDeleteReading || deleteBusy}>
                       <FaTrash size={12} />
                     </button>
-                    {isBilled && (
-                      <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                        <FaCheckCircle size={10} /> Posted
-                      </span>
-                    )}
                   </div>
                 );
               }}
@@ -1380,7 +1391,7 @@ const MeterReadings = () => {
                 <span className="font-semibold">Showing:</span> {filteredReadings.length === 0 ? 0 : startIndex + 1}
                 {" - "}
                 {Math.min(endIndex, filteredReadings.length)} of {filteredReadings.length} reading(s)
-                {appliedFilters.status !== "ALL" && ` · Status: ${getStatusLabel(appliedFilters.status)}`}
+                {appliedFilters.status !== "ALL" && ` · Status: ${PAYMENT_LABEL[appliedFilters.status] || appliedFilters.status}`}
               </p>
               <p>
                 <span className="font-semibold">Selected:</span> {selectedCount}

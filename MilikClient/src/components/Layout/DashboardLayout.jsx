@@ -224,6 +224,19 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
     [activeCompanyContext]
   );
 
+  // useMemo: prevents new object identity on every render so Toaster doesn't re-configure
+  const toastOptions = useMemo(
+    () => ({
+      duration: 4000,
+      style: {
+        background: darkMode ? "#374151" : "#FFFFFF",
+        color: darkMode ? "#FFFFFF" : "#374151",
+        border: `1px solid ${darkMode ? "#4B5563" : "#E5E7EB"}`,
+      },
+    }),
+    [darkMode]
+  );
+
   return (
     <div
       className={`${
@@ -232,14 +245,7 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
     >
       <Toaster
         position="top-right"
-        toastOptions={{
-          duration: 4000,
-          style: {
-            background: darkMode ? "#374151" : "#FFFFFF",
-            color: darkMode ? "#FFFFFF" : "#374151",
-            border: `1px solid ${darkMode ? "#4B5563" : "#E5E7EB"}`,
-          },
-        }}
+        toastOptions={toastOptions}
       />
       <ToastContainer
         position="top-right"

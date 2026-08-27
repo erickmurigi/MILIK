@@ -92,10 +92,26 @@ const buildOtherPaidTooltip = (row) => {
   return parts.join('  ·  ');
 };
 
+// Net balance brought forward from backend: gross prior invoices − gross prior receipts (signed — negative = credit)
+const calcBalBF = (row) => Number(row.balBF || 0);
+
 const sumRows = (rows, key) => rows.reduce((s, r) => s + Number(r[key] || 0), 0);
 const sumOtherExpd = (rows) => rows.reduce((s, r) => s + calcOtherExpd(r), 0);
 const sumRentPaid = (rows) => rows.reduce((s, r) => s + calcRentPaid(r), 0);
 const sumOtherPaid = (rows) => rows.reduce((s, r) => s + calcOtherPaid(r), 0);
+const sumBalBF = (rows) => rows.reduce((s, r) => s + calcBalBF(r), 0);
+
+const STATUS_LABEL = { owing: 'Arrears', credit: 'Overpaid', settled: 'Settled' };
+
+// Module-scope constant — avoids allocating a new array on every render
+const COLS = ['Tenant', 'Unit', 'BAL B/F', 'Rent', 'Other Exp\'d', 'Rent Paid', 'Others Paid', 'Total Paid', 'BAL C/F', 'Oldest Due', 'Status'];
+
+// Inline <style> content moved here so it is not a new string on every render
+const REPORT_STYLE = `
+  .milik-report-page select:focus, .milik-report-page input:focus { border-color: #0B3B2E; box-shadow: 0 0 0 1px rgba(11,59,46,0.2); outline: none; }
+  .pb-tooltip { position: relative; cursor: default; }
+  .pb-tooltip:hover::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 4px); transform: translateX(-50%); white-space: nowrap; background: #1e293b; color: #fff; font-size: 9px; padding: 3px 7px; border-radius: 3px; z-index: 50; pointer-events: none; }
+`;
 
 const statusStyle = (s) =>
   s === 'owing'
@@ -111,11 +127,20 @@ const PaidBalanceReport = () => {
   const dispatch = useDispatch();
   const currentUser = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
-  const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", ["accounts", "propertyManagement"]);
+  const canExportReports = useMemo(
+    () => hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", ["accounts", "propertyManagement"]),
+    [currentUser, currentCompany]
+  );
   const properties = useSelector(selectAllProperties);
 
-  const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company || '';
-  const companyName = currentCompany?.name || currentCompany?.companyName || currentCompany?.businessName || currentUser?.company?.name || 'Milik';
+  const businessId = useMemo(
+    () => currentCompany?._id || currentUser?.company?._id || currentUser?.company || '',
+    [currentCompany, currentUser]
+  );
+  const companyName = useMemo(
+    () => currentCompany?.name || currentCompany?.companyName || currentCompany?.businessName || currentUser?.company?.name || 'Milik',
+    [currentCompany, currentUser]
+  );
 
   const [loading, setLoading] = useState(false);
   const filtersInitialized = useRef(false);
@@ -130,7 +155,7 @@ const PaidBalanceReport = () => {
     };
   });
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
-  const resetFilters = () => {
+  const resetFilters = useCallback(() => {
     const now = new Date();
     setFilters({
       startDate: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`,
@@ -139,7 +164,7 @@ const PaidBalanceReport = () => {
       status: 'all',
       search: '',
     });
-  };
+  }, [setFilters]);
   const [report, setReport] = useState({ summary: {}, rows: [], allUtilityTypes: [] });
 
   useEffect(() => {
@@ -224,6 +249,37 @@ const PaidBalanceReport = () => {
     return { largestOwing, largestCredit, earliestArrear, settlementRate };
   }, [report.rows, summary.tenantCount]);
 
+  // Pre-compute per-row derived values once per propertyGroups update instead of
+  // calling calcRentPaid/calcOtherPaid/calcOtherExpd 2-3× each during render.
+  const enrichedPropertyGroups = useMemo(() => propertyGroups.map((group) => ({
+    ...group,
+    rows: group.rows.map((row) => {
+      const _otherExpd = calcOtherExpd(row);
+      const _rentPaid  = calcRentPaid(row);
+      const _otherPaid = calcOtherPaid(row);
+      const _balBF     = calcBalBF(row);
+      return {
+        ...row,
+        _otherExpd,
+        _rentPaid,
+        _otherPaid,
+        _balBF,
+        _otherExpdTip: _otherExpd > 0 ? buildOtherExpdTooltip(row) : '',
+        _otherPaidTip: _otherPaid > 0 ? buildOtherPaidTooltip(row) : '',
+      };
+    }),
+  })), [propertyGroups]);
+
+  // Grand-total row: computed once from filtered rows, not re-derived in the JSX closure.
+  const grandTotals = useMemo(() => ({
+    totalBF:        sumBalBF(searchFilteredRows),
+    totalRent:      sumRows(searchFilteredRows, 'rentInvoiced'),
+    totalOther:     sumOtherExpd(searchFilteredRows),
+    totalRentPaid:  sumRentPaid(searchFilteredRows),
+    totalOtherPaid: sumOtherPaid(searchFilteredRows),
+    totalBalance:   sumRows(searchFilteredRows, 'netBalance'),
+  }), [searchFilteredRows]);
+
   const yearOptions = useMemo(() => { const y = new Date().getFullYear(); return [y + 1, y, y - 1, y - 2, y - 3].map(String); }, []);
   const { selMonth, selYear } = useMemo(() => {
     const fallbackYear = String(new Date().getFullYear());
@@ -237,7 +293,7 @@ const PaidBalanceReport = () => {
     return { selMonth: null, selYear: String(e.getFullYear()) };
   }, [filters.asOfDate, filters.startDate]);
 
-  const applyMonthYear = (month, year) => {
+  const applyMonthYear = useCallback((month, year) => {
     const m = Number(month); const y = Number(year);
     if (!m || !y) return;
     const lastDay = new Date(y, m, 0).getDate();
@@ -245,20 +301,21 @@ const PaidBalanceReport = () => {
     const asOfDate = `${y}-${String(m).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
     setFilters(prev => ({ ...prev, startDate, asOfDate }));
     loadReport(undefined, { startDate, asOfDate });
-  };
+  }, [loadReport, setFilters]);
 
-  const handleExportCSV = () => {
+  const handleExportCSV = useCallback(() => {
     if (!canExportReports) { toast.error("You do not have permission to export reports"); return; }
-    const header = ['Property', 'Tenant', 'Unit', 'BAL B/F', 'Rent', 'Other Exp\'d', 'Amt Paid', 'Other$ Paid', 'BAL C/F', 'Oldest Due', 'Status'];
+    const header = ['Property', 'Tenant', 'Unit', 'BAL B/F', 'Rent', 'Other Exp\'d', 'Rent Paid', 'Others Paid', 'Total Paid', 'BAL C/F', 'Oldest Due', 'Status'];
     const rows = (report.rows || []).map((row) => [
       row.propertyName || '',
       row.tenantName || '',
       row.unitNumber || '',
-      row.previousArrears || 0,
+      calcBalBF(row),
       row.rentInvoiced || 0,
       calcOtherExpd(row),
       calcRentPaid(row),
       calcOtherPaid(row),
+      calcRentPaid(row) + calcOtherPaid(row),
       row.netBalance || 0,
       row.oldestDueDate ? new Date(row.oldestDueDate).toLocaleDateString() : '',
       row.status || '',
@@ -271,7 +328,7 @@ const PaidBalanceReport = () => {
     a.download = `paid_balance_${filters.asOfDate}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  };
+  }, [canExportReports, report.rows, filters.asOfDate]);
 
   const handlePrint = useCallback(() => {
     if (!canExportReports) { toast.error("You do not have permission to print reports"); return; }
@@ -312,7 +369,7 @@ const PaidBalanceReport = () => {
 
     groups.forEach((group) => {
       const gr = group.rows;
-      const gBF = sumRows(gr, 'previousArrears');
+      const gBF = sumBalBF(gr);
       const gRent = sumRows(gr, 'rentInvoiced');
       const gOther = sumOtherExpd(gr);
       const gAmtPaid = sumRentPaid(gr);
@@ -325,24 +382,25 @@ const PaidBalanceReport = () => {
       const gCredit = gr.filter((r) => r.status === 'credit').length;
       const gSettled = gr.filter((r) => r.status === 'settled').length;
       const badges = [
-        gOwing > 0 ? `<span style="color:#dc2626">${gOwing} owing</span>` : "",
-        gCredit > 0 ? `<span style="color:#059669">${gCredit} credit</span>` : "",
-        gSettled > 0 ? `<span style="color:#94a3b8">${gSettled} settled</span>` : "",
+        gOwing > 0 ? `<span style="color:#dc2626">${gOwing} ${STATUS_LABEL.owing}</span>` : "",
+        gCredit > 0 ? `<span style="color:#059669">${gCredit} ${STATUS_LABEL.credit}</span>` : "",
+        gSettled > 0 ? `<span style="color:#94a3b8">${gSettled} ${STATUS_LABEL.settled}</span>` : "",
       ].filter(Boolean).join(" &nbsp;&middot;&nbsp; ");
 
       rowsHtml += `<tr class="prop-hdr">
         <td colspan="2"><span class="prop-name">${esc(group.name)}</span> <span class="prop-meta">${gr.length} unit${gr.length !== 1 ? "s" : ""} &nbsp;&middot;&nbsp; ${badges}</span></td>
-        <td style="text-align:right">${dash(gBF)}</td>
+        <td style="text-align:right;${gBF > 0 ? "color:#ea580c;font-weight:700" : gBF < 0 ? "color:#059669;font-weight:700" : "color:#94a3b8"}">${gBF !== 0 ? mon(gBF) : "—"}</td>
         <td style="text-align:right">${mon(gRent)}</td>
         <td style="text-align:right">${dash(gOther)}</td>
         <td style="text-align:right;color:#059669;font-weight:700">${mon(gAmtPaid)}</td>
         <td style="text-align:right;${gOtherPaid > 0 ? "color:#059669;font-weight:700" : "color:#94a3b8"}">${dash(gOtherPaid)}</td>
+        <td style="text-align:right;color:#059669;font-weight:900">${mon(gAmtPaid + gOtherPaid)}</td>
         <td style="text-align:right;${cfStyle(gBalance)}">${mon(gBalance)}</td>
         <td></td><td></td>
       </tr>`;
 
       gr.forEach((row, i) => {
-        const bf = Number(row.previousArrears || 0);
+        const bf = calcBalBF(row);
         const otherExpd = calcOtherExpd(row);
         const amtPaid = calcRentPaid(row);
         const otherPaid = calcOtherPaid(row);
@@ -351,14 +409,15 @@ const PaidBalanceReport = () => {
         rowsHtml += `<tr class="${i % 2 === 1 ? "alt" : ""}">
           <td>${esc(row.tenantName || "—")}</td>
           <td>${esc(row.unitNumber || "—")}</td>
-          <td style="text-align:right;${bf > 0 ? "color:#ea580c;font-weight:600" : "color:#cbd5e1"}">${dash(bf)}</td>
+          <td style="text-align:right;${bf > 0 ? "color:#ea580c;font-weight:600" : bf < 0 ? "color:#059669;font-weight:600" : "color:#cbd5e1"}">${bf !== 0 ? mon(bf) : "—"}</td>
           <td style="text-align:right">${mon(row.rentInvoiced)}</td>
           <td style="text-align:right;${otherExpd > 0 ? "" : "color:#cbd5e1"}">${dash(otherExpd)}</td>
           <td style="text-align:right;color:#059669">${mon(amtPaid)}</td>
           <td style="text-align:right;${otherPaid > 0 ? "color:#059669" : "color:#cbd5e1"}">${dash(otherPaid)}</td>
+          <td style="text-align:right;color:#059669;font-weight:700">${mon(amtPaid + otherPaid)}</td>
           <td style="text-align:right;${cfStyle(cf)}">${mon(cf)}</td>
           <td>${row.oldestDueDate ? esc(fmtDate(row.oldestDueDate)) : "—"}</td>
-          <td style="color:${statusColor(st)};font-weight:700">${esc(st.charAt(0).toUpperCase() + st.slice(1))}</td>
+          <td style="color:${statusColor(st)};font-weight:700">${esc(STATUS_LABEL[st] || (st.charAt(0).toUpperCase() + st.slice(1)))}</td>
         </tr>`;
       });
     });
@@ -366,11 +425,12 @@ const PaidBalanceReport = () => {
     rowsHtml += `<tr class="grand-total">
       <td>GRAND TOTAL</td>
       <td style="color:rgba(255,255,255,.6)">${allRows.length} tenants</td>
-      <td style="text-align:right">${dash(grandBF)}</td>
+      <td style="text-align:right;${grandBF > 0 ? "color:#fca5a5" : grandBF < 0 ? "color:#6ee7b7" : ""}">${grandBF !== 0 ? mon(grandBF) : "—"}</td>
       <td style="text-align:right">${mon(grandRent)}</td>
       <td style="text-align:right">${dash(grandOther)}</td>
       <td style="text-align:right">${mon(grandAmtPaid)}</td>
       <td style="text-align:right">${dash(grandOtherPaid)}</td>
+      <td style="text-align:right;font-weight:900">${mon(grandAmtPaid + grandOtherPaid)}</td>
       <td style="text-align:right;${grandBalance > 0 ? "color:#fca5a5" : grandBalance < 0 ? "color:#6ee7b7" : ""}">${mon(grandBalance)}</td>
       <td></td><td></td>
     </tr>`;
@@ -422,8 +482,8 @@ const PaidBalanceReport = () => {
   <span>Paid: <b style="color:#059669">${mon(summ.totalPaidApplied)}</b></span>
   <span>Outstanding: <b style="color:#dc2626">${mon(summ.totalOutstanding)}</b></span>
   <span>Net Balance: <b>${mon(summ.netBalance)}</b></span>
-  <span>Owing: <b style="color:#dc2626">${summ.owingCount || 0}</b></span>
-  <span>Credit: <b style="color:#059669">${summ.creditCount || 0}</b></span>
+  <span>Arrears: <b style="color:#dc2626">${summ.owingCount || 0}</b></span>
+  <span>Overpaid: <b style="color:#059669">${summ.creditCount || 0}</b></span>
   <span>Settled: <b>${summ.settledCount || 0}</b></span>
 </div>
 <table>
@@ -433,8 +493,9 @@ const PaidBalanceReport = () => {
     <th style="text-align:right">BAL B/F</th>
     <th style="text-align:right">Rent</th>
     <th style="text-align:right">Other Exp'd</th>
-    <th style="text-align:right">Amt Paid</th>
-    <th style="text-align:right">Other$ Paid</th>
+    <th style="text-align:right">Rent Paid</th>
+    <th style="text-align:right">Others Paid</th>
+    <th style="text-align:right">Total Paid</th>
     <th style="text-align:right">BAL C/F</th>
     <th style="text-align:left">Oldest Due</th>
     <th style="text-align:left">Status</th>
@@ -448,18 +509,13 @@ const PaidBalanceReport = () => {
     win.document.write(html);
     win.document.close();
     setTimeout(() => { win.focus(); win.print(); }, 450);
-  }, [canExportReports, companyName, currentCompany, searchFilteredRows, report.summary, filters, propertyGroups]);
-
-  const COLS = ['Tenant', 'Unit', 'BAL B/F', 'Rent', 'Other Exp\'d', 'Amt Paid', 'Other$ Paid', 'BAL C/F', 'Oldest Due', 'Status'];
+  // propertyGroups removed: handlePrint builds its own groups directly from searchFilteredRows
+  }, [canExportReports, companyName, currentCompany, searchFilteredRows, report.summary, filters]);
 
   return (
     <DashboardLayout lockContentScroll>
       <div className="no-print milik-report-page flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-1.5">
-        <style>{`
-          .milik-report-page select:focus, .milik-report-page input:focus { border-color: #0B3B2E; box-shadow: 0 0 0 1px rgba(11,59,46,0.2); outline: none; }
-          .pb-tooltip { position: relative; cursor: default; }
-          .pb-tooltip:hover::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 4px); transform: translateX(-50%); white-space: nowrap; background: #1e293b; color: #fff; font-size: 9px; padding: 3px 7px; border-radius: 3px; z-index: 50; pointer-events: none; }
-        `}</style>
+        <style>{REPORT_STYLE}</style>
         <div className="mx-auto flex w-full max-w-none min-h-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 
@@ -476,7 +532,7 @@ const PaidBalanceReport = () => {
                   <input type="date" value={filters.asOfDate} onChange={setFilter("asOfDate")} className="h-7 flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </div>
                 <AppSelect value={filters.propertyId} onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))} options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))} placeholder="All properties" searchable clearable size="sm" />
-                <AppSelect value={filters.status} onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))} options={[{ value: "owing", label: "Owing" }, { value: "credit", label: "Credit" }, { value: "settled", label: "Settled" }]} placeholder="All tenant positions" clearable size="sm" />
+                <AppSelect value={filters.status} onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))} options={[{ value: "owing", label: "Arrears" }, { value: "credit", label: "Overpaid" }, { value: "settled", label: "Settled" }]} placeholder="All tenant positions" clearable size="sm" />
                 <input value={filters.search} onChange={setFilter("search")} placeholder="Search tenant, property, unit" className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </div>
             </div>
@@ -488,8 +544,8 @@ const PaidBalanceReport = () => {
                   {[
                     { label: 'Period Invoiced', value: formatMoney(summary.totalInvoiced),        accent: 'text-slate-800' },
                     { label: 'Total Paid',       value: formatMoney(summary.totalPaidApplied),     accent: 'text-emerald-700' },
-                    { label: 'Outstanding',       value: formatMoney(summary.totalOutstanding),     accent: 'text-red-600',     sub: summary.owingCount ? `${summary.owingCount} owing` : null },
-                    { label: 'Unapplied Credit',  value: formatMoney(summary.totalUnappliedCredit), accent: 'text-amber-600',   sub: summary.creditCount ? `${summary.creditCount} credit` : null },
+                    { label: 'Outstanding',       value: formatMoney(summary.totalOutstanding),     accent: 'text-red-600',     sub: summary.owingCount ? `${summary.owingCount} in arrears` : null },
+                    { label: 'Unapplied Credit',  value: formatMoney(summary.totalUnappliedCredit), accent: 'text-amber-600',   sub: summary.creditCount ? `${summary.creditCount} overpaid` : null },
                     { label: 'Net Balance',       value: formatMoney(summary.netBalance),           accent: 'text-slate-800' },
                     { label: 'Largest Debtor',    value: balanceInsights.largestOwing?.tenantName || '—', accent: 'text-red-600', sub: balanceInsights.largestOwing ? formatMoney(balanceInsights.largestOwing.netBalance) : null },
                     { label: 'Largest Credit',    value: balanceInsights.largestCredit?.tenantName || '—', accent: 'text-emerald-700', sub: balanceInsights.largestCredit ? formatMoney(Math.abs(Number(balanceInsights.largestCredit.netBalance || 0))) : null },
@@ -513,11 +569,11 @@ const PaidBalanceReport = () => {
 
             {/* ── Info strip ── */}
             <div className="flex-shrink-0 flex flex-wrap gap-3 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] border-b border-slate-100">
-              <span className="text-red-600">Owing: {summary.owingCount || 0}</span>
-              <span className="text-emerald-700">Credit: {summary.creditCount || 0}</span>
+              <span className="text-red-600">Arrears: {summary.owingCount || 0}</span>
+              <span className="text-emerald-700">Overpaid: {summary.creditCount || 0}</span>
               <span className="text-slate-500">Settled: {summary.settledCount || 0}</span>
               <span className="text-slate-400">·</span>
-              <span className="text-slate-500">{propertyGroups.length} {propertyGroups.length === 1 ? 'property' : 'properties'} · {searchFilteredRows.length} tenants</span>
+              <span className="text-slate-500">{enrichedPropertyGroups.length} {enrichedPropertyGroups.length === 1 ? 'property' : 'properties'} · {searchFilteredRows.length} tenants</span>
               {balanceInsights.earliestArrear?.tenantName && (
                 <span className="text-orange-600">Oldest due: {balanceInsights.earliestArrear.tenantName} ({fmtDate(balanceInsights.earliestArrear.oldestDueDate)})</span>
               )}
@@ -531,28 +587,30 @@ const PaidBalanceReport = () => {
                     <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                       <tr>
                         {COLS.map((h, i) => (
-                          <th key={h} className={`whitespace-nowrap px-2 py-1.5 text-left font-bold text-[9px] tracking-wide ${i >= 2 && i <= 6 ? 'text-right' : ''} ${i < COLS.length - 1 ? 'border-r border-white/10' : ''}`}>
+                          <th key={h} className={`whitespace-nowrap px-2 py-1.5 text-left font-bold text-[9px] tracking-wide ${i >= 2 && i <= 7 ? 'text-right' : ''} ${i < COLS.length - 1 ? 'border-r border-white/10' : ''}`}>
                             {h}
                           </th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {propertyGroups.length === 0 ? (
+                      {enrichedPropertyGroups.length === 0 ? (
                         <tr>
                           <td colSpan={COLS.length} className="px-3 py-6 text-center text-slate-400 text-[11px]">
                             {loading ? 'Loading...' : 'No tenants matched the selected filters.'}
                           </td>
                         </tr>
-                      ) : propertyGroups.map((group) => {
+                      ) : enrichedPropertyGroups.map((group) => {
                         const gRows = group.rows;
-                        const gBF = sumRows(gRows, 'previousArrears');
-                        const gRent = sumRows(gRows, 'rentInvoiced');
-                        const gOther = sumOtherExpd(gRows);
-                        const gPaid = sumRows(gRows, 'totalPaidApplied');
+                        // Use pre-computed _rentPaid / _otherPaid / _otherExpd / _balBF per row
+                        const gBF      = gRows.reduce((s, r) => s + r._balBF,     0);
+                        const gRent    = sumRows(gRows, 'rentInvoiced');
+                        const gOther   = gRows.reduce((s, r) => s + r._otherExpd,  0);
+                        const gRentP   = gRows.reduce((s, r) => s + r._rentPaid,   0);
+                        const gOtherP  = gRows.reduce((s, r) => s + r._otherPaid,  0);
                         const gBalance = sumRows(gRows, 'netBalance');
-                        const gOwing = gRows.filter((r) => r.status === 'owing').length;
-                        const gCredit = gRows.filter((r) => r.status === 'credit').length;
+                        const gOwing   = gRows.filter((r) => r.status === 'owing').length;
+                        const gCredit  = gRows.filter((r) => r.status === 'credit').length;
                         const gSettled = gRows.filter((r) => r.status === 'settled').length;
 
                         return (
@@ -563,53 +621,51 @@ const PaidBalanceReport = () => {
                                 <div className="flex items-center gap-2">
                                   <span className="font-black text-[10px] text-[#0B3B2E] uppercase tracking-wide">{group.propertyName}</span>
                                   <span className="text-[8px] text-slate-500 font-semibold">{gRows.length} unit{gRows.length !== 1 ? 's' : ''}</span>
-                                  {gOwing > 0 && <span className="text-[8px] text-red-600 font-bold">{gOwing} owing</span>}
-                                  {gCredit > 0 && <span className="text-[8px] text-emerald-700 font-bold">{gCredit} credit</span>}
-                                  {gSettled > 0 && <span className="text-[8px] text-slate-400 font-bold">{gSettled} settled</span>}
+                                  {gOwing > 0 && <span className="text-[8px] text-red-600 font-bold">{gOwing} {STATUS_LABEL.owing}</span>}
+                                  {gCredit > 0 && <span className="text-[8px] text-emerald-700 font-bold">{gCredit} {STATUS_LABEL.credit}</span>}
+                                  {gSettled > 0 && <span className="text-[8px] text-slate-400 font-bold">{gSettled} {STATUS_LABEL.settled}</span>}
                                 </div>
                               </td>
-                              <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-orange-600">{gBF > 0 ? formatMoney(gBF) : <span className="text-slate-300">—</span>}</td>
+                              <td className={`px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold ${gBF > 0 ? 'text-orange-600' : gBF < 0 ? 'text-emerald-700' : ''}`}>{gBF !== 0 ? formatMoney(gBF) : <span className="text-slate-300">—</span>}</td>
                               <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-slate-700">{formatMoney(gRent)}</td>
                               <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-slate-700">{gOther > 0 ? formatMoney(gOther) : <span className="text-slate-300">—</span>}</td>
-                              <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-emerald-700">{formatMoney(sumRentPaid(gRows))}</td>
-                              <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-emerald-700">{sumOtherPaid(gRows) > 0 ? formatMoney(sumOtherPaid(gRows)) : <span className="text-white/30">—</span>}</td>
+                              <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-emerald-700">{formatMoney(gRentP)}</td>
+                              <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-bold text-emerald-700">{gOtherP > 0 ? formatMoney(gOtherP) : <span className="text-white/30">—</span>}</td>
+                              <td className="px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] font-black text-emerald-700">{formatMoney(gRentP + gOtherP)}</td>
                               <td className={`px-2 py-1.5 border-r border-[#0B3B2E]/20 text-right text-[9px] ${balCfStyle(gBalance)}`}>{formatMoney(gBalance)}</td>
                               <td colSpan={2} />
                             </tr>
 
-                            {/* Tenant rows */}
+                            {/* Tenant rows — use pre-computed _* fields to avoid re-invoking calc helpers */}
                             {gRows.map((row, i) => {
-                              const otherExpd = calcOtherExpd(row);
-                              const otherTip = buildOtherExpdTooltip(row);
                               const balCf = Number(row.netBalance || 0);
                               return (
                                 <tr key={`${row.tenantId}-${row.unitId || i}`} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-emerald-50/30' : 'bg-slate-50/40 hover:bg-emerald-50/30'}`}>
                                   <td className="px-2 py-1 border-r border-gray-100 font-semibold text-slate-900 whitespace-nowrap">{row.tenantName}</td>
                                   <td className="px-2 py-1 border-r border-gray-100 text-slate-500 whitespace-nowrap">{row.unitNumber || '—'}</td>
                                   <td className="px-2 py-1 border-r border-gray-100 text-right">
-                                    {Number(row.previousArrears || 0) > 0
-                                      ? <span className="text-orange-600 font-semibold">{formatMoney(row.previousArrears)}</span>
-                                      : <span className="text-slate-300">—</span>}
+                                    {row._balBF > 0 ? <span className="text-orange-600 font-semibold">{formatMoney(row._balBF)}</span> : row._balBF < 0 ? <span className="text-emerald-700 font-semibold">{formatMoney(row._balBF)}</span> : <span className="text-slate-300">—</span>}
                                   </td>
                                   <td className="px-2 py-1 border-r border-gray-100 text-right text-slate-700">{formatMoney(row.rentInvoiced)}</td>
                                   <td className="px-2 py-1 border-r border-gray-100 text-right">
-                                    {otherExpd > 0
-                                      ? <span className={`pb-tooltip text-slate-700 underline decoration-dotted decoration-slate-400`} data-tip={otherTip || undefined}>{formatMoney(otherExpd)}</span>
+                                    {row._otherExpd > 0
+                                      ? <span className="pb-tooltip text-slate-700 underline decoration-dotted decoration-slate-400" data-tip={row._otherExpdTip || undefined}>{formatMoney(row._otherExpd)}</span>
                                       : <span className="text-slate-300">—</span>}
                                   </td>
-                                  <td className="px-2 py-1 border-r border-gray-100 text-right text-emerald-700">{formatMoney(calcRentPaid(row))}</td>
+                                  <td className="px-2 py-1 border-r border-gray-100 text-right text-emerald-700">{formatMoney(row._rentPaid)}</td>
                                   <td className="px-2 py-1 border-r border-gray-100 text-right">
-                                    {calcOtherPaid(row) > 0
-                                      ? <span className="pb-tooltip text-emerald-700 underline decoration-dotted decoration-emerald-400" data-tip={buildOtherPaidTooltip(row) || undefined}>{formatMoney(calcOtherPaid(row))}</span>
+                                    {row._otherPaid > 0
+                                      ? <span className="pb-tooltip text-emerald-700 underline decoration-dotted decoration-emerald-400" data-tip={row._otherPaidTip || undefined}>{formatMoney(row._otherPaid)}</span>
                                       : <span className="text-slate-300">—</span>}
                                   </td>
+                                  <td className="px-2 py-1 border-r border-gray-100 text-right font-bold text-emerald-700">{formatMoney(row._rentPaid + row._otherPaid)}</td>
                                   <td className={`px-2 py-1 border-r border-gray-100 text-right ${balCfStyle(balCf)}`}>{formatMoney(balCf)}</td>
                                   <td className="px-2 py-1 border-r border-gray-100 text-slate-500 whitespace-nowrap text-[9px]">
                                     {row.oldestDueDate ? fmtDate(row.oldestDueDate) : <span className="text-slate-300">—</span>}
                                   </td>
                                   <td className="px-2 py-1">
                                     <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[9px] font-black ${statusStyle(row.status)}`}>
-                                      {row.status}
+                                      {STATUS_LABEL[row.status] || row.status}
                                     </span>
                                   </td>
                                 </tr>
@@ -619,29 +675,21 @@ const PaidBalanceReport = () => {
                         );
                       })}
 
-                      {/* Grand total row */}
-                      {propertyGroups.length > 0 && (() => {
-                        const allRows = searchFilteredRows;
-                        const totalBF = sumRows(allRows, 'previousArrears');
-                        const totalRent = sumRows(allRows, 'rentInvoiced');
-                        const totalOther = sumOtherExpd(allRows);
-                        const totalRentPaid = sumRentPaid(allRows);
-                        const totalOtherPaid = sumOtherPaid(allRows);
-                        const totalBalance = sumRows(allRows, 'netBalance');
-                        return (
-                          <tr className="border-t-2 border-[#0B3B2E] bg-[#0B3B2E] text-white">
-                            <td className="px-2 py-1.5 font-black text-[9px] tracking-wide uppercase">Grand Total</td>
-                            <td className="px-2 py-1.5 text-[9px] text-white/60 border-r border-white/10">{allRows.length} tenants</td>
-                            <td className="px-2 py-1.5 border-r border-white/10 text-right font-bold text-[9px]">{totalBF > 0 ? formatMoney(totalBF) : '—'}</td>
-                            <td className="px-2 py-1.5 border-r border-white/10 text-right font-bold text-[9px]">{formatMoney(totalRent)}</td>
-                            <td className="px-2 py-1.5 border-r border-white/10 text-right font-bold text-[9px]">{totalOther > 0 ? formatMoney(totalOther) : '—'}</td>
-                            <td className="px-2 py-1.5 border-r border-white/10 text-right font-bold text-[9px]">{formatMoney(totalRentPaid)}</td>
-                            <td className="px-2 py-1.5 border-r border-white/10 text-right font-bold text-[9px]">{totalOtherPaid > 0 ? formatMoney(totalOtherPaid) : '—'}</td>
-                            <td className={`px-2 py-1.5 border-r border-white/10 text-right font-black text-[9px] ${totalBalance > 0 ? 'text-red-300' : totalBalance < 0 ? 'text-emerald-300' : ''}`}>{formatMoney(totalBalance)}</td>
-                            <td colSpan={2} />
-                          </tr>
-                        );
-                      })()}
+                      {/* Grand total row — uses memoized grandTotals to avoid re-summing on each render */}
+                      {enrichedPropertyGroups.length > 0 && (
+                        <tr className="border-t-2 border-[#0B3B2E] bg-[#0B3B2E] text-white">
+                          <td className="px-2 py-1.5 font-black text-[9px] tracking-wide uppercase">Grand Total</td>
+                          <td className="px-2 py-1.5 text-[9px] text-white/60 border-r border-white/10">{searchFilteredRows.length} tenants</td>
+                          <td className={`px-2 py-1.5 border-r border-white/10 text-right font-bold text-[9px] ${grandTotals.totalBF > 0 ? 'text-orange-300' : grandTotals.totalBF < 0 ? 'text-emerald-300' : ''}`}>{grandTotals.totalBF !== 0 ? formatMoney(grandTotals.totalBF) : '—'}</td>
+                          <td className="px-2 py-1.5 border-r border-white/10 text-right font-bold text-[9px]">{formatMoney(grandTotals.totalRent)}</td>
+                          <td className="px-2 py-1.5 border-r border-white/10 text-right font-bold text-[9px]">{grandTotals.totalOther > 0 ? formatMoney(grandTotals.totalOther) : '—'}</td>
+                          <td className="px-2 py-1.5 border-r border-white/10 text-right font-bold text-[9px]">{formatMoney(grandTotals.totalRentPaid)}</td>
+                          <td className="px-2 py-1.5 border-r border-white/10 text-right font-bold text-[9px]">{grandTotals.totalOtherPaid > 0 ? formatMoney(grandTotals.totalOtherPaid) : '—'}</td>
+                          <td className="px-2 py-1.5 border-r border-white/10 text-right font-black text-[9px] text-emerald-300">{formatMoney(grandTotals.totalRentPaid + grandTotals.totalOtherPaid)}</td>
+                          <td className={`px-2 py-1.5 border-r border-white/10 text-right font-black text-[9px] ${grandTotals.totalBalance > 0 ? 'text-red-300' : grandTotals.totalBalance < 0 ? 'text-emerald-300' : ''}`}>{formatMoney(grandTotals.totalBalance)}</td>
+                          <td colSpan={2} />
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>

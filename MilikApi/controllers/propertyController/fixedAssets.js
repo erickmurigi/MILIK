@@ -51,6 +51,7 @@ export const getFixedAssets = async (req, res, next) => {
       .populate("depreciationExpenseAccount", "code name")
       .populate("accumulatedDepreciationAccount", "code name")
       .sort({ createdAt: -1 })
+      .limit(500)
       .lean();
 
     const enriched = assets.map((a) => ({

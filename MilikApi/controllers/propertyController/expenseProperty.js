@@ -76,6 +76,7 @@ export const getExpenses = async (req, res, next) => {
       .populate("property", "name address")
       .populate("unit", "unitNumber")
       .sort({ date: -1, createdAt: -1 })
+      .limit(1000)
       .lean();
 
     return res.status(200).json(expenses);
@@ -248,6 +249,7 @@ export const getPropertyExpenses = async (req, res, next) => {
       .populate("property", "name address")
       .populate("unit", "unitNumber")
       .sort({ date: -1, createdAt: -1 })
+      .limit(1000)
       .lean();
 
     const summary = await ExpenseProperty.aggregate([

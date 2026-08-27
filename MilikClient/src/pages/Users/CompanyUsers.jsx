@@ -10,6 +10,7 @@ import {
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import PaginationBar from "../../components/PaginationBar";
 import { getUsers } from "../../redux/apiCalls";
+import { selectAllUsers } from "../../redux/selectors";
 import { adminRequests } from "../../utils/requestMethods";
 
 const PAGE_SIZE = 25;
@@ -43,7 +44,7 @@ export default function CompanyUsers() {
   const navigate      = useNavigate();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const currentUser   = useSelector((s) => s.auth?.currentUser);
-  const users         = useSelector((s) => s.user?.users || []);
+  const users         = useSelector(selectAllUsers);
   const isFetching    = useSelector((s) => s.user?.isFetching);
 
   const [search,       setSearch]       = useTabState("/users:search",       "");

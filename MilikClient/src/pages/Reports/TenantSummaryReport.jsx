@@ -7,6 +7,7 @@ import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getTenantSummaryReport } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
+import { selectAllProperties } from "../../redux/selectors";
 import { formatMoney } from "../../utils/money";
 import useDebounce from "../../hooks/useDebounce";
 import PaginationBar from "../../components/PaginationBar";
@@ -21,7 +22,7 @@ const TenantSummaryReport = () => {
   const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
   const businessId = currentCompany?._id || "";
 
-  const reduxProperties = useSelector((s) => s.property?.properties || []);
+  const reduxProperties = useSelector(selectAllProperties);
 
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState([]);

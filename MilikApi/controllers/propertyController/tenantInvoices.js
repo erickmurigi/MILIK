@@ -34,6 +34,29 @@ const SINGLE_INVOICE_ACCOUNT_CACHE_TTL_MS = 30 * 1000;
 const singleInvoiceAccountCache = new Map();
 export const clearInvoiceAccountCache = () => singleInvoiceAccountCache.clear();
 
+// 10-second TTL cache for snapshot batch results — prevents duplicate DB trips
+// when the same (business, tenantIds, asOfDate) set is requested multiple times
+// during a single page load (e.g. dashboard + statement + report all in one session).
+const SNAPSHOT_BATCH_CACHE_TTL_MS = 10 * 1000;
+const snapshotBatchCache = new Map();
+const _getSnapshotCache = (key) => {
+  const entry = snapshotBatchCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) { snapshotBatchCache.delete(key); return null; }
+  return entry.value;
+};
+const _setSnapshotCache = (key, value) => {
+  snapshotBatchCache.set(key, { value, expiresAt: Date.now() + SNAPSHOT_BATCH_CACHE_TTL_MS });
+  // Evict entries older than 2× TTL to avoid unbounded growth
+  if (snapshotBatchCache.size > 200) {
+    const cutoff = Date.now();
+    for (const [k, v] of snapshotBatchCache) {
+      if (v.expiresAt < cutoff) snapshotBatchCache.delete(k);
+    }
+  }
+};
+export const clearSnapshotBatchCache = () => snapshotBatchCache.clear();
+
 const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 const safeLower = (value = "") => String(value || "").trim().toLowerCase();
 const normalizeUtilityMatch = (value = "") =>
@@ -874,6 +897,7 @@ const getActiveNotesForTenant = async ({ businessId, tenantId, asOfDate = null }
     postingStatus: { $in: ["posted", "not_applicable", undefined, null] },
     ...buildAsOfDateFilter("noteDate", asOfDate),
   })
+    .select(TENANT_SNAPSHOT_NOTE_FIELDS)
     .sort({ noteDate: 1, createdAt: 1, _id: 1 })
     .lean();
 
@@ -1686,6 +1710,17 @@ export const computeTenantInvoiceSnapshotsBatch = async ({ businessId, tenantIds
   const normalizedTenantIds = [...new Set((Array.isArray(tenantIds) ? tenantIds : []).filter(Boolean).map(String))];
   if (!businessId || normalizedTenantIds.length === 0) return new Map();
 
+  // Cache key: only effective when no extra query filters are supplied (the common hot path).
+  const hasExtraFilters = Object.keys(invoiceQuery).length > 0 || Object.keys(receiptQuery).length > 0 || Object.keys(noteQuery).length > 0;
+  const cacheKey = hasExtraFilters
+    ? null
+    : `${businessId}:${normalizedTenantIds.slice().sort().join(",")}:${asOfDate ?? "all"}`;
+
+  if (cacheKey) {
+    const cached = _getSnapshotCache(cacheKey);
+    if (cached) return cached;
+  }
+
   const [invoices, receipts, notes] = await Promise.all([
     getActiveInvoicesForTenants({ businessId, tenantIds: normalizedTenantIds, asOfDate, extraQuery: invoiceQuery }),
     getActiveReceiptsForTenants({ businessId, tenantIds: normalizedTenantIds, asOfDate, extraQuery: receiptQuery }),
@@ -1708,6 +1743,7 @@ export const computeTenantInvoiceSnapshotsBatch = async ({ businessId, tenantIds
     );
   });
 
+  if (cacheKey) _setSnapshotCache(cacheKey, bundles);
   return bundles;
 };
 

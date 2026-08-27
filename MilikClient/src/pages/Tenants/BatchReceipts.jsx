@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { selectAllProperties, selectAllTenants } from "../../redux/selectors";
 import { useNavigate } from "react-router-dom";
 import {
   FaArrowLeft,
@@ -55,8 +56,8 @@ const BatchReceipts = () => {
   const dispatch      = useDispatch();
   const navigate      = useNavigate();
   const company       = useSelector((s) => s.company?.currentCompany);
-  const allTenants    = useSelector((s) => s.tenant?.tenants || []);
-  const allProperties = useSelector((s) => s.property?.properties || []);
+  const allTenants    = useSelector(selectAllTenants);
+  const allProperties = useSelector(selectAllProperties);
   const businessId    = company?._id;
 
   // ── Tab ───────────────────────────────────────────────────────────────────────

@@ -89,6 +89,12 @@ const getCategoryColor = (category) => {
   }
 };
 
+// Module-scope helper — avoids creating an IIFE on every row render
+const getLedgerBadge = (property) => {
+  const v = String(property.accountLedgerType || "").toLowerCase();
+  return v.startsWith("off") || v === "property-gl";
+};
+
 const Properties = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -198,7 +204,7 @@ const Properties = () => {
   }, [currentPage]);
 
   // Apply search (button)
-  const applySearch = () => {
+  const applySearch = useCallback(() => {
     setAppliedFilters({
       ...draftFilters,
       code: draftFilters.code.trim(),
@@ -212,9 +218,9 @@ const Properties = () => {
     setSelectAll(false);
     setActionMenuOpen(false);
     setExpandedRows([]);
-  };
+  }, [draftFilters, setAppliedFilters, setCurrentPage]);
 
-  const resetFilters = () => {
+  const resetFilters = useCallback(() => {
     setDraftFilters(emptyFilters);
     setAppliedFilters(emptyFilters);
     setCurrentPage(1);
@@ -222,14 +228,14 @@ const Properties = () => {
     setSelectAll(false);
     setExpandedRows([]);
     setActionMenuOpen(false);
-  };
+  }, [setAppliedFilters, setCurrentPage]);
 
-  const onFilterEnter = (e) => {
+  const onFilterEnter = useCallback((e) => {
     if (e.key === "Enter") {
       e.preventDefault();
       applySearch();
     }
-  };
+  }, [applySearch]);
 
   // Fetch properties when applied filters or page changes
   useEffect(() => {
@@ -258,11 +264,11 @@ const Properties = () => {
   }, [error]);
 
   // Selection
-  const handleSelectProperty = (id) => {
+  const handleSelectProperty = useCallback((id) => {
     setSelectedProperties((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  };
+  }, []);
 
-  const handleSelectAll = () => {
+  const handleSelectAll = useCallback(() => {
     if (selectAll) {
       setSelectedProperties([]);
       setSelectAll(false);
@@ -270,40 +276,43 @@ const Properties = () => {
       setSelectedProperties((properties || []).map((p) => p._id));
       setSelectAll(true);
     }
-  };
+  }, [selectAll, properties]);
 
-  const handleCheckboxClick = (e) => e.stopPropagation();
+  const handleCheckboxClick = useCallback((e) => e.stopPropagation(), []);
 
   // Toggle expand for a specific row
-  const toggleRowExpand = (propertyId) => {
+  const toggleRowExpand = useCallback((propertyId) => {
     setExpandedRows((prev) =>
       prev.includes(propertyId) ? prev.filter((id) => id !== propertyId) : [...prev, propertyId]
     );
-  };
+  }, []);
 
   // Expand all rows
-  const expandAllRows = () => {
+  const expandAllRows = useCallback(() => {
     if (properties && properties.length > 0) {
       setExpandedRows(properties.map((p) => p._id));
     }
-  };
+  }, [properties]);
 
   // Collapse all rows
-  const collapseAllRows = () => {
+  const collapseAllRows = useCallback(() => {
     setExpandedRows([]);
-  };
+  }, []);
 
   // Check if all rows are expanded
-  const allRowsExpanded = properties && properties.length > 0 && expandedRows.length === properties.length;
+  const allRowsExpanded = useMemo(
+    () => properties && properties.length > 0 && expandedRows.length === properties.length,
+    [properties, expandedRows]
+  );
 
   // Row click now selects the property (not expands)
-  const handleRowClick = (propertyId, e) => {
+  const handleRowClick = useCallback((propertyId, e) => {
     if (e.target.type === "checkbox" || e.target.closest(".action-buttons")) return;
     // Select the property
     handleSelectProperty(propertyId);
-  };
+  }, [handleSelectProperty]);
 
-  const buildFetchParams = () => ({
+  const buildFetchParams = useCallback(() => ({
     page: currentPage,
     limit: pageSize,
     search: "",
@@ -315,7 +324,7 @@ const Properties = () => {
     lrNumber: appliedFilters.lr,
     landlord: appliedFilters.landlord,
     location: appliedFilters.location,
-  });
+  }), [currentPage, pageSize, appliedFilters]);
 
   // Delete
   const handleDelete = (propertyId) => {
@@ -729,11 +738,11 @@ const Properties = () => {
                               </td>
                               <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
                                 <span className="font-semibold text-slate-900 truncate block">{toListingCaps(property.propertyName)}</span>
-                                {(() => { const v = String(property.accountLedgerType || "").toLowerCase(); return (v.startsWith("off") || v === "property-gl") ? (
+                                {getLedgerBadge(property) && (
                                   <span className="inline-flex items-center px-1.5 py-px rounded text-[9px] font-bold tracking-wide bg-purple-100 text-purple-700 border border-purple-200 mt-0.5">
                                     Property GL{property.propertyLedgerEnabled ? " ✓" : ""}
                                   </span>
-                                ) : null; })()}
+                                )}
                               </td>
                               <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
                                 <span className="text-slate-600 truncate block">{toListingCaps(getPrimaryLandlord(property.landlords))}</span>
@@ -804,7 +813,7 @@ const Properties = () => {
                                       <div>
                                         <span className="text-xs font-semibold text-gray-700">Account Ledger:</span>
                                         <div className="mt-1 flex flex-col gap-1">
-                                          {(() => { const v = String(property.accountLedgerType || "").toLowerCase(); return (v.startsWith("off") || v === "property-gl") ? (
+                                          {getLedgerBadge(property) ? (
                                             <>
                                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200">
                                                 Property GL — {property.propertyLedgerEnabled ? "Ledger Active" : "Ledger Disabled"}
@@ -821,7 +830,7 @@ const Properties = () => {
                                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
                                               In-GL — Posts to General Ledger
                                             </span>
-                                          ); })()}
+                                          )}
                                         </div>
                                       </div>
                                       <div>

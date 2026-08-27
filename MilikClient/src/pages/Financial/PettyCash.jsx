@@ -1,6 +1,7 @@
 ﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import { useDispatch, useSelector } from "react-redux";
+import { selectAllProperties } from "../../redux/selectors";
 import { toast } from "react-toastify";
 import {
   FaBook,
@@ -112,7 +113,7 @@ const PettyCash = () => {
   const dispatch = useDispatch();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const currentUser = useSelector((s) => s.auth?.currentUser);
-  const properties = useSelector((s) => s.property?.properties || []);
+  const properties = useSelector(selectAllProperties);
   const { propertiesLoaded } = useEntityCache(currentCompany?._id);
 
   const [activeTab, setActiveTab] = useTabState("/accounts/petty-cash:activeTab", "disbursements");

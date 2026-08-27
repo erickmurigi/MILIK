@@ -11,6 +11,7 @@ import {
   getTenantPayments,
   getTenantBalance,
   getTenantTotalDue,
+  getTenantStatementBundle,
   migrateTenantCodes,
   bulkImportTenants,
   transferTenantUnit,
@@ -28,6 +29,9 @@ router.post("/bulk-import", verifyUser, bulkImportTenants)
 
 // Get all tenants
 router.get("/", verifyUser, getTenants)
+
+// Get tenant statement bundle (tenant + leases + receipts + invoices + notes in one round trip)
+router.get("/:id/statement-bundle", verifyUser, getTenantStatementBundle)
 
 // Get single tenant
 router.get("/:id", verifyUser, getTenant)

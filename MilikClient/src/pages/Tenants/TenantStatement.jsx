@@ -24,12 +24,11 @@ import {
 } from "../../redux/selectors";
 import { getUnits } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
+import { getLeasesSuccess } from "../../redux/leasesRedux";
 import {
   getLeases,
   getUtilities,
-  listRentPaymentsPage,
-  getTenantInvoices,
-  getTenantInvoiceNotes,
+  getTenantStatementBundle,
   createTenantInvoice,
   updateLease,
   updateLeaseReviews,
@@ -37,10 +36,10 @@ import {
 } from "../../redux/apiCalls";
 import { deleteTenantInvoice } from "../../redux/invoiceApi";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import Spinner from "../../components/common/Spinner";
 import SingleBookingModal from "./SingleBookingModal";
 import AppSelect from "../../components/common/AppSelect";
 import { toast } from "react-toastify";
-import { adminRequests } from "../../utils/requestMethods";
 import { fetchCompanySettings, selectCompanySettings } from "../../redux/companySettingsRedux";
 import { normalizeCompanyTaxConfig } from "./invoiceTaxUtils";
 import {
@@ -323,11 +322,10 @@ const TenantStatement = () => {
     `${location.pathname}:activeTab`,
     ["statement", "billing", "reviews"].includes(initialRequestedTab) ? initialRequestedTab : "statement"
   );
-  // These are kept only for the print/email/SMS handlers — statement display
-  // is now handled by TenantStatementTab which owns its own date state.
-  const [startDate, setStartDate] = useState(`${new Date().getFullYear()}-01-01`);
-  const [endDate,   setEndDate]   = useState(formatInputDate(new Date()));
-  const [transactionType,] = useState("ALL");
+  // Lifted filter state — shared between the statement tab view and print/PDF.
+  const [stmtFrom,       setStmtFrom]       = useState("2000-01-01");
+  const [stmtTo,         setStmtTo]         = useState(formatInputDate(new Date()));
+  const [stmtTypeFilter, setStmtTypeFilter] = useState("ALL");
   const [reviewFormOpen, setReviewFormOpen] = useState(false);
   const [allocationTraceTarget, setAllocationTraceTarget] = useState(null);
   const [editingReviewId, setEditingReviewId] = useState(null);
@@ -374,6 +372,7 @@ const TenantStatement = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const { propertiesLoaded, unitsLoaded } = useEntityCache(currentCompany?._id);
   const [tenantData, setTenantData] = useState(null);
+  const [tenantLoading, setTenantLoading] = useState(true);
   const leasesFromStore = useSelector(selectAllLeases);
   const [tenantPayments, setTenantPayments] = useState([]);
   const unitsFromStore = useSelector(selectAllUnits);
@@ -396,7 +395,8 @@ const TenantStatement = () => {
     if (requestedTab === "reviews" && location.state?.openReviewForm) {
       setReviewFormOpen(true);
     }
-  }, [tenantId, location.key, location.state]);
+  // location.state is a new object reference on every navigation — only key and tenantId are stable identifiers
+  }, [tenantId, location.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tenantUnitRecord = useMemo(() => {
     const unitId = tenant?.unit?._id || tenant?.unit || null;
@@ -593,40 +593,36 @@ const TenantStatement = () => {
   useEffect(() => {
     if (!currentCompany?._id) return;
 
-    adminRequests.get(`/tenants/${tenantId}`).then((res) => setTenantData(res.data?.data || res.data)).catch(() => {});
     if (!unitsLoaded) dispatch(getUnits({ business: currentCompany._id }));
     if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
-    getLeases(dispatch, currentCompany._id, null, tenantId);
     getUtilities(dispatch, currentCompany._id);
-    listRentPaymentsPage({ business: currentCompany._id, tenant: tenantId, status: "active", limit: 500, page: 1 })
-      .then(({ items }) => setTenantPayments(items ?? []))
-      .catch(() => {});
-  }, [dispatch, currentCompany?._id, tenantId]);
+
+    getTenantStatementBundle(tenantId)
+      .then((data) => {
+        setTenantData(data.tenant || null);
+        setTenantLoading(false);
+        if (Array.isArray(data.leases)) {
+          dispatch(getLeasesSuccess(data.leases));
+        }
+        setTenantPayments(data.receipts?.items ?? []);
+        setTenantInvoices(Array.isArray(data.invoices) ? data.invoices : []);
+        setTenantInvoiceNotes(Array.isArray(data.invoiceNotes) ? data.invoiceNotes : []);
+      })
+      .catch(() => { setTenantLoading(false); });
+  }, [dispatch, currentCompany?._id, tenantId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!currentCompany?._id || !tenantId) return;
-
+    if (!currentCompany?._id || !tenantId || invoiceRefresh === 0) return;
+    // On subsequent refreshes (after invoice mutations), re-fetch invoices only
     const loadInvoices = async () => {
       try {
-        const [invoices, notes] = await Promise.all([
-          getTenantInvoices({
-            business: currentCompany._id,
-            tenantId,
-          }),
-          getTenantInvoiceNotes({
-            business: currentCompany._id,
-            tenantId,
-          }),
-        ]);
-        setTenantInvoices(Array.isArray(invoices) ? invoices : []);
-        setTenantInvoiceNotes(Array.isArray(notes) ? notes : []);
-      } catch (error) {
-        console.error("Failed to load tenant invoices:", error);
-        setTenantInvoices([]);
-        setTenantInvoiceNotes([]);
+        const bundle = await getTenantStatementBundle(tenantId);
+        setTenantInvoices(Array.isArray(bundle.invoices) ? bundle.invoices : []);
+        setTenantInvoiceNotes(Array.isArray(bundle.invoiceNotes) ? bundle.invoiceNotes : []);
+      } catch {
+        // silent — stale data is preferable to crashing
       }
     };
-
     loadInvoices();
   }, [currentCompany?._id, tenantId, invoiceRefresh]);
 
@@ -646,7 +642,8 @@ const TenantStatement = () => {
     toast.info("Invoice cancellation is not enabled in the current backend route yet.");
   };
 
-  const getInvoicesForPeriod = (periodRow, categories = ["RENT_CHARGE", "UTILITY_CHARGE"]) => {
+  // Stable reference so child handlers that call this don't cause re-renders of memoized subtrees
+  const getInvoicesForPeriod = useCallback((periodRow, categories = ["RENT_CHARGE", "UTILITY_CHARGE"]) => {
     const allowedCategories = Array.isArray(categories)
       ? categories.map((category) => String(category || "").toUpperCase())
       : [];
@@ -665,7 +662,7 @@ const TenantStatement = () => {
           (!metadataPeriodKey && invoicePeriod === periodRow?.description))
       );
     });
-  };
+  }, [tenantInvoices]);
 
   const validTenantInvoices = useMemo(() => {
     return tenantInvoices
@@ -874,7 +871,8 @@ const TenantStatement = () => {
     return null;
   }, [allocationTraceTarget, allocationTraceData]);
 
-  const openReceiptAllocationWorkspace = (receiptId = "") => {
+  // useCallback: stable reference prevents re-computing allocationTracePanelJsx on every render
+  const openReceiptAllocationWorkspace = useCallback((receiptId = "") => {
     const query = receiptId ? `?receipt=${encodeURIComponent(receiptId)}&mode=allocate` : "";
     const receipt = receiptId
       ? activeTenantReceipts.find((item) => safeId(item) === String(receiptId)) ||
@@ -887,9 +885,11 @@ const TenantStatement = () => {
     navigate(`/receipts/${tenantId}${query}`, {
       state: { ...(location.state || {}), tabTitle },
     });
-  };
+  }, [activeTenantReceipts, tenantPayments, navigate, tenantId, location.state]);
 
-  const renderAllocationTracePanel = () => {
+  // useMemo: this panel builds ~200 lines of JSX from already-memoized trace data.
+  // Previously rebuilt on every render; now only recomputed when trace data or selection changes.
+  const allocationTracePanelJsx = useMemo(() => {
     const receiptCount = allocationTraceData.receiptCount || 0;
     const unappliedCount = allocationTraceData.unappliedReceipts.length || 0;
     const hasSelection = Boolean(selectedAllocationTrace && allocationTraceTarget?.kind);
@@ -1104,7 +1104,8 @@ const TenantStatement = () => {
         </div>
       </div>
     );
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allocationTraceData, allocationTraceTarget, selectedAllocationTrace, openReceiptAllocationWorkspace, setAllocationTraceTarget]);
 
   const billingScheduleData = useMemo(() => {
     const baseRent = tenantLease?.rentAmount || tenant?.rent || 23000;
@@ -1368,11 +1369,16 @@ const TenantStatement = () => {
     return { totRent, totUtil, totTotal: totRent + totUtil, bookedCount };
   }, [filteredBillingScheduleData]);
 
-  const tabs = [
-    { id: "statement", label: "Tenant Statement", icon: <FaFileInvoiceDollar /> },
-    { id: "billing", label: "Billing Schedule", icon: <FaCalendarAlt /> },
-    { id: "reviews", label: "Rent Reviews / Escalations", icon: <FaChartBar /> },
-  ];
+  // useMemo: icons are React elements — recreating them on every render creates new object references
+  // that force any React.memo'd child that receives this array to re-render unnecessarily.
+  const tabs = useMemo(
+    () => [
+      { id: "statement", label: "Tenant Statement", icon: <FaFileInvoiceDollar /> },
+      { id: "billing", label: "Billing Schedule", icon: <FaCalendarAlt /> },
+      { id: "reviews", label: "Rent Reviews / Escalations", icon: <FaChartBar /> },
+    ],
+    []
+  );
 
   const handlePrint = useCallback(() => {
     const co = currentCompany || {};
@@ -1386,15 +1392,15 @@ const TenantStatement = () => {
     })();
     const property = tenant?.unit?.property?.propertyName || tenant?.property?.propertyName || '—';
     const allTxns = statementData?.transactions || [];
-    const printStart = startDate ? new Date(`${startDate}T00:00:00`) : null;
-    const printEnd = endDate ? new Date(`${endDate}T23:59:59`) : null;
+    const printStart = stmtFrom ? new Date(`${stmtFrom}T00:00:00`) : null;
+    const printEnd = stmtTo ? new Date(`${stmtTo}T23:59:59`) : null;
     const printBbf = printStart
       ? allTxns.filter((t) => new Date(t.date) < printStart).reduce((sum, t) => sum + t.amount, 0)
       : 0;
     const hasPrintBbf = printStart !== null && allTxns.some((t) => new Date(t.date) < printStart);
     const txns = allTxns
       .filter((t) => {
-        if (transactionType !== 'ALL' && t.type !== transactionType) return false;
+        if (stmtTypeFilter !== 'ALL' && t.type !== stmtTypeFilter) return false;
         const d = new Date(t.date);
         const fromOk = printStart ? d >= printStart : true;
         const toOk = printEnd ? d <= printEnd : true;
@@ -1441,7 +1447,7 @@ const TenantStatement = () => {
       .chg{color:#dc2626}.pay{color:#047857}.amb{color:#b45309}
       *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
     </style></head><body>
-    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">Tenant Statement</div><div class="sub">Period: ${startDate || 'All'} to ${endDate || 'All'}</div></div>
+    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">Tenant Statement</div><div class="sub">Period: ${stmtFrom || 'All'} to ${stmtTo || 'All'}</div></div>
     <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div></div></div>
     <div class="info">
       <div class="box"><div class="box-label">Tenant</div><strong>${tenantName}</strong></div>
@@ -1467,7 +1473,7 @@ const TenantStatement = () => {
     </body></html>`);
     win.document.close();
     win.onload = () => { win.focus(); win.print(); };
-  }, [currentCompany, tenant, statementData, startDate, endDate, transactionType]);
+  }, [currentCompany, tenant, statementData, stmtFrom, stmtTo, stmtTypeFilter]);
 
   const handleDownload = () => {
     handlePrint();
@@ -1586,7 +1592,13 @@ const TenantStatement = () => {
       tenantLease={tenantLease}
       onOpenAllocationTrace={(target) => setAllocationTraceTarget(target)}
       onOpenReceiptWorkspace={(receiptId) => openReceiptAllocationWorkspace(receiptId ?? "")}
-      allocationTracePanel={renderAllocationTracePanel()}
+      allocationTracePanel={allocationTracePanelJsx}
+      from={stmtFrom}
+      to={stmtTo}
+      typeFilter={stmtTypeFilter}
+      onFromChange={setStmtFrom}
+      onToChange={setStmtTo}
+      onTypeFilterChange={setStmtTypeFilter}
     />
   );
 
@@ -1873,7 +1885,10 @@ const TenantStatement = () => {
                 </button>
                 <button onClick={async () => {
                     if (currentCompany?._id) {
-                      await Promise.all([getLeases(dispatch, currentCompany._id, null, tenantId), getTenantInvoices(dispatch, currentCompany._id, tenantId)]);
+                      const bundle = await getTenantStatementBundle(tenantId);
+                      if (Array.isArray(bundle.leases)) dispatch(getLeasesSuccess(bundle.leases));
+                      if (Array.isArray(bundle.invoices)) setTenantInvoices(bundle.invoices);
+                      if (Array.isArray(bundle.invoiceNotes)) setTenantInvoiceNotes(bundle.invoiceNotes);
                       setInvoiceRefresh((v) => v + 1); setSelectedSchedules([]);
                       toast.success("Billing schedule refreshed.");
                     }
@@ -3083,6 +3098,16 @@ const TenantStatement = () => {
         return renderStatement();
     }
   };
+
+  if (tenantLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex h-full items-center justify-center">
+          <Spinner size="lg" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   if (!tenant) {
     return (

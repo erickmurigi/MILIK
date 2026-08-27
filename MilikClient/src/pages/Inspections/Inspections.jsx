@@ -2,7 +2,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import { useDispatch, useSelector } from "react-redux";
-import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
+import {
+  selectCurrentCompany,
+  selectCurrentUser,
+  selectAllProperties,
+  selectAllUnits,
+  selectAllTenants,
+} from "../../redux/selectors";
 import { getProperties } from "../../redux/propertyRedux";
 import { getUnits, getTenants } from "../../redux/apiCalls";
 import {
@@ -124,9 +130,9 @@ const Inspections = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
 
-  const reduxProperties = useSelector((s) => s.property?.properties || []);
-  const reduxUnits = useSelector((s) => s.unit?.units || []);
-  const reduxTenants = useSelector((s) => s.tenant?.tenants || []);
+  const reduxProperties = useSelector(selectAllProperties);
+  const reduxUnits      = useSelector(selectAllUnits);
+  const reduxTenants    = useSelector(selectAllTenants);
   const canCreate = hasCompanyPermission(currentUser, currentCompany, "inspections", "create", "propertyManagement");
   const canUpdate = hasCompanyPermission(currentUser, currentCompany, "inspections", "update", "propertyManagement");
   const canDelete = hasCompanyPermission(currentUser, currentCompany, "inspections", "delete", "propertyManagement");

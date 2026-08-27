@@ -186,6 +186,7 @@ const propertySlice = createSlice({
       limit: 10
     },
     loadedFor: null,
+    loadedAt: 0,
     loading: false,
     error: null,
     success: false
@@ -203,6 +204,7 @@ const propertySlice = createSlice({
       state.currentProperty = null;
       state.pagination = { total: 0, page: 1, pages: 1, limit: 10 };
       state.loadedFor = null;
+      state.loadedAt = 0;
       state.loading = false;
       state.error = null;
       state.success = false;
@@ -225,6 +227,7 @@ const propertySlice = createSlice({
           limit: 50
         };
         state.loadedFor = String(action.meta.arg?.business || '');
+        state.loadedAt  = Date.now();
       })
       .addCase(getProperties.rejected, (state, action) => {
         state.loading = false;

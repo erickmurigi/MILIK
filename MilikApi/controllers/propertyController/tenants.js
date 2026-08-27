@@ -1751,11 +1751,84 @@ export const getTenantBalance = async (req, res, next) => {
   }
 };
 
+// Statement bundle — returns tenant + leases + receipts + invoices + notes in one request,
+// replacing 5 separate API calls with a single parallel fetch.
+export const getTenantStatementBundle = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    const tenantId = req.params.id;
+    const filter = req.user?.isSystemAdmin
+      ? { _id: tenantId }
+      : { _id: tenantId, business: businessId };
+
+    // Auth check — fast lean query
+    const tenantBase = await Tenant.findOne(filter).select("_id business unit").lean();
+    if (!tenantBase) return next(createError(404, "Tenant not found"));
+
+    const foPropertyIds = await getFieldOfficerPropertyIds(req);
+    if (foPropertyIds !== null) {
+      const foSet = new Set(foPropertyIds.map(String));
+      const unitDoc = tenantBase.unit ? await Unit.findById(tenantBase.unit, { property: 1 }).lean() : null;
+      if (!unitDoc || !foSet.has(String(unitDoc.property))) {
+        return next(createError(403, "Not authorized to access this tenant"));
+      }
+    }
+
+    const bId = tenantBase.business;
+
+    const [tenant, leases, receipts, invoices, invoiceNotes] = await Promise.all([
+      // Full tenant with unit/property populate
+      Tenant.findOne(filter)
+        .populate("unit", "unitNumber property rent amenities status utilities")
+        .populate("unit.property", "propertyName propertyCode address name propertyType depositHeldBy")
+        .populate("additionalUnits", "unitNumber property rent status utilities")
+        .populate("additionalUnits.property", "propertyName propertyCode address name propertyType depositHeldBy")
+        .lean(),
+
+      // Leases for this tenant
+      Lease.find({ business: bId, tenant: tenantId })
+        .sort({ startDate: -1, createdAt: -1 })
+        .limit(50)
+        .populate("tenant", "name tenantCode email phone idNumber leaseType moveInDate moveOutDate status")
+        .populate({ path: "unit", select: "unitNumber unitName property rent status", populate: { path: "property", select: "propertyName propertyCode name address landlords" } })
+        .populate("landlord", "landlordName landlordCode phoneNumber email")
+        .lean(),
+
+      // Active receipts (limit 500 — same as frontend calls)
+      RentPayment.find({ business: bId, tenant: tenantId, ledgerType: "receipts", isConfirmed: true, isCancelled: { $ne: true }, isReversed: { $ne: true }, reversalOf: null })
+        .sort({ paymentDate: -1, createdAt: -1 })
+        .limit(500)
+        .lean(),
+
+      // Invoices (pending / paid / partially_paid)
+      TenantInvoice.find({ business: bId, tenant: tenantId, status: { $in: ["pending", "paid", "partially_paid"] } })
+        .sort({ invoiceDate: -1, createdAt: -1 })
+        .lean(),
+
+      // Invoice notes
+      TenantInvoiceNote.find({ business: bId, tenant: tenantId, status: { $nin: ["cancelled", "reversed"] } })
+        .sort({ noteDate: -1, createdAt: -1 })
+        .lean(),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      tenant,
+      leases,
+      receipts: { items: receipts, total: receipts.length },
+      invoices,
+      invoiceNotes,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // Get tenant total due
 
 export const getTenantTotalDue = async (tenantId) => {
   try {
-    const tenant = await Tenant.findById(tenantId).populate("unit", "_id").populate("additionalUnits", "_id").lean();
+    const tenant = await Tenant.findById(tenantId).select("unit additionalUnits rent balance").lean();
     if (!tenant) return { rent: 0, utilities: [], total: 0 };
 
     const assignedUnitIds = getTenantAssignedUnitIds(tenant);

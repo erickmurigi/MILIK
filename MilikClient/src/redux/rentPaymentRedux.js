@@ -5,6 +5,8 @@ export const rentPaymentSlice = createSlice({
     name: "rentPayment",
     initialState: {
         rentPayments: [],
+        loadedFor: null,
+        loadedAt: 0,
         isFetching: false,
         error: false
     },
@@ -21,6 +23,11 @@ export const rentPaymentSlice = createSlice({
         getRentPaymentsFailure: (state) => {
             state.isFetching = false
             state.error = true
+        },
+        // Mark collection as freshly loaded for a given business
+        setRentPaymentsLoaded: (state, action) => {
+            state.loadedFor = action.payload?.business ?? null;
+            state.loadedAt  = Date.now();
         },
 
         // Create rent payment
@@ -111,6 +118,7 @@ export const {
     getRentPaymentsStart,
     getRentPaymentsSuccess,
     getRentPaymentsFailure,
+    setRentPaymentsLoaded,
     createRentPaymentStart,
     createRentPaymentSuccess,
     createRentPaymentFailure,

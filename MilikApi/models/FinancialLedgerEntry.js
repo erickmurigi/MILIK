@@ -294,6 +294,8 @@ FinancialLedgerEntrySchema.index({ business: 1, unit: 1, status: 1, transactionD
 FinancialLedgerEntrySchema.index({ business: 1, status: 1, transactionDate: 1, accountId: 1 });
 // Optimized for ledger activity: accountId range scan + sort by date/createdAt
 FinancialLedgerEntrySchema.index({ business: 1, accountId: 1, transactionDate: 1, createdAt: 1 });
+// Optimized for liability subledger drill-down: account + status equality then date range
+FinancialLedgerEntrySchema.index({ business: 1, accountId: 1, status: 1, transactionDate: 1 });
 FinancialLedgerEntrySchema.index({ business: 1, journalGroupId: 1, status: 1 });
 
 FinancialLedgerEntrySchema.pre("findOneAndUpdate", function blockImmutableUpdate(next) {

@@ -987,6 +987,7 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
               })
           : [];
         let previousArrears = 0;
+        let priorInvoiceTotal = 0;
         let previousArrearsRent = 0;
         let previousArrearsUtility = 0;
         const previousArrearsUtilityBreakdown = {};
@@ -994,6 +995,7 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
         let previousArrearsDeposit = 0;
         let previousArrearsOther = 0;
         for (const inv of priorInvoices) {
+          priorInvoiceTotal += Number(inv.amount || 0);
           const remaining = Number(inv.outstanding || 0);
           if (remaining <= 0) continue;
           previousArrears += remaining;
@@ -1078,14 +1080,19 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
         }
 
         let unappliedCredit = 0;
+        let priorReceiptTotal = 0;
         let lastPaymentDateMs = null;
         for (const receipt of receipts) {
           unappliedCredit += Number(receipt?.unappliedAmount || 0);
           if (receipt?.paymentDate) {
             const ms = new Date(receipt.paymentDate).getTime();
             if (!lastPaymentDateMs || ms > lastPaymentDateMs) lastPaymentDateMs = ms;
+            if (fromDateMs && ms < fromDateMs) priorReceiptTotal += Number(receipt?.amount || 0);
           }
         }
+
+        // BAL B/F = gross prior invoices − gross prior receipts (signed; negative = credit carried forward)
+        const balBF = fromDateMs ? round2(priorInvoiceTotal - priorReceiptTotal) : 0;
 
         const netBalance = round2(previousArrears + outstanding - unappliedCredit);
         const status = netBalance > 0.009 ? "owing" : netBalance < -0.009 ? "credit" : "settled";
@@ -1095,6 +1102,7 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
         allRows.push({
           ...row,
           previousArrears,
+          balBF,
           previousArrearsRent: round2(previousArrearsRent),
           previousArrearsUtility: round2(previousArrearsUtility),
           previousArrearsUtilityBreakdown,
@@ -2683,29 +2691,35 @@ export const getLiabilitySubledger = async (req, res, next) => {
     const total = round2(rows.reduce((s, r) => s + r.balance, 0));
     if (!rows.length) return res.json({ success: true, tab, accountCode, accountName: account.name, total: 0, groups: [] });
 
-    const tenants = await Tenant.find({ _id: { $in: rows.map((r) => r.tenantId) }, business: businessId })
-      .populate({ path: "unit", select: "unitNumber property", populate: { path: "property", select: "propertyName propertyCode" } })
-      .select("name unit")
-      .lean();
+    const tenantIdList = rows.map((r) => r.tenantId);
+
+    // Fetch tenants and (for deposits) the latest DEPOSIT_CHARGE invoices in parallel.
+    const [tenants, invs] = await Promise.all([
+      Tenant.find({ _id: { $in: tenantIdList }, business: businessId })
+        .populate({ path: "unit", select: "unitNumber property", populate: { path: "property", select: "propertyName propertyCode" } })
+        .select("name unit")
+        .lean(),
+      tab === "deposits"
+        ? TenantInvoice.find({
+            business: businessId,
+            tenant:   { $in: tenantIdList },
+            category: "DEPOSIT_CHARGE",
+            ...(asOfDate ? { invoiceDate: { $lte: asOfDate } } : {}),
+          })
+            .select("tenant invoiceNumber amount invoiceDate")
+            .sort({ invoiceDate: -1 })
+            .lean()
+        : Promise.resolve([]),
+    ]);
+
     const tenantMap = new Map(tenants.map((t) => [String(t._id), t]));
 
-    // For deposits: fetch the latest DEPOSIT_CHARGE invoice per tenant for reference
-    let invoiceMap = new Map();
-    if (tab === "deposits") {
-      const invs = await TenantInvoice.find({
-        business: businessId,
-        tenant:   { $in: rows.map((r) => r.tenantId) },
-        category: "DEPOSIT_CHARGE",
-        ...(asOfDate ? { invoiceDate: { $lte: asOfDate } } : {}),
-      })
-        .select("tenant invoiceNumber amount invoiceDate")
-        .sort({ invoiceDate: -1 })
-        .lean();
-      invs.forEach((inv) => {
-        const key = String(inv.tenant);
-        if (!invoiceMap.has(key)) invoiceMap.set(key, inv);
-      });
-    }
+    // Build invoice map (first entry per tenant wins — sorted by date desc so newest first)
+    const invoiceMap = new Map();
+    invs.forEach((inv) => {
+      const key = String(inv.tenant);
+      if (!invoiceMap.has(key)) invoiceMap.set(key, inv);
+    });
 
     const byProp = new Map();
     rows.forEach((r) => {
@@ -2905,40 +2919,37 @@ export const getTenantSummaryReport = async (req, res, next) => {
 
     const tenantIds = tenants.map((t) => t._id);
 
-    // Step 3: Fetch units and properties in parallel
+    // Step 3+4: Fetch units, properties, and invoice aggregates all in parallel.
     const unitIds = [...new Set(tenants.map((t) => String(t.unit)).filter(Boolean))]
       .map((id) => toObjectId(id))
       .filter(Boolean);
 
-    const [units, properties] = await Promise.all([
+    const [units, properties, invoiceAgg] = await Promise.all([
       Unit.find({ _id: { $in: unitIds } }).select("_id unitNumber name property").lean(),
       filterPropertyId && mongoose.Types.ObjectId.isValid(filterPropertyId)
         ? Property.find({ _id: toObjectId(filterPropertyId) }).select("_id propertyName name").lean()
         : Property.find({ business: businessId }).select("_id propertyName name").lean(),
+      TenantInvoice.aggregate([
+        {
+          $match: {
+            business: new mongoose.Types.ObjectId(String(businessId)),
+            tenant: { $in: tenantIds },
+            status: { $nin: ["cancelled", "reversed"] },
+            postingStatus: { $nin: ["failed", "reversed"] },
+          },
+        },
+        {
+          $group: {
+            _id: "$tenant",
+            totalInvoiced: { $sum: "$amount" },
+            invoiceCount: { $sum: 1 },
+          },
+        },
+      ]),
     ]);
 
     const unitMap = new Map(units.map((u) => [String(u._id), u]));
     const propMap = new Map(properties.map((p) => [String(p._id), p]));
-
-    // Step 4: Aggregate TenantInvoice totals per tenant (one DB round-trip for all tenants)
-    const invoiceAgg = await TenantInvoice.aggregate([
-      {
-        $match: {
-          business: new mongoose.Types.ObjectId(String(businessId)),
-          tenant: { $in: tenantIds },
-          status: { $nin: ["cancelled", "reversed"] },
-          postingStatus: { $nin: ["failed", "reversed"] },
-        },
-      },
-      {
-        $group: {
-          _id: "$tenant",
-          totalInvoiced: { $sum: "$amount" },
-          invoiceCount: { $sum: 1 },
-        },
-      },
-    ]);
-
     const invoiceMap = new Map(invoiceAgg.map((a) => [String(a._id), a]));
 
     // Step 5: Join tenant data with invoice aggregates and unit/property lookups

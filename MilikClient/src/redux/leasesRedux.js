@@ -5,10 +5,19 @@ export const leaseSlice = createSlice({
     name: "lease",
     initialState: {
         leases: [],
+        loadedFor: null,
+        loadedAt: 0,
         isFetching: false,
         error: false
     },
     reducers: {
+        // Track when a company-wide lease list was last successfully fetched.
+        // Only set by getLeases in apiCalls when no tenant/unit filter is used.
+        setLeaseLoadMeta: (state, action) => {
+            state.loadedFor = action.payload.loadedFor;
+            state.loadedAt  = action.payload.loadedAt;
+        },
+
         // Get all leases
         getLeasesStart: (state) => {
             state.isFetching = true
@@ -103,6 +112,7 @@ export const leaseSlice = createSlice({
 })
 
 export const {
+    setLeaseLoadMeta,
     getLeasesStart,
     getLeasesSuccess,
     getLeasesFailure,

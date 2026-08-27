@@ -5,10 +5,18 @@ export const utilitySlice = createSlice({
     name: "utility",
     initialState: {
         utilities: [],
+        loadedFor: null,
+        loadedAt: 0,
         isFetching: false,
         error: false
     },
     reducers: {
+        // Track when the company-wide utility list was last successfully fetched.
+        setUtilityLoadMeta: (state, action) => {
+            state.loadedFor = action.payload.loadedFor;
+            state.loadedAt  = action.payload.loadedAt;
+        },
+
         // Get all utilities
         getUtilitiesStart: (state) => {
             state.isFetching = true
@@ -74,6 +82,7 @@ export const utilitySlice = createSlice({
 })
 
 export const {
+    setUtilityLoadMeta,
     getUtilitiesStart,
     getUtilitiesSuccess,
     getUtilitiesFailure,

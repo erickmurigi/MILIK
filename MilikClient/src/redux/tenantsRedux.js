@@ -72,6 +72,7 @@ export const tenantSlice = createSlice({
         tenants: [],
         pagination: { total: 0, page: 1, pages: 1, limit: 50 },
         loadedFor: null,
+        loadedAt: 0,
         isFetching: false,
         error: false
     },
@@ -176,6 +177,7 @@ export const tenantSlice = createSlice({
                     state.pagination = { total, page, pages: p.pages ?? Math.max(1, Math.ceil(total / limit)), limit };
                 }
                 state.loadedFor = String(action.meta.arg?.business || '');
+                state.loadedAt  = Date.now();
             })
             .addCase(getTenants.rejected, (state) => {
                 state.isFetching = false;

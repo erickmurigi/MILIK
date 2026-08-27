@@ -37,6 +37,7 @@ import {
   bulkImportInvoiceNotes,
 } from "../../redux/invoiceApi";
 import { adminRequests } from "../../utils/requestMethods";
+import { INV_STATUS_BADGE, INV_STATUS_BADGE_DEFAULT, fmtAmountKE } from "../../utils/invoiceStatus";
 import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
 import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
@@ -133,7 +134,7 @@ const getStatusChip = (status) => {
   return "border-slate-200 bg-slate-50 text-slate-700";
 };
 
-const getNotePaymentState = (note = {}) => {
+const getNotePaymentLabel = (note = {}) => {
   const noteType = String(note?.noteType || note?.documentType || "").toUpperCase();
   const status = String(note?.status || "").toLowerCase();
   const paymentStatus = String(note?.paymentStatus || note?.metadata?.paymentStatus || "").toLowerCase();
@@ -141,16 +142,12 @@ const getNotePaymentState = (note = {}) => {
   const paidAmount = Number(note?.amountPaid ?? note?.paidAmount ?? note?.metadata?.amountPaid ?? 0);
   const balance = Number(note?.balance ?? note?.balanceDue ?? note?.remainingBalance ?? note?.outstanding ?? note?.metadata?.balance ?? NaN);
 
-  if (status === "reversed") return { label: "Reversed", className: "bg-slate-100 text-slate-700" };
-  if (status === "cancelled") return { label: "Cancelled", className: "bg-rose-100 text-rose-700" };
-  if (noteType === "CREDIT_NOTE") return { label: "Credit Applied", className: "bg-blue-100 text-blue-700" };
-  if (paymentStatus === "paid" || status === "paid" || Number.isFinite(balance) && balance <= 0) {
-    return { label: "Paid", className: "bg-green-100 text-green-700" };
-  }
-  if (["part_paid", "partially_paid", "partial"].includes(paymentStatus) || paidAmount > 0 && paidAmount < amount) {
-    return { label: "Part Paid", className: "bg-amber-100 text-amber-700" };
-  }
-  return { label: "Unpaid", className: "bg-rose-100 text-rose-700 border border-rose-200" };
+  if (status === "reversed") return "Reversed";
+  if (status === "cancelled") return "Cancelled";
+  if (noteType === "CREDIT_NOTE") return "Credit Applied";
+  if (paymentStatus === "paid" || status === "paid" || (Number.isFinite(balance) && balance <= 0)) return "Paid";
+  if (["part_paid", "partially_paid", "partial"].includes(paymentStatus) || (paidAmount > 0 && paidAmount < amount)) return "Partially Paid";
+  return "Unpaid";
 };
 
 const normalizeInvoiceItemKey = (invoice) => {
@@ -957,13 +954,12 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
                 { label: "Property" },
                 { label: "Unit" },
                 { label: "Description" },
-                { label: "Type" },
                 { label: "Note Date", align: "center" },
                 { label: "Source Invoice", align: "center" },
                 { label: "Amount", align: "right" },
+                { label: "Paid", align: "right" },
+                { label: "Balance", align: "right" },
                 { label: "Status", align: "center" },
-                { label: "Payment", align: "center" },
-                { label: "Created", align: "center" },
               ]}
               rows={paginatedNotes}
               rowKey="_id"
@@ -979,7 +975,9 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
               onRowClick={(note) => toggleNoteSelect(String(note._id))}
               isSelected={(note) => selectedNotesSet.has(String(note._id))}
               renderRow={(note) => {
-                const paymentState = getNotePaymentState(note);
+                const statusLabel = getNotePaymentLabel(note);
+                const notePaid = Number(note?.amountPaid ?? note?.paidAmount ?? note?.metadata?.amountPaid ?? 0);
+                const noteBalance = Number(note?.balance ?? note?.outstanding ?? note?.metadata?.balance ?? 0);
                 return (
                   <>
                     <td className="px-3 py-1.5 border-r border-gray-100">
@@ -989,24 +987,23 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
                     <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{resolvePropertyName(note, propertyMap)}</td>
                     <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{resolveUnitName(note, tenantMap)}</td>
                     <td className="px-3 py-1.5 border-r border-gray-100 text-orange-700">{note.description || note.metadata?.billItemLabel || `${humanizeCategory(note.noteType || note.documentType)} - ${humanizeCategory(note.category || "Charge")}`}</td>
-                    <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">{humanizeCategory(note.category || "-")}</span>
-                    </td>
                     <td className="px-3 py-1.5 border-r border-gray-100 text-center text-slate-700">{fmtDate(note.noteDate || note.invoiceDate || note.createdAt)}</td>
                     <td className="px-3 py-1.5 border-r border-gray-100 text-center text-slate-700">{note.sourceInvoiceNumber || note?.sourceInvoice?.invoiceNumber || "-"}</td>
-                    <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold text-slate-900">{formatCurrency(note.amount)}</td>
-                    <td className="px-3 py-1.5 border-r border-gray-100 text-center">
-                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${getStatusChip(note?.status)}`}>{note?.status || "posted"}</span>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold text-slate-900 tabular-nums">{fmtAmountKE(note.amount)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold tabular-nums">
+                      {notePaid > 0.005 ? <span className="text-emerald-700">{fmtAmountKE(notePaid)}</span> : <span className="text-slate-400">—</span>}
+                    </td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold tabular-nums">
+                      {noteBalance > 0.005 ? <span className="text-red-600">{fmtAmountKE(noteBalance)}</span> : <span className="text-slate-400">—</span>}
                     </td>
                     <td className="px-3 py-1.5 border-r border-gray-100 text-center">
-                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${paymentState.className}`}>{paymentState.label}</span>
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${INV_STATUS_BADGE[statusLabel] || INV_STATUS_BADGE_DEFAULT}`}>{statusLabel}</span>
                     </td>
-                    <td className="px-3 py-1.5 border-r border-gray-100 text-center text-slate-700">{fmtDate(note.createdAt || note.noteDate || note.invoiceDate)}</td>
                   </>
                 );
               }}
               renderExpanded={(note) => {
-                const paymentState = getNotePaymentState(note);
+                const paymentState = { label: getNotePaymentLabel(note), className: INV_STATUS_BADGE[getNotePaymentLabel(note)] || INV_STATUS_BADGE_DEFAULT };
                 return (
                   <div className="grid grid-cols-1 gap-3 text-xs md:grid-cols-4">
                     <div>

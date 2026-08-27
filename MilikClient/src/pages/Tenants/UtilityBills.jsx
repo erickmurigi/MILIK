@@ -30,13 +30,13 @@ import { useTabState } from "../../hooks/useTabState";
 import { safeId } from "../../utils/idUtils";
 import MilikTable from "../../components/common/MilikTable";
 import { buildInvoiceNarration } from "../../utils/invoiceNarrationUtils";
+import { INV_STATUS_BADGE, INV_STATUS_BADGE_DEFAULT, fmtAmountKE } from "../../utils/invoiceStatus";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 
 const STATUS_FILTERS = [
   { val: "ACTIVE", label: "All" },
-  { val: "Issued", label: "Issued" },
   { val: "Unpaid", label: "Unpaid" },
   { val: "Partially Paid", label: "Partially Paid" },
   { val: "Paid", label: "Paid" },
@@ -71,15 +71,9 @@ const mapStatusLabel = ({ rawStatus = "", outstanding = 0, appliedAmount = 0 }) 
   if (s === "cancelled") return "Cancelled";
   if (s === "reversed") return "Reversed";
   if (outstanding <= 0) return "Paid";
-  return appliedAmount > 0 ? "Partially Paid" : "Issued";
+  return appliedAmount > 0 ? "Partially Paid" : "Unpaid";
 };
 
-const getStatusBadgeClass = (status = "") => {
-  if (status === "Paid") return "bg-green-100 text-green-700";
-  if (status === "Partially Paid") return "bg-amber-100 text-amber-700";
-  if (status === "Cancelled" || status === "Reversed") return "bg-slate-100 text-slate-700";
-  return "bg-orange-100 text-orange-700";
-};
 
 const resolveUtilityTypeLabel = (record) => {
   const meta = record?.metadata && typeof record.metadata === "object" ? record.metadata : {};
@@ -116,7 +110,11 @@ const UtilityBills = () => {
   const unitLookup = useMemo(() => new Map((units || []).map((u) => [safeId(u), u])), [units]);
   const propertyLookup = useMemo(() => new Map((properties || []).map((p) => [safeId(p), p])), [properties]);
 
-  const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
+  // useCallback: prevents a new function identity on every render so filter inputs don't re-render
+  const setFilter = useCallback(
+    (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value })),
+    []
+  );
 
   const loadData = useCallback(async () => {
     if (!currentCompany?._id) return;
@@ -223,8 +221,7 @@ const UtilityBills = () => {
     return rows.filter((row) => {
       const { status, invoiceNo, tenantName, propertyId, unitId, utilityType, fromDate, toDate } = appliedFilters;
       if (status === "ACTIVE" && ["cancelled", "reversed"].includes(row.rawStatus)) return false;
-      if (status === "Issued" && row.status !== "Issued") return false;
-      if (status === "Unpaid" && !["Issued", "Partially Paid"].includes(row.status)) return false;
+      if (status === "Unpaid" && !["Unpaid", "Partially Paid"].includes(row.status)) return false;
       if (status === "Partially Paid" && row.status !== "Partially Paid") return false;
       if (status === "Paid" && row.status !== "Paid") return false;
       if (invoiceNo && !row.id.toLowerCase().includes(invoiceNo.toLowerCase())) return false;
@@ -250,7 +247,11 @@ const UtilityBills = () => {
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const startIndex = (safeCurrentPage - 1) * pageSize;
-  const currentPageRows = filteredRows.slice(startIndex, startIndex + pageSize);
+  // useMemo: stable array identity so the selectAll useEffect only fires when page content truly changes
+  const currentPageRows = useMemo(
+    () => filteredRows.slice(startIndex, startIndex + pageSize),
+    [filteredRows, startIndex, pageSize]
+  );
   const selectedCount = selectedRows.length;
 
   useEffect(() => { setCurrentPage(1); setSelectedRows([]); setSelectAll(false); }, [appliedFilters]);
@@ -260,15 +261,19 @@ const UtilityBills = () => {
     setSelectAll(keys.length > 0 && keys.every((k) => selectedRowsSet.has(k)));
   }, [currentPageRows, selectedRows]);
 
-  const toggleRow = (key) => setSelectedRows((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]);
-  const toggleAll = () => {
+  // useCallback: stable references prevent re-renders of table rows and toolbar buttons
+  const toggleRow = useCallback(
+    (key) => setSelectedRows((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]),
+    []
+  );
+  const toggleAll = useCallback(() => {
     const keys = currentPageRows.map((r) => r.key);
     if (selectAll) setSelectedRows((prev) => prev.filter((k) => !keys.includes(k)));
     else setSelectedRows((prev) => [...new Set([...prev, ...keys])]);
-  };
+  }, [currentPageRows, selectAll]);
 
-  const applySearch = () => setAppliedFilters({ ...draftFilters });
-  const resetFilters = () => { setDraftFilters(emptyFilters); setAppliedFilters(emptyFilters); };
+  const applySearch = useCallback(() => setAppliedFilters({ ...draftFilters }), [draftFilters]);
+  const resetFilters = useCallback(() => { setDraftFilters(emptyFilters); setAppliedFilters(emptyFilters); }, []);
 
   return (
     <DashboardLayout lockContentScroll>
@@ -314,9 +319,8 @@ const UtilityBills = () => {
                 { label: "Due Date", align: "center" },
                 { label: "Amount", align: "right" },
                 { label: "Paid", align: "right" },
-                { label: "Outstanding", align: "right" },
+                { label: "Balance", align: "right" },
                 { label: "Status", align: "center" },
-                { label: "Created", align: "center" },
               ]}
               rows={currentPageRows}
               rowKey="key"
@@ -342,13 +346,16 @@ const UtilityBills = () => {
                   </td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-center text-slate-600">{row.invoiceDateLabel}</td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-center text-slate-600">{row.dueDateLabel}</td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold text-slate-900">{formatCurrency(row.amount)}</td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold text-emerald-700">{formatCurrency(row.appliedAmount)}</td>
-                  <td className={`px-3 py-1.5 border-r border-gray-100 text-right font-bold ${row.outstanding > 0 ? "text-rose-600" : "text-slate-400"}`}>{formatCurrency(row.outstanding)}</td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 text-center">
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${getStatusBadgeClass(row.status)}`}>{row.status}</span>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold text-slate-900 tabular-nums">{fmtAmountKE(row.amount)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold tabular-nums">
+                    {row.appliedAmount > 0.005 ? <span className="text-emerald-700">{fmtAmountKE(row.appliedAmount)}</span> : <span className="text-slate-400">—</span>}
                   </td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 text-center text-slate-600">{row.createdDate}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold tabular-nums">
+                    {row.outstanding > 0.005 ? <span className="text-red-600">{fmtAmountKE(row.outstanding)}</span> : <span className="text-slate-400">—</span>}
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-center">
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${INV_STATUS_BADGE[row.status] || INV_STATUS_BADGE_DEFAULT}`}>{row.status}</span>
+                  </td>
                 </>
               )}
               renderActions={(row) => (

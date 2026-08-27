@@ -56,6 +56,7 @@ const initialState = {
   units: [],
   pagination: { total: 0, page: 1, pages: 1, limit: 500 },
   loadedFor: null,
+  loadedAt: 0,
   isFetching: false,
   error: false,
 };
@@ -213,6 +214,7 @@ export const unitSlice = createSlice({
           };
         }
         state.loadedFor = String(action.meta.arg?.business || '');
+        state.loadedAt  = Date.now();
       })
       .addCase(getUnits.rejected, (state) => {
         state.isFetching = false;

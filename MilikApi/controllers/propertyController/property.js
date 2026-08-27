@@ -1524,6 +1524,7 @@ export const getPropertyTenants = async (req, res, next) => {
     })
       .select("name tenantCode unit additionalUnits rent deposit balance moveInDate moveOutDate status business")
       .populate("unit", "unitNumber rent")
+      .limit(1000)
       .lean();
 
     res.status(200).json(tenants);
@@ -1619,7 +1620,7 @@ export const bulkImportProperties = async (req, res, next) => {
       .map((p) => String(p.landlordName || "").trim())
       .filter(Boolean);
     const landlordDocs = landlordLookupValues.length
-      ? await Landlord.find({ company: businessId }).select("_id landlordName landlordCode email phoneNumber status")
+      ? await Landlord.find({ company: businessId }).select("_id landlordName landlordCode email phoneNumber status").limit(2000).lean()
       : [];
     const landlordMap = new Map();
     landlordDocs.forEach((landlord) => {

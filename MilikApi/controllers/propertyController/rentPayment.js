@@ -1399,8 +1399,10 @@ const confirmNonCashDirectToLandlordReceipt = async (payment, actorId) => {
     throw new Error("Receipt amount must be greater than zero for ledger posting.");
   }
 
-  const { propertyId, landlordId } = await resolvePropertyAndLandlord(payment);
-  const remittanceAccount = await resolveLandlordRemittancePayableAccount(payment.business);
+  const [{ propertyId, landlordId }, remittanceAccount] = await Promise.all([
+    resolvePropertyAndLandlord(payment),
+    resolveLandlordRemittancePayableAccount(payment.business),
+  ]);
 
   if (!remittanceAccount?._id) {
     throw new Error("Landlord Remittance Payable account not found for direct-to-landlord receipt posting.");
@@ -1647,8 +1649,10 @@ const postReceiptJournal = async (payment, actorId) => {
     throw new Error("Receipt amount must be greater than zero for ledger posting.");
   }
 
-  const { propertyId, landlordId } = await resolvePropertyAndLandlord(payment);
-  const balancingAccount = await resolveCashbookAccount(payment.business, payment);
+  const [{ propertyId, landlordId }, balancingAccount] = await Promise.all([
+    resolvePropertyAndLandlord(payment),
+    resolveCashbookAccount(payment.business, payment),
+  ]);
   if (!balancingAccount?._id) {
     throw new Error(
       "Cashbook/bank account could not be resolved for this receipt. " +
@@ -2153,7 +2157,10 @@ export const postReceiptUnappliedAllocationReleaseJournal = async ({
     return { journalGroupId: null, entries: [], touchedAccountIds: [] };
   }
 
-  const { propertyId, landlordId } = await resolvePropertyAndLandlord(payment);
+  const [{ propertyId, landlordId }, releaseAccount] = await Promise.all([
+    resolvePropertyAndLandlord(payment),
+    resolveUnallocatedReceiptsLiabilityAccount(payment.business),
+  ]);
   const receiver = payment?.paidDirectToLandlord ? "landlord" : "manager";
   const transactionDate = new Date();
   const { start, end } = getStatementPeriodFromPayment({
@@ -2161,7 +2168,6 @@ export const postReceiptUnappliedAllocationReleaseJournal = async ({
     paymentDate: transactionDate,
   });
   const journalGroupId = new mongoose.Types.ObjectId();
-  const releaseAccount = await resolveUnallocatedReceiptsLiabilityAccount(payment.business);
   const grouped = new Map();
 
   rows.forEach((row) => {
@@ -3527,30 +3533,32 @@ export const updatePayment = async (req, res, next) => {
       return next(createError(400, "Reference number is required for tenant receipts."));
     }
 
-    const duplicateRef = await RentPayment.findOne({
-      business: payment.business,
-      referenceNumber,
-      _id: { $ne: payment._id },
-    }).lean();
+    const requestedReceiptNumber = String(
+      req.body?.receiptNumber || payment.receiptNumber || ""
+    ).trim();
+
+    // Run both duplicate checks in parallel — they are independent queries.
+    const [duplicateRef, duplicateReceipt] = await Promise.all([
+      RentPayment.findOne({
+        business: payment.business,
+        referenceNumber,
+        _id: { $ne: payment._id },
+      }).select("_id").lean(),
+      requestedReceiptNumber
+        ? RentPayment.findOne({
+            business: payment.business,
+            receiptNumber: requestedReceiptNumber,
+            _id: { $ne: payment._id },
+          }).select("_id").lean()
+        : Promise.resolve(null),
+    ]);
 
     if (duplicateRef) {
       return next(createError(400, "Reference number already exists in this company."));
     }
 
-    const requestedReceiptNumber = String(
-      req.body?.receiptNumber || payment.receiptNumber || ""
-    ).trim();
-
-    if (requestedReceiptNumber) {
-      const duplicateReceipt = await RentPayment.findOne({
-        business: payment.business,
-        receiptNumber: requestedReceiptNumber,
-        _id: { $ne: payment._id },
-      }).lean();
-
-      if (duplicateReceipt) {
-        return next(createError(400, "Receipt number already exists in this company."));
-      }
+    if (duplicateReceipt) {
+      return next(createError(400, "Receipt number already exists in this company."));
     }
 
     if (!isDirectToLandlord && !isTakeOnCredit && !normalizedCashbook) {
@@ -3570,32 +3578,34 @@ export const updatePayment = async (req, res, next) => {
       allocationMode: useManualAllocations ? "manual" : "auto",
     };
 
-    const allocationData = useManualAllocations
-      ? await buildManualReceiptAllocationData({
-          payment: {
-            ...payment.toObject(),
-            business: payment.business,
-            tenant: tenantId,
-            unit: unitId,
+    // allocationData computation and property lookup are independent — run in parallel.
+    const [allocationData, property] = await Promise.all([
+      useManualAllocations
+        ? buildManualReceiptAllocationData({
+            payment: {
+              ...payment.toObject(),
+              business: payment.business,
+              tenant: tenantId,
+              unit: unitId,
+              amount: req.body?.amount ?? payment.amount,
+              paymentType: req.body?.paymentType || payment.paymentType,
+              metadata,
+              isConfirmed: Boolean(payment.isConfirmed),
+              postingStatus: payment.postingStatus || "unposted",
+            },
+            requestedAllocations: req.body?.allocations,
+          })
+        : buildReceiptAllocationData({
+            businessId: payment.business,
+            tenantId,
             amount: req.body?.amount ?? payment.amount,
-            paymentType: req.body?.paymentType || payment.paymentType,
+            paymentTypeOverride: isTakeOnCredit ? (metadata?.paymentType || req.body?.paymentType || payment.paymentType || "") : "",
             metadata,
-            isConfirmed: Boolean(payment.isConfirmed),
-            postingStatus: payment.postingStatus || "unposted",
-          },
-          requestedAllocations: req.body?.allocations,
-        })
-      : await buildReceiptAllocationData({
-          businessId: payment.business,
-          tenantId,
-          amount: req.body?.amount ?? payment.amount,
-          paymentTypeOverride: isTakeOnCredit ? (metadata?.paymentType || req.body?.paymentType || payment.paymentType || "") : "",
-          metadata,
-        });
-
-    const property = unit?.property
-      ? await Property.findOne({ _id: unit.property, business: payment.business }).select("_id depositHeldBy").lean()
-      : null;
+          }),
+      unit?.property
+        ? Property.findOne({ _id: unit.property, business: payment.business }).select("_id depositHeldBy").lean()
+        : Promise.resolve(null),
+    ]);
 
     const depositContext = buildResolvedDepositMetadata({
       tenant,

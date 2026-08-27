@@ -313,5 +313,7 @@ RentPaymentSchema.index({ business: 1, tenant: 1, isConfirmed: 1, paymentDate: -
 RentPaymentSchema.index({ business: 1, unit: 1, isConfirmed: 1, paymentType: 1 });
 // Covers financial report batch queries: business + tenant(s) + ledgerType + isConfirmed + paymentDate
 RentPaymentSchema.index({ business: 1, tenant: 1, ledgerType: 1, isConfirmed: 1, paymentDate: -1 });
+// Covers getRentalCollectionReport / getPropertyIncomeSummaryReport confirmation-scoped fetch
+RentPaymentSchema.index({ business: 1, ledgerType: 1, isConfirmed: 1, isCancelled: 1, isReversed: 1, paymentDate: -1 });
 
 export default mongoose.model("RentPayment", RentPaymentSchema);

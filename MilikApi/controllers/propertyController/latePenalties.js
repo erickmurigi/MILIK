@@ -540,6 +540,7 @@ export const getLatePenaltyRules = async (req, res, next) => {
     const rows = await LatePenaltyRule.find({ business: businessId })
       .populate("postingAccount", "code name type")
       .sort({ active: -1, createdAt: -1 })
+      .limit(100)
       .lean();
 
     return res.status(200).json({ rules: rows });

@@ -62,6 +62,7 @@ import {
 
 
 import {
+  setUtilityLoadMeta,
   getUtilitiesStart,
   getUtilitiesSuccess,
   getUtilitiesFailure,
@@ -116,6 +117,7 @@ import {
   getRentPaymentsStart,
   getRentPaymentsSuccess,
   getRentPaymentsFailure,
+  setRentPaymentsLoaded,
   createRentPaymentStart,
   createRentPaymentSuccess,
   createRentPaymentFailure,
@@ -164,6 +166,7 @@ import {
   deleteLeaseStart,
   deleteLeaseSuccess,
   deleteLeaseFailure,
+  setLeaseLoadMeta,
   signLeaseStart,
   signLeaseSuccess,
   signLeaseFailure,
@@ -903,6 +906,7 @@ export const getUtilities = async (dispatch, business) => {
   try {
     const res = await adminRequests.get(`/utilities?business=${business}`);
     dispatch(getUtilitiesSuccess(res.data));
+    dispatch(setUtilityLoadMeta({ loadedFor: String(business || ''), loadedAt: Date.now() }));
   } catch (err) {
     dispatch(getUtilitiesFailure());
   }
@@ -1164,6 +1168,7 @@ export const getRentPayments = async (dispatch, business, tenant = null, unit = 
     
     const res = await adminRequests.get(url);
     dispatch(getRentPaymentsSuccess(extractList(res.data)));
+    dispatch(setRentPaymentsLoaded({ business }));
   } catch (err) {
     dispatch(getRentPaymentsFailure());
   }
@@ -1391,22 +1396,8 @@ export const deleteLandlordReceipt = async (id, params = {}) => {
 };
 
 // Cancel reversal and restore receipt allocation effect
-export const cancelReversalRentPayment = async (dispatch, id, cancelData = {}) => {
-  dispatch(updateRentPaymentStart());
-  try {
-    const res = await adminRequests.put(`/rent-payments/reverse/cancel/${id}`, cancelData);
-    const updatedOriginal = res?.data?.data?.original;
-    if (updatedOriginal) {
-      dispatch(updateRentPaymentSuccess(updatedOriginal));
-    } else {
-      dispatch(updateRentPaymentFailure());
-    }
-    return res.data;
-  } catch (err) {
-    dispatch(updateRentPaymentFailure());
-    throw err;
-  }
-};
+// Alias for cancelRentPaymentReversal — kept for backward compatibility.
+export const cancelReversalRentPayment = cancelRentPaymentReversal;
 
 // Get payment summary
 export const getPaymentSummary = async (business, month = null, year = null) => {
@@ -1769,9 +1760,17 @@ export const getLeases = async (dispatch, business, status = null, tenant = null
     if (status) url += `&status=${status}`;
     if (tenant) url += `&tenant=${tenant}`;
     if (unit) url += `&unit=${unit}`;
-    
+
     const res = await adminRequests.get(url);
     dispatch(getLeasesSuccess(extractList(res.data)));
+
+    // Only stamp the company-wide cache when no per-entity filter is used.
+    // Tenant- or unit-scoped fetches return a partial list and must not
+    // mark the global cache as fresh.
+    if (!tenant && !unit) {
+      dispatch(setLeaseLoadMeta({ loadedFor: String(business || ''), loadedAt: Date.now() }));
+    }
+
     return res.data;
   } catch (err) {
     dispatch(getLeasesFailure());
@@ -2621,6 +2620,11 @@ export const getTenantInvoiceNotes = async ({ tenantId = null, business = null }
   const query = params.toString();
   const res = await adminRequests.get(`/tenant-invoices/notes${query ? `?${query}` : ""}`);
   return extractList(res.data);
+};
+
+export const getTenantStatementBundle = async (tenantId) => {
+  const res = await adminRequests.get(`/tenants/${tenantId}/statement-bundle`);
+  return res.data;
 };
 
 export const getTenantInvoiceNoteChargeTypes = async () => {

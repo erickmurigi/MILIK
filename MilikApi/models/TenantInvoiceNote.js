@@ -133,6 +133,9 @@ const TenantInvoiceNoteSchema = new mongoose.Schema(
 
 TenantInvoiceNoteSchema.index({ business: 1, noteNumber: 1 }, { unique: true });
 TenantInvoiceNoteSchema.index({ business: 1, tenant: 1, noteDate: -1 });
+// Covers snapshot query: {business, tenant, status:$nin, postingStatus} sort noteDate — replaces the
+// looser {business, tenant, noteDate} prefix scan that did not filter by status before sorting.
+TenantInvoiceNoteSchema.index({ business: 1, tenant: 1, status: 1, noteDate: -1 });
 TenantInvoiceNoteSchema.index({ business: 1, sourceInvoice: 1, noteType: 1, status: 1 });
 TenantInvoiceNoteSchema.index({ business: 1, property: 1, status: 1, noteDate: -1 });
 
