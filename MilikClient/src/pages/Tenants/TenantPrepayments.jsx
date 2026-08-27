@@ -213,10 +213,10 @@ const TenantPrepayments = () => {
     () =>
       properties
         .map((property) => ({
-          _id: safeId(property),
-          propertyName: property?.propertyName || property?.name || "Unnamed Property",
+          value: safeId(property),
+          label: property?.propertyName || property?.name || "Unnamed Property",
         }))
-        .filter((property) => property._id),
+        .filter((property) => property.value),
     [properties]
   );
 
@@ -248,7 +248,7 @@ const TenantPrepayments = () => {
                 <AppSelect
                   value={propertyFilter}
                   onChange={(v) => setPropertyFilter(v ?? "all")}
-                  options={propertyOptions.map((property) => ({ value: property._id, label: property.propertyName }))}
+                  options={propertyOptions}
                   placeholder="Property"
                   clearable
                   searchable

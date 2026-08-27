@@ -229,7 +229,24 @@ export const runDepreciation = async (req, res, next) => {
     const assets = await FixedAsset.find(filter)
       .populate("assetAccount", "_id code name")
       .populate("depreciationExpenseAccount", "_id code name")
-      .populate("accumulatedDepreciationAccount", "_id code name");
+      .populate("accumulatedDepreciationAccount", "_id code name")
+      .lean();
+
+    // Batch-check which assets already have depreciation posted for this period (avoids N+1)
+    const eligibleAssetIds = assets
+      .filter((a) => calcMonthlyDepreciation(a) > 0)
+      .map((a) => String(a._id));
+    const alreadyPostedSet = new Set();
+    if (eligibleAssetIds.length) {
+      const postedEntries = await FinancialLedgerEntry.find({
+        business: businessId,
+        sourceTransactionType: "fixed_asset_depreciation",
+        sourceTransactionId: { $in: eligibleAssetIds },
+        statementPeriodStart: start,
+        statementPeriodEnd: end,
+      }).select("sourceTransactionId").lean();
+      for (const e of postedEntries) alreadyPostedSet.add(String(e.sourceTransactionId));
+    }
 
     const results = [];
     const touchedAccounts = new Set();
@@ -237,20 +254,13 @@ export const runDepreciation = async (req, res, next) => {
 
     await Promise.all(
       assets.map(async (asset) => {
-        const monthly = calcMonthlyDepreciation(asset.toObject());
+        const monthly = calcMonthlyDepreciation(asset);
         if (monthly <= 0) {
           results.push({ assetId: asset._id, name: asset.name, skipped: true, reason: "No depreciation to post" });
           return;
         }
 
-        const alreadyPosted = await FinancialLedgerEntry.findOne({
-          sourceTransactionType: "fixed_asset_depreciation",
-          sourceTransactionId: asset._id,
-          statementPeriodStart: start,
-          statementPeriodEnd: end,
-        }).select("_id").lean();
-
-        if (alreadyPosted) {
+        if (alreadyPostedSet.has(String(asset._id))) {
           results.push({ assetId: asset._id, name: asset.name, skipped: true, reason: "Already posted for this period" });
           return;
         }

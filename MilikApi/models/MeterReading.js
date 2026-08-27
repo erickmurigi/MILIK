@@ -152,5 +152,7 @@ MeterReadingSchema.index({ business: 1, unit: 1, utilityType: 1, billingPeriod: 
 MeterReadingSchema.index({ business: 1, status: 1, readingDate: -1 });
 // getMeterReadings: property-scoped filter with status + readingDate sort
 MeterReadingSchema.index({ business: 1, property: 1, status: 1, readingDate: -1 });
+// getPreviousReadingValue: covers business + property + unit + status filter and billingPeriod sort
+MeterReadingSchema.index({ business: 1, property: 1, unit: 1, status: 1, billingPeriod: -1 });
 
 export default mongoose.model("MeterReading", MeterReadingSchema);

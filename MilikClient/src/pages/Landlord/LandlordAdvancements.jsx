@@ -144,6 +144,9 @@ const statusLabel = (value) =>
     .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase()) || "Draft";
 
+// Module-scope — stable reference avoids busting AppSelect's internal useMemo every render
+const STATUS_FILTER_OPTIONS = ["draft", "submitted", "approved", "disbursed", "recovering", "paused", "cleared", "cancelled", "rejected", "reversed"].map((s) => ({ value: s, label: statusLabel(s) }));
+
 const rowTitle = (row) => row?.title || defaultTitleForType(row?.advanceType);
 
 const mapRowToForm = (row) => {
@@ -213,6 +216,11 @@ const LandlordAdvancements = () => {
   const activeProperties = useMemo(
     () => properties.filter((item) => String(item?.status || "active").toLowerCase() !== "archived"),
     [properties]
+  );
+  // Stable option arrays — avoids busting AppSelect's internal useMemo on every render
+  const activeLandlordOptions = useMemo(
+    () => activeLandlords.map((l) => ({ value: l._id, label: l.landlordName || l.firstName || l.email || "Landlord" })),
+    [activeLandlords]
   );
 
   const [rows, setRows] = useState([]);
@@ -340,6 +348,14 @@ const LandlordAdvancements = () => {
       propertyBelongsToLandlord(property, form.landlord, selectedLandlord?.landlordName)
     );
   }, [activeLandlords, activeProperties, form.landlord]);
+  const filteredPropertyOptions = useMemo(
+    () => filteredProperties.map((p) => ({ value: p._id, label: p.propertyName || p.name || p.propertyCode || "Property" })),
+    [filteredProperties]
+  );
+  const cashbookOptions = useMemo(
+    () => cashbooks.map((account) => ({ value: account._id, label: account.name || account.accountName || account.code })),
+    [cashbooks]
+  );
 
   const stats = useMemo(
     () => ({
@@ -667,7 +683,7 @@ const LandlordAdvancements = () => {
             <AppSelect
               value={filters.status}
               onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))}
-              options={["draft", "submitted", "approved", "disbursed", "recovering", "paused", "cleared", "cancelled", "rejected", "reversed"].map((s) => ({ value: s, label: statusLabel(s) }))}
+              options={STATUS_FILTER_OPTIONS}
               placeholder="All statuses"
               searchable
               clearable
@@ -676,7 +692,7 @@ const LandlordAdvancements = () => {
             <AppSelect
               value={filters.landlordId}
               onChange={(v) => setFilters((prev) => ({ ...prev, landlordId: v ?? "all" }))}
-              options={activeLandlords.map((l) => ({ value: l._id, label: l.landlordName || l.firstName || l.email || "Landlord" }))}
+              options={activeLandlordOptions}
               placeholder="All landlords"
               searchable
               clearable
@@ -685,7 +701,7 @@ const LandlordAdvancements = () => {
             <AppSelect
               value={filters.advanceType}
               onChange={(v) => setFilters((prev) => ({ ...prev, advanceType: v ?? "all" }))}
-              options={TYPE_OPTIONS.map((item) => ({ value: item.value, label: item.label }))}
+              options={TYPE_OPTIONS}
               placeholder="All types"
               clearable
               compact
@@ -825,7 +841,7 @@ const LandlordAdvancements = () => {
                   <AppSelect
                     value={form.landlord}
                     onChange={(v) => setForm((prev) => ({ ...prev, landlord: v ?? "", property: "" }))}
-                    options={activeLandlords.map((l) => ({ value: l._id, label: l.landlordName || l.firstName || l.email || "Landlord" }))}
+                    options={activeLandlordOptions}
                     placeholder="Select landlord…"
                     searchable
                     clearable
@@ -838,7 +854,7 @@ const LandlordAdvancements = () => {
                   <AppSelect
                     value={form.property}
                     onChange={(v) => setForm((prev) => ({ ...prev, property: v ?? "" }))}
-                    options={filteredProperties.map((p) => ({ value: p._id, label: p.propertyName || p.name || p.propertyCode || "Property" }))}
+                    options={filteredPropertyOptions}
                     placeholder="Select property…"
                     searchable
                     clearable
@@ -907,7 +923,7 @@ const LandlordAdvancements = () => {
                   <AppSelect
                     value={form.cashbook || null}
                     onChange={(v) => setForm((prev) => ({ ...prev, cashbook: v ?? "" }))}
-                    options={cashbooks.map((account) => ({ value: account._id, label: account.name || account.accountName || account.code }))}
+                    options={cashbookOptions}
                     placeholder="Use system default"
                     searchable
                     clearable

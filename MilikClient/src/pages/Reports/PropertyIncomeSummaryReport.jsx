@@ -89,6 +89,9 @@ const PropertyIncomeSummaryReport = () => {
   const propertyNameMap = useMemo(() => new Map(properties.map((p) => [String(p?._id), p?.propertyName || p?.name || 'Unnamed Property'])), [properties]);
   const landlordNameMap = useMemo(() => new Map(landlords.map((l) => [String(l?._id), l?.landlordName || l?.name || 'Unnamed Landlord'])), [landlords]);
 
+  const propertyOptions = useMemo(() => properties.map((p) => ({ value: p._id, label: p.propertyName || p.name })), [properties]);
+  const landlordOptions = useMemo(() => landlords.map((l) => ({ value: l._id, label: l.landlordName || l.name })), [landlords]);
+
   const filterSummary = useMemo(() => {
     const rows = [
       { label: 'Period', value: `${fmtDate(filters.startDate)} to ${fmtDate(filters.endDate)}` },
@@ -360,7 +363,7 @@ const PropertyIncomeSummaryReport = () => {
                 <AppSelect
                   value={filters.propertyId}
                   onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))}
-                  options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
+                  options={propertyOptions}
                   placeholder="All properties"
                   searchable
                   clearable
@@ -370,7 +373,7 @@ const PropertyIncomeSummaryReport = () => {
                   <AppSelect
                     value={filters.landlordId}
                     onChange={(v) => setFilters((prev) => ({ ...prev, landlordId: v ?? '' }))}
-                    options={landlords.map((l) => ({ value: l._id, label: l.landlordName || l.name }))}
+                    options={landlordOptions}
                     placeholder="All landlords"
                     searchable
                     clearable

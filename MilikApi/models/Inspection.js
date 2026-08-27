@@ -35,6 +35,8 @@ const inspectionSchema = new mongoose.Schema(
 
 inspectionSchema.index({ business: 1, property: 1, scheduledDate: -1 });
 inspectionSchema.index({ business: 1, status: 1, type: 1 });
+// Covers status filter + the controller's { scheduledDate: -1, createdAt: -1 } sort in one pass
+inspectionSchema.index({ business: 1, status: 1, scheduledDate: -1, createdAt: -1 });
 inspectionSchema.index({ business: 1, unit: 1 });
 
 export default mongoose.model("Inspection", inspectionSchema);

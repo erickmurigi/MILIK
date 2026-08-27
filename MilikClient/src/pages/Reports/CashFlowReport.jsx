@@ -6,6 +6,7 @@ import { hasCompanyPermission } from "../../utils/permissions";
 import { FaChevronDown, FaChevronRight, FaFileDownload, FaFilePdf, FaSyncAlt } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getCashFlowReport } from "../../redux/apiCalls";
+import { selectAllProperties } from "../../redux/selectors";
 
 const GRN = "#0B3B2E";
 const RED = "#DC2626";
@@ -117,7 +118,7 @@ const CashSection = ({ title, items = [], totalInflows, totalOutflows, net, acce
 const CashFlowReport = () => {
   const currentUser  = useSelector((s) => s.auth?.currentUser);
   const currentCompany = useSelector((s) => s.company?.currentCompany);
-  const properties   = useSelector((s) => Array.isArray(s.property?.properties) ? s.property.properties : []);
+  const properties   = useSelector(selectAllProperties);
   const canExport = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
 
   const businessId = useMemo(() => {

@@ -124,8 +124,8 @@ const PaymentVouchers = () => {
   });
   const filters = voucherDraft.filters || { search: "", category: "all", status: "all", propertyId: "all" };
   const debouncedSearch = useDebounce(filters.search, 400);
-  const setFilters = (value) => setVoucherDraft((prev) => ({ ...prev, filters: typeof value === "function" ? value(prev.filters || filters) : value }));
-  const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
+  const setFilters = useCallback((value) => setVoucherDraft((prev) => ({ ...prev, filters: typeof value === "function" ? value(prev.filters || filters) : value })), []);
+  const setFilter = useCallback((key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value })), [setFilters]);
   const [vouchers, setVouchers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -994,7 +994,7 @@ const PaymentVouchers = () => {
                 <AppSelect
                   value={filters.category !== "all" ? filters.category : ""}
                   onChange={(v) => setFilters((prev) => ({ ...prev, category: v ?? "all" }))}
-                  options={categories.map((item) => ({ value: item.value, label: item.label }))}
+                  options={categoryOptions}
                   placeholder="All categories"
                   size="sm"
                   clearable
@@ -1016,7 +1016,7 @@ const PaymentVouchers = () => {
                   <AppSelect
                     value={filters.propertyId !== "all" ? filters.propertyId : ""}
                     onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "all" }))}
-                    options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
+                    options={propertyOptions}
                     placeholder="All properties"
                     size="sm"
                     clearable

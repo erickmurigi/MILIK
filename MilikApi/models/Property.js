@@ -477,6 +477,7 @@ PropertySchema.index({ business: 1, propertyCode: 1 }, { unique: true });
 PropertySchema.index({ business: 1, lrNumber: 1 });
 PropertySchema.index({ business: 1, propertyName: 1 });
 PropertySchema.index({ business: 1, status: 1 });
+PropertySchema.index({ business: 1, status: 1, createdAt: -1 });
 PropertySchema.index({ business: 1, zoneRegion: 1 });
 PropertySchema.index({ "landlords.landlordId": 1 });
 PropertySchema.index({ "landlords.name": 1 });

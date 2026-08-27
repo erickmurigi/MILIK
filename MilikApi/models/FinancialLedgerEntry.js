@@ -297,6 +297,8 @@ FinancialLedgerEntrySchema.index({ business: 1, accountId: 1, transactionDate: 1
 // Optimized for liability subledger drill-down: account + status equality then date range
 FinancialLedgerEntrySchema.index({ business: 1, accountId: 1, status: 1, transactionDate: 1 });
 FinancialLedgerEntrySchema.index({ business: 1, journalGroupId: 1, status: 1 });
+// Optimized for reversal/idempotency checks: business+sourceType+sourceId equality, then filter by status
+FinancialLedgerEntrySchema.index({ business: 1, sourceTransactionType: 1, sourceTransactionId: 1, status: 1 });
 
 FinancialLedgerEntrySchema.pre("findOneAndUpdate", function blockImmutableUpdate(next) {
   return next(new Error("FinancialLedgerEntry is immutable. Use reversal entries instead of updates."));

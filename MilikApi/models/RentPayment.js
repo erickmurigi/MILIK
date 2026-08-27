@@ -309,6 +309,8 @@ RentPaymentSchema.index(
 
 // Performance index for tenant balance recomputation
 RentPaymentSchema.index({ business: 1, tenant: 1, isConfirmed: 1, paymentDate: -1 });
+// getActiveReceiptsForTenant: ascending paymentDate sort used by snapshot engine
+RentPaymentSchema.index({ business: 1, tenant: 1, ledgerType: 1, isConfirmed: 1, paymentDate: 1 });
 // Covers landlord statement service queries: business + unit (array) + isConfirmed + paymentType
 RentPaymentSchema.index({ business: 1, unit: 1, isConfirmed: 1, paymentType: 1 });
 // Covers financial report batch queries: business + tenant(s) + ledgerType + isConfirmed + paymentDate

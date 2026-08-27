@@ -349,7 +349,7 @@ export const getLeases = async (req, res, next) => {
     if (tenant) filter.tenant = tenant;
     if (unit) filter.unit = unit;
     if (property) {
-      const propertyUnits = await Unit.find({ business, property }).select("_id").lean();
+      const propertyUnits = await Unit.find({ business, property }).select("_id").limit(5000).lean();
       filter.unit = { $in: propertyUnits.map((item) => item._id) };
     }
 

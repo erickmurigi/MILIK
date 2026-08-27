@@ -323,7 +323,7 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
                 </p>
               </div>
             ) : (
-              <ErrorBoundary>
+              <ErrorBoundary key={location.pathname}>
                 {React.Children.map(children, (child) => {
                   if (!React.isValidElement(child)) return child;
                   if (typeof child.type === "string") return child;

@@ -316,7 +316,8 @@ function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSave
     }
   }, [storedSettings, company?._id, dispatch]);
 
-  const allOptions = useMemo(() => Array.from(new Set([...utilityOptions, ...STANDARD_UTILITY_OPTIONS])), [utilityOptions]);
+  // Produce { value, label } directly so the JSX prop needs no extra .map()
+  const allOptions = useMemo(() => Array.from(new Set([...utilityOptions, ...STANDARD_UTILITY_OPTIONS])).map((opt) => ({ value: opt, label: opt })), [utilityOptions]);
 
   const addRow = () => setRows((prev) => [...prev, { utility: "", utilityLabel: "", unitCharge: "", isIncluded: false }]);
   const removeRow = (i) => setRows((prev) => prev.filter((_, idx) => idx !== i));
@@ -450,7 +451,7 @@ function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSave
                       <AppSelect
                         value={row.utility}
                         onChange={(v) => updateRow(idx, "utility", v ?? "")}
-                        options={allOptions.map((opt) => ({ value: opt, label: opt }))}
+                        options={allOptions}
                         placeholder="Select type…"
                         searchable
                         clearable
@@ -2043,6 +2044,11 @@ const confirmTransferUnit = useCallback(async () => {
   const statusOptions = isTerminatedView ? ["terminated", "any"] : ["active", "inactive", "any"];
   const balanceScopeOptions = ["any", "with_balance"];
 
+  // Stable option arrays — avoids busting AppSelect's internal useMemo on every render
+  const uniquePropertyOptions = useMemo(() => uniqueProperties.filter((p) => p !== "any").map((p) => ({ value: p, label: p })), [uniqueProperties]);
+  const statusSelectOptions   = useMemo(() => statusOptions.filter((s) => s !== "any").map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) })), [statusOptions]);
+  const cashbookAccountOptions = useMemo(() => cashbookAccounts.map((account) => ({ value: normalizeId(account?._id), label: account?.name || account?.accountName || "Unnamed account" })), [cashbookAccounts]);
+
   // ===== RENDER =====
   return (
     <DashboardLayout lockContentScroll>
@@ -2055,7 +2061,7 @@ const confirmTransferUnit = useCallback(async () => {
               <AppSelect
                 value={draftFilters.property !== "any" ? draftFilters.property : ""}
                 onChange={(v) => setDraftFilters({ ...draftFilters, property: v ?? "any" })}
-                options={uniqueProperties.filter((p) => p !== "any").map((p) => ({ value: p, label: p }))}
+                options={uniquePropertyOptions}
                 placeholder="All Properties"
                 searchable
                 clearable
@@ -2065,7 +2071,7 @@ const confirmTransferUnit = useCallback(async () => {
               <AppSelect
                 value={draftFilters.status !== "any" ? draftFilters.status : ""}
                 onChange={(v) => setDraftFilters({ ...draftFilters, status: v ?? "any" })}
-                options={statusOptions.filter((s) => s !== "any").map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))}
+                options={statusSelectOptions}
                 placeholder="All Status"
                 clearable
                 compact
@@ -2990,7 +2996,7 @@ const confirmTransferUnit = useCallback(async () => {
                         <AppSelect
                           value={depositSettlementForm.cashbookAccountId}
                           onChange={(v) => setDepositSettlementForm((prev) => ({ ...prev, cashbookAccountId: v ?? "" }))}
-                          options={cashbookAccounts.map((account) => ({ value: normalizeId(account?._id), label: account?.name || account?.accountName || "Unnamed account" }))}
+                          options={cashbookAccountOptions}
                           placeholder="Select cash or bank account"
                           searchable
                           clearable

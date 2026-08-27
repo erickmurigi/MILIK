@@ -184,6 +184,9 @@ const IncomeStatementReport = () => {
   });
   const [filters, setFilters] = useTabState("/accounts/income-statement:filters", () => ({ startDate: firstDayOfMonth(), endDate: todayString(), propertyId: "" }));
 
+  // Stable option array — avoids busting AppSelect's internal useMemo on every render
+  const propertyOptions = useMemo(() => properties.map((p) => ({ value: p._id, label: `${p.propertyCode} – ${p.propertyName}` })), [properties]);
+
   useEffect(() => {
     if (businessId && !propertiesLoaded) dispatch(getProperties({ business: businessId }));
   }, [businessId]);  // eslint-disable-line react-hooks/exhaustive-deps
@@ -384,7 +387,7 @@ const IncomeStatementReport = () => {
               <AppSelect
                 value={filters.propertyId}
                 onChange={(v) => setFilters((p) => ({ ...p, propertyId: v ?? '' }))}
-                options={properties.map((p) => ({ value: p._id, label: `${p.propertyCode} – ${p.propertyName}` }))}
+                options={propertyOptions}
                 placeholder="All Properties"
                 searchable
                 clearable

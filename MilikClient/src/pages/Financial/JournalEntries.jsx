@@ -240,6 +240,11 @@ const JournalEntries = () => {
 
   useEffect(() => { loadJournals(); }, [loadJournals]);
 
+  const journalTypeFilterOptions = useMemo(
+    () => JOURNAL_TYPES.map((type) => ({ value: type.value, label: getJournalTypePresentation(type.value)?.label || type.label })),
+    []
+  );
+
   const totals = useMemo(() => {
     return journals.reduce(
       (acc, item) => {
@@ -600,7 +605,7 @@ const JournalEntries = () => {
                 <AppSelect
                   value={filters.journalType !== "all" ? filters.journalType : ""}
                   onChange={(v) => { setFilters((p) => ({ ...p, journalType: v ?? "all" })); setCurrentPage(1); }}
-                  options={JOURNAL_TYPES.map((type) => ({ value: type.value, label: getJournalTypePresentation(type.value)?.label || type.label }))}
+                  options={journalTypeFilterOptions}
                   placeholder="All Journal Types"
                   size="sm"
                   clearable

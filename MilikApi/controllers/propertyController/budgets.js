@@ -30,7 +30,7 @@ const computeActuals = async (businessId, accountIds, periodStart, periodEnd) =>
         credit: { $sum: { $cond: [{ $eq: ["$direction", "credit"] }, { $ifNull: ["$amount", 0] }, 0] } },
       },
     },
-  ]);
+  ]).allowDiskUse(true);
 
   const map = new Map();
   for (const r of results) {

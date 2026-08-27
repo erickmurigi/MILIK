@@ -32,7 +32,7 @@ export const deleteEmployee = async(req, res, next) => {
 export const getEmployee = async(req, res, next) => {
     try {
 
-        const employee = await Employee.findById(req.params.id)
+        const employee = await Employee.findById(req.params.id).lean()
         res.status(200).json(employee)
 
     } catch (err) {
@@ -59,11 +59,8 @@ export const getEmployees = async(req, res, next) => {
             return res.status(400).json({ message: "Business ID is required." });
         }
 
-        // Fetch all employees for the given business ID
-        const employees = await Employee.find({ business: businessId }).limit(500).lean();
-
-        // Filter out the support accounts
-        const filteredEmployees = employees.filter(employee => !employee.isSupportUser);
+        // Fetch all non-support employees for the given business ID
+        const filteredEmployees = await Employee.find({ business: businessId, isSupportUser: { $ne: true } }).limit(500).lean();
 
         res.status(200).json(filteredEmployees);
     } catch (err) {
@@ -111,8 +108,10 @@ export const genderCount = async(req, res, next) => {
             return res.status(400).json({ message: "Business ID is required" });
         }
         
-        const maleCount = await Employee.countDocuments({ gender: "male",  business: businessId })
-        const femaleCount = await Employee.countDocuments({ gender: "female" ,  business: businessId })
+        const [maleCount, femaleCount] = await Promise.all([
+            Employee.countDocuments({ gender: "male",   business: businessId }),
+            Employee.countDocuments({ gender: "female", business: businessId }),
+        ])
 
         res.status(200).json([
             { gender: "male", count: maleCount },
@@ -147,15 +146,10 @@ export const allEmloyeesMonthly = async (req, res, next) => {
     const endOfLastMonth = new Date(date.getFullYear(), date.getMonth(), 0);
   
     try {
-      // Count businesses created in the current month
-      const currentMonthCount = await Employee.countDocuments({
-        createdAt: { $gte: startOfCurrentMonth, $lte: endOfCurrentMonth }
-      });
-  
-      // Count businesses created in the previous month
-      const lastMonthCount = await Employee.countDocuments({
-        createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth }
-      });
+      const [currentMonthCount, lastMonthCount] = await Promise.all([
+        Employee.countDocuments({ createdAt: { $gte: startOfCurrentMonth, $lte: endOfCurrentMonth } }),
+        Employee.countDocuments({ createdAt: { $gte: startOfLastMonth,    $lte: endOfLastMonth    } }),
+      ]);
   
       res.status(200).json({
         currentMonth: currentMonthCount,

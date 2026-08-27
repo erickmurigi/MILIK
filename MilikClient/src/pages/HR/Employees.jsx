@@ -75,6 +75,11 @@ export default function Employees() {
   const total = empData?.total ?? 0;
   const totalPages = empData?.totalPages ?? 1;
 
+  const departmentOptions = useMemo(
+    () => departments.map((d) => ({ value: d._id, label: d.name })),
+    [departments]
+  );
+
   const handleTerminate = (emp) => {
     setConfirm({
       isOpen: true,
@@ -281,7 +286,7 @@ export default function Employees() {
                 className="h-8 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
             </div>
-            <AppSelect value={deptFilter} onChange={(v) => setDeptFilter(v ?? '')} options={departments.map((d) => ({ value: d._id, label: d.name }))} placeholder="All departments" clearable searchable size="sm" />
+            <AppSelect value={deptFilter} onChange={(v) => setDeptFilter(v ?? '')} options={departmentOptions} placeholder="All departments" clearable searchable size="sm" />
             <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? '')} options={STATUS_OPTIONS} placeholder="All statuses" clearable size="sm" />
             <AppSelect value={typeFilter} onChange={(v) => setTypeFilter(v ?? '')} options={TYPE_OPTIONS} placeholder="All types" clearable size="sm" />
             <span className="ml-auto text-[11px] font-semibold text-slate-500">{total} result{total !== 1 ? 's' : ''}</span>

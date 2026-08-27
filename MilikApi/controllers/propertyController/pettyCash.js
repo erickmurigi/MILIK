@@ -94,6 +94,7 @@ async function postDisbursementLedger({ disbursement, account, userId }) {
 
 async function reverseDisbursementLedger({ disbursement, userId }) {
   const existing = await FinancialLedgerEntry.find({
+    business: disbursement.business,
     sourceTransactionType: "petty_cash_disbursement",
     sourceTransactionId: String(disbursement._id),
     status: "approved",

@@ -50,6 +50,21 @@ const SECTIONS = [
   },
 ];
 
+const MORE_MODULES = [
+  { label: "Fixed Assets",       route: "/accounts/fixed-assets" },
+  { label: "Depreciation",       route: "/accounts/fixed-assets/depreciation" },
+  { label: "Budget Plans",       route: "/accounts/budget" },
+  { label: "Budget vs Actual",   route: "/accounts/budget/analysis" },
+  { label: "Trial Balance",      route: "/accounts/trial-balance" },
+  { label: "Income Statement",   route: "/accounts/income-statement" },
+  { label: "Balance Sheet",      route: "/accounts/balance-sheet" },
+  { label: "Cash Flow",          route: "/accounts/cash-flow" },
+  { label: "Financial Ratios",   route: "/accounts/financial-ratios" },
+  { label: "Tax Reports",        route: "/accounts/tax-reports" },
+  { label: "GL Integrity",       route: "/accounts/gl-integrity" },
+  { label: "Year-End Close",     route: "/accounts/year-end-close" },
+];
+
 const QUICK_ACTIONS = [
   { label: "New Journal Entry", route: "/accounts/journals",            icon: FaBook },
   { label: "Payment Voucher",   route: "/accounts/payment-vouchers",    icon: FaCreditCard },
@@ -269,20 +284,7 @@ const AccountsDashboard = () => {
           <div className="flex-1 px-3 py-3">
             <div className="mb-2 px-2 text-[9px] font-black uppercase tracking-[0.15em] text-white/25">More Modules</div>
             <div className="space-y-0.5">
-              {[
-                { label: "Fixed Assets",       route: "/accounts/fixed-assets" },
-                { label: "Depreciation",       route: "/accounts/fixed-assets/depreciation" },
-                { label: "Budget Plans",       route: "/accounts/budget" },
-                { label: "Budget vs Actual",   route: "/accounts/budget/analysis" },
-                { label: "Trial Balance",      route: "/accounts/trial-balance" },
-                { label: "Income Statement",   route: "/accounts/income-statement" },
-                { label: "Balance Sheet",      route: "/accounts/balance-sheet" },
-                { label: "Cash Flow",          route: "/accounts/cash-flow" },
-                { label: "Financial Ratios",   route: "/accounts/financial-ratios" },
-                { label: "Tax Reports",        route: "/accounts/tax-reports" },
-                { label: "GL Integrity",       route: "/accounts/gl-integrity" },
-                { label: "Year-End Close",     route: "/accounts/year-end-close" },
-              ].map(({ label, route }) => (
+              {MORE_MODULES.map(({ label, route }) => (
                 <button key={route} onClick={() => navigate(route)}
                   className="flex w-full items-center gap-2 px-2 py-1 text-left text-[10px] text-white/40 transition hover:bg-white/10 hover:text-white/75">
                   <span className="h-1 w-1 shrink-0 bg-white/20" />

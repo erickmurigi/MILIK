@@ -176,6 +176,11 @@ const LandlordStandingOrders = () => {
     () => activeLandlords.map((l) => ({ value: l._id, label: getLandlordLabel(l) })),
     [activeLandlords]
   );
+  // Stable option array — avoids busting AppSelect's internal useMemo on every render
+  const activePropertyOptions = useMemo(
+    () => activeProperties.map((p) => ({ value: p._id, label: `${p.propertyCode ? `[${p.propertyCode}] ` : ""}${p.propertyName || p.name}` })),
+    [activeProperties]
+  );
 
   const [rows, setRows] = useState([]);
   const [serverTotal, setServerTotal] = useState(0);
@@ -216,6 +221,7 @@ const LandlordStandingOrders = () => {
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const [bulkRunning, setBulkRunning] = useState(false);
   const [cashbooks, setCashbooks] = useState([]);
+  const cashbookOptions = useMemo(() => cashbooks.map((account) => ({ value: account._id, label: account.name || account.accountName || account.code || account.accountCode })), [cashbooks]);
   const [reversingRunId, setReversingRunId] = useState("");
   const [currentPage, setCurrentPage] = useTabState("/landlords/standing-orders:currentPage", 1);
   const [pageSize, setPageSize] = useState(50);
@@ -355,6 +361,10 @@ const LandlordStandingOrders = () => {
       propertyBelongsToLandlord(property, form.landlord, selectedLandlord?.landlordName)
     );
   }, [activeLandlords, activeProperties, form.landlord]);
+  const filteredPropertyOptions = useMemo(
+    () => filteredProperties.map((p) => ({ value: p._id, label: `${p.propertyCode ? `[${p.propertyCode}] ` : ""}${p.propertyName || p.name}` })),
+    [filteredProperties]
+  );
 
   const handleSave = async () => {
     const validationMessage = validateForm(form);
@@ -616,7 +626,7 @@ const LandlordStandingOrders = () => {
                 <AppSelect
                   value={filters.propertyId}
                   onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "all" }))}
-                  options={activeProperties.map((p) => ({ value: p._id, label: `${p.propertyCode ? `[${p.propertyCode}] ` : ""}${p.propertyName || p.name}` }))}
+                  options={activePropertyOptions}
                   placeholder="All Properties"
                   searchable
                   clearable
@@ -935,7 +945,7 @@ const LandlordStandingOrders = () => {
                 <AppSelect
                   value={form.property}
                   onChange={(v) => setForm((prev) => ({ ...prev, property: v ?? "" }))}
-                  options={filteredProperties.map((p) => ({ value: p._id, label: `${p.propertyCode ? `[${p.propertyCode}] ` : ""}${p.propertyName || p.name}` }))}
+                  options={filteredPropertyOptions}
                   placeholder="Select property…"
                   searchable
                   clearable
@@ -1035,7 +1045,7 @@ const LandlordStandingOrders = () => {
                 <AppSelect
                   value={form.cashbook || null}
                   onChange={(v) => setForm((prev) => ({ ...prev, cashbook: v ?? "" }))}
-                  options={cashbooks.map((account) => ({ value: account._id, label: account.name || account.accountName || account.code || account.accountCode }))}
+                  options={cashbookOptions}
                   placeholder="Auto-resolve from payment method"
                   searchable
                   clearable

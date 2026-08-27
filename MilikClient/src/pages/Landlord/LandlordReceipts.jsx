@@ -125,6 +125,8 @@ const LandlordReceipts = () => {
   const properties = ensureArray(useSelector(selectAllProperties));
   const activeLandlords = useMemo(() => landlords.filter((item) => String(item?.status || "active").toLowerCase() !== "archived"), [landlords]);
   const activeProperties = useMemo(() => properties.filter((item) => String(item?.status || "active").toLowerCase() !== "archived"), [properties]);
+  // Stable option arrays — avoids busting AppSelect's internal useMemo on every render
+  const activeLandlordOptions = useMemo(() => activeLandlords.map((l) => ({ value: l._id, label: l.landlordName })), [activeLandlords]);
 
   const canCreate  = hasCompanyPermission(currentUser, currentCompany, "landlordReceipts", "create", "accounts");
   const canReverse = hasCompanyPermission(currentUser, currentCompany, "landlordReceipts", "reverse", "accounts");
@@ -190,7 +192,8 @@ const LandlordReceipts = () => {
     }));
   }, [cashbooks]);
 
-  const landlordPropertyOptions = useMemo(() => activeProperties, [activeProperties]);
+  const landlordPropertyOptions = useMemo(() => activeProperties.map((p) => ({ value: p._id, label: p.propertyName })), [activeProperties]);
+  const cashbookOptions = useMemo(() => cashbooks.map((account) => ({ value: account.name, label: account.name })), [cashbooks]);
 
   const selectedProperty = useMemo(
     () => findPropertyById(properties, formData.property),
@@ -542,7 +545,7 @@ const LandlordReceipts = () => {
               <AppSelect
                 value={filters.landlord}
                 onChange={(v) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, landlord: v ?? "" })); }}
-                options={activeLandlords.map((l) => ({ value: l._id, label: l.landlordName }))}
+                options={activeLandlordOptions}
                 placeholder="All Landlords"
                 searchable
                 clearable
@@ -645,7 +648,7 @@ const LandlordReceipts = () => {
                 <AppSelect
                   value={formData.property}
                   onChange={(v) => setFormData((prev) => ({ ...prev, property: v ?? "" }))}
-                  options={landlordPropertyOptions.map((p) => ({ value: p._id, label: p.propertyName }))}
+                  options={landlordPropertyOptions}
                   placeholder="Select property…"
                   searchable
                   size="sm"
@@ -685,7 +688,7 @@ const LandlordReceipts = () => {
                 <AppSelect
                   value={formData.paymentMethod || null}
                   onChange={(v) => setFormData((prev) => ({ ...prev, paymentMethod: v ?? "bank_transfer" }))}
-                  options={PAYMENT_METHOD_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                  options={PAYMENT_METHOD_OPTIONS}
                   size="sm"
                 />
               </div>
@@ -694,7 +697,7 @@ const LandlordReceipts = () => {
                 <AppSelect
                   value={formData.cashbook || null}
                   onChange={(v) => setFormData((prev) => ({ ...prev, cashbook: v ?? "" }))}
-                  options={cashbooks.map((account) => ({ value: account.name, label: account.name }))}
+                  options={cashbookOptions}
                   placeholder="Select cashbook…"
                   searchable
                   clearable

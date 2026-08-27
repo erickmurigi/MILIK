@@ -1025,14 +1025,14 @@ export const getTenants = async (req, res, next) => {
       }
       filter.unit = unit;
     } else if (propertyId && mongoose.Types.ObjectId.isValid(String(propertyId))) {
-      const propertyUnits = await Unit.find({ property: propertyId, business: businessId }).select("_id").lean();
+      const propertyUnits = await Unit.find({ property: propertyId, business: businessId }).select("_id").limit(5000).lean();
       filter.unit = { $in: propertyUnits.map((u) => u._id) };
     }
 
     const foPropertyIds = await getFieldOfficerPropertyIds(req);
     if (foPropertyIds !== null) {
       const foUnits = foPropertyIds.length > 0
-        ? await Unit.find({ property: { $in: foPropertyIds }, business: businessId }, { _id: 1 }).lean()
+        ? await Unit.find({ property: { $in: foPropertyIds }, business: businessId }, { _id: 1 }).limit(5000).lean()
         : [];
       const foUnitSet = new Set(foUnits.map((u) => String(u._id)));
 
@@ -1162,9 +1162,9 @@ export const getTenant = async (req, res, next) => {
     const foPropertyIds = await getFieldOfficerPropertyIds(req);
     if (foPropertyIds !== null) {
       const foSet = new Set(foPropertyIds.map(String));
-      const unitId = tenant.unit?._id || tenant.unit;
-      const unitDoc = unitId ? await Unit.findById(unitId, { property: 1 }).lean() : null;
-      if (!unitDoc || !foSet.has(String(unitDoc.property))) {
+      // unit.property is already populated in the query above — use it directly
+      const propId = tenant.unit?.property?._id || tenant.unit?.property;
+      if (!propId || !foSet.has(String(propId))) {
         return next(createError(403, "Not authorized to access this tenant"));
       }
     }

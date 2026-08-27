@@ -63,6 +63,10 @@ const EMPTY_FILTERS = {
 const PROPERTIES_FOR_DROPDOWN = ["A1, KH KENYA", "AAA, PARKLANDS KENYA", "ALL PURPOSE APARTMENT", "ALPHA APARTMENT", "BASIL TOWERS", "BLUE SKY PLAZA"];
 const CHARGE_FREQUENCIES = ["Monthly", "Quarterly", "Semi-Annually", "Annually", "One-time"];
 
+// Module-scope option arrays so AppSelect gets a stable reference every render
+const PROPERTIES_FOR_DROPDOWN_OPTIONS = PROPERTIES_FOR_DROPDOWN.map((p) => ({ value: p, label: p }));
+const CHARGE_FREQUENCIES_OPTIONS = CHARGE_FREQUENCIES.map((f) => ({ value: f, label: f }));
+
 const formatUnitTypeLabel = (value = "") => {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -815,12 +819,13 @@ const Units = () => {
   };
 
   // propertiesForDropdown and chargeFrequencies are now module-scope constants (PROPERTIES_FOR_DROPDOWN, CHARGE_FREQUENCIES)
+  // Produce { value, label } directly so the JSX prop needs no extra .map()
   const unitTypeOptions = useMemo(() => {
     const apiTypes = configuredUnitTypes.length
       ? configuredUnitTypes.map((t) => t.name.toLowerCase().replace(/\s+/g, ""))
       : sanitizeCompanyUnitTypes(currentCompany?.unitTypes);
     const existingTypes = Array.from(new Set((unitsData || []).map((item) => String(item?.unitType || "").trim()).filter(Boolean)));
-    return Array.from(new Set([...apiTypes, ...existingTypes]));
+    return Array.from(new Set([...apiTypes, ...existingTypes])).map((type) => ({ value: type, label: formatUnitTypeLabel(type) }));
   }, [configuredUnitTypes, currentCompany?.unitTypes, unitsData]);
 
   // ---------------------------
@@ -861,7 +866,7 @@ const Units = () => {
             <AppSelect
               value={draftFilters.unitType === "any" ? "" : draftFilters.unitType}
               onChange={(v) => setDraftFilters((p) => ({ ...p, unitType: v ?? "any" }))}
-              options={unitTypeOptions.map((type) => ({ value: type, label: formatUnitTypeLabel(type) }))}
+              options={unitTypeOptions}
               placeholder="Unit Type"
               searchable
               clearable
@@ -1124,7 +1129,7 @@ const Units = () => {
                         <AppSelect
                           value={formData.property}
                           onChange={(v) => setFormData((p) => ({ ...p, property: v ?? "" }))}
-                          options={PROPERTIES_FOR_DROPDOWN.map((p) => ({ value: p, label: p }))}
+                          options={PROPERTIES_FOR_DROPDOWN_OPTIONS}
                           placeholder="Select Property"
                           searchable
                           clearable
@@ -1248,7 +1253,7 @@ const Units = () => {
                         <AppSelect
                           value={formData.chargeFreq}
                           onChange={(v) => setFormData((p) => ({ ...p, chargeFreq: v ?? "" }))}
-                          options={CHARGE_FREQUENCIES.map((f) => ({ value: f, label: f }))}
+                          options={CHARGE_FREQUENCIES_OPTIONS}
                           placeholder="Select Frequency"
                           clearable
                           size="md"

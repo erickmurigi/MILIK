@@ -113,8 +113,9 @@ const Properties = () => {
     canDeleteProperty: hasCompanyPermission(currentUser || {}, currentCompany, "properties", "delete", "propertyManagement"),
   }), [currentUser, currentCompany]);
 
+  // Produce { value, label } directly so the JSX prop needs no extra .map()
   const landlordOptions = useMemo(() =>
-    landlords.map(l => ({ id: l._id || l.id, label: l.fullName || l.name || l.landlordName || "Unnamed" })),
+    landlords.map(l => ({ value: l._id || l.id || "", label: l.fullName || l.name || l.landlordName || "Unnamed" })),
   [landlords]);
 
   // Pagination
@@ -579,7 +580,7 @@ const Properties = () => {
             <AppSelect
               value={draftFilters.landlord}
               onChange={(v) => setDraftFilters((p) => ({ ...p, landlord: v ?? "" }))}
-              options={landlordOptions.map((l) => ({ value: l.id || "", label: l.label }))}
+              options={landlordOptions}
               placeholder="All Landlords"
               searchable
               clearable

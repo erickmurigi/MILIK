@@ -93,6 +93,9 @@ const ArrearsAgedAnalysis = () => {
     return [...set].sort();
   }, [allRows]);
 
+  // Stable option objects — avoids busting AppSelect's internal useMemo on every render
+  const propertyOptions = useMemo(() => properties.map((p) => ({ value: p, label: p })), [properties]);
+
   const filteredRows = useMemo(() => {
     let rows = allRows;
     const q = search.trim().toLowerCase();
@@ -252,7 +255,7 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
             <AppSelect
               value={selectedProperty}
               onChange={(v) => setSelectedProperty(v ?? "")}
-              options={properties.map((p) => ({ value: p, label: p }))}
+              options={propertyOptions}
               placeholder="All Properties"
               searchable
               clearable

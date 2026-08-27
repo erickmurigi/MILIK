@@ -132,6 +132,9 @@ const getStatusLabel = (status) =>
     .replace(/_/g, " ")
     .replace(/\b\w/g, (match) => match.toUpperCase()) || "Unknown";
 
+// Module-scope — stable reference avoids busting AppSelect's internal useMemo every render
+const AGREEMENT_STATUS_SELECT_OPTIONS = AGREEMENT_STATUS_OPTIONS.map((s) => ({ value: s, label: getStatusLabel(s) }));
+
 const buildInitialForm = () => ({
   _id: "",
   agreementNumber: "",
@@ -238,6 +241,8 @@ const TenantAgreements = () => {
     });
     return map;
   }, [units]);
+  // Stable option array — avoids busting AppSelect's internal useMemo on every render
+  const unitSelectOptions = useMemo(() => (Array.isArray(units) ? units : []).map((u) => ({ value: u._id, label: u.unitNumber || u.unitName || u.name })), [units]);
 
   const propertiesById = useMemo(() => {
     const map = new Map();
@@ -387,6 +392,8 @@ const TenantAgreements = () => {
       .filter(Boolean);
     return ["any", ...Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))];
   }, [agreementRows]);
+  // Stable option array — avoids busting AppSelect's internal useMemo on every render
+  const uniquePropertyOptions = useMemo(() => uniqueProperties.filter((n) => n !== "any").map((n) => ({ value: n, label: toListingCaps(n) })), [uniqueProperties]);
 
   const toggleAgreementSelect = (id) => {
     setSelectedAgreements((prev) =>
@@ -686,7 +693,7 @@ const TenantAgreements = () => {
               placeholder="Property"
               value={draftFilters.property}
               onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "any" }))}
-              options={uniqueProperties.filter((n) => n !== "any").map((n) => ({ value: n, label: toListingCaps(n) }))}
+              options={uniquePropertyOptions}
             />
             <AppSelect
               compact
@@ -694,7 +701,7 @@ const TenantAgreements = () => {
               placeholder="Status"
               value={draftFilters.status}
               onChange={(v) => setDraftFilters((prev) => ({ ...prev, status: v ?? "any" }))}
-              options={AGREEMENT_STATUS_OPTIONS.map((s) => ({ value: s, label: getStatusLabel(s) }))}
+              options={AGREEMENT_STATUS_SELECT_OPTIONS}
             />
             <label className="h-[20px] shrink-0 inline-flex items-center gap-1.5 border border-slate-200 bg-white px-1.5 text-[9px] text-gray-800 hover:bg-white cursor-pointer">
               <input type="checkbox" checked={draftFilters.expiringOnly} onChange={(event) => setDraftFilters((prev) => ({ ...prev, expiringOnly: event.target.checked }))} className="rounded border-gray-300 text-orange-600 focus:ring-[#0B3B2E]/20" />
@@ -887,7 +894,7 @@ const TenantAgreements = () => {
                           placeholder="Select unit"
                           value={form.unit}
                           onChange={(v) => setForm((p) => ({ ...p, unit: v ?? "" }))}
-                          options={(Array.isArray(units) ? units : []).map((u) => ({ value: u._id, label: u.unitNumber || u.unitName || u.name }))}
+                          options={unitSelectOptions}
                         />
                       )},
                       { label: "Status", content: (
@@ -895,7 +902,7 @@ const TenantAgreements = () => {
                           size="md"
                           value={form.status}
                           onChange={(v) => setForm((p) => ({ ...p, status: v ?? "active" }))}
-                          options={AGREEMENT_STATUS_OPTIONS.map((s) => ({ value: s, label: getStatusLabel(s) }))}
+                          options={AGREEMENT_STATUS_SELECT_OPTIONS}
                         />
                       )},
                       { label: "Start Date", content: <input type="date" value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} className="w-full border border-slate-300 px-3 py-2 text-xs outline-none focus:border-[#0B3B2E]" /> },

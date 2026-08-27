@@ -1125,11 +1125,11 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
       }
     }
 
-    // Sort by property name, then by tenant name
+    // Sort by property name, then by unit number (natural sort so S2 < S10)
     allRows.sort((a, b) => {
       const propCmp = (a.propertyName || "").localeCompare(b.propertyName || "");
       if (propCmp !== 0) return propCmp;
-      return (a.tenantName || "").localeCompare(b.tenantName || "");
+      return (a.unitNumber || "").localeCompare(b.unitNumber || "", undefined, { numeric: true, sensitivity: "base" });
     });
 
     const rows = allRows;

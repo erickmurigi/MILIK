@@ -1986,19 +1986,24 @@ const rollbackPostedAllocationReleaseEntries = async ({ entryIds = [], actorId =
   const normalizedEntryIds = [...new Set((Array.isArray(entryIds) ? entryIds : []).filter(Boolean).map(String))];
   if (!normalizedEntryIds.length || !actorId) return [];
 
-  const reversalEntries = [];
-  for (const entryId of normalizedEntryIds) {
-    try {
-      const result = await postReversal({
+  const results = await Promise.allSettled(
+    normalizedEntryIds.map((entryId) =>
+      postReversal({
         entryId,
         reason: reason || "Auto-reversal of incomplete unapplied receipt release",
         userId: actorId,
-      });
-      if (result?.reversalEntry) reversalEntries.push(result.reversalEntry);
-    } catch (rollbackError) {
-      console.error("Failed to rollback unapplied release ledger entry:", rollbackError);
+      })
+    )
+  );
+
+  const reversalEntries = [];
+  results.forEach((outcome) => {
+    if (outcome.status === "fulfilled") {
+      if (outcome.value?.reversalEntry) reversalEntries.push(outcome.value.reversalEntry);
+    } else {
+      console.error("Failed to rollback unapplied release ledger entry:", outcome.reason);
     }
-  }
+  });
 
   return reversalEntries;
 };

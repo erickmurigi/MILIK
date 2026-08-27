@@ -38,6 +38,9 @@ const METHODS = [
   { value: "check",         label: "Cheque" },
 ];
 
+// Module-scope — stable references avoid busting AppSelect's internal useMemo every render
+const MONTH_SELECT_OPTIONS = MONTHS.map((m) => ({ value: String(m.value), label: m.label }));
+
 const fmt = (v) =>
   Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -66,6 +69,9 @@ const BatchReceipts = () => {
   // ── Shared fields ─────────────────────────────────────────────────────────────
   const [shared, setShared]           = useState(DEFAULT_SHARED);
   const [cashbookOptions, setCashbookOptions] = useState([]);
+  // Stable option arrays — avoids busting AppSelect's internal useMemo on every render
+  const cashbookSelectOptions = useMemo(() => cashbookOptions.map((a) => ({ value: a.name, label: a.name })), [cashbookOptions]);
+  const allPropertyOptions    = useMemo(() => allProperties.map((p) => ({ value: p._id, label: p.propertyName || p.name })), [allProperties]);
   const setSharedField = useCallback((f, v) => setShared((p) => ({ ...p, [f]: v })), []);
 
   // ── M-Pesa state ──────────────────────────────────────────────────────────────
@@ -129,7 +135,8 @@ const BatchReceipts = () => {
       const propName = t.unit?.property?.propertyName || t.unit?.property?.name;
       if (propId && propName && !seen.has(String(propId))) seen.set(String(propId), propName);
     });
-    return [...seen.entries()].map(([id, name]) => ({ id, name }));
+    // Produce { value, label } directly so the JSX prop needs no extra .map()
+    return [...seen.entries()].map(([id, name]) => ({ value: id, label: name }));
   }, [collections]);
 
   const filteredCollections = useMemo(() => {
@@ -347,7 +354,7 @@ const BatchReceipts = () => {
                 placeholder="— Required —"
                 value={shared.cashbook}
                 onChange={(v) => setSharedField("cashbook", v ?? "")}
-                options={cashbookOptions.map((a) => ({ value: a.name, label: a.name }))}
+                options={cashbookSelectOptions}
                 error={!shared.cashbook ? "Required" : ""}
               />
             </div>
@@ -363,7 +370,7 @@ const BatchReceipts = () => {
               size="sm"
               value={shared.paymentMethod}
               onChange={(v) => setSharedField("paymentMethod", v ?? "mobile_money")}
-              options={METHODS.map((m) => ({ value: m.value, label: m.label }))}
+              options={METHODS}
             />
           </div>
 
@@ -383,7 +390,7 @@ const BatchReceipts = () => {
               size="sm"
               value={String(shared.month)}
               onChange={(v) => setSharedField("month", Number(v ?? shared.month))}
-              options={MONTHS.map((m) => ({ value: String(m.value), label: m.label }))}
+              options={MONTH_SELECT_OPTIONS}
             />
             <input
               type="number"
@@ -467,7 +474,7 @@ const BatchReceipts = () => {
                     placeholder="All Properties"
                     value={mpesaPropertyFilter}
                     onChange={(v) => setMpesaPropertyFilter(v ?? "")}
-                    options={mpesaPropertyOptions.map((p) => ({ value: p.id, label: p.name }))}
+                    options={mpesaPropertyOptions}
                   />
                 )}
                 <button
@@ -580,7 +587,7 @@ const BatchReceipts = () => {
                   placeholder="— Select Property —"
                   value={propertyId}
                   onChange={(v) => setPropertyId(v ?? "")}
-                  options={allProperties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
+                  options={allPropertyOptions}
                 />
 
                 {propertyId && propertyTenants.length > 0 && (

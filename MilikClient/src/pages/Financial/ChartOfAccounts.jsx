@@ -269,6 +269,11 @@ const ChartOfAccounts = () => {
     return [...new Set([...predefined, ...fromAccounts])];
   }, [effectiveType, accounts]);
 
+  const currentSubGroupSelectOptions = useMemo(
+    () => currentSubGroupOptions.map((opt) => ({ value: opt, label: opt })),
+    [currentSubGroupOptions]
+  );
+
   const codeConflict = useMemo(() => {
     if (!formData.code.trim()) return false;
     const upper = formData.code.trim().toUpperCase();
@@ -803,7 +808,7 @@ const ChartOfAccounts = () => {
                     <AppSelect
                       value={formData.subGroup}
                       onChange={(v) => setFormData((prev) => ({ ...prev, subGroup: v ?? "" }))}
-                      options={currentSubGroupOptions.map((opt) => ({ value: opt, label: opt }))}
+                      options={currentSubGroupSelectOptions}
                       size="sm"
                     />
                   </div>

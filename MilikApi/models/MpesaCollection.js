@@ -175,5 +175,7 @@ MpesaCollectionSchema.index({ business: 1, matchingStatus: 1, transactionDate: -
 MpesaCollectionSchema.index({ business: 1, source: 1, createdAt: -1 });
 MpesaCollectionSchema.index({ business: 1, tenant: 1, transactionDate: -1 });
 MpesaCollectionSchema.index({ business: 1, matchedReceipt: 1, transactionDate: -1 });
+// listMpesaCollections: shortCode-filtered queries with date range + sort
+MpesaCollectionSchema.index({ business: 1, shortCode: 1, transactionDate: -1 });
 
 export default mongoose.model("MpesaCollection", MpesaCollectionSchema);

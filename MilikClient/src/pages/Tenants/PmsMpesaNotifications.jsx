@@ -284,6 +284,9 @@ const detectCsvFormat = (headers) => {
   return null;
 };
 
+// Module-scope — stable reference avoids busting AppSelect's internal useMemo every render
+const STATUS_FILTER_OPTIONS = ["unmatched", "captured", "duplicate", "ignored"].map((k) => ({ value: k, label: STATUS_META[k].label }));
+
 const RESULT_META = {
   matched:   { label: "Matched",   cls: "bg-emerald-50 border-emerald-200 text-emerald-700" },
   duplicate: { label: "Duplicate", cls: "bg-slate-50 border-slate-200 text-slate-500"       },
@@ -345,6 +348,8 @@ const ImportResultsSummary = ({ results, onClose }) => (
 // ─── Upload / Import Modal ────────────────────────────────────────────────────
 function UploadModal({ businessId, paybills = [], onClose, onUploaded }) {
   const fileInputRef                = useRef(null);
+  // Stable option array — avoids busting AppSelect's internal useMemo on every render
+  const paybillOptions = useMemo(() => paybills.map((pb) => ({ value: pb.shortCode, label: pb.name ? `${pb.name} (${pb.shortCode})` : pb.shortCode })), [paybills]);
   const [tab,              setTab]              = useState("csv");
   const [file,             setFile]             = useState(null);
   const [preview,          setPreview]          = useState(null);
@@ -445,7 +450,7 @@ function UploadModal({ businessId, paybills = [], onClose, onUploaded }) {
               <AppSelect
                 value={selectedShortCode}
                 onChange={(v) => setSelectedShortCode(v ?? "")}
-                options={paybills.map((pb) => ({ value: pb.shortCode, label: pb.name ? `${pb.name} (${pb.shortCode})` : pb.shortCode }))}
+                options={paybillOptions}
                 placeholder="Auto-detect (primary paybill)"
                 searchable
                 clearable
@@ -584,6 +589,8 @@ export default function PmsMpesaNotifications() {
   const currentCompany = useSelector(selectCurrentCompany);
   const businessId     = String(currentCompany?._id || currentCompany?.id || "");
   const paybills       = currentCompany?.paymentIntegration?.mpesaPaybills || [];
+  // Stable option arrays — avoids busting AppSelect's internal useMemo on every render
+  const paybillOptions = useMemo(() => paybills.map((pb) => ({ value: pb.shortCode, label: `${pb.name || pb.shortCode} (${pb.shortCode})` })), [paybills]);
 
   const [notifications, setNotifications] = useState([]);
   const [summary,       setSummary]       = useState([]);
@@ -768,7 +775,7 @@ export default function PmsMpesaNotifications() {
           <AppSelect
             value={filters.status}
             onChange={(v) => setFilters(p => ({ ...p, status: v ?? "" }))}
-            options={["unmatched", "captured", "duplicate", "ignored"].map(k => ({ value: k, label: STATUS_META[k].label }))}
+            options={STATUS_FILTER_OPTIONS}
             placeholder="All statuses"
             clearable
             compact
@@ -777,7 +784,7 @@ export default function PmsMpesaNotifications() {
             <AppSelect
               value={filters.shortCode}
               onChange={(v) => setFilters(p => ({ ...p, shortCode: v ?? "" }))}
-              options={paybills.map((pb) => ({ value: pb.shortCode, label: `${pb.name || pb.shortCode} (${pb.shortCode})` }))}
+              options={paybillOptions}
               placeholder="All paybills"
               searchable
               clearable

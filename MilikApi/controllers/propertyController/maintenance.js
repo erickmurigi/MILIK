@@ -156,7 +156,7 @@ export const updateMaintenanceStatus = async (req, res, next) => {
     }
 
     const query = scopedMaintenanceQuery(req, req.params.id);
-    const updatedMaintenance = await Maintenance.findOneAndUpdate(query, { $set: updateData }, { new: true });
+    const updatedMaintenance = await Maintenance.findOneAndUpdate(query, { $set: updateData }, { new: true }).lean();
     if (!updatedMaintenance) return next(createError(404, "Maintenance request not found"));
     res.status(200).json(updatedMaintenance);
   } catch (err) {

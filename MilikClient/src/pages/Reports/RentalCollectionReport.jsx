@@ -26,6 +26,15 @@ const formatMethod = (value) => (value ? String(value).replace(/_/g, ' ') : 'All
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
   .map((label, i) => ({ value: String(i + 1), label }));
 
+// Module-scope — stable reference avoids busting AppSelect's internal useMemo every render
+const PAYMENT_METHOD_OPTIONS = [
+  { value: "cash",          label: "Cash" },
+  { value: "mobile_money",  label: "Mobile money" },
+  { value: "bank_transfer", label: "Bank transfer" },
+  { value: "check",         label: "Cheque" },
+  { value: "credit_card",   label: "Card" },
+];
+
 const RentalCollectionReport = () => {
   const dispatch = useDispatch();
   const currentUser = useSelector(selectCurrentUser);
@@ -120,6 +129,12 @@ const RentalCollectionReport = () => {
       .map((t) => { const u = t?.unit || {}; return { _id: u?._id || u, unitNumber: u?.unitNumber || u?.name || 'Unit' }; })
       .filter((u, idx, arr) => u._id && arr.findIndex((e) => String(e._id) === String(u._id)) === idx);
   }, [tenants, filters.tenantId]);
+
+  // Stable option arrays — avoids busting AppSelect's internal useMemo on every render
+  const propertyOptions = useMemo(() => properties.map((p) => ({ value: p._id, label: p.propertyName || p.name })), [properties]);
+  const tenantOptions   = useMemo(() => tenants.map((t) => buildTenantOption(t)), [tenants]);
+  const unitOptions     = useMemo(() => units.map((u) => ({ value: u._id, label: u.unitNumber })), [units]);
+  const landlordOptions = useMemo(() => landlords.map((l) => ({ value: l._id, label: l.landlordName || l.name })), [landlords]);
 
   const summary = report.summary || {};
   const allUtilityTypes = report.allUtilityTypes || [];
@@ -388,16 +403,16 @@ const RentalCollectionReport = () => {
                   <input type="date" value={filters.endDate} onChange={setFilter("endDate")} className="h-7 flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </div>
                 <AppSelect value={filters.zone || null} onChange={(v) => setFilters((p) => ({ ...p, zone: v ?? "", propertyId: "" }))} options={zoneOptions} placeholder="Zone" searchable clearable size="sm" />
-                <AppSelect value={filters.propertyId || null} onChange={(v) => setFilters((p) => ({ ...p, propertyId: v ?? "", zone: "" }))} options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))} placeholder="Property" searchable clearable size="sm" />
-                <AppSelect value={filters.tenantId || null} onChange={(v) => setFilters((p) => ({ ...p, tenantId: v ?? "", unitId: "" }))} options={tenants.map((t) => buildTenantOption(t))} placeholder="Tenant" searchable clearable size="sm" />
-                <AppSelect value={filters.paymentMethod || null} onChange={(v) => setFilters((p) => ({ ...p, paymentMethod: v ?? "" }))} options={[{ value: "cash", label: "Cash" }, { value: "mobile_money", label: "Mobile money" }, { value: "bank_transfer", label: "Bank transfer" }, { value: "check", label: "Cheque" }, { value: "credit_card", label: "Card" }]} placeholder="Method" clearable size="sm" />
+                <AppSelect value={filters.propertyId || null} onChange={(v) => setFilters((p) => ({ ...p, propertyId: v ?? "", zone: "" }))} options={propertyOptions} placeholder="Property" searchable clearable size="sm" />
+                <AppSelect value={filters.tenantId || null} onChange={(v) => setFilters((p) => ({ ...p, tenantId: v ?? "", unitId: "" }))} options={tenantOptions} placeholder="Tenant" searchable clearable size="sm" />
+                <AppSelect value={filters.paymentMethod || null} onChange={(v) => setFilters((p) => ({ ...p, paymentMethod: v ?? "" }))} options={PAYMENT_METHOD_OPTIONS} placeholder="Method" clearable size="sm" />
                 <input value={filters.cashbook} onChange={setFilter("cashbook")} placeholder="Cashbook..." className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </div>
               {(!isLandlordMode || units.length > 0) && (
                 <div className="mt-1.5 grid gap-1.5 md:grid-cols-3 xl:grid-cols-6">
-                  <AppSelect value={filters.unitId || null} onChange={(v) => setFilters((p) => ({ ...p, unitId: v ?? "" }))} options={units.map((u) => ({ value: u._id, label: u.unitNumber }))} placeholder="Unit" searchable clearable size="sm" />
+                  <AppSelect value={filters.unitId || null} onChange={(v) => setFilters((p) => ({ ...p, unitId: v ?? "" }))} options={unitOptions} placeholder="Unit" searchable clearable size="sm" />
                   {!isLandlordMode && (
-                    <AppSelect value={filters.landlordId || null} onChange={(v) => setFilters((p) => ({ ...p, landlordId: v ?? "" }))} options={landlords.map((l) => ({ value: l._id, label: l.landlordName || l.name }))} placeholder="Landlord" searchable clearable size="sm" />
+                    <AppSelect value={filters.landlordId || null} onChange={(v) => setFilters((p) => ({ ...p, landlordId: v ?? "" }))} options={landlordOptions} placeholder="Landlord" searchable clearable size="sm" />
                   )}
                 </div>
               )}

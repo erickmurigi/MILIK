@@ -26,7 +26,7 @@ export const createUtility = async (req, res, next) => {
 export const getUtilities = async (req, res, next) => {
   try {
     const business = resolveBusinessId(req);
-    const utilities = await Utility.find({ business }).sort({ name: 1 });
+    const utilities = await Utility.find({ business }).sort({ name: 1 }).limit(500).lean();
     res.status(200).json(utilities);
   } catch (err) {
     next(err);
@@ -36,7 +36,7 @@ export const getUtilities = async (req, res, next) => {
 // Get single utility
 export const getUtility = async (req, res, next) => {
   try {
-    const utility = await Utility.findOne(scopedUtilityQuery(req, req.params.id));
+    const utility = await Utility.findOne(scopedUtilityQuery(req, req.params.id)).lean();
     if (!utility) return next(createError(404, "Utility not found"));
     res.status(200).json(utility);
   } catch (err) {

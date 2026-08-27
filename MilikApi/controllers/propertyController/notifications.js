@@ -19,8 +19,9 @@ export const createNotification = async (req, res, next) => {
 
   try {
     const savedNotification = await newNotification.save();
-    emitToCompany(business, "notification:new", savedNotification);
-    res.status(200).json(savedNotification);
+    const plain = savedNotification.toObject();
+    emitToCompany(business, "notification:new", plain);
+    res.status(200).json(plain);
   } catch (err) {
     next(err);
   }
@@ -78,7 +79,7 @@ export const markAsRead = async (req, res, next) => {
       scopedNotificationQuery(req, req.params.id),
       { $set: { isRead: true } },
       { new: true }
-    );
+    ).lean();
     if (!updatedNotification) return next(createError(404, "Notification not found"));
     res.status(200).json(updatedNotification);
   } catch (err) {

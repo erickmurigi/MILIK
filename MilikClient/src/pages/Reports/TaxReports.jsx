@@ -112,6 +112,9 @@ const TaxReports = () => {
     };
   }, [currentCompany?._id, filters.startDate, filters.endDate]);
 
+  // Stable option array — avoids busting AppSelect's internal useMemo on every render
+  const propertyOptions = useMemo(() => properties.map((p) => ({ value: p._id, label: p.propertyName })), [properties]);
+
   const rows = useMemo(() => {
     const invoiceRows = invoices
       .filter((invoice) => {
@@ -353,7 +356,7 @@ const TaxReports = () => {
                 <AppSelect
                   value={filters.propertyId}
                   onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))}
-                  options={properties.map((p) => ({ value: p._id, label: p.propertyName }))}
+                  options={propertyOptions}
                   placeholder="All Properties"
                   searchable
                   clearable

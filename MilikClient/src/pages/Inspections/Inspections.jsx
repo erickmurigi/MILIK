@@ -265,6 +265,16 @@ const Inspections = () => {
     { key: "cancelled",   label: "Cancelled",   count: stats.cancelled,  dot: "bg-slate-400",   text: "text-slate-600",   bg: "bg-slate-50",   border: "border-slate-200",   filterType: "status" },
   ], [stats]);
 
+  const propertySelectOptions = useMemo(
+    () => properties.map((p) => ({ value: p._id, label: getPropertyName(p) })),
+    [properties]
+  );
+
+  const availableUnitOptions = useMemo(
+    () => availableUnits.map((u) => ({ value: u._id, label: `${getPropertyName(u?.property)} · Unit ${u?.unitNumber || "—"}` })),
+    [availableUnits]
+  );
+
   const totalPages = Math.max(1, serverPages);
   const pageRows = inspections; // server returns the correct slice already
 
@@ -544,7 +554,7 @@ const Inspections = () => {
                   <AppSelect
                     value={selectedPropertyId}
                     onChange={(v) => setForm((prev) => ({ ...prev, property: v ?? "", unit: "", tenant: "" }))}
-                    options={properties.map((p) => ({ value: p._id, label: getPropertyName(p) }))}
+                    options={propertySelectOptions}
                     placeholder="Select property…"
                     searchable
                     size="md"
@@ -555,7 +565,7 @@ const Inspections = () => {
                   <AppSelect
                     value={form.unit}
                     onChange={(v) => setForm((prev) => ({ ...prev, unit: v ?? "", tenant: "" }))}
-                    options={availableUnits.map((u) => ({ value: u._id, label: `${getPropertyName(u?.property)} · Unit ${u?.unitNumber || "—"}` }))}
+                    options={availableUnitOptions}
                     placeholder="Property-level / common area"
                     searchable
                     clearable

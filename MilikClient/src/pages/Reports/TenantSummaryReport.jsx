@@ -35,6 +35,9 @@ const TenantSummaryReport = () => {
   // Sync Redux properties into local state for the property filter dropdown
   useEffect(() => { if (reduxProperties.length) setProperties(reduxProperties); }, [reduxProperties]);
 
+  // Stable option array — avoids busting AppSelect's internal useMemo on every render
+  const propertyOptions = useMemo(() => properties.map((p) => ({ value: p._id, label: p.propertyName || p.name })), [properties]);
+
   const loadData = useCallback(async (signal) => {
     if (!businessId) return;
     setLoading(true);
@@ -264,7 +267,7 @@ const TenantSummaryReport = () => {
                 <AppSelect
                   value={filters.propertyId}
                   onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "" }))}
-                  options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
+                  options={propertyOptions}
                   placeholder="All properties"
                   searchable
                   clearable

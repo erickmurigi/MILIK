@@ -259,6 +259,16 @@ const Maintenances = () => {
     { key: "emergency",   label: "Emergency",   count: stats.emergency,  dot: "bg-rose-500",    text: "text-rose-700",    bg: "bg-rose-50",    border: "border-rose-200",    filterType: "priority" },
   ], [stats]);
 
+  const propertySelectOptions = useMemo(
+    () => properties.map((p) => ({ value: p._id, label: getPropertyName(p) })),
+    [properties]
+  );
+
+  const availableUnitOptions = useMemo(
+    () => availableUnits.map((u) => ({ value: u._id, label: `${getPropertyName(u?.property)} · Unit ${u?.unitNumber || "—"}` })),
+    [availableUnits]
+  );
+
   const totalPages = Math.max(1, serverPages);
   const pageRows = requests; // server already returns the correct page slice
 
@@ -554,7 +564,7 @@ const Maintenances = () => {
                   <AppSelect
                     value={selectedPropertyId}
                     onChange={(v) => setForm((prev) => ({ ...prev, unit: "", tenant: "", property: v ?? "" }))}
-                    options={properties.map((p) => ({ value: p._id, label: getPropertyName(p) }))}
+                    options={propertySelectOptions}
                     placeholder="Select property…"
                     searchable
                     size="md"
@@ -565,7 +575,7 @@ const Maintenances = () => {
                   <AppSelect
                     value={form.unit}
                     onChange={(v) => setForm((prev) => ({ ...prev, unit: v ?? "", tenant: "" }))}
-                    options={availableUnits.map((u) => ({ value: u._id, label: `${getPropertyName(u?.property)} · Unit ${u?.unitNumber || "—"}` }))}
+                    options={availableUnitOptions}
                     placeholder="Select unit…"
                     searchable
                     size="md"

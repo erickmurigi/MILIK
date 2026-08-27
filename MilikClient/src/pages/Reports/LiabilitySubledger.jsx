@@ -351,6 +351,12 @@ const LiabilitySubledger = () => {
     [allProperties]
   );
 
+  // Stable option array — avoids busting AppSelect's internal useMemo on every render
+  const activePropertyOptions = useMemo(
+    () => activeProperties.map((p) => ({ value: p._id, label: p.propertyName })),
+    [activeProperties]
+  );
+
   const load = useCallback(async (currentTab, currentFilters) => {
     if (!businessId) return;
     if (abortRef.current) abortRef.current.abort();
@@ -455,7 +461,7 @@ const LiabilitySubledger = () => {
         <AppSelect
           value={filters.property}
           onChange={(v) => setFilters((p) => ({ ...p, property: v ?? '' }))}
-          options={activeProperties.map((p) => ({ value: p._id, label: p.propertyName }))}
+          options={activePropertyOptions}
           placeholder="All properties"
           searchable
           clearable

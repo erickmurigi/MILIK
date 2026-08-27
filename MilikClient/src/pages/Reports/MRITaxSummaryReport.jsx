@@ -46,6 +46,9 @@ const MRITaxSummaryReport = () => {
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [report, setReport] = useState({ summary: {}, byProperty: [], byMonth: [], mriRate: 0.075 });
 
+  // Stable option array — avoids busting AppSelect's internal useMemo on every render
+  const propertyOptions = useMemo(() => properties.map((p) => ({ value: p._id, label: p.propertyName || p.name })), [properties]);
+
   useEffect(() => {
     if (!businessId) return;
     dispatch(getProperties({ business: businessId }));
@@ -302,7 +305,7 @@ const MRITaxSummaryReport = () => {
                 <AppSelect
                   value={filters.propertyId}
                   onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))}
-                  options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
+                  options={propertyOptions}
                   placeholder="All properties"
                   searchable
                   clearable

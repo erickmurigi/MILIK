@@ -333,7 +333,7 @@ export const checkLedgerBalance = async (req, res, next) => {
           count: { $sum: 1 },
         },
       },
-    ]);
+    ]).allowDiskUse(true);
 
     const totalDebit = Number(totals?.totalDebit || 0);
     const totalCredit = Number(totals?.totalCredit || 0);
@@ -374,7 +374,7 @@ export const checkLedgerBalance = async (req, res, next) => {
       },
       { $sort: { firstEntry: -1 } },
       { $limit: 50 },
-    ]);
+    ]).allowDiskUse(true);
 
     return res.json({
       success: true,
@@ -483,7 +483,7 @@ export const runIntegrityReport = async (req, res, next) => {
             count: { $sum: 1 },
           },
         },
-      ]),
+      ]).allowDiskUse(true),
       FinancialLedgerEntry.aggregate([
         { $match: { business: bizId, status: { $in: REPORT_STATUSES }, journalGroupId: { $ne: null } } },
         {
@@ -501,7 +501,7 @@ export const runIntegrityReport = async (req, res, next) => {
         { $match: { diff: { $not: { $gt: -0.01, $lt: 0.01 } } } },
         { $sort: { firstDate: -1 } },
         { $limit: 100 },
-      ]),
+      ]).allowDiskUse(true),
       FinancialLedgerEntry.distinct("accountId", {
         business: bizId,
         status: { $in: ACTIVE_STATUSES },
@@ -519,7 +519,7 @@ export const runIntegrityReport = async (req, res, next) => {
           },
         },
         { $addFields: { netBalance: { $subtract: ["$netDebit", "$netCredit"] } } },
-      ]),
+      ]).allowDiskUse(true),
       ChartOfAccount.find(
         { business: bizId, isActive: true },
         { _id: 1, code: 1, name: 1, type: 1 }
@@ -1158,6 +1158,7 @@ export const getEntriesBySource = async (req, res, next) => {
     })
       .populate({ path: "accountId", select: "code name type" })
       .sort({ transactionDate: 1, createdAt: 1 })
+      .limit(500)
       .lean();
 
     const formatted = entries.map((e) => ({

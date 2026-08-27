@@ -231,6 +231,7 @@ TenantSchema.index({ business: 1, name: 1 });
 TenantSchema.index({ unit: 1 });
 TenantSchema.index({ business: 1, unit: 1, status: 1 });
 TenantSchema.index({ additionalUnits: 1 });
+TenantSchema.index({ business: 1, additionalUnits: 1, status: 1 });
 TenantSchema.index({ business: 1, moveInDate: -1 });
 TenantSchema.index({ business: 1, createdAt: -1 });
 TenantSchema.index({ business: 1, balance: 1 });
