@@ -801,7 +801,7 @@ useEffect(() => {
   }, [draftStorageKey, isEditMode]);
 
   useEffect(() => {
-    if (isEditMode || !draftStorageKey || !draftRestoredRef.current) return;
+    if (isEditMode || !draftStorageKey || !draftRestoredRef.current || submittingRef.current) return;
     try {
       sessionStorage.setItem(
         draftStorageKey,
@@ -1257,6 +1257,7 @@ useEffect(() => {
       const result = isEditMode
         ? await dispatch(updateTenant({ id: routeTenantId, tenantData: payload })).unwrap()
         : await dispatch(createTenant(payload)).unwrap();
+      submittingRef.current = true;
       clearDraftState();
       toast.success(result?.message || `Tenant ${isEditMode ? "updated" : "created"} successfully!`);
 
