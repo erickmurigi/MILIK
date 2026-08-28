@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 import CarWashCreditAccount from "../models/CarWashCreditAccount.js";
 import CarWashAccountStatement from "../models/CarWashAccountStatement.js";
 import CarWashAccountTopup from "../models/CarWashAccountTopup.js";
@@ -15,7 +15,7 @@ import { accrueCommissionForJob, markJobCommissionsPayable } from "../services/c
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
-// ─── Number generators ────────────────────────────────────────────────────────
+// â”€â”€â”€ Number generators â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const generateAccountNumber = async (business) => {
   const today = new Date();
@@ -41,9 +41,9 @@ const generateStatementNumber = async (business, periodStart) => {
   return `${prefix}${String(seq).padStart(3, "0")}`;
 };
 
-// ─── Balance computation ──────────────────────────────────────────────────────
+// â”€â”€â”€ Balance computation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-// Single-account variant — used when refreshing one account after a topup/payment.
+// Single-account variant â€” used when refreshing one account after a topup/payment.
 const computeAccountBalance = async (business, accountId) => {
   const account = await CarWashCreditAccount.findById(accountId).select("plates").lean();
   const plates = Array.isArray(account?.plates) ? account.plates.filter(Boolean) : [];
@@ -66,13 +66,13 @@ const computeAccountBalance = async (business, accountId) => {
   const totals = await CarWashPayment.aggregate([
     { $match: { business: businessOid, job: { $in: jobIds } } },
     { $group: { _id: null, paid: { $sum: "$amount" } } },
-  ]);
+  ]).allowDiskUse(true);
 
   const totalInvoiced = uniqueJobs.reduce((sum, j) => sum + Math.max(0, Number(j.price || 0) - Number(j.discountAmount || 0)), 0);
   return round2(Math.max(0, totalInvoiced - Number(totals[0]?.paid || 0)));
 };
 
-// Batch variant — computes balances for all accounts in 2 queries instead of 3N.
+// Batch variant â€” computes balances for all accounts in 2 queries instead of 3N.
 const computeAllBalances = async (business, accounts) => {
   if (!accounts.length) return {};
   const businessOid = new mongoose.Types.ObjectId(String(business));
@@ -94,7 +94,7 @@ const computeAllBalances = async (business, accounts) => {
   const paymentRows = await CarWashPayment.aggregate([
     { $match: { business: businessOid, job: { $in: allJobIds } } },
     { $group: { _id: "$job", paid: { $sum: "$amount" } } },
-  ]);
+  ]).allowDiskUse(true);
   const paidByJob = new Map(paymentRows.map((r) => [String(r._id), Number(r.paid)]));
   const jobById   = new Map(allJobs.map((j) => [String(j._id), j]));
 
@@ -135,7 +135,7 @@ const computeAllBalances = async (business, accounts) => {
   return result;
 };
 
-// ─── CRUD ─────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const listAccounts = async (req, res, next) => {
   try {
@@ -205,7 +205,7 @@ export const createAccount = async (req, res, next) => {
     const customer = await CarWashCustomer.findOne({ _id: customerId, business }).lean();
     if (!customer) return next(createError(404, "Customer not found"));
 
-    // Normalize plates — merge customer plates with any extra plates provided
+    // Normalize plates â€” merge customer plates with any extra plates provided
     const allPlates = [...new Set([
       ...(customer.plates || []),
       ...(Array.isArray(plates) ? plates.map((p) => String(p).trim().toUpperCase()).filter(Boolean) : []),
@@ -299,7 +299,7 @@ export const updateAccount = async (req, res, next) => {
   }
 };
 
-// ─── Plate lookup for job creation ───────────────────────────────────────────
+// â”€â”€â”€ Plate lookup for job creation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const lookupAccountByPlate = async (req, res, next) => {
   try {
@@ -326,7 +326,7 @@ export const lookupAccountByPlate = async (req, res, next) => {
   }
 };
 
-// ─── FIFO payment recording ───────────────────────────────────────────────────
+// â”€â”€â”€ FIFO payment recording â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const recordAccountPayment = async (req, res, next) => {
   try {
@@ -365,8 +365,8 @@ export const recordAccountPayment = async (req, res, next) => {
     }
     const effectiveMethod = isWalletAccount ? "prepaid" : method;
 
-    // ── FIFO allocation ──────────────────────────────────────────────────────
-    // Link any plate-matched jobs that are missing the creditAccount ref — this
+    // â”€â”€ FIFO allocation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // Link any plate-matched jobs that are missing the creditAccount ref â€” this
     // prevents a permanent phantom debt where the balance includes jobs that can
     // never be settled because recordAccountPayment only queries by creditAccount.
     if ((account.plates || []).length) {
@@ -425,7 +425,7 @@ export const recordAccountPayment = async (req, res, next) => {
         updatedBy: userId,
       });
 
-      // Post Dr Cashbook / Cr 4400 for each job settled — same entry as a direct payment.
+      // Post Dr Cashbook / Cr 4400 for each job settled â€” same entry as a direct payment.
       // Fire-and-forget so a ledger error never blocks the payment response.
       if (cashbookAccount) {
         postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbookAccount, job: { ...job }, userId, taxAmount: Number(job.taxAmount || 0), jobPrice: Number(job.price || 0) })
@@ -453,7 +453,7 @@ export const recordAccountPayment = async (req, res, next) => {
     account.currentBalance = newBalance;
     account.updatedBy = userId;
     if (isWalletAccount) {
-      // Deduct only what was actually allocated — unallocated remainder stays in the wallet
+      // Deduct only what was actually allocated â€” unallocated remainder stays in the wallet
       const allocated = round2(amount - remaining);
       account.accountCredit = round2((account.accountCredit || 0) - allocated);
     } else {
@@ -474,7 +474,7 @@ export const recordAccountPayment = async (req, res, next) => {
   }
 };
 
-// ─── Statement generation ─────────────────────────────────────────────────────
+// â”€â”€â”€ Statement generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const refreshStatementStatuses = async (business, accountId) => {
   const statements = await CarWashAccountStatement.find({ business, account: accountId, status: { $nin: ["paid"] } });
@@ -543,7 +543,7 @@ export const generateStatement = async (req, res, next) => {
     const paymentTotals = await CarWashPayment.aggregate([
       { $match: { business, job: { $in: jobIds } } },
       { $group: { _id: "$job", paid: { $sum: "$amount" } } },
-    ]);
+    ]).allowDiskUse(true);
     const paidMap = new Map(paymentTotals.map((p) => [String(p._id), p.paid]));
 
     const jobLines = jobs.map((j) => {
@@ -641,7 +641,7 @@ export const getStatement = async (req, res, next) => {
   }
 };
 
-// ─── Send statement SMS ───────────────────────────────────────────────────────
+// â”€â”€â”€ Send statement SMS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const sendStatementSms = async (req, res, next) => {
   try {
@@ -673,7 +673,7 @@ export const sendStatementSms = async (req, res, next) => {
   }
 };
 
-// ─── Send statement email ─────────────────────────────────────────────────────
+// â”€â”€â”€ Send statement email â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const sendStatementEmail = async (req, res, next) => {
   try {
@@ -696,8 +696,8 @@ export const sendStatementEmail = async (req, res, next) => {
     const jobRows = (statement.jobs || []).map((j) => `
       <tr>
         <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">${new Date(j.jobDate).toLocaleDateString("en-KE")}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">${esc(j.plateNumber || "—")}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">${esc(j.serviceName || "—")}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">${esc(j.plateNumber || "â€”")}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">${esc(j.serviceName || "â€”")}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right">${fmtAmt(j.price)}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right">${fmtAmt(j.paidAmount)}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:bold;color:${j.outstanding > 0 ? "#dc2626" : "#16a34a"}">${fmtAmt(j.outstanding)}</td>
@@ -706,7 +706,7 @@ export const sendStatementEmail = async (req, res, next) => {
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,sans-serif;color:#1e293b;max-width:700px;margin:0 auto;padding:24px">
       <div style="background:#0B3B2E;color:#fff;padding:20px 24px;border-radius:4px 4px 0 0">
         <h2 style="margin:0;font-size:18px">Car Wash Account Statement</h2>
-        <p style="margin:4px 0 0;opacity:.75;font-size:13px">${esc(period)} · Ref: ${esc(statement.statementNumber)}</p>
+        <p style="margin:4px 0 0;opacity:.75;font-size:13px">${esc(period)} Â· Ref: ${esc(statement.statementNumber)}</p>
       </div>
       <div style="border:1px solid #e2e8f0;border-top:none;padding:20px 24px">
         <p style="margin:0 0 4px"><strong>To:</strong> ${esc(contactName)}</p>
@@ -751,7 +751,7 @@ export const sendStatementEmail = async (req, res, next) => {
     await sendAdHocEmail({
       businessId: business,
       to,
-      subject: `Car Wash Statement — ${period} (${statement.statementNumber})`,
+      subject: `Car Wash Statement â€” ${period} (${statement.statementNumber})`,
       html,
       text: `Hi ${contactName},\n\nYour car wash statement for ${period}:\nInvoiced: ${fmtAmt(statement.totalInvoiced)}\nPaid: ${fmtAmt(statement.totalPaid)}\nAmount Due: ${fmtAmt(statement.totalOutstanding)}\nRef: ${statement.statementNumber}\n\nThank you.`,
     });
@@ -763,7 +763,7 @@ export const sendStatementEmail = async (req, res, next) => {
   }
 };
 
-// ─── Auto-billing: called on server startup + daily check ────────────────────
+// â”€â”€â”€ Auto-billing: called on server startup + daily check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Finds all monthly accounts where today is their billingDay and no statement
 // exists for the current month yet, then generates statements automatically.
 
@@ -807,7 +807,7 @@ export const processDueBilling = async (business) => {
     const paymentTotals = await CarWashPayment.aggregate([
       { $match: { business: account.business, job: { $in: jobIds } } },
       { $group: { _id: "$job", paid: { $sum: "$amount" } } },
-    ]);
+    ]).allowDiskUse(true);
     const paidMap = new Map(paymentTotals.map((p) => [String(p._id), p.paid]));
 
     const jobLines = jobs.map((j) => {
@@ -869,7 +869,7 @@ export const processDueBilling = async (business) => {
   return results;
 };
 
-// ─── Prepaid top-up ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Prepaid top-up â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const recordAccountTopup = async (req, res, next) => {
   try {
@@ -905,7 +905,7 @@ export const recordAccountTopup = async (req, res, next) => {
       { $inc: { accountCredit: amount } }
     );
 
-    // Post Dr Cashbook / Cr Revenue — revenue recognised at point of cash receipt
+    // Post Dr Cashbook / Cr Revenue â€” revenue recognised at point of cash receipt
     await postCarWashTopupLedger({ businessId: business, topup, cashbookAccountId: cashbookAccount, userId });
 
     res.status(201).json({
@@ -934,7 +934,7 @@ export const listAccountTopups = async (req, res, next) => {
   }
 };
 
-// Called from the financials journal — no account ID required
+// Called from the financials journal â€” no account ID required
 export const voidTopupDirect = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);

@@ -131,6 +131,9 @@ const ModuleTabManager = ({ darkMode }) => {
 
   const currentModule = useMemo(() => getWorkspaceFromRoute(location.pathname), [location.pathname]);
 
+  const pendingRouteRef = useRef(null);
+  const [isNavigating, setIsNavigating] = useState(false);
+
   const [openModules, setOpenModules] = useState(() => readOpenModules(currentCompanyKey, currentCompany));
   const [activeModule, setActiveModule] = useState(() =>
     readActiveModule(currentCompanyKey, currentCompany, readOpenModules(currentCompanyKey, currentCompany))
@@ -155,6 +158,12 @@ const ModuleTabManager = ({ darkMode }) => {
   }, [currentCompanyKey]);
 
   useEffect(() => {
+    if (!pendingRouteRef.current) return;
+    pendingRouteRef.current = null;
+    setIsNavigating(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
     if (!currentModule) return;
     if (!isCompanyWorkspaceAllowed(currentCompany, currentModule)) return;
 
@@ -170,8 +179,13 @@ const ModuleTabManager = ({ darkMode }) => {
     if (!config) return;
     if (!isCompanyWorkspaceAllowed(currentCompany, moduleId)) return;
 
+    const route = config.route || getWorkspaceDefaultRoute(moduleId);
+    if (route !== location.pathname) {
+      pendingRouteRef.current = route;
+      setIsNavigating(true);
+    }
     setActiveModule(moduleId);
-    navigate(config.route || getWorkspaceDefaultRoute(moduleId));
+    navigate(route);
   };
 
   const closeModule = (moduleId) => {
@@ -202,9 +216,12 @@ const ModuleTabManager = ({ darkMode }) => {
     <div
       className={`fixed bottom-0 left-0 right-0 z-50 border-t shadow-lg ${
         darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#1a472a] border-[#0d3320]'
-      } flex items-center px-3 py-1 gap-1.5 overflow-x-auto`}
+      } relative flex items-center px-3 py-1 gap-1.5 overflow-x-auto`}
       style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
     >
+      {isNavigating && (
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-orange-400 animate-pulse pointer-events-none" />
+      )}
       {visibleModules.map((module) => {
         const isActive = activeModule === module.id;
         return (

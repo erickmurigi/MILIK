@@ -1,4 +1,4 @@
-import { createError } from "../../../utils/error.js";
+﻿import { createError } from "../../../utils/error.js";
 import mongoose from "mongoose";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import CarWashDeposit from "../models/CarWashDeposit.js";
@@ -70,7 +70,7 @@ const summarizeDeposits = async (filter) => {
   const rows = await CarWashDeposit.aggregate([
     { $match: aggregateFilter },
     { $group: { _id: "$status", amount: { $sum: "$amount" }, count: { $sum: 1 } } },
-  ]);
+  ]).allowDiskUse(true);
   const summary = {
     pending: { amount: 0, count: 0 },
     confirmed: { amount: 0, count: 0 },

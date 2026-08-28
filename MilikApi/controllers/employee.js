@@ -43,7 +43,9 @@ export const getEmployee = async(req, res, next) => {
 //get all business
 export const getAllEmployees = async(req, res, next) => {
     try {
-        const employees = await Employee.find().limit(500).lean()
+        const { businessId } = req.query;
+        if (!businessId) return res.status(400).json({ message: "Business ID is required." });
+        const employees = await Employee.find({ business: businessId, isSupportUser: { $ne: true } }).limit(500).lean();
         res.status(200).json(employees)
 
     } catch (err) {

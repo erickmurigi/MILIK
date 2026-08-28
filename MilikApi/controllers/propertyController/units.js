@@ -1,5 +1,7 @@
+import mongoose from "mongoose";
 import Unit from "../../models/Unit.js";
 import { getFieldOfficerPropertyIds } from "../../utils/fieldOfficerScope.js";
+import { slugifyWithSuffix } from "../../utils/slugify.js";
 import Tenant from "../../models/Tenant.js";
 import Property from "../../models/Property.js";
 import Lease from "../../models/Lease.js";
@@ -1195,7 +1197,10 @@ export const bulkImportUnits = async (req, res, next) => {
     const touchedPropertyIds = new Set();
 
     if (validUnits.length > 0) {
-      const docsToInsert = validUnits.map(({ _importRow, ...doc }) => doc);
+      const docsToInsert = validUnits.map(({ _importRow, ...doc }) => {
+        const _id = new mongoose.Types.ObjectId();
+        return { _id, ...doc, slug: slugifyWithSuffix(doc.unitNumber, _id) };
+      });
 
       let insertedDocs = [];
       let writeErrors = [];

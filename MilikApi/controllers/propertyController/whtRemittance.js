@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 import TaxRemittance from "../../models/TaxRemittance.js";
 import PaymentVoucher from "../../models/PaymentVoucher.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
@@ -26,16 +26,16 @@ const aggregateWhtForPeriod = async (businessId, accountId, periodStart, periodE
       },
     },
     { $group: { _id: "$direction", total: { $sum: "$amount" } } },
-  ]);
+  ]).allowDiskUse(true);
 
   const result = { credit: 0, debit: 0 };
   rows.forEach((r) => { result[r._id] = round2(r.total); });
   return result;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // GET /api/wht-remittance/summary?business=&year=&month=
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const getWhtReturnSummary = async (req, res, next) => {
   try {
     const businessId = req.query.business;
@@ -119,7 +119,7 @@ export const getWhtReturnSummary = async (req, res, next) => {
       vouchers: vouchers.map((v) => ({
         _id: v._id, voucherNo: v.voucherNo, amount: v.amount,
         whtAmount: v.whtAmount, paidDate: v.paidDate, narration: v.narration,
-        providerName: v.serviceProvider?.name || "—",
+        providerName: v.serviceProvider?.name || "â€”",
       })),
     });
   } catch (err) {
@@ -127,9 +127,9 @@ export const getWhtReturnSummary = async (req, res, next) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // GET /api/wht-remittance
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const getWhtRemittanceHistory = async (req, res, next) => {
   try {
     const { business: businessId, year } = req.query;
@@ -150,10 +150,10 @@ export const getWhtRemittanceHistory = async (req, res, next) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // POST /api/wht-remittance/remit
 // GL: Dr WHT Payable 2141 (amount), Cr Cashbook (amount)
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const remitWht = async (req, res, next) => {
   let remittance = null;
   try {
@@ -221,18 +221,18 @@ export const remitWht = async (req, res, next) => {
       category:              "TAX_REMITTANCE",
       journalGroupId,
       payer: "n/a", receiver: "n/a",
-      notes: `KRA WHT remittance – ${periodLabel}${paymentReference ? ` (Ref: ${paymentReference})` : ""}`,
+      notes: `KRA WHT remittance â€“ ${periodLabel}${paymentReference ? ` (Ref: ${paymentReference})` : ""}`,
       createdBy: actorUserId, approvedBy: actorUserId, approvedAt: new Date(),
       status: "approved",
       allowUnscoped: true,
     };
 
     try {
-      // Dr WHT Payable 2141 — reduces the liability
+      // Dr WHT Payable 2141 â€” reduces the liability
       await postEntry({ ...commonEntry, accountId: whtAccount._id, amount, direction: "debit", metadata: { postingRole: "wht_payable_reduction", accountCode: "2141" } });
       touchedAccountIds.push(whtAccount._id);
 
-      // Cr Cashbook — cash leaves to KRA
+      // Cr Cashbook â€” cash leaves to KRA
       await postEntry({ ...commonEntry, accountId: cashbookAccountId, amount, direction: "credit", metadata: { postingRole: "cashbook_outflow", kraReference: paymentReference || "" } });
       touchedAccountIds.push(cashbookAccountId);
     } catch (glErr) {
@@ -252,9 +252,9 @@ export const remitWht = async (req, res, next) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // PATCH /api/wht-remittance/:id/void
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const voidWhtRemittance = async (req, res, next) => {
   try {
     const { id }     = req.params;

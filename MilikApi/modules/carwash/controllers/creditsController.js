@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+﻿import mongoose from 'mongoose';
 import CarWashCustomerCredit from '../models/CarWashCustomerCredit.js';
 import CarWashCustomer from '../models/CarWashCustomer.js';
 import CarWashJob from '../models/CarWashJob.js';
@@ -65,7 +65,7 @@ export const listCredits = async (req, res, next) => {
       CarWashCustomerCredit.aggregate([
         { $match: { business: businessOid, status, ...(filter.createdAt && { createdAt: filter.createdAt }), ...(filter.customer && { customer: filter.customer }) } },
         { $group: { _id: null, total: { $sum: '$amount' } } },
-      ]),
+      ]).allowDiskUse(true),
     ]);
 
     res.json({
@@ -267,13 +267,13 @@ export const repairCreditLedgers = async (req, res, next) => {
     );
 
     const pending = credits.filter((c) => !postedIds.has(String(c._id)));
-    let posted = 0;
-    for (const creditDoc of pending) {
-      await postCarWashCustomerCreditCreationLedger({ businessId: business, creditDoc, cashbookAccountId: cashbook._id, userId });
-      posted++;
-    }
+    await Promise.all(
+      pending.map((creditDoc) =>
+        postCarWashCustomerCreditCreationLedger({ businessId: business, creditDoc, cashbookAccountId: cashbook._id, userId })
+      )
+    );
 
-    res.json({ success: true, message: `Repaired ${posted} credit ledger entries (${credits.length - posted} already posted).` });
+    res.json({ success: true, message: `Repaired ${pending.length} credit ledger entries (${credits.length - pending.length} already posted).` });
   } catch (err) {
     next(err);
   }

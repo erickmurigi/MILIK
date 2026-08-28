@@ -51,8 +51,14 @@ const CarWashCashbooks = () => {
   }, [accounts, appliedFilters.search]);
 
   const pageCount = Math.max(Math.ceil(filteredAccounts.length / pageSize), 1);
-  const pagedAccounts = filteredAccounts.slice((page - 1) * pageSize, page * pageSize);
-  const totalBalance = filteredAccounts.reduce((sum, account) => sum + Number(account.balance || 0), 0);
+  const pagedAccounts = useMemo(
+    () => filteredAccounts.slice((page - 1) * pageSize, page * pageSize),
+    [filteredAccounts, page, pageSize]
+  );
+  const totalBalance = useMemo(
+    () => filteredAccounts.reduce((sum, account) => sum + Number(account.balance || 0), 0),
+    [filteredAccounts]
+  );
 
   const applyFilters = (event) => {
     event.preventDefault();

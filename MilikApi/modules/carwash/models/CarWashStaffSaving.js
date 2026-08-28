@@ -43,5 +43,6 @@ const carWashStaffSavingSchema = new Schema(
 carWashStaffSavingSchema.index({ business: 1, staff: 1, date: -1 });
 carWashStaffSavingSchema.index({ business: 1, staff: 1, commissionPayout: 1 });
 carWashStaffSavingSchema.index({ business: 1, staff: 1, coveredTo: -1 });
+carWashStaffSavingSchema.index({ business: 1, isReversed: 1, staff: 1 });
 
 export default mongoose.model("CarWashStaffSaving", carWashStaffSavingSchema);

@@ -292,6 +292,8 @@ FinancialLedgerEntrySchema.index({ business: 1, landlord: 1, status: 1, transact
 FinancialLedgerEntrySchema.index({ business: 1, unit: 1, status: 1, transactionDate: -1 });
 // Optimized for report aggregations: $match on business+status+date, $group on accountId
 FinancialLedgerEntrySchema.index({ business: 1, status: 1, transactionDate: 1, accountId: 1 });
+// Covers income-statement property filter: business+property+sourceTransactionType+status+date
+FinancialLedgerEntrySchema.index({ business: 1, property: 1, sourceTransactionType: 1, status: 1, transactionDate: 1 });
 // Optimized for ledger activity: accountId range scan + sort by date/createdAt
 FinancialLedgerEntrySchema.index({ business: 1, accountId: 1, transactionDate: 1, createdAt: 1 });
 // Optimized for liability subledger drill-down: account + status equality then date range

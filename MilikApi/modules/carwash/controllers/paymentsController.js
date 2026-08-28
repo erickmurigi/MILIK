@@ -1,4 +1,4 @@
-import { createError } from "../../../utils/error.js";
+﻿import { createError } from "../../../utils/error.js";
 import mongoose from "mongoose";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import CarWashJob from "../models/CarWashJob.js";
@@ -59,7 +59,7 @@ const refreshJobPaymentStatus = async (business, jobId) => {
     CarWashPayment.aggregate([
       { $match: { business: new mongoose.Types.ObjectId(String(business)), job: jobOid } },
       ...effectivePaidAggregation,
-    ]),
+    ]).allowDiskUse(true),
   ]);
   if (!job) throw createError(404, "Car Wash job not found");
   const paidAmount = Number(totals?.[0]?.paid || 0);
@@ -127,7 +127,7 @@ export const listPayments = async (req, res, next) => {
       CarWashPayment.aggregate([
         { $match: aggFilter },
         { $group: { _id: null, total: { $sum: "$amount" } } },
-      ]),
+      ]).allowDiskUse(true),
     ]);
 
     const totalAmount = Math.round((totalAmountAgg[0]?.total || 0) * 100) / 100;
@@ -157,7 +157,7 @@ export const recordPayment = async (req, res, next) => {
         const cap         = round2(Number(job.price || 0) * maxPct / 100);
         const headroom    = round2(Math.max(0, cap - jobDiscount));
         if (discountAmount > headroom + AMOUNT_TOLERANCE) {
-          return next(createError(400, `Write-off cannot exceed KES ${headroom} — job already has a KES ${jobDiscount} discount applied (${maxPct}% cap)`));
+          return next(createError(400, `Write-off cannot exceed KES ${headroom} â€” job already has a KES ${jobDiscount} discount applied (${maxPct}% cap)`));
         }
       }
     }
@@ -166,12 +166,12 @@ export const recordPayment = async (req, res, next) => {
     const paidRows = await CarWashPayment.aggregate([
       { $match: { business: job.business, job: job._id } },
       ...effectivePaidAggregation,
-    ]);
+    ]).allowDiskUse(true);
     const alreadyPaid = Number(paidRows?.[0]?.paid || 0);
     const outstanding = Math.max(netJobPrice(job) - alreadyPaid, 0);
     if (outstanding <= 0) return next(createError(400, "Car Wash job is already fully paid"));
     // Credit amount = excess paid above what is owed (overpayment).
-    // Only tracked when job has a plate — without a plate we cannot look up a customer,
+    // Only tracked when job has a plate â€” without a plate we cannot look up a customer,
     // and CarWashCustomerCredit.customer is required. Carpet-job overpayments are kept as revenue.
     const creditAmount = effectiveAmount > outstanding + AMOUNT_TOLERANCE && job.plateNumber
       ? round2(effectiveAmount - outstanding) : 0;
@@ -216,7 +216,7 @@ export const recordPayment = async (req, res, next) => {
     const { job: updatedJob, paidAmount: totalEffectivePaid } = await refreshJobPaymentStatus(business, job._id);
 
     // Persist M-Pesa payer phone in-memory now (needed by accrual + SMS below).
-    // The DB writes and commission accrual are independent — run in parallel.
+    // The DB writes and commission accrual are independent â€” run in parallel.
     if (receivedFromPhone) updatedJob.phone = receivedFromPhone;
 
     await Promise.all([
@@ -283,9 +283,9 @@ export const recordPayment = async (req, res, next) => {
           }).catch(() => {});
         }
       } catch (err) {
-        // Credit doc creation failed — ledger entry exists but no credit doc.
+        // Credit doc creation failed â€” ledger entry exists but no credit doc.
         // Log with enough detail to allow manual reconciliation.
-        console.error('[CW Credit] RECONCILIATION NEEDED — ledger entry posted but credit doc creation failed. job=%s creditAmount=%s error=%s',
+        console.error('[CW Credit] RECONCILIATION NEEDED â€” ledger entry posted but credit doc creation failed. job=%s creditAmount=%s error=%s',
           updatedJob.jobNumber, creditAmount, err?.message || err);
       }
     }
@@ -309,7 +309,7 @@ export const deletePayment = async (req, res, next) => {
       CarWashPayment.aggregate([
         { $match: { business: payment.business, job: payment.job } },
         ...effectivePaidAggregation,
-      ]),
+      ]).allowDiskUse(true),
     ]);
     if (!jobBeforeDelete) return next(createError(404, "Car Wash job not found"));
     const effectiveThisPayment = round2(Number(payment.amount || 0) + Number(payment.discountAmount || 0));
@@ -332,7 +332,7 @@ export const deletePayment = async (req, res, next) => {
     }
     // Only revoke the stamp when the job becomes fully unpaid AND staff never manually
     // marked it done. If another payment remains (still partial), the customer earned
-    // the stamp. If the job is "done", the car was serviced — stamp stands.
+    // the stamp. If the job is "done", the car was serviced â€” stamp stands.
     const jobWillBeUnpaid = paidAfterDelete <= 0;
     if (jobWillBeUnpaid && !["done", "paid"].includes(jobBeforeDelete.status)) {
       await revokeStampForJob({ business, jobId: jobBeforeDelete._id, plate: jobBeforeDelete.plateNumber });
@@ -343,14 +343,14 @@ export const deletePayment = async (req, res, next) => {
     await payment.deleteOne();
 
     // Clean up overpayment artifacts so no phantom credits remain after deletion
-    // 1. CarWashCustomerCredit — created when payment exceeded outstanding (manual OR M-Pesa cash-customer overpayment)
+    // 1. CarWashCustomerCredit â€” created when payment exceeded outstanding (manual OR M-Pesa cash-customer overpayment)
     const linkedCredit = await CarWashCustomerCredit.findOneAndDelete({ business, sourcePayment: deletedPaymentId });
     if (linkedCredit) {
-      // M-Pesa overpayment credits have a separate GL entry type — must be reversed explicitly.
+      // M-Pesa overpayment credits have a separate GL entry type â€” must be reversed explicitly.
       // Manual overpayment credits share the payment's GL entry, already reversed above.
       await reverseCarWashCustomerCreditCreationLedger({ businessId: business, creditDocId: linkedCredit._id, req });
     }
-    // 2. CarWashAccountTopup — created when M-Pesa overpayment was routed to a prepaid/credit wallet
+    // 2. CarWashAccountTopup â€” created when M-Pesa overpayment was routed to a prepaid/credit wallet
     if (deletedPaymentMethod === "mpesa" && deletedPaymentRef) {
       const linkedTopup = await CarWashAccountTopup.findOneAndUpdate(
         { business, reference: deletedPaymentRef, isVoided: false },
@@ -429,7 +429,7 @@ export const sendPaymentSms = async (req, res, next) => {
   }
 };
 
-// ─── M-Pesa STK Push ──────────────────────────────────────────────────────────
+// â”€â”€â”€ M-Pesa STK Push â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const initiateStkPush = async (req, res, next) => {
   try {
     const { phone, amount, jobId } = req.body;
@@ -449,7 +449,7 @@ export const initiateStkPush = async (req, res, next) => {
     const primaryConfig = getPrimaryMpesaPaybillConfig(configs);
     let config = primaryConfig;
 
-    // Use the branch's own paybill when available — fall back to primary if the branch config is incomplete
+    // Use the branch's own paybill when available â€” fall back to primary if the branch config is incomplete
     if (job.branch) {
       const branchDoc = await CarWashBranch.findById(job.branch).select("mpesaShortCode").lean();
       const branchCode = String(branchDoc?.mpesaShortCode || "").trim();
@@ -461,7 +461,7 @@ export const initiateStkPush = async (req, res, next) => {
           if (branchConfig.consumerKey && branchConfig.consumerSecret && branchConfig.shortCode && branchPasskey) {
             config = { ...branchConfig, passkey: branchPasskey };
           } else {
-            console.warn("[STK] Branch %s paybill %s has incomplete credentials — falling back to primary config", job.branch, branchCode);
+            console.warn("[STK] Branch %s paybill %s has incomplete credentials â€” falling back to primary config", job.branch, branchCode);
           }
         }
       }
@@ -470,7 +470,7 @@ export const initiateStkPush = async (req, res, next) => {
     // Normalise passkey field name before credential check (handles both casings)
     const passkey = config?.passkey || config?.passKey || "";
     if (!config?.consumerKey || !config?.consumerSecret || !config?.shortCode || !passkey) {
-      return next(createError(400, "M-Pesa credentials not configured for this business. Set them up in Setup → M-Pesa."));
+      return next(createError(400, "M-Pesa credentials not configured for this business. Set them up in Setup â†’ M-Pesa."));
     }
 
     // STK idempotency guard: prevent duplicate prompts for the same job within 60 s
@@ -481,14 +481,14 @@ export const initiateStkPush = async (req, res, next) => {
       createdAt: { $gte: new Date(Date.now() - 60_000) },
     }).lean();
     if (recentPending) {
-      return res.status(409).json({ success: false, message: "An M-Pesa prompt was already sent — please wait for the customer to respond before retrying." });
+      return res.status(409).json({ success: false, message: "An M-Pesa prompt was already sent â€” please wait for the customer to respond before retrying." });
     }
 
     // Validate requested amount does not exceed outstanding balance
     const paidRows = await CarWashPayment.aggregate([
       { $match: { business: new mongoose.Types.ObjectId(String(business)), job: job._id } },
       { $group: { _id: "$job", paid: { $sum: { $add: ["$amount", { $ifNull: ["$discountAmount", 0] }] } } } },
-    ]);
+    ]).allowDiskUse(true);
     const alreadyPaid = Number(paidRows?.[0]?.paid || 0);
     const stkAmount = Math.ceil(Number(amount));
     const outstandingForStkCheck = round2(Math.max(0, netJobPrice(job) - alreadyPaid));

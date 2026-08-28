@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { FaExclamationTriangle, FaPlus, FaRedoAlt, FaTimes, FaTrash, FaUndo } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -13,6 +13,26 @@ import MilikTable from "../../components/common/MilikTable";
 
 const icc = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const lc  = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
+
+const DAMAGE_STATUS_OPTIONS = [
+  { value: "all", label: "All Statuses" },
+  { value: "pending", label: "Pending" },
+  { value: "deducted", label: "Deducted" },
+  { value: "waived", label: "Waived" },
+];
+const DAMAGE_COLUMNS = [
+  { label: "Date" },
+  { label: "Staff" },
+  { label: "Description" },
+  { label: "Amount", align: "right" },
+  { label: "Recovery" },
+  { label: "Status", align: "center" },
+];
+const DEDUCTION_MODE_OPTIONS = [
+  { value: "full", label: "Full — deduct entire balance at next payout" },
+  { value: "percent", label: "Installment % — fixed % of damage per payout" },
+  { value: "fixed", label: "Fixed amount — fixed Ksh per payout" },
+];
 const r2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
 const statusPill = (status) => {
@@ -236,12 +256,7 @@ export default function CarWashStaffDamages() {
             size="sm"
             value={filterStatus}
             onChange={(v) => { setFilterStatus(v ?? "all"); setPage(1); }}
-            options={[
-              { value: "all", label: "All Statuses" },
-              { value: "pending", label: "Pending" },
-              { value: "deducted", label: "Deducted" },
-              { value: "waived", label: "Waived" },
-            ]}
+            options={DAMAGE_STATUS_OPTIONS}
           />
           <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
             className="h-8 border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none" />
@@ -259,14 +274,7 @@ export default function CarWashStaffDamages() {
 
         {/* Table */}
         <MilikTable
-          columns={[
-            { label: "Date" },
-            { label: "Staff" },
-            { label: "Description" },
-            { label: "Amount", align: "right" },
-            { label: "Recovery" },
-            { label: "Status", align: "center" },
-          ]}
+          columns={DAMAGE_COLUMNS}
           rows={damages}
           rowKey="_id"
           loading={loading}
@@ -410,11 +418,7 @@ export default function CarWashStaffDamages() {
                   label="Recovery mode"
                   value={form.deductionMode}
                   onChange={(v) => setForm((f) => ({ ...f, deductionMode: v ?? "full", deductionValue: "" }))}
-                  options={[
-                    { value: "full", label: "Full — deduct entire balance at next payout" },
-                    { value: "percent", label: "Installment % — fixed % of damage per payout" },
-                    { value: "fixed", label: "Fixed amount — fixed Ksh per payout" },
-                  ]}
+                  options={DEDUCTION_MODE_OPTIONS}
                 />
               </div>
               {form.deductionMode === "percent" && (

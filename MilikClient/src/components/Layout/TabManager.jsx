@@ -103,6 +103,9 @@ const TabManager = ({ darkMode }) => {
   const tabsByWorkspaceRef = useRef(tabsByWorkspace);
   useEffect(() => { tabsByWorkspaceRef.current = tabsByWorkspace; });
 
+  const pendingRouteRef = useRef(null);
+  const [isNavigating, setIsNavigating] = useState(false);
+
   const scrollRef  = useRef(null);
   const tabRefs    = useRef({});
   const [scrollState, setScrollState] = useState({ left: false, right: false });
@@ -142,6 +145,13 @@ const TabManager = ({ darkMode }) => {
   );
 
   useEffect(() => { locationPathRef.current = location.pathname; }, [location.pathname]);
+
+  // Clear the pending-navigation indicator once the route actually commits.
+  useEffect(() => {
+    if (!pendingRouteRef.current) return;
+    pendingRouteRef.current = null;
+    setIsNavigating(false);
+  }, [location.pathname]);
 
   // Reset tabs and navigate to module picker whenever the active company changes.
   useEffect(() => {
@@ -257,7 +267,10 @@ const TabManager = ({ darkMode }) => {
   }, [currentCompanyName, currentTabTitle, location.pathname]);
 
   const switchTab = useCallback((tabId, route) => {
+    if (route === location.pathname) return;
     const now = Date.now();
+    pendingRouteRef.current = route;
+    setIsNavigating(true);
     setTabsByWorkspace((prev) => ({
       ...prev,
       [currentWorkspace]: (prev[currentWorkspace] || []).map((t) =>
@@ -266,7 +279,7 @@ const TabManager = ({ darkMode }) => {
     }));
     setActiveTabsByWorkspace((prev) => ({ ...prev, [currentWorkspace]: tabId }));
     navigate(route);
-  }, [currentWorkspace, navigate]);
+  }, [currentWorkspace, navigate, location.pathname]);
 
   const closeTab = useCallback((tabId, event) => {
     event?.stopPropagation?.();
@@ -301,7 +314,7 @@ const TabManager = ({ darkMode }) => {
 
   return (
     <div
-      className={`flex items-center border-b shadow-lg overflow-hidden ${
+      className={`relative flex items-center border-b shadow-lg overflow-hidden ${
         darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#31694E] border-[#1f4a35]'
       }`}
     >
@@ -379,6 +392,10 @@ const TabManager = ({ darkMode }) => {
         >
           <FaWindowClose className="h-3.5 w-3.5" />
         </button>
+      )}
+
+      {isNavigating && (
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-400 animate-pulse pointer-events-none" />
       )}
     </div>
   );

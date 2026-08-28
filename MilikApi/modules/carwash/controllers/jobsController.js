@@ -1,4 +1,4 @@
-import { createError } from "../../../utils/error.js";
+﻿import { createError } from "../../../utils/error.js";
 import mongoose from "mongoose";
 import Company from "../../../models/Company.js";
 import CarWashJob from "../models/CarWashJob.js";
@@ -137,7 +137,7 @@ const getPaidAmount = async (business, jobId) => {
   const rows = await CarWashPayment.aggregate([
     { $match: { business: new mongoose.Types.ObjectId(String(business)), job: new mongoose.Types.ObjectId(String(jobId)) } },
     { $group: { _id: "$job", amount: { $sum: "$amount" } } },
-  ]);
+  ]).allowDiskUse(true);
   return Number(rows?.[0]?.amount || 0);
 };
 
@@ -165,7 +165,7 @@ export const listJobs = async (req, res, next) => {
       filter.$or = [{ service: svcId }, { "serviceLines.service": svcId }];
     }
     if (req.query.staff && mongoose.Types.ObjectId.isValid(req.query.staff)) {
-      // assignedStaff is now an array — $elemMatch or direct equality both work
+      // assignedStaff is now an array â€” $elemMatch or direct equality both work
       filter.assignedStaff = new mongoose.Types.ObjectId(req.query.staff);
     }
     if (req.query.dateFrom || req.query.dateTo) {
@@ -239,7 +239,7 @@ export const getJob = async (req, res, next) => {
       CarWashPayment.aggregate([
         { $match: { business: new mongoose.Types.ObjectId(String(business)), job: new mongoose.Types.ObjectId(String(jobId)) } },
         { $group: { _id: null, amount: { $sum: "$amount" } } },
-      ]),
+      ]).allowDiskUse(true),
     ]);
     if (!job) return next(createError(404, "Car Wash job not found"));
     const amountPaid = Number(paidRows?.[0]?.amount || 0);
@@ -261,7 +261,7 @@ export const createJob = async (req, res, next) => {
     if (jobType === "carpet" && !itemDescription) return next(createError(400, "Item description is required for carpet jobs"));
     // balance_bf: plate optional (debt may be known only by customer name)
 
-    // Resolve service lines — new multi-line format takes priority
+    // Resolve service lines â€” new multi-line format takes priority
     let serviceLines = null;
     let rootService = null, rootServiceName = "", rootVehicleType = "", totalPrice = 0, totalTaxAmount = 0;
 
@@ -339,7 +339,7 @@ export const createJob = async (req, res, next) => {
       resolvedCreditAccountCompanyName = acc.contactPerson || acc.accountNumber || "";
     }
 
-    // Auto-detect account by plate — covers prepaid, credit, and monthly accounts.
+    // Auto-detect account by plate â€” covers prepaid, credit, and monthly accounts.
     // Voucher accounts are excluded: they are always selected manually by the supervisor.
     // Prepaid is prioritised so the wallet auto-deduction below still fires first.
     if (!resolvedCreditAccount && plateNumber && jobType === "vehicle") {
@@ -399,14 +399,14 @@ export const createJob = async (req, res, next) => {
     }
 
     if ((job.jobType === "vehicle" || job.jobType === "balance_bf") && job.plateNumber) {
-      // Awaited — guarantees customer + loyalty card exist before response is sent.
+      // Awaited â€” guarantees customer + loyalty card exist before response is sent.
       try {
         await autoEnrollPlate({ business, plate: job.plateNumber, customerName: job.customerName, phone: job.phone });
       } catch (err) {
         console.error("[CW Job] autoEnroll failed job=%s plate=%s: %s", job.jobNumber, job.plateNumber, err?.message || err);
       }
 
-      // Award stamp for completed vehicle jobs — balance_bf is historical debt, not a new wash.
+      // Award stamp for completed vehicle jobs â€” balance_bf is historical debt, not a new wash.
       // For done status: only credit account jobs earn the stamp here (cash/M-Pesa stamp fires on payment).
       const shouldStampOnCreate =
         job.jobType === "vehicle" &&
@@ -423,7 +423,7 @@ export const createJob = async (req, res, next) => {
       // Keep customer stats current
       recomputeCustomerStats(business, job.plateNumber).catch(() => {});
 
-      // Register plate on the credit account — but not for voucher accounts (any plate can use any voucher)
+      // Register plate on the credit account â€” but not for voucher accounts (any plate can use any voucher)
       if (resolvedCreditAccount && job.plateNumber && resolvedCreditAccountType !== "voucher") {
         CarWashCreditAccount.updateOne(
           { _id: resolvedCreditAccount },
@@ -432,7 +432,7 @@ export const createJob = async (req, res, next) => {
       }
     }
 
-    // Auto-apply prepaid credit — atomically deduct min(accountCredit, netPrice) with no race condition.
+    // Auto-apply prepaid credit â€” atomically deduct min(accountCredit, netPrice) with no race condition.
     // Uses a MongoDB 4.2+ aggregation-pipeline update so the read-modify-write is a single atomic op.
     const netPrice = round2(Math.max(0, totalPrice - discountAmount));
     if (resolvedCreditAccount && netPrice > 0 && resolvedCreditAccountType !== "voucher") {
@@ -615,7 +615,7 @@ export const updateJob = async (req, res, next) => {
     await existing.save();
     if (existing.paymentStatus === "paid" || existing.paymentStatus === "partial") {
       // Re-evaluate commissions with updated service lines/prices.
-      // "paid" → payable, "partial" → earned. accrueCommissionForJob handles both.
+      // "paid" â†’ payable, "partial" â†’ earned. accrueCommissionForJob handles both.
       await accrueCommissionForJob({ req, job: existing });
       // Award stamp when paid OR when done (manual completion without payment).
       // awardLoyaltyStamp has a per-job idempotency guard, but we merge the two
@@ -628,7 +628,7 @@ export const updateJob = async (req, res, next) => {
         }
       }
     } else {
-      // Unpaid or cancelled — cancel any pending commissions
+      // Unpaid or cancelled â€” cancel any pending commissions
       const cancelReason = existing.status === "cancelled"
         ? "Car Wash job was cancelled."
         : "Job not yet paid.";
@@ -676,13 +676,13 @@ export const updateJobStatus = async (req, res, next) => {
       if (status === "paid") return next(createError(400, "Record payment before marking a Car Wash job as paid"));
       if (status === "cancelled") {
         const hasPayment = await CarWashPayment.exists({ business, job: req.params.id });
-        if (hasPayment) return next(createError(400, "Cannot cancel a job that has payments — reverse the payments first."));
+        if (hasPayment) return next(createError(400, "Cannot cancel a job that has payments â€” reverse the payments first."));
         return next(createError(404, "Car wash job not found"));
       }
-      return next(createError(400, "This job is done and fully paid — its status cannot be changed."));
+      return next(createError(400, "This job is done and fully paid â€” its status cannot be changed."));
     }
 
-    // Pre-paid job advanced to ready → auto-mark done so it leaves washboard/queue display
+    // Pre-paid job advanced to ready â†’ auto-mark done so it leaves washboard/queue display
     if (status === "ready" && job.paymentStatus === "paid") {
       job.status = "done";
       await CarWashJob.updateOne({ _id: job._id }, { status: "done" });
@@ -695,7 +695,7 @@ export const updateJobStatus = async (req, res, next) => {
     } else {
       if (effectiveStatus === "done") {
         if (job.isVoucher) {
-          // Voucher job — courtesy SMS to customer, no stamp
+          // Voucher job â€” courtesy SMS to customer, no stamp
           resolveCarWashSmsBody(business, "carwash_voucher_completed", {
             customerName: job.customerName || "Customer",
             plate: job.plateNumber || "",
@@ -820,11 +820,11 @@ export const deleteJobsBulk = async (req, res, next) => {
       CarWashPayment.aggregate([
         { $match: { business: businessOid, job: { $in: jobObjectIds } } },
         { $group: { _id: "$job", count: { $sum: 1 } } },
-      ]),
+      ]).allowDiskUse(true),
       CarWashStaffCommission.aggregate([
         { $match: { business: businessOid, job: { $in: jobObjectIds }, status: { $in: ["earned", "payable", "paid"] } } },
         { $group: { _id: "$job", count: { $sum: 1 } } },
-      ]),
+      ]).allowDiskUse(true),
     ]);
     const paymentsMap = new Map(paymentCounts.map((r) => [String(r._id), r.count]));
     const commissionsMap = new Map(commissionCounts.map((r) => [String(r._id), r.count]));
@@ -884,7 +884,7 @@ export const sendJobSms = async (req, res, next) => {
   }
 };
 
-// ─── Carpet photo upload ──────────────────────────────────────────────────────
+// â”€â”€â”€ Carpet photo upload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const uploadJobPhotos = (req, res, next) => {
   carpetUpload(req, res, async (err) => {
     if (err) return next(createError(400, err?.message || "Photo upload failed"));

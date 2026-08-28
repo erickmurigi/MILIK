@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
 import CarWashStaffDamage from "../models/CarWashStaffDamage.js";
 import CarWashStaff from "../models/CarWashStaff.js";
@@ -172,7 +172,7 @@ export const listDamagesBalances = async (req, res, next) => {
           ]}},
         }},
         { $match: { $or: [{ totalDeducted: { $gt: 0 } }, { totalWaived: { $gt: 0 } }, { 'pendingDocs.0': { $exists: true } }] } },
-      ]),
+      ]).allowDiskUse(true),
     ]);
 
     // Compute installment totals in JS (only for pending docs — much smaller set)

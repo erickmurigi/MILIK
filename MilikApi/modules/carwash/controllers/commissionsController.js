@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
 import CarWashCommissionRule from "../models/CarWashCommissionRule.js";
 import CarWashStaffCommission from "../models/CarWashStaffCommission.js";
@@ -140,7 +140,7 @@ export const listCommissions = async (req, res, next) => {
       CarWashStaffCommission.aggregate([
         { $match: summaryFilter },
         { $group: { _id: "$status", amount: { $sum: "$commissionAmount" }, count: { $sum: 1 } } },
-      ]),
+      ]).allowDiskUse(true),
     ]);
 
     const summary = summaryRows.reduce((acc, row) => {
@@ -178,7 +178,7 @@ export const createCommissionPayout = async (req, res, next) => {
     );
     if (flipped.modifiedCount !== commissionIds.length) {
       // A concurrent payout already claimed some commissions
-      return next(createError(409, "Another payout is being processed for this staff member — please try again in a moment."));
+      return next(createError(409, "Another payout is being processed for this staff member â€” please try again in a moment."));
     }
 
     const commissionAmount = round2(commissions.reduce((sum, item) => sum + Number(item.commissionAmount || 0), 0));
@@ -278,7 +278,7 @@ export const createCommissionPayout = async (req, res, next) => {
       damagesHeld,
       netCash,
       message: messageParts.length
-        ? `Commission payout recorded — ${messageParts.join(", ")}`
+        ? `Commission payout recorded â€” ${messageParts.join(", ")}`
         : "Commission payout recorded",
     });
   } catch (error) {
@@ -331,7 +331,7 @@ export const listCommissionPayouts = async (req, res, next) => {
   }
 };
 
-// ─── Staff wallet ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Staff wallet â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const getStaffWallet = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -351,7 +351,7 @@ export const getStaffWallet = async (req, res, next) => {
             amount: { $sum: "$commissionAmount" },
             count:  { $sum: 1 },
         }},
-      ]),
+      ]).allowDiskUse(true),
       getStaffSavingsBalance(business, staffId),
       getStaffDamagesSummary(business, staffId),
       CarWashStaffSaving.find({ business: businessOid, staff: staffOid })
@@ -387,7 +387,7 @@ export const getStaffWallet = async (req, res, next) => {
   }
 };
 
-// ─── Single earned/payable commission reversal ────────────────────────────────
+// â”€â”€â”€ Single earned/payable commission reversal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const reverseEarnedCommission = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -400,7 +400,7 @@ export const reverseEarnedCommission = async (req, res, next) => {
     if (!["earned", "payable"].includes(commission.status)) {
       return next(createError(400,
         commission.status === "paid"
-          ? "Cannot reverse a paid commission — reverse the payout first"
+          ? "Cannot reverse a paid commission â€” reverse the payout first"
           : "Commission is already cancelled"
       ));
     }
@@ -424,7 +424,7 @@ export const reverseEarnedCommission = async (req, res, next) => {
   }
 };
 
-// ─── Commission payout reversal ───────────────────────────────────────────────
+// â”€â”€â”€ Commission payout reversal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const reverseCommissionPayout = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -460,7 +460,7 @@ export const reverseCommissionPayout = async (req, res, next) => {
       );
     }
 
-    // 4. Release damage holds — damages return to "pending" for next payout
+    // 4. Release damage holds â€” damages return to "pending" for next payout
     if (payout.damagesHeld > 0) {
       await releaseDamagesForPayout(business, payout._id);
     }
@@ -482,7 +482,7 @@ export const reverseCommissionPayout = async (req, res, next) => {
   }
 };
 
-// ─── Savings disbursement reversal ────────────────────────────────────────────
+// â”€â”€â”€ Savings disbursement reversal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const reverseSavingsPayout = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -512,7 +512,7 @@ export const reverseSavingsPayout = async (req, res, next) => {
   }
 };
 
-// ─── Savings payout (annual or on-demand) ────────────────────────────────────
+// â”€â”€â”€ Savings payout (annual or on-demand) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const createSavingsPayout = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -543,7 +543,7 @@ export const createSavingsPayout = async (req, res, next) => {
 };
 
 
-// ─── Savings transaction history ──────────────────────────────────────────────
+// â”€â”€â”€ Savings transaction history â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const listSavings = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -581,7 +581,7 @@ export const listSavings = async (req, res, next) => {
   }
 };
 
-// ─── Delete only legacy "daily" records (from old cron system) ────────────────
+// â”€â”€â”€ Delete only legacy "daily" records (from old cron system) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const cleanupLegacySavings = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -592,7 +592,7 @@ export const cleanupLegacySavings = async (req, res, next) => {
   }
 };
 
-// ─── Wipe all savings records for the business (admin reset) ──────────────────
+// â”€â”€â”€ Wipe all savings records for the business (admin reset) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const resetSavings = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -603,7 +603,7 @@ export const resetSavings = async (req, res, next) => {
   }
 };
 
-// ─── Initialize savings tracking for all active staff ─────────────────────────
+// â”€â”€â”€ Initialize savings tracking for all active staff â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const initializeSavings = async (req, res, next) => {
   try {
     const business   = resolveActiveBusinessId(req);
@@ -621,7 +621,7 @@ export const initializeSavings = async (req, res, next) => {
   }
 };
 
-// ─── Savings balance summary (all staff, one aggregation) ─────────────────────
+// â”€â”€â”€ Savings balance summary (all staff, one aggregation) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const listSavingsBalances = async (req, res, next) => {
   try {
     const business    = resolveActiveBusinessId(req);
@@ -637,7 +637,7 @@ export const listSavingsBalances = async (req, res, next) => {
           disbursed:    { $sum: { $cond: [{ $eq: ["$type", "disbursement"] }, "$amount", 0] } },
           lastCoveredTo:{ $max: { $cond: [{ $eq: ["$type", "deduction"] }, "$coveredTo", null] } },
         }},
-      ]),
+      ]).allowDiskUse(true),
       CarWashStaff.find({ business: businessOid, active: { $ne: false } }).select("name").lean(),
     ]);
 

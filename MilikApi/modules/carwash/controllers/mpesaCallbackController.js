@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 import axios from "axios";
 import crypto from "crypto";
 import { readFileSync, existsSync } from "fs";
@@ -42,7 +42,7 @@ const parseMpesaDate = (raw = "") => {
     const hour  = Number(text.slice(8, 10));
     const min   = Number(text.slice(10, 12));
     const sec   = Number(text.slice(12, 14));
-    // TransTime is EAT (UTC+3) — convert to UTC by subtracting 3 hours
+    // TransTime is EAT (UTC+3) â€” convert to UTC by subtracting 3 hours
     const dt = new Date(Date.UTC(year, month - 1, day, hour - 3, min, sec));
     return Number.isNaN(dt.getTime()) ? new Date() : dt;
   }
@@ -109,11 +109,11 @@ const refreshJobPaymentStatus = async (business, jobId) => {
   const totals = await CarWashPayment.aggregate([
     { $match: { business: job.business, job: job._id } },
     { $group: { _id: "$job", amount: { $sum: "$amount" } } },
-  ]);
+  ]).allowDiskUse(true);
   const paidAmount = Number(totals?.[0]?.amount || 0);
   const price = netJobPrice(job);
   job.paymentStatus = paidAmount <= 0 ? "unpaid" : paidAmount < price ? "partial" : "paid";
-  // Fully-paid ready job → auto-advance to done so it leaves the washboard
+  // Fully-paid ready job â†’ auto-advance to done so it leaves the washboard
   if (job.paymentStatus === "paid" && job.status === "ready") {
     job.status = "done";
   }
@@ -125,7 +125,7 @@ const refreshJobPaymentStatus = async (business, jobId) => {
   return job;
 };
 
-// ─── Safaricom MSISDN normalisation (shared) ──────────────────────────────────
+// â”€â”€â”€ Safaricom MSISDN normalisation (shared) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const normalizeMsisdn = (raw = "") => {
   const _digits = String(raw || "").replace(/\D/g, "");
   if (_digits.startsWith("254") && _digits.length === 12) return "0" + _digits.slice(3);
@@ -134,7 +134,7 @@ const normalizeMsisdn = (raw = "") => {
   return null;
 };
 
-// ─── Transaction Status Query — fetches actual payer phone from Safaricom ─────
+// â”€â”€â”€ Transaction Status Query â€” fetches actual payer phone from Safaricom â”€â”€â”€â”€â”€
 const MPESA_BASE_URL = process.env.MPESA_ENVIRONMENT === "production"
   ? "https://api.safaricom.co.ke"
   : "https://sandbox.safaricom.co.ke";
@@ -176,7 +176,7 @@ const triggerTransactionStatusQuery = async ({ config, transId, businessId, noti
     }
     const token = await getMpesaAccessToken(consumerKey, consumerSecret);
     const apiBase = normalizeText(process.env.MPESA_CALLBACK_BASE_URL || "").replace(/\/$/, "");
-    if (!apiBase) { console.warn("[TxnStatus] MPESA_CALLBACK_BASE_URL not set — skipping query"); return; }
+    if (!apiBase) { console.warn("[TxnStatus] MPESA_CALLBACK_BASE_URL not set â€” skipping query"); return; }
 
     await axios.post(
       `${MPESA_BASE_URL}/mpesa/transactionstatus/v1/queryresult`,
@@ -201,7 +201,7 @@ const triggerTransactionStatusQuery = async ({ config, transId, businessId, noti
 };
 
 export const handleTransactionStatusResult = async (req, res) => {
-  // Acknowledge immediately — processing is async
+  // Acknowledge immediately â€” processing is async
   res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
   try {
     const result = req.body?.Result;
@@ -210,7 +210,7 @@ export const handleTransactionStatusResult = async (req, res) => {
     const transId = normalizeText(result.TransactionID || "");
     if (!transId) return;
 
-    // Extract DebitPartyName — format "254712345678 - JOHN DOE"
+    // Extract DebitPartyName â€” format "254712345678 - JOHN DOE"
     const params = Array.isArray(result.ResultParameters?.ResultParameter)
       ? result.ResultParameters.ResultParameter
       : [];
@@ -255,7 +255,7 @@ export const handleTransactionStatusResult = async (req, res) => {
         const totals = await CarWashPayment.aggregate([
           { $match: { business: notif.business, job: job._id } },
           { $group: { _id: null, amount: { $sum: "$amount" } } },
-        ]);
+        ]).allowDiskUse(true);
         const totalPaid = Number(totals?.[0]?.amount || 0);
         const remaining = round2(Math.max(0, netJobPrice(job) - totalPaid));
         const pendingStampBody = notif.pendingStampSmsBody || null;
@@ -280,7 +280,7 @@ export const handleTransactionStatusResult = async (req, res) => {
   }
 };
 
-// ─── STK Push callback ───────────────────────────────────────────────────────
+// â”€â”€â”€ STK Push callback â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const handleStkCallback = async (req, res) => {
   res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
   try {
@@ -350,7 +350,7 @@ export const handleStkCallback = async (req, res) => {
     const totals = await CarWashPayment.aggregate([
       { $match: { business: job.business, job: job._id } },
       { $group: { _id: null, amount: { $sum: "$amount" } } },
-    ]);
+    ]).allowDiskUse(true);
     const alreadyPaid  = round2(totals?.[0]?.amount || 0);
     const outstanding  = round2(Math.max(round2(netJobPrice(job)) - alreadyPaid, 0));
     if (outstanding <= 0) {
@@ -412,11 +412,11 @@ export const validateCarWashCallback = async (req, res) => {
     const resolved = await resolveCarWashCompanyAndConfig(shortCode);
 
     if (!resolved) {
-      return res.status(200).json({ ResultCode: 1, ResultDesc: "Rejected – service not found" });
+      return res.status(200).json({ ResultCode: 1, ResultDesc: "Rejected â€“ service not found" });
     }
 
     // If the company has opted out of validation (responseType = "Completed"),
-    // accept blindly — they don't want Safaricom to wait on a DB round-trip.
+    // accept blindly â€” they don't want Safaricom to wait on a DB round-trip.
     const responseType = normalizeText(resolved.config?.responseType || "Completed");
     if (responseType === "Completed") {
       return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
@@ -460,7 +460,7 @@ export const validateCarWashCallback = async (req, res) => {
     return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
   } catch (err) {
     console.error("[CW Validation] Unexpected error: %s", err?.message || err);
-    // On any error always accept — Safaricom requires a response and we can't
+    // On any error always accept â€” Safaricom requires a response and we can't
     // block a payment due to a server fault. Confirmation handler will handle edge cases.
     return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
   }
@@ -480,8 +480,8 @@ export const confirmCarWashCallback = async (req, res) => {
     const resolved = await resolveCarWashCompanyAndConfig(shortCode);
 
     if (!resolved) {
-      await saveNotif({ status: "error", resultCode: 0, resultDesc: "Accepted – company not matched" });
-      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – company not matched" });
+      await saveNotif({ status: "error", resultCode: 0, resultDesc: "Accepted â€“ company not matched" });
+      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted â€“ company not matched" });
     }
 
     const { company, config, branch } = resolved;
@@ -503,22 +503,22 @@ export const confirmCarWashCallback = async (req, res) => {
     notifBase = { ...notifBase, transactionCode, billRefNumber, plate, amount, msisdn: normalizedMsisdn || "", maskedMsisdn, senderName, transactionDate: transDate };
 
     if (!plate || amount <= 0) {
-      await saveNotif({ status: "error", resultCode: 0, resultDesc: "Accepted – insufficient data" });
-      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – insufficient data" });
+      await saveNotif({ status: "error", resultCode: 0, resultDesc: "Accepted â€“ insufficient data" });
+      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted â€“ insufficient data" });
     }
 
-    // Reject blank transaction codes — the unique index only protects non-empty references,
+    // Reject blank transaction codes â€” the unique index only protects non-empty references,
     // so a blank code would bypass duplicate detection and could double-create payments.
     if (!transactionCode) {
-      await saveNotif({ status: "unmatched", resultCode: 0, resultDesc: "Accepted – no transaction code" });
-      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – no transaction code" });
+      await saveNotif({ status: "unmatched", resultCode: 0, resultDesc: "Accepted â€“ no transaction code" });
+      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted â€“ no transaction code" });
     }
 
-    // Duplicate check — same transaction code already processed
+    // Duplicate check â€” same transaction code already processed
     const dup = await CarWashMpesaNotification.findOne({ transactionCode, status: "matched" }).lean();
     if (dup) {
       await saveNotif({ status: "duplicate", resultCode: 0, resultDesc: "Duplicate transaction" });
-      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – duplicate" });
+      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted â€“ duplicate" });
     }
 
     const job = await CarWashJob.findOne({
@@ -589,12 +589,12 @@ export const confirmCarWashCallback = async (req, res) => {
           }
         })();
 
-        return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – prepaid wallet topped up" });
+        return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted â€“ prepaid wallet topped up" });
       }
 
       // Voucher account: company pays with their account number as bill ref.
       // Full amount is credited to the wallet, then FIFO-allocated to open jobs (oldest first).
-      // Any remainder stays as account credit — auto-deducted as new jobs come in.
+      // Any remainder stays as account credit â€” auto-deducted as new jobs come in.
       const allVoucherAccs = await CarWashCreditAccount.find({
         business: businessId, accountType: "voucher", status: "active",
       }).select("_id accountNumber accountCredit").lean();
@@ -641,7 +641,7 @@ export const confirmCarWashCallback = async (req, res) => {
           const vPaidAggs = await CarWashPayment.aggregate([
             { $match: { business: new mongoose.Types.ObjectId(String(businessId)), job: { $in: vJobIds } } },
             { $group: { _id: "$job", paid: { $sum: "$amount" } } },
-          ]);
+          ]).allowDiskUse(true);
           const paidByJob = new Map(vPaidAggs.map(r => [String(r._id), Number(r.paid)]));
 
           for (const vJob of openVoucherJobs) {
@@ -673,15 +673,15 @@ export const confirmCarWashCallback = async (req, res) => {
               creditRemaining = round2(creditRemaining - payAmount);
               allocatedJobNumbers.push(vJob.jobNumber || String(vJob._id));
             } catch (_allocErr) {
-              // Skip on per-job error — credit stays on wallet, staff can allocate manually
+              // Skip on per-job error â€” credit stays on wallet, staff can allocate manually
             }
           }
         }
 
         const allocNote = allocatedJobNumbers.length > 0
           ? `Allocated to ${allocatedJobNumbers.join(", ")}${creditRemaining > 0.009 ? `; KES ${round2(creditRemaining)} as credit` : ""}`
-          : `No open jobs — KES ${amount} stored as credit`;
-        await saveNotif({ status: "matched", resultCode: 0, resultDesc: `Voucher FIFO – ${allocNote}` });
+          : `No open jobs â€” KES ${amount} stored as credit`;
+        await saveNotif({ status: "matched", resultCode: 0, resultDesc: `Voucher FIFO â€“ ${allocNote}` });
 
         // SMS confirmation fire-and-forget
         (async () => {
@@ -706,38 +706,38 @@ export const confirmCarWashCallback = async (req, res) => {
           }
         })();
 
-        return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – voucher allocation complete" });
+        return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted â€“ voucher allocation complete" });
       }
 
       await saveNotif({ status: "unmatched", resultCode: 0, resultDesc: `No open job found for plate ${plate}` });
       sendUnmatchedPaymentSms({ business: businessId, businessName: company.name, senderName, amount, phone: normalizedMsisdn, maskedMsisdn }).catch(() => {});
-      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – no open job found for plate" });
+      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted â€“ no open job found for plate" });
     }
 
     const cashbookId = config?.defaultCashbookAccountId;
     if (!cashbookId || !mongoose.Types.ObjectId.isValid(String(cashbookId))) {
       await saveNotif({ matchedJob: job._id, status: "error", resultCode: 0, resultDesc: "Cashbook not configured" });
-      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – cashbook not configured" });
+      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted â€“ cashbook not configured" });
     }
     const cashbook = await ChartOfAccount.findOne({ _id: cashbookId, business: businessId, type: "asset", isPosting: true }).lean();
     if (!cashbook) {
       await saveNotif({ matchedJob: job._id, status: "error", resultCode: 0, resultDesc: "Cashbook not found" });
-      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – cashbook not found" });
+      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted â€“ cashbook not found" });
     }
 
     const totals = await CarWashPayment.aggregate([
       { $match: { business: businessId, job: job._id } },
       { $group: { _id: "$job", amount: { $sum: "$amount" } } },
-    ]);
+    ]).allowDiskUse(true);
     const alreadyPaid = round2(totals?.[0]?.amount || 0);
     const outstanding = round2(Math.max(round2(netJobPrice(job)) - alreadyPaid, 0));
     if (outstanding <= 0) {
       await saveNotif({ matchedJob: job._id, status: "duplicate", resultCode: 0, resultDesc: "Job already fully paid" });
-      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – job already fully paid" });
+      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted â€“ job already fully paid" });
     }
 
     const paidAmount = round2(amount);
-    // Cap the recorded payment at the outstanding amount — excess is routed separately
+    // Cap the recorded payment at the outstanding amount â€” excess is routed separately
     const appliedAmount = round2(Math.min(paidAmount, outstanding));
     let payment;
     try {
@@ -755,8 +755,8 @@ export const confirmCarWashCallback = async (req, res) => {
     } catch (payErr) {
       // E11000 = unique-index violation: same M-Pesa receipt already created a payment
       if (payErr.code === 11000) {
-        await saveNotif({ matchedJob: job._id, status: "duplicate", resultCode: 0, resultDesc: "Duplicate receipt — payment already recorded" });
-        return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – duplicate receipt" });
+        await saveNotif({ matchedJob: job._id, status: "duplicate", resultCode: 0, resultDesc: "Duplicate receipt â€” payment already recorded" });
+        return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted â€“ duplicate receipt" });
       }
       throw payErr;
     }
@@ -774,13 +774,13 @@ export const confirmCarWashCallback = async (req, res) => {
 
     const jobUpdates = { ...(branchId && !job.branch ? { branch: branchId } : {}) };
     if (!job.isVoucher) {
-      // Normal jobs: M-Pesa payer is the customer — overwrite phone & name with verified Safaricom data
+      // Normal jobs: M-Pesa payer is the customer â€” overwrite phone & name with verified Safaricom data
       if (normalizedMsisdn) jobUpdates.phone = normalizedMsisdn;
       if (!normalizedMsisdn && msisdn) jobUpdates.maskedMsisdn = msisdn;
       if (senderName) jobUpdates.customerName = senderName;
     }
     // Voucher jobs: phone & customerName were set at job creation (the actual customer's details).
-    // The M-Pesa payer is the car wash cashier — do NOT overwrite the customer's contact.
+    // The M-Pesa payer is the car wash cashier â€” do NOT overwrite the customer's contact.
     if (Object.keys(jobUpdates).length) {
       await CarWashJob.updateOne({ _id: job._id, business: businessId }, { $set: jobUpdates });
     }
@@ -810,7 +810,7 @@ export const confirmCarWashCallback = async (req, res) => {
             { new: true }
           );
           if (overpayAcc) {
-            // Has a credit/prepaid account — top up wallet and post Dr Cashbook / Cr 4400
+            // Has a credit/prepaid account â€” top up wallet and post Dr Cashbook / Cr 4400
             const topupDoc = await CarWashAccountTopup.create({
               business: businessId,
               account: overpayAcc._id,
@@ -823,7 +823,7 @@ export const confirmCarWashCallback = async (req, res) => {
             });
             postCarWashTopupLedger({ businessId, topup: topupDoc, cashbookAccountId: cashbook._id, userId: null }).catch(() => {});
           } else {
-            // No credit account — save as customer credit and post Dr Cashbook / Cr 2162
+            // No credit account â€” save as customer credit and post Dr Cashbook / Cr 2162
             const customer = await CarWashCustomer.findOne({ business: businessId, plates: buildPlateRegex(plate) }).lean();
             if (!customer) return;
             const creditDoc = await CarWashCustomerCredit.create({
@@ -834,7 +834,7 @@ export const confirmCarWashCallback = async (req, res) => {
               status: "active",
               sourceJob: job._id,
               sourcePayment: payment._id,
-              notes: `M-Pesa overpayment from C2B – ${transactionCode || "N/A"} (${senderName || "Unknown"})`,
+              notes: `M-Pesa overpayment from C2B â€“ ${transactionCode || "N/A"} (${senderName || "Unknown"})`,
             });
             postCarWashCustomerCreditCreationLedger({ businessId, creditDoc, cashbookAccountId: cashbook._id, userId: null })
               .catch((e) => console.error("[C2B] Credit GL posting failed plate=%s: %s", plate, e?.message));
@@ -881,7 +881,7 @@ export const confirmCarWashCallback = async (req, res) => {
   }
 };
 
-// ─── Mark notification as reversed (manual — when reversed from M-Pesa portal) ─
+// â”€â”€â”€ Mark notification as reversed (manual â€” when reversed from M-Pesa portal) â”€
 export const markNotificationReversed = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -897,13 +897,13 @@ export const markNotificationReversed = async (req, res, next) => {
     notif.notes        = [notif.notes, `Reversed: ${reversalRef}`].filter(Boolean).join(" | ");
     await notif.save();
 
-    res.json({ success: true, data: notif, message: "Notification marked as reversed — allocation blocked" });
+    res.json({ success: true, data: notif, message: "Notification marked as reversed â€” allocation blocked" });
   } catch (err) {
     next(err);
   }
 };
 
-// ─── List notifications (authenticated) ──────────────────────────────────────
+// â”€â”€â”€ List notifications (authenticated) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const listMpesaNotifications = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -951,9 +951,9 @@ export const listMpesaNotifications = async (req, res, next) => {
     const summary = await CarWashMpesaNotification.aggregate([
       { $match: summaryMatch },
       { $group: { _id: "$status", count: { $sum: 1 }, totalAmount: { $sum: "$amount" } } },
-    ]);
+    ]).allowDiskUse(true);
 
-    // Backcompat: old matched notifications predate allocatedAmount — populate from matchedPayment
+    // Backcompat: old matched notifications predate allocatedAmount â€” populate from matchedPayment
     for (const n of notifications) {
       if (n.status === "matched" && !n.allocatedAmount && n.matchedPayment?.amount) {
         n.allocatedAmount = round2(n.matchedPayment.amount);
@@ -966,7 +966,7 @@ export const listMpesaNotifications = async (req, res, next) => {
   }
 };
 
-// ─── Reassign / correct a wrong-account notification ─────────────────────────
+// â”€â”€â”€ Reassign / correct a wrong-account notification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const reassignMpesaNotification = async (req, res, next) => {
   try {
     if (!req.user?.adminAccess && !req.user?.isSystemAdmin && req.user?.role !== "manager") {
@@ -1006,7 +1006,7 @@ export const reassignMpesaNotification = async (req, res, next) => {
     const totals = await CarWashPayment.aggregate([
       { $match: { business: job.business, job: job._id } },
       { $group: { _id: "$job", amount: { $sum: "$amount" } } },
-    ]);
+    ]).allowDiskUse(true);
     const alreadyPaid = round2(totals?.[0]?.amount || 0);
     const outstanding = round2(Math.max(round2(netJobPrice(job)) - alreadyPaid, 0));
     if (outstanding <= 0) {
@@ -1047,7 +1047,7 @@ export const reassignMpesaNotification = async (req, res, next) => {
     notif.matchedJob = job._id;
     notif.matchedPayment = payment._id;
     notif.resultDesc = `Manually assigned to job ${job.jobNumber || job._id} by ${assignActorName}`;
-    notif.notes = `Corrected — original account reference: ${notif.billRefNumber}`;
+    notif.notes = `Corrected â€” original account reference: ${notif.billRefNumber}`;
     await notif.save();
 
     const updatedJob = await refreshJobPaymentStatus(business, job._id);
@@ -1099,7 +1099,7 @@ export const reassignMpesaNotification = async (req, res, next) => {
   }
 };
 
-// ─── List unpaid jobs (for allocation modal) ──────────────────────────────────
+// â”€â”€â”€ List unpaid jobs (for allocation modal) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const listUnpaidJobs = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -1118,7 +1118,7 @@ export const listUnpaidJobs = async (req, res, next) => {
     const payTotals = await CarWashPayment.aggregate([
       { $match: { business: new mongoose.Types.ObjectId(String(business)), job: { $in: jobIds } } },
       { $group: { _id: "$job", paid: { $sum: "$amount" } } },
-    ]);
+    ]).allowDiskUse(true);
     const paidMap = new Map(payTotals.map((p) => [String(p._id), round2(p.paid)]));
 
     const unpaid = [];
@@ -1135,7 +1135,7 @@ export const listUnpaidJobs = async (req, res, next) => {
   }
 };
 
-// ─── Allocate one M-Pesa notification across multiple jobs ───────────────────
+// â”€â”€â”€ Allocate one M-Pesa notification across multiple jobs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const allocateNotification = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -1278,7 +1278,7 @@ const tryRegisterC2BUrls = async (safaricomBase, version, accessToken, shortCode
   return data;
 };
 
-// ─── Register C2B validation/confirmation URLs with Safaricom ─────────────────
+// â”€â”€â”€ Register C2B validation/confirmation URLs with Safaricom â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const registerCarWashPaybillUrls = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -1326,7 +1326,7 @@ export const registerCarWashPaybillUrls = async (req, res, next) => {
         headers: { Authorization: `Basic ${auth}` },
         timeout: 15000,
       });
-      // Trim — Safaricom has been observed returning tokens with trailing whitespace
+      // Trim â€” Safaricom has been observed returning tokens with trailing whitespace
       accessToken = String(tokenRes.data?.access_token || "").trim();
     } catch (tokenErr) {
       return res.status(502).json({
@@ -1339,7 +1339,7 @@ export const registerCarWashPaybillUrls = async (req, res, next) => {
       return res.status(502).json({ success: false, message: "No access token returned by Safaricom. Check your credentials." });
     }
 
-    // Register validation and confirmation URLs — try v1 first, fall back to v2.
+    // Register validation and confirmation URLs â€” try v1 first, fall back to v2.
     // "URLs are already registered" is treated as a soft success: Safaricom still
     // updates the URLs in many cases even when returning this error code.
     const isAlreadyRegistered = (msg = "") =>
@@ -1354,20 +1354,20 @@ export const registerCarWashPaybillUrls = async (req, res, next) => {
       console.log("[RegisterURLs] v1 succeeded for %s: %j", shortCode, safaricomResponse);
     } catch (err) {
       v1Error = extractSafaricomError(err);
-      console.warn("[RegisterURLs] v1 failed (%s) — retrying with v2", v1Error);
+      console.warn("[RegisterURLs] v1 failed (%s) â€” retrying with v2", v1Error);
       try {
         safaricomResponse = await tryRegisterC2BUrls(safaricomBase, "v2", accessToken, shortCode, responseType, confirmationURL, validationURL);
         v1Error = null;
         console.log("[RegisterURLs] v2 succeeded for %s: %j", shortCode, safaricomResponse);
       } catch (err2) {
         const v2Error = extractSafaricomError(err2);
-        console.warn("[RegisterURLs] v2 also failed for %s — v1: %s | v2: %s", shortCode, v1Error, v2Error);
-        // "URLs already registered" — Safaricom has existing URLs for this shortcode.
+        console.warn("[RegisterURLs] v2 also failed for %s â€” v1: %s | v2: %s", shortCode, v1Error, v2Error);
+        // "URLs already registered" â€” Safaricom has existing URLs for this shortcode.
         // Treat as soft success: re-registration often still updates the target URLs.
         if (isAlreadyRegistered(v2Error) || isAlreadyRegistered(v1Error)) {
           alreadyRegistered = true;
           safaricomResponse = { note: "already_registered" };
-          console.warn("[RegisterURLs] 'already registered' for %s — Safaricom may still have old URLs. Manual Daraja portal update required if callbacks don't arrive.", shortCode);
+          console.warn("[RegisterURLs] 'already registered' for %s â€” Safaricom may still have old URLs. Manual Daraja portal update required if callbacks don't arrive.", shortCode);
         } else {
           return res.status(502).json({
             success: false,
@@ -1380,14 +1380,14 @@ export const registerCarWashPaybillUrls = async (req, res, next) => {
       }
     }
 
-    console.log("[RegisterURLs] Final result for %s — alreadyRegistered=%s confirmationURL=%s", shortCode, alreadyRegistered, confirmationURL);
+    console.log("[RegisterURLs] Final result for %s â€” alreadyRegistered=%s confirmationURL=%s", shortCode, alreadyRegistered, confirmationURL);
 
     res.json({
       success: true,
       alreadyRegistered,
       message: alreadyRegistered
         ? `Safaricom reports URLs are already registered for shortcode ${shortCode}. ` +
-          `The system has submitted the updated URLs (${confirmationURL}) — ` +
+          `The system has submitted the updated URLs (${confirmationURL}) â€” ` +
           `do a test payment to confirm callbacks are arriving. ` +
           `If they are not, log in to the Daraja portal and manually update the C2B confirmation URL to: ${confirmationURL}`
         : `Callback URLs registered with Safaricom successfully. Confirmation URL: ${confirmationURL}`,
@@ -1398,7 +1398,7 @@ export const registerCarWashPaybillUrls = async (req, res, next) => {
   }
 };
 
-// ─── CSV helpers ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ CSV helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const normalizeHeader = (h) => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
@@ -1449,7 +1449,7 @@ const extractCsvRow = (rawHeaders, cells, fmt) => {
   if (fmt === "portal") {
     const txnStatus = gc("transactionstatus");
     if (txnStatus && !["completed", "success"].includes(txnStatus.toLowerCase())) {
-      return { skip: true, reason: `Skipped — status: ${txnStatus}` };
+      return { skip: true, reason: `Skipped â€” status: ${txnStatus}` };
     }
     const transactionCode = gc("receiptno");
     const amount          = round2(Number((gc("paidin") || gc("amountpaidin") || "0").replace(/,/g, "")));
@@ -1476,7 +1476,7 @@ const extractCsvRow = (rawHeaders, cells, fmt) => {
   return { skip: true, reason: "Unknown format" };
 };
 
-// ─── Bulk upload M-Pesa statement CSV ─────────────────────────────────────────
+// â”€â”€â”€ Bulk upload M-Pesa statement CSV â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const bulkUploadMpesaStatement = async (req, res, next) => {
   try {
     const business  = resolveActiveBusinessId(req);
@@ -1489,7 +1489,7 @@ export const bulkUploadMpesaStatement = async (req, res, next) => {
     const text = req.file.buffer.toString("utf-8");
     const rows = parseCsvText(text);
     if (rows.length < 2) return next(createError(400, "CSV has no data rows"));
-    if (rows.length > 2001) return next(createError(400, "CSV exceeds the 2 000 row limit — split into smaller files and upload each separately"));
+    if (rows.length > 2001) return next(createError(400, "CSV exceeds the 2 000 row limit â€” split into smaller files and upload each separately"));
 
     // Detect format
     const rawHeaders  = rows[0];
@@ -1499,7 +1499,7 @@ export const bulkUploadMpesaStatement = async (req, res, next) => {
     else if (normHeaders.includes("transid") || normHeaders.includes("billrefnumber")) fmt = "daraja";
     if (!fmt) return next(createError(400, "Unrecognised CSV format. Expected M-Pesa Business Portal or Daraja C2B export."));
 
-    // Resolve cashbook — match by shortCode if provided, else fall back to primary
+    // Resolve cashbook â€” match by shortCode if provided, else fall back to primary
     const company    = await Company.findById(business).lean();
     const configs    = getRawMpesaPaybillConfigs(company?.paymentIntegration || {});
     const config     = reqShortCode
@@ -1510,7 +1510,7 @@ export const bulkUploadMpesaStatement = async (req, res, next) => {
     const cashbook   = cashbookId && mongoose.Types.ObjectId.isValid(String(cashbookId))
       ? await ChartOfAccount.findOne({ _id: cashbookId, business, type: "asset", isPosting: true }).lean()
       : null;
-    if (!cashbook) return next(createError(422, "M-Pesa cashbook not configured — check Settings → Payments → M-Pesa Paybill"));
+    if (!cashbook) return next(createError(422, "M-Pesa cashbook not configured â€” check Settings â†’ Payments â†’ M-Pesa Paybill"));
 
     const results = [];
     let matched = 0, duplicate = 0, unmatched = 0, skipped = 0, errorCount = 0, totalMatched = 0;
@@ -1549,12 +1549,12 @@ export const bulkUploadMpesaStatement = async (req, res, next) => {
         continue;
       }
       if (!plate) {
-        results.push({ row: rowNum, status: "unmatched", reason: "No valid plate in account reference", transactionCode, billRefNumber: billRefNumber || "—", amount });
+        results.push({ row: rowNum, status: "unmatched", reason: "No valid plate in account reference", transactionCode, billRefNumber: billRefNumber || "â€”", amount });
         unmatched++;
         continue;
       }
 
-      // Duplicate guard — notification already matched
+      // Duplicate guard â€” notification already matched
       const existingNotif = await CarWashMpesaNotification.findOne({ transactionCode, status: "matched" }).lean();
       if (existingNotif) {
         results.push({ row: rowNum, status: "duplicate", reason: "Already processed", transactionCode, plate, amount });
@@ -1562,7 +1562,7 @@ export const bulkUploadMpesaStatement = async (req, res, next) => {
         continue;
       }
 
-      // Duplicate guard — payment already recorded with this reference
+      // Duplicate guard â€” payment already recorded with this reference
       const existingPayment = await CarWashPayment.findOne({ business, method: "mpesa", reference: transactionCode }).lean();
       if (existingPayment) {
         results.push({ row: rowNum, status: "duplicate", reason: "Payment already recorded", transactionCode, plate, amount });
@@ -1597,7 +1597,7 @@ export const bulkUploadMpesaStatement = async (req, res, next) => {
       const totals = await CarWashPayment.aggregate([
         { $match: { business: job.business, job: job._id } },
         { $group: { _id: null, amount: { $sum: "$amount" } } },
-      ]);
+      ]).allowDiskUse(true);
       const alreadyPaid   = round2(totals?.[0]?.amount || 0);
       const outstanding   = round2(Math.max(netJobPrice(job) - alreadyPaid, 0));
       if (outstanding <= 0) {
@@ -1690,7 +1690,7 @@ export const bulkUploadMpesaStatement = async (req, res, next) => {
   }
 };
 
-// ─── Dev-only: test masked/hashed number SMS without a real payment ───────────
+// â”€â”€â”€ Dev-only: test masked/hashed number SMS without a real payment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Blocked in production. Finds the first company with AT enabled automatically.
 export const devTestHashedSms = async (req, res, next) => {
   if (process.env.NODE_ENV === 'production') {

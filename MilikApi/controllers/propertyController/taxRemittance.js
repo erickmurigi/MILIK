@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 import TaxRemittance from "../../models/TaxRemittance.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
@@ -31,7 +31,7 @@ const resolveVatAccounts = async (businessId, companyTaxConfig) => {
 
 // Aggregate credits (VAT collected) and debits (VAT remitted) from the ledger
 // for the given accounts within a calendar-month date range.
-// Returns a Map: accountId string → { credit, debit }
+// Returns a Map: accountId string â†’ { credit, debit }
 const aggregateVatForPeriod = async (businessId, accountIds, periodStart, periodEnd) => {
   if (!accountIds.length) return new Map();
 
@@ -50,7 +50,7 @@ const aggregateVatForPeriod = async (businessId, accountIds, periodStart, period
         total: { $sum: "$amount" },
       },
     },
-  ]);
+  ]).allowDiskUse(true);
 
   const map = new Map();
   for (const row of rows) {
@@ -63,10 +63,10 @@ const aggregateVatForPeriod = async (businessId, accountIds, periodStart, period
   return map;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // GET /api/vat-remittance/summary?business=&year=&month=
 // Returns VAT collected, already remitted, and balance due for the period.
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const getVatReturnSummary = async (req, res, next) => {
   try {
     const businessId = req.query.business;
@@ -131,10 +131,10 @@ export const getVatReturnSummary = async (req, res, next) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // GET /api/vat-remittance?business=&year=
 // Lists all remittances for a business, optionally filtered by year.
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const getRemittanceHistory = async (req, res, next) => {
   try {
     const { business: businessId, year } = req.query;
@@ -157,19 +157,19 @@ export const getRemittanceHistory = async (req, res, next) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // POST /api/vat-remittance/remit
 // Records a VAT payment to KRA.
 //
 // GL entries posted:
-//   Dr VAT Payable 2140  (amount from PM module, proportional)   ← reduces liability
-//   Dr VAT Payable 2190  (amount from inventory module, proportional) ← reduces liability
-//   Cr Cashbook           (total paid to KRA)                    ← cash out
+//   Dr VAT Payable 2140  (amount from PM module, proportional)   â† reduces liability
+//   Dr VAT Payable 2190  (amount from inventory module, proportional) â† reduces liability
+//   Cr Cashbook           (total paid to KRA)                    â† cash out
 //
 // All legs share the same journalGroupId.
 // If GL posting fails after TaxRemittance creation, the record is deleted to
 // prevent an orphaned document with no matching GL entries.
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const remitVat = async (req, res, next) => {
   let remittance = null;
 
@@ -289,7 +289,7 @@ export const remitVat = async (req, res, next) => {
       journalGroupId,
       payer:    "n/a",
       receiver: "n/a",
-      notes:    `KRA VAT remittance – ${periodLabel}${paymentReference ? ` (Ref: ${paymentReference})` : ""}`,
+      notes:    `KRA VAT remittance â€“ ${periodLabel}${paymentReference ? ` (Ref: ${paymentReference})` : ""}`,
       createdBy:    actorUserId,
       approvedBy:   actorUserId,
       approvedAt:   new Date(),
@@ -299,7 +299,7 @@ export const remitVat = async (req, res, next) => {
 
     try {
       // Proportionally debit each VAT account based on outstanding balance.
-      // Ensures 2140 and 2190 are independently reduced — not lumped onto one account.
+      // Ensures 2140 and 2190 are independently reduced â€” not lumped onto one account.
       let remaining = amount;
       for (const { account, balance } of balancePerAccount) {
         if (balance <= 0 || remaining <= 0) continue;
@@ -333,7 +333,7 @@ export const remitVat = async (req, res, next) => {
         touchedAccountIds.push(balancePerAccount[0].account._id);
       }
 
-      // Credit cashbook — cash leaves the business to KRA
+      // Credit cashbook â€” cash leaves the business to KRA
       await postEntry({
         ...commonEntry,
         accountId: cashbookAccountId,
@@ -344,7 +344,7 @@ export const remitVat = async (req, res, next) => {
       touchedAccountIds.push(cashbookAccountId);
 
     } catch (glErr) {
-      // GL posting failed — delete the orphaned TaxRemittance and any partial GL entries
+      // GL posting failed â€” delete the orphaned TaxRemittance and any partial GL entries
       await TaxRemittance.deleteOne({ _id: remittance._id }).catch(() => {});
       await FinancialLedgerEntry.deleteMany({ sourceTransactionType: "tax_remittance", sourceTransactionId: String(remittance._id) }).catch(() => {});
       throw glErr;
@@ -363,10 +363,10 @@ export const remitVat = async (req, res, next) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // PATCH /api/vat-remittance/:id/void
 // Reverses all GL entries for a remittance and marks it voided.
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const voidRemittance = async (req, res, next) => {
   try {
     const { id }     = req.params;

@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+﻿import mongoose from 'mongoose';
 import CarWashCustomer from '../models/CarWashCustomer.js';
 import CarWashLoyaltyProgram from '../models/CarWashLoyaltyProgram.js';
 import CarWashLoyaltyCard from '../models/CarWashLoyaltyCard.js';
@@ -25,7 +25,7 @@ const sendLoyaltySms = async (business, phone, body, templateKey, recipientName 
   });
 };
 
-// ─── Loyalty program ──────────────────────────────────────────────────────────
+// â”€â”€â”€ Loyalty program â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const getLoyaltyProgram = async (req, res, next) => {
   try {
@@ -87,7 +87,7 @@ export const upsertLoyaltyProgram = async (req, res, next) => {
   }
 };
 
-// ─── Customers ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Customers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const listCustomers = async (req, res, next) => {
   try {
@@ -191,7 +191,7 @@ export const awardManualStamp = async (req, res, next) => {
   }
 };
 
-// Enriched customer list — used by the dedicated Customers page.
+// Enriched customer list â€” used by the dedicated Customers page.
 // Returns every CarWashCustomer with aggregated job stats, outstanding balance,
 // loyalty card progress, and credit account reference.
 // All aggregations are batched (no N+1 queries).
@@ -214,7 +214,7 @@ export const listCustomersEnriched = async (req, res, next) => {
     const sortDir         = req.query.sortDir === 'asc' ? 1 : -1;
     const exportCsv       = req.query.export === 'csv';
 
-    // ── Phase 1: fetch loyalty program + run pre-queries that inform the DB filter ──
+    // â”€â”€ Phase 1: fetch loyalty program + run pre-queries that inform the DB filter â”€â”€
     const loyaltyProgram = await CarWashLoyaltyProgram.findOne({ business, isActive: true })
       .select('stampsRequired rewardType rewardValue isActive').lean();
 
@@ -264,7 +264,7 @@ export const listCustomersEnriched = async (req, res, next) => {
       }
     }
 
-    // ── Phase 2: build DB filter — all conditions resolved at DB level ────────
+    // â”€â”€ Phase 2: build DB filter â€” all conditions resolved at DB level â”€â”€â”€â”€â”€â”€â”€â”€
     const filter = { business };
     if (search) {
       filter.$or = [
@@ -290,7 +290,7 @@ export const listCustomersEnriched = async (req, res, next) => {
     const sortFieldMap = { name: 'name', visits: 'stats.totalJobs', lastVisit: 'stats.lastVisit', spend: 'stats.totalPaid', outstanding: 'stats.outstanding' };
     const dbSort = { [sortFieldMap[sortBy] || 'name']: sortDir };
 
-    // ── Phase 3: count + customers + global stats (all parallel) ─────────────
+    // â”€â”€ Phase 3: count + customers + global stats (all parallel) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const customerQuery = CarWashCustomer.find(filter).sort(dbSort);
     if (!exportCsv) customerQuery.skip((pageNum - 1) * limitNum).limit(limitNum);
 
@@ -300,16 +300,16 @@ export const listCustomersEnriched = async (req, res, next) => {
       CarWashCustomerCredit.aggregate([
         { $match: { business: businessOid, status: 'active' } },
         { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
-      ]),
+      ]).allowDiskUse(true),
       Promise.all([
         CarWashJob.aggregate([
           { $match: { business: businessOid, status: { $nin: ['cancelled'] } } },
           { $group: { _id: null, total: { $sum: { $subtract: ['$price', { $ifNull: ['$discountAmount', 0] }] } } } },
-        ]),
+        ]).allowDiskUse(true),
         CarWashPayment.aggregate([
           { $match: { business: businessOid } },
           { $group: { _id: null, total: { $sum: '$amount' } } },
-        ]),
+        ]).allowDiskUse(true),
       ]).then(([inv, paid]) => [{ total: Math.max(0, (inv[0]?.total || 0) - (paid[0]?.total || 0)) }]),
     ]);
 
@@ -323,7 +323,7 @@ export const listCustomersEnriched = async (req, res, next) => {
       return res.json({ success: true, data: [], total: 0, page: pageNum, limit: limitNum, loyaltyProgram: loyaltyProgram || null, globalStats });
     }
 
-    // ── Phase 4: enrich page data — O(page_size), never O(all_customers) ─────
+    // â”€â”€ Phase 4: enrich page data â€” O(page_size), never O(all_customers) â”€â”€â”€â”€â”€
     const customerIds = customers.map((c) => c._id);
     const allPlates   = [...new Set(customers.flatMap((c) => c.plates || []))];
 
@@ -348,7 +348,7 @@ export const listCustomersEnriched = async (req, res, next) => {
       }
     }
 
-    // Stats read directly from the denormalized field — no per-customer aggregation
+    // Stats read directly from the denormalized field â€” no per-customer aggregation
     const enriched = customers.map((c) => {
       const s = c.stats || {};
       let creditAccount = null;
@@ -474,7 +474,7 @@ export const updateCustomer = async (req, res, next) => {
   }
 };
 
-// ─── Plate lookup ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Plate lookup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const lookupPlate = async (req, res, next) => {
   try {
@@ -522,14 +522,14 @@ export const lookupPlate = async (req, res, next) => {
   }
 };
 
-// ─── Stamp awarding (called internally from payments flow) ────────────────────
+// â”€â”€â”€ Stamp awarding (called internally from payments flow) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, maskedMsisdn = null, suppressSms = false, payerName = null }) => {
   if (!job?.plateNumber) return null;
 
   const plate = normalizePlate(job.plateNumber);
 
-  // 1. Always ensure customer exists — independent of loyalty program
+  // 1. Always ensure customer exists â€” independent of loyalty program
   const customer = await ensureCarWashCustomer({
     business,
     plate,
@@ -540,11 +540,11 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, m
   });
   if (!customer) return null;
 
-  // 2. Check for active loyalty program — no program = customer created but no stamp
+  // 2. Check for active loyalty program â€” no program = customer created but no stamp
   const program = await CarWashLoyaltyProgram.findOne({ business, isActive: true }).lean();
   if (!program) return customer;
 
-  // 3. Always upsert the loyalty card first — card must exist even if this job is not eligible.
+  // 3. Always upsert the loyalty card first â€” card must exist even if this job is not eligible.
   // Moving this before the eligibility check prevents "No card yet" for customers whose
   // first jobs happen to use a non-eligible service.
   let card = await CarWashLoyaltyCard.findOneAndUpdate(
@@ -553,10 +553,10 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, m
     { upsert: true, new: true }
   );
 
-  // Voucher jobs are paid by the issuing company — no personal stamp earned
+  // Voucher jobs are paid by the issuing company â€” no personal stamp earned
   if (job.isVoucher) return null;
 
-  // Idempotency guard — this job was already stamped or a redemption was already recorded
+  // Idempotency guard â€” this job was already stamped or a redemption was already recorded
   const jobIdStr = String(job._id);
   if (card.stampHistory.some((h) => String(h.job) === jobIdStr)) return card;
 
@@ -573,8 +573,8 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, m
     return { card, rewardTriggered: false };
   }
 
-  // 4. Check service eligibility — empty applicableServices = all services qualify.
-  // If services were typed manually (not selected from catalog), service IDs are null —
+  // 4. Check service eligibility â€” empty applicableServices = all services qualify.
+  // If services were typed manually (not selected from catalog), service IDs are null â€”
   // in that case we skip the check and allow the stamp (benefit of the doubt).
   // Card is already created above; we only skip the STAMP, not the card.
   if (program.applicableServices?.length) {
@@ -643,7 +643,7 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, m
           || await resolveCarWashSmsBody(business, 'carwash_stamp_earned', stampVars);
         templateKey = 'carwash_stamp_earned_standalone';
       } else {
-        // Combined with payment SMS — short version is fine, plate already in payment message
+        // Combined with payment SMS â€” short version is fine, plate already in payment message
         stampSmsBody = await resolveCarWashSmsBody(business, 'carwash_stamp_earned', stampVars);
         templateKey  = 'carwash_stamp_earned';
       }
@@ -661,10 +661,10 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, m
   return { card, rewardTriggered, program, smsBody: stampSmsBody };
 };
 
-// ─── Customer upsert — completely independent of loyalty ─────────────────────
+// â”€â”€â”€ Customer upsert â€” completely independent of loyalty â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Creates or updates the CarWashCustomer record for a plate.
 // Called at job creation AND as a safety net before stamp awarding.
-// Never throws — failure must not block any calling flow.
+// Never throws â€” failure must not block any calling flow.
 // Kenyan plate pattern (KXX + 3-4 digits + optional letter) after normalization.
 // Used to reject plate-formatted strings being saved as customer names.
 const PLATE_RE = /^[A-Z]{2,3}\d{3,4}[A-Z]?$/;
@@ -688,7 +688,7 @@ export const ensureCarWashCustomer = async ({ business, plate, customerName, pho
     // Guard: reject a customerName that looks like a different plate (e.g. staff typed wrong plate in name field)
     const cleanCustomerName = safeCustomerName(customerName, normalizedPlate);
 
-    // Plate is the sole identity key — every unique plate is its own customer record.
+    // Plate is the sole identity key â€” every unique plate is its own customer record.
     // Phone is stored as metadata only and is never used for lookup or merging.
     // buildPlateRegex handles existing records stored with spaces/dashes.
     let customer = await CarWashCustomer.findOne({ business, plates: buildPlateRegex(normalizedPlate) }).lean();
@@ -713,17 +713,17 @@ export const ensureCarWashCustomer = async ({ business, plate, customerName, pho
       }
     }
 
-    // Keep fields up to date — only fill blanks, never overwrite data the user provided
+    // Keep fields up to date â€” only fill blanks, never overwrite data the user provided
     const updates = {};
     if (!customer.phone && cleanPhone) {
       updates.phone = cleanPhone;
-      // Real phone discovered — masked MSISDN is no longer the contact method
+      // Real phone discovered â€” masked MSISDN is no longer the contact method
       if (customer.maskedMsisdn) updates.maskedMsisdn = "";
     } else if (cleanMasked && !customer.phone && customer.maskedMsisdn !== cleanMasked) {
       updates.maskedMsisdn = cleanMasked;
     }
     // Replace name if: (a) none set yet, (b) current name is the plate itself, or (c) current name
-    // looks like a different plate number (staff data-entry error — correct it when a real name arrives)
+    // looks like a different plate number (staff data-entry error â€” correct it when a real name arrives)
     const nameIsPlate = customer.name && (
       (customer.plates || []).some((p) => String(p).trim().toUpperCase() === customer.name.trim().toUpperCase()) ||
       looksLikePlate(customer.name)
@@ -741,15 +741,15 @@ export const ensureCarWashCustomer = async ({ business, plate, customerName, pho
   }
 };
 
-// ─── Auto-enroll plate at job creation ───────────────────────────────────────
-// Called from jobsController.createJob. Never throws — failure must not block job creation.
+// â”€â”€â”€ Auto-enroll plate at job creation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Called from jobsController.createJob. Never throws â€” failure must not block job creation.
 export const autoEnrollPlate = async ({ business, plate, customerName, phone, maskedMsisdn = null, payerName = null }) => {
   try {
     // Customer creation is always guaranteed via ensureCarWashCustomer
     const customer = await ensureCarWashCustomer({ business, plate, customerName, phone, maskedMsisdn, payerName });
     if (!customer) return null;
 
-    // Loyalty card creation is optional — only if a program is active
+    // Loyalty card creation is optional â€” only if a program is active
     const program = await CarWashLoyaltyProgram.findOne({ business, isActive: true }).lean();
     if (!program) return customer;
 
@@ -765,7 +765,7 @@ export const autoEnrollPlate = async ({ business, plate, customerName, phone, ma
   }
 };
 
-// ─── Payment confirmation SMS (called from payments flow) ─────────────────────
+// â”€â”€â”€ Payment confirmation SMS (called from payments flow) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const sendPaymentConfirmationSms = async ({ business, job, amount, remaining = null, overridePhone = null, maskedMsisdn = null, loyaltySmsBody = null, payerName = null }) => {
   if (!job?.plateNumber) return;
@@ -798,7 +798,7 @@ export const sendPaymentConfirmationSms = async ({ business, job, amount, remain
     if (phone) {
       await sendLoyaltySms(business, phone, body, 'carwash_payment_confirmed', customerName);
     } else if (maskedMsisdn) {
-      // Real phone not yet known — send to hashed MSISDN via AT's masked-number endpoint
+      // Real phone not yet known â€” send to hashed MSISDN via AT's masked-number endpoint
       sendAdHocSmsToMasked({ businessId: business, maskedNumber: maskedMsisdn, body, templateKey: 'carwash_payment_confirmed', recipientName: customerName }).catch(() => {});
     }
   } catch (_err) {
@@ -806,7 +806,7 @@ export const sendPaymentConfirmationSms = async ({ business, job, amount, remain
   }
 };
 
-// ─── Unmatched M-Pesa payment acknowledgement SMS ────────────────────────────
+// â”€â”€â”€ Unmatched M-Pesa payment acknowledgement SMS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Called when an M-Pesa payment arrives but no open job is found for the plate.
 
 export const sendUnmatchedPaymentSms = async ({ business, businessName, senderName, amount, phone = null, maskedMsisdn = null }) => {
@@ -827,7 +827,7 @@ export const sendUnmatchedPaymentSms = async ({ business, businessName, senderNa
   }
 };
 
-// ─── Manual SMS to a loyalty customer ────────────────────────────────────────
+// â”€â”€â”€ Manual SMS to a loyalty customer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const sendCustomerSms = async (req, res, next) => {
   try {
@@ -851,16 +851,16 @@ export const sendCustomerSms = async (req, res, next) => {
   }
 };
 
-// ─── Card detail ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Card detail â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Revokes the loyalty stamp earned for a specific job when that job's payment
  * is deleted. Replays the remaining stamp history to recalculate all counters
- * accurately — handles the edge case where the revoked stamp was the one that
+ * accurately â€” handles the edge case where the revoked stamp was the one that
  * triggered a reward cycle.
  *
- * Does NOT touch totalRewardsRedeemed — redemptions already made stand.
- * Never throws — stamp revocation must not block the payment deletion.
+ * Does NOT touch totalRewardsRedeemed â€” redemptions already made stand.
+ * Never throws â€” stamp revocation must not block the payment deletion.
  */
 export const revokeStampForJob = async ({ business, jobId, plate }) => {
   if (!plate || !jobId) return;
@@ -920,7 +920,7 @@ export const revokeStampForJob = async ({ business, jobId, plate }) => {
 
 /**
  * Backfill: processes all existing vehicle jobs to ensure customers exist and
- * stamps are awarded for jobs that are Done/Paid. Safe to run multiple times — idempotent.
+ * stamps are awarded for jobs that are Done/Paid. Safe to run multiple times â€” idempotent.
  */
 export const backfillCustomersAndStamps = async (req, res, next) => {
   try {
@@ -945,7 +945,7 @@ export const backfillCustomersAndStamps = async (req, res, next) => {
       totalJobs += jobs.length;
       offset += jobs.length;
 
-      // Pre-fetch all plates already known in this batch — one query replaces 2N countDocuments
+      // Pre-fetch all plates already known in this batch â€” one query replaces 2N countDocuments
       const batchPlates = [...new Set(
         jobs.map((j) => String(j.plateNumber || '').trim().toUpperCase()).filter(Boolean)
       )];
@@ -982,7 +982,7 @@ export const backfillCustomersAndStamps = async (req, res, next) => {
 /**
  * One-time migration: merges per-plate loyalty cards into one per-customer card.
  * Also drops the old {business,plate} unique index and ensures {business,customer} unique.
- * Safe to run multiple times — idempotent.
+ * Safe to run multiple times â€” idempotent.
  */
 export const migrateToPerCustomerCards = async (req, res, next) => {
   try {
@@ -1119,7 +1119,7 @@ export const getCustomerStatement = async (req, res, next) => {
       const sl = j.serviceLines || [];
       const serviceName = sl.length
         ? sl[0].serviceName + (sl.length > 1 ? ` +${sl.length - 1}` : "")
-        : (j.serviceName || "—");
+        : (j.serviceName || "â€”");
 
       return { _id: j._id, jobNumber: j.jobNumber, plateNumber: j.plateNumber, serviceName, charge, paid, balance: runningBalance, date: j.createdAt };
     });
@@ -1133,8 +1133,8 @@ export const getCustomerStatement = async (req, res, next) => {
   }
 };
 
-// ─── Backfill denormalized stats for all existing customers ──────────────────
-// One-time migration endpoint — call once after deploying the stats schema change.
+// â”€â”€â”€ Backfill denormalized stats for all existing customers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// One-time migration endpoint â€” call once after deploying the stats schema change.
 // Processes in batches to avoid memory pressure.
 
 export const backfillCustomerStats = async (req, res, next) => {
@@ -1159,7 +1159,7 @@ export const backfillCustomerStats = async (req, res, next) => {
   }
 };
 
-// ─── Bulk SMS to multiple customers ──────────────────────────────────────────
+// â”€â”€â”€ Bulk SMS to multiple customers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const bulkSendCustomerSms = async (req, res, next) => {
   try {
@@ -1206,7 +1206,7 @@ export const bulkSendCustomerSms = async (req, res, next) => {
   }
 };
 
-// ─── Find duplicate customers (same plate in multiple records) ────────────────
+// â”€â”€â”€ Find duplicate customers (same plate in multiple records) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const findDuplicateCustomers = async (req, res, next) => {
   try {
@@ -1218,7 +1218,7 @@ export const findDuplicateCustomers = async (req, res, next) => {
       { $unwind: '$plates' },
       { $group: { _id: '$plates', customerIds: { $addToSet: '$_id' }, count: { $sum: 1 } } },
       { $match: { count: { $gt: 1 } } },
-    ]);
+    ]).allowDiskUse(true);
 
     if (!dupPlates.length) return res.json({ success: true, data: [], total: 0 });
 
@@ -1237,7 +1237,7 @@ export const findDuplicateCustomers = async (req, res, next) => {
   }
 };
 
-// ─── Merge customers ──────────────────────────────────────────────────────────
+// â”€â”€â”€ Merge customers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const mergeCustomers = async (req, res, next) => {
   try {
@@ -1253,7 +1253,7 @@ export const mergeCustomers = async (req, res, next) => {
     const toMerge = await CarWashCustomer.find({ _id: { $in: mergeIds }, business }).lean();
     if (!toMerge.length) return next(createError(404, 'No customers to merge found'));
 
-    // Combine plates — add plates from merged records that the keeper doesn't have
+    // Combine plates â€” add plates from merged records that the keeper doesn't have
     const newPlates = toMerge.flatMap((c) => c.plates || [])
       .filter((p) => !keepCustomer.plates.includes(p));
     if (newPlates.length) keepCustomer.plates = [...keepCustomer.plates, ...newPlates];

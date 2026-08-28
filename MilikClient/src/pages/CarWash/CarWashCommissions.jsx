@@ -13,6 +13,17 @@ import PaginationBar from "../../components/PaginationBar";
 import MilikTable from "../../components/common/MilikTable";
 
 const fmtSvc = (svc, fallback = "—") => svc ? (svc.category ? `${svc.category} — ${svc.name}` : svc.name) : fallback;
+
+const COMMISSIONS_COLUMNS = [
+  { label: "Staff" },
+  { label: "Job" },
+  { label: "Service" },
+  { label: "Base Price", align: "right" },
+  { label: "Rate", align: "right" },
+  { label: "Commission", align: "right" },
+  { label: "Status" },
+  { label: "Earned On" },
+];
 const statuses     = ["earned", "payable", "paid", "cancelled"];
 const statusLabels = { earned: "Earned", payable: "Payable", paid: "Paid", cancelled: "Cancelled" };
 const DEFAULT_PAGE_SIZE = 30;
@@ -184,16 +195,7 @@ const CarWashCommissions = () => {
         </div>
 
         <MilikTable
-          columns={[
-            { label: "Staff" },
-            { label: "Job" },
-            { label: "Service" },
-            { label: "Base Price", align: "right" },
-            { label: "Rate", align: "right" },
-            { label: "Commission", align: "right" },
-            { label: "Status" },
-            { label: "Earned On" },
-          ]}
+          columns={COMMISSIONS_COLUMNS}
           rows={commissions}
           loading={loading}
           empty="No commissions found for the selected filters."

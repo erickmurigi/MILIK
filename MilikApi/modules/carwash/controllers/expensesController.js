@@ -1,4 +1,4 @@
-import { createError } from "../../../utils/error.js";
+﻿import { createError } from "../../../utils/error.js";
 import mongoose from "mongoose";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import CarWashExpense from "../models/CarWashExpense.js";
@@ -146,7 +146,7 @@ const summarizeExpenses = async (filter) => {
       { $group: { _id: "$category", amount: { $sum: "$amount" }, count: { $sum: 1 } } },
       { $sort: { amount: -1, count: -1 } },
       { $limit: 20 },
-    ]),
+    ]).allowDiskUse(true),
   ]);
   const summary = {
     draft: { amount: 0, count: 0 }, approved: { amount: 0, count: 0 },
@@ -338,17 +338,17 @@ export const getExpensesReport = async (req, res, next) => {
         { $match: paidFilter },
         { $group: { _id: "$category", amount: { $sum: "$amount" }, count: { $sum: 1 } } },
         { $sort: { amount: -1 } },
-      ]),
+      ]).allowDiskUse(true),
       CarWashExpense.aggregate([
         { $match: paidFilter },
         { $group: { _id: "$method", amount: { $sum: "$amount" }, count: { $sum: 1 } } },
         { $sort: { amount: -1 } },
-      ]),
+      ]).allowDiskUse(true),
       CarWashExpense.aggregate([
         { $match: paidFilter },
         { $group: { _id: "$branch", amount: { $sum: "$amount" }, count: { $sum: 1 } } },
         { $sort: { amount: -1 } },
-      ]),
+      ]).allowDiskUse(true),
       CarWashExpense.aggregate([
         { $match: paidFilter },
         { $group: {
@@ -357,14 +357,14 @@ export const getExpensesReport = async (req, res, next) => {
           count:  { $sum: 1 },
         }},
         { $sort: { "_id.year": 1, "_id.month": 1 } },
-      ]),
+      ]).allowDiskUse(true),
       // Top 10 payees by paid spend
       CarWashExpense.aggregate([
         { $match: { ...paidFilter, payee: { $nin: ["", null] } } },
         { $group: { _id: "$payee", amount: { $sum: "$amount" }, count: { $sum: 1 } } },
         { $sort: { amount: -1 } },
         { $limit: 10 },
-      ]),
+      ]).allowDiskUse(true),
       // Top 5 individual paid expenses
       CarWashExpense.find(paidFilter)
         .sort({ amount: -1 })
@@ -375,7 +375,7 @@ export const getExpensesReport = async (req, res, next) => {
       CarWashExpense.aggregate([
         { $match: pendingFilter },
         { $group: { _id: "$status", amount: { $sum: "$amount" }, count: { $sum: 1 } } },
-      ]),
+      ]).allowDiskUse(true),
     ]);
 
     const branchIds  = byBranch.map((b) => b._id).filter(Boolean);

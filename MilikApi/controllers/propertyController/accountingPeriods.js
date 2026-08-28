@@ -1,10 +1,10 @@
-import AccountingPeriod from "../../models/AccountingPeriod.js";
+﻿import AccountingPeriod from "../../models/AccountingPeriod.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import { toObjectId } from "../../utils/db.js";
 import { resolveBusinessId } from "../../utils/requestContext.js";
 import { createError } from "../../utils/error.js";
 
-// ─── LIST ─────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ LIST â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const getAccountingPeriods = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -24,7 +24,7 @@ export const getAccountingPeriods = async (req, res, next) => {
   }
 };
 
-// ─── GET ONE ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ GET ONE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const getAccountingPeriod = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -39,7 +39,7 @@ export const getAccountingPeriod = async (req, res, next) => {
   }
 };
 
-// ─── CREATE ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ CREATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const createAccountingPeriod = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -82,7 +82,7 @@ export const createAccountingPeriod = async (req, res, next) => {
   }
 };
 
-// ─── UPDATE ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ UPDATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const updateAccountingPeriod = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -103,7 +103,7 @@ export const updateAccountingPeriod = async (req, res, next) => {
   }
 };
 
-// ─── CLOSE ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ CLOSE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const closeAccountingPeriod = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -124,7 +124,7 @@ export const closeAccountingPeriod = async (req, res, next) => {
   }
 };
 
-// ─── REOPEN ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ REOPEN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const reopenAccountingPeriod = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -151,7 +151,7 @@ export const reopenAccountingPeriod = async (req, res, next) => {
   }
 };
 
-// ─── LOCK ─────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ LOCK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const lockAccountingPeriod = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -175,7 +175,7 @@ export const lockAccountingPeriod = async (req, res, next) => {
   }
 };
 
-// ─── PERIOD STATS (entry counts, amounts for the period) ─────────────────────
+// â”€â”€â”€ PERIOD STATS (entry counts, amounts for the period) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const getAccountingPeriodStats = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -200,7 +200,7 @@ export const getAccountingPeriodStats = async (req, res, next) => {
           reversedCount: { $sum: { $cond: [{ $eq: ["$status", "reversed"] }, 1, 0] } },
         },
       },
-    ]);
+    ]).allowDiskUse(true);
 
     return res.status(200).json({
       period,

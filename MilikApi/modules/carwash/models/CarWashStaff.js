@@ -22,5 +22,6 @@ const carWashStaffSchema = new mongoose.Schema(
 
 carWashStaffSchema.index({ business: 1, name: 1 });
 carWashStaffSchema.index({ business: 1, active: 1 });
+carWashStaffSchema.index({ business: 1, branch: 1, active: 1 });
 
 export default mongoose.model("CarWashStaff", carWashStaffSchema);

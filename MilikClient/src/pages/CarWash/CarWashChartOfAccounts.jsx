@@ -128,10 +128,17 @@ const CarWashChartOfAccounts = () => {
     })).filter((group) => group.accounts.length > 0);
   }, [filteredAccounts]);
 
-  const cashbookCount = filteredAccounts.filter(isCashbookAccount).length;
-  const incomeCount = filteredAccounts.filter((account) => String(account.type || "").toLowerCase() === "income").length;
-  const expenseCount = filteredAccounts.filter((account) => String(account.type || "").toLowerCase() === "expense").length;
-  const totalBalance = filteredAccounts.reduce((sum, account) => sum + Number(account.balance || 0), 0);
+  const { cashbookCount, incomeCount, expenseCount, totalBalance } = useMemo(() => {
+    let cashbookCount = 0, incomeCount = 0, expenseCount = 0, totalBalance = 0;
+    for (const account of filteredAccounts) {
+      if (isCashbookAccount(account)) cashbookCount++;
+      const type = String(account.type || "").toLowerCase();
+      if (type === "income") incomeCount++;
+      if (type === "expense") expenseCount++;
+      totalBalance += Number(account.balance || 0);
+    }
+    return { cashbookCount, incomeCount, expenseCount, totalBalance };
+  }, [filteredAccounts]);
   const selectedAccounts = useMemo(() => {
     const selected = new Set(selectedIds);
     return accounts.filter((account) => selected.has(account._id));

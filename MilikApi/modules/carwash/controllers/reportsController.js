@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 import CarWashExpense from "../models/CarWashExpense.js";
 import CarWashJob from "../models/CarWashJob.js";
 import CarWashPayment from "../models/CarWashPayment.js";
@@ -134,12 +134,12 @@ const buildRangeSummary = async (business, start, end, type, branchId = null) =>
       { $group: { _id: "$category", amount: { $sum: "$amount" }, count: { $sum: 1 } } },
       { $sort: { amount: -1, count: -1 } },
       { $limit: 20 },
-    ]),
+    ]).allowDiskUse(true),
     CarWashJob.aggregate([
       { $match: jobMatch },
       { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, count: { $sum: 1 } } },
       { $sort: { _id: 1 } },
-    ]),
+    ]).allowDiskUse(true),
     CarWashPayment.aggregate([
       { $match: paymentMatch },
       {
@@ -150,13 +150,13 @@ const buildRangeSummary = async (business, start, end, type, branchId = null) =>
         },
       },
       { $sort: { _id: 1 } },
-    ]),
+    ]).allowDiskUse(true),
     CarWashJob.aggregate([
       { $match: jobMatch },
       { $group: { _id: "$serviceName", jobs: { $sum: 1 }, value: { $sum: "$price" } } },
       { $sort: { jobs: -1, value: -1 } },
       { $limit: 20 },
-    ]),
+    ]).allowDiskUse(true),
     // Group by staff ID (no $lookup) — resolve names in one batched query after
     CarWashJob.aggregate([
       { $match: jobMatch },
@@ -164,7 +164,7 @@ const buildRangeSummary = async (business, start, end, type, branchId = null) =>
       { $group: { _id: "$assignedStaff", jobs: { $sum: 1 }, value: { $sum: "$price" } } },
       { $sort: { jobs: -1, value: -1 } },
       { $limit: 20 },
-    ]),
+    ]).allowDiskUse(true),
   ]);
 
   const statusCounts = emptyStatusCounts();
@@ -236,25 +236,25 @@ export const dailySummary = async (req, res, next) => {
       CarWashJob.aggregate([
         { $match: { business: businessOId, createdAt: { $gte: start, $lt: end }, ...branchFilter } },
         { $group: { _id: "$status", count: { $sum: 1 } } },
-      ]),
+      ]).allowDiskUse(true),
       CarWashPayment.aggregate([
         { $match: { business: businessOId, paymentDate: { $gte: start, $lt: end }, ...branchFilter } },
         { $group: { _id: "$method", amount: { $sum: "$amount" }, count: { $sum: 1 } } },
-      ]),
+      ]).allowDiskUse(true),
       CarWashExpense.aggregate([
         { $match: paidExpenseMatch },
         { $group: { _id: "$status", amount: { $sum: "$amount" }, count: { $sum: 1 } } },
-      ]),
+      ]).allowDiskUse(true),
       CarWashExpense.aggregate([
         { $match: pendingExpenseMatch },
         { $group: { _id: null, amount: { $sum: "$amount" }, count: { $sum: 1 } } },
-      ]),
+      ]).allowDiskUse(true),
       CarWashExpense.aggregate([
         { $match: paidExpenseMatch },
         { $group: { _id: "$category", amount: { $sum: "$amount" }, count: { $sum: 1 } } },
         { $sort: { amount: -1, count: -1 } },
         { $limit: 20 },
-      ]),
+      ]).allowDiskUse(true),
     ]);
 
     const statusCounts = emptyStatusCounts();
@@ -348,7 +348,7 @@ export const serviceReport = async (req, res, next) => {
           },
         },
         { $sort: { jobs: -1, totalPrice: -1 } },
-      ]),
+      ]).allowDiskUse(true),
       CarWashPayment.aggregate([
         { $match: paymentMatch },
         { $lookup: { from: "carwashjobs", localField: "job", foreignField: "_id", as: "jobDoc" } },
@@ -363,7 +363,7 @@ export const serviceReport = async (req, res, next) => {
             mpesa: { $sum: { $cond: [{ $eq: ["$method", "mpesa"] }, "$amount", 0] } },
           },
         },
-      ]),
+      ]).allowDiskUse(true),
     ]);
 
     const jobMap     = new Map(serviceJobRows.map((r) => [r._id, r]));
@@ -452,7 +452,7 @@ export const staffReport = async (req, res, next) => {
           },
         },
         { $sort: { jobs: -1 } },
-      ]),
+      ]).allowDiskUse(true),
       // Group payments by job first (many→few) before lookups — far fewer docs to join
       CarWashPayment.aggregate([
         { $match: paymentMatch },
@@ -474,7 +474,7 @@ export const staffReport = async (req, res, next) => {
           cash:     { $sum: "$cash" },
           mpesa:    { $sum: "$mpesa" },
         }},
-      ]),
+      ]).allowDiskUse(true),
       CarWashStaffCommission.aggregate([
         { $match: commissionMatch },
         { $lookup: { from: "carwashstaffs", localField: "staff", foreignField: "_id", as: "staffDoc" } },
@@ -486,7 +486,7 @@ export const staffReport = async (req, res, next) => {
             commissionCount: { $sum: 1 },
           },
         },
-      ]),
+      ]).allowDiskUse(true),
     ]);
 
     const totalJobs = staffJobRows.reduce((s, r) => s + r.jobs, 0);

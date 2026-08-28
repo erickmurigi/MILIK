@@ -17,6 +17,17 @@ import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from "../../components/PaginationBar";
 import MilikTable from "../../components/common/MilikTable";
 
+const MPESA_NOTIF_COLUMNS = [
+  { label: "Time" },
+  { label: "Status" },
+  { label: "Plate (reference)" },
+  { label: "Amount", align: "right" },
+  { label: "Sender Name" },
+  { label: "Phone" },
+  { label: "Transaction Code" },
+  { label: "Matched Job" },
+];
+
 const DEFAULT_PAGE_SIZE = 50;
 
 const STATUS_META = {
@@ -1056,16 +1067,7 @@ export default function CarWashMpesaNotifications() {
         </div>
 
         <MilikTable
-          columns={[
-            { label: "Time" },
-            { label: "Status" },
-            { label: "Plate (reference)" },
-            { label: "Amount", align: "right" },
-            { label: "Sender Name" },
-            { label: "Phone" },
-            { label: "Transaction Code" },
-            { label: "Matched Job" },
-          ]}
+          columns={MPESA_NOTIF_COLUMNS}
           rows={notifications}
           rowKey="_id"
           loading={loading}

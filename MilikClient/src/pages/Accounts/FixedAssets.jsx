@@ -20,6 +20,7 @@ const METHODS = [
   { value: "none",             label: "No Depreciation" },
 ];
 const CATEGORIES = ["Furniture", "Equipment", "Vehicles", "Buildings", "Land", "Computers & IT", "Other"];
+const CATEGORY_OPTIONS = CATEGORIES.map((c) => ({ value: c, label: c }));
 
 const fmt = (n) =>
   Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -264,7 +265,7 @@ const FixedAssets = () => {
             placeholder="All Categories"
             value={filterCategory}
             onChange={(v) => setFilterCategory(v ?? "")}
-            options={CATEGORIES.map((c) => ({ value: c, label: c }))}
+            options={CATEGORY_OPTIONS}
           />
 
           <input
@@ -329,7 +330,7 @@ const FixedAssets = () => {
                   placeholder="Select…"
                   value={form.category}
                   onChange={(v) => fc("category", v ?? "")}
-                  options={CATEGORIES.map((c) => ({ value: c, label: c }))}
+                  options={CATEGORY_OPTIONS}
                 />
               </div>
               <div>

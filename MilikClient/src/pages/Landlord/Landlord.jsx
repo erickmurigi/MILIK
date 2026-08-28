@@ -80,6 +80,13 @@ const Landlords = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   
+  // Permissions (must come before any useCallback that puts these in dep arrays)
+  const { canCreate, canUpdate, canDelete } = useMemo(() => ({
+    canCreate: hasCompanyPermission(currentUser, currentCompany, "landlords", "create", "propertyManagement"),
+    canUpdate: hasCompanyPermission(currentUser, currentCompany, "landlords", "update", "propertyManagement"),
+    canDelete: hasCompanyPermission(currentUser, currentCompany, "landlords", "delete", "propertyManagement"),
+  }), [currentUser, currentCompany]);
+
   // Table + UI state
   const [selectedLandlords, setSelectedLandlords] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
@@ -488,11 +495,6 @@ const Landlords = () => {
   }, [selectedLandlords, landlords, navigate]);
 
   const selectedCount = selectedLandlords.length;
-  const { canCreate, canUpdate, canDelete } = useMemo(() => ({
-    canCreate: hasCompanyPermission(currentUser, currentCompany, "landlords", "create", "propertyManagement"),
-    canUpdate: hasCompanyPermission(currentUser, currentCompany, "landlords", "update", "propertyManagement"),
-    canDelete: hasCompanyPermission(currentUser, currentCompany, "landlords", "delete", "propertyManagement"),
-  }), [currentUser, currentCompany]);
   const canEdit = selectedCount === 1 && canUpdate;
 
   // Excel Import Handler

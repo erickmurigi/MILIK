@@ -16,6 +16,17 @@ import PaginationBar from "../../components/PaginationBar";
 import MilikTable from "../../components/common/MilikTable";
 
 const fmtSvc  = (svc, fallback = "—") => svc ? (svc.category ? `${svc.category} — ${svc.name}` : svc.name) : fallback;
+
+const PAYOUT_COLUMNS = [
+  { label: "Payout No." },
+  { label: "Staff" },
+  { label: "Method" },
+  { label: "Cashbook" },
+  { label: "Commission", align: "right" },
+  { label: "Savings Held", align: "right" },
+  { label: "Net Cash", align: "right" },
+  { label: "Date" },
+];
 const ic         = "h-7 border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const methods    = ["cash", "mpesa", "bank", "card", "other"];
 const DEFAULT_PAGE_SIZE = 30;
@@ -291,16 +302,7 @@ const CarWashCommissionPayouts = () => {
         </div>
 
         <MilikTable
-          columns={[
-            { label: "Payout No." },
-            { label: "Staff" },
-            { label: "Method" },
-            { label: "Cashbook" },
-            { label: "Commission", align: "right" },
-            { label: "Savings Held", align: "right" },
-            { label: "Net Cash", align: "right" },
-            { label: "Date" },
-          ]}
+          columns={PAYOUT_COLUMNS}
           rows={payouts}
           loading={loading}
           empty="No commission payouts found for the selected filters."

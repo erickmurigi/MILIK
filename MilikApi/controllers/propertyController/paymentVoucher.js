@@ -1236,19 +1236,20 @@ export const updatePaymentVoucher = async (req, res, next) => {
     if (voucherRequiresExplicitDebitAccount(effectiveCategory) && !isValidObjectId(payload.debitAccount || existing.debitAccount || null)) {
       return next(createError(400, "Debit posting account is required for this voucher category."));
     }
-    const sourceRequisition = await resolveVoucherSourceRequisition({
-      businessId: business,
-      requisitionId: requestedSourceRequisitionId || null,
-      propertyId,
-      currentVoucherId: existing._id,
-    });
-
-    const accountingContext = await resolveVoucherLandlordContext({
-      businessId: business,
-      propertyId: propertyId || null,
-      landlordId: payload.landlord || existing.landlord || null,
-      voucherCategory: payload.category || existing.category || "",
-    });
+    const [sourceRequisition, accountingContext] = await Promise.all([
+      resolveVoucherSourceRequisition({
+        businessId: business,
+        requisitionId: requestedSourceRequisitionId || null,
+        propertyId,
+        currentVoucherId: existing._id,
+      }),
+      resolveVoucherLandlordContext({
+        businessId: business,
+        propertyId: propertyId || null,
+        landlordId: payload.landlord || existing.landlord || null,
+        voucherCategory: payload.category || existing.category || "",
+      }),
+    ]);
 
     payload.landlord = accountingContext.landlordId || null;
     payload.sourceRequisition = sourceRequisition?._id || existing.sourceRequisition || null;

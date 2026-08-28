@@ -1,4 +1,4 @@
-
+﻿
 import mongoose from "mongoose";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import LandlordAdvancement from "../../models/LandlordAdvancement.js";
@@ -394,7 +394,7 @@ const computeCurrentLandlordPayable = async ({ businessId, propertyId, landlordI
         total: { $sum: "$amount" },
       },
     },
-  ]);
+  ]).allowDiskUse(true);
 
   const debitTotal = grouped.find((g) => g._id === "debit")?.total || 0;
   const creditTotal = grouped.find((g) => g._id === "credit")?.total || 0;
