@@ -553,17 +553,38 @@ export const getUnits = async (req, res, next) => {
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(limit, 10) || 500, 1), 5000);
 
-    const [units, total] = await Promise.all([
-      Unit.find(filter)
-        .select("-images")
-        .populate("property", "propertyName propertyCode address")
-        .populate("lastTenant", "name phone status")
-        .sort({ createdAt: -1 })
-        .skip((pageNum - 1) * limitNum)
-        .limit(limitNum)
-        .lean(),
-      Unit.countDocuments(filter),
-    ]);
+    // Phase 1: lightweight query to get all matching IDs + property refs for sort-by-name.
+    // Sorting by property ObjectId groups same-ObjectId units but can split two properties
+    // that share a name (e.g. duplicate property records). Sorting by name fixes this.
+    const allStubs = await Unit.find(filter).select("_id property unitNumber").lean();
+
+    const stubPropIds = [...new Set(allStubs.map((u) => String(u.property)))];
+    const stubProps = stubPropIds.length
+      ? await Property.find({ _id: { $in: stubPropIds } }).select("propertyName").lean()
+      : [];
+    const stubPropNameMap = new Map(stubProps.map((p) => [String(p._id), String(p.propertyName || "")]));
+
+    allStubs.sort((a, b) => {
+      const nameA = stubPropNameMap.get(String(a.property)) || "";
+      const nameB = stubPropNameMap.get(String(b.property)) || "";
+      const nameCmp = nameA.localeCompare(nameB, undefined, { sensitivity: "base" });
+      if (nameCmp !== 0) return nameCmp;
+      return String(a.unitNumber || "").localeCompare(String(b.unitNumber || ""), undefined, { numeric: true, sensitivity: "base" });
+    });
+
+    const total = allStubs.length;
+    const pagedIds = allStubs.slice((pageNum - 1) * limitNum, pageNum * limitNum).map((u) => u._id);
+
+    // Phase 2: fetch full data for this page's IDs, then restore sort order.
+    const rawUnits = pagedIds.length
+      ? await Unit.find({ _id: { $in: pagedIds } })
+          .select("-images")
+          .populate("property", "propertyName propertyCode address")
+          .populate("lastTenant", "name phone status")
+          .lean()
+      : [];
+    const unitById = new Map(rawUnits.map((u) => [String(u._id), u]));
+    const units = pagedIds.map((id) => unitById.get(String(id))).filter(Boolean);
 
     const unitIds = units.map((unit) => unit._id);
     const occupyingTenants = unitIds.length
