@@ -11,6 +11,7 @@ import {
 } from '../../utils/workspaceRoutes';
 import { getPageTitle } from '../../utils/tabRouteNames';
 import { clearTabCache } from '../../hooks/useTabState';
+import { preloadRoute } from '../../utils/routePreloader';
 
 let tabIdCounter = 0;
 const generateUniqueTabId = (prefix = 'tab') => {
@@ -293,10 +294,13 @@ const TabManager = ({ darkMode }) => {
     setTabsByWorkspace((prev) => ({ ...prev, [currentWorkspace]: fallback }));
 
     if (activeTab === tabId) {
-      const idx     = sortedTabs.findIndex((t) => t.id === tabId);
-      const nextTab = sortedTabs[idx - 1] || sortedTabs[idx + 1] || fallback[0];
+      const idx      = sortedTabs.findIndex((t) => t.id === tabId);
+      const nextTab  = sortedTabs[idx - 1] || sortedTabs[idx + 1] || fallback[0];
+      const nextRoute = nextTab.route || getWorkspaceDefaultRoute(currentWorkspace);
       setActiveTabsByWorkspace((prev) => ({ ...prev, [currentWorkspace]: nextTab.id }));
-      navigate(nextTab.route || getWorkspaceDefaultRoute(currentWorkspace));
+      pendingRouteRef.current = nextRoute;
+      setIsNavigating(true);
+      navigate(nextRoute);
     }
   }, [workspaceTabs, activeTab, sortedTabs, currentWorkspace, navigate]);
 
@@ -305,6 +309,8 @@ const TabManager = ({ darkMode }) => {
     const defaultTab = getWorkspaceDefaultTab(currentWorkspace);
     setTabsByWorkspace((prev) => ({ ...prev, [currentWorkspace]: [defaultTab] }));
     setActiveTabsByWorkspace((prev) => ({ ...prev, [currentWorkspace]: defaultTab.id }));
+    pendingRouteRef.current = defaultTab.route;
+    setIsNavigating(true);
     navigate(defaultTab.route);
   }, [currentWorkspace, navigate, workspaceTabs]);
 
@@ -339,6 +345,7 @@ const TabManager = ({ darkMode }) => {
                 ref={(el) => { if (el) tabRefs.current[tab.id] = el; else delete tabRefs.current[tab.id]; }}
                 onClick={() => switchTab(tab.id, tab.route)}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); switchTab(tab.id, tab.route); } }}
+                onMouseEnter={() => { if (!isActive && tab.route) preloadRoute(tab.route); }}
                 tabIndex={0}
                 role="tab"
                 aria-selected={isActive}

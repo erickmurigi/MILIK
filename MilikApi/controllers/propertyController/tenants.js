@@ -97,12 +97,13 @@ const buildRequestedTenantUnits = ({ primaryUnitId, additionalUnits = [] } = {})
   };
 };
 
+const PROPERTY_SELECT = "propertyName propertyCode address name propertyType depositHeldBy";
+const UNIT_SELECT     = "unitNumber property rent status utilities";
+
 const populateTenantQuery = (query) =>
   query
-    .populate("unit", "unitNumber property rent status utilities")
-    .populate("unit.property", "propertyName propertyCode address name propertyType depositHeldBy")
-    .populate("additionalUnits", "unitNumber property rent status utilities")
-    .populate("additionalUnits.property", "propertyName propertyCode address name propertyType depositHeldBy");
+    .populate({ path: "unit",            select: UNIT_SELECT,     populate: { path: "property", select: PROPERTY_SELECT } })
+    .populate({ path: "additionalUnits", select: UNIT_SELECT,     populate: { path: "property", select: PROPERTY_SELECT } });
 
 const calculateTenantAssignedRent = (unitDocs = [], fallback = 0) => {
   const total = unitDocs.reduce((sum, unit) => sum + Number(unit?.rent || 0), 0);
@@ -1076,16 +1077,13 @@ export const getTenants = async (req, res, next) => {
     const skip = (page - 1) * limit;
 
     const [tenants, total] = await Promise.all([
-      Tenant.find(filter)
-        .select("-unitTransferHistory")
-        .populate("unit", "unitNumber property rent status utilities")
-        .populate("unit.property", "propertyName propertyCode address name propertyType depositHeldBy")
-        .populate("additionalUnits", "unitNumber property rent status utilities")
-        .populate("additionalUnits.property", "propertyName propertyCode address name propertyType depositHeldBy")
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
+      populateTenantQuery(
+        Tenant.find(filter)
+          .select("-unitTransferHistory")
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+      ).lean(),
       Tenant.countDocuments(filter),
     ]);
 
@@ -1149,10 +1147,8 @@ export const getTenant = async (req, res, next) => {
       : { _id: req.params.id, business: businessId };
 
     const tenant = await Tenant.findOne(filter)
-      .populate("unit", "unitNumber property rent amenities status utilities")
-      .populate("unit.property", "propertyName propertyCode address name propertyType depositHeldBy")
-      .populate("additionalUnits", "unitNumber property rent status utilities")
-      .populate("additionalUnits.property", "propertyName propertyCode address name propertyType depositHeldBy")
+      .populate({ path: "unit",            select: "unitNumber property rent amenities status utilities", populate: { path: "property", select: PROPERTY_SELECT } })
+      .populate({ path: "additionalUnits", select: UNIT_SELECT, populate: { path: "property", select: PROPERTY_SELECT } })
       .lean();
 
     if (!tenant) {
@@ -1779,10 +1775,8 @@ export const getTenantStatementBundle = async (req, res, next) => {
     const [tenant, leases, receipts, invoices, invoiceNotes] = await Promise.all([
       // Full tenant with unit/property populate
       Tenant.findOne(filter)
-        .populate("unit", "unitNumber property rent amenities status utilities")
-        .populate("unit.property", "propertyName propertyCode address name propertyType depositHeldBy")
-        .populate("additionalUnits", "unitNumber property rent status utilities")
-        .populate("additionalUnits.property", "propertyName propertyCode address name propertyType depositHeldBy")
+        .populate({ path: "unit",            select: "unitNumber property rent amenities status utilities", populate: { path: "property", select: PROPERTY_SELECT } })
+        .populate({ path: "additionalUnits", select: UNIT_SELECT, populate: { path: "property", select: PROPERTY_SELECT } })
         .lean(),
 
       // Leases for this tenant

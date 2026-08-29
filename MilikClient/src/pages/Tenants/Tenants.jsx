@@ -2357,9 +2357,15 @@ const confirmTransferUnit = useCallback(async () => {
                     ) : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap">
-                    <span className="text-slate-600">{tenant.startDate}</span>
-                    <span className="text-slate-300 mx-1.5">→</span>
-                    {tenant.endDate === "-" ? <span className="text-slate-400 italic text-[10px]">open</span> : <span className={tenant.expiryWarning?.hasWarning ? "font-semibold text-red-600" : "text-slate-600"}>{tenant.endDate}</span>}
+                    {tenant.startDate === "-" && tenant.endDate === "-" ? (
+                      <span className="text-slate-300">—</span>
+                    ) : (
+                      <>
+                        <span className="text-slate-600">{tenant.startDate}</span>
+                        <span className="text-slate-300 mx-1.5">→</span>
+                        {tenant.endDate === "-" ? <span className="text-slate-400 italic text-[10px]">open</span> : <span className={tenant.expiryWarning?.hasWarning ? "font-semibold text-red-600" : "text-slate-600"}>{tenant.endDate}</span>}
+                      </>
+                    )}
                   </td>
                   <td className="px-3 py-1.5 text-center">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
