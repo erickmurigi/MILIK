@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { selectCurrentUser } from "../../redux/selectors";
 import toast from "react-hot-toast";
 import {
   FaArrowLeft,
@@ -16,6 +17,7 @@ import {
   FaMapMarkerAlt,
   FaPhone,
   FaSave,
+  FaShieldAlt,
   FaStore,
   FaUsers,
 } from "react-icons/fa";
@@ -178,6 +180,8 @@ const AddCompanyWizard = () => {
   const { id } = useParams();
   const fileInputRef = useRef(null);
   const isEditMode = Boolean(id);
+  const currentUser = useSelector(selectCurrentUser);
+  const isSystemAdmin = Boolean(currentUser?.isSystemAdmin || currentUser?.superAdminAccess);
 
   const [formData, setFormData] = useState(INITIAL_STATE);
   const [saving, setSaving] = useState(false);
@@ -299,6 +303,22 @@ const AddCompanyWizard = () => {
       setSaving(false);
     }
   };
+
+  if (!isSystemAdmin) {
+    return (
+      <DashboardLayout>
+        <div className="flex h-full items-center justify-center p-8">
+          <div className="flex max-w-sm items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-6 py-5 shadow-sm">
+            <FaShieldAlt className="shrink-0 text-2xl text-amber-500" />
+            <div>
+              <div className="text-sm font-black text-amber-800">Access Restricted</div>
+              <div className="mt-1 text-xs text-amber-700">Registering and editing companies is restricted to Milik Admin users only.</div>
+            </div>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout lockContentScroll>

@@ -1060,7 +1060,7 @@ export default function CarWashMpesaNotifications() {
       </form>
 
       {/* Table */}
-      <div className="border border-slate-200 bg-white shadow-sm">
+      <div className="flex-1 min-h-0 flex flex-col border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center gap-4 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <span>Showing <strong className="text-[#0B3B2E]">{notifications.length}</strong> / {pagination.total}</span>
           <span>Page <strong className="text-[#0B3B2E]">{pagination.page}</strong> / {pagination.pages}</span>

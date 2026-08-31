@@ -329,6 +329,10 @@ export const getCompanySettings = async (req, res, next) => {
     }
 
     const data = settings.toJSON ? settings.toJSON() : settings;
+    // Ensure terminology Map is always a plain object (Mongoose Map serialization varies by version)
+    if (data.terminology instanceof Map) {
+      data.terminology = Object.fromEntries(data.terminology);
+    }
     settingsCache.set(cacheKey, { data, expiresAt: Date.now() + SETTINGS_CACHE_TTL_MS });
     res.status(200).json(data);
   } catch (err) {
@@ -1228,6 +1232,57 @@ export const updateAutoInvoicing = async (req, res, next) => {
     res.status(200).json({
       message: "Auto invoicing settings updated",
       autoInvoicing: settings.autoInvoicing,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const ALLOWED_TERMINOLOGY_KEYS = [
+  "tenant", "tenants",
+  "unit", "units",
+  "property", "properties",
+  "landlord", "landlords",
+  "rent",
+  "lease",
+  "meter", "meters",
+  "utility", "utilities",
+  "invoice", "invoices",
+  "receipt", "receipts",
+];
+
+export const updateTerminology = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+
+    const incoming = req.body?.terminology;
+    if (!incoming || typeof incoming !== "object" || Array.isArray(incoming)) {
+      return next(createError(400, "terminology must be a plain object"));
+    }
+
+    let settings = await findCompanySettings(businessId);
+    if (!settings) {
+      settings = new CompanySettings({ company: businessId });
+    }
+
+    for (const key of ALLOWED_TERMINOLOGY_KEYS) {
+      if (!(key in incoming)) continue;
+      const value = String(incoming[key] ?? "").trim().slice(0, 40);
+      if (value) {
+        settings.terminology.set(key, value);
+      } else {
+        settings.terminology.delete(key);
+      }
+    }
+
+    settings.markModified("terminology");
+    await settings.save();
+    invalidateSettingsCache(String(businessId));
+
+    return res.status(200).json({
+      message: "Terminology updated",
+      terminology: Object.fromEntries(settings.terminology),
+      settings,
     });
   } catch (err) {
     next(err);

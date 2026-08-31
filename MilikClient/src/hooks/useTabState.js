@@ -11,6 +11,9 @@ export const clearTabCache = (routePrefix) => {
 
 export const clearAllTabCache = () => _cache.clear();
 
+export const getTabCache = (key) => _cache.get(key);
+export const setTabCache = (key, value) => _cache.set(key, value);
+
 /**
  * Drop-in useState replacement that persists state across tab switches.
  * cacheKey must be globally unique: "/route/path:stateName"

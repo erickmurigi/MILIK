@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useTerms } from "../../hooks/useTerm";
 import { selectAllProperties, selectAllTenants } from "../../redux/selectors";
 import { useNavigate } from "react-router-dom";
 import {
@@ -60,6 +61,7 @@ const BatchReceipts = () => {
   const navigate      = useNavigate();
   const company       = useSelector((s) => s.company?.currentCompany);
   const allTenants    = useSelector(selectAllTenants);
+  const { tenant: termTenant, tenants: termTenants, unit: termUnit, property: termProperty, properties: termProperties } = useTerms("tenant", "tenants", "unit", "property", "properties");
   const allProperties = useSelector(selectAllProperties);
   const businessId    = company?._id;
 
@@ -528,8 +530,8 @@ const BatchReceipts = () => {
                   { label: "M-Pesa Code" },
                   { label: "Payer" },
                   { label: "Account Ref" },
-                  { label: "Property" },
-                  { label: "Tenant · Unit" },
+                  { label: termProperty },
+                  { label: `${termTenant} · ${termUnit}` },
                 ]}
                 rows={filteredCollections}
                 rowKey="_id"

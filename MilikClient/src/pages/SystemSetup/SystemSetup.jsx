@@ -949,9 +949,12 @@ export default function SystemSetupPage() {
     if (!VALID_SECTIONS.includes(activeSection)) navigate("/system-setup/overview", { replace: true });
   }, [activeSection, navigate]);
 
-  // Pass high limits so system admin always sees all records, not the default 10
-  useEffect(() => { dispatch(getCompanies({ includeDemo: true, limit: 200 })); }, [dispatch]);
-  useEffect(() => { dispatch(getUsers(selectedCompanyId || undefined, { limit: 500 })); }, [dispatch, selectedCompanyId]);
+  // Pass high limits so system admin always sees all records, not the default 10.
+  // Guard both fetches behind isSystemAdmin — non-admins get an access warning and
+  // do not need this data. The API enforces auth server-side, but this avoids
+  // wasted requests and prevents partial data exposure in Redux state.
+  useEffect(() => { if (isSystemAdmin) dispatch(getCompanies({ includeDemo: true, limit: 200 })); }, [dispatch, isSystemAdmin]);
+  useEffect(() => { if (isSystemAdmin) dispatch(getUsers(selectedCompanyId || undefined, { limit: 500 })); }, [dispatch, isSystemAdmin, selectedCompanyId]);
   useEffect(() => { setSelectedCompanyId(companyFilterFromQuery); }, [companyFilterFromQuery]);
 
   const isSystemAdmin = Boolean(currentUser?.isSystemAdmin || currentUser?.superAdminAccess);
@@ -1044,9 +1047,26 @@ export default function SystemSetupPage() {
   const handleToggleUserLock = (user) => {
     const id = normalizeId(user);
     if (!id) return;
-    dispatch(toggleUserLock(id))
-      .then(() => toast.success(user?.locked ? "User unlocked successfully." : "User locked successfully."))
-      .catch((error) => toast.error(error?.response?.data?.message || error?.message || "Failed to update user lock status."));
+    const isLocked = Boolean(user?.locked);
+    const name = `${user?.surname || ""} ${user?.otherNames || ""}`.trim() || user?.email || "this user";
+    setConfirmDialog({
+      isOpen: true,
+      title: isLocked ? "Unlock user" : "Lock user",
+      message: isLocked
+        ? `Unlock ${name}? They will be able to sign in again.`
+        : `Lock ${name}? They will be blocked from signing in immediately.`,
+      isDangerous: !isLocked,
+      confirmText: isLocked ? "Unlock" : "Lock",
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        try {
+          await dispatch(toggleUserLock(id));
+          toast.success(isLocked ? "User unlocked successfully." : "User locked successfully.");
+        } catch (error) {
+          toast.error(error?.response?.data?.message || error?.message || "Failed to update user lock status.");
+        }
+      },
+    });
   };
 
   const handleDeleteUser = (user) => {
@@ -1081,6 +1101,7 @@ export default function SystemSetupPage() {
   };
 
   const handleRefresh = () => {
+    if (!isSystemAdmin) return;
     dispatch(getCompanies({ includeDemo: true, limit: 200 }));
     dispatch(getUsers(selectedCompanyId || undefined, { limit: 500 }));
   };

@@ -33,6 +33,7 @@ import PropertyImportModal from "../../components/Modals/PropertyImportModal";
 import { downloadPropertiesTemplate, exportPropertiesToExcel } from "../../utils/excelTemplates";
 import { adminRequests } from "../../utils/requestMethods";
 import { printTabularList } from "../../utils/printList";
+import { useTerm } from "../../hooks/useTerm";
 import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 import { useTabState } from "../../hooks/useTabState";
 import { fmtDate } from "../../utils/dates";
@@ -98,6 +99,11 @@ const getLedgerBadge = (property) => {
 const Properties = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const termProperties = useTerm("properties");
+  const termProperty = useTerm("property");
+  const termLandlord = useTerm("landlord");
+  const termLandlords = useTerm("landlords");
+  const termUnits = useTerm("units");
 
   // Redux state
   const properties = useSelector(selectAllProperties);
@@ -147,16 +153,16 @@ const Properties = () => {
     () => [
       { key: "code", label: "Code" },
       { key: "name", label: "Name" },
-      { key: "landlord", label: "Landlord" },
+      { key: "landlord", label: termLandlord },
       { key: "category", label: "Category" },
       { key: "zone", label: "Zone" },
       { key: "location", label: "Location" },
-      { key: "totalUnits", label: "Total Units" },
+      { key: "totalUnits", label: `Total ${termUnits}` },
       { key: "occupiedUnits", label: "Occupied" },
       { key: "vacantUnits", label: "Vacant" },
       { key: "status", label: "Status" },
     ],
-    []
+    [termLandlord, termUnits]
   );
 
   // Filters
@@ -331,8 +337,8 @@ const Properties = () => {
   const handleDelete = (propertyId) => {
     setConfirmDialog({
       isOpen: true,
-      title: "Delete Property",
-      message: "Delete this property? If it has operational or accounting history, MILIK will archive it safely instead.",
+      title: `Delete ${termProperty}`,
+      message: `Delete this ${termProperty.toLowerCase()}? If it has operational or accounting history, MILIK will archive it safely instead.`,
       confirmText: "Delete",
       isDangerous: true,
       onConfirm: async () => {
@@ -350,14 +356,14 @@ const Properties = () => {
 
   const handleBulkDelete = async () => {
     if (selectedProperties.length === 0) {
-      toast.error("No properties selected");
+      toast.error(`No ${termProperties.toLowerCase()} selected`);
       return;
     }
 
     setConfirmDialog({
       isOpen: true,
-      title: "Delete Properties",
-      message: `Are you sure you want to delete ${selectedProperties.length} properties? Unused properties will be deleted permanently, but properties with operational or accounting history will be archived safely instead.`,
+      title: `Delete ${termProperties}`,
+      message: `Are you sure you want to delete ${selectedProperties.length} ${termProperties.toLowerCase()}? Unused ${termProperties.toLowerCase()} will be deleted permanently, but ${termProperties.toLowerCase()} with operational or accounting history will be archived safely instead.`,
       confirmText: "Delete",
       isDangerous: true,
       onConfirm: async () => {
@@ -380,14 +386,14 @@ const Properties = () => {
         }
         const failed = results.filter((r) => r.status === 'rejected').length;
         if (deletedCount > 0 && archivedCount > 0) {
-          toast.success(`${deletedCount} properties deleted and ${archivedCount} archived safely.`);
+          toast.success(`${deletedCount} ${termProperties.toLowerCase()} deleted and ${archivedCount} archived safely.`);
         } else if (archivedCount > 0) {
-          toast.success(`${archivedCount} properties archived safely instead of being deleted.`);
+          toast.success(`${archivedCount} ${termProperties.toLowerCase()} archived safely instead of being deleted.`);
         } else if (deletedCount > 0) {
-          toast.success(`${deletedCount} properties deleted successfully.`);
+          toast.success(`${deletedCount} ${termProperties.toLowerCase()} deleted successfully.`);
         }
         if (deletedCount === 0 && archivedCount === 1 && responseMessages[0]) toast.info(responseMessages[0]);
-        if (failed > 0) toast.error(`${failed} properties could not be deleted.`);
+        if (failed > 0) toast.error(`${failed} ${termProperties.toLowerCase()} could not be deleted.`);
         dispatch(getProperties(buildFetchParams()));
       },
     });
@@ -429,21 +435,21 @@ const Properties = () => {
 
   const handlePrintList = () => {
     if (!Array.isArray(properties) || properties.length === 0) {
-      toast.warning("No properties to print");
+      toast.warning(`No ${termProperties.toLowerCase()} to print`);
       return;
     }
 
     printTabularList({
-      title: "Properties List",
-      subtitle: "Current visible properties register",
+      title: `${termProperties} List`,
+      subtitle: `Current visible ${termProperties.toLowerCase()} register`,
       company: currentCompany || {},
       summary: `Records: ${properties.length} • Printed on ${new Date().toLocaleString()}`,
       columns: [
-        { label: "Property Code", value: (row) => row?.propertyCode || row?.code || "-" },
-        { label: "Property Name", value: (row) => row?.propertyName || row?.name || "-" },
-        { label: "Landlord", value: (row) => row?.landlord?.name || row?.landlordName || row?.landlords?.[0]?.name || row?.landlords?.[0]?.landlordId?.landlordName || row?.landlords?.[0]?.landlordId?.fullName || "-" },
+        { label: `${termProperty} Code`, value: (row) => row?.propertyCode || row?.code || "-" },
+        { label: `${termProperty} Name`, value: (row) => row?.propertyName || row?.name || "-" },
+        { label: termLandlord, value: (row) => row?.landlord?.name || row?.landlordName || row?.landlords?.[0]?.name || row?.landlords?.[0]?.landlordId?.landlordName || row?.landlords?.[0]?.landlordId?.fullName || "-" },
         { label: "Location", value: (row) => row?.location || row?.address || "-" },
-        { label: "Units", value: (row) => row?.unitsCount || row?.totalUnits || row?.units?.length || "-", align: "right" },
+        { label: termUnits, value: (row) => row?.unitsCount || row?.totalUnits || row?.units?.length || "-", align: "right" },
         { label: "Status", value: (row) => row?.status || "active" },
       ],
       rows: properties,
@@ -452,11 +458,11 @@ const Properties = () => {
 
   const handleExport = () => {
     if (!properties || properties.length === 0) {
-      toast.warning('No properties to export');
+      toast.warning(`No ${termProperties.toLowerCase()} to export`);
       return;
     }
     exportPropertiesToExcel(properties);
-    toast.success('Properties exported successfully');
+    toast.success(`${termProperties} exported successfully`);
   };
 
   const openEditProperty = (propertyId) => {
@@ -476,14 +482,14 @@ const Properties = () => {
   // Archive/Restore properties
   const archiveSelected = () => {
     if (selectedProperties.length === 0) {
-      toast.error("No properties selected");
+      toast.error(`No ${termProperties.toLowerCase()} selected`);
       return;
     }
 
     setConfirmDialog({
       isOpen: true,
-      title: "Archive Properties",
-      message: `Are you sure you want to archive ${selectedProperties.length} properties? You can restore them later.`,
+      title: `Archive ${termProperties}`,
+      message: `Are you sure you want to archive ${selectedProperties.length} ${termProperties.toLowerCase()}? You can restore them later.`,
       confirmText: "Archive",
       isDangerous: false,
       onConfirm: async () => {
@@ -496,8 +502,8 @@ const Properties = () => {
         );
         const archOk = archResults.filter((r) => r.status === 'fulfilled').length;
         const archFail = archResults.filter((r) => r.status === 'rejected').length;
-        if (archOk > 0) toast.success(`${archOk} properties archived successfully.`);
-        if (archFail > 0) toast.error(`${archFail} properties could not be archived.`);
+        if (archOk > 0) toast.success(`${archOk} ${termProperties.toLowerCase()} archived successfully.`);
+        if (archFail > 0) toast.error(`${archFail} ${termProperties.toLowerCase()} could not be archived.`);
         dispatch(getProperties(buildFetchParams()));
       },
     });
@@ -505,14 +511,14 @@ const Properties = () => {
 
   const restoreSelected = () => {
     if (selectedProperties.length === 0) {
-      toast.error("No properties selected");
+      toast.error(`No ${termProperties.toLowerCase()} selected`);
       return;
     }
 
     setConfirmDialog({
       isOpen: true,
-      title: "Restore Properties",
-      message: `Are you sure you want to restore ${selectedProperties.length} properties?`,
+      title: `Restore ${termProperties}`,
+      message: `Are you sure you want to restore ${selectedProperties.length} ${termProperties.toLowerCase()}?`,
       confirmText: "Restore",
       isDangerous: false,
       onConfirm: async () => {
@@ -525,8 +531,8 @@ const Properties = () => {
         );
         const restOk = restResults.filter((r) => r.status === 'fulfilled').length;
         const restFail = restResults.filter((r) => r.status === 'rejected').length;
-        if (restOk > 0) toast.success(`${restOk} properties restored successfully.`);
-        if (restFail > 0) toast.error(`${restFail} properties could not be restored.`);
+        if (restOk > 0) toast.success(`${restOk} ${termProperties.toLowerCase()} restored successfully.`);
+        if (restFail > 0) toast.error(`${restFail} ${termProperties.toLowerCase()} could not be restored.`);
         dispatch(getProperties(buildFetchParams()));
       },
     });
@@ -581,7 +587,7 @@ const Properties = () => {
               value={draftFilters.landlord}
               onChange={(v) => setDraftFilters((p) => ({ ...p, landlord: v ?? "" }))}
               options={landlordOptions}
-              placeholder="All Landlords"
+              placeholder={`All ${termLandlords}`}
               searchable
               clearable
               compact
@@ -781,7 +787,7 @@ const Properties = () => {
                                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                                     {/* Property Details */}
                                     <div className="space-y-3 p-3 bg-white rounded-lg shadow-sm border border-gray-100">
-                                      <h4 className="font-bold text-gray-900 text-sm mb-3 pb-2 border-b-2 border-[#0B3B2E]">📋 Property Details</h4>
+                                      <h4 className="font-bold text-gray-900 text-sm mb-3 pb-2 border-b-2 border-[#0B3B2E]">📋 {termProperty} Details</h4>
                                       <div>
                                         <span className="text-xs font-semibold text-gray-700">Property Type:</span>
                                         <p className="text-sm font-bold text-gray-900 mt-1">{property.propertyCategory || property.propertyType || "N/A"}</p>
@@ -835,7 +841,7 @@ const Properties = () => {
                                         </div>
                                       </div>
                                       <div>
-                                        <span className="text-xs font-semibold text-gray-700">Held for Landlord:</span>
+                                        <span className="text-xs font-semibold text-gray-700">Held for {termLandlord}:</span>
                                         {property.pctrlBalance > 0 ? (
                                           <p className="text-sm font-bold text-emerald-700 mt-1">
                                             KES {Number(property.pctrlBalance).toLocaleString("en-KE", { minimumFractionDigits: 2 })}
@@ -871,7 +877,7 @@ const Properties = () => {
                                           </div>
                                         ))
                                       ) : (
-                                        <p className="text-sm text-gray-600 font-semibold">No landlords added</p>
+                                        <p className="text-sm text-gray-600 font-semibold">No {termLandlords.toLowerCase()} added</p>
                                       )}
                                       {property.specificContactInfo && (
                                         <div className="p-2 bg-gray-50 rounded border border-gray-200">
@@ -900,7 +906,7 @@ const Properties = () => {
                                             <button
                                               className={`px-3 py-2 text-xs text-white rounded-lg flex items-center justify-center gap-2 transition-colors w-full font-bold ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
                                             >
-                                              <FaEdit /> Edit Property
+                                              <FaEdit /> Edit {termProperty}
                                             </button>
                                           </Link>
                                         )}
@@ -913,7 +919,7 @@ const Properties = () => {
                                             }}
                                             className="px-3 py-2 text-xs bg-red-600 text-white rounded-lg flex items-center justify-center gap-2 hover:bg-red-700 transition-colors w-full font-bold"
                                           >
-                                            <FaTrash /> Delete Property
+                                            <FaTrash /> Delete {termProperty}
                                           </button>
                                         )}
                                       </div>
@@ -932,14 +938,14 @@ const Properties = () => {
                           >
                             <div className="flex flex-col items-center justify-center py-8">
                             
-                              <div className="text-lg font-bold text-gray-400 mb-2">No properties found</div>
+                              <div className="text-lg font-bold text-gray-400 mb-2">No {termProperties.toLowerCase()} found</div>
                               <div className="text-sm text-gray-500 mb-4">Use the filter fields above, then click Search</div>
                               {canCreateProperty && (
                                 <Link to="/properties/new">
                                   <button
                                     className={`px-4 py-2 text-white rounded-lg transition-colors ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
                                   >
-                                    Add New Property
+                                    Add New {termProperty}
                                   </button>
                                 </Link>
                               )}
@@ -958,7 +964,7 @@ const Properties = () => {
                   pageSize={pageSize}
                   onPageChange={setCurrentPage}
                   onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
-                  label="properties"
+                  label={termProperties.toLowerCase()}
                 />
             </>
           </div>

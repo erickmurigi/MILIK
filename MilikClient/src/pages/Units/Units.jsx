@@ -39,6 +39,7 @@ import {
 import { adminRequests } from "../../utils/requestMethods";
 import { getCompanyUnitTypes } from "../../redux/apiCalls";
 import { printTabularList } from "../../utils/printList";
+import { useTerms } from "../../hooks/useTerm";
 import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 import AppSelect from "../../components/common/AppSelect";
 
@@ -116,6 +117,7 @@ const formatRentAmount = (amount) => {
 const Units = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { unit: termUnit, units: termUnits, property: termProperty, tenant: termTenant } = useTerms("unit", "units", "property", "tenant");
   
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
@@ -374,7 +376,7 @@ const Units = () => {
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
 
-    return [{ value: "any", label: "Property" }, ...options];
+    return [{ value: "any", label: termProperty }, ...options];
   }, [properties]);
 
   // ---------------------------
@@ -511,7 +513,7 @@ const Units = () => {
     if (selectedCount === 0) return;
 
     if (selectedArchivableUnits.length === 0) {
-      toast.warning("Only non-archived, non-occupied units can be archived from this list.");
+      toast.warning(`Only non-archived, non-occupied ${termUnits.toLowerCase()} can be archived from this list.`);
       return;
     }
 
@@ -520,11 +522,11 @@ const Units = () => {
 
     setConfirmDialog({
       isOpen: true,
-      title: "Archive Units",
+      title: `Archive ${termUnits}`,
       message:
         skippedCount > 0
-          ? `Archive ${archiveCount} eligible unit(s). ${skippedCount} selected unit(s) will be skipped because they are already archived or still occupied.`
-          : `Are you sure you want to archive ${archiveCount} selected unit(s)? You can restore them later.`,
+          ? `Archive ${archiveCount} eligible ${termUnit.toLowerCase()}(s). ${skippedCount} selected ${termUnit.toLowerCase()}(s) will be skipped because they are already archived or still occupied.`
+          : `Are you sure you want to archive ${archiveCount} selected ${termUnit.toLowerCase()}(s)? You can restore them later.`,
       confirmText: "Archive",
       isDangerous: false,
       onConfirm: async () => {
@@ -538,9 +540,9 @@ const Units = () => {
         );
         const archiveOk = archiveResults.filter((r) => r.status === "fulfilled").length;
         const archiveFail = archiveResults.filter((r) => r.status === "rejected").length;
-        if (archiveOk > 0) toast.success(`${archiveOk} unit(s) archived successfully.`);
-        if (archiveFail > 0) toast.error(`${archiveFail} unit(s) could not be archived.`);
-        if (skippedCount > 0) toast.info(`${skippedCount} unit(s) were skipped (occupied or already archived).`);
+        if (archiveOk > 0) toast.success(`${archiveOk} ${termUnit.toLowerCase()}(s) archived successfully.`);
+        if (archiveFail > 0) toast.error(`${archiveFail} ${termUnit.toLowerCase()}(s) could not be archived.`);
+        if (skippedCount > 0) toast.info(`${skippedCount} ${termUnit.toLowerCase()}(s) were skipped (occupied or already archived).`);
         dispatch(getUnits(buildUnitParams(safeCurrentPage)));
       },
     });
@@ -551,7 +553,7 @@ const Units = () => {
     if (selectedCount === 0) return;
 
     if (selectedRestorableUnits.length === 0) {
-      toast.warning("Select archived units to restore them back to vacant status.");
+      toast.warning(`Select archived ${termUnits.toLowerCase()} to restore them back to vacant status.`);
       return;
     }
 
@@ -560,11 +562,11 @@ const Units = () => {
 
     setConfirmDialog({
       isOpen: true,
-      title: "Restore Units",
+      title: `Restore ${termUnits}`,
       message:
         skippedCount > 0
-          ? `Restore ${restoreCount} archived unit(s). ${skippedCount} selected unit(s) will be skipped because they are not archived.`
-          : `Are you sure you want to restore ${restoreCount} selected unit(s)?`,
+          ? `Restore ${restoreCount} archived ${termUnit.toLowerCase()}(s). ${skippedCount} selected ${termUnit.toLowerCase()}(s) will be skipped because they are not archived.`
+          : `Are you sure you want to restore ${restoreCount} selected ${termUnit.toLowerCase()}(s)?`,
       confirmText: "Restore",
       isDangerous: false,
       onConfirm: async () => {
@@ -578,9 +580,9 @@ const Units = () => {
         );
         const restoreOk = restoreResults.filter((r) => r.status === "fulfilled").length;
         const restoreFail = restoreResults.filter((r) => r.status === "rejected").length;
-        if (restoreOk > 0) toast.success(`${restoreOk} unit(s) restored successfully.`);
-        if (restoreFail > 0) toast.error(`${restoreFail} unit(s) could not be restored.`);
-        if (skippedCount > 0) toast.info(`${skippedCount} unit(s) were skipped (not archived).`);
+        if (restoreOk > 0) toast.success(`${restoreOk} ${termUnit.toLowerCase()}(s) restored successfully.`);
+        if (restoreFail > 0) toast.error(`${restoreFail} ${termUnit.toLowerCase()}(s) could not be restored.`);
+        if (skippedCount > 0) toast.info(`${skippedCount} ${termUnit.toLowerCase()}(s) were skipped (not archived).`);
         dispatch(getUnits(buildUnitParams(safeCurrentPage)));
       },
     });
@@ -590,7 +592,7 @@ const Units = () => {
     if (selectedCount === 0) return;
 
     if (selectedDeletableUnits.length === 0) {
-      toast.warning("Selected units are protected because they are occupied or already carry tenant history.");
+      toast.warning(`Selected ${termUnits.toLowerCase()} are protected because they are occupied or already carry tenant history.`);
       return;
     }
 
@@ -599,11 +601,11 @@ const Units = () => {
 
     setConfirmDialog({
       isOpen: true,
-      title: "Delete Units",
+      title: `Delete ${termUnits}`,
       message:
         skippedCount > 0
-          ? `Delete ${deleteCount} eligible unit(s). ${skippedCount} selected unit(s) will be skipped because they are occupied or already have tenant history.`
-          : `Are you sure you want to delete ${deleteCount} selected unit(s)? This action cannot be undone.`,
+          ? `Delete ${deleteCount} eligible ${termUnit.toLowerCase()}(s). ${skippedCount} selected ${termUnit.toLowerCase()}(s) will be skipped because they are occupied or already have tenant history.`
+          : `Are you sure you want to delete ${deleteCount} selected ${termUnit.toLowerCase()}(s)? This action cannot be undone.`,
       confirmText: "Delete",
       isDangerous: true,
       onConfirm: async () => {
@@ -615,9 +617,9 @@ const Units = () => {
         );
         const deleteOk = deleteResults.filter((r) => r.status === "fulfilled").length;
         const deleteFail = deleteResults.filter((r) => r.status === "rejected").length;
-        if (deleteOk > 0) toast.success(`${deleteOk} unit(s) deleted successfully.`);
-        if (deleteFail > 0) toast.error(`${deleteFail} unit(s) could not be deleted.`);
-        if (skippedCount > 0) toast.info(`${skippedCount} unit(s) were skipped (occupied or have tenant history).`);
+        if (deleteOk > 0) toast.success(`${deleteOk} ${termUnit.toLowerCase()}(s) deleted successfully.`);
+        if (deleteFail > 0) toast.error(`${deleteFail} ${termUnit.toLowerCase()}(s) could not be deleted.`);
+        if (skippedCount > 0) toast.info(`${skippedCount} ${termUnit.toLowerCase()}(s) were skipped (occupied or have tenant history).`);
         dispatch(getUnits(buildUnitParams(safeCurrentPage)));
       },
     });
@@ -628,7 +630,7 @@ const Units = () => {
   // ---------------------------
   const handleDownloadTemplate = () => {
     downloadUnitsTemplate(properties || []);
-    toast.info('Units import template downloaded!');
+    toast.info(`${termUnits} import template downloaded!`);
   };
 
   const handleBulkImport = async (validRecords) => {
@@ -650,23 +652,23 @@ const Units = () => {
 
   const handlePrintList = () => {
     if (!currentUnits.length) {
-      toast.warning("No units to print");
+      toast.warning(`No ${termUnits.toLowerCase()} to print`);
       return;
     }
 
     printTabularList({
-      title: "Units List",
-      subtitle: "Current filtered units register",
+      title: `${termUnits} List`,
+      subtitle: `Current filtered ${termUnits.toLowerCase()} register`,
       company: currentCompany || {},
       summary: `Records: ${unitPagination.total} • Printed on ${new Date().toLocaleString()}`,
       columns: [
-        { label: "Unit No",      value: (u) => u.unitNo || "-" },
+        { label: `${termUnit} No`,      value: (u) => u.unitNo || "-" },
         { label: "Code",         value: (u) => u.unitCode || "-" },
-        { label: "Property",     value: (u) => u.propertyName || "-" },
-        { label: "Unit Type",    value: (u) => formatUnitTypeLabel(u.unitType) || "-" },
+        { label: termProperty,     value: (u) => u.propertyName || "-" },
+        { label: `${termUnit} Type`,    value: (u) => formatUnitTypeLabel(u.unitType) || "-" },
         { label: "Rent",         value: (u) => u.currentRent || "Ksh 0", align: "right" },
         { label: "Status",       value: (u) => u.status ? u.status.charAt(0).toUpperCase() + u.status.slice(1) : "-" },
-        { label: "Tenant",       value: (u) => u.status === "occupied" && u.tenant !== "-" ? u.tenant : "-" },
+        { label: termTenant,       value: (u) => u.status === "occupied" && u.tenant !== "-" ? u.tenant : "-" },
         { label: "Vacant Since", value: (u) => u.status === "vacant" ? u.vacantFrom : "-" },
       ],
       rows: currentUnits,
@@ -675,11 +677,11 @@ const Units = () => {
 
   const handleExportToExcel = () => {
     if (!unitsData || unitsData.length === 0) {
-      toast.warning('No units to export');
+      toast.warning(`No ${termUnits.toLowerCase()} to export`);
       return;
     }
     exportUnitsToExcel(unitsData);
-    toast.success('Units exported successfully!');
+    toast.success(`${termUnits} exported successfully!`);
   };
 
   // ---------------------------
@@ -841,7 +843,7 @@ const Units = () => {
               value={draftFilters.property === "any" ? "" : draftFilters.property}
               onChange={(v) => setDraftFilters((p) => ({ ...p, property: v ?? "any" }))}
               options={uniqueProperties.filter((p) => p.value !== "any")}
-              placeholder="Property"
+              placeholder={termProperty}
               searchable
               clearable
               compact
@@ -867,7 +869,7 @@ const Units = () => {
               value={draftFilters.unitType === "any" ? "" : draftFilters.unitType}
               onChange={(v) => setDraftFilters((p) => ({ ...p, unitType: v ?? "any" }))}
               options={unitTypeOptions}
-              placeholder="Unit Type"
+              placeholder={`${termUnit} Type`}
               searchable
               clearable
               compact
@@ -876,10 +878,10 @@ const Units = () => {
             <div className="h-3 w-px shrink-0 bg-slate-200" />
 
             <input value={draftFilters.unitNo} onChange={(e) => setDraftFilters((p) => ({ ...p, unitNo: normalizeUppercaseInput(e.target.value) }))}
-              onKeyDown={onFilterEnter} placeholder="Unit No."
+              onKeyDown={onFilterEnter} placeholder={`${termUnit} No.`}
               className="h-[20px] w-20 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
             <input value={draftFilters.tenant} onChange={(e) => setDraftFilters((p) => ({ ...p, tenant: normalizeUppercaseInput(e.target.value) }))}
-              onKeyDown={onFilterEnter} placeholder="Tenant"
+              onKeyDown={onFilterEnter} placeholder={termTenant}
               className="h-[20px] w-24 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
 
             <div className="h-3 w-px shrink-0 bg-slate-200" />
@@ -967,9 +969,9 @@ const Units = () => {
               tableFixed
               actionsWidth="72px"
               columns={[
-                { label: 'Unit No', width: '90px' },
+                { label: `${termUnit} No`, width: '90px' },
                 { label: 'Code', width: '78px' },
-                { label: 'Unit Type', width: '112px' },
+                { label: `${termUnit} Type`, width: '112px' },
                 { label: 'Rent', align: 'right', width: '108px' },
                 { label: 'Status', align: 'center', width: '92px' },
                 { label: 'Occupancy', width: '200px' },
@@ -978,7 +980,7 @@ const Units = () => {
               rows={currentUnits}
               rowKey="id"
               loading={isFetching}
-              empty={appliedFilters.property !== 'any' || appliedFilters.status !== 'any' ? 'No units match the current filters.' : 'No units found. Create a unit or import existing units.'}
+              empty={appliedFilters.property !== 'any' || appliedFilters.status !== 'any' ? `No ${termUnits.toLowerCase()} match the current filters.` : `No ${termUnits.toLowerCase()} found. Create a ${termUnit.toLowerCase()} or import existing ${termUnits.toLowerCase()}.`}
               groupBy={(u) => u.propertyName}
               checkboxes
               allChecked={selectAll && visibleUnitIds.length > 0}
@@ -1046,10 +1048,10 @@ const Units = () => {
               renderExpanded={(u) => (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   <div className="space-y-4 p-4 bg-white rounded-lg shadow-md border-2 border-[#0B3B2E]/30">
-                    <h4 className="font-black text-gray-900 text-sm mb-4 pb-2 border-b-3 border-[#0B3B2E]">📋 Unit Details</h4>
-                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">Unit Number</span><p className="text-sm font-black text-gray-900 mt-2">{u.unitNo || 'N/A'}</p></div>
-                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">Unit Code</span><p className="text-sm font-black font-mono text-gray-900 mt-2 bg-gray-100 p-2 rounded">{u.unitCode || 'N/A'}</p></div>
-                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">Unit Type</span><p className="text-sm font-black text-gray-900 mt-2">{formatUnitTypeLabel(u.unitType) || 'N/A'}</p></div>
+                    <h4 className="font-black text-gray-900 text-sm mb-4 pb-2 border-b-3 border-[#0B3B2E]">📋 {termUnit} Details</h4>
+                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">{termUnit} Number</span><p className="text-sm font-black text-gray-900 mt-2">{u.unitNo || 'N/A'}</p></div>
+                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">{termUnit} Code</span><p className="text-sm font-black font-mono text-gray-900 mt-2 bg-gray-100 p-2 rounded">{u.unitCode || 'N/A'}</p></div>
+                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">{termUnit} Type</span><p className="text-sm font-black text-gray-900 mt-2">{formatUnitTypeLabel(u.unitType) || 'N/A'}</p></div>
                     <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">Status</span>
                       <p className={`text-sm font-black mt-2 inline-block px-3 py-1 rounded-lg ${u.status === 'occupied' ? 'bg-green-200 text-green-900' : u.status === 'vacant' ? 'bg-red-200 text-red-900' : u.status === 'maintenance' ? 'bg-yellow-200 text-yellow-900' : 'bg-gray-200 text-gray-900'}`}>
                         {u.status.charAt(0).toUpperCase() + u.status.slice(1)}
@@ -1064,9 +1066,9 @@ const Units = () => {
                   </div>
                   <div className="space-y-4 p-4 bg-white rounded-lg shadow-md border-2 border-blue-300/50">
                     <h4 className="font-black text-gray-900 text-sm mb-4 pb-2 border-b-3 border-blue-600">👥 Occupancy Details</h4>
-                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">Current Tenant</span><p className="text-sm font-black text-gray-900 mt-2">{u.tenant || '-'}</p></div>
+                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">Current {termTenant}</span><p className="text-sm font-black text-gray-900 mt-2">{u.tenant || '-'}</p></div>
                     <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">Vacant Since</span><p className="text-sm font-black text-gray-900 mt-2">{u.status === 'vacant' ? u.vacantFrom : '-'}</p></div>
-                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">Property</span><p className="text-sm font-black text-gray-900 mt-2">{u.propertyName || 'Unknown'}</p></div>
+                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">{termProperty}</span><p className="text-sm font-black text-gray-900 mt-2">{u.propertyName || 'Unknown'}</p></div>
                   </div>
                   <div className="space-y-4 p-4 bg-white rounded-lg shadow-md border-2 border-green-300/50">
                     <h4 className="font-black text-gray-900 text-sm mb-4 pb-2 border-b-3 border-green-600">⚙️ Actions</h4>
@@ -1096,7 +1098,7 @@ const Units = () => {
                 }
               }}
               loading={isFetching}
-              label="units"
+              label={termUnits.toLowerCase()}
             />
           </div>
         </div>
@@ -1109,7 +1111,7 @@ const Units = () => {
           <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
             <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
               <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
-                <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">Add New Unit/Space</h2>
+                <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">Add New {termUnit}/Space</h2>
                 <button
                   onClick={closeAddUnitModal}
                   className="text-white/70 transition-colors hover:text-white"
@@ -1125,12 +1127,12 @@ const Units = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Property <span className="text-red-500">*</span></label>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">{termProperty} <span className="text-red-500">*</span></label>
                         <AppSelect
                           value={formData.property}
                           onChange={(v) => setFormData((p) => ({ ...p, property: v ?? "" }))}
                           options={PROPERTIES_FOR_DROPDOWN_OPTIONS}
-                          placeholder="Select Property"
+                          placeholder={`Select ${termProperty}`}
                           searchable
                           clearable
                           size="md"

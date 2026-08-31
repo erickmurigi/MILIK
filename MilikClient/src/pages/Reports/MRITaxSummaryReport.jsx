@@ -13,6 +13,7 @@ import { hasCompanyPermission } from '../../utils/permissions';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 import { fmtDate } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
+import { useTerms } from '../../hooks/useTerm';
 
 const toDateInputValue = (value) => new Date(value).toISOString().split('T')[0];
 
@@ -45,6 +46,8 @@ const MRITaxSummaryReport = () => {
   }));
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [report, setReport] = useState({ summary: {}, byProperty: [], byMonth: [], mriRate: 0.075 });
+
+  const { property: termProperty } = useTerms("property");
 
   // Stable option array — avoids busting AppSelect's internal useMemo on every render
   const propertyOptions = useMemo(() => properties.map((p) => ({ value: p._id, label: p.propertyName || p.name })), [properties]);
@@ -95,7 +98,7 @@ const MRITaxSummaryReport = () => {
       toast.warning ? toast.warning('No export permission') : toast.error('No export permission');
       return;
     }
-    const propHeader = ['Property', 'Gross Rent', `MRI Tax (${mriRatePercent}%)`];
+    const propHeader = [termProperty, 'Gross Rent', `MRI Tax (${mriRatePercent}%)`];
     const propRows = (report.byProperty || []).map((row) => [
       row.propertyName || '',
       row.grossRent || 0,
@@ -163,8 +166,8 @@ const MRITaxSummaryReport = () => {
       <div class="card"><div class="cl">Total MRI Tax (${mriRatePercent}%)</div><div class="cv" style="color:#c2410c">${fmt(summary.totalMriTax)}</div></div>
       <div class="card"><div class="cl">Properties</div><div class="cv">${(report.byProperty || []).length}</div></div>
     </div>
-    <h3>By Property</h3>
-    <table><thead><tr><th>Property</th><th class="r">Gross Rent</th><th class="r">MRI Tax (${mriRatePercent}%)</th></tr></thead>
+    <h3>By ${termProperty}</h3>
+    <table><thead><tr><th>${termProperty}</th><th class="r">Gross Rent</th><th class="r">MRI Tax (${mriRatePercent}%)</th></tr></thead>
     <tbody>${(report.byProperty || []).map((row) => `<tr><td>${row.propertyName || '—'}</td><td class="r">${fmt(row.grossRent)}</td><td class="r" style="color:#c2410c"><strong>${fmt(row.mriTax)}</strong></td></tr>`).join('')}</tbody>
     <tfoot><tr><td><strong>TOTAL</strong></td><td class="r"><strong>${fmt(summary.totalGrossRent)}</strong></td><td class="r" style="color:#c2410c"><strong>${fmt(summary.totalMriTax)}</strong></td></tr></tfoot></table>
     <h3>Monthly Breakdown</h3>
@@ -175,7 +178,7 @@ const MRITaxSummaryReport = () => {
     </body></html>`);
     win.document.close();
     win.onload = () => { win.focus(); win.print(); };
-  }, [canExportReports, currentCompany, currentUser, report, summary, mriRatePercent, filters.startDate, filters.endDate]);
+  }, [canExportReports, currentCompany, currentUser, report, summary, mriRatePercent, filters.startDate, filters.endDate, termProperty]);
 
   return (
     <DashboardLayout lockContentScroll>
@@ -234,11 +237,11 @@ const MRITaxSummaryReport = () => {
           </div>
 
           <div className="mri-print-section">
-            <h2 className="mri-print-section-title">By Property</h2>
+            <h2 className="mri-print-section-title">By {termProperty}</h2>
             <table className="mri-print-table">
               <thead>
                 <tr>
-                  <th>Property</th>
+                  <th>{termProperty}</th>
                   <th className="text-right">Gross Rent</th>
                   <th className="text-right">MRI Tax ({mriRatePercent}%)</th>
                 </tr>
@@ -306,7 +309,7 @@ const MRITaxSummaryReport = () => {
                   value={filters.propertyId}
                   onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))}
                   options={propertyOptions}
-                  placeholder="All properties"
+                  placeholder={`All ${termProperty}s`}
                   searchable
                   clearable
                   size="sm"
@@ -346,12 +349,12 @@ const MRITaxSummaryReport = () => {
 
                 {/* By property */}
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
-                  <div className="flex-shrink-0 bg-[#0B3B2E] px-2 py-1.5 text-xs font-bold text-white">By Property</div>
+                  <div className="flex-shrink-0 bg-[#0B3B2E] px-2 py-1.5 text-xs font-bold text-white">By {termProperty}</div>
                   <div className="min-h-0 flex-1 overflow-auto">
                     <table className="min-w-full text-[11px] border-collapse">
                       <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                         <tr>
-                          <th className="whitespace-nowrap px-2 py-1 text-left font-bold border-r border-white/10">Property</th>
+                          <th className="whitespace-nowrap px-2 py-1 text-left font-bold border-r border-white/10">{termProperty}</th>
                           <th className="whitespace-nowrap px-2 py-1 text-left font-bold border-r border-white/10">Gross Rent</th>
                           <th className="whitespace-nowrap px-2 py-1 text-left font-bold">MRI Tax ({mriRatePercent}%)</th>
                         </tr>

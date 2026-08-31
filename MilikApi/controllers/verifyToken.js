@@ -198,6 +198,19 @@ export const verifyAdmin = (req, res, next) => {
   });
 };
 
+// Requires setup or admin access — for company configuration endpoints
+export const verifySetupAccess = (req, res, next) => {
+  verifyToken(req, res, (err) => {
+    if (err) return next(err);
+
+    if (!req.user?.setupAccess && !req.user?.adminAccess && !isSystemAdminUser(req.user)) {
+      return next(createError(403, "Setup or admin access required"));
+    }
+
+    next();
+  });
+};
+
 export const verifySuperAdmin = (req, res, next) => {
   verifyToken(req, res, (err) => {
     if (err) return next(err);

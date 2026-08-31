@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useTerms } from "../../hooks/useTerm";
 import { FaFileDownload, FaFilter, FaPrint, FaSyncAlt, FaUsers } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
@@ -19,6 +20,7 @@ const TenantSummaryReport = () => {
   const dispatch = useDispatch();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const currentUser = useSelector((s) => s.auth?.currentUser || s.auth?.user || null);
+  const { tenant: termTenant, tenants: termTenants, unit: termUnit, property: termProperty, properties: termProperties } = useTerms("tenant", "tenants", "unit", "property", "properties");
   const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
   const businessId = currentCompany?._id || "";
 
@@ -171,7 +173,7 @@ const TenantSummaryReport = () => {
       <div class="card"><div class="cl">Total Collected</div><div class="cv" style="color:#0B3B2E">${fmt(totals.paid)}</div></div>
       <div class="card"><div class="cl">Outstanding</div><div class="cv" style="color:${totals.balance > 0 ? '#b91c1c' : '#047857'}">${fmt(totals.balance)}</div></div>
     </div>
-    <table><thead><tr><th>Tenant</th><th>Email</th><th>Phone</th><th>Property</th><th>Unit</th><th class="r">Invoiced</th><th class="r">Collected</th><th class="r">Outstanding</th><th>Status</th></tr></thead>
+    <table><thead><tr><th>${termTenant}</th><th>Email</th><th>Phone</th><th>${termProperty}</th><th>${termUnit}</th><th class="r">Invoiced</th><th class="r">Collected</th><th class="r">Outstanding</th><th>Status</th></tr></thead>
     <tbody>${filteredRows.map((row) => `<tr><td><strong>${row.tenantName}</strong></td><td>${row.email}</td><td>${row.phone}</td><td>${row.propertyName}</td><td>${row.unitNumber}</td><td class="r">${fmt(row.totalInvoiced)}</td><td class="r" style="color:#047857"><strong>${fmt(row.totalPaid)}</strong></td><td class="r" style="color:${row.balance > 0 ? '#b91c1c' : row.balance < 0 ? '#047857' : '#64748b'}">${fmt(row.balance)}</td><td><span class="${row.status === 'active' ? 'ba act' : 'ba ina'}">${row.status}</span></td></tr>`).join('')}</tbody>
     <tfoot><tr><td colspan="5"><strong>TOTALS (${filteredRows.length} tenants)</strong></td><td class="r">${fmt(totals.invoiced)}</td><td class="r">${fmt(totals.paid)}</td><td class="r">${fmt(totals.balance)}</td><td></td></tr></tfoot>
     </table></body></html>`);
@@ -227,7 +229,7 @@ const TenantSummaryReport = () => {
           <table className="ts-print-table">
             <thead>
               <tr>
-                {["Tenant", "Email", "Phone", "Property", "Unit", "Invoiced", "Collected", "Outstanding", "Status"].map((h) => <th key={h}>{h}</th>)}
+                {[termTenant, "Email", "Phone", termProperty, termUnit, "Invoiced", "Collected", "Outstanding", "Status"].map((h) => <th key={h}>{h}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -260,7 +262,7 @@ const TenantSummaryReport = () => {
                   <input
                     value={filters.search}
                     onChange={setFilter("search")}
-                    placeholder="Tenant, property, unit..."
+                    placeholder={`${termTenant}, ${termProperty.toLowerCase()}, ${termUnit.toLowerCase()}...`}
                     className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
@@ -268,7 +270,7 @@ const TenantSummaryReport = () => {
                   value={filters.propertyId}
                   onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "" }))}
                   options={propertyOptions}
-                  placeholder="All properties"
+                  placeholder={`All ${termProperties.toLowerCase()}`}
                   searchable
                   clearable
                   size="sm"
@@ -280,12 +282,12 @@ const TenantSummaryReport = () => {
                     { value: "active", label: "Active only" },
                     { value: "inactive", label: "Inactive only" },
                   ]}
-                  placeholder="All tenants"
+                  placeholder={`All ${termTenants.toLowerCase()}`}
                   clearable
                   size="sm"
                 />
                 <span className="shrink-0 rounded border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">
-                  <FaUsers className="inline mr-1" />{filteredRows.length} tenants
+                  <FaUsers className="inline mr-1" />{filteredRows.length} {termTenants.toLowerCase()}
                 </span>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 {[
@@ -325,7 +327,7 @@ const TenantSummaryReport = () => {
               <table className="min-w-full text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className="bg-[#0B3B2E] text-white">
-                    {["Tenant", "Email", "Phone", "Property", "Unit", "Invoiced", "Collected", "Outstanding", "Status"].map((h, i, arr) => (
+                    {[termTenant, "Email", "Phone", termProperty, termUnit, "Invoiced", "Collected", "Outstanding", "Status"].map((h, i, arr) => (
                       <th key={h} className={`whitespace-nowrap px-3 py-1 text-left font-bold ${i < arr.length - 1 ? "border-r border-white/10" : ""}`}>{h}</th>
                     ))}
                   </tr>
@@ -334,7 +336,7 @@ const TenantSummaryReport = () => {
                   {filteredRows.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="px-3 py-8 text-center text-xs text-slate-500">
-                        {loading ? "Loading..." : "No tenants found for the current filter selection."}
+                        {loading ? "Loading..." : `No ${termTenants.toLowerCase()} found for the current filter selection.`}
                       </td>
                     </tr>
                   ) : (

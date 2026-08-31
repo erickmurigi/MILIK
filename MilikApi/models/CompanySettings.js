@@ -67,7 +67,10 @@ const expenseItemSchema = new mongoose.Schema(
     _id: mongoose.Schema.Types.ObjectId,
     name: { type: String, required: true },
     description: { type: String, default: "" },
-    code: { type: String, unique: true, sparse: true },
+    // NOTE: `unique` on an embedded subdocument field is NOT enforced by MongoDB without
+    // a top-level compound index (e.g. { company: 1, "expenseItems.code": 1 }).
+    // Uniqueness of expense item codes is enforced in the controller layer instead.
+    code: { type: String, default: "" },
     category: {
       type: String,
       enum: ["maintenance", "utilities", "staffing", "supplies", "other"],
@@ -356,6 +359,11 @@ const CompanySettingsSchema = new mongoose.Schema(
     timezone: { type: String, default: "Africa/Nairobi" },
     dateFormat: { type: String, default: "DD/MM/YYYY" },
     isActive: { type: Boolean, default: true },
+    terminology: {
+      type: Map,
+      of: String,
+      default: () => new Map(),
+    },
   },
   { timestamps: true }
 );

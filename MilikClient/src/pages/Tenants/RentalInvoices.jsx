@@ -55,6 +55,7 @@ import {
 import { hasCompanyPermission } from "../../utils/permissions";
 import { INV_STATUS_BADGE, INV_STATUS_BADGE_DEFAULT, fmtAmountKE } from "../../utils/invoiceStatus";
 import { useTabState } from "../../hooks/useTabState";
+import { useTerm } from "../../hooks/useTerm";
 import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
 import SingleBookingModal from "./SingleBookingModal";
@@ -680,6 +681,10 @@ const actionBtnCls = (enabled, activeCls) =>
 
 const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const [pageSize, setPageSize] = useState(50);
+  const termInvoices = useTerm("invoices");
+  const termTenant = useTerm("tenant");
+  const termTenants = useTerm("tenants");
+  const termUnit = useTerm("unit");
   const { id: tenantId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -1483,13 +1488,13 @@ const visibleInvoiceKeys = useMemo(
   <div class="body-grid">
     <div>
       <div class="sec-label">Billed To</div>
-      <div class="fk">Tenant</div>
-      <div class="fv lg">${escapeHtml(invoice?.tenantName || 'Tenant')}</div>
-      ${tenantCode ? `<div class="fk">Tenant Code</div><div class="fv">${tenantCode}</div>` : ''}
+      <div class="fk">${escapeHtml(termTenant)}</div>
+      <div class="fv lg">${escapeHtml(invoice?.tenantName || termTenant)}</div>
+      ${tenantCode ? `<div class="fk">${escapeHtml(termTenant)} Code</div><div class="fv">${tenantCode}</div>` : ''}
       ${tenantEmail ? `<div class="fk">Email</div><div class="fv">${tenantEmail}</div>` : ''}
-      <div class="fk">Property</div>
+      <div class="fk">${escapeHtml(termProperty)}</div>
       <div class="fv">${escapeHtml(invoice?.propertyName || '-')}</div>
-      <div class="fk">Unit</div>
+      <div class="fk">${escapeHtml(termUnit)}</div>
       <div class="fv">${escapeHtml(invoice?.unitName || '-')}</div>
     </div>
     <div>
@@ -1586,7 +1591,7 @@ const visibleInvoiceKeys = useMemo(
     <div class="brand-wrap">
       <div class="logo">${companyLogo ? `<img src="${escapeHtml(companyLogo)}" alt="logo" />` : escapeHtml(companyDisplayName.slice(0, 1).toUpperCase())}</div>
       <div>
-        <h1>Tenant Invoices Register</h1>
+        <h1>${termTenants} Invoices Register</h1>
         <div class="company">${escapeHtml(companyDisplayName)}</div>
         ${companyPhone || companyEmail ? `<div style="font-size:11px; color:#64748b; margin-top:3px;">${[companyPhone, companyEmail].filter(Boolean).map(escapeHtml).join(" · ")}</div>` : ""}
       </div>
@@ -1597,9 +1602,9 @@ const visibleInvoiceKeys = useMemo(
     <thead>
       <tr>
         <th>Invoice #</th>
-        <th>Tenant</th>
+        <th>${termTenant}</th>
         <th>Property</th>
-        <th>Unit</th>
+        <th>${termUnit}</th>
         <th>Description</th>
         <th>Invoice Date</th>
         <th>Due Date</th>
@@ -1670,7 +1675,7 @@ const visibleInvoiceKeys = useMemo(
       }
 
       const printWindow = openHtmlDocument(
-        "MILIK Rental Invoices List",
+        `MILIK Rental ${termInvoices} List`,
         buildInvoiceListHtml(printableRows)
       );
       if (!printWindow) return;
@@ -2536,12 +2541,12 @@ const createInvoiceForTenant = async (
                 />
                 <div className="mx-0.5 h-3 w-px shrink-0 bg-slate-200" />
                 <input type="text" value={draftFilters.invoiceNo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: normalizeUppercaseInput(e.target.value) }))} placeholder="Invoice #" className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                {!tenantId && <input type="text" value={draftFilters.tenantName} onChange={setFilter("tenantName")} placeholder="Tenant" className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />}
+                {!tenantId && <input type="text" value={draftFilters.tenantName} onChange={setFilter("tenantName")} placeholder={termTenant} className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />}
                 <AppSelect
                   value={draftFilters.property === "any" ? "" : draftFilters.property}
                   onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "any", unit: "any" }))}
                   options={uniqueProperties.filter((p) => p !== "any").map((p) => ({ value: p, label: p }))}
-                  placeholder="Property"
+                  placeholder={termProperty}
                   searchable
                   clearable
                   compact
@@ -2550,7 +2555,7 @@ const createInvoiceForTenant = async (
                   value={draftFilters.unit === "any" ? "" : draftFilters.unit}
                   onChange={(v) => setDraftFilters((prev) => ({ ...prev, unit: v ?? "any" }))}
                   options={unitsForSelectedProperty.filter((u) => u !== "any").map((u) => ({ value: u, label: u }))}
-                  placeholder="Unit"
+                  placeholder={termUnit}
                   searchable
                   clearable
                   compact
@@ -2594,8 +2599,8 @@ const createInvoiceForTenant = async (
             <MilikTable
               columns={[
                 { label: "Invoice #" },
-                ...(!tenantId ? [{ label: "Tenant" }, { label: "Property" }] : []),
-                { label: "Unit" },
+                ...(!tenantId ? [{ label: termTenant }, { label: termProperty }] : []),
+                { label: termUnit },
                 { label: "Description" },
                 { label: "Invoice Date", align: "center" },
                 { label: "Due Date", align: "center" },
@@ -2645,7 +2650,7 @@ const createInvoiceForTenant = async (
                   {canExportInvoice && <button onClick={() => handlePrintInvoice(invoice)} className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800" title="Print Invoice"><FaPrint size={12} /></button>}
                   {canExportInvoice && <button onClick={() => handleDownloadInvoice(invoice)} className="rounded p-1 text-green-600 hover:bg-green-50 hover:text-green-800" title="Download Invoice"><FaDownload size={12} /></button>}
                   {canDeleteInvoice && <button onClick={() => handleDeleteSingle(invoice)} className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800" title="Delete Invoice"><FaTrash size={12} /></button>}
-                  {!tenantId && <button onClick={() => handleViewTenantStatement(invoice.tenantId)} className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800" title="View Tenant Statement"><FaArrowRight size={12} /></button>}
+                  {!tenantId && <button onClick={() => handleViewTenantStatement(invoice.tenantId)} className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800" title={`View ${termTenant} Statement`}><FaArrowRight size={12} /></button>}
                 </div>
               )}
             />
@@ -2712,7 +2717,7 @@ const createInvoiceForTenant = async (
 
 
                 <div className="md:col-span-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-600">
-                  Batch scope: {batchBookingScopeCount.toLocaleString()} active tenant{batchBookingScopeCount === 1 ? "" : "s"} match the current property filter.
+                  Batch scope: {batchBookingScopeCount.toLocaleString()} active {batchBookingScopeCount === 1 ? termTenant.toLowerCase() : termTenants.toLowerCase()} match the current property filter.
                 </div>
 
                 <div>
@@ -2858,7 +2863,7 @@ const createInvoiceForTenant = async (
 
               <div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
                 <p className="text-xs text-orange-800 font-semibold">
-                  Scope preview: {batchBookingScopeCount} active tenant(s) will be booked for{" "}
+                  Scope preview: {batchBookingScopeCount} active {termTenant.toLowerCase()}(s) will be booked for{" "}
                   {formatPeriodLabel(Number(batchBookingForm.month), Number(batchBookingForm.year))}.
                 </p>
                 <p className="text-xs text-orange-800 font-semibold mt-1">
@@ -2944,11 +2949,11 @@ const createInvoiceForTenant = async (
                 {/* Meta strip */}
                 <div className="mt-4 grid grid-cols-3 divide-x divide-white/10 rounded border border-white/10 bg-white/5 text-[11px]">
                   <div className="px-3 py-2">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-emerald-300/60">Tenant</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-emerald-300/60">{termTenant}</p>
                     <p className="mt-0.5 truncate font-semibold text-white">{activeInvoice.tenantName}</p>
                   </div>
                   <div className="px-3 py-2">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-emerald-300/60">Unit</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-emerald-300/60">{termUnit}</p>
                     <p className="mt-0.5 truncate font-semibold text-white">{activeInvoice.propertyName} · {activeInvoice.unitName}</p>
                   </div>
                   <div className="px-3 py-2">
@@ -3025,7 +3030,7 @@ const createInvoiceForTenant = async (
                 )}
                 <button type="button" onClick={() => handleViewTenantStatement(activeInvoice.tenantId)}
                   className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:bg-slate-50">
-                  <FaArrowRight size={10} /> Tenant Statement
+                  <FaArrowRight size={10} /> {termTenant} Statement
                 </button>
                 {canDeleteInvoice && (
                   <button type="button" onClick={() => handleDeleteSingle(activeInvoice)} disabled={!canDeleteActiveInvoice}
@@ -3164,7 +3169,7 @@ const createInvoiceForTenant = async (
         contextType="invoice"
         recordIds={selectedInvoices}
         title={`SMS Invoice${selectedInvoices.length !== 1 ? "s" : ""} (${selectedInvoices.length})`}
-        subtitle="Send an SMS notification to the tenants for the selected invoices."
+        subtitle={`Send an SMS notification to the ${termTenants.toLowerCase()} for the selected ${termInvoices.toLowerCase()}.`}
         allowedChannels={["sms"]}
         defaultChannel="sms"
         onSent={() => setShowSmsModal(false)}
@@ -3176,7 +3181,7 @@ const createInvoiceForTenant = async (
         contextType="invoice"
         recordIds={selectedInvoices}
         title={`Email Invoice${selectedInvoices.length !== 1 ? "s" : ""} (${selectedInvoices.length})`}
-        subtitle="Send an email notification to the tenants for the selected invoices."
+        subtitle={`Send an email notification to the ${termTenants.toLowerCase()} for the selected ${termInvoices.toLowerCase()}.`}
         allowedChannels={["email"]}
         defaultChannel="email"
         onSent={() => setShowEmailModal(false)}

@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
+import { selectCompanySettings, fetchCompanySettings, getSettingsSuccess } from "../../redux/companySettingsRedux";
+import { TERM_DEFAULTS } from "../../hooks/useTerm";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
@@ -165,6 +167,11 @@ const TAB_CONFIG = {
     icon: FaSms,
     requiredModules: ["carwash"],
   },
+  terminology: {
+    label: "Terminology",
+    icon: FaTag,
+    custom: true,
+  },
 };
 
 const SIDEBAR_GROUPS = [
@@ -175,6 +182,7 @@ const SIDEBAR_GROUPS = [
   { label: "Property Sales",           items: ["saleStages", "saleSources", "salePropertyTypes", "saleCommDefaults"] },
   { label: "Inventory & POS",          items: ["invPOSSettings"] },
   { label: "Car Wash",                 items: ["cwOperations", "cwSMS"] },
+  { label: "System",                   items: ["terminology"] },
 ];
 
 const emptyForms = {
@@ -475,6 +483,98 @@ const ACCOUNTING_DEFAULT_FIELDS = [
 const extractErrorMessage = (error) =>
   error?.response?.data?.message || error?.message || "Failed to process company settings request";
 
+const INV_POS_DEFAULTS = {
+  receiptHeader: "", receiptFooter: "Thank you for your business!",
+  showVATBreakdown: true, showCashierName: true, showReceiptNumber: true,
+  autoReceiptPrint: false, currency: "KES", currencySymbol: "Ksh",
+  vatPIN: "", kraETIMSEnabled: false, decimalPlaces: 2,
+};
+
+const COLLECTION_COLUMNS = {
+  utilities: ["Name", "Category", "Description", "Status", "Actions"],
+  periods: ["Name", "Months", "Days", "Status", "Actions"],
+  expenses: ["Name", "Code", "Category", "Default Amount", "Status", "Actions"],
+  deposits: ["Name", "Code", "Default Amount", "Refundable", "Description", "Status", "Actions"],
+  unitTypes: ["Name", "Category", "Description", "Status", "Actions"],
+  maintenanceCategories: ["Name", "Priority", "Description", "Status", "Actions"],
+  saleStages:        ["#", "Stage Name", "Status", "Actions"],
+  saleSources:       ["Source Name", "Status", "Actions"],
+  salePropertyTypes: ["Type Name", "Status", "Actions"],
+};
+
+const DEFAULT_UNIT_TYPES_SEED = [
+  { name: "Studio",     category: "residential", isActive: true },
+  { name: "1 Bedroom",  category: "residential", isActive: true },
+  { name: "2 Bedroom",  category: "residential", isActive: true },
+  { name: "3 Bedroom",  category: "residential", isActive: true },
+  { name: "4 Bedroom",  category: "residential", isActive: true },
+  { name: "Commercial", category: "commercial",  isActive: true },
+];
+
+const BILLING_DAY_OPTIONS = Array.from({ length: 28 }, (_, i) => {
+  const d = i + 1;
+  return { value: d, label: d === 1 ? "1st (Start of month)" : `${d}${d === 2 ? "nd" : d === 3 ? "rd" : "th"}` };
+});
+
+const LATE_PENALTY_BENEFICIARY_OPTIONS = [
+  { value: "manager", label: "Property Manager — keeps late fees as collection incentive" },
+  { value: "landlord", label: "Landlord — late penalties flow to the landlord statement" },
+];
+
+const TAX_MODE_OPTIONS = [
+  { value: "exclusive", label: "Exclusive" },
+  { value: "inclusive", label: "Inclusive" },
+];
+
+const ROUNDING_PRECISION_OPTIONS = [0, 1, 2, 3, 4].map((value) => ({
+  value,
+  label: `${value} decimal place${value === 1 ? "" : "s"}`,
+}));
+
+const TAX_CODE_TYPE_OPTIONS = [
+  { value: "vat", label: "VAT" },
+  { value: "zero_rated", label: "Zero Rated" },
+  { value: "exempt", label: "Exempt" },
+  { value: "none", label: "None" },
+];
+
+const NOTIFY_CHANNEL_OPTIONS = [
+  { value: "sms", label: "SMS only" },
+  { value: "email", label: "Email only" },
+  { value: "both", label: "SMS + Email" },
+];
+
+const PENALIZE_ITEM_OPTIONS = [
+  { value: "rent_only", label: "Rent only" },
+  { value: "current_period_rent_only", label: "Current period rent only" },
+  { value: "current_period_bill_balance_only", label: "Current period bill balance only" },
+  { value: "all_arrears", label: "All arrears" },
+  { value: "outstanding_invoice_balance", label: "Outstanding invoice balance" },
+];
+
+const CALCULATION_TYPE_OPTIONS = [
+  { value: "flat_amount", label: "Flat amount" },
+  { value: "percentage_overdue_balance", label: "Percentage of overdue balance" },
+  { value: "daily_fixed_amount", label: "Daily fixed amount" },
+  { value: "daily_percentage", label: "Daily percentage" },
+];
+
+const REPEAT_FREQUENCY_OPTIONS = [
+  { value: "manual", label: "Manual" },
+  { value: "monthly", label: "Monthly" },
+];
+
+const CW_DAMAGE_MODE_OPTIONS = [
+  { value: "full", label: "Full — deduct entire remaining balance at next payout" },
+  { value: "percent", label: "Installment % — deduct a percentage of original damage each payout" },
+  { value: "fixed", label: "Fixed amount — deduct a fixed Ksh amount each payout" },
+];
+
+const SALE_COMMISSION_TYPE_OPTIONS = [
+  { value: "percentage", label: "Percentage of sale price" },
+  { value: "flat", label: "Flat Amount (KES)" },
+];
+
 const defaultPenaltyRuleForm = {
   ruleName: "", effectiveFrom: new Date().toISOString().slice(0, 10),
   active: true, postingAccount: "", graceDays: 0, minimumOverdueDays: 1,
@@ -580,6 +680,244 @@ const SettingRow = ({ title, meta, status, children }) => (
 );
 
 
+const TERM_PRESETS = {
+  pms: {
+    label: "Property Management",
+    description: "Default PMS labels",
+    values: {},
+  },
+  water: {
+    label: "Water Vending",
+    description: "Customers, Meters, Zones",
+    values: {
+      tenant: "Customer", tenants: "Customers",
+      unit: "Meter", units: "Meters",
+      property: "Zone", properties: "Zones",
+      landlord: "Owner", landlords: "Owners",
+      rent: "Water Charge", lease: "Contract",
+      utility: "Consumption", utilities: "Consumptions",
+    },
+  },
+  internet: {
+    label: "Internet / ISP",
+    description: "Subscribers, Connections, Sites",
+    values: {
+      tenant: "Subscriber", tenants: "Subscribers",
+      unit: "Connection", units: "Connections",
+      meter: "Router", meters: "Routers",
+      property: "Site", properties: "Sites",
+      landlord: "Owner", landlords: "Owners",
+      rent: "Subscription Fee", lease: "Service Agreement",
+      utility: "Add-on", utilities: "Add-ons",
+      invoice: "Invoice", invoices: "Invoices",
+      receipt: "Receipt", receipts: "Receipts",
+    },
+  },
+  storage: {
+    label: "Self-Storage",
+    description: "Clients, Units, Facilities",
+    values: {
+      tenant: "Client", tenants: "Clients",
+      unit: "Storage Unit", units: "Storage Units",
+      meter: "Space", meters: "Spaces",
+      property: "Facility", properties: "Facilities",
+      landlord: "Owner", landlords: "Owners",
+      rent: "Storage Fee", lease: "Rental Agreement",
+      utility: "Service", utilities: "Services",
+      invoice: "Invoice", invoices: "Invoices",
+      receipt: "Receipt", receipts: "Receipts",
+    },
+  },
+};
+
+const TERM_GROUPS = [
+  {
+    label: "People",
+    keys: ["tenant", "tenants"],
+    hint: "What do you call the people who pay for your services?",
+  },
+  {
+    label: "Spaces / Resources",
+    keys: ["unit", "units", "meter", "meters"],
+    hint: "What are the individual billable items or spaces called?",
+  },
+  {
+    label: "Organisation",
+    keys: ["property", "properties", "landlord", "landlords"],
+    hint: "What are the owning entities and their groupings called?",
+  },
+  {
+    label: "Commercial",
+    keys: ["rent", "lease"],
+    hint: "What do you call the recurring charge and the agreement?",
+  },
+  {
+    label: "Financial",
+    keys: ["invoice", "invoices", "receipt", "receipts", "utility", "utilities"],
+    hint: "Financial document and charge terminology.",
+  },
+];
+
+const TerminologyPanel = ({ currentCompany }) => {
+  const dispatch = useDispatch();
+  const companySettings = useSelector(selectCompanySettings);
+  const savedTerminology = companySettings?.terminology ?? {};
+
+  const readSaved = useCallback((src) => {
+    const next = {};
+    Object.keys(TERM_DEFAULTS).forEach((k) => {
+      next[k] = src instanceof Map ? (src.get(k) || "") : (src[k] || "");
+    });
+    return next;
+  }, []);
+
+  const [form, setForm] = useState(() => readSaved(savedTerminology));
+  const [saving, setSaving] = useState(false);
+  const [activePreset, setActivePreset] = useState(null);
+
+  useEffect(() => {
+    setForm(readSaved(companySettings?.terminology ?? {}));
+  }, [companySettings, readSaved]);
+
+  const applyPreset = (presetKey) => {
+    const preset = TERM_PRESETS[presetKey];
+    if (!preset) return;
+    setForm(() => {
+      const next = {};
+      Object.keys(TERM_DEFAULTS).forEach((k) => {
+        next[k] = preset.values[k] ?? "";
+      });
+      return next;
+    });
+    setActivePreset(presetKey);
+  };
+
+  const handleChange = (key, value) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    setActivePreset(null);
+  };
+
+  const handleReset = () => {
+    setForm(readSaved(companySettings?.terminology ?? {}));
+    setActivePreset(null);
+  };
+
+  const handleSave = async () => {
+    if (!currentCompany?._id) return;
+    setSaving(true);
+    try {
+      const payload = {};
+      Object.keys(form).forEach((k) => { if (form[k].trim()) payload[k] = form[k].trim(); });
+      const result = await adminRequests.patch(`/company-settings/${currentCompany._id}/terminology`, { terminology: payload });
+      // Update Redux directly from the response — the fetchCompanySettings guard would return
+      // stale cached data if settings are already in store, so we update the terminology field directly.
+      const freshTerminology = result?.data?.terminology ?? {};
+      if (companySettings) {
+        dispatch(getSettingsSuccess({ ...companySettings, terminology: freshTerminology }));
+      } else {
+        dispatch(fetchCompanySettings(currentCompany._id));
+      }
+      toast.success("Terminology saved.");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to save terminology.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const isDirty = Object.keys(TERM_DEFAULTS).some((k) => {
+    const saved = savedTerminology instanceof Map ? (savedTerminology.get(k) || "") : (savedTerminology[k] || "");
+    return form[k] !== saved;
+  });
+
+  return (
+    <div className="max-w-3xl space-y-6">
+      {/* Presets */}
+      <div>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Quick Presets</p>
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(TERM_PRESETS).map(([key, preset]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => applyPreset(key)}
+              className={`inline-flex flex-col items-start rounded border px-3 py-2 text-left transition-colors duration-150 ${
+                activePreset === key
+                  ? "border-[#0B3B2E] bg-[#0B3B2E] text-white"
+                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
+              }`}
+            >
+              <span className="text-[11px] font-semibold">{preset.label}</span>
+              <span className={`text-[10px] ${activePreset === key ? "text-slate-300" : "text-slate-400"}`}>
+                {preset.description}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Groups */}
+      {TERM_GROUPS.map((group) => (
+        <div key={group.label}>
+          <div className="mb-2 flex items-center gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">{group.label}</p>
+            <div className="h-px flex-1 bg-slate-200" />
+          </div>
+          <p className="mb-3 text-[11px] text-slate-400">{group.hint}</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {group.keys.map((key) => {
+              const custom = form[key];
+              const defaultVal = TERM_DEFAULTS[key];
+              return (
+                <div key={key}>
+                  <div className="mb-1 flex items-center justify-between">
+                    <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      {defaultVal}
+                    </label>
+                    {custom && (
+                      <span className="text-[10px] text-[#0B3B2E] font-medium">→ {custom}</span>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    className={inputClass}
+                    value={custom}
+                    placeholder={`Default: ${defaultVal}`}
+                    maxLength={40}
+                    onChange={(e) => handleChange(key, e.target.value)}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      {/* Actions */}
+      <div className="flex items-center justify-between border-t border-slate-200 pt-4">
+        <button
+          type="button"
+          onClick={handleReset}
+          disabled={!isDirty}
+          className="text-[11px] text-slate-500 underline underline-offset-2 disabled:cursor-not-allowed disabled:opacity-40 hover:text-slate-700"
+        >
+          Discard changes
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving || !isDirty}
+          className="inline-flex items-center gap-2 border border-transparent px-4 py-2 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          style={{ backgroundColor: MILIK_GREEN }}
+        >
+          <FaSave size={11} />
+          {saving ? "Saving..." : "Save Terminology"}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const CompanySettings = () => {
   const confirm = useConfirm();
   const navigate = useNavigate();
@@ -614,12 +952,6 @@ const CompanySettings = () => {
   const [saleCommForm, setSaleCommForm] = useState({ rate: 3, commissionType: "percentage", whtRate: 5 });
   const [savingSaleComm, setSavingSaleComm] = useState(false);
 
-  const INV_POS_DEFAULTS = {
-    receiptHeader: "", receiptFooter: "Thank you for your business!",
-    showVATBreakdown: true, showCashierName: true, showReceiptNumber: true,
-    autoReceiptPrint: false, currency: "KES", currencySymbol: "Ksh",
-    vatPIN: "", kraETIMSEnabled: false, decimalPlaces: 2,
-  };
   const [invPOSForm, setInvPOSForm] = useState(INV_POS_DEFAULTS);
   const [loadingInvPOS, setLoadingInvPOS] = useState(false);
   const [savingInvPOS, setSavingInvPOS] = useState(false);
@@ -662,7 +994,9 @@ const CompanySettings = () => {
   const [incomeRules, setIncomeRules] = useState({ latePenaltyBeneficiary: "manager" });
   const [savingIncomeRules, setSavingIncomeRules] = useState(false);
   const [chartAccounts, setChartAccounts] = useState([]);
-  const [loadedChartAccountCompanyId, setLoadedChartAccountCompanyId] = useState("");
+  // Track which company's chart of accounts is loaded via a ref so the guard
+  // does NOT recreate loadChartAccounts on every successful load.
+  const loadedChartAccountCompanyIdRef = React.useRef("");
   const requestedTab = searchParams.get("tab");
   const activeTab = (requestedTab && visibleTabKeys.has(requestedTab)) ? requestedTab : firstVisibleTab;
   const [showInactive, setShowInactive] = useTabState("/settings:showInactive", false);
@@ -692,12 +1026,12 @@ const CompanySettings = () => {
     }
   }, [visibleTabKeys, firstVisibleTab, searchParams, setSearchParams]);
 
-  const switchTab = (tabKey) => {
+  const switchTab = useCallback((tabKey) => {
     if (!Object.prototype.hasOwnProperty.call(TAB_CONFIG, tabKey)) return;
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("tab", tabKey);
     setSearchParams(nextParams);
-  };
+  }, [searchParams, setSearchParams]);
 
   const loadSettings = useCallback(async ({ silent = false } = {}) => {
     if (!currentCompany?._id) {
@@ -740,12 +1074,12 @@ const CompanySettings = () => {
   const loadChartAccounts = useCallback(async () => {
     if (!currentCompany?._id) {
       setChartAccounts([]);
-      setLoadedChartAccountCompanyId("");
+      loadedChartAccountCompanyIdRef.current = "";
       return;
     }
 
     const companyId = String(currentCompany._id);
-    if (loadedChartAccountCompanyId === companyId) {
+    if (loadedChartAccountCompanyIdRef.current === companyId) {
       return;
     }
 
@@ -755,15 +1089,15 @@ const CompanySettings = () => {
       const response = await adminRequests.get(`/chart-of-accounts?${query}`);
       const rows = Array.isArray(response?.data) ? response.data : [];
       setChartAccounts(rows.filter((account) => account?.isPosting !== false && account?.isHeader !== true));
-      setLoadedChartAccountCompanyId(companyId);
+      loadedChartAccountCompanyIdRef.current = companyId;
     } catch (error) {
       setChartAccounts([]);
-      setLoadedChartAccountCompanyId("");
+      loadedChartAccountCompanyIdRef.current = "";
       toast.error(extractErrorMessage(error));
     } finally {
       setLoadingAccounts(false);
     }
-  }, [currentCompany?._id, loadedChartAccountCompanyId]);
+  }, [currentCompany?._id]);
 
   const loadSaleSettings = useCallback(async () => {
     if (!hasSale || !currentCompany?._id) return;
@@ -916,58 +1250,75 @@ const CompanySettings = () => {
     [settings, saleSettings]
   );
 
+  // Groups chart accounts by type. Each bucket stores both the raw account (for
+  // the "Selected:" display) and a pre-mapped { value, label } option array so
+  // the inline .map() in renderAccountingDefaultsGrid doesn't recreate arrays on
+  // every render.
   const chartAccountOptionsByType = useMemo(() => {
-    return chartAccounts.reduce((acc, account) => {
+    const raw = chartAccounts.reduce((acc, account) => {
       const type = String(account?.type || "").trim().toLowerCase();
       if (!type) return acc;
       if (!acc[type]) acc[type] = [];
       acc[type].push(account);
       return acc;
     }, {});
+    // Pre-compute the option arrays so JSX props are stable across renders
+    const mapped = {};
+    for (const [type, accounts] of Object.entries(raw)) {
+      mapped[type] = {
+        accounts,
+        options: accounts.map((a) => ({
+          value: a._id,
+          label: a.code ? `${a.code} — ${a.name}` : a.name,
+        })),
+      };
+    }
+    return mapped;
   }, [chartAccounts]);
 
-  const setAccountingDefaultField = (field, value) => {
-    setAccountingDefaults((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
+  const penaltyAccountOptions = useMemo(
+    () => penaltyAccounts.map((a) => ({ value: a._id, label: `${a.code ? a.code + " · " : ""}${a.name}` })),
+    [penaltyAccounts]
+  );
 
-  const setHrAccountingDefaultField = (field, value) => {
-    setHrAccountingDefaults((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
+  const cwCashbookOptions = useMemo(
+    () => cwCashbooks.map((cb) => ({ value: cb._id, label: `${cb.code} – ${cb.name}` })),
+    [cwCashbooks]
+  );
 
-  const setInvAccountingDefaultField = (field, value) => {
-    setInvAccountingDefaults((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
+  const setAccountingDefaultField = useCallback((field, value) => {
+    setAccountingDefaults((prev) => ({ ...prev, [field]: value }));
+  }, []);
 
-  const openCreateModal = (tabKey) => {
+  const setHrAccountingDefaultField = useCallback((field, value) => {
+    setHrAccountingDefaults((prev) => ({ ...prev, [field]: value }));
+  }, []);
+
+  const setInvAccountingDefaultField = useCallback((field, value) => {
+    setInvAccountingDefaults((prev) => ({ ...prev, [field]: value }));
+  }, []);
+
+  const openCreateModal = useCallback((tabKey) => {
     setModalTab(tabKey);
     setEditingItem(null);
     setFormData({ ...emptyForms[tabKey] });
     setShowModal(true);
-  };
+  }, []);
 
-  const openEditModal = (tabKey, item) => {
+  const openEditModal = useCallback((tabKey, item) => {
     setModalTab(tabKey);
     setEditingItem(item);
     setFormData({ ...item });
     setShowModal(true);
-  };
+  }, []);
 
-  const closeModal = () => {
+  const closeModal = useCallback(() => {
     setShowModal(false);
     setEditingItem(null);
     setFormData({ ...emptyForms[modalTab] });
-  };
+  }, [modalTab]);
 
-  const collectionMap = {
+  const collectionMap = useMemo(() => ({
     utilities: settings?.utilityTypes || [],
     periods: settings?.billingPeriods || [],
     expenses: settings?.expenseItems || [],
@@ -977,7 +1328,7 @@ const CompanySettings = () => {
     saleStages:        [...(saleSettings?.pipelineStages || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
     saleSources:       saleSettings?.leadSources    || [],
     salePropertyTypes: saleSettings?.propertyTypes  || [],
-  };
+  }), [settings, saleSettings]);
 
   const visibleItems = useMemo(() => {
     const items = collectionMap[activeTab] || [];
@@ -1288,18 +1639,6 @@ const CompanySettings = () => {
     return "";
   };
 
-  const COLLECTION_COLUMNS = {
-    utilities: ["Name", "Category", "Description", "Status", "Actions"],
-    periods: ["Name", "Months", "Days", "Status", "Actions"],
-    expenses: ["Name", "Code", "Category", "Default Amount", "Status", "Actions"],
-    deposits: ["Name", "Code", "Default Amount", "Refundable", "Description", "Status", "Actions"],
-    unitTypes: ["Name", "Category", "Description", "Status", "Actions"],
-    maintenanceCategories: ["Name", "Priority", "Description", "Status", "Actions"],
-    saleStages:        ["#", "Stage Name", "Status", "Actions"],
-    saleSources:       ["Source Name", "Status", "Actions"],
-    salePropertyTypes: ["Type Name", "Status", "Actions"],
-  };
-
   const renderCollectionRow = (tabKey, item, idx = 0) => {
     const isActive = item?.isActive !== false;
     return (
@@ -1370,24 +1709,18 @@ const CompanySettings = () => {
     );
   };
 
-  const DEFAULT_UNIT_TYPES_SEED = [
-    { name: "Studio",     category: "residential", isActive: true },
-    { name: "1 Bedroom",  category: "residential", isActive: true },
-    { name: "2 Bedroom",  category: "residential", isActive: true },
-    { name: "3 Bedroom",  category: "residential", isActive: true },
-    { name: "4 Bedroom",  category: "residential", isActive: true },
-    { name: "Commercial", category: "commercial",  isActive: true },
-  ];
-
   const [loadingDefaults, setLoadingDefaults] = React.useState(false);
 
   const handleLoadDefaultUnitTypes = async () => {
     if (!currentCompany?._id || loadingDefaults) return;
     setLoadingDefaults(true);
     try {
-      for (const ut of DEFAULT_UNIT_TYPES_SEED) {
-        await adminRequests.post(`/company-settings/${currentCompany._id}/unit-types`, ut);
-      }
+      // Fire all seed requests in parallel instead of sequentially to avoid N+1 latency
+      await Promise.all(
+        DEFAULT_UNIT_TYPES_SEED.map((ut) =>
+          adminRequests.post(`/company-settings/${currentCompany._id}/unit-types`, ut)
+        )
+      );
       toast.success("Default unit types loaded.");
       await loadSettings({ silent: true });
     } catch (err) {
@@ -1523,10 +1856,7 @@ const CompanySettings = () => {
               hint="Who receives late payment penalties charged to tenants?"
               value={incomeRules.latePenaltyBeneficiary}
               onChange={(v) => setIncomeRules((p) => ({ ...p, latePenaltyBeneficiary: v }))}
-              options={[
-                { value: "manager", label: "Property Manager — keeps late fees as collection incentive" },
-                { value: "landlord", label: "Landlord — late penalties flow to the landlord statement" },
-              ]}
+              options={LATE_PENALTY_BENEFICIARY_OPTIONS}
               getLabel={(o) => o.label}
               getValue={(o) => o.value}
             />
@@ -1653,10 +1983,7 @@ const CompanySettings = () => {
               hint="1–28, day of month rent is due"
               value={autoInvoicing.billingDay}
               onChange={(v) => setAutoInvoicing((p) => ({ ...p, billingDay: Number(v ?? 1) }))}
-              options={Array.from({ length: 28 }, (_, i) => {
-                const d = i + 1;
-                return { value: d, label: d === 1 ? "1st (Start of month)" : `${d}${d === 2 ? "nd" : d === 3 ? "rd" : "th"}` };
-              })}
+              options={BILLING_DAY_OPTIONS}
               size="md"
             />
             <p className="mt-1 text-[11px] text-slate-500">
@@ -1694,11 +2021,7 @@ const CompanySettings = () => {
               hint="Requires configured SMS / email profile"
               value={autoInvoicing.notifyChannel}
               onChange={(v) => setAutoInvoicing((p) => ({ ...p, notifyChannel: v ?? "none" }))}
-              options={[
-                { value: "sms", label: "SMS only" },
-                { value: "email", label: "Email only" },
-                { value: "both", label: "SMS + Email" },
-              ]}
+              options={NOTIFY_CHANNEL_OPTIONS}
               size="md"
             />
           )}
@@ -1820,10 +2143,7 @@ const CompanySettings = () => {
             label="Default Tax Mode"
             value={taxConfig.taxSettings.defaultTaxMode}
             onChange={(v) => handleTaxSettingChange("defaultTaxMode", v ?? "exclusive")}
-            options={[
-              { value: "exclusive", label: "Exclusive" },
-              { value: "inclusive", label: "Inclusive" },
-            ]}
+            options={TAX_MODE_OPTIONS}
             size="md"
           />
           <div>
@@ -1858,10 +2178,7 @@ const CompanySettings = () => {
             label="Rounding Precision"
             value={taxConfig.taxSettings.roundingPrecision}
             onChange={(v) => handleTaxSettingChange("roundingPrecision", Number(v ?? 2))}
-            options={[0, 1, 2, 3, 4].map((value) => ({
-              value,
-              label: `${value} decimal place${value === 1 ? "" : "s"}`,
-            }))}
+            options={ROUNDING_PRECISION_OPTIONS}
             size="md"
           />
         </div>
@@ -1932,12 +2249,7 @@ const CompanySettings = () => {
                   label="Type"
                   value={code.type}
                   onChange={(v) => handleTaxCodeChange(index, "type", v ?? "vat")}
-                  options={[
-                    { value: "vat", label: "VAT" },
-                    { value: "zero_rated", label: "Zero Rated" },
-                    { value: "exempt", label: "Exempt" },
-                    { value: "none", label: "None" },
-                  ]}
+                  options={TAX_CODE_TYPE_OPTIONS}
                   size="md"
                 />
                 <div>
@@ -1985,8 +2297,9 @@ const CompanySettings = () => {
   const renderAccountingDefaultsGrid = (fields, defaults, setField) => (
     <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
       {fields.map((field) => {
-        const options = chartAccountOptionsByType[field.type] || [];
-        const selectedAccount = options.find((account) => String(account?._id || "") === String(defaults[field.key] || ""));
+        const bucket = chartAccountOptionsByType[field.type];
+        const options = bucket?.options || [];
+        const selectedAccount = (bucket?.accounts || []).find((account) => String(account?._id || "") === String(defaults[field.key] || ""));
 
         return (
           <div key={field.key} className="border border-slate-200 bg-slate-50 p-3">
@@ -1997,10 +2310,7 @@ const CompanySettings = () => {
               <AppSelect
                 value={defaults[field.key] || ""}
                 onChange={(v) => setField(field.key, v ?? "")}
-                options={options.map((account) => ({
-                  value: account._id,
-                  label: account.code ? `${account.code} — ${account.name}` : account.name,
-                }))}
+                options={options}
                 placeholder="Use automatic fallback"
                 clearable
                 searchable
@@ -2155,7 +2465,7 @@ const CompanySettings = () => {
             <label className="mb-1 block text-xs font-bold text-slate-700">Default Commission Type</label>
             <AppSelect value={saleCommForm.commissionType}
               onChange={(v) => setSaleCommForm((p) => ({ ...p, commissionType: v ?? "percentage" }))}
-              options={[{ value: "percentage", label: "Percentage of sale price" }, { value: "flat", label: "Flat Amount (KES)" }]}
+              options={SALE_COMMISSION_TYPE_OPTIONS}
               size="md" />
           </div>
           <div>
@@ -2365,7 +2675,7 @@ const CompanySettings = () => {
                 <AppSelect key={method} label={CW_METHOD_LABELS[method]}
                   value={cwDefaults[method]}
                   onChange={(v) => { setCwDefaults((p) => ({ ...p, [method]: v ?? "" })); setDirtyCW(true); }}
-                  options={cwCashbooks.map((cb) => ({ value: cb._id, label: `${cb.code} – ${cb.name}` }))}
+                  options={cwCashbookOptions}
                   placeholder="— No default —" clearable searchable size="md" />
               ))}
             </div>
@@ -2375,11 +2685,7 @@ const CompanySettings = () => {
             <div className="space-y-4">
               <AppSelect label="Default recovery mode" value={cwDmgMode}
                 onChange={(v) => { setCwDmgMode(v ?? "full"); setCwDmgValue(""); setDirtyCW(true); }}
-                options={[
-                  { value: "full", label: "Full — deduct entire remaining balance at next payout" },
-                  { value: "percent", label: "Installment % — deduct a percentage of original damage each payout" },
-                  { value: "fixed", label: "Fixed amount — deduct a fixed Ksh amount each payout" },
-                ]} size="md" />
+                options={CW_DAMAGE_MODE_OPTIONS} size="md" />
               {cwDmgMode === "percent" && (
                 <div>
                   <label className="mb-1 block text-xs font-bold text-slate-700">Default deduction rate (%)</label>
@@ -2873,6 +3179,10 @@ const CompanySettings = () => {
                 <div className="flex-1 overflow-auto px-4 py-4">{renderCWOperationsTab()}</div>
               ) : activeTab === "cwSMS" ? (
                 <div className="flex-1 overflow-auto px-4 py-4">{renderCWSMSTab()}</div>
+              ) : activeTab === "terminology" ? (
+                <div className="flex-1 overflow-auto px-4 py-4">
+                  <TerminologyPanel currentCompany={currentCompany} />
+                </div>
               ) : (
                 renderCollectionTab(activeTab)
               )}
@@ -2962,7 +3272,7 @@ const CompanySettings = () => {
                       <AppSelect
                         value={penaltyRuleForm.postingAccount}
                         onChange={(v) => setPenaltyRuleForm((prev) => ({ ...prev, postingAccount: v ?? "" }))}
-                        options={penaltyAccounts.map((account) => ({ value: account._id, label: `${account.code ? account.code + " · " : ""}${account.name}` }))}
+                        options={penaltyAccountOptions}
                         placeholder="Select account"
                         searchable
                         clearable
@@ -3000,13 +3310,7 @@ const CompanySettings = () => {
                     <AppSelect
                       value={penaltyRuleForm.penalizeItem}
                       onChange={(v) => setPenaltyRuleForm((prev) => ({ ...prev, penalizeItem: v ?? "outstanding_invoice_balance" }))}
-                      options={[
-                        { value: "rent_only", label: "Rent only" },
-                        { value: "current_period_rent_only", label: "Current period rent only" },
-                        { value: "current_period_bill_balance_only", label: "Current period bill balance only" },
-                        { value: "all_arrears", label: "All arrears" },
-                        { value: "outstanding_invoice_balance", label: "Outstanding invoice balance" },
-                      ]}
+                      options={PENALIZE_ITEM_OPTIONS}
                       size="md"
                       className="w-full"
                     />
@@ -3018,12 +3322,7 @@ const CompanySettings = () => {
                       <AppSelect
                         value={penaltyRuleForm.calculationType}
                         onChange={(v) => setPenaltyRuleForm((prev) => ({ ...prev, calculationType: v ?? "percentage_overdue_balance" }))}
-                        options={[
-                          { value: "flat_amount", label: "Flat amount" },
-                          { value: "percentage_overdue_balance", label: "Percentage of overdue balance" },
-                          { value: "daily_fixed_amount", label: "Daily fixed amount" },
-                          { value: "daily_percentage", label: "Daily percentage" },
-                        ]}
+                        options={CALCULATION_TYPE_OPTIONS}
                         size="md"
                         className="w-full"
                       />
@@ -3084,7 +3383,7 @@ const CompanySettings = () => {
                     <AppSelect
                       value={penaltyRuleForm.repeatFrequency}
                       onChange={(v) => setPenaltyRuleForm((prev) => ({ ...prev, repeatFrequency: v ?? "manual" }))}
-                      options={[{ value: "manual", label: "Manual" }, { value: "monthly", label: "Monthly" }]}
+                      options={REPEAT_FREQUENCY_OPTIONS}
                       size="md"
                       className="w-full"
                     />

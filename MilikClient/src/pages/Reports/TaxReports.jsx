@@ -12,6 +12,7 @@ import { fetchCompanySettings, selectCompanySettings } from '../../redux/company
 import { adminRequests } from '../../utils/requestMethods';
 import { formatMoney } from '../../utils/money';
 import PaginationBar from '../../components/PaginationBar';
+import { useTerms } from '../../hooks/useTerm';
 
 const GREEN_BG = 'bg-[#0B3B2E]';
 const ORANGE = '#F97316';
@@ -61,6 +62,8 @@ const TaxReports = () => {
   const [processedStatements, setProcessedStatements] = useState([]);
   const [currentPage, setCurrentPage] = useTabState("/accounts/tax-reports:currentPage", 1);
   const [pageSize, setPageSize] = useState(50);
+
+  const { property: termProperty } = useTerms("property");
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -200,7 +203,7 @@ const TaxReports = () => {
       return;
     }
     const csv = [
-      ['Date', 'Source', 'Reference', 'Property', 'Party', 'Tax Code', 'Tax Rate', 'Net Amount', 'Tax Amount', 'Gross Amount'].join(','),
+      ['Date', 'Source', 'Reference', termProperty, 'Party', 'Tax Code', 'Tax Rate', 'Net Amount', 'Tax Amount', 'Gross Amount'].join(','),
       ...rows.map((row) => [
         new Date(row.date).toLocaleDateString(),
         row.source,
@@ -259,13 +262,13 @@ const TaxReports = () => {
       <div class="card"><div class="cl">Output VAT / Tax</div><div class="cv" style="color:#c2410c">${fmt(totals.taxAmount)}</div></div>
       <div class="card"><div class="cl">Gross Value</div><div class="cv" style="color:#047857">${fmt(totals.grossAmount)}</div></div>
     </div>
-    <table><thead><tr><th>Date</th><th>Source</th><th>Reference</th><th>Property</th><th>Party</th><th>Tax Code</th><th class="r">Rate</th><th class="r">Net</th><th class="r">Tax</th><th class="r">Gross</th></tr></thead>
+    <table><thead><tr><th>Date</th><th>Source</th><th>Reference</th><th>${termProperty}</th><th>Party</th><th>Tax Code</th><th class="r">Rate</th><th class="r">Net</th><th class="r">Tax</th><th class="r">Gross</th></tr></thead>
     <tbody>${rows.map((row) => `<tr><td>${row.date ? new Date(row.date).toLocaleDateString() : '—'}</td><td>${row.source || ''}</td><td>${row.reference || ''}</td><td>${row.propertyName || ''}</td><td>${row.partyName || ''}</td><td>${row.taxCode || ''}</td><td class="r">${row.taxRate || 0}%</td><td class="r">${fmt(row.netAmount)}</td><td class="r">${fmt(row.taxAmount)}</td><td class="r"><strong>${fmt(row.grossAmount)}</strong></td></tr>`).join('')}</tbody>
     <tfoot><tr><td colspan="7"><strong>TOTALS (${rows.length} records)</strong></td><td class="r">${fmt(totals.netAmount)}</td><td class="r">${fmt(totals.taxAmount)}</td><td class="r"><strong>${fmt(totals.grossAmount)}</strong></td></tr></tfoot>
     </table></body></html>`);
     win.document.close();
     win.onload = () => { win.focus(); win.print(); };
-  }, [canExportReports, currentCompany, rows, totals, filters.startDate, filters.endDate, preparedBy]);
+  }, [canExportReports, currentCompany, rows, totals, filters.startDate, filters.endDate, preparedBy, termProperty]);
 
   return (
     <DashboardLayout lockContentScroll>
@@ -295,7 +298,7 @@ const TaxReports = () => {
             </div>
             <div className="tax-print-meta">
               <div><strong>Period:</strong> {filters.startDate} to {filters.endDate}</div>
-              <div><strong>Property:</strong> {filters.propertyId ? (properties.find((p) => String(p._id) === filters.propertyId)?.propertyName || "Selected") : "All properties"}</div>
+              <div><strong>{termProperty}:</strong> {filters.propertyId ? (properties.find((p) => String(p._id) === filters.propertyId)?.propertyName || "Selected") : `All ${termProperty}s`}</div>
               <div><strong>Generated:</strong> {new Date().toLocaleString()}</div>
               <div><strong>Prepared by:</strong> {preparedBy}</div>
             </div>
@@ -315,7 +318,7 @@ const TaxReports = () => {
           <table className="tax-print-table">
             <thead>
               <tr>
-                {["Date", "Source", "Reference", "Property", "Party", "Tax Code", "Rate %", "Net", "Tax", "Gross"].map((h) => <th key={h}>{h}</th>)}
+                {["Date", "Source", "Reference", termProperty, "Party", "Tax Code", "Rate %", "Net", "Tax", "Gross"].map((h) => <th key={h}>{h}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -352,12 +355,12 @@ const TaxReports = () => {
                 <input type="date" value={filters.endDate} onChange={setFilter("endDate")} className="w-full rounded-md border border-orange-300 bg-orange-50 px-2 py-1.5 text-xs" />
               </div>
               <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">Property</label>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">{termProperty}</label>
                 <AppSelect
                   value={filters.propertyId}
                   onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))}
                   options={propertyOptions}
-                  placeholder="All Properties"
+                  placeholder={`All ${termProperty}s`}
                   searchable
                   clearable
                   size="sm"
@@ -397,7 +400,7 @@ const TaxReports = () => {
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Source</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Reference</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{termProperty}</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Party</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Tax Code</th>
                     <th className="px-3 py-1 text-right font-bold border-r border-white/10">Rate</th>

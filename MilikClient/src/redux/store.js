@@ -83,13 +83,21 @@ const migrations = {
       company: buildPersistedCompanyState(state.company),
     };
   },
+  5: (state) => {
+    // Added companySettings to whitelist; existing persisted state won't have it — initialize to null
+    if (!state || typeof state !== "object") return state;
+    return {
+      ...state,
+      companySettings: state.companySettings ?? { companySettings: null, isFetching: false, error: false, errorMessage: "" },
+    };
+  },
 };
 
 const persistConfig = {
   key: "root",
-  version: 4,
+  version: 5,
   storage,
-  whitelist: ["auth", "company"],
+  whitelist: ["auth", "company", "companySettings"],
   migrate: createMigrate(migrations, { debug: false }),
 };
 

@@ -11,7 +11,37 @@ import {
 } from '../../utils/workspaceRoutes';
 import { getPageTitle } from '../../utils/tabRouteNames';
 import { clearTabCache } from '../../hooks/useTabState';
+import { getTerm } from '../../hooks/useTerm';
 import { preloadRoute } from '../../utils/routePreloader';
+
+const resolveRouteTitle = (route, terminology) => {
+  if (!route || !terminology) return null;
+  const t = (key) => getTerm(terminology, key);
+  const overrides = {
+    '/tenants':                       t('tenants'),
+    '/tenants/deposits':              `${t('tenant')} Deposits`,
+    '/tenants/terminated':            `Terminated ${t('tenants')}`,
+    '/tenants/take-on-balances':      'Take-On Balances',
+    '/agreements':                    `${t('tenant')} Agreements`,
+    '/properties':                    t('properties'),
+    '/properties/new':                `New ${t('property')}`,
+    '/landlords':                     t('landlords'),
+    '/landlords/new':                 `New ${t('landlord')}`,
+    '/landlord-payments':             `${t('landlord')} Payments`,
+    '/landlord/statements':           `${t('landlord')} Statements`,
+    '/landlord/processed-statements': 'Processed Statements',
+    '/financial/landlord-statement':  `${t('landlord')} Statement`,
+    '/units':                         t('units'),
+    '/units/new':                     `New ${t('unit')}`,
+    '/units/space-types':             `${t('unit')} Types`,
+    '/vacants':                       `${t('unit')} Availability`,
+    '/invoices/rental':               `Rental ${t('invoices')}`,
+    '/receipts':                      t('receipts'),
+    '/receipts/landlord':             `${t('landlord')} ${t('receipts')}`,
+    '/meter-readings':                `${t('meter')} Readings`,
+  };
+  return overrides[route] ?? null;
+};
 
 let tabIdCounter = 0;
 const generateUniqueTabId = (prefix = 'tab') => {
@@ -90,6 +120,11 @@ const TabManager = ({ darkMode }) => {
   const location           = useLocation();
   const navigate           = useNavigate();
   const currentCompany     = useSelector(selectCurrentCompany);
+  const terminology = useSelector((s) => s.companySettings?.companySettings?.terminology ?? {});
+  const resolveTitle = useCallback(
+    (route) => resolveRouteTitle(route, terminology),
+    [terminology]
+  );
   const currentCompanyKey  = String(currentCompany?._id || 'default-company');
   const currentCompanyName = String(currentCompany?.companyName || currentCompany?.name || '').trim();
   const previousCompanyKeyRef = useRef(currentCompanyKey);
@@ -109,6 +144,26 @@ const TabManager = ({ darkMode }) => {
 
   const scrollRef  = useRef(null);
   const tabRefs    = useRef({});
+
+  // Eagerly preload all persisted tab routes during idle time so that
+  // navigating to any open tab is instant, even on first load of the session.
+  const bgPreloadDoneRef = useRef(false);
+  useEffect(() => {
+    if (bgPreloadDoneRef.current) return;
+    bgPreloadDoneRef.current = true;
+    const routes = Object.values(tabsByWorkspaceRef.current)
+      .flat()
+      .map((t) => t.route)
+      .filter(Boolean);
+    const run = () => routes.forEach(preloadRoute);
+    if (typeof requestIdleCallback === 'function') {
+      const id = requestIdleCallback(run, { timeout: 2000 });
+      return () => cancelIdleCallback(id);
+    }
+    const id = setTimeout(run, 800);
+    return () => clearTimeout(id);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [scrollState, setScrollState] = useState({ left: false, right: false });
 
   const checkScroll = useCallback(() => {
@@ -254,11 +309,13 @@ const TabManager = ({ darkMode }) => {
 
   const currentTabTitle = useMemo(() => {
     const direct = workspaceTabs.find((t) => t.route === location.pathname);
+    const resolved = resolveTitle(location.pathname);
+    if (resolved) return resolved;
     if (direct?.title) return direct.title;
     const active = workspaceTabs.find((t) => t.id === activeTab);
     if (active?.title) return active.title;
     return getPageTitle(location.pathname);
-  }, [activeTab, location.pathname, workspaceTabs]);
+  }, [activeTab, location.pathname, workspaceTabs, resolveTitle]);
 
   useEffect(() => {
     const title = currentTabTitle || getPageTitle(location.pathname) || 'Milik';
@@ -270,6 +327,7 @@ const TabManager = ({ darkMode }) => {
   const switchTab = useCallback((tabId, route) => {
     if (route === location.pathname) return;
     const now = Date.now();
+    if (route) preloadRoute(route);
     pendingRouteRef.current = route;
     setIsNavigating(true);
     setTabsByWorkspace((prev) => ({
@@ -298,6 +356,7 @@ const TabManager = ({ darkMode }) => {
       const nextTab  = sortedTabs[idx - 1] || sortedTabs[idx + 1] || fallback[0];
       const nextRoute = nextTab.route || getWorkspaceDefaultRoute(currentWorkspace);
       setActiveTabsByWorkspace((prev) => ({ ...prev, [currentWorkspace]: nextTab.id }));
+      if (nextRoute) preloadRoute(nextRoute);
       pendingRouteRef.current = nextRoute;
       setIsNavigating(true);
       navigate(nextRoute);
@@ -349,7 +408,7 @@ const TabManager = ({ darkMode }) => {
                 tabIndex={0}
                 role="tab"
                 aria-selected={isActive}
-                title={tab.title}
+                title={resolveTitle(tab.route) || tab.title}
                 className={`flex items-center px-2 py-0.5 rounded-t-md cursor-pointer transition-all duration-150 border-t border-l border-r select-none outline-none focus-visible:ring-1 focus-visible:ring-white/50 ${
                   isActive
                     ? darkMode
@@ -363,10 +422,15 @@ const TabManager = ({ darkMode }) => {
                 {tab.route === '/dashboard' && (
                   <FaHome className="mr-1 h-3 w-3 flex-shrink-0" />
                 )}
-                <span className="text-[11px] uppercase truncate max-w-[130px]">{tab.title}</span>
+                <span className="text-[11px] uppercase truncate max-w-[130px]">{resolveTitle(tab.route) || tab.title}</span>
                 {tab.closable && sortedTabs.length > 1 && (
                   <button
                     onClick={(e) => closeTab(tab.id, e)}
+                    onMouseEnter={() => {
+                      const idx = sortedTabs.findIndex((t) => t.id === tab.id);
+                      const dest = sortedTabs[idx - 1] || sortedTabs[idx + 1];
+                      if (dest?.route) preloadRoute(dest.route);
+                    }}
                     className={`ml-1 p-0.5 rounded-full flex-shrink-0 transition-colors duration-150 ${
                       isActive
                         ? 'text-white hover:bg-red-600'

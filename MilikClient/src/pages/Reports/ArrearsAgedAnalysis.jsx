@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
+import { useTerms } from "../../hooks/useTerm";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { FaFileDownload, FaFilePdf, FaSearch, FaSyncAlt, FaTimes } from "react-icons/fa";
@@ -57,6 +58,7 @@ const ArrearsAgedAnalysis = () => {
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const companyName = String(currentCompany?.companyName || currentCompany?.name || "").trim();
   const businessId = currentCompany?._id;
+  const { tenant: termTenant, unit: termUnit, property: termProperty } = useTerms("tenant", "unit", "property");
 
   const [asOf, setAsOf] = useState(todayString());
   const [data, setData] = useState(null);
@@ -187,7 +189,7 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
 <p class="sub">As of ${new Date(asOf).toLocaleDateString("en-KE",{day:"2-digit",month:"long",year:"numeric"})} · ${filteredRows.length} record${filteredRows.length !== 1 ? "s" : ""} · KES ${fmt(bucketTotals.all)}</p>
 <table>
   <thead><tr>
-    <th>Invoice #</th><th>Tenant</th><th>Property / Unit</th><th class="r">Due Date</th><th class="r">Days Over</th>
+    <th>Invoice #</th><th>${termTenant}</th><th>${termProperty} / ${termUnit}</th><th class="r">Due Date</th><th class="r">Days Over</th>
     ${bucketHeaders}
   </tr></thead>
   <tbody>${bodyRows}</tbody>
@@ -318,8 +320,8 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
               <thead className="sticky top-0 z-10">
                 <tr className="bg-[#0B3B2E] text-white">
                   <th className="px-3 py-1 text-left font-bold border-r border-white/10">Invoice #</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Tenant</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property / Unit</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">{termTenant}</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">{termProperty} / {termUnit}</th>
                   <th className="px-3 py-1 text-right font-bold border-r border-white/10">Due Date</th>
                   <th className="px-3 py-1 text-right font-bold border-r border-white/10">Days Overdue</th>
                   {BUCKETS.map((b, i, arr) => (

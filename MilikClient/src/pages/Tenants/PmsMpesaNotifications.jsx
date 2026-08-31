@@ -13,6 +13,7 @@ import { todayISO, fmtDate } from "../../utils/dates";
 import { formatMoney } from "../../utils/money";
 import StatusBadge from "../../components/common/StatusBadge";
 import Spinner from "../../components/common/Spinner";
+import { useTerms } from "../../hooks/useTerm";
 import { toast } from "react-toastify";
 import { adminRequests } from "../../utils/requestMethods";
 import { selectCurrentCompany } from "../../redux/selectors";
@@ -587,6 +588,7 @@ export default function PmsMpesaNotifications() {
   const confirm = useConfirm();
   const navigate       = useNavigate();
   const currentCompany = useSelector(selectCurrentCompany);
+  const { tenant: termTenant, unit: termUnit, property: termProperty } = useTerms("tenant", "unit", "property");
   const businessId     = String(currentCompany?._id || currentCompany?.id || "");
   const paybills       = currentCompany?.paymentIntegration?.mpesaPaybills || [];
   // Stable option arrays — avoids busting AppSelect's internal useMemo on every render
@@ -715,9 +717,9 @@ export default function PmsMpesaNotifications() {
         { label: "Payer",      value: (n) => n.payerName || "—" },
         { label: "Txn Code",   value: (n) => n.transactionCode || "—" },
         { label: "Paybill",    value: (n) => n.configName || "—" },
-        { label: "Tenant",     value: (n) => getTenantLabel(n.tenant) !== "—" ? getTenantLabel(n.tenant) : "Unmatched" },
-        { label: "Property",   value: (n) => n.tenant?.unit?.property?.propertyName || n.tenant?.property?.propertyName || "—" },
-        { label: "Unit",       value: (n) => n.tenant?.unit?.unitName || n.tenant?.unit?.unitNumber || n.tenant?.unit?.name || "—" },
+        { label: termTenant,   value: (n) => getTenantLabel(n.tenant) !== "—" ? getTenantLabel(n.tenant) : "Unmatched" },
+        { label: termProperty, value: (n) => n.tenant?.unit?.property?.propertyName || n.tenant?.property?.propertyName || "—" },
+        { label: termUnit,     value: (n) => n.tenant?.unit?.unitName || n.tenant?.unit?.unitNumber || n.tenant?.unit?.name || "—" },
         { label: "Receipt",    value: (n) => n.matchedReceipt ? (n.matchedReceipt.receiptNumber || n.matchedReceipt.referenceNumber || "linked") : "—" },
       ],
       rows: notifications,
@@ -836,9 +838,9 @@ export default function PmsMpesaNotifications() {
             { label: "Payer" },
             { label: "Txn Code" },
             { label: "Paybill Config" },
-            { label: "Tenant" },
-            { label: "Property" },
-            { label: "Unit" },
+            { label: termTenant },
+            { label: termProperty },
+            { label: termUnit },
             { label: "Receipt" },
           ]}
           rows={notifications}

@@ -12,6 +12,7 @@ import {
   selectAllRentPayments, selectAllExpenseProperties,
 } from '../../redux/selectors';
 import { fmtKES, parseDate } from './dashboardUtils';
+import { useTerms } from '../../hooks/useTerm';
 
 const TONES = {
   green:  'bg-[#0B3B2E] border-[#0B3B2E]',
@@ -35,6 +36,8 @@ const MetricsGrid = ({ summaryData = {}, loading = false }) => {
   const expenseProperties = useSelector(selectAllExpenseProperties);
   const currentCompany    = useSelector(selectCurrentCompany);
   const currentUser       = useSelector(selectCurrentUser);
+
+  const { property: termProperty, properties: termProperties, units: termUnits, landlords: termLandlords } = useTerms("property", "properties", "units", "landlords");
 
   const ctx           = currentCompany || currentUser?.company || null;
   const isLandlord    = isSelfManagingLandlordCompany(ctx);
@@ -88,8 +91,8 @@ const MetricsGrid = ({ summaryData = {}, loading = false }) => {
   const metrics = useMemo(() => {
     const v = loading ? '…' : null;
     const base = [
-      { id: 1, label: isLandlord ? 'My Properties'   : 'Total Properties', value: v ?? totalProperties.toString(), icon: FaBuilding,     tone: 'green'  },
-      { id: 2, label: isLandlord ? 'Portfolio Units'  : 'Total Units',      value: v ?? totalUnits.toString(),      icon: FaHome,          tone: 'green'  },
+      { id: 1, label: isLandlord ? `My ${termProperties}` : `Total ${termProperties}`, value: v ?? totalProperties.toString(), icon: FaBuilding, tone: 'green' },
+      { id: 2, label: isLandlord ? `Portfolio ${termUnits}` : `Total ${termUnits}`,   value: v ?? totalUnits.toString(),      icon: FaHome,     tone: 'green' },
       { id: 3, label: 'Occupancy Rate',                                      value: v ?? `${occupancyRate}%`,        icon: FaChartPie,      tone: 'green'  },
       ...(canFinancials ? [
         { id: 4, label: 'Collected This Month', value: v ?? fmtKES(monthlyCollected), icon: FaMoneyBillWave, tone: 'orange' },
@@ -102,10 +105,10 @@ const MetricsGrid = ({ summaryData = {}, loading = false }) => {
       );
     }
     if (!isLandlord && canFinancials && totalLandlordPayable > 0) {
-      base.push({ id: 7, label: 'Owed to Landlords', value: fmtKES(totalLandlordPayable), icon: FaHandHoldingUsd, tone: 'orange' });
+      base.push({ id: 7, label: `Owed to ${termLandlords}`, value: fmtKES(totalLandlordPayable), icon: FaHandHoldingUsd, tone: 'orange' });
     }
     return base;
-  }, [canFinancials, isLandlord, loading, monthlyCollected, monthlyExpenses, netIncome, occupancyRate, totalLandlordPayable, totalProperties, totalUnits]);
+  }, [canFinancials, isLandlord, loading, monthlyCollected, monthlyExpenses, netIncome, occupancyRate, totalLandlordPayable, totalProperties, totalUnits, termProperties, termUnits, termLandlords]);
 
   const cols = metrics.length >= 6 ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'
     : metrics.length === 5          ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'

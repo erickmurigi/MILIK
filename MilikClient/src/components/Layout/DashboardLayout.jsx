@@ -33,6 +33,7 @@ import {
 } from "../../utils/workspaceRoutes";
 import { GL_ACCESS_MODULES, hasCompanyModule, isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { useTerm } from "../../hooks/useTerm";
 
 const MENU_PERMISSION_MAP = {
   "properties-list": { resource: "properties", action: "view", moduleKey: "propertyManagement" },
@@ -281,8 +282,8 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
       <div
         className={`flex bg-white min-h-0 ${
           lockContentScroll
-            ? "flex-1 min-h-0 overflow-hidden pb-8"
-            : "flex-1 min-h-screen overflow-x-hidden pb-8"
+            ? "flex-1 min-h-0 overflow-hidden pb-10"
+            : "flex-1 min-h-screen overflow-x-hidden pb-10"
         }`}
       >
         <main
@@ -492,8 +493,8 @@ const MENU_COLOR_MAP = {
   "comm-email":     { color: "#1d4ed8", label: "Email Messaging",       icon: FaEnvelope },
 };
 
-const ProfessionalDropdown = ({ menuId, items, darkMode, onMenuEnter, onMenuLeave, onItemClick }) => {
-  const menuInfo = MENU_COLOR_MAP[menuId] || { color: "#0B3B2E", label: menuId.toUpperCase(), icon: FaCog };
+const ProfessionalDropdown = ({ menuId, items, darkMode, onMenuEnter, onMenuLeave, onItemClick, menuColorMap = MENU_COLOR_MAP }) => {
+  const menuInfo = menuColorMap[menuId] || { color: "#0B3B2E", label: menuId.toUpperCase(), icon: FaCog };
   const MenuIcon = menuInfo.icon;
   return (
     <div
@@ -549,8 +550,8 @@ const ProfessionalDropdown = ({ menuId, items, darkMode, onMenuEnter, onMenuLeav
   );
 };
 
-const FinancialDropdown = ({ categoryId, items, darkMode, onMenuEnter, onMenuLeave, onItemClick }) => {
-  const category = MENU_COLOR_MAP[categoryId] || { color: "#0B3B2E", label: "Financial Accounts", icon: FaBook };
+const FinancialDropdown = ({ categoryId, items, darkMode, onMenuEnter, onMenuLeave, onItemClick, menuColorMap = MENU_COLOR_MAP }) => {
+  const category = menuColorMap[categoryId] || { color: "#0B3B2E", label: "Financial Accounts", icon: FaBook };
   return (
     <div
       className={`absolute left-full top-0 w-96 shadow-2xl z-[120] rounded-lg overflow-visible border pointer-events-auto ${
@@ -634,6 +635,25 @@ const TopToolbar = ({
 
   const isSystemAdminWorkspace    = currentWorkspace === WORKSPACE_IDS.SYSTEM_ADMIN;
   const isCompanySetupWorkspace   = currentWorkspace === WORKSPACE_IDS.COMPANY_SETUP;
+
+  // Terminology hooks — respect company-level label overrides
+  const termTenant     = useTerm("tenant");
+  const termTenants    = useTerm("tenants");
+  const termProperty   = useTerm("property");
+  const termProperties = useTerm("properties");
+  const termLandlord   = useTerm("landlord");
+  const termLandlords  = useTerm("landlords");
+  const termUnit       = useTerm("unit");
+  const termUnits      = useTerm("units");
+
+  // Dynamic color map that reflects company terminology in dropdown headers
+  const dynamicMenuColorMap = useMemo(() => ({
+    ...MENU_COLOR_MAP,
+    properties: { ...MENU_COLOR_MAP.properties, label: termProperties },
+    landlord:   { ...MENU_COLOR_MAP.landlord,   label: termLandlords  },
+    tenants:    { ...MENU_COLOR_MAP.tenants,    label: termTenants    },
+    units:      { ...MENU_COLOR_MAP.units,      label: termUnits      },
+  }), [termProperties, termLandlords, termTenants, termUnits]);
 
   // For neutral pages (e.g. /my-account), derive menu from the company's enabled modules
   // so a Car Wash-only company doesn't see the PMS navbar.
@@ -1463,54 +1483,54 @@ const TopToolbar = ({
     const items = [
       {
         id: "landlord",
-        label: "Landlords",
+        label: termLandlords,
         icon: FaUser,
         submenu: [
-          { id: "landlord-list", label: "Landlord Listing", icon: FaUser },
-          { id: "add-landlord", label: "Add New Landlord", icon: FaPlus },
-          { id: "landlord-details", label: "Landlord Details", icon: FaAddressCard },
+          { id: "landlord-list", label: `${termLandlord} Listing`, icon: FaUser },
+          { id: "add-landlord", label: `Add New ${termLandlord}`, icon: FaPlus },
+          { id: "landlord-details", label: `${termLandlord} Details`, icon: FaAddressCard },
         ],
       },
       {
         id: "properties",
-        label: "Properties",
+        label: termProperties,
         icon: FaHome,
         submenu: [
-          { id: "properties-list", label: "Properties Listing", icon: FaHome },
+          { id: "properties-list", label: `${termProperty} Listing`, icon: FaHome },
           { id: "add-property", label: "Add New Property", icon: FaPlus },
           { id: "zones", label: "Zones", icon: FaLayerGroup },
           { type: "separator" },
           { id: "property-commission-settings", label: "Commission Settings", icon: FaCog },
           { id: "commissions-list", label: "Commission List", icon: FaList },
           { type: "separator" },
-          { id: "units-spaces", label: "Units/Spaces Management", icon: FaSquare },
+          { id: "units-spaces", label: `${termUnits}/Spaces Management`, icon: FaSquare },
           { id: "availability", label: "Availability Status", icon: FaCheck },
         ],
       },
       {
         id: "units",
-        label: "Units",
+        label: termUnits,
         icon: FaSquare,
         submenu: [
-          { id: "units-list", label: "Units Listing", icon: FaSquare },
-          { id: "add-unit", label: "Add New Unit", icon: FaPlus },
-          { id: "space-types", label: "Unit Types", icon: FaTag },
+          { id: "units-list", label: `${termUnits} Listing`, icon: FaSquare },
+          { id: "add-unit", label: `Add New ${termUnit}`, icon: FaPlus },
+          { id: "space-types", label: `${termUnit} Types`, icon: FaTag },
         ],
       },
       {
         id: "tenants",
-        label: "Tenants",
+        label: termTenants,
         icon: FaUsers,
         submenu: [
-          { id: "tenants-list", label: "Tenants Listing", icon: FaUsers },
-          { id: "terminated-tenants", label: "Terminated Tenants", icon: FaUserSlash },
-          { id: "add-tenant", label: "New Tenant", icon: FaPlus },
+          { id: "tenants-list", label: `${termTenant} Listing`, icon: FaUsers },
+          { id: "terminated-tenants", label: `Terminated ${termTenants}`, icon: FaUserSlash },
+          { id: "add-tenant", label: `New ${termTenant}`, icon: FaPlus },
           { type: "separator" },
-          { id: "tenant-deposits", label: "Tenants Deposits", icon: FaCoins },
-          { id: "tenant-agreements", label: "Tenant Agreements", icon: FaClipboard },
+          { id: "tenant-deposits", label: `${termTenant} Deposits`, icon: FaCoins },
+          { id: "tenant-agreements", label: `${termTenant} Agreements`, icon: FaClipboard },
           { id: "tenant-take-on-balances", label: "Take-On Balances", icon: FaMoneyBillWave },
-          { id: "tenant-financing", label: "Tenants Financing", icon: FaReceipt },
-          { id: "tenant-journals", label: "Tenants Journals", icon: FaClipboard },
+          { id: "tenant-financing", label: `${termTenant} Financing`, icon: FaReceipt },
+          { id: "tenant-journals", label: `${termTenant} Journals`, icon: FaClipboard },
         ],
       },
       {
@@ -1521,7 +1541,7 @@ const TopToolbar = ({
           { id: "rental-invoicing", label: "Rental Invoicing", hasSubmenu: true, icon: FaFileInvoice, category: "invoicing", categoryColor: "#4F46E5" },
           { id: "rental-receipting", label: "Rental Receipting", hasSubmenu: true, icon: FaReceipt, category: "receipting", categoryColor: "#10B981" },
           { type: "separator" },
-          { id: "landlord-payments", label: "Landlord Payments", hasSubmenu: true, icon: FaHandHolding, category: "landlord", categoryColor: "#8B5CF6" },
+          { id: "landlord-payments", label: `${termLandlord} Payments`, hasSubmenu: true, icon: FaHandHolding, category: "landlord", categoryColor: "#8B5CF6" },
         ],
       },
       {
@@ -1577,13 +1597,13 @@ const TopToolbar = ({
         if (item.id === "properties") {
           return {
             ...item,
-            label: "My Properties",
+            label: `My ${termProperties}`,
             submenu: item.submenu
               .filter((subItem) => !["property-commission-settings", "commissions-list"].includes(subItem.id))
               .map((subItem) => {
-                if (subItem.id === "properties-list") return { ...subItem, label: "My Properties" };
+                if (subItem.id === "properties-list") return { ...subItem, label: `My ${termProperties}` };
                 if (subItem.id === "add-property") return { ...subItem, label: "Add Property" };
-                if (subItem.id === "units-spaces") return { ...subItem, label: "Units / Spaces" };
+                if (subItem.id === "units-spaces") return { ...subItem, label: `${termUnits} / Spaces` };
                 if (subItem.id === "availability") return { ...subItem, label: "Occupancy & Availability" };
                 return subItem;
               }),
@@ -1597,7 +1617,7 @@ const TopToolbar = ({
               ...item.submenu
                 .filter((subItem) => subItem.id !== "landlord-payments")
                 .map((subItem) => {
-                  if (subItem.id === "rental-invoicing") return { ...subItem, label: "Tenant Invoicing" };
+                  if (subItem.id === "rental-invoicing") return { ...subItem, label: `${termTenant} Invoicing` };
                   if (subItem.id === "rental-receipting") return { ...subItem, label: "Rent Collections" };
                   return subItem;
                 }),
@@ -1631,7 +1651,7 @@ const TopToolbar = ({
       });
 
     return filterMenuByPermissions(items, currentUser, activeCompanyContext);
-  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isClientsWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
+  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isClientsWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace, termTenant, termTenants, termUnit, termUnits, termProperty, termProperties, termLandlord, termLandlords]);
 
   const nestedSubmenus = useMemo(() => {
     if (isSystemAdminWorkspace || isCompanySetupWorkspace || isAccountsWorkspace || isCarWashWorkspace || isClientsWorkspace || isPropertySaleWorkspace || isHumanResourceWorkspace || isCommunicationsWorkspace) {
@@ -1654,8 +1674,8 @@ const TopToolbar = ({
         { id: "rental-receipts", label: "Rental Receipts", icon: FaReceipt },
         { id: "mpesa-collections", label: "M-Pesa Collections",  icon: FaPhone },
         { id: "coop-collections",  label: "Co-op Collections",   icon: FaPhone },
-        { id: "tenant-prepayments", label: "Tenants Prepayments", icon: FaCoins },
-        { id: "landlord-receipt", label: "Landlord Receipts", icon: FaReceipt },
+        { id: "tenant-prepayments", label: `${termTenant} Prepayments`, icon: FaCoins },
+        { id: "landlord-receipt", label: `${termLandlord} Receipts`, icon: FaReceipt },
       ],
       "landlord-payments": [
         { id: "commission-landlord-statement", label: "Commissions & LL Statement", icon: FaFileAlt },
@@ -1700,7 +1720,7 @@ const TopToolbar = ({
     });
 
     return submenus;
-  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isClientsWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
+  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isClientsWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace, termTenant, termLandlord]);
 
   const handleMenuItemClick = useCallback((menuId) => {
     const route = routeConfig[menuId];
@@ -1779,6 +1799,7 @@ const TopToolbar = ({
                 onMenuEnter={openHoveredFinancialItem}
                 onMenuLeave={closeHoveredFinancialItem}
                 onItemClick={handleMenuItemClick}
+                menuColorMap={dynamicMenuColorMap}
               />
             ) : (
               <ProfessionalDropdown
@@ -1788,6 +1809,7 @@ const TopToolbar = ({
                 onMenuEnter={openHoveredFinancialItem}
                 onMenuLeave={closeHoveredFinancialItem}
                 onItemClick={handleMenuItemClick}
+                menuColorMap={dynamicMenuColorMap}
               />
             )
           )}

@@ -94,6 +94,12 @@ const authSlice = createSlice({
       state.token = action.payload;
     },
 
+    // Silently update token after a background refresh
+    tokenRefreshed: (state, action) => {
+      state.token = action.payload;
+      localStorage.setItem('milik_token', action.payload);
+    },
+
     // Initialize auth from localStorage
     initializeAuth: (state, action) => {
       state.currentUser = normalizeUserCompanyContext(action.payload.user);
@@ -125,6 +131,7 @@ export const {
   getCurrentUserSuccess,
   getCurrentUserFailure,
   setToken,
+  tokenRefreshed,
   initializeAuth,
   clearAuth,
 } = authSlice.actions;

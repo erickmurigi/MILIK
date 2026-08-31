@@ -36,6 +36,7 @@ import { hasCompanyPermission } from "../../utils/permissions";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
 import AppSelect from "../../components/common/AppSelect";
 import { printTabularList } from "../../utils/printList";
+import { useTerm } from "../../hooks/useTerm";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
 
@@ -156,13 +157,13 @@ const isOffMarketStatus = (status) => {
   return ["archived", "inactive", "off_market", "off market"].includes(normalized);
 };
 
-const buildCsv = (rows) => {
+const buildCsv = (rows, { termProperty = "Property", termUnit = "Unit", termTenant = "Tenant" } = {}) => {
   const header = [
-    "Property",
-    "Unit/Space",
-    "Unit Type",
+    termProperty,
+    `${termUnit}/Space`,
+    `${termUnit} Type`,
     "Availability Status",
-    "Current Tenant",
+    `Current ${termTenant}`,
     "Available From",
     "Days Vacant",
     "Monthly Rent",
@@ -193,6 +194,10 @@ const buildCsv = (rows) => {
 const Vacants = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const termUnits = useTerm("units");
+  const termUnit = useTerm("unit");
+  const termTenant = useTerm("tenant");
+  const termProperty = useTerm("property");
 
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
@@ -367,7 +372,7 @@ const Vacants = () => {
         notes.push("Reserved and awaiting move-in");
       }
       if (availabilityStatus === "off_market") {
-        notes.push("Unit is archived or inactive");
+        notes.push(`${termUnit} is archived or inactive`);
       }
       if (availabilityStatus === "owner_occupied") {
         notes.push("Occupied by property owner");
@@ -441,8 +446,8 @@ const Vacants = () => {
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
 
-    return [{ value: "any", label: "Property" }, ...options];
-  }, [properties]);
+    return [{ value: "any", label: termProperty }, ...options];
+  }, [properties, termProperty]);
 
   const unitTypeOptions = useMemo(() => {
     const companyTypes = sanitizeCompanyUnitTypes(currentCompany?.unitTypes);
@@ -634,8 +639,8 @@ const Vacants = () => {
   const handleReserve = (row) => {
     queueStatusChange({
       row,
-      title: "Reserve Unit",
-      message: `Mark ${row.unitNo} as reserved? It will remain unavailable until a tenant is moved in or the reservation is cleared.`,
+      title: `Reserve ${termUnit}`,
+      message: `Mark ${row.unitNo} as reserved? It will remain unavailable until a ${termTenant.toLowerCase()} is moved in or the reservation is cleared.`,
       confirmText: "Reserve",
       unitData: {
         status: "reserved",
@@ -691,7 +696,7 @@ const Vacants = () => {
   const handleRestore = (row) => {
     queueStatusChange({
       row,
-      title: "Restore Unit",
+      title: `Restore ${termUnit}`,
       message: `Restore ${row.unitNo} back into the active availability stock as vacant?`,
       confirmText: "Restore",
       unitData: {
@@ -704,13 +709,13 @@ const Vacants = () => {
 
   const handleOwnerOccupied = (row) => {
     if (row.tenantId && row.tenantName !== "-") {
-      toast.error(`${row.unitNo} has an active tenant (${row.tenantName}). Remove the tenant before marking this unit as owner occupied.`);
+      toast.error(`${row.unitNo} has an active ${termTenant.toLowerCase()} (${row.tenantName}). Remove the ${termTenant.toLowerCase()} before marking this ${termUnit.toLowerCase()} as owner occupied.`);
       return;
     }
     queueStatusChange({
       row,
       title: "Mark as Owner Occupied",
-      message: `Mark ${row.unitNo} as owner occupied? The unit will be excluded from rental availability and occupancy calculations.`,
+      message: `Mark ${row.unitNo} as owner occupied? The ${termUnit} will be excluded from rental availability and occupancy calculations.`,
       confirmText: "Mark Owner Occupied",
       unitData: { ownerOccupied: true, status: "occupied", isVacant: false },
     });
@@ -719,7 +724,7 @@ const Vacants = () => {
   const handleReleaseOwner = (row) => {
     queueStatusChange({
       row,
-      title: "Release Owner Occupied Unit",
+      title: `Release Owner Occupied ${termUnit}`,
       message: `Release ${row.unitNo} back into the letting stock as vacant?`,
       confirmText: "Release Unit",
       unitData: { ownerOccupied: false, status: "vacant", isVacant: true, vacantSince: new Date().toISOString() },
@@ -732,7 +737,7 @@ const Vacants = () => {
       return;
     }
 
-    const nextActionLabel = row.status === "reserved" ? "Complete Take-On" : "Add Tenant";
+    const nextActionLabel = row.status === "reserved" ? "Complete Take-On" : `Add ${termTenant}`;
     navigate(
       `/tenant/new?propertyId=${encodeURIComponent(row.propertyId)}&unitId=${encodeURIComponent(row.id)}&source=availability_status`,
       {
@@ -763,16 +768,16 @@ const Vacants = () => {
     }
 
     printTabularList({
-      title: "Availability Status",
+      title: `Vacant ${termUnits}`,
       subtitle: "Unit-by-unit occupancy and availability control list",
       company: currentCompany,
       summary: `Records: ${filteredRows.length} • Rentable units: ${summary.rentable} • Occupancy rate: ${summary.occupancyRate}% • Printed on ${new Date().toLocaleString()}`,
       columns: [
-        { label: "Property", value: (row) => row.propertyName },
-        { label: "Unit/Space", value: (row) => row.unitNo },
+        { label: termProperty, value: (row) => row.propertyName },
+        { label: `${termUnit}/Space`, value: (row) => row.unitNo },
         { label: "Type", value: (row) => row.unitTypeLabel },
         { label: "Status", value: (row) => row.statusLabel },
-        { label: "Tenant", value: (row) => row.tenantName },
+        { label: termTenant, value: (row) => row.tenantName },
         { label: "Available From", value: (row) => row.availableFromLabel },
         { label: "Days Vacant", value: (row) => row.daysVacantLabel, align: "right" },
         { label: "Rent", value: (row) => row.rentLabel, align: "right" },
@@ -787,7 +792,7 @@ const Vacants = () => {
       return;
     }
 
-    const csv = buildCsv(filteredRows);
+    const csv = buildCsv(filteredRows, { termProperty, termUnit, termTenant });
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -821,8 +826,8 @@ const Vacants = () => {
             <button onClick={resetFilters} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={7} /> Reset</button>
             <button onClick={allExpanded ? collapseAll : expandAll} disabled={!currentRows.length} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white shadow-sm ${currentRows.length ? (allExpanded ? "bg-orange-600 hover:bg-orange-700" : `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`) : "cursor-not-allowed bg-gray-400"}`}>{allExpanded ? <><FaCompressAlt size={7} /> Collapse</> : <><FaExpandAlt size={7} /> Expand</>}</button>
             <div className="mx-1 h-3 w-px shrink-0 bg-gray-300" />
-            {canCreateTenant && <button onClick={() => navigate("/tenant/new")} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaUserPlus size={7} /> Add Tenant</button>}
-            {canCreateUnit && <button onClick={() => navigate("/units/new")} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaPlus size={7} /> Add Unit</button>}
+            {canCreateTenant && <button onClick={() => navigate("/tenant/new")} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaUserPlus size={7} /> Add {termTenant}</button>}
+            {canCreateUnit && <button onClick={() => navigate("/units/new")} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaPlus size={7} /> Add {termUnit}</button>}
             <div className="mx-1 h-3 w-px shrink-0 bg-gray-300" />
             <button onClick={handlePrint} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-slate-700 px-1.5 text-[9px] font-bold text-white shadow-sm hover:bg-slate-800"><FaPrint size={7} /> Print</button>
             <button onClick={handleExport} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-gray-300 px-1.5 text-[9px] font-bold shadow-sm hover:bg-gray-50"><FaFileExport size={7} /> Export</button>
@@ -833,14 +838,14 @@ const Vacants = () => {
             <AppSelect value={draftFilters.window} onChange={(v) => setDraftFilters((prev) => ({ ...prev, window: v ?? "all" }))} options={[{value:"now",label:"Available Now"},{value:"next7",label:"In 7 Days"},{value:"next30",label:"In 30 Days"}]} placeholder="Availability" clearable compact />
             <div className="mx-1 h-3 w-px shrink-0 bg-gray-300" />
             <input value={draftFilters.search} onChange={(event) => setDraftFilters((prev) => ({ ...prev, search: event.target.value }))} onKeyDown={handleFilterEnter} placeholder="Search…" className="h-[20px] w-28 shrink-0 border border-gray-300 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-            <input value={draftFilters.tenant} onChange={(event) => setDraftFilters((prev) => ({ ...prev, tenant: event.target.value }))} onKeyDown={handleFilterEnter} placeholder="Tenant" className="h-[20px] w-20 shrink-0 border border-gray-300 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+            <input value={draftFilters.tenant} onChange={(event) => setDraftFilters((prev) => ({ ...prev, tenant: event.target.value }))} onKeyDown={handleFilterEnter} placeholder={termTenant} className="h-[20px] w-20 shrink-0 border border-gray-300 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
           </div>
 
           {/* Context action bar — shows when a row is selected */}
           <div className={`flex items-center gap-1.5 overflow-x-auto border-t px-2 py-1 transition-all ${selectedRow ? "border-gray-200 bg-[#f5faf8]" : "border-transparent bg-transparent"}`} style={{ minHeight: "34px" }}>
             {selectedRow ? (
               <>
-                <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-400">Unit:</span>
+                <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-400">{termUnit}:</span>
                 <span className="shrink-0 inline-flex items-center gap-1 rounded bg-[#0B3B2E] px-2 py-0.5 text-[10px] font-bold text-white">{selectedRow.unitNo}</span>
                 <span className="shrink-0 text-[10px] font-semibold text-slate-600 truncate max-w-[140px]" title={selectedRow.propertyName}>{selectedRow.propertyName}</span>
                 <span className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${getAvailabilityTone(selectedRow.status)}`}>{selectedRow.statusLabel}</span>
@@ -848,13 +853,13 @@ const Vacants = () => {
                 <div className="mx-1 h-4 w-px shrink-0 bg-gray-300" />
                 {canUpdateUnit && (
                   <button onClick={() => navigate(`/units/${selectedRow.id}`)} className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}>
-                    <FaUserEdit size={9} /> View Unit
+                    <FaUserEdit size={9} /> View {termUnit}
                   </button>
                 )}
                 {selectedRow.status !== "owner_occupied" && (
                   selectedRow.tenantId ? (
-                    <button onClick={() => navigate(`/tenant/${selectedRow.tenantId}/statement`, { state: { tabTitle: `${selectedRow.unitNo} Tenant` } })} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-slate-700 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-slate-800">
-                      <FaUserEdit size={9} /> Review Tenant
+                    <button onClick={() => navigate(`/tenant/${selectedRow.tenantId}/statement`, { state: { tabTitle: `${selectedRow.unitNo} ${termTenant}` } })} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-slate-700 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-slate-800">
+                      <FaUserEdit size={9} /> Review {termTenant}
                     </button>
                   ) : canCreateTenant && (
                     <button
@@ -862,7 +867,7 @@ const Vacants = () => {
                       disabled={!["vacant", "reserved"].includes(selectedRow.status)}
                       className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2 text-[10px] font-bold text-white shadow-sm ${["vacant", "reserved"].includes(selectedRow.status) ? `${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}` : "cursor-not-allowed bg-gray-400"}`}
                     >
-                      <FaUserPlus size={9} /> {selectedRow.status === "reserved" ? "Complete Take-On" : "Add Tenant"}
+                      <FaUserPlus size={9} /> {selectedRow.status === "reserved" ? "Complete Take-On" : `Add ${termTenant}`}
                     </button>
                   )
                 )}
@@ -911,12 +916,12 @@ const Vacants = () => {
           <div className="flex h-full min-h-0 flex-col rounded-lg border border-gray-200 bg-white shadow-sm">
             <MilikTable
               columns={[
-                { label: 'Property', width: '130px' },
-                { label: 'Unit No', width: '75px' },
+                { label: termProperty, width: '130px' },
+                { label: `${termUnit} No`, width: '75px' },
                 { label: 'Code', width: '75px' },
-                { label: 'Unit Type', width: '105px' },
+                { label: `${termUnit} Type`, width: '105px' },
                 { label: 'Availability', width: '110px' },
-                { label: 'Current Tenant', width: '120px' },
+                { label: `Current ${termTenant}`, width: '120px' },
                 { label: 'Available From', width: '100px' },
                 { label: 'Days', width: '70px', align: 'right' },
                 { label: 'Rent', width: '90px', align: 'right' },
@@ -924,7 +929,7 @@ const Vacants = () => {
               rows={currentRows}
               rowKey="id"
               loading={unitsLoading}
-              empty={unitsLoading ? "Loading availability status..." : "No availability records found. Try adjusting the filters or add units to start tracking availability."}
+              empty={unitsLoading ? "Loading availability status..." : `No availability records found. Try adjusting the filters or add ${termUnits.toLowerCase()} to start tracking availability.`}
               minWidth="980px"
               groupBy={(row) => row.propertyName}
               onRowClick={(row) => setSelectedRowId((prev) => (prev === row.id ? null : row.id))}
@@ -959,11 +964,11 @@ const Vacants = () => {
                       <p className="mt-2 text-sm font-black text-gray-900">{row.propertyName}</p>
                     </div>
                     <div>
-                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Unit / Space</span>
+                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">{termUnit} / Space</span>
                       <p className="mt-2 text-sm font-black text-gray-900">{row.unitNo}</p>
                     </div>
                     <div>
-                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Unit Type</span>
+                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">{termUnit} Type</span>
                       <p className="mt-2 text-sm font-black text-gray-900">{row.unitTypeLabel}</p>
                     </div>
                   </div>
@@ -987,7 +992,7 @@ const Vacants = () => {
                   <div className="space-y-3 rounded-lg border-2 border-blue-200 bg-white p-4 shadow-md">
                     <h4 className="border-b-2 border-blue-600 pb-2 text-sm font-black text-gray-900">👥 Occupancy Context</h4>
                     <div>
-                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Current Tenant</span>
+                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Current {termTenant}</span>
                       <p className="mt-2 text-sm font-black text-gray-900">{row.tenantName}</p>
                     </div>
                     <div>
@@ -1007,7 +1012,7 @@ const Vacants = () => {
                       <p className="mt-2 text-sm font-black text-gray-900">{row.rentLabel}</p>
                     </div>
                     <div>
-                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Unit Code</span>
+                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">{termUnit} Code</span>
                       <p className="mt-2 text-sm font-black text-gray-900">{row.unitCode}</p>
                     </div>
                     <div>
@@ -1027,7 +1032,7 @@ const Vacants = () => {
               onPageChange={setCurrentPage}
               onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
               loading={unitsLoading}
-              label="units"
+              label={termUnits.toLowerCase()}
             />
           </div>
         </div>

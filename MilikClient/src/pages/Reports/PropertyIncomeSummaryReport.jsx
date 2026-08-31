@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTabState } from '../../hooks/useTabState';
 import { useDispatch, useSelector } from 'react-redux';
+import { useTerms } from '../../hooks/useTerm';
 import AppSelect from '../../components/common/AppSelect';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties, selectAllLandlords } from '../../redux/selectors';
@@ -29,6 +30,7 @@ const PropertyIncomeSummaryReport = () => {
   const properties = useSelector(selectAllProperties);
   const landlords = useSelector(selectAllLandlords);
   const isLandlordMode = isSelfManagingLandlordCompany(currentCompany || currentUser?.company);
+  const { property: termProperty, landlord: termLandlord } = useTerms("property", "landlord");
 
   const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company || '';
   const companyName = currentCompany?.name
@@ -95,13 +97,13 @@ const PropertyIncomeSummaryReport = () => {
   const filterSummary = useMemo(() => {
     const rows = [
       { label: 'Period', value: `${fmtDate(filters.startDate)} to ${fmtDate(filters.endDate)}` },
-      { label: 'Property', value: filters.propertyId ? propertyNameMap.get(String(filters.propertyId)) || 'Selected property' : 'All properties' },
+      { label: termProperty, value: filters.propertyId ? propertyNameMap.get(String(filters.propertyId)) || 'Selected property' : 'All properties' },
     ];
     if (!isLandlordMode) {
-      rows.push({ label: 'Landlord', value: filters.landlordId ? landlordNameMap.get(String(filters.landlordId)) || 'Selected landlord' : 'All landlords' });
+      rows.push({ label: termLandlord, value: filters.landlordId ? landlordNameMap.get(String(filters.landlordId)) || 'Selected landlord' : 'All landlords' });
     }
     return rows;
-  }, [filters, propertyNameMap, landlordNameMap, isLandlordMode]);
+  }, [filters, propertyNameMap, landlordNameMap, isLandlordMode, termProperty, termLandlord]);
 
   const insights = useMemo(() => {
     const byProperty = Array.isArray(report.byProperty) ? report.byProperty : [];
@@ -140,7 +142,7 @@ const PropertyIncomeSummaryReport = () => {
       toast.warning ? toast.warning('You do not have permission to export reports') : toast.error('You do not have permission to export reports');
       return;
     }
-    const header = ['Property', 'Rent Invoiced', 'Utilities Invoiced', 'Total Invoiced', 'Total Collected', 'Total Expenses', 'Net Income (Cash)', 'Collection Rate'];
+    const header = [termProperty, 'Rent Invoiced', 'Utilities Invoiced', 'Total Invoiced', 'Total Collected', 'Total Expenses', 'Net Income (Cash)', 'Collection Rate'];
     const rows = (report.byProperty || []).map((row) => [
       row.propertyName || '',
       row.rentInvoiced || 0,
@@ -201,8 +203,8 @@ const PropertyIncomeSummaryReport = () => {
       <div class="card"><div class="cl">Total Expenses</div><div class="cv" style="color:#b91c1c">${fmt(summary.totalExpenses)}</div></div>
       <div class="card"><div class="cl">Net Income</div><div class="cv" style="color:${Number(summary.netIncome || 0) >= 0 ? '#047857' : '#b91c1c'}">${fmt(summary.netIncome)}</div></div>
     </div>
-    <h3>By Property</h3>
-    <table><thead><tr><th>Property</th><th class="r">Rent Invoiced</th><th class="r">Utilities</th><th class="r">Total Invoiced</th><th class="r">Collected</th><th class="r">Expenses</th><th class="r">Net Income</th><th class="r">Collection Rate</th></tr></thead>
+    <h3>By ${termProperty}</h3>
+    <table><thead><tr><th>${termProperty}</th><th class="r">Rent Invoiced</th><th class="r">Utilities</th><th class="r">Total Invoiced</th><th class="r">Collected</th><th class="r">Expenses</th><th class="r">Net Income</th><th class="r">Collection Rate</th></tr></thead>
     <tbody>${(report.byProperty || []).map((row) => `<tr><td><strong>${row.propertyName || '—'}</strong></td><td class="r">${fmt(row.rentInvoiced)}</td><td class="r">${fmt(row.utilitiesInvoiced)}</td><td class="r">${fmt(row.totalInvoiced)}</td><td class="r">${fmt(row.totalCollected)}</td><td class="r" style="color:#b91c1c">${fmt(row.totalExpenses)}</td><td class="r" style="color:${Number(row.netIncome || 0) >= 0 ? '#047857' : '#b91c1c'}"><strong>${fmt(row.netIncome)}</strong></td><td class="r">${fmtP(row.collectionRate)}</td></tr>`).join('')}</tbody>
     <tfoot><tr><td><strong>TOTAL</strong></td><td class="r"><strong>${fmt(summary.totalRentInvoiced)}</strong></td><td class="r"><strong>${fmt(summary.totalUtilitiesInvoiced)}</strong></td><td class="r"><strong>${fmt(summary.totalInvoiced)}</strong></td><td class="r"><strong>${fmt(summary.totalCollected)}</strong></td><td class="r"><strong>${fmt(summary.totalExpenses)}</strong></td><td class="r"><strong>${fmt(summary.netIncome)}</strong></td><td class="r"><strong>${fmtP(summary.collectionRate)}</strong></td></tr></tfoot></table>
     ${(report.expensesByCategory || []).length > 0 ? `<h3>Expenses by Category</h3><table><thead><tr><th>Category</th><th class="r">Total</th><th class="r">Count</th></tr></thead><tbody>${(report.expensesByCategory || []).map((row) => `<tr><td>${formatCategory(row.category)}</td><td class="r">${fmt(row.total)}</td><td class="r">${row.count}</td></tr>`).join('')}</tbody></table>` : ''}
@@ -292,7 +294,7 @@ const PropertyIncomeSummaryReport = () => {
             <table className="report-print-table">
               <thead>
                 <tr>
-                  <th>Property</th>
+                  <th>{termProperty}</th>
                   <th className="text-right">Rent Invoiced</th>
                   <th className="text-right">Utilities Invoiced</th>
                   <th className="text-right">Total Invoiced</th>
@@ -417,8 +419,8 @@ const PropertyIncomeSummaryReport = () => {
                   <table className="min-w-full text-[11px] border-collapse">
                     <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                       <tr>
-                        {['Property', 'Rent Invoiced', 'Utilities Invoiced', 'Total Invoiced', 'Collected', 'Expenses', 'Net Income (Cash)', 'Collection %'].map((h, i, arr) => (
-                          <th key={h} className={`whitespace-nowrap px-3 py-1.5 text-left font-bold ${i > 0 ? 'text-right' : ''} ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
+                        {[termProperty, 'Rent Invoiced', 'Utilities Invoiced', 'Total Invoiced', 'Collected', 'Expenses', 'Net Income (Cash)', 'Collection %'].map((h, i, arr) => (
+                          <th key={i} className={`whitespace-nowrap px-3 py-1.5 text-left font-bold ${i > 0 ? 'text-right' : ''} ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
                         ))}
                       </tr>
                     </thead>

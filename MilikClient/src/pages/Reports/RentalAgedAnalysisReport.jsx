@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
+import { useTerms } from "../../hooks/useTerm";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import { FaClock, FaFileDownload, FaFilter, FaPrint, FaSyncAlt } from "react-icons/fa";
@@ -19,6 +20,7 @@ const normalizeArray = (value) => (Array.isArray(value) ? value : Array.isArray(
 const RentalAgedAnalysisReport = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
+  const { tenant: termTenant, unit: termUnit, property: termProperty, properties: termProperties } = useTerms("tenant", "unit", "property", "properties");
   const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", ["accounts", "propertyManagement"]);
   const businessId = currentCompany?._id || "";
   const companyName = currentCompany?.name || currentCompany?.companyName || currentCompany?.businessName || "Milik";
@@ -162,7 +164,7 @@ const RentalAgedAnalysisReport = () => {
       <div class="card"><div class="cl">90+ Days</div><div class="cv" style="color:#7f1d1d">${fmt(totals.days90Plus)}</div></div>
       <div class="card"><div class="cl">Total Outstanding</div><div class="cv" style="color:#b91c1c"><strong>${fmt(totals.total)}</strong></div></div>
     </div>
-    <table><thead><tr><th>Tenant</th><th>Property</th><th>Unit</th><th class="r">Current</th><th class="r">1-30d</th><th class="r">31-60d</th><th class="r">61-90d</th><th class="r">90+ d</th><th class="r">Total</th><th>Oldest Due</th></tr></thead>
+    <table><thead><tr><th>${termTenant}</th><th>${termProperty}</th><th>${termUnit}</th><th class="r">Current</th><th class="r">1-30d</th><th class="r">31-60d</th><th class="r">61-90d</th><th class="r">90+ d</th><th class="r">Total</th><th>Oldest Due</th></tr></thead>
     <tbody>${filteredRows.map((row) => `<tr><td><strong>${row.tenantName}</strong></td><td>${row.propertyName}</td><td>${row.unitNumber}</td><td class="r">${fmt(row.current)}</td><td class="r">${fmt(row.days30)}</td><td class="r">${fmt(row.days60)}</td><td class="r">${fmt(row.days90)}</td><td class="r" style="color:#b91c1c"><strong>${fmt(row.days90Plus)}</strong></td><td class="r"><strong>${fmt(row.total)}</strong></td><td>${row.oldestDueDate ? new Date(row.oldestDueDate).toLocaleDateString() : '—'}</td></tr>`).join('')}</tbody>
     <tfoot><tr><td colspan="3"><strong>TOTALS</strong></td><td class="r">${fmt(totals.current)}</td><td class="r">${fmt(totals.days30)}</td><td class="r">${fmt(totals.days60)}</td><td class="r">${fmt(totals.days90)}</td><td class="r">${fmt(totals.days90Plus)}</td><td class="r"><strong>${fmt(totals.total)}</strong></td><td></td></tr></tfoot>
     </table></body></html>`);
@@ -253,7 +255,7 @@ const RentalAgedAnalysisReport = () => {
           <table className="report-print-table">
             <thead>
               <tr>
-                {["Tenant", "Property", "Unit", "Current", "1-30", "31-60", "61-90", "90+", "Total", "Oldest Due"].map((header) => <th key={header}>{header}</th>)}
+                {[termTenant, termProperty, termUnit, "Current", "1-30", "31-60", "61-90", "90+", "Total", "Oldest Due"].map((header) => <th key={header}>{header}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -292,7 +294,7 @@ const RentalAgedAnalysisReport = () => {
               <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
                 <div className="relative shrink-0">
                   <FaFilter className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-orange-500" />
-                  <input value={filters.search} onChange={setFilter("search")} placeholder="Tenant, property, unit" className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                  <input value={filters.search} onChange={setFilter("search")} placeholder={`${termTenant}, ${termProperty.toLowerCase()}, ${termUnit.toLowerCase()}`} className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </div>
                 <AppSelect
                   value={filters.zone || null}
@@ -307,7 +309,7 @@ const RentalAgedAnalysisReport = () => {
                   value={filters.propertyId}
                   onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "", zone: "" }))}
                   options={propertyOptions}
-                  placeholder="All properties"
+                  placeholder={`All ${termProperties.toLowerCase()}`}
                   searchable
                   clearable
                   size="sm"
@@ -348,7 +350,7 @@ const RentalAgedAnalysisReport = () => {
                 </colgroup>
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className="bg-[#0B3B2E] text-white">
-                    {['Tenant', 'Property', 'Unit', 'Current', '1-30', '31-60', '61-90', '90+', 'Total', 'Oldest Due'].map((header, i, arr) => {
+                    {[termTenant, termProperty, termUnit, 'Current', '1-30', '31-60', '61-90', '90+', 'Total', 'Oldest Due'].map((header, i, arr) => {
                       const isNumeric = ['Current', '1-30', '31-60', '61-90', '90+', 'Total'].includes(header);
                       return (
                         <th

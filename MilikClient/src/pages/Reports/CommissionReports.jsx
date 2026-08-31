@@ -16,6 +16,7 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { fmtDate } from "../../utils/dates";
 import { adminRequests } from "../../utils/requestMethods";
 import PaginationBar from "../../components/PaginationBar";
+import { useTerms } from "../../hooks/useTerm";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -109,6 +110,8 @@ const CommissionReports = () => {
   const setFilter = (key) => (e) => setAppliedFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [currentPage, setCurrentPage] = useTabState("/reports/commissions:currentPage", 1);
   const [pageSize, setPageSize] = useState(50);
+
+  const { property: termProperty, landlord: termLandlord } = useTerms("property", "landlord");
 
   const loadData = useCallback(async () => {
     if (!currentCompany?._id) {
@@ -277,13 +280,13 @@ const CommissionReports = () => {
       <div class="card"><div class="cl">Statements / Months</div><div class="cv">${totals.statements} / ${totals.months}</div></div>
       <div class="card"><div class="cl">Reversed Statements</div><div class="cv" style="color:#FF8C00">${totals.reversedStatements}</div></div>
     </div>
-    <table><thead><tr><th>Recognition Date</th><th>Statement No.</th><th>Property</th><th>Landlord</th><th>Basis</th><th>Structure</th><th class="r">Recognized</th><th class="r">Reversed</th><th>Status</th></tr></thead>
+    <table><thead><tr><th>Recognition Date</th><th>Statement No.</th><th>${termProperty}</th><th>${termLandlord}</th><th>Basis</th><th>Structure</th><th class="r">Recognized</th><th class="r">Reversed</th><th>Status</th></tr></thead>
     <tbody>${filteredRows.map((row) => `<tr><td>${fmtDate(row.recognitionDate)}</td><td>${row.statementNumber}</td><td>${row.propertyName}</td><td>${row.landlordName}</td><td>${row.recognitionBasis}</td><td>${row.structureLabel}</td><td class="r"><strong>${fmt(row.recognizedAmount)}</strong></td><td class="r" style="color:#b91c1c">${fmt(row.reversedAmount)}</td><td><span class="${row.status === 'Reversed' ? 'badge-r' : 'badge-g'}">${row.status}</span></td></tr>`).join('')}</tbody>
     <tfoot><tr><td colspan="6"><strong>TOTALS</strong></td><td class="r"><strong>${fmt(totals.recognizedCommission)}</strong></td><td class="r" style="color:#b91c1c"><strong>${fmt(totals.reversedCommission)}</strong></td><td></td></tr></tfoot>
     </table></body></html>`);
     win.document.close();
     win.onload = () => { win.focus(); win.print(); };
-  }, [canExportReports, currentCompany, currentUser, filteredRows, totals, appliedFilters.monthFrom, appliedFilters.monthTo]);
+  }, [canExportReports, currentCompany, currentUser, filteredRows, totals, appliedFilters.monthFrom, appliedFilters.monthTo, termProperty, termLandlord]);
 
   const resetFilters = () => {
     setAppliedFilters({
@@ -304,8 +307,8 @@ const CommissionReports = () => {
         "Recognition Date",
         "Month",
         "Statement Number",
-        "Property",
-        "Landlord",
+        termProperty,
+        termLandlord,
         "Recognition Basis",
         "Percentage / Amount",
         "Recognized Amount",
@@ -386,7 +389,7 @@ const CommissionReports = () => {
           <table className="comm-print-table">
             <thead>
               <tr>
-                {["Recognition Date", "Statement No.", "Property", "Landlord", "Basis", "Structure", "Recognized", "Reversed", "Status"].map((h) => <th key={h}>{h}</th>)}
+                {["Recognition Date", "Statement No.", termProperty, termLandlord, "Basis", "Structure", "Recognized", "Reversed", "Status"].map((h) => <th key={h}>{h}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -430,7 +433,7 @@ const CommissionReports = () => {
               />
               <div className="relative flex min-w-[200px] flex-1">
                 <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={9} />
-                <input value={appliedFilters.search} onChange={setFilter("search")} placeholder="Search statement, property, landlord or basis…" className="h-7 w-full rounded-md border border-slate-200 bg-white pl-6 pr-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
+                <input value={appliedFilters.search} onChange={setFilter("search")} placeholder={`Search statement, ${termProperty.toLowerCase()}, ${termLandlord.toLowerCase()} or basis…`} className="h-7 w-full rounded-md border border-slate-200 bg-white pl-6 pr-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
               </div>
               <div className="ml-auto flex items-center gap-1.5">
                 {canExportReports && <button onClick={handleExportCSV} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaFileDownload size={9} /> Export CSV</button>}
@@ -467,7 +470,7 @@ const CommissionReports = () => {
               <table className="min-w-full text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                   <tr>
-                    {['Recognition Date', 'Statement No.', 'Property', 'Landlord', 'Basis', 'Structure', 'Recognized', 'Reversed', 'Status'].map((h, i, arr) => (
+                    {['Recognition Date', 'Statement No.', termProperty, termLandlord, 'Basis', 'Structure', 'Recognized', 'Reversed', 'Status'].map((h, i, arr) => (
                       <th key={h} className={`whitespace-nowrap px-3 py-1.5 text-left font-bold ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
                     ))}
                   </tr>

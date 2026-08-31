@@ -1,6 +1,8 @@
-import React, { useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import Spinner from "./Spinner";
 import { FaChevronDown, FaChevronRight, FaSort, FaSortUp, FaSortDown } from "react-icons/fa";
+import { getTabCache, setTabCache } from "../../hooks/useTabState";
 
 function buildGroups(rows, groupFn) {
   const map = new Map();
@@ -20,7 +22,7 @@ function SortIcon({ col, sortKey, sortDir, onSort }) {
     : <FaSortDown className="ml-0.5 inline" size={8} />;
 }
 
-const MilikTable = React.memo(function MilikTable({
+const MilikTable = React.memo(React.forwardRef(function MilikTable({
   columns   = [],   // { label, align?, width?, className?, sortKey? }
   rows      = [],
   rowKey    = "_id",
@@ -54,8 +56,39 @@ const MilikTable = React.memo(function MilikTable({
   actionsWidth,
   stickyHeader = true,
   className,
-}) {
+}, ref) {
   const [expandedKeys, setExpandedKeys] = React.useState(new Set());
+  const location = useLocation();
+  const internalRef = useRef(null);
+  const cacheKey = location.pathname + ":scrollTop";
+
+  // Combine forwarded ref + internal ref
+  const setRef = useCallback((el) => {
+    internalRef.current = el;
+    if (typeof ref === "function") ref(el);
+    else if (ref) ref.current = el;
+  }, [ref]);
+
+  // Restore scroll on mount
+  useEffect(() => {
+    const el = internalRef.current;
+    if (!el) return;
+    const saved = getTabCache(cacheKey);
+    if (saved) el.scrollTop = saved;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist scroll on scroll (rAF-throttled, no re-renders)
+  useEffect(() => {
+    const el = internalRef.current;
+    if (!el) return;
+    let rafId = null;
+    const onScroll = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => { setTabCache(cacheKey, el.scrollTop); rafId = null; });
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => { el.removeEventListener("scroll", onScroll); if (rafId) cancelAnimationFrame(rafId); };
+  }, [cacheKey]);
 
   const hasExpand  = !!renderExpanded;
   const hasActions = !!renderActions;
@@ -151,7 +184,7 @@ const MilikTable = React.memo(function MilikTable({
   );
 
   return (
-    <div className={`flex-1 min-h-0 overflow-auto ${className ?? ""}`}>
+    <div ref={setRef} className={`flex-1 min-h-0 overflow-auto ${className ?? ""}`}>
       <table
         className="w-full border-collapse text-xs"
         style={{ ...(minWidth ? { minWidth } : {}), ...(tableFixed ? { tableLayout: 'fixed' } : {}) }}
@@ -251,6 +284,6 @@ const MilikTable = React.memo(function MilikTable({
       </table>
     </div>
   );
-});
+}));
 
 export default MilikTable;

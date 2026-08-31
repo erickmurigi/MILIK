@@ -4,11 +4,29 @@ import { createError } from "../utils/error.js";
 import { normalizeCompanyModules, normalizeCompanyOperatingMode, serializeCompanyForClient } from "../utils/companyModules.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import { timingSafeEqual } from "crypto";
 import { buildTemporaryPassword, normalizeBoolean } from "../utils/onboardingAccess.js";
 import { sendUserOnboardingEmail } from "../utils/onboardingMailer.js";
 import { attachAuthCookie, clearAuthCookie, extractAuthCookieToken } from "../utils/authCookie.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
-import { addToBlacklist } from "../utils/tokenBlacklist.js";
+import { addToBlacklist, isBlacklistedAsync } from "../utils/tokenBlacklist.js";
+
+// Constant-time string comparison to prevent timing attacks on credential checks.
+const timingSafeStringEqual = (a, b) => {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  try {
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    if (bufA.length !== bufB.length) {
+      // Still consume time proportional to b's length to avoid length-based leaks
+      timingSafeEqual(bufB, bufB);
+      return false;
+    }
+    return timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+};
 
 const getJWTSecret = () => {
   const secret = process.env.JWT_SECRET;
@@ -20,7 +38,8 @@ const getJWTSecret = () => {
 
 const JWT_ISSUER = "milik-api";
 const JWT_AUDIENCE = "milik-client";
-const JWT_OPTIONS = { expiresIn: "90d", issuer: JWT_ISSUER, audience: JWT_AUDIENCE };
+const JWT_OPTIONS        = { expiresIn: "7d",  issuer: JWT_ISSUER, audience: JWT_AUDIENCE };
+const JWT_REFRESH_OPTIONS = { expiresIn: "30d", issuer: JWT_ISSUER, audience: JWT_AUDIENCE };
 
 // Pre-computed dummy hash — used to pad response timing when a login email is not found,
 // preventing user enumeration via timing attacks.
@@ -397,7 +416,7 @@ export const loginUser = async (req, res, next) => {
     const adminPasswordPlain = process.env.MILIK_ADMIN_PASSWORD;
     const adminPasswordMatches = isAdminEmail && (adminPasswordHash
       ? await bcrypt.compare(password, adminPasswordHash)
-      : adminPasswordPlain && password === adminPasswordPlain);
+      : adminPasswordPlain && timingSafeStringEqual(password, adminPasswordPlain));
 
     if (isAdminEmail && (adminPasswordHash || adminPasswordPlain) && adminPasswordMatches) {
       const user = buildSystemAdminUserPayload();
@@ -666,6 +685,48 @@ export const getAccessibleCompanies = async (req, res, next) => {
     });
   } catch (err) {
     next(err);
+  }
+};
+
+export const refreshToken = async (req, res) => {
+  const EXPIRED_MSG = "Session expired. Please log in again.";
+  let token;
+  try {
+    token =
+      req.headers.authorization?.startsWith("Bearer ")
+        ? req.headers.authorization.slice(7)
+        : extractAuthCookieToken(req.cookies);
+
+    if (!token) {
+      return res.status(401).json({ success: false, message: EXPIRED_MSG });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, getJWTSecret(), {
+        issuer: JWT_ISSUER,
+        audience: JWT_AUDIENCE,
+        algorithms: ["HS256"],
+      });
+    } catch (_err) {
+      return res.status(401).json({ success: false, message: EXPIRED_MSG });
+    }
+
+    const revoked = await isBlacklistedAsync(token);
+    if (revoked) {
+      return res.status(401).json({ success: false, message: EXPIRED_MSG });
+    }
+
+    // createAuthToken expects user._id; the decoded payload carries id.
+    const newToken = createAuthToken({ ...decoded, _id: decoded.id });
+
+    attachAuthCookie(res, newToken);
+    await addToBlacklist(token, decoded.exp * 1000);
+
+    return res.status(200).json({ success: true, token: newToken, user: decoded });
+  } catch (err) {
+    console.error("Token refresh error:", err);
+    return res.status(401).json({ success: false, message: EXPIRED_MSG });
   }
 };
 

@@ -94,7 +94,7 @@ const CarWashCashbooks = () => {
         <button type="button" onClick={resetFilters} className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127]"><FaRedoAlt />Reset</button>
       </form>
 
-      <div className="min-h-[calc(100vh-14rem)] overflow-x-auto border border-slate-200 bg-white shadow-sm">
+      <div className="flex-1 min-h-0 flex flex-col border border-slate-200 bg-white shadow-sm">
         <div className="flex min-h-8 flex-wrap items-center gap-x-5 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <span>Cashbooks: <strong className="text-[#0B3B2E]">{filteredAccounts.length}</strong></span>
           <span>Combined Balance: <strong className="text-[#0B3B2E]">{formatMoney(totalBalance)}</strong></span>

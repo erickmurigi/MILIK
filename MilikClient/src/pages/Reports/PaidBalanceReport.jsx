@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTabState } from '../../hooks/useTabState';
 import { useDispatch, useSelector } from 'react-redux';
 import AppSelect from '../../components/common/AppSelect';
+import { useTerms } from '../../hooks/useTerm';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties } from '../../redux/selectors';
 import { getTenantPaidBalanceReport } from '../../redux/apiCalls';
@@ -103,8 +104,6 @@ const sumBalBF = (rows) => rows.reduce((s, r) => s + calcBalBF(r), 0);
 
 const STATUS_LABEL = { owing: 'Arrears', credit: 'Overpaid', settled: 'Settled' };
 
-// Module-scope constant — avoids allocating a new array on every render
-const COLS = ['Tenant', 'Unit', 'BAL B/F', 'Rent', 'Other Exp\'d', 'Rent Paid', 'Others Paid', 'Total Paid', 'BAL C/F', 'Oldest Due', 'Status'];
 
 // Inline <style> content moved here so it is not a new string on every render
 const REPORT_STYLE = `
@@ -127,6 +126,8 @@ const PaidBalanceReport = () => {
   const dispatch = useDispatch();
   const currentUser = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
+  const { tenant: termTenant, tenants: termTenants, unit: termUnit, property: termProperty } = useTerms('tenant', 'tenants', 'unit', 'property');
+  const COLS = useMemo(() => [termTenant, termUnit, 'BAL B/F', 'Rent', "Other Exp'd", 'Rent Paid', 'Others Paid', 'Total Paid', 'BAL C/F', 'Oldest Due', 'Status'], [termTenant, termUnit]);
   const canExportReports = useMemo(
     () => hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", ["accounts", "propertyManagement"]),
     [currentUser, currentCompany]
@@ -309,7 +310,7 @@ const PaidBalanceReport = () => {
 
   const handleExportCSV = useCallback(() => {
     if (!canExportReports) { toast.error("You do not have permission to export reports"); return; }
-    const header = ['Property', 'Tenant', 'Unit', 'BAL B/F', 'Rent', 'Other Exp\'d', 'Rent Paid', 'Others Paid', 'Total Paid', 'BAL C/F', 'Oldest Due', 'Status'];
+    const header = [termProperty, termTenant, termUnit, 'BAL B/F', 'Rent', "Other Exp'd", 'Rent Paid', 'Others Paid', 'Total Paid', 'BAL C/F', 'Oldest Due', 'Status'];
     const rows = (report.rows || []).map((row) => [
       row.propertyName || '',
       row.tenantName || '',
@@ -332,7 +333,7 @@ const PaidBalanceReport = () => {
     a.download = `paid_balance_${filters.asOfDate}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [canExportReports, report.rows, filters.asOfDate]);
+  }, [canExportReports, report.rows, filters.asOfDate, termProperty, termTenant, termUnit]);
 
   const handlePrint = useCallback(() => {
     if (!canExportReports) { toast.error("You do not have permission to print reports"); return; }
@@ -494,8 +495,8 @@ const PaidBalanceReport = () => {
 </div>
 <table>
   <thead><tr>
-    <th style="text-align:left">Tenant</th>
-    <th style="text-align:left">Unit</th>
+    <th style="text-align:left">${termTenant}</th>
+    <th style="text-align:left">${termUnit}</th>
     <th style="text-align:right">BAL B/F</th>
     <th style="text-align:right">Rent</th>
     <th style="text-align:right">Other Exp'd</th>
@@ -539,7 +540,7 @@ const PaidBalanceReport = () => {
                 </div>
                 <AppSelect value={filters.propertyId} onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))} options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))} placeholder="All properties" searchable clearable size="sm" />
                 <AppSelect value={filters.status} onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))} options={[{ value: "owing", label: "Arrears" }, { value: "credit", label: "Overpaid" }, { value: "settled", label: "Settled" }]} placeholder="All tenant positions" clearable size="sm" />
-                <input value={filters.search} onChange={setFilter("search")} placeholder="Search tenant, property, unit" className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <input value={filters.search} onChange={setFilter("search")} placeholder={`Search ${termTenant.toLowerCase()}, ${termProperty.toLowerCase()}, ${termUnit.toLowerCase()}`} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </div>
             </div>
 
@@ -579,7 +580,7 @@ const PaidBalanceReport = () => {
               <span className="text-emerald-700">Overpaid: {summary.creditCount || 0}</span>
               <span className="text-slate-500">Settled: {summary.settledCount || 0}</span>
               <span className="text-slate-400">·</span>
-              <span className="text-slate-500">{enrichedPropertyGroups.length} {enrichedPropertyGroups.length === 1 ? 'property' : 'properties'} · {searchFilteredRows.length} tenants</span>
+              <span className="text-slate-500">{enrichedPropertyGroups.length} {enrichedPropertyGroups.length === 1 ? termProperty.toLowerCase() : termProperty.toLowerCase() + 's'} · {searchFilteredRows.length} {termTenants.toLowerCase()}</span>
               {balanceInsights.earliestArrear?.tenantName && (
                 <span className="text-orange-600">Oldest due: {balanceInsights.earliestArrear.tenantName} ({fmtDate(balanceInsights.earliestArrear.oldestDueDate)})</span>
               )}

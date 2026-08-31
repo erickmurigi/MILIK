@@ -1,10 +1,11 @@
-import { lazy, Suspense, useEffect, useMemo } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ScrollToTop from "./components/common/ScrollToTop";
 import { useDispatch, useSelector } from "react-redux";
 import { clearCurrentCompany, getCompanySuccess, setCurrentCompany } from "./redux/companiesRedux";
-import { initializeAuth } from "./redux/authSlice";
-import { getAccessibleCompanies } from "./redux/apiCalls";
+import { initializeAuth, tokenRefreshed } from "./redux/authSlice";
+import { getAccessibleCompanies, refreshAccessToken } from "./redux/apiCalls";
+import { fetchCompanySettings } from "./redux/companySettingsRedux";
 import useInactivityLogout from "./hooks/useInactivityLogout";
 import { clearClientSessionStorage } from "./utils/sessionCleanup";
 import { hasSessionTimedOut } from "./utils/sessionTimeout";
@@ -501,6 +502,7 @@ function PublicEntryRoute() {
 function App() {
   const dispatch = useDispatch();
   const currentUser = useSelector(selectCurrentUser);
+  const token = useSelector((state) => state.auth.token);
   const currentCompany = useSelector(selectCurrentCompany);
   const isCompanySwitching = useSelector((state) => Boolean(state.company?.isSwitching));
 
@@ -508,10 +510,28 @@ function App() {
 
   useEffect(() => {
     if (currentUser) return;
-    const { token, user: storedUser } = getStoredAuthSession();
-    if (!token || !storedUser) return;
-    dispatch(initializeAuth({ user: storedUser, token }));
+    const { token: storedToken, user: storedUser } = getStoredAuthSession();
+    if (!storedToken || !storedUser) return;
+    dispatch(initializeAuth({ user: storedUser, token: storedToken }));
   }, [currentUser, dispatch]);
+
+  // Silent token refresh on mount — runs once when the user is logged in.
+  // If refresh succeeds the new token is stored in Redux + localStorage.
+  // If it fails the existing 401 interceptor in requestMethods.js handles logout.
+  const tokenRefreshAttempted = useRef(false);
+  useEffect(() => {
+    if (!currentUser || !token) return;
+    if (tokenRefreshAttempted.current) return;
+    tokenRefreshAttempted.current = true;
+
+    refreshAccessToken().then((data) => {
+      if (data?.token) {
+        dispatch(tokenRefreshed(data.token));
+      } else {
+        console.debug('[auth] silent refresh: no new token returned');
+      }
+    });
+  }, [currentUser, token, dispatch]);
 
   useEffect(() => {
     let cancelled = false;
@@ -583,7 +603,8 @@ function App() {
   useEffect(() => {
     if (!currentCompany?._id) return;
     localStorage.setItem("milik_active_company_id", currentCompany._id);
-  }, [currentCompany]);
+    dispatch(fetchCompanySettings(currentCompany._id));
+  }, [currentCompany?._id, dispatch]);
 
   return (
     <ESSContextProvider>

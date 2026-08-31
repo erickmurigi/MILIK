@@ -42,6 +42,7 @@ import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScope
 import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
 import PaginationBar from "../../components/PaginationBar";
+import { useTerms } from "../../hooks/useTerm";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
@@ -258,6 +259,7 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const tenants = useSelector(selectAllTenants);
+  const { tenant: termTenant, tenants: termTenants, property: termProperty, unit: termUnit } = useTerms("tenant", "tenants", "property", "unit");
 
   const requestedType = String(searchParams.get("type") || "").trim().toLowerCase();
   const initialNoteType = requestedType === "debit" ? "DEBIT_NOTE" : "CREDIT_NOTE";
@@ -901,7 +903,7 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
                   options={[
                     { value: "active", label: "Active" },
                     { value: "terminated", label: "Terminated" },
-                    { value: "all", label: "All Tenants" },
+                    { value: "all", label: `All ${termTenants}` },
                   ]}
                   size="sm"
                 />
@@ -909,7 +911,7 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
                   value={filters.tenantId}
                   onChange={(v) => setFilters((prev) => ({ ...prev, tenantId: v ?? "" }))}
                   options={filterTenantOptions}
-                  placeholder="Tenant"
+                  placeholder={termTenant}
                   searchable
                   clearable
                   size="sm"
@@ -931,16 +933,16 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
                 <button type="button" onClick={() => setShowImportModal(true)} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} hover:bg-[#0A3127]`}><FaUpload size={10} /> Import</button>
                 <button
                   type="button"
-                  onClick={() => setCommunicationModal({ contextType: "tenant_bulk", recordIds: selectedNoteTenantIds, title: `Notify ${selectedNoteTenantIds.length} Tenant${selectedNoteTenantIds.length !== 1 ? "s" : ""}`, subtitle: "Send credit/debit note notification via SMS.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })}
+                  onClick={() => setCommunicationModal({ contextType: "tenant_bulk", recordIds: selectedNoteTenantIds, title: `Notify ${selectedNoteTenantIds.length} ${termTenant}${selectedNoteTenantIds.length !== 1 ? "s" : ""}`, subtitle: "Send credit/debit note notification via SMS.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })}
                   disabled={selectedNoteTenantIds.length === 0}
-                  title={selectedNotes.length === 0 ? "Select notes to SMS tenants" : `SMS ${selectedNoteTenantIds.length} tenant${selectedNoteTenantIds.length !== 1 ? "s" : ""}`}
+                  title={selectedNotes.length === 0 ? `Select notes to SMS ${termTenants}` : `SMS ${selectedNoteTenantIds.length} ${termTenant}${selectedNoteTenantIds.length !== 1 ? "s" : ""}`}
                   className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${selectedNoteTenantIds.length > 0 ? "bg-teal-600 hover:bg-teal-700" : "bg-gray-400 cursor-not-allowed"}`}
                 ><FaSms size={10} /></button>
                 <button
                   type="button"
-                  onClick={() => setCommunicationModal({ contextType: "tenant_bulk", recordIds: selectedNoteTenantIds, title: `Email ${selectedNoteTenantIds.length} Tenant${selectedNoteTenantIds.length !== 1 ? "s" : ""}`, subtitle: "Send credit/debit note notification via email.", allowedChannels: ["email"], defaultChannel: "email" })}
+                  onClick={() => setCommunicationModal({ contextType: "tenant_bulk", recordIds: selectedNoteTenantIds, title: `Email ${selectedNoteTenantIds.length} ${termTenant}${selectedNoteTenantIds.length !== 1 ? "s" : ""}`, subtitle: "Send credit/debit note notification via email.", allowedChannels: ["email"], defaultChannel: "email" })}
                   disabled={selectedNoteTenantIds.length === 0}
-                  title={selectedNotes.length === 0 ? "Select notes to email tenants" : `Email ${selectedNoteTenantIds.length} tenant${selectedNoteTenantIds.length !== 1 ? "s" : ""}`}
+                  title={selectedNotes.length === 0 ? `Select notes to email ${termTenants}` : `Email ${selectedNoteTenantIds.length} ${termTenant}${selectedNoteTenantIds.length !== 1 ? "s" : ""}`}
                   className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${selectedNoteTenantIds.length > 0 ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-400 cursor-not-allowed"}`}
                 ><FaEnvelope size={10} /></button>
               </div>
@@ -950,9 +952,9 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
             <MilikTable
               columns={[
                 { label: "Note #" },
-                { label: "Tenant" },
-                { label: "Property" },
-                { label: "Unit" },
+                { label: termTenant },
+                { label: termProperty },
+                { label: termUnit },
                 { label: "Description" },
                 { label: "Note Date", align: "center" },
                 { label: "Source Invoice", align: "center" },
@@ -1019,7 +1021,7 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
                       <p className="font-semibold text-[#0B3B2E]">{formatCurrency(note.amount)}</p>
                     </div>
                     <div>
-                      <span className="font-black uppercase tracking-[0.12em] text-amber-700">Tenant & Property</span>
+                      <span className="font-black uppercase tracking-[0.12em] text-amber-700">{`${termTenant} & ${termProperty}`}</span>
                       <p className="mt-1 font-semibold text-slate-900">{note?.tenant?.name || note?.tenantName || "-"}</p>
                       <p className="text-slate-600">{resolvePropertyName(note, propertyMap)}</p>
                       <p className="text-slate-600">{resolveUnitName(note, tenantMap)}</p>
@@ -1116,14 +1118,14 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
                   </label>
 
                   <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
-                    <span>Tenant</span>
+                    <span>{termTenant}</span>
                     <AppSelect
                       value={tenantScope}
                       onChange={(v) => setTenantScope(v ?? "active")}
                       options={[
-                        { value: "active", label: "Active tenants" },
-                        { value: "terminated", label: "Terminated tenants" },
-                        { value: "all", label: "All tenants" },
+                        { value: "active", label: `Active ${termTenants}` },
+                        { value: "terminated", label: `Terminated ${termTenants}` },
+                        { value: "all", label: `All ${termTenants}` },
                       ]}
                       disabled={!propertyId}
                       size="md"
@@ -1132,7 +1134,7 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
                       value={tenantId}
                       onChange={(v) => setTenantId(v ?? "")}
                       options={modalTenantOptions}
-                      placeholder={propertyId ? "Select tenant" : "Select property first"}
+                      placeholder={propertyId ? `Select ${termTenant}` : `Select ${termProperty} first`}
                       searchable
                       disabled={!propertyId}
                       size="md"

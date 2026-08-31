@@ -44,6 +44,7 @@ import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtil
 import { useTabState } from "../../hooks/useTabState";
 import { safeId } from "../../utils/idUtils";
 import MilikTable from "../../components/common/MilikTable";
+import { useTerms } from "../../hooks/useTerm";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -198,6 +199,7 @@ const TenantDeposits = () => {
   const units = useSelector(selectAllUnits);
   const properties = useSelector(selectAllProperties);
   const { propertiesLoaded, unitsLoaded, tenantsLoaded } = useEntityCache(currentCompany?._id);
+  const { tenant: termTenant, tenants: termTenants, unit: termUnit, units: termUnits, property: termProperty, properties: termProperties } = useTerms("tenant", "tenants", "unit", "units", "property", "properties");
 
   const isLandlordWorkspace = useMemo(() => isSelfManagingLandlordCompany(currentCompany || null), [currentCompany]);
   const holderColumnLabel = isLandlordWorkspace ? "Owner / Landlord" : "Deposit Holder";
@@ -771,7 +773,7 @@ const TenantDeposits = () => {
           <table>
             <thead>
               <tr>
-                <th>Invoice #</th><th>Tenant</th><th>Property</th><th>Unit</th><th>Deposit Type</th>
+                <th>Invoice #</th><th>${termTenant}</th><th>${termProperty}</th><th>${termUnit}</th><th>Deposit Type</th>
                 <th>Holder</th><th>Invoice Date</th><th>Due Date</th><th>Amount</th><th>Outstanding</th><th>Status</th>
               </tr>
             </thead>
@@ -803,12 +805,12 @@ const TenantDeposits = () => {
                 ))}
                 <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
                 <input type="text" value={draftFilters.invoiceNo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: normalizeUppercaseInput(e.target.value) }))} placeholder="Invoice #" className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <input type="text" value={draftFilters.tenantName} onChange={setFilter("tenantName")} placeholder="Tenant" className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <input type="text" value={draftFilters.tenantName} onChange={setFilter("tenantName")} placeholder={termTenant} className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 <AppSelect
                   compact
                   clearable
                   searchable
-                  placeholder="Property"
+                  placeholder={termProperty}
                   value={draftFilters.propertyId}
                   onChange={(v) => setDraftFilters((prev) => ({ ...prev, propertyId: v ?? "any", unitId: "any" }))}
                   options={activePropertyOptions}
@@ -816,7 +818,7 @@ const TenantDeposits = () => {
                 <AppSelect
                   compact
                   clearable
-                  placeholder="Unit"
+                  placeholder={termUnit}
                   value={draftFilters.unitId}
                   onChange={(v) => setDraftFilters((prev) => ({ ...prev, unitId: v ?? "any" }))}
                   options={unitFilterOptions}
@@ -847,15 +849,15 @@ const TenantDeposits = () => {
                 <button onClick={loadDepositInvoices} disabled={loading} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-gray-300 bg-white px-1.5 text-[9px] text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-60">{loading ? <Spinner size="sm" /> : <FaRedoAlt size={7} />} Refresh</button>
                 <button onClick={handleDeleteSelected} disabled={!canDeleteInvoice || selectedCount === 0 || deleting} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white shadow-sm ${selectedCount > 0 ? "bg-red-600 hover:bg-red-700" : "cursor-not-allowed bg-gray-400"}`}><FaTrash size={7} /> Delete</button>
                 <button
-                  onClick={() => setCommunicationModal({ contextType: "invoice", recordIds: selectedInvoices, title: `Notify ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, subtitle: "Send deposit invoice notification via SMS.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })}
+                  onClick={() => setCommunicationModal({ contextType: "invoice", recordIds: selectedInvoices, title: `Notify ${selectedCount} ${selectedCount !== 1 ? termTenants : termTenant}`, subtitle: "Send deposit invoice notification via SMS.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })}
                   disabled={selectedCount === 0}
-                  title={selectedCount === 0 ? "Select deposits to SMS tenants" : `SMS ${selectedCount} tenant${selectedCount !== 1 ? "s" : ""}`}
+                  title={selectedCount === 0 ? `Select deposits to SMS ${termTenants.toLowerCase()}` : `SMS ${selectedCount} ${selectedCount !== 1 ? termTenants.toLowerCase() : termTenant.toLowerCase()}`}
                   className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white shadow-sm ${selectedCount > 0 ? "bg-teal-600 hover:bg-teal-700" : "cursor-not-allowed bg-gray-400"}`}
                 ><FaSms size={7} /> SMS</button>
                 <button
-                  onClick={() => setCommunicationModal({ contextType: "invoice", recordIds: selectedInvoices, title: `Email ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, subtitle: "Send deposit invoice notification via email.", allowedChannels: ["email"], defaultChannel: "email" })}
+                  onClick={() => setCommunicationModal({ contextType: "invoice", recordIds: selectedInvoices, title: `Email ${selectedCount} ${selectedCount !== 1 ? termTenants : termTenant}`, subtitle: "Send deposit invoice notification via email.", allowedChannels: ["email"], defaultChannel: "email" })}
                   disabled={selectedCount === 0}
-                  title={selectedCount === 0 ? "Select deposits to email tenants" : `Email ${selectedCount} tenant${selectedCount !== 1 ? "s" : ""}`}
+                  title={selectedCount === 0 ? `Select deposits to email ${termTenants.toLowerCase()}` : `Email ${selectedCount} ${selectedCount !== 1 ? termTenants.toLowerCase() : termTenant.toLowerCase()}`}
                   className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white shadow-sm ${selectedCount > 0 ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-gray-400"}`}
                 ><FaEnvelope size={7} /> Email</button>
                 <button onClick={handlePrintList} disabled={!canExportInvoice || totalFilteredCount === 0} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white shadow-sm ${totalFilteredCount > 0 ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"}`}><FaPrint size={7} /> Print</button>
@@ -866,9 +868,9 @@ const TenantDeposits = () => {
             <MilikTable
               columns={[
                 { label: "Invoice #" },
-                { label: "Tenant" },
-                { label: "Property" },
-                { label: "Unit" },
+                { label: termTenant },
+                { label: termProperty },
+                { label: termUnit },
                 { label: "Deposit Type" },
                 { label: holderColumnLabel },
                 { label: "Booking / Invoice Date", align: "center" },
@@ -981,11 +983,11 @@ const TenantDeposits = () => {
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tenant <span className="text-red-500">*</span></label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">{termTenant} <span className="text-red-500">*</span></label>
                   <AppSelect
                     size="md"
                     searchable
-                    placeholder="Select tenant"
+                    placeholder={`Select ${termTenant.toLowerCase()}`}
                     value={depositForm.unitId ? `${depositForm.tenantId}__${depositForm.unitId}` : depositForm.tenantId}
                     onChange={(v) => updateDepositTenant(v ?? "")}
                     options={tenantSelectOptions}

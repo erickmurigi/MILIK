@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
+import { useTerms } from "../../hooks/useTerm";
 import {
   FaFileDownload, FaFilePdf, FaSyncAlt,
 } from "react-icons/fa";
@@ -44,6 +45,7 @@ const escapeHtml = (v) =>
 // ─── Aging Table ─────────────────────────────────────────────────────────────
 const AgingTable = React.memo(({ rows, totals, type }) => {
   const isAR = type === "ar";
+  const { tenant: termTenant, unit: termUnit, property: termProperty, landlord: termLandlord } = useTerms("tenant", "unit", "property", "landlord");
 
   if (!rows.length) {
     return (
@@ -61,14 +63,14 @@ const AgingTable = React.memo(({ rows, totals, type }) => {
             {isAR ? (
               <>
                 <th className="px-3 py-1 text-left font-bold border-r border-white/10">Invoice #</th>
-                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Tenant</th>
-                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property / Unit</th>
+                <th className="px-3 py-1 text-left font-bold border-r border-white/10">{termTenant}</th>
+                <th className="px-3 py-1 text-left font-bold border-r border-white/10">{termProperty} / {termUnit}</th>
               </>
             ) : (
               <>
                 <th className="px-3 py-1 text-left font-bold border-r border-white/10">Reference</th>
                 <th className="px-3 py-1 text-left font-bold border-r border-white/10">Narration</th>
-                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property / Landlord</th>
+                <th className="px-3 py-1 text-left font-bold border-r border-white/10">{termProperty} / {termLandlord}</th>
               </>
             )}
             <th className="px-3 py-1 text-right font-bold border-r border-white/10">Due Date</th>
@@ -139,6 +141,7 @@ const AgingTable = React.memo(({ rows, totals, type }) => {
 const ARAPAgingReport = () => {
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const companyName = String(currentCompany?.companyName || currentCompany?.name || "").trim();
+  const { tenant: termTenant, unit: termUnit, property: termProperty, landlord: termLandlord } = useTerms("tenant", "unit", "property", "landlord");
 
   const [tab, setTab] = useState("ar");
   const [asOf, setAsOf] = useState(todayString());
@@ -183,8 +186,8 @@ const ARAPAgingReport = () => {
     if (!rows.length) return toast.info("No data to export");
     const isAR = tab === "ar";
     const headers = isAR
-      ? ["Invoice #", "Tenant", "Property", "Unit", "Invoice Date", "Due Date", "Days Overdue", "Bucket", "Amount", "Applied", "Outstanding"]
-      : ["Reference", "Narration", "Category", "Status", "Property", "Landlord", "Due Date", "Days Overdue", "Bucket", "Amount"];
+      ? ["Invoice #", termTenant, termProperty, termUnit, "Invoice Date", "Due Date", "Days Overdue", "Bucket", "Amount", "Applied", "Outstanding"]
+      : ["Reference", "Narration", "Category", "Status", termProperty, termLandlord, "Due Date", "Days Overdue", "Bucket", "Amount"];
 
     const dataRows = rows.map((r) =>
       isAR
@@ -214,8 +217,8 @@ const ARAPAgingReport = () => {
     const isAR = tab === "ar";
     const title = isAR ? "Arrears Aged Analysis" : "Payment Aged Analysis";
     const headerRow = isAR
-      ? `<th>Invoice #</th><th>Tenant</th><th>Property / Unit</th><th>Due Date</th><th>Days Over</th><th>Bucket</th><th class="right">Outstanding (KES)</th>`
-      : `<th>Reference</th><th>Narration</th><th>Property / Landlord</th><th>Due Date</th><th>Days Over</th><th>Bucket</th><th class="right">Amount (KES)</th>`;
+      ? `<th>Invoice #</th><th>${termTenant}</th><th>${termProperty} / ${termUnit}</th><th>Due Date</th><th>Days Over</th><th>Bucket</th><th class="right">Outstanding (KES)</th>`
+      : `<th>Reference</th><th>Narration</th><th>${termProperty} / ${termLandlord}</th><th>Due Date</th><th>Days Over</th><th>Bucket</th><th class="right">Amount (KES)</th>`;
 
     const bodyRows = rows.map((r) => {
       const cells = isAR

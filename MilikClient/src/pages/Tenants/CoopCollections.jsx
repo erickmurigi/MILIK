@@ -16,6 +16,7 @@ import { selectCurrentCompany } from "../../redux/selectors";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { useTabState } from "../../hooks/useTabState";
 import useDebounce from "../../hooks/useDebounce";
+import { useTerms } from '../../hooks/useTerm';
 import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
 import PaginationBar from "../../components/PaginationBar";
@@ -147,6 +148,7 @@ export default function CoopCollections() {
   const confirm = useConfirm();
   const currentCompany = useSelector(selectCurrentCompany);
   const businessId     = currentCompany?._id || "";
+  const { tenant: termTenant } = useTerms("tenant");
 
   const [items,    setItems]    = useState([]);
   const [total,    setTotal]    = useState(0);
@@ -320,7 +322,7 @@ export default function CoopCollections() {
               { label: "Tenant Code" },
               { label: "Amount" },
               { label: "Payer" },
-              { label: "Tenant" },
+              { label: termTenant },
               { label: "Status" },
             ]}
             rows={items}

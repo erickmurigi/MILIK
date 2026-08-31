@@ -70,6 +70,7 @@ import { hasCompanyPermission } from "../../utils/permissions";
 import { printTabularList } from "../../utils/printList";
 import { isCashbookAccount } from "../../utils/cashbookUtils";
 import { useTabState } from "../../hooks/useTabState";
+import { useTerm } from "../../hooks/useTerm";
 import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
 
@@ -298,6 +299,12 @@ const buildJournalEntriesForReceipt = (receipt) => {
 
 const Receipts = ({ viewMode = "tenant" }) => {
   const confirm = useConfirm();
+  const termReceipts = useTerm("receipts");
+  const termReceipt = useTerm("receipt");
+  const termTenant = useTerm("tenant");
+  const termTenants = useTerm("tenants");
+  const termUnit = useTerm("unit");
+  const termProperty = useTerm("property");
   const { id: tenantId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -1710,16 +1717,16 @@ const Receipts = ({ viewMode = "tenant" }) => {
     }
     const totalAmt = receipts.reduce((s, r) => s + Math.abs(Number(r.amount || 0)), 0);
     printTabularList({
-      title: "Receipts Register",
+      title: `${termReceipts} Register`,
       subtitle: `${receipts.length} record${receipts.length !== 1 ? "s" : ""} · Total KES ${totalAmt.toLocaleString()}`,
       company: currentCompany,
       columns: [
         { label: "#", key: "_idx", value: (_, i) => i + 1 },
-        { label: "Receipt #", key: "receiptNumber" },
+        { label: `${termReceipt} #`, key: "receiptNumber" },
         { label: "Date", key: "paymentDate", value: (r) => fmtDate(r.paymentDate) },
-        { label: "Tenant", key: "_tenant", value: (r) => getTenantName(r, tenants) },
-        { label: "Property", key: "_property", value: (r) => getPropertyName(r, tenants) },
-        { label: "Unit", key: "_unit", value: (r) => getUnitName(r, tenants) },
+        { label: termTenant, key: "_tenant", value: (r) => getTenantName(r, tenants) },
+        { label: termProperty, key: "_property", value: (r) => getPropertyName(r, tenants) },
+        { label: termUnit, key: "_unit", value: (r) => getUnitName(r, tenants) },
         { label: "Reference", key: "referenceNumber" },
         { label: "Method", key: "paymentMethod", value: (r) => String(r.paymentMethod || "-").replaceAll("_", " ") },
         { label: "Amount (KES)", key: "amount", align: "right", value: (r) => Math.abs(Number(r.amount || 0)).toLocaleString() },
@@ -1765,7 +1772,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                   <FaArrowLeft size={8} /> {location.state.propertyName} Ledger
                 </button>
               )}
-              <span className="shrink-0 border border-slate-300 bg-white px-1 py-0.5 text-[8px] font-bold text-slate-700">{stats.count} Receipts</span>
+              <span className="shrink-0 border border-slate-300 bg-white px-1 py-0.5 text-[8px] font-bold text-slate-700">{stats.count} {termReceipts}</span>
               <span className="shrink-0 border border-green-300 bg-green-50 px-1 py-0.5 text-[8px] font-bold text-green-700">Ksh {stats.total.toLocaleString()}</span>
               <span className="shrink-0 border border-blue-300 bg-blue-50 px-1 py-0.5 text-[8px] font-bold text-blue-700">{stats.confirmedCount} Conf.</span>
               <span className="shrink-0 border border-orange-300 bg-orange-50 px-1 py-0.5 text-[8px] font-bold text-orange-700">{stats.pendingCount} Pend.</span>
@@ -1777,12 +1784,12 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 placeholder="Receipt #"
                 className="h-[20px] w-[4.5rem] shrink-0 border border-slate-200 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
-              <input value={draftFilters.tenantSearch} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantSearch: normalizeUppercaseInput(e.target.value) }))} placeholder="Tenant" className="h-[20px] w-[4.5rem] shrink-0 border border-slate-200 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <input value={draftFilters.tenantSearch} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantSearch: normalizeUppercaseInput(e.target.value) }))} placeholder={termTenant} className="h-[20px] w-[4.5rem] shrink-0 border border-slate-200 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
               <AppSelect
                 value={draftFilters.property}
                 onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "all", unit: "" }))}
                 options={propertyOptions.filter((p) => p !== "all").map((p) => ({ value: p, label: p }))}
-                placeholder="Property"
+                placeholder={termProperty}
                 searchable
                 clearable
                 compact
@@ -1790,7 +1797,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
               <input
                 value={draftFilters.unit}
                 onChange={(e) => setDraftFilters((prev) => ({ ...prev, unit: e.target.value || "" }))}
-                placeholder="Unit"
+                placeholder={termUnit}
                 className="h-[20px] w-10 shrink-0 border border-slate-200 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
               <AppSelect
@@ -1869,8 +1876,8 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 compact
               />
               {canExportReceipt && <button onClick={handlePrintList} title="Print list" className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white bg-indigo-600 hover:bg-indigo-700"><FaPrint size={7} /> Print</button>}
-              <button onClick={() => setShowSmsModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `SMS ${selectedIds.length} receipt${selectedIds.length !== 1 ? "s" : ""}` : "Select receipts to SMS"} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white bg-teal-600 hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"><FaSms size={7} /> SMS</button>
-              <button onClick={() => setShowEmailModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `Email ${selectedIds.length} receipt${selectedIds.length !== 1 ? "s" : ""}` : "Select receipts to email"} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white bg-blue-600 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><FaEnvelope size={7} /> Email</button>
+              <button onClick={() => setShowSmsModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `SMS ${selectedIds.length} ${selectedIds.length !== 1 ? termReceipts : termReceipt}` : `Select ${termReceipts.toLowerCase()} to SMS`} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white bg-teal-600 hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"><FaSms size={7} /> SMS</button>
+              <button onClick={() => setShowEmailModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `Email ${selectedIds.length} ${selectedIds.length !== 1 ? termReceipts : termReceipt}` : `Select ${termReceipts.toLowerCase()} to email`} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white bg-blue-600 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><FaEnvelope size={7} /> Email</button>
               {canCreateReceipt && !isLandlordReceiptView && (
                 <button onClick={() => navigate("/receipts/batch")} title="Batch Receipt Entry" className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-1.5 text-[9px] text-white hover:bg-[#0d4a38]">
                   <FaListAlt size={7} /> Batch
@@ -1883,11 +1890,11 @@ const Receipts = ({ viewMode = "tenant" }) => {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <MilikTable
               columns={[
-                { label: "Receipt #" },
+                { label: `${termReceipt} #` },
                 { label: "Date" },
-                { label: "Tenant" },
-                { label: "Property" },
-                { label: "Unit" },
+                { label: termTenant },
+                { label: termProperty },
+                { label: termUnit },
                 { label: "Cashbook" },
                 { label: "Method" },
                 { label: "Amount", align: "right" },
@@ -1898,7 +1905,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
               ]}
               rows={currentPageReceipts}
               rowKey="_id"
-              empty="No receipts found."
+              empty={`No ${termReceipts.toLowerCase()} found.`}
               minWidth={1200}
               checkboxes
               allChecked={currentPageReceipts.length > 0 && visibleReceiptIds.every((id) => selectedIdsSet.has(id))}
@@ -1960,7 +1967,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
               onPageChange={handlePageChange}
               onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
               loading={false}
-              label="receipts"
+              label={termReceipts.toLowerCase()}
             />
           </div>
         </div>
@@ -1971,7 +1978,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
           <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
             <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
               <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
-                {activeReceipt ? "Edit Receipt" : "Create Receipt"}
+                {activeReceipt ? `Edit ${termReceipt}` : `Create ${termReceipt}`}
               </h3>
               <button onClick={resetForm} className="text-white/70 transition-colors hover:text-white">
                 <FaTimes />
@@ -2164,7 +2171,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tenant *</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">{termTenant} *</label>
                   <AppSelect
                     value={formData.tenantId}
                     onChange={(v) => setFormData((prev) => ({ ...prev, tenantId: v ?? "" }))}
@@ -2319,7 +2326,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 onClick={handleSave}
                 className={`px-4 py-2 text-xs text-white font-semibold ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
               >
-                {activeReceipt ? "Update Receipt" : "Create Receipt"}
+                {activeReceipt ? `Update ${termReceipt}` : `Create ${termReceipt}`}
               </button>
             </div>
           </div>
@@ -2364,7 +2371,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 <div className="shrink-0 bg-[#0B3B2E] px-6 py-5 text-white">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
-                      <p className="text-[9px] font-black uppercase tracking-[0.35em] text-emerald-300/80">Rental Receipt</p>
+                      <p className="text-[9px] font-black uppercase tracking-[0.35em] text-emerald-300/80">Rental {termReceipt}</p>
                       <div className="mt-1.5 flex flex-wrap items-center gap-2.5">
                         <h2 className="font-mono text-[22px] font-black leading-none tracking-tight">
                           {activeReceipt.receiptNumber || activeReceipt.referenceNumber || "—"}
@@ -2389,11 +2396,11 @@ const Receipts = ({ viewMode = "tenant" }) => {
                   {/* Meta strip */}
                   <div className="mt-4 grid grid-cols-3 divide-x divide-white/10 rounded border border-white/10 bg-white/5 text-[11px]">
                     <div className="px-3 py-2">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-emerald-300/60">Tenant</p>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-emerald-300/60">{termTenant}</p>
                       <p className="mt-0.5 truncate font-semibold text-white">{getTenantName(activeReceipt, tenants)}</p>
                     </div>
                     <div className="px-3 py-2">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-emerald-300/60">Unit</p>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-emerald-300/60">{termUnit}</p>
                       <p className="mt-0.5 truncate font-semibold text-white">{getPropertyName(activeReceipt, tenants)} · {getUnitName(activeReceipt, tenants)}</p>
                     </div>
                     <div className="px-3 py-2">
@@ -2407,7 +2414,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 <div className="shrink-0 border-b border-slate-200 bg-white px-6 py-4">
                   <div className="flex items-end justify-between gap-4">
                     <div>
-                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Receipt Amount</p>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{termReceipt} Amount</p>
                       <p className="mt-1 font-mono text-[28px] font-black leading-none tracking-tight text-slate-900">
                         Ksh {receiptAmount.toLocaleString()}
                       </p>
@@ -3120,8 +3127,8 @@ const Receipts = ({ viewMode = "tenant" }) => {
         businessId={currentCompany?._id || ""}
         contextType="receipt"
         recordIds={selectedIds}
-        title={`SMS Receipt${selectedIds.length !== 1 ? "s" : ""} (${selectedIds.length})`}
-        subtitle="Send an SMS notification to the tenants for the selected receipts."
+        title={`SMS ${selectedIds.length !== 1 ? termReceipts : termReceipt} (${selectedIds.length})`}
+        subtitle={`Send an SMS notification to the ${termTenants.toLowerCase()} for the selected ${termReceipts.toLowerCase()}.`}
         allowedChannels={["sms"]}
         defaultChannel="sms"
         onSent={() => setShowSmsModal(false)}
@@ -3132,8 +3139,8 @@ const Receipts = ({ viewMode = "tenant" }) => {
         businessId={currentCompany?._id || ""}
         contextType="receipt"
         recordIds={selectedIds}
-        title={`Email Receipt${selectedIds.length !== 1 ? "s" : ""} (${selectedIds.length})`}
-        subtitle="Send an email notification to the tenants for the selected receipts."
+        title={`Email ${selectedIds.length !== 1 ? termReceipts : termReceipt} (${selectedIds.length})`}
+        subtitle={`Send an email notification to the ${termTenants.toLowerCase()} for the selected ${termReceipts.toLowerCase()}.`}
         allowedChannels={["email"]}
         defaultChannel="email"
         onSent={() => setShowEmailModal(false)}
@@ -3148,7 +3155,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
               <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
                 <FaUndo className="text-xs" />
                 <span>
-                  {reversalModal.isBatch ? `Reverse ${reversalModal.receipts.length} Receipt${reversalModal.receipts.length !== 1 ? "s" : ""}` : "Reverse Receipt"}
+                  {reversalModal.isBatch ? `Reverse ${reversalModal.receipts.length} ${reversalModal.receipts.length !== 1 ? termReceipts : termReceipt}` : `Reverse ${termReceipt}`}
                   {!reversalModal.isBatch && reversalModal.receipt?.receiptNumber && (
                     <span className="ml-1.5 font-mono text-xs font-normal normal-case tracking-normal text-white/60">{reversalModal.receipt.receiptNumber}</span>
                   )}
@@ -3162,8 +3169,8 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 <FaInfoCircle className="text-amber-500 mt-0.5 shrink-0" />
                 <p className="text-sm text-amber-800">
                   {reversalModal.isBatch
-                    ? `This will reverse ${reversalModal.receipts.length} confirmed receipt(s) and post offsetting ledger entries. This action cannot be undone.`
-                    : "This will reverse the receipt and post an offsetting ledger entry. This action cannot be undone."}
+                    ? `This will reverse ${reversalModal.receipts.length} confirmed ${termReceipts.toLowerCase()} and post offsetting ledger entries. This action cannot be undone.`
+                    : `This will reverse the ${termReceipt.toLowerCase()} and post an offsetting ledger entry. This action cannot be undone.`}
                 </p>
               </div>
 
@@ -3240,7 +3247,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
               <div className="flex items-start gap-3 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3">
                 <FaInfoCircle className="text-emerald-600 mt-0.5 shrink-0" />
                 <p className="text-sm text-emerald-800">
-                  This will void the reversal entry and fully restore receipt{" "}
+                  This will void the reversal entry and fully restore {termReceipt.toLowerCase()}{" "}
                   <span className="font-semibold">{cancelReversalModal.receipt?.receiptNumber}</span> to
                   its original confirmed state. All ledger entries will be corrected automatically.
                 </p>
@@ -3287,7 +3294,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 ) : (
                   <>
                     <FaRedoAlt className="text-xs" />
-                    Restore Receipt
+                    Restore {termReceipt}
                   </>
                 )}
               </button>

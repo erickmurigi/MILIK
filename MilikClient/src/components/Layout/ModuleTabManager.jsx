@@ -216,9 +216,12 @@ const ModuleTabManager = ({ darkMode }) => {
     <div
       className={`fixed bottom-0 left-0 right-0 z-50 border-t shadow-lg ${
         darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#1a472a] border-[#0d3320]'
-      } relative flex items-center px-3 py-1 gap-1.5 overflow-x-auto`}
-      style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+      }`}
     >
+      <div
+        className="relative flex items-center px-3 py-1 gap-1.5 overflow-x-auto"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+      >
       {isNavigating && (
         <div className="absolute top-0 left-0 right-0 h-0.5 bg-orange-400 animate-pulse pointer-events-none" />
       )}
@@ -255,6 +258,7 @@ const ModuleTabManager = ({ darkMode }) => {
           </div>
         );
       })}
+      </div>
     </div>
   );
 };

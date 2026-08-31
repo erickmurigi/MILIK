@@ -6,6 +6,7 @@ import { hasCompanyPermission } from '../../utils/permissions';
 import { selectCurrentUser, selectCurrentCompany, selectAllExpenseProperties } from '../../redux/selectors';
 import { parseDate, fmtKES, shortKES, fullKES } from './dashboardUtils';
 import DashboardCard from './DashboardCard';
+import { useTerms } from '../../hooks/useTerm';
 
 const GRN    = '#0B3B2E';
 const ORG    = '#C8511A';
@@ -37,6 +38,8 @@ const FinancialOverview = ({ summaryData = {} }) => {
   const currentCompany    = useSelector(selectCurrentCompany);
   const currentUser       = useSelector(selectCurrentUser);
   const expenseProperties = useSelector(selectAllExpenseProperties);
+
+  const { properties: termProperties } = useTerms("properties");
 
   const ctx           = currentCompany || currentUser?.company || null;
   const isLandlord    = isSelfManagingLandlordCompany(ctx);
@@ -98,7 +101,7 @@ const FinancialOverview = ({ summaryData = {} }) => {
 
   return (
     <DashboardCard
-      title={isLandlord ? 'Portfolio Cashflow Overview' : 'Financial Operations Overview'}
+      title={isLandlord ? `${termProperties} Cashflow Overview` : 'Financial Operations Overview'}
       right={<span className="text-[10px] font-bold text-[#0B3B2E]">{curYear}</span>}
     >
       {/* Current-month stat rows */}

@@ -12,6 +12,7 @@ import {
 import { useNavigate, useLocation } from "react-router-dom";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { useTerm } from "../../hooks/useTerm";
 import {
   FaPlus,
   FaCheck,
@@ -285,6 +286,7 @@ const getTenantUnitUtils = (tenant, allUnits) => {
 function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSaved }) {
   const isMulti = tenants.length > 1;
   const singleTenant = isMulti ? null : tenants[0];
+  const termTenants = useTerm("tenants");
 
   const storedSettings = useSelector(selectCompanySettings);
   const [utilityOptions, setUtilityOptions] = useState([]);
@@ -370,7 +372,7 @@ function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSave
             <FaBolt size={14} />
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">
-                {isMulti ? `Adding Utilities — ${tenants.length} Tenants` : "Utilities"}
+                {isMulti ? `Adding Utilities — ${tenants.length} ${termTenants}` : "Utilities"}
               </p>
               <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
                 {isMulti
@@ -410,7 +412,7 @@ function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSave
           {isMulti && (
             <div className="border-b border-slate-100 bg-amber-50 px-5 py-3">
               <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-amber-600">
-                These utilities will be added to all {tenants.length} selected tenants
+                These utilities will be added to all {tenants.length} selected {termTenants.toLowerCase()}
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {tenants.map((t) => (
@@ -500,7 +502,7 @@ function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSave
             className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0d5442] disabled:opacity-50">
             {saving
               ? <><Spinner size="sm" /> Saving…</>
-              : isMulti ? `Save to ${tenants.length} Tenants` : "Save Utilities"}
+              : isMulti ? `Save to ${tenants.length} ${termTenants}` : "Save Utilities"}
           </button>
         </div>
       </div>
@@ -511,6 +513,8 @@ function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSave
 // ─── Remove Utility Modal ─────────────────────────────────────────────────────
 function RemoveUtilityModal({ tenants, allUnits, dispatch, onClose, onSaved }) {
   const isMulti = tenants.length > 1;
+  const termTenant = useTerm("tenant");
+  const termTenants = useTerm("tenants");
   const [selected, setSelected] = useState(new Set());
   const [saving, setSaving] = useState(false);
 
@@ -578,7 +582,7 @@ function RemoveUtilityModal({ tenants, allUnits, dispatch, onClose, onSaved }) {
             <FaTrash size={13} />
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">
-                {isMulti ? `Remove Utilities — ${tenants.length} Tenants` : "Remove Utilities"}
+                {isMulti ? `Remove Utilities — ${tenants.length} ${termTenants}` : "Remove Utilities"}
               </p>
               <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
                 {isMulti
@@ -597,7 +601,7 @@ function RemoveUtilityModal({ tenants, allUnits, dispatch, onClose, onSaved }) {
         {isMulti && (
           <div className="border-b border-slate-100 bg-red-50 px-5 py-3">
             <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-red-600">
-              Selected utilities will be removed from all matching tenants
+              Selected utilities will be removed from all matching {termTenants.toLowerCase()}
             </p>
             <div className="flex flex-wrap gap-1.5">
               {tenants.map((t) => (
@@ -616,7 +620,7 @@ function RemoveUtilityModal({ tenants, allUnits, dispatch, onClose, onSaved }) {
           {utilityOptions.length === 0 ? (
             <div className="rounded-lg border border-slate-200 bg-slate-50 py-10 text-center">
               <p className="text-sm font-semibold text-slate-400">No additional utilities found</p>
-              <p className="mt-1 text-xs text-slate-400">These tenants only have unit-inherited utilities</p>
+              <p className="mt-1 text-xs text-slate-400">These {termTenants.toLowerCase()} only have unit-inherited utilities</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -632,7 +636,7 @@ function RemoveUtilityModal({ tenants, allUnits, dispatch, onClose, onSaved }) {
                     </div>
                     {isMulti && (
                       <span className={`text-[10px] font-bold ${count < tenants.length ? "text-amber-600" : "text-slate-400"}`}>
-                        {count}/{tenants.length} tenants
+                        {count}/{tenants.length} {termTenants.toLowerCase()}
                       </span>
                     )}
                   </label>
@@ -656,7 +660,7 @@ function RemoveUtilityModal({ tenants, allUnits, dispatch, onClose, onSaved }) {
               className="flex items-center gap-2 bg-red-600 px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-red-700 disabled:opacity-50">
               {saving
                 ? <><Spinner size="sm" /> Removing…</>
-                : `Remove from ${isMulti ? `${tenants.length} Tenants` : "Tenant"}`}
+                : `Remove from ${isMulti ? `${tenants.length} ${termTenants}` : termTenant}`}
             </button>
           </div>
         </div>
@@ -669,6 +673,9 @@ const Tenants = ({ listingMode = "active" }) => {
   const dispatch  = useDispatch();
   const navigate  = useNavigate();
   const location  = useLocation();
+  const termTenants = useTerm("tenants");
+  const termTenant = useTerm("tenant");
+  const termUnit = useTerm("unit");
 
   // Redux state
   const currentCompany = useSelector(selectCurrentCompany);
@@ -1669,15 +1676,15 @@ const confirmTransferUnit = useCallback(async () => {
           description: `Deposit top-up — unit transfer to ${newUnitDoc?.unitNumber || "new unit"}`,
           metadata: { unitTransfer: true, transferEffectiveDate: transferForm.effectiveDate },
         });
-        toast.success("Tenant transferred and deposit top-up invoice created");
+        toast.success(`${termTenant} transferred and deposit top-up invoice created`);
       } catch {
-        toast.success("Tenant transferred successfully");
+        toast.success(`${termTenant} transferred successfully`);
         toast.warning("Deposit top-up invoice could not be created automatically — please create it manually");
       }
     } else if (transferForm.reduceDeposit && transferFiltered.depositDiff < 0) {
-      toast.success("Tenant transferred and deposit record reduced to match new unit");
+      toast.success(`${termTenant} transferred and deposit record reduced to match new ${termUnit.toLowerCase()}`);
     } else {
-      toast.success("Tenant unit transferred successfully");
+      toast.success(`${termTenant} ${termUnit.toLowerCase()} transferred successfully`);
     }
 
     setShowTransferModal(false);
@@ -1765,7 +1772,7 @@ const confirmTransferUnit = useCallback(async () => {
         terminationReason: terminationForm.reason,
       });
 
-      toast.success(response?.data?.message || "Tenant terminated successfully");
+      toast.success(response?.data?.message || `${termTenant} terminated successfully`);
       setShowTerminateModal(false);
       setTerminationForm({ tenantId: "", effectiveDate: "", reason: "" });
       setSelectedTenants([]);
@@ -1798,14 +1805,14 @@ const confirmTransferUnit = useCallback(async () => {
 
     const confirmRestoreTenant = async () => {
     if (!canUpdateTenant) { toast.warning("You do not have permission to update tenants"); return; }
-    if (!restoreForm.tenantId) { toast.error("No tenant selected"); return; }
+    if (!restoreForm.tenantId) { toast.error(`No ${termTenant.toLowerCase()} selected`); return; }
     setIsRestoring(true);
     try {
       const response = await adminRequests.put(`/tenants/status/${restoreForm.tenantId}`, {
         business: currentCompany?._id,
         status: "active",
       });
-      toast.success(response?.data?.message || "Tenant restored successfully");
+      toast.success(response?.data?.message || `${termTenant} restored successfully`);
       setShowRestoreModal(false);
       setRestoreForm({ tenantId: "", notes: "" });
       setSelectedTenants([]);
@@ -1923,7 +1930,7 @@ const confirmTransferUnit = useCallback(async () => {
   // ---------------------------
   const handleDownloadTemplate = () => {
     downloadTenantsTemplate(units || []);
-    toast.info("Tenants import template downloaded!");
+    toast.info(`${termTenants} import template downloaded!`);
   };
 
   const handleBulkImport = async (validRecords) => {
@@ -1977,7 +1984,7 @@ const confirmTransferUnit = useCallback(async () => {
     }
 
     if (!printRows.length) {
-      toast.warning("No tenants to print");
+      toast.warning(`No ${termTenants.toLowerCase()} to print`);
       return;
     }
 
@@ -2004,16 +2011,16 @@ const confirmTransferUnit = useCallback(async () => {
     };
 
     printTabularList({
-      title: "Tenants List",
+      title: `${termTenants} List`,
       subtitle: isArrearsFilter
-        ? "Tenants with outstanding balance — all pages"
-        : "Current filtered tenants register",
+        ? `${termTenants} with outstanding balance — all pages`
+        : `Current filtered ${termTenants.toLowerCase()} register`,
       company: currentCompany || {},
       summary: `Records: ${printRows.length} • Printed on ${new Date().toLocaleString()}`,
       columns: [
-        { label: "Unit", value: (row) => row?.unit?.unitNumber || row?.unitNumber || "-" },
+        { label: termUnit, value: (row) => row?.unit?.unitNumber || row?.unitNumber || "-" },
         { label: "A/C #", value: (row) => row?.tenantCode || row?.code || "-" },
-        { label: "Tenant Name", value: (row) => row?.name || row?.tenantName || "-" },
+        { label: `${termTenant} Name`, value: (row) => row?.name || row?.tenantName || "-" },
         { label: "Phone", value: (row) => row?.phone || row?.phoneNumber || "-" },
         { label: "Rent", value: (row) => row?.rent || "-", align: "right" },
         { label: "Balance", value: (row) => Number(row?.balance || 0).toLocaleString(), align: "right" },
@@ -2026,11 +2033,11 @@ const confirmTransferUnit = useCallback(async () => {
 
   const handleExportToExcel = () => {
     if (!tenantsData || tenantsData.length === 0) {
-      toast.warning("No tenants to export");
+      toast.warning(`No ${termTenants.toLowerCase()} to export`);
       return;
     }
     exportTenantsToExcel(tenantsData);
-    toast.info("Tenants exported successfully!");
+    toast.info(`${termTenants} exported successfully!`);
   };
 
   // ===== FILTER OPTIONS =====
@@ -2131,8 +2138,8 @@ const confirmTransferUnit = useCallback(async () => {
                     <div className="border-b border-gray-100 bg-slate-50 px-3 py-2">
                       <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
                         {selectedTenants.length === 0
-                          ? "No tenant selected"
-                          : `${selectedTenants.length} tenant${selectedTenants.length !== 1 ? "s" : ""} selected`}
+                          ? `No ${termTenant.toLowerCase()} selected`
+                          : `${selectedTenants.length} ${selectedTenants.length !== 1 ? termTenants.toLowerCase() : termTenant.toLowerCase()} selected`}
                       </p>
                     </div>
 
@@ -2150,7 +2157,7 @@ const confirmTransferUnit = useCallback(async () => {
                       </button>
                       <button onClick={handleOpenAgreement} disabled={!menuHasOneSel}
                         className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuHasOneSel ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
-                        <FaHandshake size={12} /> Tenant Agreement
+                        <FaHandshake size={12} /> {termTenant} Agreement
                         {!menuHasSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
                         {menuHasMulti && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
                       </button>
@@ -2161,7 +2168,7 @@ const confirmTransferUnit = useCallback(async () => {
                       <div className="border-b border-gray-100 py-1">
                         <button onClick={handleEditTenant} disabled={!menuHasOneSel}
                           className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuHasOneSel ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
-                          <FaUserEdit size={12} /> Edit Tenant Details
+                          <FaUserEdit size={12} /> Edit {termTenant} Details
                           {!menuHasOneSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
                         </button>
                         <button onClick={handleTransferUnit} disabled={!menuCanTransfer}
@@ -2184,12 +2191,12 @@ const confirmTransferUnit = useCallback(async () => {
                         <button onClick={handleAddUtility} disabled={!menuHasSel}
                           className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuHasSel ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
                           <FaBolt size={12} /> Add Utility
-                          {menuHasMulti && <span className="ml-auto text-[10px] text-indigo-500">{selectedTenants.length} tenants</span>}
+                          {menuHasMulti && <span className="ml-auto text-[10px] text-indigo-500">{selectedTenants.length} {termTenants.toLowerCase()}</span>}
                         </button>
                         <button onClick={handleRemoveUtility} disabled={!menuHasSel}
                           className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuHasSel ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
                           <FaTrash size={12} /> Remove Utility
-                          {menuHasMulti && <span className="ml-auto text-[10px] text-indigo-500">{selectedTenants.length} tenants</span>}
+                          {menuHasMulti && <span className="ml-auto text-[10px] text-indigo-500">{selectedTenants.length} {termTenants.toLowerCase()}</span>}
                         </button>
                       </div>
                     )}
@@ -2200,7 +2207,7 @@ const confirmTransferUnit = useCallback(async () => {
                         {!isTerminatedView && (
                           <button onClick={handleOpenTerminateTenant} disabled={!menuCanTerminate}
                             className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuCanTerminate ? "hover:bg-amber-50 text-amber-700 font-medium" : "cursor-not-allowed text-gray-300"}`}>
-                            <FaUserSlash size={12} /> Terminate Tenant
+                            <FaUserSlash size={12} /> Terminate {termTenant}
                             {!menuHasOneSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
                             {menuHasOneSel && !selectedPrimaryTenant?.canTerminate && <span className="ml-auto text-[10px] text-slate-400">not eligible</span>}
                           </button>
@@ -2208,7 +2215,7 @@ const confirmTransferUnit = useCallback(async () => {
                         {isTerminatedView && (
                           <button onClick={handleOpenRestoreTenant} disabled={!menuCanRestore}
                             className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 font-semibold ${menuCanRestore ? "hover:bg-emerald-50 text-[#0B3B2E]" : "cursor-not-allowed text-gray-300"}`}>
-                            <FaRedoAlt size={12} /> Restore Tenant
+                            <FaRedoAlt size={12} /> Restore {termTenant}
                             {!menuHasOneSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
                           </button>
                         )}
@@ -2219,7 +2226,7 @@ const confirmTransferUnit = useCallback(async () => {
                     <div className="border-b border-gray-100 py-1">
                       <button onClick={() => { setActionMenuOpen(false); setShowCommunicationModal(true); }}
                         className="w-full text-left px-3 py-1.5 text-xs hover:bg-orange-50 flex items-center gap-2 text-orange-700">
-                        <FaSms size={12} /> SMS Tenants
+                        <FaSms size={12} /> SMS {termTenants}
                         {menuHasSel && <span className="ml-auto text-[10px] text-orange-400">{selectedTenants.length} selected</span>}
                       </button>
                     </div>
@@ -2229,7 +2236,7 @@ const confirmTransferUnit = useCallback(async () => {
                       <div className="py-1">
                         <button onClick={handleDeleteSelectedTenants} disabled={!menuHasDeletable}
                           className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 font-semibold ${menuHasDeletable ? "hover:bg-red-50 text-red-600" : "cursor-not-allowed text-gray-300"}`}>
-                          <FaTrash size={12} /> Delete Tenant(s)
+                          <FaTrash size={12} /> Delete {termTenant}(s)
                           {menuHasDeletable
                             ? <span className="ml-auto text-[10px]">{selectedDeletableTenants.length} eligible</span>
                             : <span className="ml-auto text-[10px] text-slate-400">none eligible</span>}
@@ -2268,9 +2275,9 @@ const confirmTransferUnit = useCallback(async () => {
         {/* ===== TENANTS TABLE ===== */}
         <MilikTable
           columns={[
-            { label: "Unit", width: "80px" },
+            { label: termUnit, width: "80px" },
             { label: "A/C #", width: "82px" },
-            { label: "Tenant" },
+            { label: termTenant },
             ...(isTerminatedView ? [
               { label: "Terminated", width: "108px" },
               { label: "Move-out", width: "100px" },
@@ -2289,7 +2296,7 @@ const confirmTransferUnit = useCallback(async () => {
           rows={currentTenants}
           rowKey="id"
           loading={tableLoading}
-          empty={isTerminatedView ? "No terminated tenants found. Try adjusting filters." : "No tenants found. Try adjusting filters or create a new tenant."}
+          empty={isTerminatedView ? `No terminated ${termTenants.toLowerCase()} found. Try adjusting filters.` : `No ${termTenants.toLowerCase()} found. Try adjusting filters or create a new ${termTenant.toLowerCase()}.`}
           groupBy={(tenant) => toListingCaps(tenant.propertyName)}
           checkboxes
           allChecked={selectAll}
@@ -2476,7 +2483,7 @@ const confirmTransferUnit = useCallback(async () => {
             <div className="max-h-44 overflow-y-auto rounded-lg border border-slate-200">
               {filteredUnits.length === 0 ? (
                 <div className="flex items-center justify-center py-6 text-xs text-slate-400">
-                  {allVacantUnits.length === 0 ? "No vacant units available for transfer" : "No units match the current filters"}
+                  {allVacantUnits.length === 0 ? `No vacant ${termUnit.toLowerCase()}s available for transfer` : `No ${termUnit.toLowerCase()}s match the current filters`}
                 </div>
               ) : (
                 <table className="w-full text-xs">
@@ -2751,7 +2758,7 @@ const confirmTransferUnit = useCallback(async () => {
                 disabled={!canUpdateTenant || isTerminating}
                 className="flex items-center gap-2 bg-red-600 px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-red-700 disabled:opacity-50"
               >
-                {isTerminating ? "Terminating..." : "Terminate Tenant"}
+                {isTerminating ? "Terminating..." : `Terminate ${termTenant}`}
               </button>
             </div>
           </div>
@@ -2839,7 +2846,7 @@ const confirmTransferUnit = useCallback(async () => {
                 onClick={confirmRestoreTenant}
                 disabled={!canUpdateTenant || isRestoring}
                 className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0d5442] disabled:opacity-50">
-                {isRestoring ? "Restoring…" : "Restore Tenant"}
+                {isRestoring ? "Restoring…" : `Restore ${termTenant}`}
               </button>
             </div>
           </div>
@@ -3140,15 +3147,15 @@ const confirmTransferUnit = useCallback(async () => {
 
             <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-3">
               <p className="text-xs text-slate-700">
-                Delete <strong>{selectedDeletableTenants.length}</strong> eligible tenant record(s).
+                Delete <strong>{selectedDeletableTenants.length}</strong> eligible {termTenant.toLowerCase()} record(s).
               </p>
               <p className="text-xs font-semibold text-red-600">
-                Only unused tenant records will be deleted. Active or historical tenants stay protected.
+                Only unused {termTenant.toLowerCase()} records will be deleted. Active or historical {termTenants.toLowerCase()} stay protected.
               </p>
 
               {selectedDeletableTenants.length > 0 && (
                 <div className="border border-slate-200 bg-slate-50 p-3">
-                  <p className="mb-1.5 text-[10px] font-black uppercase tracking-wide text-slate-500">Eligible tenants to be deleted:</p>
+                  <p className="mb-1.5 text-[10px] font-black uppercase tracking-wide text-slate-500">Eligible {termTenants.toLowerCase()} to be deleted:</p>
                   <ul className="text-xs text-slate-700 space-y-1 max-h-32 overflow-y-auto">
                     {selectedDeletableTenants.slice(0, 10).map((tenant) => (
                       <li key={tenant.id} className="flex items-center gap-2">
@@ -3167,7 +3174,7 @@ const confirmTransferUnit = useCallback(async () => {
 
               {selectedTenantRows.length > selectedDeletableTenants.length && (
                 <div className="border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-                  {selectedTenantRows.length - selectedDeletableTenants.length} selected tenant(s) will be skipped because they are still active, have balances, or already have history.
+                  {selectedTenantRows.length - selectedDeletableTenants.length} selected {termTenant.toLowerCase()}(s) will be skipped because they are still active, have balances, or already have history.
                 </div>
               )}
             </div>
@@ -3193,7 +3200,7 @@ const confirmTransferUnit = useCallback(async () => {
                 ) : (
                   <>
                     <FaTrash size={10} />
-                    Delete {selectedDeletableTenants.length} Tenant(s)
+                    Delete {selectedDeletableTenants.length} {termTenant}(s)
                   </>
                 )}
               </button>
@@ -3208,8 +3215,8 @@ const confirmTransferUnit = useCallback(async () => {
         businessId={currentCompany?._id || ""}
         contextType="tenant_bulk"
         recordIds={selectedTenants}
-        title="SMS Tenants"
-        subtitle="Use tenant-relevant templates only and preview the resolved message first."
+        title={`SMS ${termTenants}`}
+        subtitle={`Use ${termTenant.toLowerCase()}-relevant templates only and preview the resolved message first.`}
         allowedChannels={["sms"]}
         defaultChannel="sms"
       />

@@ -1,6 +1,7 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
+import { useTerms } from "../../hooks/useTerm";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import { FaFileDownload, FaFilter, FaPercent, FaPrint, FaSyncAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -18,6 +19,7 @@ const RentalInvoiceVATReport = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
+  const { tenant: termTenant, unit: termUnit, property: termProperty } = useTerms("tenant", "unit", "property");
   const businessId = currentCompany?._id || "";
 
   const [loading, setLoading] = useState(false);
@@ -119,7 +121,7 @@ const RentalInvoiceVATReport = () => {
       toast.warning("You do not have permission to export reports");
       return;
     }
-    const header = ["Invoice No", "Tenant", "Property", "Unit", "Category", "Invoice Date", "Due Date", "Tax Code", "Rate", "Net", "Tax", "Gross", "Status"];
+    const header = ["Invoice No", termTenant, termProperty, termUnit, "Category", "Invoice Date", "Due Date", "Tax Code", "Rate", "Net", "Tax", "Gross", "Status"];
     const body = filteredRows.map((row) => [
       row?.invoiceNumber || "",
       row?.tenant?.tenantName || row?.tenant?.name || "",
@@ -182,7 +184,7 @@ const RentalInvoiceVATReport = () => {
       <div class="card"><div class="cl">VAT</div><div class="cv" style="color:#b45309">${fmt(totals.tax)}</div></div>
       <div class="card"><div class="cl">Gross</div><div class="cv">${fmt(totals.gross)}</div></div>
     </div>
-    <table><thead><tr><th>Invoice</th><th>Tenant</th><th>Property</th><th>Unit</th><th>Category</th><th>Invoice Date</th><th>Tax Code</th><th class="r">Rate</th><th class="r">Net</th><th class="r">VAT</th><th class="r">Gross</th><th>Status</th></tr></thead>
+    <table><thead><tr><th>Invoice</th><th>${termTenant}</th><th>${termProperty}</th><th>${termUnit}</th><th>Category</th><th>Invoice Date</th><th>Tax Code</th><th class="r">Rate</th><th class="r">Net</th><th class="r">VAT</th><th class="r">Gross</th><th>Status</th></tr></thead>
     <tbody>${filteredRows.map((row) => `<tr><td>${row?.invoiceNumber || '—'}</td><td>${row?.tenant?.tenantName || row?.tenant?.name || '—'}</td><td>${row?.property?.propertyName || '—'}</td><td>${row?.unit?.unitNumber || '—'}</td><td>${row?.category || '—'}</td><td>${fmtDate(row?.invoiceDate)}</td><td>${row?.taxSnapshot?.taxCodeName || '—'}</td><td class="r">${Number(row?.taxSnapshot?.taxRate || 0)}%</td><td class="r">${fmt(row?.taxSnapshot?.netAmount || row?.amount)}</td><td class="r">${fmt(row?.taxSnapshot?.taxAmount)}</td><td class="r"><strong>${fmt(row?.taxSnapshot?.grossAmount || row?.amount)}</strong></td><td>${row?.status || '—'}</td></tr>`).join('')}</tbody>
     <tfoot><tr><td colspan="8"><strong>TOTALS</strong></td><td class="r">${fmt(totals.net)}</td><td class="r">${fmt(totals.tax)}</td><td class="r"><strong>${fmt(totals.gross)}</strong></td><td></td></tr></tfoot>
     </table></body></html>`);
@@ -240,7 +242,7 @@ const RentalInvoiceVATReport = () => {
           <table className="vat-print-table">
             <thead>
               <tr>
-                {["Invoice", "Tenant", "Property", "Unit", "Category", "Invoice Date", "Due Date", "Tax Code", "Rate", "Net", "VAT", "Gross", "Status"].map((h) => <th key={h}>{h}</th>)}
+                {["Invoice", termTenant, termProperty, termUnit, "Category", "Invoice Date", "Due Date", "Tax Code", "Rate", "Net", "VAT", "Gross", "Status"].map((h, i) => <th key={i}>{h}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -325,8 +327,8 @@ const RentalInvoiceVATReport = () => {
               <table className="min-w-full text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className="bg-[#0B3B2E] text-white">
-                    {['Invoice', 'Tenant', 'Property', 'Unit', 'Category', 'Invoice Date', 'Due Date', 'Tax', 'Net', 'VAT', 'Gross', 'Status'].map((header, i, arr) => (
-                      <th key={header} className={`whitespace-nowrap px-3 py-1 text-left font-bold ${i < arr.length - 1 ? "border-r border-white/10" : ""}`}>{header}</th>
+                    {['Invoice', termTenant, termProperty, termUnit, 'Category', 'Invoice Date', 'Due Date', 'Tax', 'Net', 'VAT', 'Gross', 'Status'].map((header, i, arr) => (
+                      <th key={i} className={`whitespace-nowrap px-3 py-1 text-left font-bold ${i < arr.length - 1 ? "border-r border-white/10" : ""}`}>{header}</th>
                     ))}
                   </tr>
                 </thead>

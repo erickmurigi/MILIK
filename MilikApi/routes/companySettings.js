@@ -28,9 +28,10 @@ import {
   updateTaxConfiguration,
   updateAutoInvoicing,
   updateIncomeRules,
+  updateTerminology,
 } from "../controllers/propertyController/companySettings.js";
 import { processAutoRentInvoices } from "../services/autoRentInvoicingService.js";
-import { verifyUser } from "../controllers/verifyToken.js";
+import { verifyUser, verifySetupAccess } from "../controllers/verifyToken.js";
 
 const router = express.Router();
 
@@ -65,42 +66,51 @@ router.post("/:businessId/maintenance-categories", verifyUser, addMaintenanceCat
 router.put("/:businessId/maintenance-categories/:itemId", verifyUser, updateMaintenanceCategory);
 router.delete("/:businessId/maintenance-categories/:itemId", verifyUser, deleteMaintenanceCategory);
 
-// Billing Periods
-router.post("/:businessId/periods", verifyUser, addBillingPeriod);
-router.put("/:businessId/periods/:periodId", verifyUser, updateBillingPeriod);
-router.delete("/:businessId/periods/:periodId", verifyUser, deleteBillingPeriod);
+// Billing Periods — setup/admin only
+router.post("/:businessId/periods", verifySetupAccess, addBillingPeriod);
+router.put("/:businessId/periods/:periodId", verifySetupAccess, updateBillingPeriod);
+router.delete("/:businessId/periods/:periodId", verifySetupAccess, deleteBillingPeriod);
 
-// Tax Configuration
-router.put("/:businessId/tax-configuration", verifyUser, updateTaxConfiguration);
+// Tax Configuration — setup/admin only
+router.put("/:businessId/tax-configuration", verifySetupAccess, updateTaxConfiguration);
 
-// Accounting Defaults
-router.put("/:businessId/accounting-defaults", verifyUser, updateAccountingDefaults);
+// Accounting Defaults — setup/admin only
+router.put("/:businessId/accounting-defaults", verifySetupAccess, updateAccountingDefaults);
 
-// HR Accounting Defaults
-router.put("/:businessId/hr-accounting-defaults", verifyUser, updateHrAccountingDefaults);
+// HR Accounting Defaults — setup/admin only
+router.put("/:businessId/hr-accounting-defaults", verifySetupAccess, updateHrAccountingDefaults);
 
-// Inventory Accounting Defaults
-router.put("/:businessId/inventory-accounting-defaults", verifyUser, updateInventoryAccountingDefaults);
+// Inventory Accounting Defaults — setup/admin only
+router.put("/:businessId/inventory-accounting-defaults", verifySetupAccess, updateInventoryAccountingDefaults);
 
-// Expense Items
-router.post("/:businessId/expenses", verifyUser, addExpenseItem);
-router.put("/:businessId/expenses/:expenseId", verifyUser, updateExpenseItem);
-router.delete("/:businessId/expenses/:expenseId", verifyUser, deleteExpenseItem);
+// Expense Items — setup/admin only
+router.post("/:businessId/expenses", verifySetupAccess, addExpenseItem);
+router.put("/:businessId/expenses/:expenseId", verifySetupAccess, updateExpenseItem);
+router.delete("/:businessId/expenses/:expenseId", verifySetupAccess, deleteExpenseItem);
 
-// Deposit Types
-router.post("/:businessId/deposits", verifyUser, addDepositType);
-router.put("/:businessId/deposits/:depositTypeId", verifyUser, updateDepositType);
-router.delete("/:businessId/deposits/:depositTypeId", verifyUser, deleteDepositType);
+// Deposit Types — setup/admin only
+router.post("/:businessId/deposits", verifySetupAccess, addDepositType);
+router.put("/:businessId/deposits/:depositTypeId", verifySetupAccess, updateDepositType);
+router.delete("/:businessId/deposits/:depositTypeId", verifySetupAccess, deleteDepositType);
 
-// Income Rules
-router.put("/:businessId/income-rules", verifyUser, updateIncomeRules);
+// Income Rules — setup/admin only
+router.put("/:businessId/income-rules", verifySetupAccess, updateIncomeRules);
 
-// Auto Invoicing
-router.put("/:businessId/auto-invoicing", verifyUser, updateAutoInvoicing);
-router.post("/:businessId/auto-invoicing/trigger", verifyUser, async (req, res) => {
+// Terminology — setup/admin only
+router.patch("/:businessId/terminology", verifySetupAccess, updateTerminology);
+
+// Auto Invoicing — setup/admin only
+router.put("/:businessId/auto-invoicing", verifySetupAccess, updateAutoInvoicing);
+router.post("/:businessId/auto-invoicing/trigger", verifySetupAccess, async (req, res) => {
   try {
     const businessId = req.params.businessId;
-    const today = req.body?.date ? new Date(req.body.date) : new Date();
+    let today = new Date();
+    if (req.body?.date) {
+      today = new Date(req.body.date);
+      if (isNaN(today.getTime())) {
+        return res.status(400).json({ message: "Invalid date supplied. Use an ISO 8601 date string (e.g. 2026-08-31)." });
+      }
+    }
     const results = await processAutoRentInvoices(businessId, today, { forceRun: true, triggeredBy: "manual" });
     const summary = results[0] || { created: 0, skipped: 0, errors: [] };
     res.status(200).json({

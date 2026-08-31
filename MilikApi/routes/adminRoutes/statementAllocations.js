@@ -1,5 +1,5 @@
 import express from "express";
-import { verifyUser } from "../../controllers/verifyToken.js";
+import { verifyUser, verifySuperAdmin } from "../../controllers/verifyToken.js";
 import {
   searchTransactions,
   adjustBookingDate,
@@ -11,11 +11,13 @@ import {
 
 const router = express.Router();
 
-router.get("/search",          verifyUser, searchTransactions);
-router.get("/invoices",        verifyUser, getTenantInvoicesForRealloc);
-router.get("/history",         verifyUser, getAdjustmentHistory);
-router.patch("/booking-date",         verifyUser, adjustBookingDate);
-router.patch("/reallocate",           verifyUser, reallocatePayment);
-router.post("/recompute",             verifyUser, recomputeTenantState);
+// All routes in this file are system-admin only. verifySuperAdmin enforces this at the
+// route layer (the controller also verifies, providing defense-in-depth).
+router.get("/search",          verifySuperAdmin, searchTransactions);
+router.get("/invoices",        verifySuperAdmin, getTenantInvoicesForRealloc);
+router.get("/history",         verifySuperAdmin, getAdjustmentHistory);
+router.patch("/booking-date",  verifySuperAdmin, adjustBookingDate);
+router.patch("/reallocate",    verifySuperAdmin, reallocatePayment);
+router.post("/recompute",      verifySuperAdmin, recomputeTenantState);
 
 export default router;

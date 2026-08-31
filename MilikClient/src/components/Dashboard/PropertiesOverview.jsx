@@ -9,6 +9,7 @@ import {
   classifyUnit,
   fmtKES,
 } from './dashboardUtils';
+import { useTerms } from '../../hooks/useTerm';
 
 // ─── Health colour ────────────────────────────────────────────────────────────
 const health = (pct) => pct >= 80 ? '#0B3B2E' : pct >= 50 ? '#C8511A' : '#DC2626';
@@ -142,6 +143,7 @@ const PropertiesOverview = ({
   maintByUnit   = new Map(),
   today         = new Date(),
 }) => {
+  const { property: termProperty, properties: termProperties, unit: termUnit, units: termUnits } = useTerms("property", "properties", "unit", "units");
   const navigate   = useNavigate();
   const properties = useSelector(selectAllProperties);
   const units      = useSelector(selectAllUnits);
@@ -211,9 +213,9 @@ const PropertiesOverview = ({
   return (
     <div className="overflow-hidden border border-slate-200 bg-white shadow-sm">
       <div className="flex items-center justify-between border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5">
-        <h2 className="text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">Portfolio Pulse</h2>
+        <h2 className="text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">{termProperties} Pulse</h2>
         <span className="text-[10px] font-semibold text-slate-400">
-          {new Date().toLocaleString('en-KE', { month: 'long', year: 'numeric' })} · {propertiesWithStats.length} propert{propertiesWithStats.length === 1 ? 'y' : 'ies'}
+          {new Date().toLocaleString('en-KE', { month: 'long', year: 'numeric' })} · {propertiesWithStats.length} {propertiesWithStats.length === 1 ? termProperty : termProperties}
         </span>
       </div>
       <div className="flex overflow-x-auto">
@@ -225,7 +227,7 @@ const PropertiesOverview = ({
         />
         {propertiesWithStats.length === 0 ? (
           <div className="flex flex-1 items-center justify-center py-10 text-xs font-semibold text-slate-400">
-            No active properties found.
+            No active {termProperties.toLowerCase()} found.
           </div>
         ) : (
           <div className="flex divide-x divide-slate-100">

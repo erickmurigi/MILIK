@@ -18,6 +18,7 @@ import AppSelect from '../../components/common/AppSelect';
 import { adminRequests } from '../../utils/requestMethods';
 import { fmtDate } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
+import { useTerms } from '../../hooks/useTerm';
 
 const formatPercent = (value) => (value === null || value === undefined ? '—' : `${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}%`);
 const toDateInputValue = (value) => new Date(value).toISOString().split('T')[0];
@@ -39,6 +40,7 @@ const RentalCollectionReport = () => {
   const dispatch = useDispatch();
   const currentUser = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
+  const { tenant: termTenant, tenants: termTenants, unit: termUnit, units: termUnits, property: termProperty, properties: termProperties, landlord: termLandlord } = useTerms("tenant", "tenants", "unit", "units", "property", "properties", "landlord");
   const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", ["accounts", "propertyManagement"]);
   const properties = useSelector(selectAllProperties);
   const tenants = useSelector(selectAllTenants);
@@ -178,7 +180,7 @@ const RentalCollectionReport = () => {
   const handleExportCSV = () => {
     if (!canExportReports) { toast.error("You do not have permission to export reports"); return; }
     const utCols = hasUtilityBreakdown ? allUtilityTypes : ['Utility Applied'];
-    const header = ['Date', 'Receipt #', 'Property', 'Tenant', 'Unit', 'Method', 'Collected', 'Allocated', 'Rent Applied', ...utCols, 'Penalty Applied', 'Unapplied', 'Cashbook'];
+    const header = ['Date', 'Receipt #', termProperty, termTenant, termUnit, 'Method', 'Collected', 'Allocated', 'Rent Applied', ...utCols, 'Penalty Applied', 'Unapplied', 'Cashbook'];
     const rows = (report.rows || []).map((row) => [
       row.paymentDate ? new Date(row.paymentDate).toLocaleDateString() : '',
       row.receiptNumber || '', row.propertyName || '', row.tenantName || '', row.unitNumber || '',
@@ -289,7 +291,7 @@ const RentalCollectionReport = () => {
     </div>
     <div class="sec">Collection Summary by Property</div>
     <table><thead><tr>
-      <th>Property</th><th class="r">Receipts</th><th class="r">Tenants</th><th class="r">Collected</th><th class="r">Rent</th>${utHeader}<th class="r">Penalty</th><th class="r">Unapplied</th>
+      <th>${termProperty}</th><th class="r">Receipts</th><th class="r">${termTenants}</th><th class="r">Collected</th><th class="r">Rent</th>${utHeader}<th class="r">Penalty</th><th class="r">Unapplied</th>
     </tr></thead>
     <tbody>${byProp.map((row) => `<tr>
       <td class="nm">${esc(row.propertyName)}</td>
@@ -313,7 +315,7 @@ const RentalCollectionReport = () => {
     </tr></tfoot></table>
     <div class="sec pb">Receipts by Property</div>
     <table><thead><tr>
-      <th>Date</th><th>Receipt #</th><th>Tenant</th><th>Unit</th><th>Method</th>
+      <th>Date</th><th>Receipt #</th><th>${termTenant}</th><th>${termUnit}</th><th>Method</th>
       <th class="r">Collected</th><th class="r">Allocated</th><th class="r">Rent</th>
       ${utHeader}<th class="r">Penalty</th><th class="r">Unapplied</th><th>Cashbook</th>
     </tr></thead>
@@ -403,16 +405,16 @@ const RentalCollectionReport = () => {
                   <input type="date" value={filters.endDate} onChange={setFilter("endDate")} className="h-7 flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </div>
                 <AppSelect value={filters.zone || null} onChange={(v) => setFilters((p) => ({ ...p, zone: v ?? "", propertyId: "" }))} options={zoneOptions} placeholder="Zone" searchable clearable size="sm" />
-                <AppSelect value={filters.propertyId || null} onChange={(v) => setFilters((p) => ({ ...p, propertyId: v ?? "", zone: "" }))} options={propertyOptions} placeholder="Property" searchable clearable size="sm" />
-                <AppSelect value={filters.tenantId || null} onChange={(v) => setFilters((p) => ({ ...p, tenantId: v ?? "", unitId: "" }))} options={tenantOptions} placeholder="Tenant" searchable clearable size="sm" />
+                <AppSelect value={filters.propertyId || null} onChange={(v) => setFilters((p) => ({ ...p, propertyId: v ?? "", zone: "" }))} options={propertyOptions} placeholder={termProperty} searchable clearable size="sm" />
+                <AppSelect value={filters.tenantId || null} onChange={(v) => setFilters((p) => ({ ...p, tenantId: v ?? "", unitId: "" }))} options={tenantOptions} placeholder={termTenant} searchable clearable size="sm" />
                 <AppSelect value={filters.paymentMethod || null} onChange={(v) => setFilters((p) => ({ ...p, paymentMethod: v ?? "" }))} options={PAYMENT_METHOD_OPTIONS} placeholder="Method" clearable size="sm" />
                 <input value={filters.cashbook} onChange={setFilter("cashbook")} placeholder="Cashbook..." className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </div>
               {(!isLandlordMode || units.length > 0) && (
                 <div className="mt-1.5 grid gap-1.5 md:grid-cols-3 xl:grid-cols-6">
-                  <AppSelect value={filters.unitId || null} onChange={(v) => setFilters((p) => ({ ...p, unitId: v ?? "" }))} options={unitOptions} placeholder="Unit" searchable clearable size="sm" />
+                  <AppSelect value={filters.unitId || null} onChange={(v) => setFilters((p) => ({ ...p, unitId: v ?? "" }))} options={unitOptions} placeholder={termUnit} searchable clearable size="sm" />
                   {!isLandlordMode && (
-                    <AppSelect value={filters.landlordId || null} onChange={(v) => setFilters((p) => ({ ...p, landlordId: v ?? "" }))} options={landlordOptions} placeholder="Landlord" searchable clearable size="sm" />
+                    <AppSelect value={filters.landlordId || null} onChange={(v) => setFilters((p) => ({ ...p, landlordId: v ?? "" }))} options={landlordOptions} placeholder={termLandlord} searchable clearable size="sm" />
                   )}
                 </div>
               )}
@@ -451,7 +453,7 @@ const RentalCollectionReport = () => {
                   <table className="min-w-full text-[10px] border-collapse">
                     <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                       <tr>
-                        {['Date', 'Receipt #', 'Tenant', 'Unit', 'Method', 'Collected', 'Allocated', 'Rent',
+                        {['Date', 'Receipt #', termTenant, termUnit, 'Method', 'Collected', 'Allocated', 'Rent',
                           ...(hasUtilityBreakdown ? allUtilityTypes : ['Utilities']),
                           'Penalty', 'Unapplied', 'Cashbook'
                         ].map((h, i, arr) => (

@@ -41,6 +41,7 @@ import { getTenants } from "../../redux/tenantsRedux";
 import { getProperties } from "../../redux/propertyRedux";
 import { getUnits } from "../../redux/unitRedux";
 import { useTabState } from "../../hooks/useTabState";
+import { useTerms } from '../../hooks/useTerm';
 import {
   createLease,
   deleteLease,
@@ -170,6 +171,7 @@ const TenantAgreements = () => {
   const properties = useSelector(selectAllProperties);
   const units = useSelector(selectAllUnits);
   const isFetchingLeases = useSelector((state) => state.lease?.isFetching || false);
+  const { tenant: termTenant, tenants: termTenants, unit: termUnit, property: termProperty } = useTerms("tenant", "tenants", "unit", "property");
 
   const [filters, setFilters] = useTabState("/agreements:filters", {
     status: "any",
@@ -337,9 +339,9 @@ const TenantAgreements = () => {
         toast.success(`Created ${created} missing agreement${created !== 1 ? "s" : ""}${failed > 0 ? ` (${failed} failed — check unit assignments)` : ""}.`);
         await loadData();
       } else if (failed > 0) {
-        toast.warning(`${failed} tenant${failed !== 1 ? "s" : ""} still have no agreement — they may not have a unit assigned.`);
+        toast.warning(`${failed} ${termTenant.toLowerCase()}${failed !== 1 ? "s" : ""} still have no agreement — they may not have a ${termUnit.toLowerCase()} assigned.`);
       } else {
-        toast.info("No missing agreements found — all active tenants already have one.");
+        toast.info(`No missing agreements found — all active ${termTenants.toLowerCase()} already have one.`);
       }
     } catch (err) {
       toast.error(err?.response?.data?.message || "Backfill failed.");
@@ -491,8 +493,8 @@ const TenantAgreements = () => {
   };
 
   const validateForm = () => {
-    if (!form.tenant) return "Tenant is required.";
-    if (!form.unit) return "Unit is required.";
+    if (!form.tenant) return `${termTenant} is required.`;
+    if (!form.unit) return `${termUnit} is required.`;
     if (!form.startDate) return "Agreement start date is required.";
     if (!form.endDate) return "Agreement end date is required.";
     const start = new Date(form.startDate);
@@ -535,14 +537,14 @@ const TenantAgreements = () => {
     try {
       if (form._id) {
         await updateLease(dispatch, form._id, payload);
-        toast.success("Tenant agreement updated successfully.");
+        toast.success(`${termTenant} agreement updated successfully.`);
       } else {
         await createLease(dispatch, payload);
-        toast.success("Tenant agreement created successfully.");
+        toast.success(`${termTenant} agreement created successfully.`);
       }
       closeModal();
     } catch (error) {
-      toast.error(error?.response?.data?.message || error?.message || "Failed to save tenant agreement.");
+      toast.error(error?.response?.data?.message || error?.message || `Failed to save ${termTenant.toLowerCase()} agreement.`);
     } finally {
       setSubmitting(false);
     }
@@ -566,7 +568,7 @@ const TenantAgreements = () => {
   const handleSign = async (row, signedBy) => {
     try {
       await signLease(dispatch, row.id, { signedBy, business: currentCompany?._id });
-      toast.success(`${signedBy === "tenant" ? "Tenant" : "Landlord"} signature recorded.`);
+      toast.success(`${signedBy === "tenant" ? termTenant : "Landlord"} signature recorded.`);
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || "Failed to sign agreement.");
     }
@@ -672,7 +674,7 @@ const TenantAgreements = () => {
             <span className="shrink-0 border border-slate-200 bg-slate-50 px-1 py-0.5 text-[8px] font-bold text-slate-600">Pending: {summary.pending}</span>
             {missingCount > 0 && (
               <span className="shrink-0 border border-red-300 bg-red-50 px-1 py-0.5 text-[8px] font-bold text-red-700">
-                {missingCount} tenant{missingCount !== 1 ? "s" : ""} missing agreement
+                {missingCount} {termTenant.toLowerCase()}{missingCount !== 1 ? "s" : ""} missing agreement
               </span>
             )}
             {selectedAgreements.length > 0 && (
@@ -690,7 +692,7 @@ const TenantAgreements = () => {
             <AppSelect
               compact
               clearable
-              placeholder="Property"
+              placeholder={termProperty}
               value={draftFilters.property}
               onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "any" }))}
               options={uniquePropertyOptions}
@@ -715,7 +717,7 @@ const TenantAgreements = () => {
               <button
                 onClick={handleBackfillLeases}
                 disabled={backfilling}
-                title={`Create agreements for ${missingCount} tenant${missingCount !== 1 ? "s" : ""} that don't have one`}
+                title={`Create agreements for ${missingCount} ${termTenant.toLowerCase()}${missingCount !== 1 ? "s" : ""} that don't have one`}
                 className="h-[20px] shrink-0 flex items-center gap-0.5 bg-red-600 px-1.5 text-[9px] font-medium text-white shadow-sm hover:bg-red-700 disabled:opacity-60"
               >
                 {backfilling ? <FaSyncAlt size={7} className="animate-spin" /> : <FaWrench size={7} />}
@@ -729,9 +731,9 @@ const TenantAgreements = () => {
         <MilikTable
               columns={[
                 { label: "Agreement" },
-                { label: "Tenant" },
-                { label: "Property" },
-                { label: "Unit" },
+                { label: termTenant },
+                { label: termProperty },
+                { label: termUnit },
                 { label: "Status", align: "center" },
                 { label: "Start" },
                 { label: "End" },
@@ -872,26 +874,26 @@ const TenantAgreements = () => {
                 <div className="flex-1 overflow-y-auto bg-white px-5 py-4">
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {[
-                      { label: "Tenant", content: (
+                      { label: termTenant, content: (
                         <>
                           <AppSelect
                             size="md"
                             searchable
-                            placeholder="Select tenant"
+                            placeholder={`Select ${termTenant.toLowerCase()}`}
                             value={form.tenant}
                             onChange={(v) => handleTenantChange(v ?? "")}
                             options={tenantSelectOptions}
                           />
                           <label className="mt-1.5 inline-flex cursor-pointer items-center gap-2 text-[10px] text-slate-500">
                             <input type="checkbox" checked={includeTerminatedTenants} onChange={(e) => setIncludeTerminatedTenants(e.target.checked)} className="border-slate-300" />
-                            Include terminated tenants
+                            Include terminated {termTenants.toLowerCase()}
                           </label>
                         </>
                       )},
-                      { label: "Unit", content: (
+                      { label: termUnit, content: (
                         <AppSelect
                           size="md"
-                          placeholder="Select unit"
+                          placeholder={`Select ${termUnit.toLowerCase()}`}
                           value={form.unit}
                           onChange={(v) => setForm((p) => ({ ...p, unit: v ?? "" }))}
                           options={unitSelectOptions}

@@ -483,6 +483,16 @@ export const getAccessibleCompanies = async ({ forceRefresh = false } = {}) => {
   return accessibleCompaniesCache.promise;
 };
 
+// Silent JWT token refresh — returns response data on success, null on failure
+export const refreshAccessToken = async () => {
+  try {
+    const res = await adminRequests.post('/auth/refresh');
+    return res.data;
+  } catch {
+    return null;
+  }
+};
+
 const resolveCompanyId = (query = {}, getState) => {
   if (query?.company) return query.company;
 

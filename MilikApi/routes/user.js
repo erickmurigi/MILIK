@@ -350,18 +350,43 @@ router.post('/', verifyUser, async (req, res) => {
     const shouldSendOnboardingEmail = normalizeBoolean(req.body.sendOnboardingEmail, autoGeneratePassword);
     const companyAssignments = sanitizeAssignments(req.body.companyAssignments, companies, req.body.moduleAccess || {}, req.body.permissions || {});
 
+    // Explicit whitelist — never spread req.body directly to prevent mass assignment
+    // of internal fields (locked, isActive, lastLogin, isSystemAuditUser, etc.)
+    const body = req.body || {};
     const payload = {
-      ...req.body,
-      email: normalizedEmail,
-      password: resolvedPassword,
-      company: primaryCompany,
+      // Profile fields
+      surname:       String(body.surname || '').trim(),
+      otherNames:    String(body.otherNames || '').trim(),
+      idNumber:      body.idNumber !== undefined ? String(body.idNumber).trim() : undefined,
+      gender:        body.gender !== undefined ? String(body.gender).trim() : undefined,
+      postalAddress: body.postalAddress !== undefined ? String(body.postalAddress).trim() : undefined,
+      phoneNumber:   String(body.phoneNumber || '').trim(),
+      profile:       body.profile || 'Agent',
+      // Resolved / overridden fields
+      email:         normalizedEmail,
+      password:      resolvedPassword,
+      company:       primaryCompany,
       primaryCompany,
       accessibleCompanies: companyIds,
       companyAssignments,
       mustChangePassword,
       passwordProvisioningMethod: autoGeneratePassword ? 'emailed_temp_password' : 'manual',
       lastPasswordChangeAt: autoGeneratePassword ? null : new Date(),
+      isActive: true,
+      locked:   false,
+      // Privilege flags — each guarded by caller role (system-access check already ran above)
+      adminAccess:        isSystemAdmin(req.user)
+                            ? normalizeBoolean(body.adminAccess, false)
+                            : false,
+      setupAccess:        (isSystemAdmin(req.user) || req.user?.adminAccess)
+                            ? normalizeBoolean(body.setupAccess, false)
+                            : false,
+      companySetupAccess: (isSystemAdmin(req.user) || req.user?.adminAccess)
+                            ? normalizeBoolean(body.companySetupAccess, false)
+                            : false,
     };
+    // Strip undefined keys so Mongoose doesn't unset existing defaults
+    Object.keys(payload).forEach((key) => payload[key] === undefined && delete payload[key]);
 
     const user = new User(payload);
     await user.save();

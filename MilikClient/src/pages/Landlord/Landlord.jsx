@@ -36,6 +36,7 @@ import { downloadLandlordsTemplate, exportLandlordsToExcel } from "../../utils/e
 import { toast } from "react-toastify";
 import { adminRequests } from "../../utils/requestMethods";
 import { printTabularList } from "../../utils/printList";
+import { useTerm } from "../../hooks/useTerm";
 import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 import { hasCompanyPermission } from "../../utils/permissions";
 import AppSelect from "../../components/common/AppSelect";
@@ -72,6 +73,10 @@ const countLinkedProperties = (landlord = {}) =>
 const Landlords = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const termLandlords = useTerm("landlords");
+  const termLandlord = useTerm("landlord");
+  const termProperty = useTerm("property");
+  const termProperties = useTerm("properties");
   
   // Redux state
   const landlords          = useSelector(selectAllLandlords);
@@ -138,17 +143,17 @@ const Landlords = () => {
 
   const columns = useMemo(
     () => [
-      { key: "code", label: "Landlord Code" },
-      { key: "name", label: "Landlord Name" },
+      { key: "code", label: `${termLandlord} Code` },
+      { key: "name", label: `${termLandlord} Name` },
       { key: "status", label: "Status" },
       { key: "location", label: "Location" },
       { key: "email", label: "Email" },
       { key: "phone", label: "Phone Nos." },
-      { key: "active", label: "Active Properties" },
-      { key: "archived", label: "Archived Properties" },
+      { key: "active", label: `Active ${termProperties}` },
+      { key: "archived", label: `Archived ${termProperties}` },
       { key: "portal", label: "Portal Access" },
     ],
-    []
+    [termLandlord, termProperties]
   );
 
   const buildLandlordParams = useCallback((page = 1) => {
@@ -327,7 +332,7 @@ const Landlords = () => {
 
   // Delete selected landlords
   const deleteSelected = async () => {
-    if (!canDelete) { toast.warning("You don't have permission to delete landlords"); return; }
+    if (!canDelete) { toast.warning(`You don't have permission to delete ${termLandlords.toLowerCase()}`); return; }
     if (selectedLandlords.length === 0) return;
 
     if (selectedDeletableLandlords.length === 0) {
@@ -337,8 +342,8 @@ const Landlords = () => {
         title: "Delete Blocked",
         message:
           protectedCount === 1
-            ? "The selected landlord is linked to existing properties, so deletion is blocked. Archive the landlord instead if you want to hide it from active operations."
-            : `All ${protectedCount} selected landlords are linked to existing properties, so deletion is blocked. Archive them instead if you want to hide them from active operations.`,
+            ? `The selected ${termLandlord.toLowerCase()} is linked to existing ${termProperties.toLowerCase()}, so deletion is blocked. Archive the ${termLandlord.toLowerCase()} instead if you want to hide it from active operations.`
+            : `All ${protectedCount} selected ${termLandlords.toLowerCase()} are linked to existing ${termProperties.toLowerCase()}, so deletion is blocked. Archive them instead if you want to hide them from active operations.`,
         confirmText: "OK",
         cancelText: "Close",
         isDangerous: false,
@@ -353,13 +358,13 @@ const Landlords = () => {
 
     setConfirmDialog({
       isOpen: true,
-      title: isSingleDelete ? "Delete Landlord" : "Delete Landlords",
+      title: isSingleDelete ? `Delete ${termLandlord}` : `Delete ${termLandlords}`,
       message:
         skippedCount > 0
-          ? `Delete ${deleteCount} landlord(s) with no linked properties. ${skippedCount} selected landlord(s) will be skipped because they still manage or own properties.`
+          ? `Delete ${deleteCount} ${termLandlord.toLowerCase()}(s) with no linked ${termProperties.toLowerCase()}. ${skippedCount} selected ${termLandlord.toLowerCase()}(s) will be skipped because they still manage or own ${termProperties.toLowerCase()}.`
           : isSingleDelete
-          ? "Are you sure you want to delete this landlord? This action cannot be undone."
-          : `Are you sure you want to delete ${deleteCount} landlords? This action cannot be undone.`,
+          ? `Are you sure you want to delete this ${termLandlord.toLowerCase()}? This action cannot be undone.`
+          : `Are you sure you want to delete ${deleteCount} ${termLandlords.toLowerCase()}? This action cannot be undone.`,
       confirmText: "Delete",
       cancelText: "Cancel",
       isDangerous: true,
@@ -372,9 +377,9 @@ const Landlords = () => {
         );
         const delOk = delResults.filter((r) => r.status === "fulfilled").length;
         const delFail = delResults.filter((r) => r.status === "rejected").length;
-        if (delOk > 0) toast.success(delOk === 1 ? "Landlord deleted successfully." : `${delOk} landlords deleted successfully.`);
-        if (delFail > 0) toast.error(`${delFail} landlord(s) could not be deleted.`);
-        if (skippedCount > 0) toast.info(skippedCount === 1 ? "1 landlord was skipped (still has linked properties)." : `${skippedCount} landlords were skipped (still have linked properties).`);
+        if (delOk > 0) toast.success(delOk === 1 ? `${termLandlord} deleted successfully.` : `${delOk} ${termLandlords.toLowerCase()} deleted successfully.`);
+        if (delFail > 0) toast.error(`${delFail} ${termLandlord.toLowerCase()}(s) could not be deleted.`);
+        if (skippedCount > 0) toast.info(skippedCount === 1 ? `1 ${termLandlord.toLowerCase()} was skipped (still has linked ${termProperties.toLowerCase()}).` : `${skippedCount} ${termLandlords.toLowerCase()} were skipped (still have linked ${termProperties.toLowerCase()}).`);
         setCurrentPage(1);
         dispatch(getLandlords(buildLandlordParams()));
       },
@@ -382,7 +387,7 @@ const Landlords = () => {
   };
 
   const archiveSelected = () => {
-    if (!canUpdate) { toast.warning("You don't have permission to archive landlords"); return; }
+    if (!canUpdate) { toast.warning(`You don't have permission to archive ${termLandlords.toLowerCase()}`); return; }
     if (selectedLandlords.length === 0) return;
     setActionMenuOpen(false);
 
@@ -390,7 +395,7 @@ const Landlords = () => {
       setConfirmDialog({
         isOpen: true,
         title: "Nothing to Archive",
-        message: "All selected landlords are already archived.",
+        message: `All selected ${termLandlords.toLowerCase()} are already archived.`,
         confirmText: "OK",
         cancelText: "Close",
         isDangerous: false,
@@ -401,11 +406,11 @@ const Landlords = () => {
 
     setConfirmDialog({
       isOpen: true,
-      title: selectedArchivableLandlords.length === 1 ? "Archive Landlord" : "Archive Landlords",
+      title: selectedArchivableLandlords.length === 1 ? `Archive ${termLandlord}` : `Archive ${termLandlords}`,
       message:
         selectedArchivableLandlords.length === 1
-          ? "Are you sure you want to archive this landlord?"
-          : `Are you sure you want to archive ${selectedArchivableLandlords.length} landlords?`,
+          ? `Are you sure you want to archive this ${termLandlord.toLowerCase()}?`
+          : `Are you sure you want to archive ${selectedArchivableLandlords.length} ${termLandlords.toLowerCase()}?`,
       confirmText: "Archive",
       cancelText: "Cancel",
       isDangerous: false,
@@ -419,8 +424,8 @@ const Landlords = () => {
         );
         const archOk = archResults.filter((r) => r.status === "fulfilled").length;
         const archFail = archResults.filter((r) => r.status === "rejected").length;
-        if (archOk > 0) toast.success(archOk === 1 ? "Landlord archived successfully." : `${archOk} landlords archived successfully.`);
-        if (archFail > 0) toast.error(`${archFail} landlord(s) could not be archived.`);
+        if (archOk > 0) toast.success(archOk === 1 ? `${termLandlord} archived successfully.` : `${archOk} ${termLandlords.toLowerCase()} archived successfully.`);
+        if (archFail > 0) toast.error(`${archFail} ${termLandlord.toLowerCase()}(s) could not be archived.`);
         setCurrentPage(1);
         dispatch(getLandlords(buildLandlordParams()));
       },
@@ -428,7 +433,7 @@ const Landlords = () => {
   };
 
   const restoreSelected = () => {
-    if (!canUpdate) { toast.warning("You don't have permission to restore landlords"); return; }
+    if (!canUpdate) { toast.warning(`You don't have permission to restore ${termLandlords.toLowerCase()}`); return; }
     if (selectedLandlords.length === 0) return;
     setActionMenuOpen(false);
 
@@ -436,7 +441,7 @@ const Landlords = () => {
       setConfirmDialog({
         isOpen: true,
         title: "Nothing to Restore",
-        message: "Select at least one archived landlord to restore.",
+        message: `Select at least one archived ${termLandlord.toLowerCase()} to restore.`,
         confirmText: "OK",
         cancelText: "Close",
         isDangerous: false,
@@ -447,11 +452,11 @@ const Landlords = () => {
 
     setConfirmDialog({
       isOpen: true,
-      title: selectedRestorableLandlords.length === 1 ? "Restore Landlord" : "Restore Landlords",
+      title: selectedRestorableLandlords.length === 1 ? `Restore ${termLandlord}` : `Restore ${termLandlords}`,
       message:
         selectedRestorableLandlords.length === 1
-          ? "Are you sure you want to restore this landlord?"
-          : `Are you sure you want to restore ${selectedRestorableLandlords.length} landlords?`,
+          ? `Are you sure you want to restore this ${termLandlord.toLowerCase()}?`
+          : `Are you sure you want to restore ${selectedRestorableLandlords.length} ${termLandlords.toLowerCase()}?`,
       confirmText: "Restore",
       cancelText: "Cancel",
       isDangerous: false,
@@ -464,8 +469,8 @@ const Landlords = () => {
         );
         const restOk = restResults.filter((r) => r.status === "fulfilled").length;
         const restFail = restResults.filter((r) => r.status === "rejected").length;
-        if (restOk > 0) toast.success(restOk === 1 ? "Landlord restored successfully." : `${restOk} landlords restored successfully.`);
-        if (restFail > 0) toast.error(`${restFail} landlord(s) could not be restored.`);
+        if (restOk > 0) toast.success(restOk === 1 ? `${termLandlord} restored successfully.` : `${restOk} ${termLandlords.toLowerCase()} restored successfully.`);
+        if (restFail > 0) toast.error(`${restFail} ${termLandlord.toLowerCase()}(s) could not be restored.`);
         setCurrentPage(1);
         dispatch(getLandlords(buildLandlordParams()));
       },
@@ -474,7 +479,7 @@ const Landlords = () => {
 
   // --- MODAL / FORM ---
   const openAddModal = useCallback(() => {
-    if (!canCreate) { toast.warning("You don't have permission to create landlords"); return; }
+    if (!canCreate) { toast.warning(`You don't have permission to create ${termLandlords.toLowerCase()}`); return; }
     navigate('/landlords/new');
   }, [canCreate, navigate]);
 
@@ -529,35 +534,35 @@ const Landlords = () => {
 
   const handleExport = async () => {
     if (landlordPagination.total === 0 && landlords.length === 0) {
-      toast.warning('No landlords to export');
+      toast.warning(`No ${termLandlords.toLowerCase()} to export`);
       return;
     }
     try {
       const rows = await fetchAllForExport();
       exportLandlordsToExcel(rows);
-      toast.success(`Exported ${rows.length} landlords to Excel`);
+      toast.success(`Exported ${rows.length} ${termLandlords.toLowerCase()} to Excel`);
     } catch {
       exportLandlordsToExcel(landlords);
-      toast.success(`Exported ${landlords.length} landlords to Excel`);
+      toast.success(`Exported ${landlords.length} ${termLandlords.toLowerCase()} to Excel`);
     }
   };
 
   const handlePrintList = async () => {
     if (landlordPagination.total === 0 && landlords.length === 0) {
-      toast.warning("No landlords to print");
+      toast.warning(`No ${termLandlords.toLowerCase()} to print`);
       return;
     }
     let rows = landlords;
     try { rows = await fetchAllForExport(); } catch { /* use current page */ }
 
     printTabularList({
-      title: "Landlords List",
-      subtitle: "Current filtered landlords register",
+      title: `${termLandlords} List`,
+      subtitle: `Current filtered ${termLandlords.toLowerCase()} register`,
       company: currentCompany || {},
       summary: `Records: ${rows.length} • Printed on ${new Date().toLocaleString()}`,
       columns: [
-        { label: "Landlord Code", value: (row) => row?.landlordCode || row?.code || "-" },
-        { label: "Landlord Name", value: (row) => row?.fullName || row?.name || row?.landlordName || row?.firstName || "-" },
+        { label: `${termLandlord} Code`, value: (row) => row?.landlordCode || row?.code || "-" },
+        { label: `${termLandlord} Name`, value: (row) => row?.fullName || row?.name || row?.landlordName || row?.firstName || "-" },
         { label: "Status", value: (row) => row?.status || "Active" },
         { label: "Location", value: (row) => row?.location || "-" },
         { label: "Email", value: (row) => row?.email || "-" },
@@ -770,7 +775,7 @@ const Landlords = () => {
                     <tr>
                       <td colSpan={columns.length + 1} className="px-3 py-8 text-center text-gray-400 bg-white">
                         <div className="flex flex-col items-center justify-center gap-1">
-                          <div className="text-sm font-bold">Loading landlords...</div>
+                          <div className="text-sm font-bold">Loading {termLandlords.toLowerCase()}...</div>
                         </div>
                       </td>
                     </tr>
@@ -839,15 +844,15 @@ const Landlords = () => {
                     <tr>
                       <td colSpan={columns.length + 1} className="px-3 py-8 text-center text-gray-400 bg-white">
                         <div className="flex flex-col items-center justify-center gap-2">
-                          <div className="text-sm font-bold">No landlords found</div>
+                          <div className="text-sm font-bold">No {termLandlords.toLowerCase()} found</div>
                           <div className="text-xs text-gray-400">Use the filter fields above, then click Search</div>
                           <button
                             onClick={openAddModal}
                             className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                            title="Add your first landlord"
+                            title={`Add your first ${termLandlord.toLowerCase()}`}
                           >
                             <FaPlus className="text-xs" />
-                            <span>Add New Landlord</span>
+                            <span>Add New {termLandlord}</span>
                           </button>
                         </div>
                       </td>
@@ -865,7 +870,7 @@ const Landlords = () => {
               onPageChange={goToPage}
               onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
               loading={isFetching}
-              label="landlords"
+              label={termLandlords.toLowerCase()}
             />
           </div>
         </div>
@@ -882,8 +887,8 @@ const Landlords = () => {
           businessId={currentCompany?._id || ""}
           contextType="landlord_bulk"
           recordIds={selectedLandlords}
-          title="SMS Selected Landlords"
-          subtitle="Choose a landlord template, preview the final message, then send."
+          title={`SMS Selected ${termLandlords}`}
+          subtitle={`Choose a ${termLandlord.toLowerCase()} template, preview the final message, then send.`}
           allowedChannels={["sms"]}
           defaultChannel="sms"
         />

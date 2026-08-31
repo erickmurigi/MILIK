@@ -11,6 +11,7 @@ import { hasCompanyPermission } from '../../utils/permissions';
 import { selectCurrentUser, selectCurrentCompany, selectAllMaintenances, selectAllExpenseProperties } from '../../redux/selectors';
 import { normalizeText, parseDate } from './dashboardUtils';
 import DashboardCard from './DashboardCard';
+import { useTerms } from '../../hooks/useTerm';
 
 // ─── Tone palette ─────────────────────────────────────────────────────────────
 const TONES = {
@@ -30,6 +31,8 @@ const QuickActions = ({ summaryData = {}, loading = false }) => {
   const currentUser    = useSelector(selectCurrentUser);
   const maintenances   = useSelector(selectAllMaintenances);
   const expenseProps   = useSelector(selectAllExpenseProperties);
+
+  const { unit: termUnit, units: termUnits, landlord: termLandlord, landlords: termLandlords, receipt: termReceipt, receipts: termReceipts, invoice: termInvoice, invoices: termInvoices, tenants: termTenants, lease: termLease, property: termProperty } = useTerms("unit", "units", "landlord", "landlords", "receipt", "receipts", "invoice", "invoices", "tenants", "lease", "property");
 
   const ctx        = currentCompany || currentUser?.company || null;
   const isLandlord = isSelfManagingLandlordCompany(ctx);
@@ -61,20 +64,20 @@ const QuickActions = ({ summaryData = {}, loading = false }) => {
 
   const items = useMemo(() => {
     const base = [
-      { id: 'vacant',   label: isLandlord ? 'Vacant units (portfolio)' : 'Vacant units',                        value: vacantUnits,       icon: <FaHome />,               tone: 'green',  route: '/vacants',                    tabTitle: 'Availability Status' },
-      ...(canInv ? [{   id: 'overdue',  label: 'Overdue invoices',                                               value: overdueInvoices,   icon: <FaFileInvoiceDollar />,  tone: 'orange', route: '/invoices/rental',            tabTitle: 'Rental Invoices' }] : []),
-      {                 id: 'leases',   label: isLandlord ? 'Lease renewals due in 30 days' : 'Leases expiring (30 days)', value: leasesExpiringSoon, icon: <FaFileAlt />, tone: 'blue', route: '/tenants',                   tabTitle: 'Tenants' },
-      ...(canRec ? [{   id: 'unposted', label: 'Unposted receipts',                                              value: unpostedReceipts,  icon: <FaReceipt />,            tone: 'amber',  route: '/receipts',                   tabTitle: 'Receipts' }] : []),
-      {                 id: 'maint',    label: 'Pending maintenance requests',                                    value: pendingMaintenance,icon: <FaTools />,              tone: 'red',    route: '/maintenances',               tabTitle: 'Maintenance' },
-      ...(canVou ? [{   id: 'vouchers', label: 'Payment vouchers awaiting approval',                             value: pendingVouchers,   icon: <FaExclamationTriangle />,tone: 'slate',  route: '/financial/payment-vouchers', tabTitle: 'Payment Vouchers' }] : []),
+      { id: 'vacant',   label: isLandlord ? `Vacant ${termUnits} (portfolio)` : `Vacant ${termUnits}`,                        value: vacantUnits,       icon: <FaHome />,               tone: 'green',  route: '/vacants',                    tabTitle: `${termUnit} Availability` },
+      ...(canInv ? [{   id: 'overdue',  label: `Overdue ${termInvoices}`,                                                      value: overdueInvoices,   icon: <FaFileInvoiceDollar />,  tone: 'orange', route: '/invoices/rental',            tabTitle: `Rental ${termInvoices}` }] : []),
+      {                 id: 'leases',   label: isLandlord ? `${termLease} renewals due in 30 days` : `${termLease}s expiring (30 days)`, value: leasesExpiringSoon, icon: <FaFileAlt />, tone: 'blue', route: '/tenants',              tabTitle: termTenants },
+      ...(canRec ? [{   id: 'unposted', label: `Unposted ${termReceipts}`,                                                     value: unpostedReceipts,  icon: <FaReceipt />,            tone: 'amber',  route: '/receipts',                   tabTitle: termReceipts }] : []),
+      {                 id: 'maint',    label: 'Pending maintenance requests',                                                  value: pendingMaintenance,icon: <FaTools />,              tone: 'red',    route: '/maintenances',               tabTitle: 'Maintenance' },
+      ...(canVou ? [{   id: 'vouchers', label: 'Payment vouchers awaiting approval',                                            value: pendingVouchers,   icon: <FaExclamationTriangle />,tone: 'slate',  route: '/financial/payment-vouchers', tabTitle: 'Payment Vouchers' }] : []),
     ];
     if (isLandlord) {
-      base.push({ id: 'expenses', label: 'Property expenses logged this month', value: thisMonthExpenseCount, icon: <FaMoneyBillWave />, tone: 'purple', route: '/property-expenses', tabTitle: 'Property Expenses' });
+      base.push({ id: 'expenses', label: `${termProperty} expenses logged this month`, value: thisMonthExpenseCount, icon: <FaMoneyBillWave />, tone: 'purple', route: '/property-expenses', tabTitle: `${termProperty} Expenses` });
     } else if (canStm) {
-      base.push({ id: 'stmts', label: 'Landlord statements pending settlement', value: pendingStatements, icon: <FaClipboardList />, tone: 'purple', route: '/landlord/processed-statements', tabTitle: 'Processed Statements' });
+      base.push({ id: 'stmts', label: `${termLandlord} statements pending settlement`, value: pendingStatements, icon: <FaClipboardList />, tone: 'purple', route: '/landlord/processed-statements', tabTitle: 'Processed Statements' });
     }
     return base;
-  }, [canInv, canRec, canStm, canVou, isLandlord, leasesExpiringSoon, overdueInvoices, pendingMaintenance, pendingStatements, pendingVouchers, thisMonthExpenseCount, unpostedReceipts, vacantUnits]);
+  }, [canInv, canRec, canStm, canVou, isLandlord, leasesExpiringSoon, overdueInvoices, pendingMaintenance, pendingStatements, pendingVouchers, thisMonthExpenseCount, unpostedReceipts, vacantUnits, termUnit, termUnits, termLandlord, termLandlords, termReceipt, termReceipts, termInvoice, termInvoices, termTenants, termLease, termProperty]);
 
   const liveAlerts   = items.filter((i) => Number(i.value || 0) > 0).length;
   const priorityItem = useMemo(
@@ -86,7 +89,7 @@ const QuickActions = ({ summaryData = {}, loading = false }) => {
 
   return (
     <DashboardCard
-      title={isLandlord ? 'Landlord Action Centre' : 'Action Centre'}
+      title={isLandlord ? `${termLandlord} Action Centre` : 'Action Centre'}
       right={<span className="text-[10px] font-bold text-[#0B3B2E]">{liveAlerts} live alert{liveAlerts !== 1 ? 's' : ''}</span>}
     >
       <div className="divide-y divide-slate-100">

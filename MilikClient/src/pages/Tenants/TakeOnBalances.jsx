@@ -8,6 +8,7 @@ import {
   selectAllProperties,
 } from "../../redux/selectors";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { useTerms } from "../../hooks/useTerm";
 import {
   FaPlus,
   FaSearch,
@@ -509,6 +510,7 @@ const TakeOnBalances = () => {
   const dispatch = useDispatch();
   const currentCompany = useSelector(selectCurrentCompany);
   const tenantState = useSelector(selectAllTenants);
+  const { tenant: termTenant, tenants: termTenants, unit: termUnit, units: termUnits, property: termProperty, properties: termProperties } = useTerms("tenant", "tenants", "unit", "units", "property", "properties");
   const propertyState = useSelector(selectAllProperties);
   const tenants = useMemo(
     () => Array.isArray(tenantState) ? tenantState : Array.isArray(tenantState?.data) ? tenantState.data : [],
@@ -987,7 +989,7 @@ const TakeOnBalances = () => {
                   value={draftFilters.propertyId}
                   onChange={(v) => setDraftFilters((prev) => ({ ...prev, propertyId: v ?? "", tenant: "" }))}
                   options={propertyFilterOptions}
-                  placeholder="Property"
+                  placeholder={termProperty}
                   searchable
                   clearable
                   compact
@@ -996,7 +998,7 @@ const TakeOnBalances = () => {
                   value={draftFilters.tenant}
                   onChange={(v) => setDraftFilters((prev) => ({ ...prev, tenant: v ?? "" }))}
                   options={tenantFilterOptions}
-                  placeholder="Tenant"
+                  placeholder={termTenant}
                   searchable
                   clearable
                   compact
@@ -1042,9 +1044,9 @@ const TakeOnBalances = () => {
 
             <MilikTable
               columns={[
-                { label: "Tenant" },
-                { label: "Property" },
-                { label: "Unit" },
+                { label: termTenant },
+                { label: termProperty },
+                { label: termUnit },
                 { label: "Bill Item" },
                 { label: "Type" },
                 { label: "Amount", align: "right" },

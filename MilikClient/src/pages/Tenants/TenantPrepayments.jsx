@@ -11,6 +11,7 @@ import { useNavigate } from "react-router-dom";
 import { FaArrowRight, FaCoins, FaReceipt, FaSearch } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { listRentPaymentsPage } from "../../redux/apiCalls";
+import { useTerms } from "../../hooks/useTerm";
 import { useTabState } from "../../hooks/useTabState";
 import { getProperties } from "../../redux/propertyRedux";
 import AppSelect from "../../components/common/AppSelect";
@@ -58,6 +59,7 @@ const TenantPrepayments = () => {
   const [pageSize, setPageSize] = useState(50);
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { tenant: termTenant, tenants: termTenants, unit: termUnit, units: termUnits, property: termProperty, properties: termProperties } = useTerms("tenant", "tenants", "unit", "units", "property", "properties");
   const currentCompany = useSelector(selectCurrentCompany);
   const properties = useSelector(selectAllProperties);
 
@@ -249,7 +251,7 @@ const TenantPrepayments = () => {
                   value={propertyFilter}
                   onChange={(v) => setPropertyFilter(v ?? "all")}
                   options={propertyOptions}
-                  placeholder="Property"
+                  placeholder={termProperty}
                   clearable
                   searchable
                   compact
@@ -274,9 +276,9 @@ const TenantPrepayments = () => {
               columns={[
                 { label: "Receipt #" },
                 { label: "Date" },
-                { label: "Tenant" },
-                { label: "Property" },
-                { label: "Unit" },
+                { label: termTenant },
+                { label: termProperty },
+                { label: termUnit },
                 { label: "Receipt", align: "right" },
                 { label: "Allocated", align: "right" },
                 { label: "Unapplied", align: "right" },

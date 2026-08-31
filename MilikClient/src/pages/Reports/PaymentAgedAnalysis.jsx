@@ -6,6 +6,7 @@ import { FaFileDownload, FaFilePdf, FaSearch, FaSyncAlt, FaTimes } from "react-i
 import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getAPAgingReport } from "../../redux/apiCalls";
+import { useTerms } from "../../hooks/useTerm";
 
 const GRN = "#0B3B2E";
 
@@ -81,6 +82,8 @@ const PaymentAgedAnalysis = () => {
   const [selectedProperty, setSelectedProperty] = useTabState("/accounts/payment-aged-analysis:selectedProperty", "");
   const [selectedStatus, setSelectedStatus] = useTabState("/accounts/payment-aged-analysis:selectedStatus", "");
   const [selectedCategory, setSelectedCategory] = useTabState("/accounts/payment-aged-analysis:selectedCategory", "");
+
+  const { property: termProperty, landlord: termLandlord } = useTerms("property", "landlord");
 
   const fetchData = useCallback(async (signal) => {
     if (!businessId) return;
@@ -158,7 +161,7 @@ const PaymentAgedAnalysis = () => {
   const handleExportCSV = useCallback(() => {
     if (!filteredRows.length) return toast.info("No data to export");
     const headers = [
-      "Reference", "Narration", "Category", "Status", "Property", "Landlord", "Due Date", "Days Overdue",
+      "Reference", "Narration", "Category", "Status", termProperty, termLandlord, "Due Date", "Days Overdue",
       ...BUCKETS.map((b) => b.label),
       "Total Amount (KES)",
     ];
@@ -186,7 +189,7 @@ const PaymentAgedAnalysis = () => {
     a.download = `Payment_Aged_Analysis_${asOf}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [filteredRows, bucketTotals, asOf]);
+  }, [filteredRows, bucketTotals, asOf, termProperty, termLandlord]);
 
   // ── Print PDF ─────────────────────────────────────────────────────────────
   const handlePrintPDF = useCallback(() => {
@@ -219,7 +222,7 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
 <p class="sub">As of ${new Date(asOf).toLocaleDateString("en-KE",{day:"2-digit",month:"long",year:"numeric"})} · ${filteredRows.length} record${filteredRows.length !== 1 ? "s" : ""} · KES ${fmt(bucketTotals.all)}</p>
 <table>
   <thead><tr>
-    <th>Reference</th><th>Narration</th><th>Property / Landlord</th><th>Status</th><th class="r">Due Date</th><th class="r">Days Over</th>
+    <th>Reference</th><th>Narration</th><th>${termProperty} / ${termLandlord}</th><th>Status</th><th class="r">Due Date</th><th class="r">Days Over</th>
     ${bucketHeaders}
   </tr></thead>
   <tbody>${bodyRows}</tbody>
@@ -235,7 +238,7 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
     w.document.close();
     w.focus();
     setTimeout(() => { w.print(); w.close(); }, 400);
-  }, [filteredRows, bucketTotals, asOf, companyName]);
+  }, [filteredRows, bucketTotals, asOf, companyName, termProperty, termLandlord]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -278,7 +281,7 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
             <input
               type="text" value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Ref, narration or landlord…"
+              placeholder={`Ref, narration or ${termLandlord.toLowerCase()}…`}
               className="h-7 w-48 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs text-slate-700 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
             />
           </div>
@@ -305,7 +308,7 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
               value={selectedProperty}
               onChange={(v) => setSelectedProperty(v ?? "")}
               options={propertyOptions}
-              placeholder="All Properties"
+              placeholder={`All ${termProperty}s`}
               searchable
               clearable
               size="sm"
@@ -379,7 +382,7 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
                 <tr className="bg-[#0B3B2E] text-white">
                   <th className="px-3 py-1 text-left font-bold border-r border-white/10">Reference</th>
                   <th className="px-3 py-1 text-left font-bold border-r border-white/10">Narration</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property / Landlord</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">{termProperty} / {termLandlord}</th>
                   <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
                   <th className="px-3 py-1 text-right font-bold border-r border-white/10">Due Date</th>
                   <th className="px-3 py-1 text-right font-bold border-r border-white/10">Days Overdue</th>
