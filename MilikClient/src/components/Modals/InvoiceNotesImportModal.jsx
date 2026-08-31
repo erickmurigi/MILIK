@@ -10,7 +10,6 @@ import {
 import { parseInvoiceNotesExcel, downloadInvoiceNotesTemplate } from "../../utils/excelTemplates";
 import { toast } from "react-toastify";
 import { useTerms } from "../../hooks/useTerm";
-import { useTerms } from "../../hooks/useTerm";
 
 const formatAmount = (value) => {
   const n = Number(value || 0);
