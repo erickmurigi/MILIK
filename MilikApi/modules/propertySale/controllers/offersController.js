@@ -11,6 +11,16 @@ const populateOffer = (query) =>
     .populate("buyer", "fullName buyerNumber phone email")
     .populate("agent", "fullName agentNumber phone");
 
+const sanitizeOfferBody = (body) => {
+  const out = { ...body };
+  if ("agent" in out)              out.agent              = out.agent || null;
+  if ("offerAmount" in out)        out.offerAmount        = out.offerAmount        !== "" && out.offerAmount        != null ? Number(out.offerAmount)        : 0;
+  if ("counterOfferAmount" in out) out.counterOfferAmount = out.counterOfferAmount !== "" && out.counterOfferAmount != null ? Number(out.counterOfferAmount) : null;
+  if ("offerDate" in out)          out.offerDate          = out.offerDate   || null;
+  if ("validityDate" in out)       out.validityDate       = out.validityDate || null;
+  return out;
+};
+
 export const listOffers = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -50,24 +60,25 @@ export const createOffer = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
+    const body = sanitizeOfferBody(req.body);
 
-    const listing = await SaleListing.findOne({ _id: req.body.listing, business }).lean();
+    const listing = await SaleListing.findOne({ _id: body.listing, business }).lean();
     if (!listing) return next(createError(400, "Listing not found"));
     if (!["available", "reserved"].includes(listing.status)) {
       return next(createError(400, `Cannot create an offer on a listing that is ${listing.status}`));
     }
 
-    const buyer = await SaleBuyer.findOne({ _id: req.body.buyer, business }).lean();
+    const buyer = await SaleBuyer.findOne({ _id: body.buyer, business }).lean();
     if (!buyer) return next(createError(400, "Buyer not found"));
 
-    if (req.body.agent) {
-      const agent = await SaleAgent.findOne({ _id: req.body.agent, business, status: "active" }).lean();
+    if (body.agent) {
+      const agent = await SaleAgent.findOne({ _id: body.agent, business, status: "active" }).lean();
       if (!agent) return next(createError(400, "Agent not found or inactive"));
     }
 
     const offerNumber = await generateSequentialNumber(SaleOffer, business, "OFR");
     const offer = await SaleOffer.create({
-      ...req.body,
+      ...body,
       business,
       offerNumber,
       createdBy: userId,
@@ -89,7 +100,8 @@ export const updateOffer = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
-    const { business: _b, offerNumber: _n, createdBy: _c, listing: _l, buyer: _by, status: _s, ...updates } = req.body;
+    const { business: _b, offerNumber: _n, createdBy: _c, listing: _l, buyer: _by, status: _s, ...rawUpdates } = req.body;
+    const updates = sanitizeOfferBody(rawUpdates);
     const offer = await populateOffer(
       SaleOffer.findOneAndUpdate(
         { _id: req.params.id, business },
@@ -129,7 +141,7 @@ export const updateOfferStatus = async (req, res, next) => {
     }
 
     const update = { status, updatedBy: userId };
-    if (counterOfferAmount !== undefined) update.counterOfferAmount = counterOfferAmount;
+    if (counterOfferAmount !== undefined && counterOfferAmount !== "") update.counterOfferAmount = Number(counterOfferAmount) || 0;
     if (negotiationNotes !== undefined) update.negotiationNotes = negotiationNotes;
 
     const offer = await SaleOffer.findOneAndUpdate(

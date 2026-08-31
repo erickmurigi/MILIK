@@ -107,9 +107,9 @@ const FinancialOverview = ({ summaryData = {} }) => {
       {/* Current-month stat rows */}
       <div className="divide-y divide-slate-100 border-b border-slate-200">
         {statRows.map((row) => (
-          <div key={row.label} className="flex items-center justify-between gap-2 px-3 py-2.5">
-            <p className="text-xs font-bold text-slate-600">{row.label}</p>
-            <p className={`text-right text-sm font-extrabold tabular-nums ${row.cls || 'text-slate-900'}`}>
+          <div key={row.label} className="flex items-center justify-between gap-2 px-3 py-1">
+            <p className="text-[11px] font-bold text-slate-600">{row.label}</p>
+            <p className={`text-right text-xs font-extrabold tabular-nums ${row.cls || 'text-slate-900'}`}>
               {row.value}
             </p>
           </div>
@@ -139,8 +139,8 @@ const FinancialOverview = ({ summaryData = {} }) => {
             )}
           </div>
         </div>
-        <div className="px-2 py-3">
-          <ResponsiveContainer width="100%" height={220}>
+        <div className="px-2 py-1">
+          <ResponsiveContainer width="100%" height={160}>
             <BarChart data={chartData} barCategoryGap="30%" barGap={3}>
               <CartesianGrid strokeDasharray="2 2" stroke="#f1f5f9" vertical={false} />
               <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#94a3b8' }} axisLine={false} tickLine={false} />

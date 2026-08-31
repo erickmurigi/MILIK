@@ -20,6 +20,13 @@ const populatePayment = (query) =>
     ],
   });
 
+const sanitizePaymentBody = (body) => {
+  const out = { ...body };
+  if ("amount" in out)      out.amount      = out.amount      !== "" && out.amount      != null ? Number(out.amount)      : 0;
+  if ("paymentDate" in out) out.paymentDate = out.paymentDate || null;
+  return out;
+};
+
 // Resolve a cashbook ChartOfAccount from an _id sent by the frontend
 const resolveCashbook = async (businessId, cashbookId) => {
   if (!cashbookId || !mongoose.isValidObjectId(String(cashbookId))) return null;
@@ -109,7 +116,7 @@ export const createPayment = async (req, res, next) => {
 
     const paymentNumber = await generateSequentialNumber(SalePayment, business, "PMT");
     const payment = await SalePayment.create({
-      ...req.body,
+      ...sanitizePaymentBody(req.body),
       business,
       paymentNumber,
       cashbook: cashbookAcc?._id || null,
@@ -152,8 +159,9 @@ export const updatePayment = async (req, res, next) => {
     const {
       business: _b, paymentNumber: _n, createdBy: _c,
       deal: _d, listing: _l, buyer: _by, status: _s,
-      ...updates
+      ...rawUpdates
     } = req.body;
+    const updates = sanitizePaymentBody(rawUpdates);
 
     // Resolve new cashbook if changed
     const newCashbookId = updates.cashbook !== undefined ? updates.cashbook : String(old.cashbook || "");

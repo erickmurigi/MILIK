@@ -6,6 +6,13 @@ import SaleCommission from "../models/SaleCommission.js";
 import SaleOffer from "../models/SaleOffer.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 
+const sanitizeAgentBody = (body) => {
+  const out = { ...body };
+  if ("userId" in out)         out.userId         = out.userId || null;
+  if ("commissionRate" in out) out.commissionRate = out.commissionRate !== "" && out.commissionRate != null ? Number(out.commissionRate) : 0;
+  return out;
+};
+
 export const listAgents = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -61,7 +68,7 @@ export const createAgent = async (req, res, next) => {
     const userId = currentUserId(req);
     const agentNumber = await generateSequentialNumber(SaleAgent, business, "AGT");
     const agent = await SaleAgent.create({
-      ...req.body,
+      ...sanitizeAgentBody(req.body),
       business,
       agentNumber,
       createdBy: userId,
@@ -77,7 +84,8 @@ export const updateAgent = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
-    const { business: _b, agentNumber: _n, createdBy: _c, ...updates } = req.body;
+    const { business: _b, agentNumber: _n, createdBy: _c, ...rawUpdates } = req.body;
+    const updates = sanitizeAgentBody(rawUpdates);
     const agent = await SaleAgent.findOneAndUpdate(
       { _id: req.params.id, business },
       { ...updates, updatedBy: userId },

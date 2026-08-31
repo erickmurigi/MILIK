@@ -50,6 +50,18 @@ const createCommissionForDeal = async ({ business, dealId, agent, listingId, buy
   });
 };
 
+const sanitizeDealBody = (body) => {
+  const out = { ...body };
+  if ("agent" in out)               out.agent               = out.agent || null;
+  if ("offer" in out)               out.offer               = out.offer || null;
+  if ("agreedPrice" in out)         out.agreedPrice         = out.agreedPrice         !== "" && out.agreedPrice         != null ? Number(out.agreedPrice)         : 0;
+  if ("stampDutyAmount" in out)     out.stampDutyAmount     = out.stampDutyAmount     !== "" && out.stampDutyAmount     != null ? Number(out.stampDutyAmount)     : 0;
+  if ("dealDate" in out)            out.dealDate            = out.dealDate            || null;
+  if ("expectedClosingDate" in out) out.expectedClosingDate = out.expectedClosingDate || null;
+  if ("titleTransferDate" in out)   out.titleTransferDate   = out.titleTransferDate   || null;
+  return out;
+};
+
 const populateDeal = (query) =>
   query
     .populate("listing", "title listingNumber propertyType askingPrice location town status")
@@ -142,7 +154,8 @@ export const createDeal = async (req, res, next) => {
     }
 
     // Strip commission override fields from deal body — they belong on the commission record
-    const { commissionRateOverride, commissionTypeOverride, commissionAmountOverride, ...dealBody } = req.body;
+    const { commissionRateOverride, commissionTypeOverride, commissionAmountOverride, ...rawDealBody } = req.body;
+    const dealBody = sanitizeDealBody(rawDealBody);
 
     const dealNumber = await generateSequentialNumber(SaleDeal, business, "DL");
     const deal = await SaleDeal.create({
@@ -181,7 +194,8 @@ export const updateDeal = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
     // status must go through closeDeal / cancelDeal — strip it here to prevent bypassing validation
-    const { business: _b, dealNumber: _n, createdBy: _c, listing: _l, buyer: _by, offer: _o, status: _s, ...updates } = req.body;
+    const { business: _b, dealNumber: _n, createdBy: _c, listing: _l, buyer: _by, offer: _o, status: _s, ...rawUpdates } = req.body;
+    const updates = sanitizeDealBody(rawUpdates);
     const deal = await populateDeal(
       SaleDeal.findOneAndUpdate(
         { _id: req.params.id, business },

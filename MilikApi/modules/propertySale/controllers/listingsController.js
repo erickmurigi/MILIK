@@ -5,6 +5,15 @@ import SaleAgent from "../models/SaleAgent.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { deleteImageFile } from "../middleware/listingImageUpload.js";
 
+const sanitizeListingBody = (body) => {
+  const out = { ...body };
+  if ("assignedAgent" in out) out.assignedAgent = out.assignedAgent || null;
+  if ("askingPrice" in out)   out.askingPrice   = out.askingPrice   !== "" && out.askingPrice   != null ? Number(out.askingPrice)   : 0;
+  if ("size" in out)          out.size          = out.size          !== "" && out.size          != null ? Number(out.size)          : null;
+  if ("listedDate" in out)    out.listedDate    = out.listedDate    || null;
+  return out;
+};
+
 export const listListings = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -64,14 +73,15 @@ export const createListing = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
 
-    if (req.body.assignedAgent) {
-      const agent = await SaleAgent.findOne({ _id: req.body.assignedAgent, business, status: "active" }).lean();
+    const body = sanitizeListingBody(req.body);
+    if (body.assignedAgent) {
+      const agent = await SaleAgent.findOne({ _id: body.assignedAgent, business, status: "active" }).lean();
       if (!agent) return next(createError(400, "Assigned agent not found or inactive"));
     }
 
     const listingNumber = await generateSequentialNumber(SaleListing, business, "LST");
     const listing = await SaleListing.create({
-      ...req.body,
+      ...body,
       business,
       listingNumber,
       createdBy: userId,
@@ -88,7 +98,8 @@ export const updateListing = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
-    const { business: _b, listingNumber: _n, createdBy: _c, ...updates } = req.body;
+    const { business: _b, listingNumber: _n, createdBy: _c, ...rawUpdates } = req.body;
+    const updates = sanitizeListingBody(rawUpdates);
 
     if (updates.assignedAgent) {
       const agent = await SaleAgent.findOne({ _id: updates.assignedAgent, business, status: "active" }).lean();

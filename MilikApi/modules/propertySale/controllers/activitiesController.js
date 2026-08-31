@@ -51,8 +51,11 @@ export const listActivities = async (req, res, next) => {
 
 const nullifyEmptyRefs = (body) => {
   const out = { ...body };
-  for (const key of ["relatedLead", "relatedBuyer", "relatedDeal", "relatedListing"]) {
+  for (const key of ["relatedLead", "relatedBuyer", "relatedDeal", "relatedListing", "date", "nextActionDate"]) {
     if (out[key] === "" || out[key] === null) out[key] = null;
+  }
+  if ("durationMinutes" in out) {
+    out.durationMinutes = out.durationMinutes !== "" && out.durationMinutes != null ? Number(out.durationMinutes) || null : null;
   }
   return out;
 };

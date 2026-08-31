@@ -685,6 +685,7 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const termTenant = useTerm("tenant");
   const termTenants = useTerm("tenants");
   const termUnit = useTerm("unit");
+  const termProperty = useTerm("property");
   const { id: tenantId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
