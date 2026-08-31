@@ -19,7 +19,7 @@ const RentalInvoiceVATReport = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
-  const { tenant: termTenant, unit: termUnit, property: termProperty } = useTerms("tenant", "unit", "property");
+  const { tenant: termTenant, unit: termUnit, property: termProperty, properties: termProperties, rent: termRent } = useTerms("tenant", "unit", "property", "properties", "rent");
   const businessId = currentCompany?._id || "";
 
   const [loading, setLoading] = useState(false);
@@ -279,7 +279,7 @@ const RentalInvoiceVATReport = () => {
                   <input
                     value={filters.search}
                     onChange={setFilter("search")}
-                    placeholder="Invoice, tenant, property, unit"
+                    placeholder={`Invoice, ${termTenant.toLowerCase()}, ${termProperty.toLowerCase()}, ${termUnit.toLowerCase()}`}
                     className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
@@ -287,7 +287,7 @@ const RentalInvoiceVATReport = () => {
                   value={filters.propertyId}
                   onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "" }))}
                   options={propertyOptions}
-                  placeholder="All properties"
+                  placeholder={`All ${termProperties.toLowerCase()}`}
                   searchable
                   clearable
                   size="sm"
@@ -296,7 +296,7 @@ const RentalInvoiceVATReport = () => {
                   value={filters.category}
                   onChange={(v) => setFilters((prev) => ({ ...prev, category: v ?? "" }))}
                   options={[
-                    { value: "RENT_CHARGE", label: "Rent" },
+                    { value: "RENT_CHARGE", label: termRent },
                     { value: "UTILITY_CHARGE", label: "Utility" },
                     { value: "LATE_PENALTY_CHARGE", label: "Late penalty" },
                   ]}

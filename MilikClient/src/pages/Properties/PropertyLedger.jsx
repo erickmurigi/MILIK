@@ -18,6 +18,7 @@ import {
   getPropertyLedgerBalanceSheet,
   getPropertyLedgerJournals,
 } from "../../redux/apiCalls";
+import { useTerm } from "../../hooks/useTerm";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const GRN = "#0B3B2E";
@@ -75,6 +76,12 @@ const THead = ({ cols }) => (
 
 // ─── Tab: Overview ────────────────────────────────────────────────────────────
 const OverviewTab = ({ propertyId, property, navigate }) => {
+  const termProperty  = useTerm("property");
+  const termUnits     = useTerm("units");
+  const termRent      = useTerm("rent");
+  const termInvoices  = useTerm("invoices");
+  const termReceipts  = useTerm("receipts");
+  const termLandlord  = useTerm("landlord");
   const [loading, setLoading] = useState(true);
   const [data, setData]       = useState({ is: null, tb: null });
 
@@ -115,19 +122,19 @@ const OverviewTab = ({ propertyId, property, navigate }) => {
 
   const quickLinks = [
     {
-      label: "Invoices",
-      sub: "Rent charges & invoices",
+      label: termInvoices,
+      sub: `${termRent} charges & ${termInvoices.toLowerCase()}`,
       icon: FaFileInvoiceDollar,
       onClick: () => navigate("/invoices/rental", { state: navState }),
     },
     {
-      label: "Receipts",
-      sub: "Rent payments collected",
+      label: termReceipts,
+      sub: `${termRent} payments collected`,
       icon: FaMoneyBillWave,
       onClick: () => navigate("/receipts", { state: navState }),
     },
     {
-      label: "Landlord Statements",
+      label: `${termLandlord} Statements`,
       sub: "Processed monthly statements",
       icon: FaFileAlt,
       onClick: () => navigate("/landlord/processed-statements", { state: navState }),
@@ -150,7 +157,7 @@ const OverviewTab = ({ propertyId, property, navigate }) => {
                     icon={FaFileInvoiceDollar}
                     tone={netProfit < 0 ? "orange" : "green"}
                     sub={outstanding != null ? "Outstanding" : (netProfit >= 0 ? "Profit" : "Loss")} />
-          <StatCard label="Units"               value={units}                                                        icon={FaBuilding}          tone="green" sub={property?.propertyType || ""} />
+          <StatCard label={termUnits}           value={units}                                                        icon={FaBuilding}          tone="green" sub={property?.propertyType || ""} />
         </div>
       )}
 
@@ -179,7 +186,7 @@ const OverviewTab = ({ propertyId, property, navigate }) => {
       </Card>
 
       {/* ── Property info strip ────────────────────────────────────────────── */}
-      <Card title="Property Info">
+      <Card title={`${termProperty} Info`}>
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 px-4 py-3 text-[11px] sm:grid-cols-4">
           {[
             { label: "Code",    value: property?.propertyCode },
@@ -442,6 +449,10 @@ const EMBEDDED_TABS = [
 ];
 
 const PropertyLedger = () => {
+  const termProperty   = useTerm("property");
+  const termProperties = useTerm("properties");
+  const termInvoices   = useTerm("invoices");
+  const termReceipts   = useTerm("receipts");
   const { id }      = useParams();
   const dispatch    = useDispatch();
   const navigate    = useNavigate();
@@ -464,8 +475,8 @@ const PropertyLedger = () => {
   if (!property) return (
     <DashboardLayout>
       <div className="flex flex-col items-center justify-center py-24 text-slate-400">
-        <p className="text-sm">Property not found.</p>
-        <button onClick={() => navigate("/properties")} className="mt-3 text-sm text-[#0B3B2E] hover:underline">Back to Properties</button>
+        <p className="text-sm">{termProperty} not found.</p>
+        <button onClick={() => navigate("/properties")} className="mt-3 text-sm text-[#0B3B2E] hover:underline">Back to {termProperties}</button>
       </div>
     </DashboardLayout>
   );
@@ -474,9 +485,9 @@ const PropertyLedger = () => {
     <DashboardLayout>
       <div className="flex flex-col items-center justify-center py-24 text-slate-400">
         <FaBook className="mb-4 text-5xl opacity-20" />
-        <p className="text-sm font-medium">This property does not use Property GL.</p>
-        <p className="mt-1 text-xs">Switch Account Ledger Type to "Property GL" in property settings to activate an isolated ledger.</p>
-        <Link to="/properties" className="mt-4 text-sm text-[#0B3B2E] hover:underline">Back to Properties</Link>
+        <p className="text-sm font-medium">This {termProperty.toLowerCase()} does not use {termProperty} GL.</p>
+        <p className="mt-1 text-xs">Switch Account Ledger Type to "{termProperty} GL" in {termProperty.toLowerCase()} settings to activate an isolated ledger.</p>
+        <Link to="/properties" className="mt-4 text-sm text-[#0B3B2E] hover:underline">Back to {termProperties}</Link>
       </div>
     </DashboardLayout>
   );
@@ -485,9 +496,9 @@ const PropertyLedger = () => {
     <DashboardLayout>
       <div className="flex flex-col items-center justify-center py-24 text-slate-400">
         <FaBook className="mb-4 text-5xl opacity-20" />
-        <p className="text-sm font-medium">Property GL is configured but not yet enabled for this property.</p>
-        <p className="mt-1 text-xs">Enable "Property Ledger" in property settings to start posting entries here.</p>
-        <Link to={`/properties/edit/${id}`} className="mt-4 text-sm text-[#0B3B2E] hover:underline">Open Property Settings</Link>
+        <p className="text-sm font-medium">{termProperty} GL is configured but not yet enabled for this {termProperty.toLowerCase()}.</p>
+        <p className="mt-1 text-xs">Enable "{termProperty} Ledger" in {termProperty.toLowerCase()} settings to start posting entries here.</p>
+        <Link to={`/properties/edit/${id}`} className="mt-4 text-sm text-[#0B3B2E] hover:underline">Open {termProperty} Settings</Link>
       </div>
     </DashboardLayout>
   );
@@ -502,7 +513,7 @@ const PropertyLedger = () => {
         <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-2.5">
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={() => navigate("/properties")} className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-800">
-              <FaArrowLeft className="text-[10px]" /> Properties
+              <FaArrowLeft className="text-[10px]" /> {termProperties}
             </button>
             <span className="text-slate-300">/</span>
             <Link to={`/properties/${id}`} className="text-[11px] text-slate-500 hover:text-slate-800">
@@ -510,10 +521,10 @@ const PropertyLedger = () => {
             </Link>
             <span className="text-slate-300">/</span>
             <span className="flex items-center gap-1 text-[11px] font-semibold text-[#0B3B2E]">
-              <FaBook className="text-[10px]" /> Property Ledger
+              <FaBook className="text-[10px]" /> {termProperty} Ledger
             </span>
             <span className="ml-auto inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E]">
-              Property GL — Ledger Active
+              {termProperty} GL — Ledger Active
             </span>
           </div>
           <h1 className="mt-1 text-sm font-black text-slate-800">
@@ -546,8 +557,8 @@ const PropertyLedger = () => {
 
               {/* Navigate-out tabs */}
               {[
-                { label: "Invoices",    path: "/invoices/rental" },
-                { label: "Receipts",    path: "/receipts" },
+                { label: termInvoices,  path: "/invoices/rental" },
+                { label: termReceipts,  path: "/receipts" },
                 { label: "Statements",  path: "/landlord/processed-statements" },
               ].map(({ label, path }) => (
                 <button

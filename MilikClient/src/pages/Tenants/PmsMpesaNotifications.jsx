@@ -319,7 +319,7 @@ const ImportResultsSummary = ({ results, onClose }) => (
             <th className="px-3 py-1 text-left font-bold border-r border-white/10">Transaction Code</th>
             <th className="px-3 py-1 text-left font-bold border-r border-white/10">Ref / Account</th>
             <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
-            <th className="px-3 py-1 text-left font-bold">Tenant</th>
+            <th className="px-3 py-1 text-left font-bold">{termTenant}</th>
           </tr>
         </thead>
         <tbody>

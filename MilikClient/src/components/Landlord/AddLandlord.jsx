@@ -18,6 +18,7 @@ import {
 import { toast } from "react-toastify";
 import { createLandlord, updateLandlord } from "../../redux/apiCalls";
 import { selectCurrentCompany, selectCurrentUser, selectLandlordIsFetching } from "../../redux/selectors";
+import { useTerms } from "../../hooks/useTerm";
 
 const MILIK_ORANGE_BG = "bg-[#0B3B2E]";
 const MILIK_ORANGE_BG_HOVER = "hover:bg-[#0A3127]";
@@ -133,6 +134,7 @@ const AddLandlord = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const isFetching = useSelector(selectLandlordIsFetching);
+  const { landlord: termLandlord, landlords: termLandlords } = useTerms("landlord", "landlords");
   const fileInputRef = useRef(null);
   const editLandlordId = location.state?.landlordId || null;
   const editLandlordData = location.state?.landlordData || null;
@@ -302,7 +304,7 @@ const AddLandlord = () => {
 
     // Validation
     if (!formData.landlordName?.trim()) {
-      toast.error("Landlord name is required");
+      toast.error(`${termLandlord} name is required`);
       return;
     }
 
@@ -320,17 +322,17 @@ const AddLandlord = () => {
 
       if (isEditMode) {
         await dispatch(updateLandlord(editLandlordId, payload));
-        toast.success("Landlord updated successfully!");
+        toast.success(`${termLandlord} updated successfully!`);
       } else {
         await dispatch(createLandlord(payload));
-        toast.success("Landlord added successfully!");
+        toast.success(`${termLandlord} added successfully!`);
       }
 
       clearDraftState();
       navigate("/landlords");
     } catch (err) {
       console.error("Error:", err);
-      toast.error(err?.message || (isEditMode ? "Failed to update landlord" : "Failed to add landlord"));
+      toast.error(err?.message || (isEditMode ? `Failed to update ${termLandlord.toLowerCase()}` : `Failed to add ${termLandlord.toLowerCase()}`));
     }
   };
 
@@ -357,8 +359,8 @@ const AddLandlord = () => {
               </button>
               <div className="h-4 w-px bg-[#2A5C4A]" />
               <div>
-                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">Landlords</div>
-                <h1 className="text-sm font-black text-white leading-none">{isEditMode ? "Edit Landlord" : "New Landlord"}</h1>
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">{termLandlords}</div>
+                <h1 className="text-sm font-black text-white leading-none">{isEditMode ? `Edit ${termLandlord}` : `New ${termLandlord}`}</h1>
               </div>
             </div>
             {currentCompany?.companyName && (
@@ -379,7 +381,7 @@ const AddLandlord = () => {
                 <div className="p-3">
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                   <div>
-                    <label className={labelClass}>Landlord Code</label>
+                    <label className={labelClass}>{termLandlord} Code</label>
                     <input
                       type="text"
                       name="landlordCode"
@@ -393,7 +395,7 @@ const AddLandlord = () => {
 
                   <div>
                     <MilikSelect
-                      label="Landlord Type"
+                      label={`${termLandlord} Type`}
                       required
                       placeholder="Select Type"
                       items={["Individual", "Company", "Partnership", "Trust"]}
@@ -406,7 +408,7 @@ const AddLandlord = () => {
 
                   <div className="md:col-span-2">
                     <label className={labelClass}>
-                      Landlord Name <span className="text-red-500">*</span>
+                      {termLandlord} Name <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -414,7 +416,7 @@ const AddLandlord = () => {
                       value={formData.landlordName}
                       onChange={handleInputChange}
                       className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                      placeholder="Enter landlord name"
+                      placeholder={`Enter ${termLandlord.toLowerCase()} name`}
                       required
                     />
                   </div>
@@ -653,7 +655,7 @@ const AddLandlord = () => {
               className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isFetching ? <FaSpinner className="animate-spin" /> : <FaSave />}
-              {isFetching ? "Saving…" : isEditMode ? "Update Landlord" : "Save Landlord"}
+              {isFetching ? "Saving…" : isEditMode ? `Update ${termLandlord}` : `Save ${termLandlord}`}
             </button>
           </div>
         </div>

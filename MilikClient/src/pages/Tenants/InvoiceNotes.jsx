@@ -1101,7 +1101,7 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
                   </label>
 
                   <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
-                    <span>Property</span>
+                    <span>{termProperty}</span>
                     <AppSelect
                       value={propertyId}
                       onChange={(v) => setPropertyId(v ?? "")}
@@ -1230,7 +1230,7 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
                 {selectedSourceInvoice ? (
                   <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                     <p><span className="font-semibold">{noteType === "CREDIT_NOTE" ? "Source Invoice" : "Linked Invoice"}:</span> {selectedSourceInvoice.invoiceNumber}</p>
-                    <p><span className="font-semibold">Property:</span> {resolvePropertyName(selectedSourceInvoice, propertyMap)}</p>
+                    <p><span className="font-semibold">{termProperty}:</span> {resolvePropertyName(selectedSourceInvoice, propertyMap)}</p>
                     <p><span className="font-semibold">Original Amount:</span> {formatCurrency(selectedSourceInvoice.amount)}</p>
                     <p><span className="font-semibold">Net Amount:</span> {formatCurrency(selectedSourceInvoice.netAmount ?? selectedSourceInvoice.amount)}</p>
                     {noteType === "CREDIT_NOTE" ? (

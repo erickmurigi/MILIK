@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { FaTimes, FaMoneyBillWave } from "react-icons/fa";
+import { useTerms } from "../../hooks/useTerm";
 
 const isNegativeProcessedStatement = (s) =>
   Boolean(s?.isNegativeStatement) || Number(s?.amountPayableByLandlordToManager || 0) > 0;
 
 const PayLandlordModal = ({ statement, onClose, onSubmit, cashbookOptions = [] }) => {
+  const { landlord: termLandlord, property: termProperty } = useTerms("landlord", "property");
   const payableAmount = isNegativeProcessedStatement(statement)
     ? 0
     : statement?.balanceDue ?? statement?.netAmountDue ?? statement?.amountPayableToLandlord ?? 0;
@@ -33,7 +35,7 @@ const PayLandlordModal = ({ statement, onClose, onSubmit, cashbookOptions = [] }
         <div className="flex-shrink-0 flex items-center justify-between gap-3 border-b border-slate-700 bg-[#0B3B2E] px-4 py-3 text-white">
           <div className="flex items-center gap-2">
             <FaMoneyBillWave className="text-emerald-400" />
-            <h2 className="text-sm font-black uppercase tracking-wide">Pay Landlord</h2>
+            <h2 className="text-sm font-black uppercase tracking-wide">Pay {termLandlord}</h2>
           </div>
           <button onClick={onClose} className="text-white/60 hover:text-white transition-colors">
             <FaTimes size={14} />
@@ -47,8 +49,8 @@ const PayLandlordModal = ({ statement, onClose, onSubmit, cashbookOptions = [] }
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Statement Summary</p>
               <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
                 {[
-                  ["Landlord", statement?.landlord?.landlordName || "N/A"],
-                  ["Property", statement?.property?.propertyName || "N/A"],
+                  [termLandlord, statement?.landlord?.landlordName || "N/A"],
+                  [termProperty, statement?.property?.propertyName || "N/A"],
                   ["Statement #", statement?.statementNumber || "N/A"],
                   ["Amount Payable", fmt(payableAmount)],
                 ].map(([label, val]) => (
@@ -63,7 +65,7 @@ const PayLandlordModal = ({ statement, onClose, onSubmit, cashbookOptions = [] }
             {isNegativeProcessedStatement(statement) && (
               <div className="border-l-4 border-red-400 bg-red-50 p-3">
                 <p className="text-sm text-red-800">
-                  <strong>Payment blocked:</strong> This statement shows the landlord owes the manager. Use "Record Recovery" instead.
+                  <strong>Payment blocked:</strong> This statement shows the {termLandlord.toLowerCase()} owes the manager. Use "Record Recovery" instead.
                 </p>
               </div>
             )}
@@ -126,7 +128,7 @@ const PayLandlordModal = ({ statement, onClose, onSubmit, cashbookOptions = [] }
             </button>
             <button type="submit" disabled={isNegativeProcessedStatement(statement)}
               className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-white bg-[#0B3B2E] hover:bg-[#0A3127] transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-              <FaMoneyBillWave size={11} /> Pay Landlord
+              <FaMoneyBillWave size={11} /> Pay {termLandlord}
             </button>
           </div>
         </form>

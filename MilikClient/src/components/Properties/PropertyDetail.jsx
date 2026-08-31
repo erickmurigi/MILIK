@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { selectCurrentProperty, selectPropertyLoading } from '../../redux/selectors';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
+import { useTerms } from '../../hooks/useTerm';
 import {
   FaArrowLeft, FaEdit, FaTrash, FaPhone, FaEnvelope,
   FaMapMarkerAlt, FaBuilding, FaHome, FaCity, FaCalendar,
@@ -17,6 +18,7 @@ const PropertyDetail = () => {
   const dispatch = useDispatch();
   const currentProperty = useSelector(selectCurrentProperty);
   const loading = useSelector(selectPropertyLoading);
+  const { property: termProperty, properties: termProperties, unit: termUnit, units: termUnits, landlords: termLandlords, rent: termRent } = useTerms("property", "properties", "unit", "units", "landlords", "rent");
 
   useEffect(() => {
     dispatch(getPropertyById(id));
@@ -36,12 +38,12 @@ const PropertyDetail = () => {
     return (
       <DashboardLayout>
         <div className="text-center py-12">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">Property not found</h2>
+          <h2 className="text-xl font-bold text-gray-800 mb-4">{termProperty} not found</h2>
           <button
             onClick={() => navigate('/properties')}
             className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
           >
-            Back to Properties
+            Back to {termProperties}
           </button>
         </div>
       </DashboardLayout>
@@ -62,7 +64,7 @@ const PropertyDetail = () => {
             </button>
             <div>
               <h1 className="text-2xl font-bold text-gray-800">{currentProperty.propertyName}</h1>
-              <p className="text-gray-600">Property Code: {currentProperty.propertyCode}</p>
+              <p className="text-gray-600">{termProperty} Code: {currentProperty.propertyCode}</p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -83,7 +85,7 @@ const PropertyDetail = () => {
               <h2 className="text-lg font-bold text-gray-800 mb-4">Basic Information</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Property Type</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{termProperty} Type</label>
                   <p className="text-gray-900">{currentProperty.propertyType}</p>
                 </div>
                 <div>
@@ -120,10 +122,10 @@ const PropertyDetail = () => {
 
           {/* Unit Statistics */}
           <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-bold text-gray-800 mb-4">Unit Statistics</h2>
+            <h2 className="text-lg font-bold text-gray-800 mb-4">{termUnit} Statistics</h2>
             <div className="space-y-4">
               <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                <span className="text-gray-700">Total Units</span>
+                <span className="text-gray-700">Total {termUnits}</span>
                 <span className="text-xl font-bold text-gray-900">{currentProperty.totalUnits}</span>
               </div>
               <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
@@ -171,7 +173,7 @@ const PropertyDetail = () => {
         {currentProperty.landlords && currentProperty.landlords.length > 0 && (
           <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold text-gray-800">Landlords</h2>
+              <h2 className="text-lg font-bold text-gray-800">{termLandlords}</h2>
               <button
                 onClick={() => navigate(`/landlord/statements?propertyId=${id}`)}
                 className="text-sm text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-2"
@@ -214,7 +216,7 @@ const PropertyDetail = () => {
                   <FaMoneyBillWave className="text-white text-xl" />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Expected Rent</p>
+                  <p className="text-sm text-gray-600">Expected {termRent}</p>
                   <p className="text-xl font-bold text-gray-900">
                     {currentProperty.currency || 'KES'} {Number(currentProperty.expectedRent || 0).toLocaleString()}
                   </p>
@@ -244,7 +246,7 @@ const PropertyDetail = () => {
                   <FaBuilding className="text-white text-xl" />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Total Units</p>
+                  <p className="text-sm text-gray-600">Total {termUnits}</p>
                   <p className="text-xl font-bold text-gray-900">
                     {currentProperty.totalUnits}
                   </p>

@@ -22,6 +22,7 @@ import {
 } from "react-icons/fa";
 import { createProperty } from "../../redux/propertyRedux";
 import { getLandlords, createLandlord } from "../../redux/apiCalls";
+import { useTerms } from "../../hooks/useTerm";
 import { selectCurrentCompany, selectCurrentUser, selectActiveLandlords, selectAllProperties, selectPropertyLoading, selectPropertyError } from "../../redux/selectors";
 import { adminRequests } from "../../utils/requestMethods";
 import { toast } from "react-toastify";
@@ -204,6 +205,21 @@ const AddProperty = () => {
   const error = useSelector(selectPropertyError);
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
+  const {
+    property: termProperty,
+    properties: termProperties,
+    unit: termUnit,
+    units: termUnits,
+    landlord: termLandlord,
+    landlords: termLandlords,
+    rent: termRent,
+    tenant: termTenant,
+    meter: termMeter,
+    utility: termUtility,
+    invoice: termInvoice,
+    invoices: termInvoices,
+    receipts: termReceipts,
+  } = useTerms("property", "properties", "unit", "units", "landlord", "landlords", "rent", "tenant", "meter", "utility", "invoice", "invoices", "receipts");
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;
   const isSelfManagingLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
@@ -375,9 +391,9 @@ const AddProperty = () => {
 
   const tabs = useMemo(() => [
     { id: "general", label: "General Info", icon: <FaHome /> },
-    { id: "space", label: "Space/Units", icon: <FaWarehouse /> },
+    { id: "space", label: `Space/${termUnits}`, icon: <FaWarehouse /> },
     { id: "accounting", label: "Accounting", icon: <FaCalculator /> },
-    { id: "utilityRates", label: "Meter Reading Rates", icon: <FaCog /> },
+    { id: "utilityRates", label: `${termMeter} Reading Rates`, icon: <FaCog /> },
     { id: "notes", label: "Listing & Notes", icon: <FaStickyNote /> },
   ], []);
 
@@ -517,7 +533,7 @@ const AddProperty = () => {
     if (!displayName || !displayName.trim()) {
       setFieldErrors((prev) => ({
         ...prev,
-        landlord: "Landlord name is missing. Please refresh and try again.",
+        landlord: `${termLandlord} name is missing. Please refresh and try again.`,
       }));
       return;
     }
@@ -548,8 +564,8 @@ const AddProperty = () => {
     const errors = {};
 
     if (!formData.dateAcquired?.trim()) errors.dateAcquired = "Date acquired is required.";
-    if (!formData.propertyName?.trim()) errors.propertyName = "Property name is required.";
-    if (!formData.propertyType?.trim()) errors.propertyType = "Property type is required.";
+    if (!formData.propertyName?.trim()) errors.propertyName = `${termProperty} name is required.`;
+    if (!formData.propertyType?.trim()) errors.propertyType = `${termProperty} type is required.`;
     if (
       !isSelfManagingLandlordMode &&
       (!formData.landlords?.[0]?.name?.trim() || !formData.landlords?.[0]?.landlordId?.trim())
@@ -567,15 +583,15 @@ const AddProperty = () => {
     }
 
     if (!newLandlord.fullName.trim()) {
-      toast.error("Landlord full name is required");
+      toast.error(`${termLandlord} full name is required`);
       return;
     }
     if (!newLandlord.email.trim()) {
-      toast.error("Landlord email is required");
+      toast.error(`${termLandlord} email is required`);
       return;
     }
     if (!newLandlord.phone.trim()) {
-      toast.error("Landlord phone is required");
+      toast.error(`${termLandlord} phone is required`);
       return;
     }
 
@@ -606,7 +622,7 @@ const AddProperty = () => {
       await dispatch(getLandlords({ company: currentCompany._id }));
       handleSelectLandlord(savedLandlord._id, savedLandlord);
 
-      toast.success("Landlord added successfully!");
+      toast.success(`${termLandlord} added successfully!`);
       setOpenAddLandlordModal(false);
       setNewLandlord({ fullName: "", email: "", phone: "" });
     } catch (err) {
@@ -674,7 +690,7 @@ const AddProperty = () => {
       await dispatch(getLandlords({ company: businessId }));
 
       clearDraftState();
-      toast.success(result?.message || "Property created successfully!");
+      toast.success(result?.message || `${termProperty} created successfully!`);
       navigate("/properties");
     } catch (err) {
       let backendMessage = "Failed to create property";
@@ -845,12 +861,12 @@ const AddProperty = () => {
             />
             {formData.letManage === "Letting" && (
               <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                <span className="font-bold">Letting only:</span> Tenant pays rent directly to the landlord. Deposit held by landlord. A one-time letting fee is charged when placing a tenant. Landlord statements and disbursements are not available.
+                <span className="font-bold">Letting only:</span> {termTenant} pays {termRent} directly to the {termLandlord}. Deposit held by {termLandlord}. A one-time letting fee is charged when placing a {termTenant}. {termLandlord} statements and disbursements are not available.
               </div>
             )}
             {formData.letManage === "Both" && (
               <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-                <span className="font-bold">Let &amp; Manage:</span> Charge a one-time letting fee when placing a tenant, then continue managing the property with ongoing commission and landlord statements.
+                <span className="font-bold">Let &amp; Manage:</span> Charge a one-time letting fee when placing a {termTenant}, then continue managing the {termProperty} with ongoing commission and {termLandlord} statements.
               </div>
             )}
           </div>
@@ -864,7 +880,7 @@ const AddProperty = () => {
                 onChange={handleChange}
                 className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
               >
-                <option value="percentage">Percentage of rent</option>
+                <option value="percentage">Percentage of {termRent}</option>
                 <option value="fixed">Fixed amount</option>
               </select>
             </div>
@@ -887,14 +903,14 @@ const AddProperty = () => {
               />
               <p className="mt-1 text-xs text-gray-500">
                 {formData.lettingFeeMode === "percentage"
-                  ? `${formData.lettingFeeValue || 0}% of the tenant's monthly rent`
-                  : `Fixed fee of ${Number(formData.lettingFeeValue || 0).toLocaleString()} charged per tenant placed`}
+                  ? `${formData.lettingFeeValue || 0}% of the ${termTenant}'s monthly ${termRent}`
+                  : `Fixed fee of ${Number(formData.lettingFeeValue || 0).toLocaleString()} charged per ${termTenant} placed`}
               </p>
             </div>
           )}
 
           <div>
-            <label className={labelClass}>Property Code <span className="text-red-500">*</span></label>
+            <label className={labelClass}>{termProperty} Code <span className="text-red-500">*</span></label>
             <input
               type="text"
               name="propertyCode"
@@ -906,7 +922,7 @@ const AddProperty = () => {
           </div>
 
           <div className="md:col-span-2">
-            <label className={labelClass}>Property Name <span className="text-red-500">*</span></label>
+            <label className={labelClass}>{termProperty} Name <span className="text-red-500">*</span></label>
             <input
               type="text"
               name="propertyName"
@@ -922,7 +938,7 @@ const AddProperty = () => {
 
           <div>
             <MilikSelect
-              label="Property Type"
+              label={`${termProperty} Type`}
               required
               placeholder="Select Type"
               items={propertyTypes}
@@ -1047,29 +1063,29 @@ const AddProperty = () => {
               </div>
 
               <div className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-3 text-xs text-amber-800">
-                Landlord selection is hidden in this mode. Saving will auto-link the property to this company as the owner and apply direct-to-owner collection defaults.
+                {termLandlord} selection is hidden in this mode. Saving will auto-link the {termProperty.toLowerCase()} to this company as the owner and apply direct-to-owner collection defaults.
               </div>
             </div>
           </div>
         ) : (
           <div className={`${sectionCard} p-4`}>
             <div className="flex justify-between items-center mb-3">
-              <h3 className={sectionHeader}>Landlords *</h3>
+              <h3 className={sectionHeader}>{termLandlords} *</h3>
               <button
                 type="button"
                 onClick={() => setOpenAddLandlordModal(true)}
                 className={`h-9 px-3 text-sm font-semibold ${MILIK_ORANGE_BG} text-white rounded-md flex items-center gap-2 ${MILIK_ORANGE_BG_HOVER} transition-colors`}
               >
-                <FaPlus /> Add Landlord
+                <FaPlus /> Add {termLandlord}
               </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
               <div>
                 <MilikSelect
-                  label="Landlord Name"
+                  label={`${termLandlord} Name`}
                   required
-                  placeholder={landlordItems.length ? "Select landlord" : "No landlords loaded"}
+                  placeholder={landlordItems.length ? `Select ${termLandlord}` : `No ${termLandlords} loaded`}
                   items={landlordItems}
                   value={selectedLandlordId}
                   disabled={loading}
@@ -1115,7 +1131,7 @@ const AddProperty = () => {
 
         <Modal
           open={openAddLandlordModal}
-          title="Add Landlord"
+          title={`Add ${termLandlord}`}
           onClose={() => setOpenAddLandlordModal(false)}
         >
           <div className="space-y-3">
@@ -1162,7 +1178,7 @@ const AddProperty = () => {
                 onClick={saveNewLandlordFromModal}
                 className={`h-10 px-4 text-sm font-semibold ${MILIK_ORANGE_BG} text-white rounded-md ${MILIK_ORANGE_BG_HOVER} transition`}
               >
-                Save Landlord
+                Save {termLandlord}
               </button>
             </div>
           </div>
@@ -1181,14 +1197,14 @@ const AddProperty = () => {
             items={["in-gl", "property-gl"]}
             value={formData.accountLedgerType}
             onChange={(val) => handleChange({ target: { name: "accountLedgerType", value: val } })}
-            getLabel={(x) => x === "property-gl" ? "Property GL" : "In-GL (Company General Ledger)"}
+            getLabel={(x) => x === "property-gl" ? `${termProperty} GL` : "In-GL (Company General Ledger)"}
             getValue={(x) => x}
           />
           {formData.accountLedgerType === "in-gl" && (
-            <p className="mt-1 text-[11px] text-blue-600">Invoices and receipts post journal entries into the company GL. Appears in Trial Balance, P&amp;L, and Balance Sheet.</p>
+            <p className="mt-1 text-[11px] text-blue-600">{termInvoices} and {termReceipts.toLowerCase()} post journal entries into the company GL. Appears in Trial Balance, P&amp;L, and Balance Sheet.</p>
           )}
           {formData.accountLedgerType === "property-gl" && (
-            <p className="mt-1 text-[11px] text-purple-600">This property has its own isolated ledger — no entries post to the company GL. Enable the Property Ledger below to activate posting.</p>
+            <p className="mt-1 text-[11px] text-purple-600">This {termProperty.toLowerCase()} has its own isolated ledger — no entries post to the company GL. Enable the {termProperty} Ledger below to activate posting.</p>
           )}
         </div>
       </div>
@@ -1204,11 +1220,11 @@ const AddProperty = () => {
                 onChange={(e) => handleChange({ target: { name: "propertyLedgerEnabled", type: "checkbox", checked: e.target.checked } })}
                 className="h-4 w-4 rounded border-purple-300 text-purple-600 focus:ring-purple-500"
               />
-              <span className="text-sm font-semibold text-purple-800">Enable Property Ledger</span>
+              <span className="text-sm font-semibold text-purple-800">Enable {termProperty} Ledger</span>
             </label>
           </div>
           <p className="mt-2 text-[11px] text-purple-700">
-            When enabled, invoices and receipts post to this property&apos;s own isolated ledger — visible via the <strong>Property Ledger</strong> button on the properties list.
+            When enabled, {termInvoices.toLowerCase()} and {termReceipts.toLowerCase()} post to this {termProperty.toLowerCase()}&apos;s own isolated ledger — visible via the <strong>{termProperty} Ledger</strong> button on the {termProperties.toLowerCase()} list.
             When disabled, transactions are tracked internally but no journal entries are created.
           </p>
         </div>
@@ -1240,7 +1256,7 @@ const AddProperty = () => {
         </div>
       </div>
 
-        <label className={labelClass}>Invoice Payment Terms</label>
+        <label className={labelClass}>{termInvoice} Payment Terms</label>
         <textarea
           name="invoicePaymentTerms"
           value={formData.invoicePaymentTerms}
@@ -1325,7 +1341,7 @@ const AddProperty = () => {
 
           <div>
             <MilikSelect
-              label="Unit Measurement"
+              label={`${termUnit} Measurement`}
               placeholder="Select Measurement"
               items={["Sq Ft", "Sq M", "Acres", "Hectares"]}
               value={formData.unitMeasurement}
@@ -1336,7 +1352,7 @@ const AddProperty = () => {
           </div>
 
           <div>
-            <label className={labelClass}>Rent Per Measure</label>
+            <label className={labelClass}>{termRent} Per Measure</label>
             <input
               type="number"
               name="rentPerMeasure"
@@ -1351,7 +1367,7 @@ const AddProperty = () => {
 
           <div>
             <MilikSelect
-              label="Rent Currency"
+              label={`${termRent} Currency`}
               placeholder="Select Currency"
               items={[
                 "Kenyan Shilling [KES]",
@@ -1391,7 +1407,7 @@ const AddProperty = () => {
             </div>
 
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-              <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Estimated Monthly Rent</div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Estimated Monthly {termRent}</div>
               <div className="mt-1 text-lg font-extrabold text-emerald-900">
                 {estimatedRent.toLocaleString()} {formData.rentCurrency}
               </div>
@@ -1429,7 +1445,7 @@ const AddProperty = () => {
             >
               <div>
                 <MilikSelect
-                  label="Service Charge/Utility"
+                  label={`Service Charge/${termUtility}`}
                   placeholder="Select Type"
                   items={["Water", "Garbage", "Electricity", "Service Charge", "Security", "Others"]}
                   value={charge.serviceCharge}
@@ -1564,7 +1580,7 @@ const AddProperty = () => {
         </div>
 
         <div className="mb-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-          The rent security deposit configured here now feeds the main unit deposit default when creating a unit for this property.
+          The {termRent.toLowerCase()} security deposit configured here now feeds the main {termUnit.toLowerCase()} deposit default when creating a {termUnit.toLowerCase()} for this {termProperty.toLowerCase()}.
         </div>
 
         <div className="space-y-3">
@@ -1578,7 +1594,7 @@ const AddProperty = () => {
                   label="Deposit Type"
                   placeholder="Select Type"
                   items={[
-                    "Rent Security Deposit",
+                    `${termRent} Security Deposit`,
                     "Water Security Deposit",
                     "Electricity Security Deposit",
                     "Others",
@@ -1612,7 +1628,7 @@ const AddProperty = () => {
 
               <div>
                 <label className={labelClass}>
-                  {deposit.chargeMode === "Percentage" ? "Percentage (% of rent)" : "Amount"}
+                  {deposit.chargeMode === "Percentage" ? `Percentage (% of ${termRent})` : "Amount"}
                 </label>
                 <input
                   type="number"
@@ -1721,7 +1737,7 @@ const AddProperty = () => {
   const renderBanking = () => (
     <div className="space-y-5">
       <div className={`${sectionCard} p-4`}>
-        <h3 className={sectionHeader}>LANDLORD DRAWER BANKING DETAILS</h3>
+        <h3 className={sectionHeader}>{termLandlord} Drawer Banking Details</h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
           <div>
@@ -1896,7 +1912,7 @@ const AddProperty = () => {
         </div>
 
         <div className="mt-4">
-          <label className={labelClass}>Property Description <span className="font-normal text-slate-400">(shown on listing page)</span></label>
+          <label className={labelClass}>{termProperty} Description <span className="font-normal text-slate-400">(shown on listing page)</span></label>
           <textarea
             name="description"
             value={formData.description}
@@ -2077,8 +2093,8 @@ const AddProperty = () => {
               >
                 <div>
                   <MilikSelect
-                    label="Utility Type"
-                    placeholder={utilityTypeOptionsLoading ? "Loading..." : "Select Utility"}
+                    label={`${termUtility} Type`}
+                    placeholder={utilityTypeOptionsLoading ? "Loading..." : `Select ${termUtility}`}
                     items={utilityTypeOptions}
                     value={rate.utilityType}
                     onChange={(val, item) => {
@@ -2098,7 +2114,7 @@ const AddProperty = () => {
                 </div>
 
                 <div>
-                  <label className={labelClass}>Unit Cost (KES)</label>
+                  <label className={labelClass}>{termUnit} Cost (KES)</label>
                   <input
                     type="number"
                     min="0"
@@ -2159,9 +2175,9 @@ const AddProperty = () => {
         <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-lg">
           <p className="text-xs text-blue-700 font-semibold mb-1">Rate Resolution Priority</p>
           <ol className="text-xs text-blue-600 space-y-0.5 list-decimal list-inside">
-            <li>Rate entered directly on the meter reading</li>
-            <li>Per-unit rate (configured on each unit)</li>
-            <li>Property rate (configured here)</li>
+            <li>Rate entered directly on the {termMeter.toLowerCase()} reading</li>
+            <li>Per-{termUnit.toLowerCase()} rate (configured on each {termUnit.toLowerCase()})</li>
+            <li>{termProperty} rate (configured here)</li>
           </ol>
         </div>
       </div>
@@ -2182,8 +2198,8 @@ const AddProperty = () => {
                 </button>
                 <div className="h-4 w-px bg-[#2A5C4A]" />
                 <div>
-                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">Properties</div>
-                  <h1 className="text-sm font-black text-white leading-none">Add New Property</h1>
+                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">{termProperties}</div>
+                  <h1 className="text-sm font-black text-white leading-none">Add New {termProperty}</h1>
                 </div>
               </div>
               <span className="rounded-lg border border-[#2A5C4A] bg-[#0A3127] px-2.5 py-1 text-[10px] font-bold text-[#B7C9C0]">{operatingModeLabel}</span>
@@ -2270,7 +2286,7 @@ const AddProperty = () => {
                   disabled={loading}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-2 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? <><FaSpinner className="animate-spin" /> Saving…</> : <><FaSave /> Save Property</>}
+                  {loading ? <><FaSpinner className="animate-spin" /> Saving…</> : <><FaSave /> Save {termProperty}</>}
                 </button>
               )}
               </div>

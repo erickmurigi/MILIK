@@ -39,6 +39,7 @@ import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import AppSelect from "../../components/common/AppSelect";
+import { useTerms } from "../../hooks/useTerm";
 
 // Milik theme constants
 const MILIK_GREEN_BG = "bg-[#0B3B2E]";
@@ -105,7 +106,7 @@ const parseTakeOnPreselection = (location) => {
 };
 
 
-const sanitizeTenantSaveError = (error, fallback = "Failed to save tenant") => {
+const sanitizeTenantSaveError = (error, fallback = "Failed to save tenant", terms = {}) => {
   const rawMessage =
     error?.response?.data?.message ||
     error?.response?.data?.error ||
@@ -116,7 +117,7 @@ const sanitizeTenantSaveError = (error, fallback = "Failed to save tenant") => {
 
   // Only remap when the error is specifically about the lease agreement number index
   if (/Milik\.leases|agreementNumber/i.test(String(rawMessage || ""))) {
-    return "Tenant could not be created because the lease agreement number already exists. Please try again.";
+    return `${terms.tenant || "Tenant"} could not be created because the ${(terms.lease || "lease").toLowerCase()} agreement number already exists. Please try again.`;
   }
 
   return String(rawMessage || fallback);
@@ -380,6 +381,21 @@ const AddTenant = () => {
     () => properties.filter((property) => String(property?.status || "active").toLowerCase() !== "archived"),
     [properties]
   );
+  const {
+    tenant: termTenant,
+    tenants: termTenants,
+    property: termProperty,
+    unit: termUnit,
+    units: termUnits,
+    landlord: termLandlord,
+    rent: termRent,
+    lease: termLease,
+    invoice: termInvoice,
+    invoices: termInvoices,
+    utility: termUtility,
+    utilities: termUtilities,
+    receipts: termReceipts,
+  } = useTerms("tenant", "tenants", "property", "unit", "units", "landlord", "rent", "lease", "invoice", "invoices", "utility", "utilities", "receipts");
 
   const generateNextTenantCode = () => "";
 
@@ -743,12 +759,12 @@ useEffect(() => {
       selectedPropertyRecord?.propertyName ||
       selectedPropertyRecord?.name ||
       takeOnPreselection?.snapshot?.propertyName ||
-      "Selected Property";
+      `Selected ${termProperty}`;
     const unitNumber =
       selectedUnitRecord?.unitNumber ||
       selectedUnitRecord?.unitName ||
       takeOnPreselection?.snapshot?.unitNumber ||
-      "Selected Unit";
+      `Selected ${termUnit}`;
     return {
       propertyName,
       unitNumber,
@@ -834,7 +850,7 @@ useEffect(() => {
 
         const tenant = response?.data?.data || response?.data?.tenant || response?.data;
         if (!tenant?._id) {
-          throw new Error("Tenant record could not be loaded for editing.");
+          throw new Error(`${termTenant} record could not be loaded for editing.`);
         }
 
         const unitId = normalizeId(tenant.unit?._id || tenant.unit?.id || tenant.unit);
@@ -918,7 +934,7 @@ useEffect(() => {
         const message =
           error?.response?.data?.message ||
           error?.message ||
-          "Failed to load tenant details for editing.";
+          `Failed to load ${termTenant.toLowerCase()} details for editing.`;
         setGeneralError(message);
         toast.error(message);
       } finally {
@@ -1001,32 +1017,33 @@ useEffect(() => {
     if (effectiveFirstMonthRent > 0) {
       items.push({
         key: "rent",
-        title: "Rent",
+        title: termRent,
         amount: effectiveFirstMonthRent,
         isProrated: !!proratedInfo,
         detail: proratedInfo
-          ? `Prorated first-month rent (${proratedInfo.remainingDays} of ${proratedInfo.daysInMonth} days)${selectedUnitRecord?.unitNumber ? ` · Unit ${selectedUnitRecord.unitNumber}` : ""}`
+          ? `Prorated first-month ${termRent.toLowerCase()} (${proratedInfo.remainingDays} of ${proratedInfo.daysInMonth} days)${selectedUnitRecord?.unitNumber ? ` · ${termUnit} ${selectedUnitRecord.unitNumber}` : ""}`
           : selectedUnitRecord?.unitNumber
-            ? `Monthly rent for Unit ${selectedUnitRecord.unitNumber}`
-            : "Monthly rent charge",
+            ? `Monthly ${termRent.toLowerCase()} for ${termUnit} ${selectedUnitRecord.unitNumber}`
+            : `Monthly ${termRent.toLowerCase()} charge`,
       });
     }
 
     if (utilityTotal > 0) {
       items.push({
         key: "utility",
-        title: "Utilities",
+        title: termUtilities,
         amount: utilityTotal,
         detail: utilityRows.map((row) => row.label).join(", "),
       });
     }
 
     if (Number(formData.depositAmount || 0) > 0) {
+      const depositHolder = formData.depositHeldBy || (isSelfManagingLandlordMode ? "Landlord" : "Management Company");
       items.push({
         key: "deposit",
         title: "Deposit",
         amount: Number(formData.depositAmount || 0),
-        detail: `Held by ${formData.depositHeldBy || (isSelfManagingLandlordMode ? "Landlord" : "Management Company")}`,
+        detail: `Held by ${depositHolder === "Landlord" ? termLandlord : depositHolder}`,
       });
     }
 
@@ -1041,7 +1058,7 @@ useEffect(() => {
         : savedTenantPayload;
 
     if (!savedTenant?._id) {
-      throw new Error("Saved tenant record was not returned from the backend.");
+      throw new Error(`Saved ${termTenant.toLowerCase()} record was not returned from the backend.`);
     }
 
     const propertyId =
@@ -1066,7 +1083,7 @@ useEffect(() => {
       formData.unit;
 
     if (!currentCompany?._id || !propertyId || !landlordId || !unitId) {
-      throw new Error("Tenant was saved, but invoice context is incomplete for property, landlord, or unit.");
+      throw new Error(`${termTenant} was saved, but ${termInvoice.toLowerCase()} context is incomplete for ${termProperty.toLowerCase()}, ${termLandlord.toLowerCase()}, or ${termUnit.toLowerCase()}.`);
     }
 
     const invoiceDate = formData.moveInDate ? new Date(formData.moveInDate) : new Date();
@@ -1140,14 +1157,14 @@ useEffect(() => {
   const validateForm = () => {
     const errors = {};
 
-    if (!formData.name?.trim()) errors.name = "Tenant name is required";
+    if (!formData.name?.trim()) errors.name = `${termTenant} name is required`;
     if (formData.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
       errors.email = "Enter a valid email address";
     }
-    if (!formData.property?.trim()) errors.property = "Property is required";
-    if (!formData.unit?.trim()) errors.unit = "Unit is required";
+    if (!formData.property?.trim()) errors.property = `${termProperty} is required`;
+    if (!formData.unit?.trim()) errors.unit = `${termUnit} is required`;
     if (Array.isArray(formData.additionalUnits) && formData.additionalUnits.some((unitId) => normalizeId(unitId) === normalizeId(formData.unit))) {
-      errors.additionalUnits = "Additional units cannot include the primary unit";
+      errors.additionalUnits = `Additional ${termUnits.toLowerCase()} cannot include the primary ${termUnit.toLowerCase()}`;
     }
     if (!formData.moveInDate) errors.moveInDate = "Move-in date is required (billing anchor)";
     if (!formData.rent || parseFloat(formData.rent) <= 0) {
@@ -1184,7 +1201,7 @@ useEffect(() => {
 
     if (!isEditMode && formData.createLeaseFeeInvoice) {
       if (formData.leaseFeeAmount === "" || Number(formData.leaseFeeAmount) <= 0) {
-        errors.leaseFeeAmount = "Enter a valid lease / agreement fee amount";
+        errors.leaseFeeAmount = `Enter a valid ${termLease.toLowerCase()} / agreement fee amount`;
       }
     }
 
@@ -1195,7 +1212,7 @@ useEffect(() => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!canSaveTenant) {
-      toast.error(isEditMode ? "You do not have permission to update tenants" : "You do not have permission to create tenants");
+      toast.error(isEditMode ? `You do not have permission to update ${termTenants.toLowerCase()}` : `You do not have permission to create ${termTenants.toLowerCase()}`);
       return;
     }
     if (submittingRef.current) return;
@@ -1223,7 +1240,7 @@ useEffect(() => {
 
       if (!selectedUnitForSubmission || !isUnitAssignable) {
         submittingRef.current = false;
-        const availabilityMessage = "The selected unit is no longer available for tenant take-on. Refresh the Availability Status page and choose another unit.";
+        const availabilityMessage = `The selected ${termUnit.toLowerCase()} is no longer available for ${termTenant.toLowerCase()} take-on. Refresh the Availability Status page and choose another ${termUnit.toLowerCase()}.`;
         setGeneralError(availabilityMessage);
         setFieldErrors((prev) => ({ ...prev, unit: availabilityMessage }));
         toast.error(availabilityMessage);
@@ -1259,7 +1276,7 @@ useEffect(() => {
         : await dispatch(createTenant(payload)).unwrap();
       submittingRef.current = true;
       clearDraftState();
-      toast.success(result?.message || `Tenant ${isEditMode ? "updated" : "created"} successfully!`);
+      toast.success(result?.message || `${termTenant} ${isEditMode ? "updated" : "created"} successfully!`);
 
       setAdditionalUtilities([]);
       dispatch(getTenants({ business: currentCompany?._id }));
@@ -1282,7 +1299,8 @@ useEffect(() => {
       submittingRef.current = false;
       const errorMsg = sanitizeTenantSaveError(
         err,
-        `Failed to ${isEditMode ? "update" : "create"} tenant`
+        `Failed to ${isEditMode ? "update" : "create"} ${termTenant.toLowerCase()}`,
+        { tenant: termTenant, lease: termLease }
       );
       setGeneralError(errorMsg);
       toast.error(errorMsg);
@@ -1291,7 +1309,7 @@ useEffect(() => {
 
   const handleConfirmInitialInvoicing = async () => {
     if (!pendingInvoiceContext?.tenant?._id) {
-      toast.error("Saved tenant invoice context is missing.");
+      toast.error(`Saved ${termTenant.toLowerCase()} ${termInvoice.toLowerCase()} context is missing.`);
       setShowInvoicePrompt(false);
       navigate("/tenants");
       return;
@@ -1299,7 +1317,7 @@ useEffect(() => {
 
     const selectedItems = pendingInvoiceContext.items.filter((i) => checkedInvoiceItems.has(i.key));
     if (selectedItems.length === 0) {
-      toast.error("Select at least one invoice line to post.");
+      toast.error(`Select at least one ${termInvoice.toLowerCase()} line to post.`);
       return;
     }
 
@@ -1389,7 +1407,7 @@ useEffect(() => {
 
       await createTenantInvoicesBatch({ business: pendingInvoiceContext.business, items: invoiceItems });
 
-      toast.success("Tenant saved and opening invoice(s) created successfully.");
+      toast.success(`${termTenant} saved and opening ${termInvoices.toLowerCase()} created successfully.`);
       setShowInvoicePrompt(false);
       setPendingInvoiceContext(null);
       navigate("/tenants");
@@ -1398,7 +1416,7 @@ useEffect(() => {
         error?.response?.data?.error ||
         error?.response?.data?.message ||
         error?.message ||
-        "Tenant saved, but invoice creation failed.";
+        `${termTenant} saved, but ${termInvoice.toLowerCase()} creation failed.`;
       toast.error(message);
     } finally {
       setIsCreatingInitialInvoices(false);
@@ -1408,7 +1426,7 @@ useEffect(() => {
   const handleSkipInitialInvoicing = () => {
     setShowInvoicePrompt(false);
     setPendingInvoiceContext(null);
-    toast.info("Tenant was saved without creating invoice(s).");
+    toast.info(`${termTenant} was saved without creating ${termInvoices.toLowerCase()}.`);
     navigate("/tenants");
   };
 
@@ -1446,8 +1464,8 @@ useEffect(() => {
             </button>
             <div className="h-4 w-px bg-[#2A5C4A]" />
             <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">Tenants</div>
-              <h1 className="text-sm font-black text-white leading-none">{isEditMode ? "Edit Tenant" : "New Tenant"}</h1>
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">{termTenants}</div>
+              <h1 className="text-sm font-black text-white leading-none">{isEditMode ? `Edit ${termTenant}` : `New ${termTenant}`}</h1>
             </div>
           </div>
         </div>
@@ -1463,7 +1481,7 @@ useEffect(() => {
           {isEditMode && tenantLoading ? (
             <div className="rounded-lg border border-slate-200 bg-white px-6 py-10 flex items-center justify-center gap-3 text-slate-700">
               <Spinner size="sm" />
-              <span className="text-xs font-semibold">Loading tenant details...</span>
+              <span className="text-xs font-semibold">Loading {termTenant.toLowerCase()} details...</span>
             </div>
           ) : (
           <form id="tenant-form" onSubmit={handleSubmit}>
@@ -1474,7 +1492,7 @@ useEffect(() => {
                 <div className="flex items-center gap-2.5 border-b border-slate-200 bg-slate-50 px-3 py-2">
                   <span className="flex h-7 w-7 items-center justify-center rounded bg-[#0B3B2E]/10 text-[#0B3B2E]"><FaUser size={13} /></span>
                   <div>
-                    <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700 leading-tight">Tenant Information</h3>
+                    <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700 leading-tight">{termTenant} Information</h3>
                     <p className="text-[10px] text-slate-500 leading-tight">Identity and contact details</p>
                   </div>
                   <div className="ml-auto">
@@ -1483,7 +1501,7 @@ useEffect(() => {
                       name="tenantCode"
                       value={formData.tenantCode}
                       onChange={handleInputChange}
-                      placeholder="Tenant Code (auto)"
+                      placeholder={`${termTenant} Code (auto)`}
                       className="h-7 w-36 rounded border border-slate-200 bg-white px-2 text-xs font-mono text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/30"
                     />
                   </div>
@@ -1518,7 +1536,7 @@ useEffect(() => {
                     </div>
                     {fieldErrors.email
                       ? <p className="mt-1 text-xs text-red-600">{fieldErrors.email}</p>
-                      : <p className="mt-1 text-[11px] text-slate-400">Used for email notifications &amp; receipts</p>}
+                      : <p className="mt-1 text-[11px] text-slate-400">Used for email notifications &amp; {termReceipts.toLowerCase()}</p>}
                   </div>
 
                   <div>
@@ -1538,8 +1556,8 @@ useEffect(() => {
                 <div className="flex items-center gap-2.5 border-b border-slate-200 bg-slate-50 px-3 py-2">
                   <span className="flex h-7 w-7 items-center justify-center rounded bg-emerald-100 text-emerald-600"><FaBuilding size={13} /></span>
                   <div>
-                    <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700 leading-tight">Property &amp; Unit</h3>
-                    <p className="text-[10px] text-slate-500 leading-tight">Assign a property and unit to this tenant</p>
+                    <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700 leading-tight">{termProperty} &amp; {termUnit}</h3>
+                    <p className="text-[10px] text-slate-500 leading-tight">Assign a {termProperty.toLowerCase()} and {termUnit.toLowerCase()} to this {termTenant.toLowerCase()}</p>
                   </div>
                 </div>
                 <div className="p-4 space-y-4">
@@ -1554,13 +1572,13 @@ useEffect(() => {
                           </p>
                           <p className="mt-1 text-xs text-slate-600">
                             Status: <span className="font-semibold text-slate-800">{preselectedUnitBanner.statusLabel}</span>
-                            {preselectedUnitBanner.rentLabel ? ` • Rent: ${preselectedUnitBanner.rentLabel}` : ""}
+                            {preselectedUnitBanner.rentLabel ? ` • ${termRent}: ${preselectedUnitBanner.rentLabel}` : ""}
                           </p>
                           <p className="mt-2 text-xs text-slate-500">
-                            This unit was opened directly from Availability Status.
+                            This {termUnit.toLowerCase()} was opened directly from Availability Status.
                             {takeOnSelectionLocked
-                              ? " Property and unit are locked to avoid assigning the wrong space."
-                              : " You can now change the property or unit selection manually."}
+                              ? ` ${termProperty} and ${termUnit.toLowerCase()} are locked to avoid assigning the wrong space.`
+                              : ` You can now change the ${termProperty.toLowerCase()} or ${termUnit.toLowerCase()} selection manually.`}
                           </p>
                         </div>
 
@@ -1604,9 +1622,9 @@ useEffect(() => {
                   )}
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                     <MilikSelect
-                      label="Property"
+                      label={termProperty}
                       required
-                      placeholder="Select Property"
+                      placeholder={`Select ${termProperty}`}
                       items={activeProperties}
                       value={formData.property}
                       onChange={(val) => {
@@ -1622,9 +1640,9 @@ useEffect(() => {
                     />
 
                     <MilikSelect
-                      label={isEditMode ? "Unit" : "Unit (Vacant Only)"}
+                      label={isEditMode ? termUnit : `${termUnit} (Vacant Only)`}
                       required
-                      placeholder="Select Unit"
+                      placeholder={`Select ${termUnit}`}
                       items={availableUnits}
                       value={formData.unit}
                       onChange={(val) => {
@@ -1659,11 +1677,11 @@ useEffect(() => {
                           }}
                           className="rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]/30 disabled:cursor-not-allowed disabled:opacity-60"
                         />
-                        Assign additional units to this tenant
+                        Assign additional {termUnits.toLowerCase()} to this {termTenant.toLowerCase()}
                       </label>
-                      <p className="mt-1 text-xs text-slate-500">Keep the selected unit as the primary unit, then reveal and tick extra units only when this tenant should occupy more than one unit.</p>
+                      <p className="mt-1 text-xs text-slate-500">Keep the selected {termUnit.toLowerCase()} as the primary {termUnit.toLowerCase()}, then reveal and tick extra {termUnits.toLowerCase()} only when this {termTenant.toLowerCase()} should occupy more than one {termUnit.toLowerCase()}.</p>
                       {showAdditionalUnits && selectedAdditionalUnitRecords.length > 0 && (
-                        <p className="mt-2 text-xs font-semibold text-emerald-700">{selectedAdditionalUnitRecords.length} additional unit(s) selected.</p>
+                        <p className="mt-2 text-xs font-semibold text-emerald-700">{selectedAdditionalUnitRecords.length} additional {termUnit.toLowerCase()}(s) selected.</p>
                       )}
                       {showAdditionalUnits ? (
                         <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
@@ -1719,7 +1737,7 @@ useEffect(() => {
                   <span className="flex h-7 w-7 items-center justify-center rounded bg-blue-100 text-blue-600"><FaMoneyBillWave size={13} /></span>
                   <div>
                     <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700 leading-tight">Billing Information</h3>
-                    <p className="text-[10px] text-slate-500 leading-tight">Rent, deposit and billing settings</p>
+                    <p className="text-[10px] text-slate-500 leading-tight">{termRent}, deposit and billing settings</p>
                   </div>
                 </div>
                 <div className="p-4 space-y-4">
@@ -1742,7 +1760,7 @@ useEffect(() => {
 
                     <div>
                       <label className={labelClass}>
-                        Monthly Rent (Ksh) <span className="text-red-500">*</span>
+                        Monthly {termRent} (Ksh) <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="number"
@@ -1785,8 +1803,8 @@ useEffect(() => {
                         value={formData.depositHeldBy}
                         onChange={(v) => handleInputChange({ target: { name: "depositHeldBy", value: v ?? (isSelfManagingLandlordMode ? "Landlord" : "Management Company") } })}
                         options={isSelfManagingLandlordMode
-                          ? [{ value: "Landlord", label: "Landlord" }]
-                          : [{ value: "Management Company", label: "Management Company" }, { value: "Landlord", label: "Landlord" }]
+                          ? [{ value: "Landlord", label: termLandlord }]
+                          : [{ value: "Management Company", label: "Management Company" }, { value: "Landlord", label: termLandlord }]
                         }
                         disabled={isSelfManagingLandlordMode}
                         error={fieldErrors.depositHeldBy || ""}
@@ -1794,8 +1812,8 @@ useEffect(() => {
                       />
                       <p className="mt-1 text-xs text-slate-500">
                         {isSelfManagingLandlordMode
-                          ? "This company is operating as the owner, so deposits default to landlord-held for new tenants."
-                          : "Choose whether the security deposit is held by the management company or the landlord."}
+                          ? `This company is operating as the owner, so deposits default to ${termLandlord.toLowerCase()}-held for new ${termTenants.toLowerCase()}.`
+                          : `Choose whether the security deposit is held by the management company or the ${termLandlord.toLowerCase()}.`}
                       </p>
                       {fieldErrors.depositHeldBy && (
                         <p className="mt-1 text-xs text-red-600">{fieldErrors.depositHeldBy}</p>
@@ -1803,7 +1821,7 @@ useEffect(() => {
                     </div>
 
                     <div className="md:col-span-2">
-                      <label className={labelClass}>Utilities & Charges (Ksh)</label>
+                      <label className={labelClass}>{termUtilities} & Charges (Ksh)</label>
                       <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-lg p-3 min-h-10 max-h-32 overflow-y-auto">
                         {combinedUtilitiesPreview.length > 0 ? (
                           <div className="space-y-1">
@@ -1822,7 +1840,7 @@ useEffect(() => {
                             })}
                           </div>
                         ) : (
-                          <p className="text-xs text-green-600">No utilities</p>
+                          <p className="text-xs text-green-600">No {termUtilities.toLowerCase()}</p>
                         )}
                       </div>
                     </div>
@@ -1840,14 +1858,14 @@ useEffect(() => {
                               ) || 0)
                             ).toFixed(2)}
                           </p>
-                          <p className="text-xs text-[#0B3B2E]/70 mt-0.5">Rent + Utilities</p>
+                          <p className="text-xs text-[#0B3B2E]/70 mt-0.5">{termRent} + {termUtilities}</p>
                         </div>
                       </div>
                     </div>
 
                     <div className="md:col-span-1">
                       <AppSelect
-                        label="Lease Type"
+                        label={`${termLease} Type`}
                         required
                         value={formData.leaseType}
                         onChange={(v) => handleInputChange({ target: { name: "leaseType", value: v ?? "at_will" } })}
@@ -1866,16 +1884,16 @@ useEffect(() => {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <h4 className={`text-sm font-bold ${isLettingProperty ? "text-blue-900" : "text-[#0B3B2E]"}`}>
-                            {isLettingProperty ? "Letting Fee" : "Lease / Agreement Fee"}
+                            {isLettingProperty ? "Letting Fee" : `${termLease} / Agreement Fee`}
                           </h4>
                           <p className={`mt-1 text-xs ${isLettingProperty ? "text-blue-800" : "text-[#0B3B2E]/70"}`}>
                             {isLettingProperty
-                              ? `This property is managed under Letting. A letting fee is automatically applied based on the property setting (${
+                              ? `This ${termProperty.toLowerCase()} is managed under Letting. A letting fee is automatically applied based on the ${termProperty.toLowerCase()} setting (${
                                   selectedPropertyRecord?.lettingFeeMode === "fixed"
                                     ? `fixed Ksh ${Number(selectedPropertyRecord?.lettingFeeValue || 0).toLocaleString()}`
-                                    : `${selectedPropertyRecord?.lettingFeeValue ?? 100}% of rent`
+                                    : `${selectedPropertyRecord?.lettingFeeValue ?? 100}% of ${termRent.toLowerCase()}`
                                 }).`
-                              : "Create a one-time tenant onboarding charge. This is posted as manager/company income and excluded from landlord statements."}
+                              : `Create a one-time ${termTenant.toLowerCase()} onboarding charge. This is posted as manager/company income and excluded from ${termLandlord.toLowerCase()} statements.`}
                           </p>
                           {isLettingProperty && computedLettingFee > 0 && (
                             <p className="mt-1 text-xs font-semibold text-blue-900">
@@ -1910,7 +1928,7 @@ useEffect(() => {
                         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <label className={labelClass}>
-                              {isLettingProperty ? "Letting Fee Amount (Ksh)" : "Lease / Agreement Fee Amount (Ksh)"}{" "}
+                              {isLettingProperty ? "Letting Fee Amount (Ksh)" : `${termLease} / Agreement Fee Amount (Ksh)`}{" "}
                               <span className="text-red-500">*</span>
                             </label>
                             <input
@@ -1940,11 +1958,11 @@ useEffect(() => {
                               name="leaseFeeDescription"
                               value={formData.leaseFeeDescription}
                               onChange={handleInputChange}
-                              placeholder={isLettingProperty ? "Letting fee" : "Lease preparation and agreement fee"}
+                              placeholder={isLettingProperty ? "Letting fee" : `${termLease} preparation and agreement fee`}
                               className={inputClass}
                             />
                             <p className="mt-1 text-xs text-slate-500">
-                              Posting uses the Lease / Agreement Fee Income Account under Accounting Defaults when configured.
+                              Posting uses the {termLease} / Agreement Fee Income Account under Accounting Defaults when configured.
                             </p>
                           </div>
                         </div>
@@ -1956,7 +1974,7 @@ useEffect(() => {
                   {formData.leaseType === "fixed" && (
                     <div className="mt-4">
                       <label className={labelClass}>
-                        Move-Out Date (End of Lease) <span className="text-red-500">*</span>
+                        Move-Out Date (End of {termLease}) <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="date"
@@ -1976,7 +1994,7 @@ useEffect(() => {
                       <div className="flex items-start gap-2">
                         <FaCalculator className="text-[#0B3B2E] mt-1 flex-shrink-0" />
                         <div className="flex-1">
-                          <h4 className="font-bold text-[#0B3B2E] text-sm mb-2">Prorated Rent Calculation (First Month)</h4>
+                          <h4 className="font-bold text-[#0B3B2E] text-sm mb-2">Prorated {termRent} Calculation (First Month)</h4>
                           <div className="text-xs text-[#0B3B2E]/70 space-y-1">
                             <p>• Days in month: <span className="font-bold">{proratedInfo.daysInMonth}</span></p>
                             <p>• Remaining days (including start date): <span className="font-bold">{proratedInfo.remainingDays}</span></p>
@@ -2022,8 +2040,8 @@ useEffect(() => {
                   <div className="flex items-center gap-2.5">
                     <span className="flex h-7 w-7 items-center justify-center rounded bg-indigo-100 text-indigo-600"><FaBolt size={13} /></span>
                     <div>
-                      <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700 leading-tight">Additional Utilities</h3>
-                      <p className="text-[10px] text-slate-500 leading-tight">Add utilities beyond the unit's defaults</p>
+                      <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700 leading-tight">Additional {termUtilities}</h3>
+                      <p className="text-[10px] text-slate-500 leading-tight">Add {termUtilities.toLowerCase()} beyond the {termUnit.toLowerCase()}'s defaults</p>
                     </div>
                   </div>
                   <button
@@ -2117,7 +2135,7 @@ useEffect(() => {
                   <span className="flex h-7 w-7 items-center justify-center rounded bg-red-100 text-red-500"><FaExclamationTriangle size={13} /></span>
                   <div>
                     <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700 leading-tight">Emergency Contact</h3>
-                    <p className="text-[10px] text-slate-500 leading-tight">Optional backup contact for this tenant</p>
+                    <p className="text-[10px] text-slate-500 leading-tight">Optional backup contact for this {termTenant.toLowerCase()}</p>
                   </div>
                 </div>
                 <div className="p-4">
@@ -2197,7 +2215,7 @@ useEffect(() => {
               className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-black text-white transition ${loading || tenantLoading ? "bg-slate-400 cursor-not-allowed" : "bg-[#0B3B2E] hover:bg-[#0A3127]"}`}
             >
               {loading ? <Spinner size="sm" /> : <FaSave />}
-              {loading ? (isEditMode ? "Updating…" : "Saving…") : (isEditMode ? "Update Tenant" : "Save Tenant")}
+              {loading ? (isEditMode ? "Updating…" : "Saving…") : (isEditMode ? `Update ${termTenant}` : `Save ${termTenant}`)}
             </button>
           </div>
         </div>
@@ -2209,10 +2227,10 @@ useEffect(() => {
             {/* Header */}
             <div className={`flex items-start justify-between gap-3 ${MILIK_GREEN_BG} px-4 py-3`}>
               <div>
-                <h2 className="text-sm font-black text-white tracking-tight">Post opening invoice?</h2>
+                <h2 className="text-sm font-black text-white tracking-tight">Post opening {termInvoice.toLowerCase()}?</h2>
                 <p className="text-[11px] text-white/70 mt-0.5 leading-tight">
                   {pendingInvoiceContext.tenant?.name || formData.name}
-                  {selectedUnitRecord?.unitNumber ? ` · Unit ${selectedUnitRecord.unitNumber}` : ""}
+                  {selectedUnitRecord?.unitNumber ? ` · ${termUnit} ${selectedUnitRecord.unitNumber}` : ""}
                   {(selectedPropertyRecord?.propertyName || selectedPropertyRecord?.name) ? ` · ${selectedPropertyRecord?.propertyName || selectedPropertyRecord?.name}` : ""}
                 </p>
               </div>
@@ -2231,7 +2249,7 @@ useEffect(() => {
               <div className="px-4 pt-3">
                 <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
                   <p className="text-[11px] font-semibold text-blue-900">
-                    {pendingInvoiceContext?.isLettingFee ? "Letting fee" : "Lease / Agreement fee"} already posted
+                    {pendingInvoiceContext?.isLettingFee ? "Letting fee" : `${termLease} / Agreement fee`} already posted
                   </p>
                   <p className="text-[10px] text-blue-700 mt-0.5">
                     KES {Number(pendingInvoiceContext.leaseFeeAmount).toLocaleString()} was invoiced automatically when the tenant was saved.
@@ -2302,7 +2320,7 @@ useEffect(() => {
                   isCreatingInitialInvoices ? "bg-slate-400 cursor-not-allowed" : `${MILIK_ORANGE_BG} ${MILIK_ORANGE_BG_HOVER}`
                 }`}
               >
-                {isCreatingInitialInvoices ? <><Spinner size="sm" /> Creating…</> : <><FaSave size={10} /> Continue &amp; Invoice</>}
+                {isCreatingInitialInvoices ? <><Spinner size="sm" /> Creating…</> : <><FaSave size={10} /> Continue &amp; {termInvoice}</>}
               </button>
             </div>
           </div>

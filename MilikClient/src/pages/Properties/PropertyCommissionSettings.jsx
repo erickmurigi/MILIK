@@ -10,6 +10,7 @@ import { adminRequests } from '../../utils/requestMethods';
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from '../../redux/selectors';
 import { hasCompanyPermission } from '../../utils/permissions';
 import AppSelect from '../../components/common/AppSelect';
+import { useTerm } from '../../hooks/useTerm';
 
 const CARD = 'rounded-2xl border border-slate-200 bg-white shadow-sm';
 const INPUT = 'w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20';
@@ -73,6 +74,12 @@ const normalizePropertyForm = (property) => ({
 });
 
 const PropertyCommissionSettings = () => {
+  const termProperty   = useTerm('property');
+  const termProperties = useTerm('properties');
+  const termRent       = useTerm('rent');
+  const termTenant     = useTerm('tenant');
+  const termTenants    = useTerm('tenants');
+  const termLandlord   = useTerm('landlord');
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const currentUser = useSelector(selectCurrentUser);
@@ -165,13 +172,13 @@ const PropertyCommissionSettings = () => {
     return [
       {
         key: 'rent',
-        label: 'Rent',
+        label: termRent,
         categoryType: 'rent',
-        description: 'Classic rent line items remain commissionable by default for backward compatibility.',
+        description: `Classic ${termRent.toLowerCase()} line items remain commissionable by default for backward compatibility.`,
       },
       ...utilityRows,
     ];
-  }, [taxConfig.utilityTypes]);
+  }, [taxConfig.utilityTypes, termRent]);
 
   useEffect(() => {
     if (!selectedProperty) {
@@ -272,10 +279,10 @@ const PropertyCommissionSettings = () => {
     setSaving(true);
     try {
       await dispatch(updateProperty({ id: selectedProperty._id, propertyData: payload })).unwrap();
-      toast.success('Property commission settings updated successfully');
+      toast.success(`${termProperty} commission settings updated successfully`);
       dispatch(getProperties({ business: businessId, limit: 500 }));
     } catch (error) {
-      toast.error(error || 'Failed to update property commission settings');
+      toast.error(error || `Failed to update ${termProperty.toLowerCase()} commission settings`);
     } finally {
       setSaving(false);
     }
@@ -289,7 +296,7 @@ const PropertyCommissionSettings = () => {
             <div>
               <h1 className="text-3xl font-bold text-slate-900">Commission Settings</h1>
               <p className="mt-1 text-sm text-slate-600">
-                Configure property-level management commission rules and VAT/tax treatment for statements.
+                Configure {termProperty.toLowerCase()}-level management commission rules and VAT/tax treatment for statements.
               </p>
             </div>
             <button
@@ -301,12 +308,12 @@ const PropertyCommissionSettings = () => {
           </div>
 
           <div className={`${CARD} p-5`}>
-            <label className="mb-0.5 block text-xs font-semibold text-slate-700">Select Property</label>
+            <label className="mb-0.5 block text-xs font-semibold text-slate-700">Select {termProperty}</label>
             <AppSelect
               value={selectedPropertyId}
               onChange={(v) => setSelectedPropertyId(v ?? "")}
               options={properties.map((p) => ({ value: p._id, label: `${p.propertyCode} - ${p.propertyName}` }))}
-              placeholder="-- Select Property --"
+              placeholder={`-- Select ${termProperty} --`}
               searchable
               disabled={loading}
               size="sm"
@@ -317,7 +324,7 @@ const PropertyCommissionSettings = () => {
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className={`${GREEN} rounded-2xl p-5 text-white shadow-sm`}>
                 <div className="text-xl font-bold">{selectedProperty.propertyName}</div>
-                <div className="mt-1 text-sm text-emerald-50">Property Code: {selectedProperty.propertyCode}</div>
+                <div className="mt-1 text-sm text-emerald-50">{termProperty} Code: {selectedProperty.propertyCode}</div>
               </div>
 
               {String(selectedProperty.letManage || "").toLowerCase() === "letting" && (
@@ -325,10 +332,10 @@ const PropertyCommissionSettings = () => {
                   <div className="flex items-start gap-3">
                     <FaInfoCircle className="mt-0.5 flex-shrink-0 text-amber-600" />
                     <div>
-                      <p className="text-sm font-bold text-amber-900">Letting Mode Property</p>
+                      <p className="text-sm font-bold text-amber-900">Letting Mode {termProperty}</p>
                       <p className="mt-1 text-xs text-amber-800">
-                        This property is set to <strong>Letting</strong> mode. Tenant payments go directly to the landlord and the landlord holds the deposit.
-                        Commission processing and landlord disbursement statements are not available for Letting properties.
+                        This {termProperty.toLowerCase()} is set to <strong>Letting</strong> mode. {termTenant} payments go directly to the {termLandlord.toLowerCase()} and the {termLandlord.toLowerCase()} holds the deposit.
+                        Commission processing and {termLandlord.toLowerCase()} disbursement statements are not available for Letting {termProperties.toLowerCase()}.
                         Any commission settings saved here will be stored but will not be applied to processed statements.
                       </p>
                     </div>
@@ -339,7 +346,7 @@ const PropertyCommissionSettings = () => {
               <div className="grid gap-6 lg:grid-cols-2">
                 <div className={`${CARD} p-5`}>
                   <h2 className="text-lg font-bold text-slate-900">Commission Rule</h2>
-                  <p className="mt-1 text-xs text-slate-500">These settings control the core management commission architecture for this property.</p>
+                  <p className="mt-1 text-xs text-slate-500">These settings control the core management commission architecture for this {termProperty.toLowerCase()}.</p>
 
                   <div className="mt-5 space-y-4">
                     <div>
@@ -393,7 +400,7 @@ const PropertyCommissionSettings = () => {
                         onChange={(v) => setFormData((f) => ({ ...f, commissionRecognitionBasis: v ?? '' }))}
                         options={[
                           { value: 'received', label: 'Collections Received' },
-                          { value: 'invoiced', label: 'Rent Expected (Invoiced / Accrual)' },
+                          { value: 'invoiced', label: `${termRent} Expected (Invoiced / Accrual)` },
                           { value: 'received_manager_only', label: 'Manager-Held Collections Only' },
                         ]}
                         size="sm"
@@ -401,13 +408,13 @@ const PropertyCommissionSettings = () => {
                     </div>
 
                     <div>
-                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tenants Pay To</label>
+                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">{termTenants} Pay To</label>
                       <AppSelect
                         value={formData.tenantsPaysTo || null}
                         onChange={(v) => setFormData((f) => ({ ...f, tenantsPaysTo: v ?? '' }))}
                         options={[
-                          { value: 'propertyManager', label: 'Property Manager' },
-                          { value: 'landlord', label: 'Landlord' },
+                          { value: 'propertyManager', label: `${termProperty} Manager` },
+                          { value: 'landlord', label: termLandlord },
                         ]}
                         size="sm"
                       />
@@ -419,8 +426,8 @@ const PropertyCommissionSettings = () => {
                         value={formData.depositHeldBy || null}
                         onChange={(v) => setFormData((f) => ({ ...f, depositHeldBy: v ?? '' }))}
                         options={[
-                          { value: 'propertyManager', label: 'Property Manager' },
-                          { value: 'landlord', label: 'Landlord' },
+                          { value: 'propertyManager', label: `${termProperty} Manager` },
+                          { value: 'landlord', label: termLandlord },
                         ]}
                         size="sm"
                       />

@@ -10,6 +10,7 @@ import {
   FaClock,
 } from "react-icons/fa";
 import { adminRequests } from "../../utils/requestMethods";
+import { useTerms } from "../../hooks/useTerm";
 
 const TABS = [
   { id: "sms", label: "SMS Sent", icon: <FaSms size={11} />, channel: "sms" },
@@ -42,6 +43,7 @@ const CommunicationHub = ({ darkMode }) => {
   const navigate = useNavigate();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const currentUser = useSelector((s) => s.auth?.currentUser);
+  const { tenants: termTenants, invoices: termInvoices } = useTerms("tenants", "invoices");
 
   const businessId = useMemo(
     () =>
@@ -91,7 +93,7 @@ const CommunicationHub = ({ darkMode }) => {
             Communications
           </h3>
           <p className={`mt-1 text-xs font-medium ${darkMode ? "text-gray-400" : "text-gray-600"}`}>
-            Recent sent messages. Send SMS/emails from Tenants or Invoices.
+            Recent sent messages. Send SMS/emails from {termTenants} or {termInvoices}.
           </p>
         </div>
         <div className="flex items-center gap-1 shrink-0">
@@ -100,7 +102,7 @@ const CommunicationHub = ({ darkMode }) => {
             onClick={() => navigate("/tenants")}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50 transition"
           >
-            <FaSms size={9} /> Tenants
+            <FaSms size={9} /> {termTenants}
           </button>
           <button
             type="button"

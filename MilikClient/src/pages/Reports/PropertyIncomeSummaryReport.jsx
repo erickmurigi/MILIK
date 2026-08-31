@@ -30,7 +30,7 @@ const PropertyIncomeSummaryReport = () => {
   const properties = useSelector(selectAllProperties);
   const landlords = useSelector(selectAllLandlords);
   const isLandlordMode = isSelfManagingLandlordCompany(currentCompany || currentUser?.company);
-  const { property: termProperty, landlord: termLandlord } = useTerms("property", "landlord");
+  const { property: termProperty, landlord: termLandlord, landlords: termLandlords, properties: termProperties } = useTerms("property", "landlord", "landlords", "properties");
 
   const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company || '';
   const companyName = currentCompany?.name
@@ -376,7 +376,7 @@ const PropertyIncomeSummaryReport = () => {
                     value={filters.landlordId}
                     onChange={(v) => setFilters((prev) => ({ ...prev, landlordId: v ?? '' }))}
                     options={landlordOptions}
-                    placeholder="All landlords"
+                    placeholder={`All ${termLandlords.toLowerCase()}`}
                     searchable
                     clearable
                     size="sm"
@@ -399,7 +399,7 @@ const PropertyIncomeSummaryReport = () => {
                   { label: 'Collection Rate',   value: formatPercent(summary.collectionRate), accent: 'text-slate-800' },
                   { label: 'Total Expenses',    value: formatMoney(summary.totalExpenses),    accent: 'text-red-600' },
                   { label: 'Net Income (Cash)', value: formatMoney(summary.netIncome),        accent: Number(summary.netIncome || 0) >= 0 ? 'text-emerald-700' : 'text-red-600' },
-                  { label: 'Properties',        value: summary.propertyCount || 0,            accent: 'text-slate-800' },
+                  { label: termProperties,       value: summary.propertyCount || 0,            accent: 'text-slate-800' },
                 ].map((item) => (
                   <div key={item.label} className="flex-1 px-4 py-3">
                     <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">{item.label}</p>

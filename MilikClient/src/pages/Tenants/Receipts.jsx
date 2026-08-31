@@ -1242,11 +1242,11 @@ const Receipts = ({ viewMode = "tenant" }) => {
   <div class="body-grid">
     <div>
       <div class="sec-label">Received From</div>
-      <div class="fk">Tenant</div>
+      <div class="fk">${termTenant}</div>
       <div class="fv lg">${escapeHtml(tenantName)}</div>
-      <div class="fk">Property</div>
+      <div class="fk">${termProperty}</div>
       <div class="fv">${escapeHtml(propertyName)}</div>
-      <div class="fk">Unit</div>
+      <div class="fk">${termUnit}</div>
       <div class="fv">${escapeHtml(unitName)}</div>
     </div>
     <div>

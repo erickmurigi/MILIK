@@ -1,6 +1,7 @@
 import React from "react";
 import { useSelector } from "react-redux";
 import { selectCurrentUser, selectCurrentCompany } from "../../redux/selectors";
+import { useTerms } from "../../hooks/useTerm";
 import { hasCompanyPermission } from "../../utils/permissions";
 import {
   FaEye,
@@ -73,6 +74,7 @@ const StatementsTable = ({
 }) => {
   const currentUser = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
+  const { landlord: termLandlord, property: termProperty } = useTerms("landlord", "property");
   const allowApprove = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "approve", "propertyManagement");
   const allowSend = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "send", "propertyManagement");
   const allowRevise = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "update", "propertyManagement");
@@ -111,7 +113,7 @@ const StatementsTable = ({
     return (
       <div className="flex flex-col items-center justify-center py-14 text-center">
         <div className="h-10 w-10 animate-spin rounded-full border-[3px] border-[#D7E0DB] border-t-[#0B3B2E]" />
-        <p className="mt-3 text-sm font-medium text-gray-600">Loading landlord statements...</p>
+        <p className="mt-3 text-sm font-medium text-gray-600">Loading {termLandlord} statements...</p>
       </div>
     );
   }
@@ -124,7 +126,7 @@ const StatementsTable = ({
         </div>
         <h3 className="text-lg font-bold text-gray-900">No statements found</h3>
         <p className="mt-2 max-w-md text-sm text-gray-500">
-          Generate a new landlord statement or adjust your filters to see matching records.
+          Generate a new {termLandlord} statement or adjust your filters to see matching records.
         </p>
       </div>
     );
@@ -136,7 +138,7 @@ const StatementsTable = ({
         <thead>
           <tr className="border-b border-[#E8EEEA] bg-[#F7FAF8]">
             <th className="px-5 py-4 text-left text-[11px] font-bold uppercase tracking-[0.14em] text-[#486255]">Statement</th>
-            <th className="px-5 py-4 text-left text-[11px] font-bold uppercase tracking-[0.14em] text-[#486255]">Property / Landlord</th>
+            <th className="px-5 py-4 text-left text-[11px] font-bold uppercase tracking-[0.14em] text-[#486255]">{termProperty} / {termLandlord}</th>
             <th className="px-5 py-4 text-left text-[11px] font-bold uppercase tracking-[0.14em] text-[#486255]">Period</th>
             <th className="px-5 py-4 text-center text-[11px] font-bold uppercase tracking-[0.14em] text-[#486255]">Version</th>
             <th className="px-5 py-4 text-right text-[11px] font-bold uppercase tracking-[0.14em] text-[#486255]">Opening</th>

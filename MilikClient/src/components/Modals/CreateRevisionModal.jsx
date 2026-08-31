@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import { FaTimes, FaEdit } from "react-icons/fa";
+import { useTerms } from "../../hooks/useTerm";
 
 const CreateRevisionModal = ({ isOpen, statement, onClose, onCreateRevision, loading = false }) => {
+  const { rent: termRent } = useTerms("rent");
   const [revisionReason, setRevisionReason] = useState("");
   const [validationError, setValidationError] = useState("");
 
@@ -63,7 +65,7 @@ const CreateRevisionModal = ({ isOpen, statement, onClose, onCreateRevision, loa
                 value={revisionReason}
                 onChange={(e) => { setRevisionReason(e.target.value); setValidationError(""); }}
                 rows={5}
-                placeholder={"Describe why this statement needs revision:\n- Corrected rent amount\n- Added missing payment\n- Adjusted opening balance"}
+                placeholder={`Describe why this statement needs revision:\n- Corrected ${termRent.toLowerCase()} amount\n- Added missing payment\n- Adjusted opening balance`}
                 className={`w-full border px-3 py-2 text-sm focus:outline-none focus:border-[#0B3B2E] resize-none ${validationError ? "border-red-500" : "border-slate-300"}`}
               />
               {validationError && <p className="text-red-600 text-xs mt-1">{validationError}</p>}

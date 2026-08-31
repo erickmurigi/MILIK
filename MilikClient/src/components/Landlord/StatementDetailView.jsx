@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState, useRef } from "react";
 import { useSelector } from "react-redux";
 import { selectCurrentUser, selectCurrentCompany } from "../../redux/selectors";
+import { useTerms } from "../../hooks/useTerm";
 import { hasCompanyPermission } from "../../utils/permissions";
 import {
   FaArrowLeft,
@@ -17,7 +18,7 @@ import StatementPrintView from "./StatementPrintView";
 const MILIK_GREEN = "#0B3B2E";
 const MILIK_ORANGE = "#FF8C00";
 
-const resolveStatementSettlement = (summary = {}) => {
+const resolveStatementSettlement = (summary = {}, landlordTerm = "Landlord") => {
   const netStatement = Number(summary?.netStatement || 0);
   const explicitRecovery = Math.max(
     Number(summary?.amountPayableByLandlordToManager || 0),
@@ -29,7 +30,7 @@ const resolveStatementSettlement = (summary = {}) => {
   if (isNegative) {
     return {
       isNegative: true,
-      label: summary?.settlementLabel || "Landlord Owes Manager",
+      label: summary?.settlementLabel || `${landlordTerm} Owes Manager`,
       amount: explicitRecovery > 0 ? explicitRecovery : Math.abs(netStatement),
     };
   }
@@ -63,6 +64,16 @@ const StatementDetailView = ({
 
   const currentUser = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
+  const {
+    landlord: termLandlord,
+    property: termProperty,
+    tenant: termTenant,
+    unit: termUnit,
+    rent: termRent,
+    utility: termUtility,
+    utilities: termUtilities,
+    invoice: termInvoice,
+  } = useTerms("landlord", "property", "tenant", "unit", "rent", "utility", "utilities", "invoice");
   const allowApprove = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "approve", "propertyManagement");
   const allowSend = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "send", "propertyManagement");
   const allowRevise = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "update", "propertyManagement");
@@ -134,7 +145,7 @@ const StatementDetailView = ({
     const fmt = (v) => `KES ${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
     const stmtNum = statement?.statementNumber || statement?.sourceStatementNumber || '—';
     const period = [statement?.periodStart, statement?.periodEnd].filter(Boolean).map(d => new Date(d).toLocaleDateString()).join(' — ') || '—';
-    win.document.write(`<!DOCTYPE html><html><head><title>Landlord Statement ${stmtNum}</title><style>
+    win.document.write(`<!DOCTYPE html><html><head><title>${termLandlord} Statement ${stmtNum}</title><style>
       @page{size:A4 portrait;margin:14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
       .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
       .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
@@ -154,14 +165,14 @@ const StatementDetailView = ({
       h3{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#0B3B2E;font-weight:900;margin:12px 0 5px}
       *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
     </style></head><body>
-    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${coName}</div><div class="ttl">Landlord Statement</div><div class="sub">Stmt #${stmtNum} · ${period} · ${statementTypeLabel}</div></div>
+    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${coName}</div><div class="ttl">${termLandlord} Statement</div><div class="sub">Stmt #${stmtNum} · ${period} · ${statementTypeLabel}</div></div>
     <div class="meta"><div>${coName}</div>${companyAddress ? `<div>${companyAddress}</div>` : ''}${companyPhone ? `<div>Tel: ${companyPhone}</div>` : ''}<div>Generated: ${new Date().toLocaleString()}</div></div></div>
     <div class="info">
-      <div class="box"><div class="box-label">Landlord</div><strong>${landlordName}</strong>${landlordEmail ? `<br>${landlordEmail}` : ''}</div>
-      <div class="box"><div class="box-label">Property</div><strong>${propertyName}</strong>${propertyAddress ? `<br>${propertyAddress}` : ''}</div>
+      <div class="box"><div class="box-label">${termLandlord}</div><strong>${landlordName}</strong>${landlordEmail ? `<br>${landlordEmail}` : ''}</div>
+      <div class="box"><div class="box-label">${termProperty}</div><strong>${propertyName}</strong>${propertyAddress ? `<br>${propertyAddress}` : ''}</div>
     </div>
-    ${tenantRows.length > 0 ? `<h3>Tenant Collection Summary</h3>
-    <table><thead><tr><th>Tenant</th><th>Unit</th><th class="r">Rent Invoiced</th><th class="r">Rent Collected</th><th class="r">Utility Invoiced</th><th class="r">Utility Collected</th></tr></thead>
+    ${tenantRows.length > 0 ? `<h3>${termTenant} Collection Summary</h3>
+    <table><thead><tr><th>${termTenant}</th><th>${termUnit}</th><th class="r">${termRent} Invoiced</th><th class="r">${termRent} Collected</th><th class="r">${termUtility} Invoiced</th><th class="r">${termUtility} Collected</th></tr></thead>
     <tbody>${tenantRows.map((row) => `<tr><td>${row.tenantName || '—'}</td><td>${row.unit || '—'}</td><td class="r">${fmt(row.invoicedRent || row.rent)}</td><td class="r">${fmt(row.paidRent || row.collected)}</td><td class="r">${fmt(row.invoicedUtility || row.utilityCharges)}</td><td class="r">${fmt(row.paidUtility || row.utilitiesCollected)}</td></tr>`).join('')}</tbody>
     <tfoot><tr><td colspan="2"><strong>TOTAL</strong></td><td class="r"><strong>${fmt(totalRentInvoiced)}</strong></td><td class="r"><strong>${fmt(totalRentReceived)}</strong></td><td class="r"></td><td class="r"></td></tr></tfoot></table>` : ''}
     ${expenseLines.length > 0 ? `<h3>Deductions / Expenses</h3>
@@ -199,7 +210,7 @@ const StatementDetailView = ({
     const tenantId =
       String(tenantObj?._id || line?.tenant || metadata?.tenantId || metadata?.tenant || "") ||
       `line-${line?._id || Math.random()}`;
-    const tenantName = tenantObj?.name || metadata?.tenantName || "Unassigned Tenant";
+    const tenantName = tenantObj?.name || metadata?.tenantName || `Unassigned ${termTenant}`;
     const unitLabel = unitObj?.unitNumber || unitObj?.name || metadata?.unit || "-";
     const paymentMethod = tenantObj?.paymentMethod || metadata?.paymentMethod || "-";
 
@@ -280,10 +291,10 @@ const StatementDetailView = ({
     summary.settlementBasisAmount ?? summary.basisCollections ?? summary.managerCollections ?? 0
   );
   const utilityPassThroughLabel =
-    summary.utilityPassThroughLabel || "Utilities (added as billed)";
+    summary.utilityPassThroughLabel || `${termUtilities} (added as billed)`;
   const utilityPassThroughAmount = Number(summary.utilityPassThroughAmount ?? 0);
   const invoiceVatPassThroughLabel =
-    summary.invoiceVatPassThroughLabel || "Invoice VAT (pass-through)";
+    summary.invoiceVatPassThroughLabel || `${termInvoice} VAT (pass-through)`;
   const invoiceVatPassThroughAmount = Number(
     summary.invoiceVatPassThroughAmount ?? summary.totalInvoiceVatInvoiced ?? 0
   );
@@ -412,7 +423,7 @@ const StatementDetailView = ({
       <div className="bg-white border border-gray-200 rounded-xl p-6">
         <div className="flex flex-col lg:flex-row justify-between gap-6">
           <div>
-            <h1 className="text-2xl font-extrabold text-gray-900">Landlord Statement Advice</h1>
+            <h1 className="text-2xl font-extrabold text-gray-900">{termLandlord} Statement Advice</h1>
             <p className="text-gray-700 font-semibold mt-1">{companyName}</p>
             <p className="text-sm text-gray-500">{companyAddress}</p>
             <p className="text-sm text-gray-500">{[companyPhone, companyEmail].filter(Boolean).join(" | ")}</p>
@@ -432,12 +443,12 @@ const StatementDetailView = ({
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="border border-gray-200 rounded-lg p-4 bg-white">
-          <h3 className="font-semibold text-gray-900 mb-2">Property</h3>
+          <h3 className="font-semibold text-gray-900 mb-2">{termProperty}</h3>
           <p className="text-lg font-bold text-gray-900">{propertyName}</p>
           {propertyAddress && <p className="text-sm text-gray-500">{propertyAddress}</p>}
         </div>
         <div className="border border-gray-200 rounded-lg p-4 bg-white">
-          <h3 className="font-semibold text-gray-900 mb-2">Landlord</h3>
+          <h3 className="font-semibold text-gray-900 mb-2">{termLandlord}</h3>
           <p className="text-lg font-bold text-gray-900">{landlordName}</p>
           <p className="text-sm text-gray-500">{landlordEmail}</p>
           <p className="text-sm text-gray-500">{statement.landlord?.phoneNumber || ""}</p>
@@ -456,21 +467,21 @@ const StatementDetailView = ({
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-          <h2 className="text-lg font-bold text-gray-900">Tenant Statement Breakdown</h2>
+          <h2 className="text-lg font-bold text-gray-900">{termTenant} Statement Breakdown</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead style={{ backgroundColor: MILIK_GREEN }}>
               <tr>
-                <th className="px-4 py-3 text-left font-semibold text-white">Tenant</th>
-                <th className="px-4 py-3 text-left font-semibold text-white">Unit</th>
-                <th className="px-4 py-3 text-right font-semibold text-white">Rent</th>
-                <th className="px-4 py-3 text-right font-semibold text-white">Invoiced Rent</th>
+                <th className="px-4 py-3 text-left font-semibold text-white">{termTenant}</th>
+                <th className="px-4 py-3 text-left font-semibold text-white">{termUnit}</th>
+                <th className="px-4 py-3 text-right font-semibold text-white">{termRent}</th>
+                <th className="px-4 py-3 text-right font-semibold text-white">Invoiced {termRent}</th>
                 {hasInvoiceVatColumn ? <th className="px-4 py-3 text-right font-semibold text-white">Invoiced VAT</th> : null}
-                <th className="px-4 py-3 text-right font-semibold text-white">Utility / Other Charges</th>
-                <th className="px-4 py-3 text-right font-semibold text-white">Paid Rent</th>
+                <th className="px-4 py-3 text-right font-semibold text-white">{termUtility} / Other Charges</th>
+                <th className="px-4 py-3 text-right font-semibold text-white">Paid {termRent}</th>
                 {hasInvoiceVatColumn ? <th className="px-4 py-3 text-right font-semibold text-white">Paid VAT</th> : null}
-                <th className="px-4 py-3 text-right font-semibold text-white">Paid Utility</th>
+                <th className="px-4 py-3 text-right font-semibold text-white">Paid {termUtility}</th>
                 <th className="px-4 py-3 text-right font-semibold text-white">Balance Forward</th>
                 <th className="px-4 py-3 text-right font-semibold text-white">Balance</th>
                 <th className="px-4 py-3 text-left font-semibold text-white">Notes / Payment Mode</th>
@@ -480,7 +491,7 @@ const StatementDetailView = ({
               {tenantRows.length === 0 && (
                 <tr>
                   <td className="px-4 py-6 text-center text-gray-500" colSpan={hasInvoiceVatColumn ? 12 : 10}>
-                    No tenant-level rows found for this statement snapshot.
+                    No {termTenant.toLowerCase()}-level rows found for this statement snapshot.
                   </td>
                 </tr>
               )}
@@ -564,10 +575,10 @@ const StatementDetailView = ({
 
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           <div className="px-5 py-3 border-b border-gray-200 bg-gray-50">
-            <h3 className="font-bold text-gray-900">Already Paid to Landlord / Early Payouts</h3>
+            <h3 className="font-bold text-gray-900">{"Already Paid to " + termLandlord + " / Early Payouts"}</h3>
           </div>
           <div className="divide-y">
-            {earlyPayoutLines.length === 0 && <p className="p-4 text-sm text-gray-500">No early payouts were already paid to the landlord in this statement.</p>}
+            {earlyPayoutLines.length === 0 && <p className="p-4 text-sm text-gray-500">{`No early payouts were already paid to the ${termLandlord.toLowerCase()} in this statement.`}</p>}
             {earlyPayoutLines.map((line) => (
               <div key={line._id || line.sourceId} className="p-4 flex justify-between gap-3 text-sm">
                 <div>
@@ -613,11 +624,11 @@ const StatementDetailView = ({
           <table className="w-full text-sm">
             <tbody>
               <tr className="border-b border-gray-200">
-                <td className="py-3 text-gray-700 font-semibold">Total Rent Invoiced</td>
+                <td className="py-3 text-gray-700 font-semibold">Total {termRent} Invoiced</td>
                 <td className="py-3 text-right font-mono text-gray-900">{formatCurrency(totalRentInvoiced)}</td>
               </tr>
               <tr className="border-b border-gray-200">
-                <td className="py-3 text-gray-700 font-semibold">Total Rent Received</td>
+                <td className="py-3 text-gray-700 font-semibold">Total {termRent} Received</td>
                 <td className="py-3 text-right font-mono text-green-700 font-bold">{formatCurrency(totalRentReceived)}</td>
               </tr>
               <tr className="border-b border-gray-200">
@@ -626,7 +637,7 @@ const StatementDetailView = ({
               </tr>
               <tr className="border-b border-gray-200">
                 <td className="py-3 text-gray-700 font-semibold">
-                  {utilityPassThroughAmount > 0 ? utilityPassThroughLabel : "Utility Collected"}
+                  {utilityPassThroughAmount > 0 ? utilityPassThroughLabel : `${termUtility} Collected`}
                 </td>
                 <td className="py-3 text-right font-mono text-gray-900">
                   {formatCurrency(utilityPassThroughAmount > 0 ? utilityPassThroughAmount : totalUtilityCollected)}
@@ -654,13 +665,13 @@ const StatementDetailView = ({
               )}
               {totalEarlyPayouts > 0 && (
                 <tr className="border-b border-gray-200">
-                  <td className="py-3 text-gray-700 font-semibold">Already Paid to Landlord / Early Payouts</td>
+                  <td className="py-3 text-gray-700 font-semibold">{"Already Paid to " + termLandlord + " / Early Payouts"}</td>
                   <td className="py-3 text-right font-mono text-emerald-700">({formatCurrency(totalEarlyPayouts)})</td>
                 </tr>
               )}
               {totalDirectToLandlord > 0 && (
                 <tr className="border-b border-gray-200">
-                  <td className="py-3 text-gray-700 font-semibold">Direct to Landlord Collections</td>
+                  <td className="py-3 text-gray-700 font-semibold">Direct to {termLandlord} Collections</td>
                   <td className="py-3 text-right font-mono text-gray-900">{formatCurrency(totalDirectToLandlord)}</td>
                 </tr>
               )}

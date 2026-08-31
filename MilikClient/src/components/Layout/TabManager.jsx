@@ -40,7 +40,20 @@ const resolveRouteTitle = (route, terminology) => {
     '/receipts/landlord':             `${t('landlord')} ${t('receipts')}`,
     '/meter-readings':                `${t('meter')} Readings`,
   };
-  return overrides[route] ?? null;
+  if (overrides[route] != null) return overrides[route];
+
+  if (route.startsWith('/properties/edit/')) return `${t('property')} Details`;
+  if (
+    route === '/tenant/new' ||
+    (route.startsWith('/tenant/') && route.endsWith('/edit'))
+  ) return `${t('tenant')} Details`;
+  if (
+    route.startsWith('/units/') &&
+    route !== '/units/new' &&
+    route.split('/').filter(Boolean).length === 2
+  ) return `${t('unit')} Details`;
+
+  return null;
 };
 
 let tabIdCounter = 0;

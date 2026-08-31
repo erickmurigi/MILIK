@@ -171,7 +171,7 @@ const TenantAgreements = () => {
   const properties = useSelector(selectAllProperties);
   const units = useSelector(selectAllUnits);
   const isFetchingLeases = useSelector((state) => state.lease?.isFetching || false);
-  const { tenant: termTenant, tenants: termTenants, unit: termUnit, property: termProperty } = useTerms("tenant", "tenants", "unit", "property");
+  const { tenant: termTenant, tenants: termTenants, unit: termUnit, property: termProperty, landlord: termLandlord, rent: termRent, lease: termLease } = useTerms("tenant", "tenants", "unit", "property", "landlord", "rent", "lease");
 
   const [filters, setFilters] = useTabState("/agreements:filters", {
     status: "any",
@@ -568,7 +568,7 @@ const TenantAgreements = () => {
   const handleSign = async (row, signedBy) => {
     try {
       await signLease(dispatch, row.id, { signedBy, business: currentCompany?._id });
-      toast.success(`${signedBy === "tenant" ? termTenant : "Landlord"} signature recorded.`);
+      toast.success(`${signedBy === "tenant" ? termTenant : termLandlord} signature recorded.`);
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || "Failed to sign agreement.");
     }
@@ -798,10 +798,10 @@ const TenantAgreements = () => {
               }}
               renderExpanded={(row) => (
                 <div className="grid grid-cols-1 gap-3 text-xs md:grid-cols-4">
-                  <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Lease period</span><p className="font-semibold text-slate-900">{formatDateLabel(row.startDate)} → {formatDateLabel(row.endDate)}</p></div>
-                  <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Rent</span><p className="font-semibold text-slate-900">{formatCurrency(row.rentAmount)}</p></div>
+                  <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">{termLease} period</span><p className="font-semibold text-slate-900">{formatDateLabel(row.startDate)} → {formatDateLabel(row.endDate)}</p></div>
+                  <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">{termRent}</span><p className="font-semibold text-slate-900">{formatCurrency(row.rentAmount)}</p></div>
                   <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Deposit</span><p className="font-semibold text-slate-900">{formatCurrency(row.depositAmount)}</p></div>
-                  <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Signature status</span><p className="font-semibold text-slate-900">Tenant: {row.signedByTenant ? "Signed" : "Pending"} · Landlord: {row.signedByLandlord ? "Signed" : "Pending"}</p></div>
+                  <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Signature status</span><p className="font-semibold text-slate-900">{termTenant}: {row.signedByTenant ? "Signed" : "Pending"} · {termLandlord}: {row.signedByLandlord ? "Signed" : "Pending"}</p></div>
                 </div>
               )}
               renderActions={(row) => {
@@ -831,8 +831,8 @@ const TenantAgreements = () => {
                           <button onClick={() => { handleGenerateDocument(row); setOpenDropdownId(null); }} disabled={generatingDocId === row.id} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-orange-700 transition hover:bg-orange-50 disabled:opacity-60">
                             <FaFilePdf size={11} /> {generatingDocId === row.id ? "Generating…" : hasDocument ? "Regenerate Doc" : "Generate Doc"}
                           </button>
-                          {canSign && tenantPending && <button onClick={() => { handleSign(row, "tenant"); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-blue-700 transition hover:bg-blue-50"><FaFileSignature size={11} /> Tenant Sign</button>}
-                          {canSign && landlordPending && <button onClick={() => { handleSign(row, "landlord"); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-violet-700 transition hover:bg-violet-50"><FaCheck size={11} /> Landlord Sign</button>}
+                          {canSign && tenantPending && <button onClick={() => { handleSign(row, "tenant"); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-blue-700 transition hover:bg-blue-50"><FaFileSignature size={11} /> {termTenant} Sign</button>}
+                          {canSign && landlordPending && <button onClick={() => { handleSign(row, "landlord"); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-violet-700 transition hover:bg-violet-50"><FaCheck size={11} /> {termLandlord} Sign</button>}
                           {canRenew && <button onClick={() => { handleRenew(row); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-amber-700 transition hover:bg-amber-50"><FaClock size={11} /> Renew</button>}
                           <button onClick={() => { navigate(`/tenant/${row.tenantId}/statement`, { state: { tabTitle: `${row.tenantName} Statement` } }); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"><FaFileContract size={11} /> Statement</button>
                           {canTerminate && <button onClick={() => { handleTerminate(row); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-xs font-semibold text-red-700 transition hover:bg-red-50"><FaTimes size={11} /> Terminate</button>}

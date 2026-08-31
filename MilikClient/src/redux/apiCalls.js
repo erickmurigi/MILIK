@@ -2140,6 +2140,11 @@ export const billMeterReading = async (id, payload = {}) => {
   return res.data;
 };
 
+export const createMeterReadingsBatch = async (payload) => {
+  const res = await adminRequests.post("/meter-readings/batch", payload);
+  return res.data;
+};
+
 // ========== LATE PENALTIES SECTION ==========
 
 export const getLatePenaltyPostingAccounts = async (business) => {

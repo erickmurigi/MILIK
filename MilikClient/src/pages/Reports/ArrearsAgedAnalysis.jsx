@@ -131,7 +131,7 @@ const ArrearsAgedAnalysis = () => {
   const handleExportCSV = useCallback(() => {
     if (!filteredRows.length) return toast.info("No data to export");
     const headers = [
-      "Invoice #", "Tenant", "Property", "Unit", "Invoice Date", "Due Date", "Days Overdue",
+      "Invoice #", termTenant, termProperty, termUnit, "Invoice Date", "Due Date", "Days Overdue",
       ...BUCKETS.map((b) => b.label),
       "Total Outstanding (KES)",
     ];
@@ -248,7 +248,7 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
             <input
               type="text" value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tenant or invoice…"
+              placeholder={`${termTenant} or invoice…`}
               className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs text-slate-700 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
             />
           </div>

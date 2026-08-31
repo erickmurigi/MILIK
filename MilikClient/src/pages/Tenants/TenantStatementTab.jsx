@@ -18,6 +18,7 @@ import React, { useState, useMemo, useCallback } from "react";
 import AppSelect from "../../components/common/AppSelect";
 import { FaLink } from "react-icons/fa";
 import { fmtDate } from "../../utils/dates";
+import { useTerm } from "../../hooks/useTerm";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const formatInputDate = (d) => {
@@ -72,6 +73,8 @@ export default function TenantStatementTab({
   onToChange,
   onTypeFilterChange,
 }) {
+  const termRent = useTerm("rent");
+
   // Fall back to local state when not controlled (defensive — parent always passes these now)
   const [localFrom,       setLocalFrom]       = useState("2000-01-01");
   const [localTo,         setLocalTo]         = useState(todayStr);
@@ -194,7 +197,7 @@ export default function TenantStatementTab({
           {/* KPI strip */}
           <div className="flex items-center gap-3">
             {[
-              { label: "Monthly Rent",   value: fmtMoney(rent),                              color: "text-white"       },
+              { label: `Monthly ${termRent}`, value: fmtMoney(rent),                          color: "text-white"       },
               { label: "Total Invoiced", value: fmtMoney(statementData?.totalCharges || 0),  color: "text-white"       },
               { label: "Total Received", value: fmtMoney(statementData?.totalPayments || 0), color: "text-emerald-300" },
               ...(outstanding > 0.009 ? [{ label: "Outstanding", value: fmtMoney(outstanding), color: "text-amber-300" }] : []),

@@ -8,8 +8,10 @@ import {
 } from "react-icons/fa";
 import { parseLandlordsExcel } from "../../utils/excelTemplates";
 import { toast } from "react-toastify";
+import { useTerms } from "../../hooks/useTerm";
 
 const LandlordImportModal = ({ isOpen, onClose, onImport }) => {
+  const { landlord: termLandlord, landlords: termLandlords } = useTerms("landlord", "landlords");
   const [file, setFile] = useState(null);
   const [parseResult, setParseResult] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -40,7 +42,7 @@ const LandlordImportModal = ({ isOpen, onClose, onImport }) => {
       if (result.errorCount > 0) {
         toast.warning(`File parsed with ${result.errorCount} errors. Please review before importing.`);
       } else {
-        toast.success(`Successfully parsed ${result.validCount} landlords.`);
+        toast.success(`Successfully parsed ${result.validCount} ${termLandlords.toLowerCase()}.`);
       }
     } catch (error) {
       toast.error(error.message || "Failed to parse Excel file");
@@ -64,10 +66,10 @@ const LandlordImportModal = ({ isOpen, onClose, onImport }) => {
       if (result?.data) {
         const { successful = [], failed = [] } = result.data;
         if (successful.length > 0 && failed.length === 0) {
-          toast.success(`Successfully imported ${successful.length} landlord${successful.length !== 1 ? "s" : ""}.`);
+          toast.success(`Successfully imported ${successful.length} ${termLandlord.toLowerCase()}${successful.length !== 1 ? "s" : ""}.`);
           handleClose();
         } else if (successful.length > 0 && failed.length > 0) {
-          toast.warning(`Imported ${successful.length} landlord${successful.length !== 1 ? "s" : ""}. ${failed.length} row${failed.length !== 1 ? "s" : ""} failed — see details below.`);
+          toast.warning(`Imported ${successful.length} ${termLandlord.toLowerCase()}${successful.length !== 1 ? "s" : ""}. ${failed.length} row${failed.length !== 1 ? "s" : ""} failed — see details below.`);
           setImportFailures(failed);
           setIsImporting(false);
         } else {
@@ -79,12 +81,12 @@ const LandlordImportModal = ({ isOpen, onClose, onImport }) => {
         toast.error(result?.message || "Import failed. Please check your file and try again.");
         setIsImporting(false);
       } else {
-        toast.success(`Successfully imported ${parseResult.validCount} landlord${parseResult.validCount !== 1 ? "s" : ""}.`);
+        toast.success(`Successfully imported ${parseResult.validCount} ${termLandlord.toLowerCase()}${parseResult.validCount !== 1 ? "s" : ""}.`);
         handleClose();
       }
     } catch (error) {
       console.error("Import error in modal:", error);
-      toast.error(error.message || "Failed to import landlords.");
+      toast.error(error.message || `Failed to import ${termLandlords.toLowerCase()}.`);
       setIsImporting(false);
     }
   };
@@ -107,7 +109,7 @@ const LandlordImportModal = ({ isOpen, onClose, onImport }) => {
         <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
           <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
             <FaUpload size={14} />
-            Import Landlords from Excel
+            Import {termLandlords} from Excel
           </h2>
           <button
             onClick={handleClose}
@@ -276,7 +278,7 @@ const LandlordImportModal = ({ isOpen, onClose, onImport }) => {
           <div className="text-xs text-slate-500">
             {parseResult && parseResult.validCount > 0 ? (
               <span className="font-semibold text-emerald-700">
-                Ready to import {parseResult.validCount} landlord{parseResult.validCount !== 1 ? "s" : ""}
+                Ready to import {parseResult.validCount} {termLandlord.toLowerCase()}{parseResult.validCount !== 1 ? "s" : ""}
               </span>
             ) : (
               "Upload an Excel file to begin"
@@ -303,7 +305,7 @@ const LandlordImportModal = ({ isOpen, onClose, onImport }) => {
               ) : (
                 <>
                   <FaUpload size={11} />
-                  Import {parseResult?.validCount || 0} Landlords
+                  Import {parseResult?.validCount || 0} {termLandlords}
                 </>
               )}
             </button>

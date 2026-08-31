@@ -9,6 +9,7 @@ import DashboardLayout from '../../components/Layout/DashboardLayout';
 import AppSelect from '../../components/common/AppSelect';
 import { adminRequests } from '../../utils/requestMethods';
 import PaginationBar from '../../components/PaginationBar';
+import { useTerm } from '../../hooks/useTerm';
 
 // ── constants ────────────────────────────────────────────────────────────────
 const ZONE_COLORS = [
@@ -257,6 +258,7 @@ const ZoneFormModal = ({ zone, officers, onClose, onSaved }) => {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function Zones() {
   const confirm = useConfirm();
+  const termProperties = useTerm("properties");
   const [zones,    setZones]    = useState([]);
   const [total,    setTotal]    = useState(0);
   const [pages,    setPages]    = useState(1);
@@ -411,7 +413,7 @@ export default function Zones() {
                     <th className="px-3 py-2 text-center font-bold border-r border-white/10" style={{ width: '36px' }}>Clr</th>
                     <th className="px-3 py-2 text-left font-bold border-r border-white/10">Name / Code</th>
                     <th className="px-3 py-2 text-left font-bold border-r border-white/10" style={{ width: '110px' }}>Type</th>
-                    <th className="px-3 py-2 text-center font-bold border-r border-white/10" style={{ width: '80px' }}>Properties</th>
+                    <th className="px-3 py-2 text-center font-bold border-r border-white/10" style={{ width: '80px' }}>{termProperties}</th>
                     <th className="px-3 py-2 text-center font-bold border-r border-white/10" style={{ width: '76px' }}>Officers</th>
                     <th className="px-3 py-2 text-center font-bold border-r border-white/10" style={{ width: '80px' }}>Supervisors</th>
                     <th className="px-3 py-2 text-center font-bold border-r border-white/10" style={{ width: '76px' }}>Status</th>

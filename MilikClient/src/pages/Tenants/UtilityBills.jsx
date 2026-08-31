@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import PaginationBar from '../../components/PaginationBar';
 import AppSelect from "../../components/common/AppSelect";
+import { useTerms } from "../../hooks/useTerm";
 import {
   selectCurrentCompany,
   selectAllTenants,
@@ -90,6 +91,7 @@ const UtilityBills = () => {
   const [pageSize, setPageSize] = useState(50);
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { tenant: termTenant, unit: termUnit, property: termProperty } = useTerms("tenant", "unit", "property");
   const currentCompany = useSelector(selectCurrentCompany);
   const tenants = useSelector(selectAllTenants);
   const units = useSelector(selectAllUnits);
@@ -293,9 +295,9 @@ const UtilityBills = () => {
                 ))}
                 <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
                 <input type="text" value={draftFilters.invoiceNo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: e.target.value.toUpperCase() }))} placeholder="Invoice #" className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <input type="text" value={draftFilters.tenantName} onChange={setFilter("tenantName")} placeholder="Tenant" className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <AppSelect compact clearable searchable placeholder="Property" value={draftFilters.propertyId} onChange={(v) => setDraftFilters((prev) => ({ ...prev, propertyId: v ?? "any", unitId: "any" }))} options={activePropertyOptions} />
-                <AppSelect compact clearable placeholder="Unit" value={draftFilters.unitId} onChange={(v) => setDraftFilters((prev) => ({ ...prev, unitId: v ?? "any" }))} options={unitFilterOptions} />
+                <input type="text" value={draftFilters.tenantName} onChange={setFilter("tenantName")} placeholder={termTenant} className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <AppSelect compact clearable searchable placeholder={termProperty} value={draftFilters.propertyId} onChange={(v) => setDraftFilters((prev) => ({ ...prev, propertyId: v ?? "any", unitId: "any" }))} options={activePropertyOptions} />
+                <AppSelect compact clearable placeholder={termUnit} value={draftFilters.unitId} onChange={(v) => setDraftFilters((prev) => ({ ...prev, unitId: v ?? "any" }))} options={unitFilterOptions} />
                 <AppSelect compact clearable placeholder="Utility Type" value={draftFilters.utilityType} onChange={(v) => setDraftFilters((prev) => ({ ...prev, utilityType: v ?? "any" }))} options={utilityTypeOptions} />
                 <input type="date" value={draftFilters.fromDate} onChange={setFilter("fromDate")} className="h-[20px] w-[5.5rem] shrink-0 border border-slate-200 bg-white px-1 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 <input type="date" value={draftFilters.toDate} onChange={setFilter("toDate")} className="h-[20px] w-[5.5rem] shrink-0 border border-slate-200 bg-white px-1 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
@@ -311,9 +313,9 @@ const UtilityBills = () => {
             <MilikTable
               columns={[
                 { label: "Invoice #" },
-                { label: "Tenant" },
-                { label: "Property" },
-                { label: "Unit" },
+                { label: termTenant },
+                { label: termProperty },
+                { label: termUnit },
                 { label: "Utility Type" },
                 { label: "Invoice Date", align: "center" },
                 { label: "Due Date", align: "center" },

@@ -104,6 +104,7 @@ const Properties = () => {
   const termLandlord = useTerm("landlord");
   const termLandlords = useTerm("landlords");
   const termUnits = useTerm("units");
+  const termInvoice = useTerm("invoice");
 
   // Redux state
   const properties = useSelector(selectAllProperties);
@@ -345,10 +346,10 @@ const Properties = () => {
         setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
         try {
           const result = await dispatch(deleteProperty(propertyId)).unwrap();
-          toast.success(result?.message || "Property deleted successfully.");
+          toast.success(result?.message || `${termProperty} deleted successfully.`);
           dispatch(getProperties(buildFetchParams()));
         } catch (err) {
-          toast.error(typeof err === 'string' ? err : getErrorMessage(err, "Failed to delete property"));
+          toast.error(typeof err === 'string' ? err : getErrorMessage(err, `Failed to delete ${termProperty.toLowerCase()}`));
         }
       },
     });
@@ -468,7 +469,7 @@ const Properties = () => {
   const openEditProperty = (propertyId) => {
     if (!propertyId) return;
     navigate(`/properties/edit/${propertyId}`, {
-      state: { tabTitle: "Property Details" },
+      state: { tabTitle: `${termProperty} Details` },
     });
   };
 
@@ -747,7 +748,7 @@ const Properties = () => {
                                 <span className="font-semibold text-slate-900 truncate block">{toListingCaps(property.propertyName)}</span>
                                 {getLedgerBadge(property) && (
                                   <span className="inline-flex items-center px-1.5 py-px rounded text-[9px] font-bold tracking-wide bg-purple-100 text-purple-700 border border-purple-200 mt-0.5">
-                                    Property GL{property.propertyLedgerEnabled ? " ✓" : ""}
+                                    {termProperty} GL{property.propertyLedgerEnabled ? " ✓" : ""}
                                   </span>
                                 )}
                               </td>
@@ -789,7 +790,7 @@ const Properties = () => {
                                     <div className="space-y-3 p-3 bg-white rounded-lg shadow-sm border border-gray-100">
                                       <h4 className="font-bold text-gray-900 text-sm mb-3 pb-2 border-b-2 border-[#0B3B2E]">📋 {termProperty} Details</h4>
                                       <div>
-                                        <span className="text-xs font-semibold text-gray-700">Property Type:</span>
+                                        <span className="text-xs font-semibold text-gray-700">{termProperty} Type:</span>
                                         <p className="text-sm font-bold text-gray-900 mt-1">{property.propertyCategory || property.propertyType || "N/A"}</p>
                                       </div>
                                       <div>
@@ -823,14 +824,14 @@ const Properties = () => {
                                           {getLedgerBadge(property) ? (
                                             <>
                                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200">
-                                                Property GL — {property.propertyLedgerEnabled ? "Ledger Active" : "Ledger Disabled"}
+                                                {termProperty} GL — {property.propertyLedgerEnabled ? "Ledger Active" : "Ledger Disabled"}
                                               </span>
                                               <Link
                                                 to={`/properties/${property._id}/ledger`}
                                                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-purple-700 text-white hover:bg-purple-800 w-fit"
                                                 onClick={(e) => e.stopPropagation()}
                                               >
-                                                Property Ledger →
+                                                {termProperty} Ledger →
                                               </Link>
                                             </>
                                           ) : (
@@ -853,7 +854,7 @@ const Properties = () => {
                                         )}
                                       </div>
                                       <div>
-                                        <span className="text-xs font-semibold text-gray-700">Invoice Prefix:</span>
+                                        <span className="text-xs font-semibold text-gray-700">{termInvoice} Prefix:</span>
                                         <p className="text-sm font-bold text-gray-900 mt-1">{property.invoicePrefix || "N/A"}</p>
                                       </div>
                                       <div>
@@ -900,7 +901,7 @@ const Properties = () => {
                                         {canUpdateProperty && (
                                           <Link
                                             to={`/properties/edit/${property._id}`}
-                                            state={{ tabTitle: "Property Details" }}
+                                            state={{ tabTitle: `${termProperty} Details` }}
                                             onClick={(e) => e.stopPropagation()}
                                           >
                                             <button

@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import { FaTimes, FaReceipt } from "react-icons/fa";
+import { useTerms } from "../../hooks/useTerm";
 
 const PostCommissionModal = ({ statement, onClose, onSubmit }) => {
+  const { landlord: termLandlord, property: termProperty } = useTerms("landlord", "property");
   const [formData, setFormData] = useState({
     postingDate: new Date().toISOString().split("T")[0],
     amount: statement?.commissionAmount || 0,
@@ -32,8 +34,8 @@ const PostCommissionModal = ({ statement, onClose, onSubmit }) => {
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Commission Details</p>
               <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
                 {[
-                  ["Landlord", statement?.landlord?.landlordName || "N/A"],
-                  ["Property", statement?.property?.propertyName || "N/A"],
+                  [termLandlord, statement?.landlord?.landlordName || "N/A"],
+                  [termProperty, statement?.property?.propertyName || "N/A"],
                   ["Period", statement?.periodStart ? new Date(statement.periodStart).toLocaleDateString("en-GB", { month: "short", year: "numeric" }) : "N/A"],
                   ["Rate", `${statement?.commissionPercentage || 0}%`],
                   ["Basis", basisLabel(statement?.commissionBasis)],

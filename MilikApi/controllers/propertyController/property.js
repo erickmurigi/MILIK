@@ -903,7 +903,7 @@ export const getProperties = async (req, res, next) => {
           "commissionPaymentMode commissionCategoryKeys commissionTaxSettings " +
           "depositHeldBy vatRate taxMode taxCodeKey " +
           "grossLettableArea netLettableArea unitMeasurement rentPerMeasure rentCurrency " +
-          "standingCharges securityDeposits " +
+          "standingCharges securityDeposits utilityRates " +
           "business controlAccount createdAt updatedAt"
         )
         .populate("landlords.landlordId", "_id landlordName firstName lastName")

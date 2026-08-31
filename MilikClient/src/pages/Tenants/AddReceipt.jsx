@@ -22,6 +22,7 @@ import { hasCompanyPermission } from "../../utils/permissions";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { isCashbookAccount } from "../../utils/cashbookUtils";
 import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
+import { useTerms } from "../../hooks/useTerm";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -106,6 +107,7 @@ const AddReceipt = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { tenant: termTenant, property: termProperty, landlord: termLandlord } = useTerms("tenant", "property", "landlord");
 
   const receiptMode = searchParams.get("mode") || "tenant";
   const isLandlordMode = receiptMode === "landlord";
@@ -779,7 +781,7 @@ const AddReceipt = () => {
               <div className="h-4 w-px bg-[#2A5C4A]" />
               <div>
                 <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">
-                  {isLandlordMode ? "Landlord" : isInstantMode ? "Instant" : "Tenant"} Receipts
+                  {isLandlordMode ? termLandlord : isInstantMode ? "Instant" : termTenant} Receipts
                 </div>
                 <h1 className="text-sm font-black text-white leading-none">New Receipt</h1>
               </div>
@@ -796,7 +798,7 @@ const AddReceipt = () => {
                 <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
                   <h2 className="text-[11px] font-bold uppercase tracking-wide text-slate-700">Collection Details</h2>
                   {isCompanyLandlordMode && (
-                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Landlord Mode — Auto-Confirmed</span>
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{termLandlord} Mode — Auto-Confirmed</span>
                   )}
                 </div>
                 <div className="p-3">
@@ -804,7 +806,7 @@ const AddReceipt = () => {
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                   {/* Property */}
                   <div>
-                    <label className={labelClass}>Property <span className="text-red-500">*</span></label>
+                    <label className={labelClass}>{termProperty} <span className="text-red-500">*</span></label>
                     <AppSelect
                       value={formData.propertyId}
                       onChange={(v) => onPropertyChange(v ?? "")}
@@ -818,7 +820,7 @@ const AddReceipt = () => {
                   {/* Tenant */}
                   <div>
                     <div className="flex items-center justify-between gap-2">
-                      <label className={labelClass}>Tenant <span className="text-red-500">*</span></label>
+                      <label className={labelClass}>{termTenant} <span className="text-red-500">*</span></label>
                       <label className="inline-flex cursor-pointer items-center gap-1.5 text-[10px] font-semibold text-slate-500">
                         <input
                           type="checkbox"

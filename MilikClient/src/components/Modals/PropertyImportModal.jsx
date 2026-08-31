@@ -8,8 +8,10 @@ import {
 } from "react-icons/fa";
 import { parsePropertiesExcel } from "../../utils/excelTemplates";
 import { toast } from "react-toastify";
+import { useTerms } from "../../hooks/useTerm";
 
 const PropertyImportModal = ({ isOpen, onClose, onImport }) => {
+  const { property: termProperty, properties: termProperties, landlord: termLandlord, units: termUnits } = useTerms("property", "properties", "landlord", "units");
   const [selectedFile, setSelectedFile] = useState(null);
   const [parseResult, setParseResult] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -32,7 +34,7 @@ const PropertyImportModal = ({ isOpen, onClose, onImport }) => {
       if (result.errorCount > 0) {
         toast.warning(`File parsed with ${result.errorCount} errors. Review before importing.`);
       } else {
-        toast.success(`Successfully validated ${result.validCount} properties.`);
+        toast.success(`Successfully validated ${result.validCount} ${termProperties.toLowerCase()}.`);
       }
     } catch (error) {
       toast.error(error.message || "Failed to parse Excel file");
@@ -56,10 +58,10 @@ const PropertyImportModal = ({ isOpen, onClose, onImport }) => {
       if (result?.data) {
         const { successful = [], failed = [] } = result.data;
         if (successful.length > 0 && failed.length === 0) {
-          toast.success(`Successfully imported ${successful.length} propert${successful.length !== 1 ? "ies" : "y"}.`);
+          toast.success(`Successfully imported ${successful.length} ${termProperty.toLowerCase()}(s).`);
           handleClose();
         } else if (successful.length > 0 && failed.length > 0) {
-          toast.warning(`Imported ${successful.length} propert${successful.length !== 1 ? "ies" : "y"}. ${failed.length} failed — see details below.`);
+          toast.warning(`Imported ${successful.length} ${termProperty.toLowerCase()}(s). ${failed.length} failed — see details below.`);
           setImportFailures(failed);
           setIsImporting(false);
         } else {
@@ -71,11 +73,11 @@ const PropertyImportModal = ({ isOpen, onClose, onImport }) => {
         toast.error(result?.message || "Import failed. Please check your file and try again.");
         setIsImporting(false);
       } else {
-        toast.success(`Successfully imported ${parseResult.validCount} propert${parseResult.validCount !== 1 ? "ies" : "y"}.`);
+        toast.success(`Successfully imported ${parseResult.validCount} ${termProperty.toLowerCase()}(s).`);
         handleClose();
       }
     } catch (error) {
-      toast.error(error.message || "Failed to import properties.");
+      toast.error(error.message || `Failed to import ${termProperties.toLowerCase()}.`);
       setIsImporting(false);
     }
   };
@@ -100,7 +102,7 @@ const PropertyImportModal = ({ isOpen, onClose, onImport }) => {
         <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
           <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
             <FaUpload size={14} />
-            Import Properties from Excel
+            Import {termProperties} from Excel
           </h2>
           <button
             onClick={handleClose}
@@ -165,7 +167,7 @@ const PropertyImportModal = ({ isOpen, onClose, onImport }) => {
                     <table className="min-w-full divide-y divide-slate-200 text-xs">
                       <thead className="bg-[#0B3B2E] text-white">
                         <tr>
-                          {["Property Name", "Type", "LR Number", "Location", "Landlord", "Units"].map((h) => (
+                          {[`${termProperty} Name`, "Type", "LR Number", "Location", termLandlord, termUnits].map((h) => (
                             <th key={h} className="px-3 py-2 text-left text-[9px] font-black uppercase tracking-wide">{h}</th>
                           ))}
                         </tr>
@@ -212,7 +214,7 @@ const PropertyImportModal = ({ isOpen, onClose, onImport }) => {
                       {parseResult.errors.map((error, index) => (
                         <div key={index} className="border border-red-200 bg-white p-3">
                           <div className="text-xs font-bold text-red-800">
-                            Row {error.row}: {error.data.propertyName || "Unnamed Property"}
+                            Row {error.row}: {error.data.propertyName || `Unnamed ${termProperty}`}
                           </div>
                           <ul className="mt-1 list-disc pl-5 text-xs text-red-700 space-y-0.5">
                             {error.errors.map((err, i) => (
@@ -235,7 +237,7 @@ const PropertyImportModal = ({ isOpen, onClose, onImport }) => {
                   <div className="max-h-60 space-y-2 overflow-y-auto">
                     {importFailures.map((failure, idx) => (
                       <div key={idx} className="border border-red-200 bg-white p-3">
-                        <div className="text-xs font-bold text-red-900">{failure.propertyName || "Unknown property"}</div>
+                        <div className="text-xs font-bold text-red-900">{failure.propertyName || `Unknown ${termProperty.toLowerCase()}`}</div>
                         <div className="mt-0.5 text-xs text-red-700">{failure.error}</div>
                       </div>
                     ))}
@@ -254,7 +256,7 @@ const PropertyImportModal = ({ isOpen, onClose, onImport }) => {
           <div className="text-xs text-slate-500">
             {parseResult
               ? `${parseResult.validCount} valid record(s) ready to import`
-              : "Upload a properties Excel file to validate first"}
+              : `Upload a ${termProperties.toLowerCase()} Excel file to validate first`}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -277,7 +279,7 @@ const PropertyImportModal = ({ isOpen, onClose, onImport }) => {
               ) : (
                 <>
                   <FaUpload size={11} />
-                  Import {parseResult?.validCount || 0} Properties
+                  Import {parseResult?.validCount || 0} {termProperties}
                 </>
               )}
             </button>

@@ -34,6 +34,7 @@ const STATUS_MAP = {
 
 // ─── Assign Tenant Modal ──────────────────────────────────────────────────────
 function AssignTenantModal({ collection, businessId, onClose, onAssigned }) {
+  const { tenant: termTenant } = useTerms("tenant");
   const [search, setSearch]   = useState(collection?.tenantCode || collection?.documentReferenceNumber || "");
   const [tenants, setTenants] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -76,7 +77,7 @@ function AssignTenantModal({ collection, businessId, onClose, onAssigned }) {
       <div className="w-full max-w-lg border border-slate-200 bg-white shadow-xl">
         <div className="flex items-center justify-between bg-[#0B3B2E] px-4 py-3">
           <div>
-            <p className="text-xs font-black uppercase tracking-wide text-white">Assign to Tenant</p>
+            <p className="text-xs font-black uppercase tracking-wide text-white">Assign to {termTenant}</p>
             <p className="text-[11px] text-emerald-200">
               {formatMoney(collection.amount)} · ref: <span className="font-mono">{collection.tenantCode || collection.documentReferenceNumber || "—"}</span>
             </p>
@@ -86,7 +87,7 @@ function AssignTenantModal({ collection, businessId, onClose, onAssigned }) {
 
         <div className="border-b border-amber-100 bg-amber-50 px-4 py-2.5 text-[11px] text-amber-800">
           <FaExclamationTriangle className="mr-1.5 inline text-amber-500" size={11} />
-          Tenant code <strong className="font-mono">&ldquo;{collection.tenantCode || collection.documentReferenceNumber}&rdquo;</strong> was not auto-matched — search to find the correct tenant.
+          {termTenant} code <strong className="font-mono">&ldquo;{collection.tenantCode || collection.documentReferenceNumber}&rdquo;</strong> was not auto-matched — search to find the correct {termTenant.toLowerCase()}.
         </div>
 
         <div className="px-4 pb-2 pt-3">
@@ -129,7 +130,7 @@ function AssignTenantModal({ collection, businessId, onClose, onAssigned }) {
         <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
           {selected
             ? <div className="text-[11px] text-slate-600">Assigning to <strong className="text-[#0B3B2E]">{selected.name} · {selected.tenantCode}</strong></div>
-            : <span className="text-[11px] text-slate-400">Select a tenant above</span>}
+            : <span className="text-[11px] text-slate-400">Select a {termTenant.toLowerCase()} above</span>}
           <div className="flex gap-2">
             <button onClick={onClose} className="inline-flex h-8 items-center px-3 text-xs font-bold text-slate-600 hover:text-slate-900">Cancel</button>
             <button onClick={handleSubmit} disabled={!selected || saving}

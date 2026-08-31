@@ -12,6 +12,7 @@ import {
   FaBuilding, FaChevronDown, FaChevronRight, FaFileDownload, FaSyncAlt,
   FaLayerGroup, FaUser, FaCalendarAlt, FaExclamationTriangle,
 } from "react-icons/fa";
+import { useTerms } from "../../hooks/useTerm";
 
 const GRN = "#0B3B2E";
 const RED = "#DC2626";

@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useEffect, useMemo } from "react";
 import { fmtDate } from "../../utils/dates";
+import { useTerms } from "../../hooks/useTerm";
 import TenantStatementTab from "./TenantStatementTab";
 import { useTabState } from "../../hooks/useTabState";
 import { useEntityCache } from "../../hooks/useEntityCache";
@@ -370,6 +371,7 @@ const TenantStatement = () => {
   const companyTaxConfig = useSelector(selectCompanySettings);
 
   const currentCompany = useSelector(selectCurrentCompany);
+  const { tenant: termTenant, rent: termRent, landlord: termLandlord, unit: termUnit } = useTerms("tenant", "rent", "landlord", "unit");
   const { propertiesLoaded, unitsLoaded } = useEntityCache(currentCompany?._id);
   const [tenantData, setTenantData] = useState(null);
   const [tenantLoading, setTenantLoading] = useState(true);
@@ -410,8 +412,8 @@ const TenantStatement = () => {
   const tenantDepositHolder = useMemo(() => {
     if (tenant?.depositHeldBy) return tenant.depositHeldBy;
     const propertyHeldBy = tenantUnitRecord?.property?.depositHeldBy;
-    return propertyHeldBy === "landlord" ? "Landlord" : "Management Company";
-  }, [tenant, tenantUnitRecord]);
+    return propertyHeldBy === "landlord" ? termLandlord : "Management Company";
+  }, [tenant, tenantUnitRecord, termLandlord]);
 
   const activeDepositInvoices = useMemo(() => {
     return (tenantInvoices || []).filter((invoice) => {
@@ -1108,7 +1110,7 @@ const TenantStatement = () => {
   }, [allocationTraceData, allocationTraceTarget, selectedAllocationTrace, openReceiptAllocationWorkspace, setAllocationTraceTarget]);
 
   const billingScheduleData = useMemo(() => {
-    const baseRent = tenantLease?.rentAmount || tenant?.rent || 23000;
+    const baseRent = tenantLease?.rentAmount || tenant?.rent || 0;
     const companyBillingPeriods = normalizeBillingPeriods(companyTaxConfig);
 
     let tenantUtilities = [];
@@ -1373,11 +1375,11 @@ const TenantStatement = () => {
   // that force any React.memo'd child that receives this array to re-render unnecessarily.
   const tabs = useMemo(
     () => [
-      { id: "statement", label: "Tenant Statement", icon: <FaFileInvoiceDollar /> },
+      { id: "statement", label: `${termTenant} Statement`, icon: <FaFileInvoiceDollar /> },
       { id: "billing", label: "Billing Schedule", icon: <FaCalendarAlt /> },
-      { id: "reviews", label: "Rent Reviews / Escalations", icon: <FaChartBar /> },
+      { id: "reviews", label: `${termRent} Reviews / Escalations`, icon: <FaChartBar /> },
     ],
-    []
+    [termTenant, termRent]
   );
 
   const handlePrint = useCallback(() => {
@@ -1550,7 +1552,7 @@ const TenantStatement = () => {
       ``,
       `ACCOUNT SUMMARY`,
       `${"─".repeat(52)}`,
-      `Monthly Rent     : KES ${rent.toLocaleString()}`,
+      `Monthly ${termRent.padEnd(12)}: KES ${rent.toLocaleString()}`,
       `Total Charges    : KES ${charges.toLocaleString()}`,
       `Total Paid       : KES ${paid.toLocaleString()}`,
       `Outstanding      : KES ${outstanding.toLocaleString()}`,
@@ -2095,7 +2097,7 @@ const TenantStatement = () => {
                       onChange={(e) => setScheduleForm((prev) => ({ ...prev, to: e.target.value }))}
                       className="mt-1 h-8 w-full border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:border-[#0B3B2E]"
                     />
-                    <label className="text-xs font-semibold text-slate-700">Rent</label>
+                    <label className="text-xs font-semibold text-slate-700">{termRent}</label>
                     <input
                       type="number"
                       value={scheduleForm.rent}
@@ -2180,7 +2182,7 @@ const TenantStatement = () => {
                 <th className="px-2.5 py-1.5 text-left font-semibold">From</th>
                 <th className="px-2.5 py-1.5 text-left font-semibold">To</th>
                 <th className="px-2.5 py-1.5 text-left font-semibold">Description</th>
-                <th className="px-2.5 py-1.5 text-right font-semibold">Rent Amount</th>
+                <th className="px-2.5 py-1.5 text-right font-semibold">{termRent} Amount</th>
                 <th className="px-2.5 py-1.5 text-right font-semibold">S. Charge/Util.</th>
                 <th className="px-2.5 py-1.5 text-right font-semibold">Total</th>
                 <th className="px-3 py-2 text-center font-semibold">Frozen</th>
@@ -3200,7 +3202,7 @@ const TenantStatement = () => {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                 <div>
                   <p style={{ fontSize: "11px", fontWeight: "bold", color: "#6B7280", marginBottom: "3px" }}>
-                    Tenant Name
+                    {termTenant} Name
                   </p>
                   <p style={{ fontSize: "13px", fontWeight: "600", color: "#1F2937" }}>
                     {tenant?.tenantName || tenant?.name || "-"}
@@ -3208,7 +3210,7 @@ const TenantStatement = () => {
                 </div>
                 <div>
                   <p style={{ fontSize: "11px", fontWeight: "bold", color: "#6B7280", marginBottom: "3px" }}>
-                    Unit Number
+                    {termUnit} Number
                   </p>
                   <p style={{ fontSize: "13px", fontWeight: "600", color: "#1F2937" }}>
                     {resolveTenantUnitNumber(tenant)}
@@ -3224,7 +3226,7 @@ const TenantStatement = () => {
                 </div>
                 <div>
                   <p style={{ fontSize: "11px", fontWeight: "bold", color: "#6B7280", marginBottom: "3px" }}>
-                    Monthly Rent
+                    Monthly {termRent}
                   </p>
                   <p style={{ fontSize: "13px", fontWeight: "600", color: "#1F2937" }}>
                     Ksh {(tenantLease?.rentAmount || tenant?.rent || 0).toLocaleString()}
@@ -3260,7 +3262,7 @@ const TenantStatement = () => {
                 return cfg ? <span className={`shrink-0 border px-2 py-0.5 text-[10px] font-black ${cfg.cls}`}>{cfg.label}</span> : null;
               })()}
               <span className="shrink-0 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600">
-                Unit {resolveTenantUnitNumber(tenant)}
+                {termUnit} {resolveTenantUnitNumber(tenant)}
               </span>
               <span className="shrink-0 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600">
                 {resolveTenantPropertyName(tenant)}

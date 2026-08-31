@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { FaTimes, FaMoneyBillWave } from "react-icons/fa";
+import { useTerms } from "../../hooks/useTerm";
 
 const getOutstandingRecoveryBalance = (statement) =>
   Math.max(Number(statement?.amountPayableByLandlordToManager || 0) - Number(statement?.amountRecovered || 0), 0);
 
 const RecordLandlordRecoveryModal = ({ statement, onClose, onSubmit, cashbookOptions = [] }) => {
+  const { landlord: termLandlord, property: termProperty } = useTerms("landlord", "property");
   const outstandingRecovery = getOutstandingRecoveryBalance(statement);
 
   const [formData, setFormData] = useState({
@@ -32,7 +34,7 @@ const RecordLandlordRecoveryModal = ({ statement, onClose, onSubmit, cashbookOpt
         <div className="flex-shrink-0 flex items-center justify-between gap-3 border-b border-slate-700 bg-[#0B3B2E] px-4 py-3 text-white">
           <div className="flex items-center gap-2">
             <FaMoneyBillWave className="text-red-400" />
-            <h2 className="text-sm font-black uppercase tracking-wide">Record Recovery From Landlord</h2>
+            <h2 className="text-sm font-black uppercase tracking-wide">Record Recovery From {termLandlord}</h2>
           </div>
           <button onClick={onClose} className="text-white/60 hover:text-white transition-colors">
             <FaTimes size={14} />
@@ -46,8 +48,8 @@ const RecordLandlordRecoveryModal = ({ statement, onClose, onSubmit, cashbookOpt
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Processed Statement Details</p>
               <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
                 {[
-                  ["Landlord", statement?.landlord?.landlordName || "N/A"],
-                  ["Property", statement?.property?.propertyName || "N/A"],
+                  [termLandlord, statement?.landlord?.landlordName || "N/A"],
+                  [termProperty, statement?.property?.propertyName || "N/A"],
                   ["Period", `${fmtDate(statement?.periodStart)} – ${fmtDate(statement?.periodEnd)}`],
                   ["Outstanding Recovery", fmt(outstandingRecovery)],
                 ].map(([label, val]) => (

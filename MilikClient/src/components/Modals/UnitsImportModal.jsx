@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { FaUpload, FaCheckCircle, FaExclamationTriangle, FaSpinner, FaTimes } from 'react-icons/fa';
 import { parseUnitsExcel } from '../../utils/excelTemplates';
 import { toast } from 'react-toastify';
+import { useTerms } from '../../hooks/useTerm';
 
 const UnitsImportModal = ({ isOpen, onClose, onImport }) => {
+  const { unit: termUnit, units: termUnits, property: termProperty, rent: termRent } = useTerms("unit", "units", "property", "rent");
   const [selectedFile, setSelectedFile] = useState(null);
   const [parseResult, setParseResult] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -25,7 +27,7 @@ const UnitsImportModal = ({ isOpen, onClose, onImport }) => {
       if (result.errorCount > 0) {
         toast.warning(`File parsed with ${result.errorCount} errors. Review before importing.`);
       } else {
-        toast.success(`Successfully validated ${result.validCount} units!`);
+        toast.success(`Successfully validated ${result.validCount} ${termUnits.toLowerCase()}!`);
       }
     } catch (error) {
       toast.error(error.message || 'Failed to parse Excel file');
@@ -49,10 +51,10 @@ const UnitsImportModal = ({ isOpen, onClose, onImport }) => {
       if (result?.data) {
         const { successful = [], failed = [] } = result.data;
         if (successful.length > 0 && failed.length === 0) {
-          toast.success(`Successfully imported ${successful.length} unit${successful.length !== 1 ? 's' : ''}!`);
+          toast.success(`Successfully imported ${successful.length} ${termUnit.toLowerCase()}${successful.length !== 1 ? 's' : ''}!`);
           handleClose();
         } else if (successful.length > 0 && failed.length > 0) {
-          toast.warning(`Imported ${successful.length} unit${successful.length !== 1 ? 's' : ''}. ${failed.length} failed — see details below.`);
+          toast.warning(`Imported ${successful.length} ${termUnit.toLowerCase()}${successful.length !== 1 ? 's' : ''}. ${failed.length} failed — see details below.`);
           setImportFailures(failed);
           setIsImporting(false);
         } else {
@@ -64,11 +66,11 @@ const UnitsImportModal = ({ isOpen, onClose, onImport }) => {
         toast.error(result?.message || 'Import failed. Please check your file and try again.');
         setIsImporting(false);
       } else {
-        toast.success(`Successfully imported ${parseResult.validCount} unit${parseResult.validCount !== 1 ? 's' : ''}!`);
+        toast.success(`Successfully imported ${parseResult.validCount} ${termUnit.toLowerCase()}${parseResult.validCount !== 1 ? 's' : ''}!`);
         handleClose();
       }
     } catch (error) {
-      toast.error(error.message || 'Failed to import units.');
+      toast.error(error.message || `Failed to import ${termUnits.toLowerCase()}.`);
       setIsImporting(false);
     }
   };
@@ -93,7 +95,7 @@ const UnitsImportModal = ({ isOpen, onClose, onImport }) => {
         <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
           <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
             <FaUpload size={14} />
-            Import Units from Excel
+            Import {termUnits} from Excel
           </h2>
           <button
             onClick={handleClose}
@@ -168,7 +170,7 @@ const UnitsImportModal = ({ isOpen, onClose, onImport }) => {
                     <table className="min-w-full divide-y divide-slate-200 text-xs">
                       <thead className="bg-[#0B3B2E] text-white">
                         <tr>
-                          {["Unit Number", "Property Code", "Type", "Rent (KES)", "Deposit (KES)", "Billing", "Status"].map((h) => (
+                          {[`${termUnit} Number`, `${termProperty} Code`, "Type", `${termRent} (KES)`, "Deposit (KES)", "Billing", "Status"].map((h) => (
                             <th key={h} className="px-3 py-2 text-left text-[9px] font-black uppercase tracking-wide">{h}</th>
                           ))}
                         </tr>
@@ -215,7 +217,7 @@ const UnitsImportModal = ({ isOpen, onClose, onImport }) => {
                       {parseResult.errors.map((error, index) => (
                         <div key={index} className="border border-red-200 bg-white p-3">
                           <div className="text-xs font-bold text-red-900">
-                            Row {error.row}: {error.data.unitNumber || 'Unnamed Unit'}
+                            Row {error.row}: {error.data.unitNumber || `Unnamed ${termUnit}`}
                           </div>
                           <ul className="mt-1 space-y-0.5 text-xs text-red-700">
                             {error.errors.map((err, i) => (
@@ -240,7 +242,7 @@ const UnitsImportModal = ({ isOpen, onClose, onImport }) => {
               <div className="max-h-60 space-y-2 overflow-y-auto">
                 {importFailures.map((failure, idx) => (
                   <div key={idx} className="border border-red-200 bg-white p-3">
-                    <div className="text-xs font-bold text-red-900">{failure.unitNumber || 'Unknown unit'}</div>
+                    <div className="text-xs font-bold text-red-900">{failure.unitNumber || `Unknown ${termUnit.toLowerCase()}`}</div>
                     <div className="mt-0.5 text-xs text-red-700">{failure.error}</div>
                   </div>
                 ))}
@@ -257,7 +259,7 @@ const UnitsImportModal = ({ isOpen, onClose, onImport }) => {
           <div className="text-xs text-slate-500">
             {parseResult && parseResult.validCount > 0 ? (
               <span className="font-semibold text-emerald-700">
-                Ready to import {parseResult.validCount} unit{parseResult.validCount !== 1 ? 's' : ''}
+                Ready to import {parseResult.validCount} {termUnit.toLowerCase()}{parseResult.validCount !== 1 ? 's' : ''}
               </span>
             ) : (
               'Upload an Excel file to begin'
@@ -284,7 +286,7 @@ const UnitsImportModal = ({ isOpen, onClose, onImport }) => {
               ) : (
                 <>
                   <FaUpload size={11} />
-                  Import {parseResult?.validCount || 0} Units
+                  Import {parseResult?.validCount || 0} {termUnits}
                 </>
               )}
             </button>

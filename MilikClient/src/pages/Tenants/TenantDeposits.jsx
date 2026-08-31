@@ -969,7 +969,7 @@ const TenantDeposits = () => {
 
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div>
-                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Property Filter</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">{termProperty} Filter</label>
                   <AppSelect
                     size="md"
                     clearable

@@ -676,6 +676,9 @@ const Tenants = ({ listingMode = "active" }) => {
   const termTenants = useTerm("tenants");
   const termTenant = useTerm("tenant");
   const termUnit = useTerm("unit");
+  const termProperty = useTerm("property");
+  const termRent = useTerm("rent");
+  const termLandlord = useTerm("landlord");
 
   // Redux state
   const currentCompany = useSelector(selectCurrentCompany);
@@ -2022,7 +2025,7 @@ const confirmTransferUnit = useCallback(async () => {
         { label: "A/C #", value: (row) => row?.tenantCode || row?.code || "-" },
         { label: `${termTenant} Name`, value: (row) => row?.name || row?.tenantName || "-" },
         { label: "Phone", value: (row) => row?.phone || row?.phoneNumber || "-" },
-        { label: "Rent", value: (row) => row?.rent || "-", align: "right" },
+        { label: termRent, value: (row) => row?.rent || "-", align: "right" },
         { label: "Balance", value: (row) => Number(row?.balance || 0).toLocaleString(), align: "right" },
         { label: "Lease Period", value: (row) => [row?.leaseStartDate || row?.startDate, row?.leaseEndDate || row?.endDate].filter(Boolean).join(" – ") || "-" },
         { label: "Status", value: (row) => computeOperationalStatus({ tenant: row }) },
@@ -2287,7 +2290,7 @@ const confirmTransferUnit = useCallback(async () => {
               { label: "Held By", width: "130px" },
             ] : [
               { label: "Phone", width: "120px" },
-              { label: "Rent", align: "right", width: "100px" },
+              { label: termRent, align: "right", width: "100px" },
               { label: "Balance", align: "right", width: "112px" },
               { label: "Lease Period", width: "188px" },
               { label: "Status", align: "center", width: "92px" },
@@ -2432,17 +2435,17 @@ const confirmTransferUnit = useCallback(async () => {
           <div className="border-b border-slate-100 bg-slate-50 px-5 py-3">
             <div className="grid grid-cols-4 gap-3 text-xs">
               <div>
-                <p className="font-bold uppercase tracking-wider text-slate-400">Tenant</p>
+                <p className="font-bold uppercase tracking-wider text-slate-400">{termTenant}</p>
                 <p className="mt-0.5 font-bold text-slate-900 truncate">{selectedPrimaryTenant?.tenantName || "-"}</p>
                 <p className="text-slate-500">{selectedPrimaryTenant?.tenantCode || "-"}</p>
               </div>
               <div>
-                <p className="font-bold uppercase tracking-wider text-slate-400">Current Unit</p>
+                <p className="font-bold uppercase tracking-wider text-slate-400">Current {termUnit}</p>
                 <p className="mt-0.5 font-bold text-slate-900">{selectedPrimaryTenant?.unitNumber || "-"}</p>
                 <p className="text-slate-500 truncate">{currentPropertyName}</p>
               </div>
               <div>
-                <p className="font-bold uppercase tracking-wider text-slate-400">Rent</p>
+                <p className="font-bold uppercase tracking-wider text-slate-400">{termRent}</p>
                 <p className="mt-0.5 font-bold text-slate-900">Ksh {fmtKES(currentRent)}</p>
               </div>
               <div>
@@ -2489,9 +2492,9 @@ const confirmTransferUnit = useCallback(async () => {
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-slate-50">
                     <tr>
-                      <th className="px-3 py-2 text-left font-semibold text-slate-600">Unit</th>
-                      <th className="px-3 py-2 text-left font-semibold text-slate-600">Property</th>
-                      <th className="px-3 py-2 text-right font-semibold text-slate-600">Rent</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-600">{termUnit}</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-600">{termProperty}</th>
+                      <th className="px-3 py-2 text-right font-semibold text-slate-600">{termRent}</th>
                       <th className="px-3 py-2 text-right font-semibold text-slate-600">Deposit</th>
                       <th className="px-3 py-2 text-center font-semibold text-slate-600">Select</th>
                     </tr>
@@ -2539,7 +2542,7 @@ const confirmTransferUnit = useCallback(async () => {
                     <p className="mt-1 text-xs font-bold text-slate-800">{selectedPrimaryTenant?.unitNumber || "-"}</p>
                     <p className="text-[11px] text-slate-500 truncate">{currentPropertyName}</p>
                     <div className="mt-1.5 flex gap-3 text-[11px] text-slate-600">
-                      <span>Rent <span className="font-bold">Ksh {fmtKES(currentRent)}</span></span>
+                      <span>{termRent} <span className="font-bold">Ksh {fmtKES(currentRent)}</span></span>
                       <span>Dep <span className="font-bold">Ksh {fmtKES(currentDeposit)}</span></span>
                     </div>
                   </div>
@@ -2699,7 +2702,7 @@ const confirmTransferUnit = useCallback(async () => {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="border border-slate-200 bg-slate-50 px-4 py-3">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Tenant</p>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">{termTenant}</p>
                   <p className="mt-1 text-sm font-bold text-slate-900">{selectedPrimaryTenant?.tenantName || "-"}</p>
                   <p className="mt-1 text-xs text-slate-600">{selectedPrimaryTenant?.tenantCode || "-"}</p>
                 </div>
@@ -2789,12 +2792,12 @@ const confirmTransferUnit = useCallback(async () => {
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="border border-slate-200 bg-slate-50 px-3 py-2.5">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Tenant</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{termTenant}</p>
                   <p className="mt-1 text-xs font-bold text-slate-900">{selectedPrimaryTenant?.tenantName || "-"}</p>
                   <p className="text-[11px] text-slate-500">{selectedPrimaryTenant?.tenantCode || "-"}</p>
                 </div>
                 <div className="border border-slate-200 bg-slate-50 px-3 py-2.5">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Unit / Property</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{termUnit} / {termProperty}</p>
                   <p className="mt-1 text-xs font-bold text-slate-900">{selectedPrimaryTenant?.unitNumber || "-"}</p>
                   <p className="text-[11px] text-slate-500">{selectedPrimaryTenant?.propertyName || "-"}</p>
                 </div>
@@ -2876,12 +2879,12 @@ const confirmTransferUnit = useCallback(async () => {
                 <div className="space-y-4">
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                     <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Tenant</p>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">{termTenant}</p>
                       <p className="mt-1.5 text-sm font-bold text-slate-900">{depositSettlementTenant?.tenantName || "-"}</p>
                       <p className="mt-0.5 text-xs text-slate-500">{depositSettlementTenant?.tenantCode || "-"}</p>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Property / Unit</p>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">{termProperty} / {termUnit}</p>
                       <p className="mt-1.5 text-sm font-bold text-slate-900">{depositSettlementTenant?.propertyName || "-"}</p>
                       <p className="mt-0.5 text-xs text-slate-500">{depositSettlementTenant?.unitNumber || "-"}</p>
                     </div>
@@ -3052,8 +3055,8 @@ const confirmTransferUnit = useCallback(async () => {
                       </div>
                       {!depositSettlementDerived.canRefund && (
                         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-900">
-                          <p className="font-bold">Landlord-held deposit rule</p>
-                          <p className="mt-1">This workspace will not post cash or bank refunds when the deposit is held by the landlord.</p>
+                          <p className="font-bold">{termLandlord}-held deposit rule</p>
+                          <p className="mt-1">This workspace will not post cash or bank refunds when the deposit is held by the {termLandlord.toLowerCase()}.</p>
                         </div>
                       )}
                     </div>

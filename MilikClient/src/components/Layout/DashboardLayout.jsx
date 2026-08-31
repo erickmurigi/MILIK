@@ -645,15 +645,18 @@ const TopToolbar = ({
   const termLandlords  = useTerm("landlords");
   const termUnit       = useTerm("unit");
   const termUnits      = useTerm("units");
+  const termRent       = useTerm("rent");
+  const termLease      = useTerm("lease");
 
   // Dynamic color map that reflects company terminology in dropdown headers
   const dynamicMenuColorMap = useMemo(() => ({
     ...MENU_COLOR_MAP,
-    properties: { ...MENU_COLOR_MAP.properties, label: termProperties },
-    landlord:   { ...MENU_COLOR_MAP.landlord,   label: termLandlords  },
-    tenants:    { ...MENU_COLOR_MAP.tenants,    label: termTenants    },
-    units:      { ...MENU_COLOR_MAP.units,      label: termUnits      },
-  }), [termProperties, termLandlords, termTenants, termUnits]);
+    properties:        { ...MENU_COLOR_MAP.properties,        label: termProperties                   },
+    landlord:          { ...MENU_COLOR_MAP.landlord,          label: termLandlords                    },
+    tenants:           { ...MENU_COLOR_MAP.tenants,           label: termTenants                      },
+    units:             { ...MENU_COLOR_MAP.units,             label: `${termUnits} & Spaces`          },
+    "landlord-payments": { ...MENU_COLOR_MAP["landlord-payments"], label: `${termLandlord} Payments`  },
+  }), [termProperties, termLandlords, termTenants, termUnits, termLandlord]);
 
   // For neutral pages (e.g. /my-account), derive menu from the company's enabled modules
   // so a Car Wash-only company doesn't see the PMS navbar.
@@ -1497,7 +1500,7 @@ const TopToolbar = ({
         icon: FaHome,
         submenu: [
           { id: "properties-list", label: `${termProperty} Listing`, icon: FaHome },
-          { id: "add-property", label: "Add New Property", icon: FaPlus },
+          { id: "add-property", label: `Add New ${termProperty}`, icon: FaPlus },
           { id: "zones", label: "Zones", icon: FaLayerGroup },
           { type: "separator" },
           { id: "property-commission-settings", label: "Commission Settings", icon: FaCog },
@@ -1538,8 +1541,8 @@ const TopToolbar = ({
         label: "Billing & Receipting",
         icon: FaFileInvoice,
         submenu: [
-          { id: "rental-invoicing", label: "Rental Invoicing", hasSubmenu: true, icon: FaFileInvoice, category: "invoicing", categoryColor: "#4F46E5" },
-          { id: "rental-receipting", label: "Rental Receipting", hasSubmenu: true, icon: FaReceipt, category: "receipting", categoryColor: "#10B981" },
+          { id: "rental-invoicing", label: `${termRent} Invoicing`, hasSubmenu: true, icon: FaFileInvoice, category: "invoicing", categoryColor: "#4F46E5" },
+          { id: "rental-receipting", label: `${termRent} Receipting`, hasSubmenu: true, icon: FaReceipt, category: "receipting", categoryColor: "#10B981" },
           { type: "separator" },
           { id: "landlord-payments", label: `${termLandlord} Payments`, hasSubmenu: true, icon: FaHandHolding, category: "landlord", categoryColor: "#8B5CF6" },
         ],
@@ -1550,7 +1553,7 @@ const TopToolbar = ({
         icon: FaChartBar,
         submenu: [
           { id: "rental-collection", label: "Rental Collection Report", icon: FaChartBar },
-          { id: "property-income-summary", label: "Property Income Summary", icon: FaChartLine },
+          { id: "property-income-summary", label: `${termProperty} Income Summary`, icon: FaChartLine },
           { id: "mri-tax-summary", label: "MRI Tax Summary", icon: FaCalculator },
           { id: "paid-balance", label: "Paid & Balance Report", icon: FaChartLine },
           { id: "aged-analysis", label: "Aged Analysis", icon: FaChartPie },
@@ -1602,7 +1605,7 @@ const TopToolbar = ({
               .filter((subItem) => !["property-commission-settings", "commissions-list"].includes(subItem.id))
               .map((subItem) => {
                 if (subItem.id === "properties-list") return { ...subItem, label: `My ${termProperties}` };
-                if (subItem.id === "add-property") return { ...subItem, label: "Add Property" };
+                if (subItem.id === "add-property") return { ...subItem, label: `Add ${termProperty}` };
                 if (subItem.id === "units-spaces") return { ...subItem, label: `${termUnits} / Spaces` };
                 if (subItem.id === "availability") return { ...subItem, label: "Occupancy & Availability" };
                 return subItem;
@@ -1618,10 +1621,10 @@ const TopToolbar = ({
                 .filter((subItem) => subItem.id !== "landlord-payments")
                 .map((subItem) => {
                   if (subItem.id === "rental-invoicing") return { ...subItem, label: `${termTenant} Invoicing` };
-                  if (subItem.id === "rental-receipting") return { ...subItem, label: "Rent Collections" };
+                  if (subItem.id === "rental-receipting") return { ...subItem, label: `${termRent} Collections` };
                   return subItem;
                 }),
-              { id: "property-expenses", label: "Property Expenses", icon: FaMoneyBillWave },
+              { id: "property-expenses", label: `${termProperty} Expenses`, icon: FaMoneyBillWave },
             ],
           };
         }
@@ -1633,7 +1636,7 @@ const TopToolbar = ({
             submenu: item.submenu
               .filter((subItem) => !["commission-reports"].includes(subItem.id))
               .map((subItem) => {
-                if (subItem.id === "rental-collection") return { ...subItem, label: "Rent Collection Report" };
+                if (subItem.id === "rental-collection") return { ...subItem, label: `${termRent} Collection Report` };
                 if (subItem.id === "property-income-summary") return { ...subItem, label: "Income & Expense Summary" };
                 if (subItem.id === "mri-tax-summary") return { ...subItem, label: "Rental Income Tax (MRI)" };
                 if (subItem.id === "paid-balance") return { ...subItem, label: "Paid & Balance" };
@@ -1651,7 +1654,7 @@ const TopToolbar = ({
       });
 
     return filterMenuByPermissions(items, currentUser, activeCompanyContext);
-  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isClientsWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace, termTenant, termTenants, termUnit, termUnits, termProperty, termProperties, termLandlord, termLandlords]);
+  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isClientsWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace, termTenant, termTenants, termUnit, termUnits, termProperty, termProperties, termLandlord, termLandlords, termRent, termLease]);
 
   const nestedSubmenus = useMemo(() => {
     if (isSystemAdminWorkspace || isCompanySetupWorkspace || isAccountsWorkspace || isCarWashWorkspace || isClientsWorkspace || isPropertySaleWorkspace || isHumanResourceWorkspace || isCommunicationsWorkspace) {
@@ -1660,9 +1663,9 @@ const TopToolbar = ({
 
     const submenus = {
       "rental-invoicing": [
-        { id: "rental-invoices-list", label: "Rental Invoices", icon: FaFileInvoice },
+        { id: "rental-invoices-list", label: `${termRent} Invoices`, icon: FaFileInvoice },
         { id: "credit-debit-notes", label: "Credit & Debit Notes", icon: FaFileInvoice },
-        { id: "lease-fees", label: "Lease Fees", icon: FaFileInvoice },
+        { id: "lease-fees", label: `${termLease} Fees`, icon: FaFileInvoice },
         { id: "utility-bills", label: "Utility Bills", icon: FaFileInvoice },
         { id: "late-penalties", label: "Late Penalties - Invoices", icon: FaExclamationTriangle },
         { id: "meter-readings", label: "Meter Readings", icon: FaDatabase },
@@ -1671,7 +1674,7 @@ const TopToolbar = ({
         { id: "rental-aged-analysis", label: "Rental Aged Analysis", icon: FaChartBar },
       ],
       "rental-receipting": [
-        { id: "rental-receipts", label: "Rental Receipts", icon: FaReceipt },
+        { id: "rental-receipts", label: `${termRent} Receipts`, icon: FaReceipt },
         { id: "mpesa-collections", label: "M-Pesa Collections",  icon: FaPhone },
         { id: "coop-collections",  label: "Co-op Collections",   icon: FaPhone },
         { id: "tenant-prepayments", label: `${termTenant} Prepayments`, icon: FaCoins },
@@ -1679,8 +1682,8 @@ const TopToolbar = ({
       ],
       "landlord-payments": [
         { id: "commission-landlord-statement", label: "Commissions & LL Statement", icon: FaFileAlt },
-        { id: "landlord-standing-orders", label: "Landlord Standing Orders", icon: FaCalendarAlt },
-        { id: "landlord-advancement", label: "Landlord Advancement", icon: FaMoneyBillWave },
+        { id: "landlord-standing-orders", label: `${termLandlord} Standing Orders`, icon: FaCalendarAlt },
+        { id: "landlord-advancement", label: `${termLandlord} Advancement`, icon: FaMoneyBillWave },
         { id: "management-fee-invoices", label: "Management Fee Invoices", icon: FaFileInvoice },
         { id: "processed-statements", label: "Processed Statements (Legacy)", icon: FaCheckCircle },
         ...(currentUser?.isSystemAdmin || currentUser?.superAdminAccess
@@ -1691,7 +1694,7 @@ const TopToolbar = ({
 
     if (isLandlordMode) {
       submenus["rental-invoicing"] = submenus["rental-invoicing"].map((item) => {
-        if (item.id === "rental-aged-analysis") return { ...item, label: "Tenant Arrears Analysis" };
+        if (item.id === "rental-aged-analysis") return { ...item, label: `${termTenant} Arrears Analysis` };
         return item;
       });
       submenus["rental-receipting"] = submenus["rental-receipting"]
@@ -1720,7 +1723,7 @@ const TopToolbar = ({
     });
 
     return submenus;
-  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isClientsWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace, termTenant, termLandlord]);
+  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isClientsWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace, termTenant, termLandlord, termRent, termLease, termProperty]);
 
   const handleMenuItemClick = useCallback((menuId) => {
     const route = routeConfig[menuId];
@@ -1964,10 +1967,10 @@ const TopToolbar = ({
           <button
             onClick={() => navigate("/tenant/new")}
             className={`flex items-center gap-1 rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
-            title="New Tenant"
+            title={`New ${termTenant}`}
           >
             <FaUserPlus className="xl:hidden shrink-0" aria-hidden="true" />
-            <span className="hidden xl:inline">+ Tenant</span>
+            <span className="hidden xl:inline">+ {termTenant}</span>
           </button>
           <button
             onClick={() => navigate("/invoices/new")}

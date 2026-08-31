@@ -3,6 +3,7 @@ import { verifyUser } from "../../controllers/verifyToken.js";
 import {
   getMeterReadings,
   createMeterReading,
+  createMeterReadingsBatch,
   updateMeterReading,
   deleteMeterReading,
   voidMeterReading,
@@ -13,6 +14,7 @@ const router = express.Router();
 
 router.get("/", verifyUser, getMeterReadings);
 router.post("/", verifyUser, createMeterReading);
+router.post("/batch", verifyUser, createMeterReadingsBatch);
 router.put("/:id", verifyUser, updateMeterReading);
 router.delete("/:id", verifyUser, deleteMeterReading);
 router.patch("/:id/void", verifyUser, voidMeterReading);

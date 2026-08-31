@@ -9,6 +9,8 @@ import {
 } from "react-icons/fa";
 import { parseInvoiceNotesExcel, downloadInvoiceNotesTemplate } from "../../utils/excelTemplates";
 import { toast } from "react-toastify";
+import { useTerms } from "../../hooks/useTerm";
+import { useTerms } from "../../hooks/useTerm";
 
 const formatAmount = (value) => {
   const n = Number(value || 0);
@@ -17,6 +19,7 @@ const formatAmount = (value) => {
 };
 
 const InvoiceNotesImportModal = ({ isOpen, onClose, onImport }) => {
+  const { tenant: termTenant, invoice: termInvoice } = useTerms("tenant", "invoice");
   const [selectedFile, setSelectedFile] = useState(null);
   const [parseResult, setParseResult] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -199,7 +202,7 @@ const InvoiceNotesImportModal = ({ isOpen, onClose, onImport }) => {
                     <table className="min-w-full divide-y divide-slate-200 text-xs">
                       <thead className="bg-[#0B3B2E] text-white">
                         <tr>
-                          {["Type", "Tenant", "Category", "Amount (KES)", "Date", "Source Inv.", "Narration"].map((h) => (
+                          {["Type", termTenant, "Category", "Amount (KES)", "Date", `Source ${termInvoice}`, "Narration"].map((h) => (
                             <th key={h} className="px-3 py-2 text-left text-[9px] font-black uppercase tracking-wide">{h}</th>
                           ))}
                         </tr>

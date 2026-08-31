@@ -1,14 +1,16 @@
 import React, { useState } from "react";
 import { FaTimes, FaCalendarAlt } from "react-icons/fa";
+import { useTerms } from "../../hooks/useTerm";
 
 const GenerateStatementModal = ({ isOpen, properties = [], landlords = [], onClose, onGenerateDraft, loading = false }) => {
+  const { property: termProperty, landlord: termLandlord } = useTerms("property", "landlord");
   const [formData, setFormData] = useState({ propertyId: "", landlordId: "", periodStart: "", periodEnd: "", notes: "" });
   const [errors, setErrors] = useState({});
 
   const validate = () => {
     const e = {};
-    if (!formData.propertyId) e.propertyId = "Property is required";
-    if (!formData.landlordId) e.landlordId = "Landlord is required";
+    if (!formData.propertyId) e.propertyId = `${termProperty} is required`;
+    if (!formData.landlordId) e.landlordId = `${termLandlord} is required`;
     if (!formData.periodStart) e.periodStart = "Start date is required";
     if (!formData.periodEnd) e.periodEnd = "End date is required";
     if (formData.periodStart && formData.periodEnd && new Date(formData.periodStart) >= new Date(formData.periodEnd))
@@ -52,8 +54,8 @@ const GenerateStatementModal = ({ isOpen, properties = [], landlords = [], onClo
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
             {[
-              { label: "Property", key: "propertyId", type: "select", options: properties.map((p) => ({ value: p._id, label: p.propertyName || p.name || "Unnamed" })) },
-              { label: "Landlord", key: "landlordId", type: "select", options: landlords.map((l) => ({ value: l._id, label: `${l.firstName} ${l.lastName}` })) },
+              { label: termProperty, key: "propertyId", type: "select", options: properties.map((p) => ({ value: p._id, label: p.propertyName || p.name || "Unnamed" })) },
+              { label: termLandlord, key: "landlordId", type: "select", options: landlords.map((l) => ({ value: l._id, label: `${l.firstName} ${l.lastName}` })) },
             ].map(({ label, key, options }) => (
               <div key={key}>
                 <label className="block text-xs font-black uppercase tracking-wide text-slate-600 mb-1.5">{label} <span className="text-red-500">*</span></label>

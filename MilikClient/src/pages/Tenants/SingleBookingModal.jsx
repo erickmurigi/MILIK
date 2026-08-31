@@ -18,6 +18,7 @@ import {
   resolveTaxSelectionPayload,
 } from "./invoiceTaxUtils";
 import AppSelect from "../../components/common/AppSelect";
+import { useTerms } from "../../hooks/useTerm";
 import { useInvoicePricing } from "./useInvoicePricing";
 import {
   MONTH_OPTIONS,
@@ -115,6 +116,7 @@ const SingleBookingModal = ({
   lockedYear = null,
   initialTenantId = "",
 }) => {
+  const { tenant: termTenant, unit: termUnit, property: termProperty, rent: termRent } = useTerms("tenant", "unit", "property", "rent");
   const currentUser = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
   const unitsFromStore = useSelector(selectAllUnits);
@@ -683,7 +685,7 @@ const SingleBookingModal = ({
             {/* Tenant selector — locked shows read-only, unlocked shows dropdown */}
             {isLocked ? (
               <div className="md:col-span-3">
-                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tenant</label>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">{termTenant}</label>
                 <div className="w-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-800">
                   {getTenantDisplayName(lockedTenant)}
                   {lockedTenant?.tenantCode ? ` · ${lockedTenant.tenantCode}` : ""}
@@ -694,7 +696,7 @@ const SingleBookingModal = ({
               </div>
             ) : (
               <div className="relative md:col-span-2">
-                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tenant</label>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">{termTenant}</label>
                 <input
                   type="text"
                   value={tenantSearch || formatTenantOptionLabel(selectedTenantOption)}
@@ -917,15 +919,15 @@ const SingleBookingModal = ({
               </p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                 <div>
-                  <p className="text-slate-500">Property</p>
+                  <p className="text-slate-500">{termProperty}</p>
                   <p className="font-semibold text-slate-900">{preview.propertyName}</p>
                 </div>
                 <div>
-                  <p className="text-slate-500">Unit</p>
+                  <p className="text-slate-500">{termUnit}</p>
                   <p className="font-semibold text-slate-900">{preview.unitName}</p>
                 </div>
                 <div>
-                  <p className="text-slate-500">Rent</p>
+                  <p className="text-slate-500">{termRent}</p>
                   <p className="font-semibold text-slate-900">KES {preview.rentAmount.toLocaleString()}</p>
                 </div>
                 <div>

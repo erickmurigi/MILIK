@@ -128,6 +128,7 @@ function TakeOnBalanceModal({
   onSave,
   saving,
 }) {
+  const { tenant: termTenant, unit: termUnit, property: termProperty } = useTerms("tenant", "unit", "property");
   const selectedTenant =
     tenants.find((tenant) => normalizeId(tenant._id) === normalizeId(form.tenantId)) || null;
   const selectedUnit = selectedTenant?.unit || null;
@@ -248,7 +249,7 @@ function TakeOnBalanceModal({
             {/* Left — form fields */}
             <div className="space-y-4">
               <div>
-                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Property</label>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">{termProperty}</label>
                 <AppSelect
                   value={form.propertyId}
                   onChange={(v) => setForm((prev) => ({ ...prev, propertyId: v ?? "", tenantId: "" }))}
@@ -261,25 +262,25 @@ function TakeOnBalanceModal({
               </div>
 
               <div>
-                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Find Tenant</label>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Find {termTenant}</label>
                 <div className="relative">
                   <FaSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={10} />
                   <input
                     value={form.tenantSearch}
                     onChange={(e) => setForm((prev) => ({ ...prev, tenantSearch: e.target.value }))}
-                    placeholder="Type tenant name, unit, or property"
+                    placeholder={`Type ${termTenant.toLowerCase()} name, ${termUnit.toLowerCase()}, or ${termProperty.toLowerCase()}`}
                     className="w-full border border-slate-300 py-2 pl-8 pr-3 text-xs shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tenant</label>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">{termTenant}</label>
                 <AppSelect
                   value={form.tenantId}
                   onChange={(v) => setForm((prev) => ({ ...prev, tenantId: v ?? "" }))}
                   options={filteredTenantOptions}
-                  placeholder={form.propertyId ? "Select tenant" : "Select property first"}
+                  placeholder={form.propertyId ? `Select ${termTenant.toLowerCase()}` : `Select ${termProperty.toLowerCase()} first`}
                   searchable
                   disabled={mode === "edit" || (!form.propertyId && mode !== "edit")}
                   size="md"
@@ -402,9 +403,9 @@ function TakeOnBalanceModal({
                 </p>
                 <div className="mt-3 divide-y divide-slate-100">
                   {[
-                    ["Tenant", getTenantDisplayName(selectedTenant)],
-                    ["Property", getPropertyDisplay(selectedProperty)],
-                    ["Unit", getUnitDisplay(selectedUnit)],
+                    [termTenant, getTenantDisplayName(selectedTenant)],
+                    [termProperty, getPropertyDisplay(selectedProperty)],
+                    [termUnit, getUnitDisplay(selectedUnit)],
                     ["Bill Item", form.billItem === "utility" ? (form.utilityLabel || "Utility") : selectedBillItem.defaultLabel],
                     ["Amount", formatCurrency(form.amount || 0)],
                   ].map(([label, value]) => (
@@ -461,6 +462,7 @@ function TakeOnBalanceModal({
 }
 
 function TakeOnViewModal({ open, row, onClose }) {
+  const { tenant: termTenant, unit: termUnit } = useTerms("tenant", "unit");
   if (!open || !row) return null;
 
   return (
@@ -478,8 +480,8 @@ function TakeOnViewModal({ open, row, onClose }) {
         </div>
         <div className="flex-1 overflow-y-auto grid grid-cols-1 gap-4 px-6 py-6 md:grid-cols-2">
           {[
-            ["Tenant", getTenantDisplayName(row.tenant)],
-            ["Unit", getUnitDisplay(row.unit)],
+            [termTenant, getTenantDisplayName(row.tenant)],
+            [termUnit, getUnitDisplay(row.unit)],
             ["Type", row.type],
             ["Amount", formatCurrency(row.amount)],
             ["Allocated", formatCurrency(row.allocated)],
@@ -1087,8 +1089,8 @@ const TakeOnBalances = () => {
                 const meta = statusMeta[row.status] || statusMeta.unallocated;
                 return (
                   <div className="grid gap-2 text-[10px] md:grid-cols-4">
-                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Tenant</span><p className="font-semibold text-slate-900">{getTenantDisplayName(row.tenant)}</p></div>
-                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Property / Unit</span><p className="font-semibold text-slate-900">{getRowPropertyName(row)} · {getUnitDisplay(row.unit)}</p></div>
+                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">{termTenant}</span><p className="font-semibold text-slate-900">{getTenantDisplayName(row.tenant)}</p></div>
+                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">{termProperty} / {termUnit}</span><p className="font-semibold text-slate-900">{getRowPropertyName(row)} · {getUnitDisplay(row.unit)}</p></div>
                     <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Bill item</span><p className="font-semibold text-slate-900">{row.billItemLabel} · {row.type}</p></div>
                     <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Posting position</span><p className="font-semibold text-slate-900">{meta.label} · Balance {formatCurrency(row.balance)}</p></div>
                   </div>

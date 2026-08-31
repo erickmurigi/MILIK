@@ -8,6 +8,7 @@ import {
 } from "react-icons/fa";
 import { parseTenantsExcel } from "../../utils/excelTemplates";
 import { toast } from "react-toastify";
+import { useTerms } from "../../hooks/useTerm";
 
 const formatMoney = (value) => {
   const amount = Number(value || 0);
@@ -27,6 +28,7 @@ const formatUtilities = (utilities = []) => {
 };
 
 const TenantsImportModal = ({ isOpen, onClose, onImport }) => {
+  const { tenant: termTenant, tenants: termTenants, property: termProperty, unit: termUnit, rent: termRent } = useTerms("tenant", "tenants", "property", "unit", "rent");
   const [selectedFile, setSelectedFile] = useState(null);
   const [parseResult, setParseResult] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -55,7 +57,7 @@ const TenantsImportModal = ({ isOpen, onClose, onImport }) => {
       if (result.errorCount > 0) {
         toast.warning(`File parsed with ${result.errorCount} row error(s). Review before importing.`);
       } else {
-        toast.success(`Validated ${result.validCount} tenant record(s).`);
+        toast.success(`Validated ${result.validCount} ${termTenant.toLowerCase()} record(s).`);
       }
     } catch (error) {
       toast.error(error.message || "Failed to parse Excel file");
@@ -68,7 +70,7 @@ const TenantsImportModal = ({ isOpen, onClose, onImport }) => {
 
   const handleImport = async () => {
     if (!parseResult || parseResult.validCount === 0) {
-      toast.error("No valid tenant records to import");
+      toast.error(`No valid ${termTenant.toLowerCase()} records to import`);
       return;
     }
 
@@ -83,26 +85,26 @@ const TenantsImportModal = ({ isOpen, onClose, onImport }) => {
       setImportFailures(failed);
 
       if (successful.length > 0 && failed.length === 0) {
-        toast.success(`Successfully imported ${successful.length} tenant(s).`);
+        toast.success(`Successfully imported ${successful.length} ${termTenant.toLowerCase()}(s).`);
         handleClose();
         return;
       }
 
       if (successful.length > 0 && failed.length > 0) {
-        toast.warning(`Imported ${successful.length} tenant(s). ${failed.length} row(s) failed.`);
+        toast.warning(`Imported ${successful.length} ${termTenant.toLowerCase()}(s). ${failed.length} row(s) failed.`);
         return;
       }
 
       if (failed.length > 0) {
-        toast.error(`Import failed for ${failed.length} tenant row(s).`);
+        toast.error(`Import failed for ${failed.length} ${termTenant.toLowerCase()} row(s).`);
         return;
       }
 
-      toast.success(`Successfully imported ${parseResult.validCount} tenant(s).`);
+      toast.success(`Successfully imported ${parseResult.validCount} ${termTenant.toLowerCase()}(s).`);
       handleClose();
     } catch (error) {
       console.error("Tenant import failed:", error);
-      toast.error(error.message || "Failed to import tenants");
+      toast.error(error.message || `Failed to import ${termTenants.toLowerCase()}`);
     } finally {
       setIsImporting(false);
     }
@@ -128,7 +130,7 @@ const TenantsImportModal = ({ isOpen, onClose, onImport }) => {
         <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
           <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
             <FaUpload size={14} />
-            Import Tenants from Excel
+            Import {termTenants} from Excel
           </h2>
           <button
             onClick={handleClose}
@@ -194,7 +196,7 @@ const TenantsImportModal = ({ isOpen, onClose, onImport }) => {
                     <table className="min-w-full divide-y divide-slate-200 text-xs">
                       <thead className="bg-[#0B3B2E] text-white">
                         <tr>
-                          {["Tenant", "Property / Unit", "Addl. Units", "Rent", "Deposit", "Held By", "Utilities", "Status"].map((h) => (
+                          {[termTenant, `${termProperty} / ${termUnit}`, "Addl. Units", termRent, "Deposit", "Held By", "Utilities", "Status"].map((h) => (
                             <th key={h} className="px-3 py-2 text-left text-[9px] font-black uppercase tracking-wide">{h}</th>
                           ))}
                         </tr>
@@ -217,7 +219,7 @@ const TenantsImportModal = ({ isOpen, onClose, onImport }) => {
                             </td>
                             <td className="px-3 py-1.5 text-right text-slate-700">{formatMoney(record.rent)}</td>
                             <td className="px-3 py-1.5 text-right text-slate-700">{formatMoney(record.depositAmount)}</td>
-                            <td className="px-3 py-1.5 text-slate-600">{record.depositHeldBy || "Property Default"}</td>
+                            <td className="px-3 py-1.5 text-slate-600">{record.depositHeldBy || `${termProperty} Default`}</td>
                             <td className="px-3 py-1.5 text-slate-600">{formatUtilities(record.utilities)}</td>
                             <td className="px-3 py-1.5 capitalize text-slate-600">{record.status || "active"}</td>
                           </tr>
@@ -294,7 +296,7 @@ const TenantsImportModal = ({ isOpen, onClose, onImport }) => {
           <div className="text-xs text-slate-500">
             {parseResult
               ? `${parseResult.validCount} valid row(s) ready for import`
-              : "Upload a tenant import file to validate first"}
+              : `Upload a ${termTenant.toLowerCase()} import file to validate first`}
           </div>
           <div className="flex items-center gap-2">
             <button

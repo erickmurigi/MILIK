@@ -11,6 +11,7 @@ import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectAll
 import { adminRequests } from "../../utils/requestMethods";
 import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import ListingImagesField from "../common/ListingImagesField";
+import { useTerms } from "../../hooks/useTerm";
 
 const MILIK_ORANGE_BG = "bg-[#0B3B2E]";
 const normalizeBillingPeriodKey = (value = "") =>
@@ -161,6 +162,15 @@ const AddUnit = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const loading = useSelector(selectUnitIsFetching);
+  const {
+    unit: termUnit,
+    units: termUnits,
+    rent: termRent,
+    property: termProperty,
+    tenant: termTenant,
+    invoice: termInvoice,
+    lease: termLease,
+  } = useTerms("unit", "units", "rent", "property", "tenant", "invoice", "lease");
   const units = useSelector(selectAllUnits);
   const properties = useSelector(selectAllProperties);
   const activeProperties = useMemo(
@@ -534,7 +544,7 @@ const AddUnit = () => {
       await adminRequests.post(`/units/${targetUnitId}/images`, body);
       setStagedImageFiles([]);
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Unit saved, but photo upload failed");
+      toast.error(err?.response?.data?.message || `${termUnit} saved, but photo upload failed`);
     }
   };
 
@@ -566,16 +576,16 @@ const AddUnit = () => {
     const errors = {};
 
     if (!formData.property?.trim()) {
-      errors.property = "Property is required";
+      errors.property = `${termProperty} is required`;
     }
     if (!formData.unitNumber?.trim()) {
-      errors.unitNumber = "Unit number is required";
+      errors.unitNumber = `${termUnit} number is required`;
     }
     if (!formData.unitType) {
-      errors.unitType = "Unit type is required";
+      errors.unitType = `${termUnit} type is required`;
     }
     if (formData.rent && parseFloat(formData.rent) < 0) {
-      errors.rent = "Rent cannot be negative";
+      errors.rent = `${termRent} cannot be negative`;
     }
     if (formData.deposit && parseFloat(formData.deposit) < 0) {
       errors.deposit = "Deposit cannot be negative";
@@ -656,11 +666,11 @@ const AddUnit = () => {
       if (isEditMode) {
         // Update existing unit
         savedUnit = await dispatch(updateUnit({ id: unitId, unitData })).unwrap();
-        toast.success("Unit updated successfully!");
+        toast.success(`${termUnit} updated successfully!`);
       } else {
         // Create new unit
         savedUnit = await dispatch(createUnit(unitData)).unwrap();
-        toast.success("Unit created successfully!");
+        toast.success(`${termUnit} created successfully!`);
       }
 
       if (stagedImageFiles.length > 0) {
@@ -679,7 +689,7 @@ const AddUnit = () => {
         err?.error ||
         err?.data?.message ||
         err?.response?.data?.message ||
-        (isEditMode ? "Failed to update unit" : "Failed to create unit");
+        (isEditMode ? `Failed to update ${termUnit.toLowerCase()}` : `Failed to create ${termUnit.toLowerCase()}`);
 
       setGeneralError(backendMessage);
       toast.error(backendMessage);
@@ -749,8 +759,8 @@ const AddUnit = () => {
             </button>
             <div className="h-4 w-px bg-[#2A5C4A]" />
             <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">Units</div>
-              <h1 className="text-sm font-black text-white leading-none">{isEditMode ? "Edit Unit" : "New Unit"}</h1>
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">{termUnits}</div>
+              <h1 className="text-sm font-black text-white leading-none">{isEditMode ? `Edit ${termUnit}` : `New ${termUnit}`}</h1>
             </div>
           </div>
         </div>
@@ -763,9 +773,9 @@ const AddUnit = () => {
             {/* Property Selection */}
             <div className="xl:col-span-5">
               <MilikSelect
-                label="Property"
+                label={termProperty}
                 required
-                placeholder="Select property"
+                placeholder={`Select ${termProperty.toLowerCase()}`}
                 items={activeProperties}
                 value={formData.property}
                 onChange={(val) => handleInputChange({ target: { name: "property", value: val } })}
@@ -784,22 +794,22 @@ const AddUnit = () => {
                     <div className="mt-0.5 text-xs font-bold text-slate-900">{measurementLabel}</div>
                   </div>
                   <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-[#0B3B2E]/70">Default Rent Rate</div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[#0B3B2E]/70">Default {termRent} Rate</div>
                     <div className="mt-0.5 text-xs font-bold text-slate-900">
                       {Number(selectedProperty.rentPerMeasure || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       {" "}{selectedProperty.rentCurrency || "KES"} / {measurementLabel}
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-[#0B3B2E]/70">Default Rent Deposit</div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[#0B3B2E]/70">Default {termRent} Deposit</div>
                     <div className="mt-0.5 text-xs font-bold text-slate-900">
                       {(() => {
                         const rentDeposit = (selectedProperty.securityDeposits || []).find(
                           (item) => String(item?.depositType || "").toLowerCase().includes("rent")
                         );
-                        if (!rentDeposit) return "Falls back to unit rent";
+                        if (!rentDeposit) return `Falls back to ${termUnit.toLowerCase()} ${termRent.toLowerCase()}`;
                         return String(rentDeposit.chargeMode || "Fixed Amount") === "Percentage"
-                          ? `${Number(rentDeposit.amount || 0).toLocaleString()}% of rent`
+                          ? `${Number(rentDeposit.amount || 0).toLocaleString()}% of ${termRent.toLowerCase()}`
                           : `${Number(rentDeposit.amount || 0).toLocaleString()} ${rentDeposit.currency || "KES"}`;
                       })()}
                     </div>
@@ -812,7 +822,7 @@ const AddUnit = () => {
             <div className="xl:col-span-12 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
               <div>
                 <label className={labelClass}>
-                  Unit Number <span className="text-red-500">*</span>
+                  {termUnit} Number <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -832,9 +842,9 @@ const AddUnit = () => {
 
               <div>
                 <MilikSelect
-                  label="Unit Type"
+                  label={`${termUnit} Type`}
                   required
-                  placeholder="Select unit type"
+                  placeholder={`Select ${termUnit.toLowerCase()} type`}
                   items={unitTypes}
                   value={formData.unitType}
                   onChange={(val) => handleInputChange({ target: { name: "unitType", value: val } })}
@@ -862,7 +872,7 @@ const AddUnit = () => {
                   disabled={loading}
                 />
                 <p className="mt-1 text-xs text-slate-500">
-                  Enter the measured unit area to let the property pricing defaults calculate rent.
+                  Enter the measured {termUnit.toLowerCase()} area to let the property pricing defaults calculate {termRent.toLowerCase()}.
                 </p>
               </div>
 
@@ -883,7 +893,7 @@ const AddUnit = () => {
 
               <div>
                 <label className={labelClass}>
-                  Monthly Rent (KES) <span className="text-red-500">*</span>
+                  Monthly {termRent} (KES) <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="number"
@@ -948,7 +958,7 @@ const AddUnit = () => {
             {/* Unit-Specific Utilities */}
             <div className="xl:col-span-7 bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-lg p-4 space-y-4">
               <div className="flex justify-between items-center">
-                <h3 className="text-base font-bold text-slate-900 tracking-tight">Unit-Specific Utilities</h3>
+                <h3 className="text-base font-bold text-slate-900 tracking-tight">{termUnit}-Specific Utilities</h3>
                 <button
                   type="button"
                   onClick={addUtility}
@@ -960,7 +970,7 @@ const AddUnit = () => {
 
               {formData.utilities.length === 0 ? (
                 <div className="text-center py-6 text-slate-500 text-sm">
-                  No utilities added yet. Click "Add Utility" to include utilities for this unit.
+                  No utilities added yet. Click "Add Utility" to include utilities for this {termUnit.toLowerCase()}.
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -986,7 +996,7 @@ const AddUnit = () => {
 
                         {/* Unit Charge */}
                         <div>
-                          <label className={labelClass}>Unit Charge (KES)</label>
+                          <label className={labelClass}>{termUnit} Charge (KES)</label>
                           <input
                             type="number"
                             value={util.unitCharge}
@@ -1009,7 +1019,7 @@ const AddUnit = () => {
                               className="rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]/30"
                               disabled={loading}
                             />
-                            <span className="text-xs font-medium text-slate-700">Include in Rent</span>
+                            <span className="text-xs font-medium text-slate-700">Include in {termRent}</span>
                           </label>
                         </div>
 
@@ -1044,7 +1054,7 @@ const AddUnit = () => {
                   {/* Utility Charges */}
                   <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
                     <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
-                      Utilities (Not in Rent)
+                      Utilities (Not in {termRent})
                     </div>
                     <div className="text-xl font-bold text-[#0B3B2E]">
                       KES {monthlyUtilityBill.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -1060,7 +1070,7 @@ const AddUnit = () => {
                     <div className="text-xl font-bold text-white">
                       KES {totalMonthlyBill.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
-                    <div className="text-xs text-white/50 mt-2">Rent + utilities</div>
+                    <div className="text-xs text-white/50 mt-2">{termRent} + utilities</div>
                   </div>
                 </div>
               )}
@@ -1091,7 +1101,7 @@ const AddUnit = () => {
                     <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
                       {(() => {
                         const selectedPeriod = billingPeriodOptions.find((item) => item.key === canonicalBillingPeriodKey(formData.billingFrequency || "monthly"));
-                        return `${selectedPeriod?.name || "Configured"} Invoice Amount`;
+                        return `${selectedPeriod?.name || "Configured"} ${termInvoice} Amount`;
                       })()}
                     </div>
                     <div className="text-2xl font-bold text-white">
@@ -1196,7 +1206,7 @@ const AddUnit = () => {
                 </div>
 
                 <div>
-                  <label className={labelClass}>Minimum Lease Term (months)</label>
+                  <label className={labelClass}>Minimum {termLease} Term (months)</label>
                   <input
                     type="number"
                     name="minimumLeaseTermMonths"
@@ -1220,7 +1230,7 @@ const AddUnit = () => {
                       disabled={loading}
                     />
                     <p className="mt-1 text-xs text-slate-500">
-                      Set this when a tenant gives notice, to list the unit before it's actually vacant.
+                      Set this when a {termTenant.toLowerCase()} gives notice, to list the {termUnit.toLowerCase()} before it's actually vacant.
                     </p>
                   </div>
                 )}
@@ -1280,12 +1290,12 @@ const AddUnit = () => {
                     <div className={`w-10 h-5 rounded-full transition-colors ${formData.rentNegotiable ? "bg-[#0B3B2E]" : "bg-slate-200"}`} />
                     <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${formData.rentNegotiable ? "translate-x-5" : "translate-x-0"}`} />
                   </div>
-                  <span className="text-xs font-semibold text-slate-700">Rent Negotiable</span>
+                  <span className="text-xs font-semibold text-slate-700">{termRent} Negotiable</span>
                 </label>
               </div>
 
               <ListingImagesField
-                label="Unit Photos"
+                label={`${termUnit} Photos`}
                 existingImages={existingImages}
                 stagedFiles={stagedImageFiles}
                 onFilesSelected={handleImageFilesSelected}
@@ -1401,7 +1411,7 @@ const AddUnit = () => {
               className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? <FaSpinner className="animate-spin" /> : <FaSave />}
-              {loading ? "Saving…" : isEditMode ? "Update Unit" : "Save Unit"}
+              {loading ? "Saving…" : isEditMode ? `Update ${termUnit}` : `Save ${termUnit}`}
             </button>
           </div>
         </div>

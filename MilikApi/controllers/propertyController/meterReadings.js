@@ -518,6 +518,235 @@ export const createMeterReading = async (req, res, next) => {
   }
 };
 
+export const createMeterReadingsBatch = async (req, res, next) => {
+  try {
+    const businessId = ensureBusinessAccess(req, resolveBusinessId(req));
+
+    const propertyId = req.body.property;
+    const utilityType = String(req.body.utilityType || "").trim();
+    const billingPeriod = toPeriodKey(req.body.billingPeriod, req.body.readingDate || new Date());
+    const readingDate = normalizeDate(req.body.readingDate || new Date());
+    const isMeterReset = Boolean(req.body.isMeterReset);
+    const rows = Array.isArray(req.body.readings) ? req.body.readings : [];
+
+    if (!propertyId || !utilityType || !billingPeriod) {
+      return next(createError(400, "Property, utility type, and billing period are required."));
+    }
+
+    if (!rows.length) {
+      return next(createError(400, "At least one reading row is required."));
+    }
+
+    const propertyDoc = await Property.findOne({ _id: propertyId, business: businessId })
+      .select("_id landlord business propertyName utilityRates")
+      .lean();
+
+    if (!propertyDoc) {
+      return next(createError(404, "Property not found for this business."));
+    }
+
+    const unitIds = Array.from(
+      new Set(
+        rows
+          .map((row) => String(row?.unit || "").trim())
+          .filter((id) => mongoose.Types.ObjectId.isValid(id))
+      )
+    );
+
+    if (!unitIds.length) {
+      return next(createError(400, "No valid unit rows were provided."));
+    }
+
+    const [unitDocs, activeTenants, previousReadings, duplicateReadings, utilityDoc] = await Promise.all([
+      Unit.find({ _id: { $in: unitIds }, business: businessId, property: propertyId })
+        .select("_id property unitNumber utilities business")
+        .lean(),
+      Tenant.find({
+        business: businessId,
+        $or: [{ unit: { $in: unitIds } }, { additionalUnits: { $in: unitIds } }],
+        status: { $in: ACTIVE_TENANT_STATUSES },
+      })
+        .select("_id name unit additionalUnits status moveInDate createdAt")
+        .sort({ moveInDate: -1, createdAt: -1 })
+        .lean(),
+      MeterReading.find({
+        business: businessId,
+        property: propertyId,
+        unit: { $in: unitIds },
+        utilityType: { $regex: `^${String(utilityType).trim()}$`, $options: "i" },
+        status: { $in: PREVIOUS_READING_STATUSES },
+        billingPeriod: { $lt: billingPeriod },
+      })
+        .select("unit currentReading billingPeriod readingDate createdAt")
+        .sort({ billingPeriod: -1, readingDate: -1, createdAt: -1 })
+        .lean(),
+      MeterReading.find({
+        business: businessId,
+        unit: { $in: unitIds },
+        utilityType: { $regex: `^${String(utilityType).trim()}$`, $options: "i" },
+        billingPeriod,
+        status: { $in: DUPLICATE_BLOCKING_STATUSES },
+      })
+        .select("unit")
+        .lean(),
+      Utility.findOne({
+        business: businessId,
+        name: { $regex: `^${String(utilityType).trim()}$`, $options: "i" },
+        isActive: true,
+      })
+        .select("unitCost")
+        .lean(),
+    ]);
+
+    const unitMap = new Map(unitDocs.map((unit) => [String(unit._id), unit]));
+
+    const tenantByUnit = new Map();
+    activeTenants.forEach((tenant) => {
+      const candidateUnitIds = [String(tenant.unit || ""), ...(tenant.additionalUnits || []).map(String)];
+      candidateUnitIds.forEach((uid) => {
+        if (!tenantByUnit.has(uid)) {
+          tenantByUnit.set(uid, tenant);
+        }
+      });
+    });
+
+    const previousByUnit = new Map();
+    previousReadings.forEach((reading) => {
+      const uid = String(reading.unit);
+      if (!previousByUnit.has(uid)) {
+        previousByUnit.set(uid, Number(reading.currentReading || 0));
+      }
+    });
+
+    const duplicateUnitSet = new Set(duplicateReadings.map((reading) => String(reading.unit)));
+
+    const propertyRate = (propertyDoc.utilityRates || []).find(
+      (r) =>
+        String(r?.utilityType || "").trim().toLowerCase() === utilityType.toLowerCase() &&
+        r?.isActive !== false
+    );
+
+    const resolveRowRate = ({ unitDoc, providedRate }) => {
+      const directRate = normalizeAmount(providedRate, NaN);
+      if (Number.isFinite(directRate) && directRate >= 0) {
+        return directRate;
+      }
+
+      const unitUtility = (unitDoc?.utilities || []).find(
+        (item) => String(item?.utility || "").trim().toLowerCase() === utilityType.toLowerCase()
+      );
+      if (unitUtility && Number.isFinite(Number(unitUtility.unitCharge))) {
+        return Number(unitUtility.unitCharge || 0);
+      }
+
+      if (propertyRate && Number.isFinite(Number(propertyRate.unitCost))) {
+        return Number(propertyRate.unitCost || 0);
+      }
+
+      if (utilityDoc && Number.isFinite(Number(utilityDoc.unitCost))) {
+        return Number(utilityDoc.unitCost || 0);
+      }
+
+      return 0;
+    };
+
+    const actorUserId = await resolveActorUserId(req, { businessId });
+
+    const toCreate = [];
+    const skipped = [];
+
+    rows.forEach((row) => {
+      const unitId = String(row?.unit || "").trim();
+      const unitDoc = unitMap.get(unitId);
+
+      if (!unitDoc) {
+        skipped.push({ unit: unitId, reason: "Unit not found for this property." });
+        return;
+      }
+
+      if (duplicateUnitSet.has(unitId)) {
+        skipped.push({
+          unit: unitId,
+          unitNumber: unitDoc.unitNumber,
+          reason: "A meter reading already exists for this unit, utility, and billing period.",
+        });
+        return;
+      }
+
+      const currentReadingRaw = row?.currentReading;
+      if (currentReadingRaw === undefined || currentReadingRaw === null || currentReadingRaw === "") {
+        skipped.push({ unit: unitId, unitNumber: unitDoc.unitNumber, reason: "Current reading is required." });
+        return;
+      }
+
+      const previousReadingRaw =
+        row?.previousReading !== undefined && row?.previousReading !== null && row?.previousReading !== ""
+          ? row.previousReading
+          : previousByUnit.get(unitId) || 0;
+
+      let consumption;
+      try {
+        consumption = computeConsumption({
+          previousReading: previousReadingRaw,
+          currentReading: currentReadingRaw,
+          isMeterReset,
+        });
+      } catch (err) {
+        skipped.push({ unit: unitId, unitNumber: unitDoc.unitNumber, reason: err.message });
+        return;
+      }
+
+      const rate = resolveRowRate({ unitDoc, providedRate: row?.rate });
+      const amount = Number((consumption.unitsConsumed * rate).toFixed(2));
+
+      const tenantId =
+        row?.tenant && mongoose.Types.ObjectId.isValid(String(row.tenant))
+          ? row.tenant
+          : tenantByUnit.get(unitId)?._id || null;
+
+      toCreate.push({
+        business: businessId,
+        property: propertyDoc._id,
+        unit: unitDoc._id,
+        tenant: tenantId,
+        utilityType,
+        meterNumber: String(row?.meterNumber ?? "").trim(),
+        billingPeriod,
+        readingDate,
+        previousReading: consumption.previousReading,
+        currentReading: consumption.currentReading,
+        unitsConsumed: consumption.unitsConsumed,
+        rate: Number(rate || 0),
+        amount,
+        isMeterReset,
+        notes: String(row?.notes ?? "").trim(),
+        status: "draft",
+        createdBy: actorUserId,
+        updatedBy: actorUserId,
+      });
+    });
+
+    let createdReadings = [];
+    if (toCreate.length) {
+      const inserted = await MeterReading.insertMany(toCreate);
+      const insertedIds = inserted.map((doc) => doc._id);
+      createdReadings = await populateReadingQuery(MeterReading.find({ _id: { $in: insertedIds } })).sort({
+        readingDate: -1,
+        createdAt: -1,
+      });
+    }
+
+    return res.status(201).json({
+      created: createdReadings,
+      skipped,
+      createdCount: createdReadings.length,
+      skippedCount: skipped.length,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const updateMeterReading = async (req, res, next) => {
   try {
     const reading = await MeterReading.findById(req.params.id);

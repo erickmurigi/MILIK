@@ -12,8 +12,9 @@ import {
 } from '../../redux/selectors';
 import { parseDate } from './dashboardUtils';
 import DashboardCard from './DashboardCard';
+import { useTerms } from '../../hooks/useTerm';
 
-const TYPE_META = {
+const TYPE_META_BASE = {
   payment:     { icon: FaMoneyBillWave, border: 'border-l-emerald-500', chip: 'bg-emerald-50 text-emerald-700',  label: 'Payment'     },
   receipt:     { icon: FaReceipt,       border: 'border-l-blue-500',    chip: 'bg-blue-50 text-blue-700',        label: 'Receipt'     },
   maintenance: { icon: FaTools,         border: 'border-l-orange-500',  chip: 'bg-orange-50 text-orange-700',    label: 'Maintenance' },
@@ -50,6 +51,13 @@ const fmtRel = (v) => {
 const RecentActivity = () => {
   const dispatch      = useDispatch();
   const notifications = useSelector(selectAllNotifications);
+  const { tenant: termTenant, lease: termLease } = useTerms('tenant', 'lease');
+
+  const TYPE_META = {
+    ...TYPE_META_BASE,
+    lease:  { ...TYPE_META_BASE.lease,  label: termLease  },
+    tenant: { ...TYPE_META_BASE.tenant, label: termTenant },
+  };
   const rentPayments  = useSelector(selectAllRentPayments);
   const maintenances  = useSelector(selectAllMaintenances);
   const leases        = useSelector(selectAllLeases);

@@ -42,11 +42,13 @@ import { fmtDate } from "../../utils/dates";
 import {
   billMeterReading,
   createMeterReading,
+  createMeterReadingsBatch,
   deleteMeterReading,
   getMeterReadings,
   updateMeterReading,
   voidMeterReading,
 } from "../../redux/apiCalls";
+import { useTerms } from "../../hooks/useTerm";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -74,6 +76,14 @@ const emptyForm = {
   currentReading: "",
   rate: "",
   notes: "",
+  isMeterReset: false,
+};
+
+const emptyBatchForm = {
+  property: "",
+  utilityType: "",
+  billingPeriod: new Date().toISOString().slice(0, 7),
+  readingDate: new Date().toISOString().slice(0, 10),
   isMeterReset: false,
 };
 
@@ -310,6 +320,13 @@ const MeterReadings = () => {
     "propertyManagement"
   );
 
+  const { property: termProperty, unit: termUnit, units: termUnits, tenant: termTenant } = useTerms(
+    "property",
+    "unit",
+    "units",
+    "tenant"
+  );
+
   const [properties, setProperties] = useState([]);
   const [units, setUnits] = useState([]);
   const [tenants, setTenants] = useState([]);
@@ -320,6 +337,11 @@ const MeterReadings = () => {
   const [bulkBilling, setBulkBilling] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [batchForm, setBatchForm] = useState(emptyBatchForm);
+  const [batchIncluded, setBatchIncluded] = useState({});
+  const [batchValues, setBatchValues] = useState({});
+  const [batchSaving, setBatchSaving] = useState(false);
   const [selectedReadingIds, setSelectedReadingIds] = useState([]);
   const selectedReadingSet = useMemo(() => new Set(selectedReadingIds), [selectedReadingIds]);
   const [appliedFilters, setAppliedFilters] = useTabState("/meter-readings:appliedFilters", emptyFilters);
@@ -494,6 +516,227 @@ const MeterReadings = () => {
     () => filteredTenants.find((tenant) => ACTIVE_TENANT_STATUSES.has(String(tenant?.status || "").trim().toLowerCase())) || null,
     [filteredTenants]
   );
+
+  // ── Batch add: pure client-side derivation over already-loaded units/readings/tenants ──
+  const batchUnits = useMemo(() => {
+    if (!batchForm.property) return [];
+    return units.filter(
+      (unit) => String(unit?.property?._id || unit?.property) === String(batchForm.property)
+    );
+  }, [units, batchForm.property]);
+
+  const batchTenantByUnit = useMemo(() => {
+    const map = new Map();
+    tenants.forEach((tenant) => {
+      const status = String(tenant?.status || "").trim().toLowerCase();
+      if (!ACTIVE_TENANT_STATUSES.has(status)) return;
+      const unitIds = [
+        String(tenant?.unit?._id || tenant?.unit || ""),
+        ...(tenant?.additionalUnits || []).map((u) => String(u?._id || u)),
+      ].filter(Boolean);
+      unitIds.forEach((uid) => {
+        if (!map.has(uid)) map.set(uid, tenant);
+      });
+    });
+    return map;
+  }, [tenants]);
+
+  const batchPreviousByUnit = useMemo(() => {
+    const map = new Map();
+    if (!batchForm.property || !batchForm.utilityType) return map;
+
+    const targetUtility = String(batchForm.utilityType || "").trim().toLowerCase();
+    const targetPeriod = String(batchForm.billingPeriod || "").trim();
+    const candidatesByUnit = new Map();
+
+    readings.forEach((reading) => {
+      if (!["draft", "billed"].includes(String(reading?.status || "").trim().toLowerCase())) return;
+      if (String(reading?.property?._id || reading?.property || "") !== String(batchForm.property)) return;
+      if (String(reading?.utilityType || "").trim().toLowerCase() !== targetUtility) return;
+
+      const readingPeriod = String(reading?.billingPeriod || "").trim();
+      if (/^\d{4}-\d{2}$/.test(targetPeriod) && /^\d{4}-\d{2}$/.test(readingPeriod)) {
+        if (!(readingPeriod < targetPeriod)) return;
+      }
+
+      const uid = String(reading?.unit?._id || reading?.unit || "");
+      if (!uid) return;
+      const list = candidatesByUnit.get(uid) || [];
+      list.push(reading);
+      candidatesByUnit.set(uid, list);
+    });
+
+    candidatesByUnit.forEach((list, uid) => {
+      list.sort((a, b) => {
+        const periodCompare = String(b?.billingPeriod || "").localeCompare(String(a?.billingPeriod || ""));
+        if (periodCompare !== 0) return periodCompare;
+        return new Date(b?.readingDate || 0).getTime() - new Date(a?.readingDate || 0).getTime();
+      });
+      map.set(uid, Number(list[0]?.currentReading || 0));
+    });
+
+    return map;
+  }, [readings, batchForm.property, batchForm.utilityType, batchForm.billingPeriod]);
+
+  const batchUnitHasUtility = useMemo(() => {
+    const map = new Map();
+    if (!batchForm.utilityType) return map;
+    const normalizedUtility = String(batchForm.utilityType || "").trim().toLowerCase();
+    batchUnits.forEach((unit) => {
+      const hasIt = (unit?.utilities || []).some(
+        (item) => String(item?.utility || "").trim().toLowerCase() === normalizedUtility
+      );
+      map.set(String(unit._id), hasIt);
+    });
+    return map;
+  }, [batchUnits, batchForm.utilityType]);
+
+  const batchDefaultRateByUnit = useMemo(() => {
+    const map = new Map();
+    if (!batchForm.property || !batchForm.utilityType) return map;
+
+    const normalizedUtility = String(batchForm.utilityType || "").trim().toLowerCase();
+    const property = properties.find((p) => String(p._id) === String(batchForm.property));
+    const propertyRate = (property?.utilityRates || []).find(
+      (r) => String(r?.utilityType || "").trim().toLowerCase() === normalizedUtility && r?.isActive !== false
+    );
+
+    batchUnits.forEach((unit) => {
+      const unitUtility = (unit?.utilities || []).find(
+        (item) => String(item?.utility || "").trim().toLowerCase() === normalizedUtility
+      );
+      let rate = 0;
+      if (unitUtility && Number.isFinite(Number(unitUtility.unitCharge))) {
+        rate = Number(unitUtility.unitCharge || 0);
+      } else if (propertyRate && Number.isFinite(Number(propertyRate.unitCost))) {
+        rate = Number(propertyRate.unitCost || 0);
+      }
+      map.set(String(unit._id), rate);
+    });
+
+    return map;
+  }, [batchUnits, properties, batchForm.property, batchForm.utilityType]);
+
+  const resetBatchForm = () => {
+    setBatchForm(emptyBatchForm);
+    setBatchIncluded({});
+    setBatchValues({});
+  };
+
+  const openBatchModal = () => {
+    resetBatchForm();
+    setShowBatchModal(true);
+  };
+
+  const handleBatchFormChange = (field, value) => {
+    setBatchForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleBatchRowChange = (unitId, field, value) => {
+    const normalizedValue = ["previousReading", "currentReading", "rate"].includes(field)
+      ? sanitizeDecimalInput(value)
+      : value;
+    setBatchValues((prev) => ({
+      ...prev,
+      [unitId]: { ...prev[unitId], [field]: normalizedValue },
+    }));
+  };
+
+  const toggleBatchInclude = (unitId) => {
+    setBatchIncluded((prev) => ({ ...prev, [unitId]: !prev[unitId] }));
+  };
+
+  const batchIncludedCount = batchUnits.filter((unit) => batchIncluded[unit._id]).length;
+
+  const handleBatchSubmit = async (e) => {
+    e.preventDefault();
+    if (!businessId) {
+      toast.error("Select a company first.");
+      return;
+    }
+
+    if (!batchForm.property || !batchForm.utilityType || !batchForm.billingPeriod) {
+      toast.error(`${termProperty}, utility type, and billing period are required.`);
+      return;
+    }
+
+    const readingsPayload = batchUnits
+      .filter((unit) => batchIncluded[unit._id])
+      .map((unit) => {
+        const uid = String(unit._id);
+        const values = batchValues[uid] || {};
+        if (values.currentReading === undefined || values.currentReading === "") return null;
+
+        const tenantId = batchTenantByUnit.get(uid)?._id || null;
+        const previousReading =
+          values.previousReading !== undefined && values.previousReading !== ""
+            ? Number(values.previousReading)
+            : batchPreviousByUnit.get(uid) || 0;
+        const rate =
+          values.rate !== undefined && values.rate !== ""
+            ? Number(values.rate)
+            : batchDefaultRateByUnit.get(uid) || 0;
+
+        return {
+          unit: unit._id,
+          tenant: tenantId,
+          meterNumber: values.meterNumber || "",
+          previousReading,
+          currentReading: Number(values.currentReading),
+          rate,
+          notes: values.notes || "",
+        };
+      })
+      .filter(Boolean);
+
+    if (!readingsPayload.length) {
+      toast.error(`Select at least one ${termUnit.toLowerCase()} and enter a current reading.`);
+      return;
+    }
+
+    setBatchSaving(true);
+    try {
+      const response = await createMeterReadingsBatch({
+        business: businessId,
+        property: batchForm.property,
+        utilityType: batchForm.utilityType,
+        billingPeriod: batchForm.billingPeriod,
+        readingDate: batchForm.readingDate,
+        isMeterReset: Boolean(batchForm.isMeterReset),
+        readings: readingsPayload,
+      });
+
+      await refreshReadings();
+
+      const createdCount = response?.createdCount ?? response?.created?.length ?? 0;
+      const skippedCount = response?.skippedCount ?? response?.skipped?.length ?? 0;
+      const skippedList = Array.isArray(response?.skipped) ? response.skipped : [];
+
+      if (createdCount > 0 && skippedCount === 0) {
+        toast.success(`${createdCount} meter reading${createdCount > 1 ? "s" : ""} captured successfully.`);
+      } else if (createdCount > 0 && skippedCount > 0) {
+        const reasons = skippedList
+          .slice(0, 4)
+          .map((s) => `${s.unitNumber || s.unit}: ${s.reason}`)
+          .join("; ");
+        toast.warn(`${createdCount} captured, ${skippedCount} skipped — ${reasons}`);
+      } else {
+        const reasons = skippedList.slice(0, 4).map((s) => s.reason).join("; ");
+        toast.error(`No meter readings were captured.${reasons ? ` ${reasons}` : ""}`);
+      }
+
+      setShowBatchModal(false);
+      resetBatchForm();
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          error.response?.data?.error ||
+          "Failed to save batch meter readings."
+      );
+    } finally {
+      setBatchSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (!form.property || !form.utilityType) return;
@@ -1247,6 +1490,252 @@ const MeterReadings = () => {
             </div>
           )}
 
+          {showBatchModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
+              <div className="flex flex-col max-h-[92vh] w-full max-w-6xl overflow-hidden border border-slate-200 bg-white shadow-2xl">
+                <div className="flex items-center justify-between bg-[#0B3B2E] px-4 py-3 text-white">
+                  <h2 className="text-sm font-black uppercase tracking-wide">Batch add meter readings</h2>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (batchSaving) return;
+                      resetBatchForm();
+                      setShowBatchModal(false);
+                    }}
+                    className="text-white/70 transition-colors hover:text-white"
+                  >
+                    <FaBan />
+                  </button>
+                </div>
+
+                <form className="flex flex-col flex-1 overflow-hidden" onSubmit={handleBatchSubmit}>
+                  <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-4">
+                    {/* ── Shared batch settings ── */}
+                    <div className="grid gap-4 md:grid-cols-5">
+                      <AppSelect
+                        label={termProperty}
+                        required
+                        value={batchForm.property}
+                        onChange={(v) => handleBatchFormChange("property", v ?? "")}
+                        options={propertyOptions}
+                        placeholder={`Select ${termProperty.toLowerCase()}`}
+                        searchable
+                        size="md"
+                      />
+
+                      <AppSelect
+                        label="Utility type"
+                        required
+                        value={batchForm.utilityType}
+                        onChange={(v) => handleBatchFormChange("utilityType", v ?? "")}
+                        options={utilityOptions.map((utility) => ({ value: utility, label: utility }))}
+                        placeholder="Select utility"
+                        size="md"
+                      />
+
+                      <label className="block">
+                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                          Billing period <span className="text-red-500">*</span>
+                        </span>
+                        <input
+                          type="month"
+                          value={batchForm.billingPeriod}
+                          onChange={(e) => handleBatchFormChange("billingPeriod", e.target.value)}
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                        />
+                      </label>
+
+                      <label className="block">
+                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Reading date</span>
+                        <input
+                          type="date"
+                          value={batchForm.readingDate}
+                          onChange={(e) => handleBatchFormChange("readingDate", e.target.value)}
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                        />
+                      </label>
+
+                      <label className="flex items-center gap-2 self-end rounded-md border border-purple-200 bg-purple-50 px-3 py-2 text-xs text-purple-900">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(batchForm.isMeterReset)}
+                          onChange={(e) => handleBatchFormChange("isMeterReset", e.target.checked)}
+                          className="h-4 w-4 rounded border-purple-300"
+                        />
+                        <span className="font-medium">Meter reset (whole batch)</span>
+                      </label>
+                    </div>
+
+                    {/* ── Units table ── */}
+                    {!batchForm.property ? (
+                      <div className="rounded border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-xs font-semibold text-slate-500">
+                        Select a {termProperty.toLowerCase()} to list its {termUnits.toLowerCase()}.
+                      </div>
+                    ) : !batchForm.utilityType ? (
+                      <div className="rounded border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-xs font-semibold text-slate-500">
+                        Select a utility type to capture readings.
+                      </div>
+                    ) : batchUnits.length === 0 ? (
+                      <div className="rounded border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-xs font-semibold text-slate-500">
+                        No {termUnits.toLowerCase()} found for this {termProperty.toLowerCase()}.
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto rounded border border-slate-200">
+                        <table className="min-w-full text-xs">
+                          <thead className="bg-slate-100">
+                            <tr>
+                              <th className="px-2 py-2 text-left text-[10px] font-black uppercase tracking-wide text-slate-500"></th>
+                              <th className="px-2 py-2 text-left text-[10px] font-black uppercase tracking-wide text-slate-500">{termUnit}</th>
+                              <th className="px-2 py-2 text-left text-[10px] font-black uppercase tracking-wide text-slate-500">{termTenant}</th>
+                              <th className="px-2 py-2 text-right text-[10px] font-black uppercase tracking-wide text-slate-500">Previous</th>
+                              <th className="px-2 py-2 text-right text-[10px] font-black uppercase tracking-wide text-slate-500">Current *</th>
+                              <th className="px-2 py-2 text-right text-[10px] font-black uppercase tracking-wide text-slate-500">Rate</th>
+                              <th className="px-2 py-2 text-right text-[10px] font-black uppercase tracking-wide text-slate-500">Consumed</th>
+                              <th className="px-2 py-2 text-right text-[10px] font-black uppercase tracking-wide text-slate-500">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {batchUnits.map((unit) => {
+                              const uid = String(unit._id);
+                              const included = Boolean(batchIncluded[uid]);
+                              const values = batchValues[uid] || {};
+                              const tenant = batchTenantByUnit.get(uid);
+                              const inferredPrevious = batchPreviousByUnit.get(uid) || 0;
+                              const defaultRate = batchDefaultRateByUnit.get(uid) || 0;
+                              const previousReading =
+                                values.previousReading !== undefined && values.previousReading !== ""
+                                  ? Number(values.previousReading)
+                                  : inferredPrevious;
+                              const currentReading = Number(values.currentReading || 0);
+                              const rate =
+                                values.rate !== undefined && values.rate !== "" ? Number(values.rate) : defaultRate;
+                              const unitsConsumed = inferUnitsConsumed({
+                                previousReading,
+                                currentReading,
+                                isMeterReset: batchForm.isMeterReset,
+                              });
+                              const amount = Number((unitsConsumed * rate).toFixed(2));
+
+                              return (
+                                <tr key={uid} className={included ? "bg-emerald-50/40" : undefined}>
+                                  <td className="px-2 py-1.5">
+                                    <input
+                                      type="checkbox"
+                                      checked={included}
+                                      onChange={() => toggleBatchInclude(uid)}
+                                      className="h-3.5 w-3.5 rounded border-slate-300"
+                                    />
+                                  </td>
+                                  <td className="px-2 py-1.5 whitespace-nowrap font-semibold text-slate-900">
+                                    {unit.unitNumber}
+                                    {batchUnitHasUtility.get(uid) && (
+                                      <span className="ml-1.5 rounded bg-blue-100 px-1 py-0.5 text-[9px] font-semibold text-blue-700">
+                                        unit rate
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-1.5 whitespace-nowrap">
+                                    {tenant ? (
+                                      <span className="text-slate-800">
+                                        {tenant.name} <span className="font-normal text-slate-400">· auto</span>
+                                      </span>
+                                    ) : (
+                                      <span className="text-amber-600">No active {termTenant.toLowerCase()}</span>
+                                    )}
+                                  </td>
+                                  <td className="px-1 py-1.5">
+                                    <input
+                                      type="text"
+                                      inputMode="decimal"
+                                      disabled={!included}
+                                      value={
+                                        values.previousReading === undefined || values.previousReading === ""
+                                          ? (inferredPrevious > 0 ? String(inferredPrevious) : "")
+                                          : values.previousReading
+                                      }
+                                      onChange={(e) => handleBatchRowChange(uid, "previousReading", e.target.value)}
+                                      className="w-24 border border-slate-200 bg-white px-2 py-1 text-right text-xs text-slate-900 outline-none focus:border-[#0B3B2E] disabled:bg-slate-50"
+                                      placeholder="0"
+                                    />
+                                  </td>
+                                  <td className="px-1 py-1.5">
+                                    <input
+                                      type="text"
+                                      inputMode="decimal"
+                                      disabled={!included}
+                                      value={values.currentReading ?? ""}
+                                      onChange={(e) => handleBatchRowChange(uid, "currentReading", e.target.value)}
+                                      className="w-24 border border-slate-200 bg-white px-2 py-1 text-right text-xs font-semibold text-slate-900 outline-none focus:border-[#0B3B2E] disabled:bg-slate-50"
+                                      placeholder="0"
+                                    />
+                                  </td>
+                                  <td className="px-1 py-1.5">
+                                    <input
+                                      type="text"
+                                      inputMode="decimal"
+                                      disabled={!included}
+                                      value={
+                                        values.rate === undefined || values.rate === ""
+                                          ? (defaultRate > 0 ? String(defaultRate) : "")
+                                          : values.rate
+                                      }
+                                      onChange={(e) => handleBatchRowChange(uid, "rate", e.target.value)}
+                                      className="w-20 border border-slate-200 bg-white px-2 py-1 text-right text-xs text-slate-900 outline-none focus:border-[#0B3B2E] disabled:bg-slate-50"
+                                      placeholder="0"
+                                    />
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right font-semibold text-slate-700 tabular-nums">
+                                    {formatNumber(unitsConsumed)}
+                                  </td>
+                                  <td className="whitespace-nowrap px-2 py-1.5 text-right font-bold text-slate-900 tabular-nums">
+                                    {formatMoney(amount)}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+                    <span className="text-[11px] font-semibold text-slate-500">
+                      {batchIncludedCount} {termUnit.toLowerCase()}
+                      {batchIncludedCount === 1 ? "" : "s"} included
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resetBatchForm();
+                          setShowBatchModal(false);
+                        }}
+                        className="border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={batchSaving || !canCreateReading || batchIncludedCount === 0}
+                        className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-black text-white ${
+                          batchSaving || !canCreateReading || batchIncludedCount === 0
+                            ? "cursor-not-allowed bg-gray-400"
+                            : `${MILIK_GREEN} hover:bg-[#0A3127]`
+                        }`}
+                      >
+                        <FaSave />{" "}
+                        {batchSaving
+                          ? "Saving..."
+                          : `Save ${batchIncludedCount} Reading${batchIncludedCount === 1 ? "" : "s"}`}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
             <div className="flex-none sticky top-0 z-20 border-b border-gray-200 bg-white shadow-sm">
               <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
@@ -1278,6 +1767,7 @@ const MeterReadings = () => {
                 <button onClick={handlePrintList} disabled={filteredReadings.length === 0} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white shadow-sm ${filteredReadings.length > 0 ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaPrint size={7} /> Print</button>
                 <button onClick={loadPageData} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSync size={7} /> Refresh</button>
                 <button onClick={openAddSectionForNew} disabled={!canCreateReading} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white shadow-sm ${canCreateReading ? `${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaPlus size={7} /> Add</button>
+                <button onClick={openBatchModal} disabled={!canCreateReading} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white shadow-sm ${canCreateReading ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaBolt size={7} /> Batch Add</button>
               </div>
             </div>
 

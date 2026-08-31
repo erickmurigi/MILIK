@@ -117,7 +117,7 @@ const formatRentAmount = (amount) => {
 const Units = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { unit: termUnit, units: termUnits, property: termProperty, tenant: termTenant } = useTerms("unit", "units", "property", "tenant");
+  const { unit: termUnit, units: termUnits, property: termProperty, tenant: termTenant, rent: termRent } = useTerms("unit", "units", "property", "tenant", "rent");
   
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
@@ -666,7 +666,7 @@ const Units = () => {
         { label: "Code",         value: (u) => u.unitCode || "-" },
         { label: termProperty,     value: (u) => u.propertyName || "-" },
         { label: `${termUnit} Type`,    value: (u) => formatUnitTypeLabel(u.unitType) || "-" },
-        { label: "Rent",         value: (u) => u.currentRent || "Ksh 0", align: "right" },
+        { label: termRent,       value: (u) => u.currentRent || "Ksh 0", align: "right" },
         { label: "Status",       value: (u) => u.status ? u.status.charAt(0).toUpperCase() + u.status.slice(1) : "-" },
         { label: termTenant,       value: (u) => u.status === "occupied" && u.tenant !== "-" ? u.tenant : "-" },
         { label: "Vacant Since", value: (u) => u.status === "vacant" ? u.vacantFrom : "-" },
@@ -972,7 +972,7 @@ const Units = () => {
                 { label: `${termUnit} No`, width: '90px' },
                 { label: 'Code', width: '78px' },
                 { label: `${termUnit} Type`, width: '112px' },
-                { label: 'Rent', align: 'right', width: '108px' },
+                { label: termRent, align: 'right', width: '108px' },
                 { label: 'Status', align: 'center', width: '92px' },
                 { label: 'Occupancy', width: '200px' },
                 { label: 'Vacant Since', width: '100px' },
@@ -1060,8 +1060,8 @@ const Units = () => {
                   </div>
                   <div className="space-y-4 p-4 bg-white rounded-lg shadow-md border-2 border-[#FF8C00]/30">
                     <h4 className="font-black text-gray-900 text-sm mb-4 pb-2 border-b-3 border-[#FF8C00]">💰 Financial Details</h4>
-                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">Monthly Rent</span><p className="text-sm font-black text-gray-900 mt-2">{u.currentRent || 'Ksh 0'}</p></div>
-                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">Market Rent</span><p className="text-sm font-black text-gray-900 mt-2">{u.marketRent || 'N/A'}</p></div>
+                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">Monthly {termRent}</span><p className="text-sm font-black text-gray-900 mt-2">{u.currentRent || 'Ksh 0'}</p></div>
+                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">Market {termRent}</span><p className="text-sm font-black text-gray-900 mt-2">{u.marketRent || 'N/A'}</p></div>
                     <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">Billing Frequency</span><p className="text-sm font-black text-gray-900 mt-2">Monthly</p></div>
                   </div>
                   <div className="space-y-4 p-4 bg-white rounded-lg shadow-md border-2 border-blue-300/50">
@@ -1164,7 +1164,7 @@ const Units = () => {
                       </div>
 
                       <div>
-                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Unit/Space No. <span className="text-red-500">*</span></label>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">{termUnit}/Space No. <span className="text-red-500">*</span></label>
                         <input
                           type="text"
                           name="unitSpaceNo"
@@ -1212,7 +1212,7 @@ const Units = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Rent Per Unit Area (Ksh)</label>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">{termRent} Per {termUnit} Area (Ksh)</label>
                         <input
                           type="number"
                           name="rentPerUnitArea"
@@ -1225,7 +1225,7 @@ const Units = () => {
                       </div>
 
                       <div>
-                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Market Rent (Ksh)</label>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Market {termRent} (Ksh)</label>
                         <input
                           type="number"
                           name="marketRent"
@@ -1499,7 +1499,7 @@ const Units = () => {
                     form="unitForm"
                     className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white transition-colors hover:bg-[#0d5442] disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <FaSave /> Save Unit
+                    <FaSave /> Save {termUnit}
                   </button>
               </div>
             </div>

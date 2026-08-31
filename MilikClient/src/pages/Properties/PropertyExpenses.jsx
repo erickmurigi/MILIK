@@ -25,6 +25,7 @@ import {
 import AppSelect from '../../components/common/AppSelect';
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
+import { useTerm } from '../../hooks/useTerm';
 
 // ─── constants ────────────────────────────────────────────────────────────────
 const CATEGORIES = ['maintenance', 'repair', 'utility', 'tax', 'insurance', 'supplies', 'other'];
@@ -62,6 +63,10 @@ const EMPTY_FORM = {
 
 // ─── ExpenseModal ─────────────────────────────────────────────────────────────
 const ExpenseModal = ({ open, editing, properties, units, businessId, onClose, onSave }) => {
+  const termProperty  = useTerm('property');
+  const termProperties = useTerm('properties');
+  const termUnit      = useTerm('unit');
+  const termReceipt   = useTerm('receipt');
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [cashbookOptions, setCashbookOptions] = useState([]);
@@ -142,7 +147,7 @@ const ExpenseModal = ({ open, editing, properties, units, businessId, onClose, o
       <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl">
           <h2 className="text-sm font-black">
-            {editing ? 'Edit Expense' : 'Record Property Expense'}
+            {editing ? 'Edit Expense' : `Record ${termProperty} Expense`}
           </h2>
           <button onClick={onClose} className="rounded-full border border-white/30 p-1.5 hover:bg-white/10 transition">
             <FaTimes size={12} />
@@ -152,12 +157,12 @@ const ExpenseModal = ({ open, editing, properties, units, businessId, onClose, o
         <form onSubmit={handleSubmit} className="max-h-[78vh] overflow-y-auto px-6 py-5 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2 sm:col-span-1">
-              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">Property</label>
+              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">{termProperty}</label>
               <AppSelect
                 value={form.property || null}
                 onChange={(v) => setForm((f) => ({ ...f, property: v ?? '', unit: '' }))}
                 options={propertyOptions}
-                placeholder="— All properties —"
+                placeholder={`— All ${termProperties.toLowerCase()} —`}
                 searchable
                 clearable
                 size="md"
@@ -165,12 +170,12 @@ const ExpenseModal = ({ open, editing, properties, units, businessId, onClose, o
             </div>
 
             <div className="col-span-2 sm:col-span-1">
-              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">Unit <span className="font-normal text-gray-400">(optional)</span></label>
+              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">{termUnit} <span className="font-normal text-gray-400">(optional)</span></label>
               <AppSelect
                 value={form.unit || null}
                 onChange={(v) => setForm((f) => ({ ...f, unit: v ?? '' }))}
                 options={filteredUnits.map((u) => ({ value: u._id, label: u.unitNumber || u.name }))}
-                placeholder="— No specific unit —"
+                placeholder={`— No specific ${termUnit.toLowerCase()} —`}
                 searchable
                 clearable
                 size="md"
@@ -232,7 +237,7 @@ const ExpenseModal = ({ open, editing, properties, units, businessId, onClose, o
             </div>
 
             <div>
-              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">Receipt / Ref No.</label>
+              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">{termReceipt} / Ref No.</label>
               <input type="text" value={form.receiptNumber} onChange={set('receiptNumber')} placeholder="Optional"
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#31694E] focus:outline-none focus:ring-1 focus:ring-[#31694E]" />
             </div>
@@ -262,6 +267,9 @@ const ExpenseModal = ({ open, editing, properties, units, businessId, onClose, o
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 const PropertyExpenses = () => {
+  const termProperty   = useTerm('property');
+  const termProperties = useTerm('properties');
+  const termUnit       = useTerm('unit');
   const confirm = useConfirm();
   const dispatch = useDispatch();
   const currentUser    = useSelector(selectCurrentUser);
@@ -374,7 +382,7 @@ const PropertyExpenses = () => {
 
   // ─── CSV export ───────────────────────────────────────────────────────────
   const handleExport = () => {
-    const header = ['Date', 'Property', 'Unit', 'Category', 'Description', 'Amount', 'Payment Method', 'Cashbook', 'Receipt No.', 'Paid By'];
+    const header = ['Date', termProperty, termUnit, 'Category', 'Description', 'Amount', 'Payment Method', 'Cashbook', 'Receipt No.', 'Paid By'];
     const rows = filtered.map((e) => [
       toInput(e.date),
       propertyMap.get(normalizeId(e.property)) || '',
@@ -443,7 +451,7 @@ const PropertyExpenses = () => {
             value={filters.propertyId || null}
             onChange={(v) => { setFilters((f) => ({ ...f, propertyId: v ?? '' })); setPage(1); }}
             options={propertyOptions}
-            placeholder="All properties"
+            placeholder={`All ${termProperties.toLowerCase()}`}
             searchable clearable compact
           />
           <AppSelect
@@ -495,7 +503,7 @@ const PropertyExpenses = () => {
               <table className="w-full min-w-[900px] text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className="bg-[#0B3B2E] text-white">
-                    {['Date', 'Property / Unit', 'Category', 'Description', 'Amount', 'Payment', 'Cashbook', 'Ref / By', ''].map((h, i, arr) => (
+                    {['Date', `${termProperty} / ${termUnit}`, 'Category', 'Description', 'Amount', 'Payment', 'Cashbook', 'Ref / By', ''].map((h, i, arr) => (
                       <th key={h || i} className={`px-3 py-1.5 text-left font-bold ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
                     ))}
                   </tr>
@@ -514,7 +522,7 @@ const PropertyExpenses = () => {
                         </td>
                         <td className="px-3 py-1.5 border-r border-gray-100">
                           <div className="font-semibold text-slate-800 truncate max-w-[160px]">{propName}</div>
-                          {unitNum && <div className="text-[10px] text-slate-500">Unit {unitNum}</div>}
+                          {unitNum && <div className="text-[10px] text-slate-500">{termUnit} {unitNum}</div>}
                         </td>
                         <td className="px-3 py-1.5 border-r border-gray-100">
                           <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${CATEGORY_COLORS[exp.category] || CATEGORY_COLORS.other}`}>

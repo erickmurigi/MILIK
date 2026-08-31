@@ -633,8 +633,8 @@ const BatchReceipts = () => {
                           {allManualChecked ? <FaCheckSquare size={13} /> : <FaSquare size={13} />}
                         </button>
                       </th>
-                      <th className="border-r border-white/10 px-3 py-2 text-left font-bold">Unit</th>
-                      <th className="border-r border-white/10 px-3 py-2 text-left font-bold">Tenant</th>
+                      <th className="border-r border-white/10 px-3 py-2 text-left font-bold">{termUnit}</th>
+                      <th className="border-r border-white/10 px-3 py-2 text-left font-bold">{termTenant}</th>
                       <th className="border-r border-white/10 px-3 py-2 text-right font-bold">Balance</th>
                       <th className="w-32 border-r border-white/10 px-3 py-2 text-right font-bold">Amount *</th>
                       <th className="w-44 border-r border-white/10 px-3 py-2 text-left font-bold">Reference No. *</th>
@@ -794,7 +794,7 @@ const BatchReceipts = () => {
                       <tr className="bg-[#0B3B2E] text-[11px] text-white">
                         <th className="border-r border-white/10 px-3 py-2 text-left font-bold">Receipt No.</th>
                         <th className="border-r border-white/10 px-3 py-2 text-left font-bold">Reference</th>
-                        <th className="border-r border-white/10 px-3 py-2 text-left font-bold">Tenant</th>
+                        <th className="border-r border-white/10 px-3 py-2 text-left font-bold">{termTenant}</th>
                         <th className="px-3 py-2 text-right font-bold">Amount</th>
                       </tr>
                     </thead>
