@@ -25,6 +25,7 @@ import {
   isSelfManagingLandlordCompany,
 } from "../../utils/companyModules";
 import StartMenu from "../../components/StartMenu/StartMenu";
+import { useTermPresetLabel, useTerm } from "../../hooks/useTerm";
 import "./ModulesDashboard.css";
 
 const CATEGORIES = ["All", "Core", "Finance", "Sales", "Operations", "People"];
@@ -140,6 +141,9 @@ const ModulesDashboard = () => {
   const activeCompanyContext = currentCompany || currentUser?.company || null;
   const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
   const operatingModeLabel = getCompanyOperatingModeLabel(activeCompanyContext?.companyMode);
+  const presetLabel = useTermPresetLabel();
+  const companySubtitle = presetLabel || operatingModeLabel;
+  const termLandlord = useTerm("landlord");
 
   useEffect(() => {
     const name = String(activeCompanyContext?.companyName || activeCompanyContext?.name || "").trim();
@@ -153,11 +157,11 @@ const ModulesDashboard = () => {
         if (m.id !== "milik") return m;
         return {
           ...m,
-          subtitle: isLandlordMode ? "Landlord Workspace" : m.subtitle,
+          subtitle: isLandlordMode ? `${termLandlord} Workspace` : m.subtitle,
         };
       })
       .filter((m) => hasCompanyModule(activeCompanyContext, m.moduleKey));
-  }, [activeCompanyContext, isLandlordMode]);
+  }, [activeCompanyContext, isLandlordMode, termLandlord]);
 
   const filteredModules = useMemo(() => {
     let list = visibleModules;
@@ -205,7 +209,7 @@ const ModulesDashboard = () => {
           />
           <div className="odoo-topbar-company">
             <span className="odoo-topbar-name">{activeCompanyContext?.companyName || "Milik"}</span>
-            {operatingModeLabel && <span className="odoo-topbar-mode">{operatingModeLabel}</span>}
+            {companySubtitle && <span className="odoo-topbar-mode">{companySubtitle}</span>}
           </div>
         </div>
         <div className="odoo-topbar-search">

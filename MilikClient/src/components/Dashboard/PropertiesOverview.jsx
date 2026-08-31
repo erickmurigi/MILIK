@@ -40,6 +40,7 @@ const OccupancyRing = React.memo(({ pct }) => {
 // ─── Property tile ────────────────────────────────────────────────────────────
 const PropertyTile = React.memo(({ property }) => {
   const navigate  = useNavigate();
+  const { units: termUnits } = useTerms("units");
   const collColor = health(property.collectionRate);
   const invoiced  = property.expectedRevenue > 0;
 
@@ -58,7 +59,7 @@ const PropertyTile = React.memo(({ property }) => {
           </p>
           <p className="text-[9px] font-semibold text-slate-400">{property.code}</p>
           <p className="mt-0.5 text-[9px] font-bold text-slate-500">
-            {property.occupiedUnits}/{property.totalUnits} units
+            {property.occupiedUnits}/{property.totalUnits} {termUnits}
           </p>
         </div>
       </div>
@@ -103,11 +104,13 @@ const PropertyTile = React.memo(({ property }) => {
 });
 
 // ─── Summary pane (left anchor) ───────────────────────────────────────────────
-const SummaryPane = React.memo(({ occupancy, collection, total, navigate }) => (
+const SummaryPane = React.memo(({ occupancy, collection, total, navigate }) => {
+  const { property: termProperty, properties: termProperties } = useTerms("property", "properties");
+  return (
   <div className="flex w-36 shrink-0 flex-col justify-between gap-3 border-r border-slate-200 bg-[#0B3B2E] p-3">
     <div>
       <p className="text-[9px] font-black uppercase tracking-widest text-white/50">Portfolio</p>
-      <p className="mt-0.5 text-[10px] font-black text-white">{total} Propert{total === 1 ? 'y' : 'ies'}</p>
+      <p className="mt-0.5 text-[10px] font-black text-white">{total} {total === 1 ? termProperty : termProperties}</p>
     </div>
     <div className="space-y-3">
       {[
@@ -131,7 +134,8 @@ const SummaryPane = React.memo(({ occupancy, collection, total, navigate }) => (
       View all →
     </button>
   </div>
-));
+  );
+});
 
 // ─── Main component ───────────────────────────────────────────────────────────
 // Collection data comes from summaryData.propertyStats (server-aggregated) — no invoice iteration.

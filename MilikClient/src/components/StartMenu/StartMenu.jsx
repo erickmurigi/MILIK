@@ -19,6 +19,7 @@ import {
   getCompanyOperatingModeLabel, hasCompanyModule, hasAnyCompanyModule,
   GL_ACCESS_MODULES, isSelfManagingLandlordCompany,
 } from "../../utils/companyModules";
+import { useTermPresetLabel } from "../../hooks/useTerm";
 
 const initials = (value = "") =>
   String(value || "")
@@ -81,6 +82,7 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
   const activeCompanyCtx  = currentCompany || currentUser?.company || null;
   const isLandlordMode    = isSelfManagingLandlordCompany(activeCompanyCtx);
   const operatingMode     = getCompanyOperatingModeLabel(activeCompanyCtx?.companyMode);
+  const presetLabel       = useTermPresetLabel();
   const isHeader          = variant === "header";
 
   useEffect(() => {
@@ -251,7 +253,7 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
           {/* Company info */}
           <div className="min-w-0 flex-1">
             <div className="truncate text-[13px] font-black text-white">{companyName}</div>
-            <div className="truncate text-[10px] font-semibold text-emerald-300">{operatingMode}</div>
+            <div className="truncate text-[10px] font-semibold text-emerald-300">{presetLabel || operatingMode}</div>
           </div>
           {/* User chip */}
           <div className="hidden flex-shrink-0 flex-col items-end sm:flex">
@@ -544,7 +546,7 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
                             <div className="mt-0.5 flex items-center gap-1.5 overflow-hidden">
                               {meta && <span className="shrink-0 text-[10px] text-slate-400">{meta}</span>}
                               {meta && <span className="h-2.5 w-px flex-shrink-0 bg-slate-200" />}
-                              <span className="shrink-0 rounded bg-slate-100 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-slate-500">{modeLabel}</span>
+                              <span className="shrink-0 rounded bg-slate-100 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-slate-500">{active ? (presetLabel || modeLabel) : modeLabel}</span>
                               {modCount > 0 && (
                                 <span className="shrink-0 rounded bg-slate-100 px-1 py-px text-[9px] text-slate-400">
                                   {modCount} module{modCount !== 1 ? "s" : ""}
