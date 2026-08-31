@@ -93,7 +93,11 @@ adminRequests.interceptors.response.use(
             error.response.status === 401 ||
             /token is not valid|not authenticated/i.test(responseMessage);
 
-          if (isAuthFailure && error.config?.url && !error.config.url.includes("/auth/login")) {
+          const authSelfUrl = error.config?.url || "";
+          const isAuthSelfEndpoint =
+            authSelfUrl.includes("/auth/login") ||
+            authSelfUrl.includes("/auth/refresh");
+          if (isAuthFailure && !isAuthSelfEndpoint) {
             clearAuthArtifacts();
             window.location.href = "/login";
           } else if (error.response.status === 403) {

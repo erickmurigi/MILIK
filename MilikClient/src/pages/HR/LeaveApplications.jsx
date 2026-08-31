@@ -25,21 +25,9 @@ import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
 
 // ── Apply Leave Modal ─────────────────────────────────────────────────────────
-function ApplyLeaveModal({ onClose, onSaved }) {
-  const [employees, setEmployees]   = useState([]);
-  const [leaveTypes, setLeaveTypes] = useState([]);
+function ApplyLeaveModal({ employees = [], leaveTypes = [], onClose, onSaved }) {
   const [form, setForm] = useState({ employee: '', leaveType: '', startDate: '', endDate: '', reason: '' });
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    Promise.all([
-      adminRequests.get('/hr/employees', { params: { limit: 200 } }),
-      adminRequests.get('/hr/leave-types'),
-    ]).then(([e, l]) => {
-      setEmployees(e.data?.employees || []);
-      setLeaveTypes(l.data || []);
-    }).catch(() => {});
-  }, []);
 
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
 
@@ -162,6 +150,13 @@ export default function LeaveApplications() {
     queryFn: () => adminRequests.get('/hr/leave-types').then((r) => r.data || []),
     staleTime: 5 * 60_000,
   });
+
+  const { data: employeesData } = useQuery({
+    queryKey: ['hr-employees-ref'],
+    queryFn: () => adminRequests.get('/hr/employees', { params: { limit: 200 } }).then((r) => r.data?.employees || []),
+    staleTime: 5 * 60_000,
+  });
+  const employeesList = employeesData ?? [];
 
   useEffect(() => { if (error) toast.error('Failed to load leave applications'); }, [error]);
   useEffect(() => { setPage(1); }, [statusFilter, typeFilter]);
@@ -347,7 +342,7 @@ export default function LeaveApplications() {
         />
       </div>
 
-      {showApply && <ApplyLeaveModal onClose={() => setShowApply(false)} onSaved={() => { setShowApply(false); queryClient.invalidateQueries({ queryKey: ['hr-leave-applications'] }); }} />}
+      {showApply && <ApplyLeaveModal employees={employeesList} leaveTypes={leaveTypes} onClose={() => setShowApply(false)} onSaved={() => { setShowApply(false); queryClient.invalidateQueries({ queryKey: ['hr-leave-applications'] }); }} />}
       <MilikConfirmDialog {...confirm} onClose={() => setConfirm((p) => ({ ...p, isOpen: false }))} />
     </DashboardLayout>
   );

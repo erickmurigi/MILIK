@@ -68,10 +68,8 @@ export const rentPaymentSlice = createSlice({
         },
         deleteRentPaymentSuccess: (state, action) => {
             state.isFetching = false
-            state.rentPayments.splice(
-                state.rentPayments.findIndex((item) => item._id === action.payload),
-                1
-            )
+            const idx = state.rentPayments.findIndex((item) => item._id === action.payload)
+            if (idx !== -1) state.rentPayments.splice(idx, 1)
         },
         deleteRentPaymentFailure: (state) => {
             state.isFetching = false

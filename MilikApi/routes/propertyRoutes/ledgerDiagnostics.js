@@ -1,5 +1,5 @@
 import express from "express";
-import { verifyToken, verifyUser, requireCompanyModule } from "../../controllers/verifyToken.js";
+import { verifyToken, verifyUser, verifyAdmin, requireCompanyModule } from "../../controllers/verifyToken.js";
 import {
   checkInvoiceLedgerEntries,
   repostInvoicesToLedger,
@@ -23,11 +23,11 @@ import {
 const router = express.Router();
 
 // ─── EXISTING DIAGNOSTIC ENDPOINTS ───────────────────────────────────────────
-router.get("/diagnostics/invoices/:propertyId/:landlordId", verifyToken, checkInvoiceLedgerEntries);
-router.post("/diagnostics/repost-invoices", verifyToken, repostInvoicesToLedger);
-router.post("/diagnostics/recompute-chart-balances", verifyToken, recomputeChartBalances);
-router.get("/diagnostics/utility-receipts", verifyToken, checkUtilityReceiptLedgerEntries);
-router.get("/diagnostics/ledger-balance", verifyToken, checkLedgerBalance);
+router.get("/diagnostics/invoices/:propertyId/:landlordId", verifyUser, requireCompanyModule("accounts"), checkInvoiceLedgerEntries);
+router.post("/diagnostics/repost-invoices", verifyAdmin, repostInvoicesToLedger);
+router.post("/diagnostics/recompute-chart-balances", verifyAdmin, recomputeChartBalances);
+router.get("/diagnostics/utility-receipts", verifyUser, requireCompanyModule("accounts"), checkUtilityReceiptLedgerEntries);
+router.get("/diagnostics/ledger-balance", verifyUser, requireCompanyModule("accounts"), checkLedgerBalance);
 router.get("/diagnostics/integrity-report", verifyUser, requireCompanyModule("accounts"), runIntegrityReport);
 
 // ─── GL HEALTH CENTRE ────────────────────────────────────────────────────────
@@ -43,6 +43,6 @@ router.get("/repair/active-corrections", verifyUser, requireCompanyModule("accou
 router.get("/repair/group-entries/:groupId", verifyUser, requireCompanyModule("accounts"), getGroupEntries);
 
 // ─── UNIVERSAL GL-by-source lookup (used by all transaction detail drawers) ──
-router.get("/entries", verifyToken, getEntriesBySource);
+router.get("/entries", verifyUser, requireCompanyModule("accounts"), getEntriesBySource);
 
 export default router;

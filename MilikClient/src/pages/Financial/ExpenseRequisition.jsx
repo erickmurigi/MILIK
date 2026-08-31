@@ -34,6 +34,7 @@ import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
+import { useTerms } from "../../hooks/useTerm";
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -66,6 +67,7 @@ const ExpenseRequisition = () => {
   const confirm = useConfirm();
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { property: termProperty } = useTerms("property");
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const properties = useSelector(selectAllProperties);
@@ -95,6 +97,7 @@ const ExpenseRequisition = () => {
   const _uid = currentUser?._id || currentUser?.id;
   const _erDraftKey = (currentCompany?._id && _uid) ? `milik:draft:expense-req:${currentCompany._id}:${_uid}` : null;
   const _erDraftRestored = useRef(false);
+  const debouncedForm = useDebounce(form, 400);
 
   useEffect(() => {
     if (!_erDraftKey || _erDraftRestored.current) return;
@@ -107,8 +110,8 @@ const ExpenseRequisition = () => {
 
   useEffect(() => {
     if (!_erDraftKey || !_erDraftRestored.current || !showModal || editingId) return;
-    try { window.sessionStorage.setItem(_erDraftKey, JSON.stringify({ form })); } catch {}
-  }, [_erDraftKey, form, showModal, editingId]);
+    try { window.sessionStorage.setItem(_erDraftKey, JSON.stringify({ form: debouncedForm })); } catch {}
+  }, [_erDraftKey, debouncedForm, showModal, editingId]);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -225,7 +228,7 @@ const ExpenseRequisition = () => {
       return;
     }
     if (!form.property) {
-      toast.warning("Property is required");
+      toast.warning(`${termProperty} is required`);
       return;
     }
     if (!Number(form.amount || 0) || Number(form.amount) <= 0) {
@@ -501,7 +504,7 @@ const ExpenseRequisition = () => {
                   <tr className="bg-[#0B3B2E] text-white">
                     <th className="px-3 py-1 text-left font-black border-r border-white/10"><button type="button" onClick={toggleSelectAll}>{selectedIds.length === rows.length && rows.length > 0 ? <FaCheck className="text-white" /> : <FaSquare className="text-white/80" />}</button></th>
                     <th className="px-3 py-1 text-left font-black border-r border-white/10">Requisition</th>
-                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Property / Provider</th>
+                    <th className="px-3 py-1 text-left font-black border-r border-white/10">{termProperty} / Provider</th>
                     <th className="px-3 py-1 text-left font-black border-r border-white/10">Needed By</th>
                     <th className="px-3 py-1 text-right font-black border-r border-white/10">Amount</th>
                     <th className="px-3 py-1 text-left font-black border-r border-white/10">Status</th>
@@ -518,7 +521,7 @@ const ExpenseRequisition = () => {
                       <tr key={row._id} className={`border-b border-gray-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-blue-50/40`}>
                         <td className="px-3 py-1 border-r border-gray-100"><button type="button" onClick={() => toggleSelect(row._id)}>{selectedIds.includes(row._id) ? <FaCheck className="text-[#0B3B2E]" /> : <FaSquare className="text-slate-400" />}</button></td>
                         <td className="px-3 py-1 border-r border-gray-100"><div className="font-black text-slate-900">{row.requisitionNo}</div><div className="text-[10px] text-slate-500">{row.title}</div>{row.linkedVoucher?.voucherNo ? <div className="mt-1 text-[10px] font-bold text-violet-600">Voucher: {row.linkedVoucher.voucherNo}</div> : null}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700"><div className="font-medium text-slate-900">{row.property?.propertyName || row.property?.name || "No property"}</div><div className="text-[10px] text-slate-500">{row.serviceProvider?.name || row.vendorName || "No provider"}</div></td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700"><div className="font-medium text-slate-900">{row.property?.propertyName || row.property?.name || `No ${termProperty.toLowerCase()}`}</div><div className="text-[10px] text-slate-500">{row.serviceProvider?.name || row.vendorName || "No provider"}</div></td>
                         <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.neededBy ? new Date(row.neededBy).toLocaleDateString() : "-"}</td>
                         <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">KES {Number(row.amount || 0).toLocaleString()}</td>
                         <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${statusPill[row.status] || statusPill.draft}`}>{row.status}</span></td>
@@ -557,7 +560,7 @@ const ExpenseRequisition = () => {
               <label className="block xl:col-span-2"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Title <span className="text-red-500">*</span></span><input value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>
               <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Amount <span className="text-red-500">*</span></span><input type="number" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>
               <AppSelect
-                label="Property"
+                label={termProperty}
                 value={form.property}
                 onChange={(v) => setForm((prev) => ({ ...prev, property: v ?? "" }))}
                 options={properties.map((p) => ({ value: p._id, label: `${p.propertyCode ? `[${p.propertyCode}] ` : ""}${p.propertyName || p.name}` }))}

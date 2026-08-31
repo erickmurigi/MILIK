@@ -1,4 +1,24 @@
 // middleware/ipWhitelist.js
+
+// Co-op Bank C2B callback IPs — configure via COOP_BANK_IPS env var (comma-separated) in production
+const coopBankIPs = process.env.COOP_BANK_IPS
+  ? process.env.COOP_BANK_IPS.split(',').map((ip) => ip.trim()).filter(Boolean)
+  : [];
+
+export const coopBankIPWhitelist = (req, res, next) => {
+  if (process.env.NODE_ENV === 'development') return next();
+  if (!coopBankIPs.length) {
+    console.warn('[Co-op B2B] COOP_BANK_IPS env var not set — all IPs allowed. Set it in production.');
+    return next();
+  }
+  const clientIP = (req.ip || req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+  if (!coopBankIPs.includes(clientIP)) {
+    console.error(`[Co-op B2B] Blocked IP: ${clientIP}`);
+    return res.status(403).json({ success: false, message: 'Forbidden: Unauthorized IP address' });
+  }
+  next();
+};
+
 const safaricomIPs = [
   '196.201.214.200',
   '196.201.214.206',

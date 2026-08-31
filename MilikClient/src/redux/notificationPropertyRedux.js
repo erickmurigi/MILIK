@@ -61,10 +61,8 @@ export const notificationSlice = createSlice({
         },
         deleteNotificationSuccess: (state, action) => {
             state.isFetching = false
-            state.notifications.splice(
-                state.notifications.findIndex((item) => item._id === action.payload),
-                1
-            )
+            const idx = state.notifications.findIndex((item) => item._id === action.payload)
+            if (idx !== -1) state.notifications.splice(idx, 1)
         },
         deleteNotificationFailure: (state) => {
             state.isFetching = false

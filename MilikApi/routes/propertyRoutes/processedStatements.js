@@ -19,8 +19,8 @@ const router = express.Router();
 // Protect all routes with auth
 router.use(verifyToken);
 
-// Create/close a new statement
-router.post("/", closeStatement);
+// Create/close a new statement — requires admin access (irreversible financial action)
+router.post("/", verifyAdmin, closeStatement);
 
 // Get all statements for a business
 router.get("/business/:businessId", getStatementsByBusiness);
@@ -34,8 +34,8 @@ router.get("/detail/:statementId", getStatementById);
 // Update statement
 router.put("/:statementId", updateStatement);
 
-// Reverse statement
-router.post("/:statementId/reverse", reverseStatement);
+// Reverse statement — requires admin access
+router.post("/:statementId/reverse", verifyAdmin, reverseStatement);
 
 // Admin force-reverse: bypasses hasLaterProcessedStatements for data-correction scenarios
 router.post("/:statementId/admin-reverse", verifyAdmin, adminForceReverseStatement);
@@ -46,7 +46,7 @@ router.post("/admin-cleanup-orphaned-gl/:businessId", verifyAdmin, adminCleanupO
 // Management fee invoice PDF
 router.get("/:statementId/management-fee-invoice-pdf", getManagementFeeInvoicePdf);
 
-// Delete statement
-router.delete("/:statementId", deleteStatement);
+// Delete statement — requires admin access
+router.delete("/:statementId", verifyAdmin, deleteStatement);
 
 export default router;

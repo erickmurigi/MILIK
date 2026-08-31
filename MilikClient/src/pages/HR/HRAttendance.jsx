@@ -23,6 +23,8 @@ const fmtDur  = (min) => {
 const monthOpts = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const thisYear  = new Date().getFullYear();
 const yearOpts  = Array.from({ length: 4 }, (_, i) => thisYear - i);
+const MONTH_OPTIONS = monthOpts.map((m, i) => ({ value: String(i + 1), label: m }));
+const YEAR_OPTIONS  = yearOpts.map((y) => ({ value: String(y), label: String(y) }));
 
 const F = 'rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20';
 
@@ -196,10 +198,14 @@ export default function HRAttendance() {
     }
   };
 
-  const present = records.filter((r) => r.checkOut).length;
-  const absent  = records.filter((r) => !r.checkOut).length;
-  const avgDur  = records.filter((r) => r.duration).reduce((s, r) => s + r.duration, 0) /
-                  (records.filter((r) => r.duration).length || 1);
+  const { present, absent, avgDur } = useMemo(() => {
+    let pres = 0, abs = 0, durSum = 0, durCount = 0;
+    for (const r of records) {
+      if (r.checkOut) pres++; else abs++;
+      if (r.duration) { durSum += r.duration; durCount++; }
+    }
+    return { present: pres, absent: abs, avgDur: durSum / (durCount || 1) };
+  }, [records]);
 
   return (
     <DashboardLayout lockContentScroll>
@@ -224,8 +230,8 @@ export default function HRAttendance() {
         {/* Filters */}
         <div className="flex flex-none flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2">
           <AppSelect value={empFilter} onChange={(v) => { setEmpFilter(v ?? ""); setPage(1); }} options={employees.map((e) => ({ value: e._id, label: `${e.surname} ${e.otherNames}` }))} placeholder="All employees" clearable searchable size="sm" />
-          <AppSelect value={monthFilter} onChange={(v) => { setMonthFilter(v ?? ""); setPage(1); }} options={monthOpts.map((m, i) => ({ value: String(i + 1), label: m }))} placeholder="All months" clearable size="sm" />
-          <AppSelect value={yearFilter} onChange={(v) => { setYearFilter(v ?? String(thisYear)); setPage(1); }} options={yearOpts.map((y) => ({ value: String(y), label: String(y) }))} size="sm" />
+          <AppSelect value={monthFilter} onChange={(v) => { setMonthFilter(v ?? ""); setPage(1); }} options={MONTH_OPTIONS} placeholder="All months" clearable size="sm" />
+          <AppSelect value={yearFilter} onChange={(v) => { setYearFilter(v ?? String(thisYear)); setPage(1); }} options={YEAR_OPTIONS} size="sm" />
           <div className="relative">
             <FaSearch size={10} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name…"

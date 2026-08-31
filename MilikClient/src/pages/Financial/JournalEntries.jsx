@@ -37,6 +37,7 @@ import { useConfirm } from "../../context/ConfirmContext";
 import { useTabState } from "../../hooks/useTabState";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
+import { useTerms } from "../../hooks/useTerm";
 
 const JOURNAL_TYPES = [
   {
@@ -131,6 +132,7 @@ const JournalEntries = () => {
   const confirm = useConfirm();
   const dispatch = useDispatch();
   const location = useLocation();
+  const { properties: termProperties } = useTerms("properties");
   const isAccountsWorkspace = location.pathname.startsWith("/accounts/");
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
@@ -614,7 +616,7 @@ const JournalEntries = () => {
                   value={filters.propertyId !== "all" ? filters.propertyId : ""}
                   onChange={(v) => { setFilters((p) => ({ ...p, propertyId: v ?? "all" })); setCurrentPage(1); }}
                   options={propertyOptions}
-                  placeholder="All Properties"
+                  placeholder={`All ${termProperties}`}
                   size="sm"
                   clearable
                   searchable

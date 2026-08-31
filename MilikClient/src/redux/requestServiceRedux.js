@@ -43,7 +43,8 @@ export const requestsSlice = createSlice({
         },
         deleteRequestSuccess:(state,action) => {
             state.isFetching = false
-            state.requests.splice(state.requests.findIndex((item) => item._id === action.payload),1)
+            const idx = state.requests.findIndex((item) => item._id === action.payload)
+            if (idx !== -1) state.requests.splice(idx, 1)
         },
         deleteRequestFailure:(state) => {
             state.isFetching = false

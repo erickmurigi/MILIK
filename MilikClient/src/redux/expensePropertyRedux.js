@@ -61,10 +61,8 @@ export const expensePropertySlice = createSlice({
         },
         deleteExpensePropertySuccess: (state, action) => {
             state.isFetching = false
-            state.expenseProperties.splice(
-                state.expenseProperties.findIndex((item) => item._id === action.payload),
-                1
-            )
+            const idx = state.expenseProperties.findIndex((item) => item._id === action.payload)
+            if (idx !== -1) state.expenseProperties.splice(idx, 1)
         },
         deleteExpensePropertyFailure: (state) => {
             state.isFetching = false

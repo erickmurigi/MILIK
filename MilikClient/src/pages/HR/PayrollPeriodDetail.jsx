@@ -253,6 +253,7 @@ export default function PayrollPeriodDetail() {
 
   const company     = useSelector(selectCurrentCompany) || {};
   const currentUser = useSelector(selectCurrentUser);
+  const canManagePayroll = Boolean(currentUser?.adminAccess || currentUser?.isSystemAdmin || currentUser?.superAdminAccess);
 
   const handlePrint = useCallback(() => {
     if (!payslips.length || !period) return;
@@ -383,22 +384,22 @@ export default function PayrollPeriodDetail() {
                     <FaPrint size={9} /> Print Register
                   </button>
                 )}
-                {isDraft && (
+                {canManagePayroll && isDraft && (
                   <button onClick={runPayroll} disabled={running} className="print-hide inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0a2e23] disabled:opacity-50">
                     <FaPlay size={9} /> {running ? 'Running…' : period.employeeCount > 0 ? 'Re-run Payroll' : 'Run Payroll'}
                   </button>
                 )}
-                {period.status === 'Draft' && period.employeeCount > 0 && (
+                {canManagePayroll && period.status === 'Draft' && period.employeeCount > 0 && (
                   <button onClick={approve} className="print-hide inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-black text-white hover:bg-blue-700">
                     <FaCheck size={9} /> Approve
                   </button>
                 )}
-                {isApproved && (
+                {canManagePayroll && isApproved && (
                   <button onClick={markPaid} className="print-hide inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-black text-white hover:bg-emerald-700">
                     <FaHandHolding size={9} /> Mark Paid
                   </button>
                 )}
-                {canReverse && currentUser?.adminAccess && (
+                {canReverse && canManagePayroll && (
                   <button
                     onClick={() => setReverseDialog({ isOpen: true, reason: '', busy: false })}
                     className="print-hide inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-black text-rose-700 hover:bg-rose-100"

@@ -58,6 +58,10 @@ export default function CompanyUsers() {
     [currentCompany, currentUser]
   );
 
+  const canManageUsers = Boolean(
+    currentUser?.adminAccess || currentUser?.isSystemAdmin || currentUser?.superAdminAccess
+  );
+
   const load = useCallback(() => {
     if (!companyId) return;
     dispatch(getUsers(companyId, { status: statusFilter === "All" ? "all" : statusFilter.toLowerCase() }));
@@ -266,15 +270,17 @@ export default function CompanyUsers() {
                             </button>
                             {actionMenuId === user._id && (
                               <div className="absolute right-0 top-full z-50 mt-1 w-44 border border-slate-200 bg-white shadow-lg">
-                                <button
-                                  onClick={() => handleToggleLock(user)}
-                                  disabled={busy}
-                                  className="flex w-full items-center gap-2 px-3 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
-                                >
-                                  {user.locked ? <FaUnlock className="text-amber-500" /> : <FaLock className="text-amber-500" />}
-                                  {user.locked ? "Unlock user" : "Lock user"}
-                                </button>
-                                {!isMe && (
+                                {canManageUsers && (
+                                  <button
+                                    onClick={() => handleToggleLock(user)}
+                                    disabled={busy}
+                                    className="flex w-full items-center gap-2 px-3 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+                                  >
+                                    {user.locked ? <FaUnlock className="text-amber-500" /> : <FaLock className="text-amber-500" />}
+                                    {user.locked ? "Unlock user" : "Lock user"}
+                                  </button>
+                                )}
+                                {canManageUsers && !isMe && (
                                   <button
                                     onClick={() => handleToggleActive(user)}
                                     disabled={busy}

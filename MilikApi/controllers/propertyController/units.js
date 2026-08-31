@@ -161,11 +161,19 @@ const calculateTotalMonthlyAmount = async (unitOrId) => {
 const updatePropertyUnitCounts = async (propertyId) => {
   if (!propertyId) return;
 
-  const [totalUnits, occupiedUnits, vacantUnits] = await Promise.all([
-    Unit.countDocuments({ property: propertyId }),
-    Unit.countDocuments({ property: propertyId, status: "occupied" }),
-    Unit.countDocuments({ property: propertyId, status: "vacant" }),
+  const [agg] = await Unit.aggregate([
+    { $match: { property: new mongoose.Types.ObjectId(String(propertyId)) } },
+    { $group: {
+      _id: null,
+      totalUnits:    { $sum: 1 },
+      occupiedUnits: { $sum: { $cond: [{ $eq: ["$status", "occupied"] }, 1, 0] } },
+      vacantUnits:   { $sum: { $cond: [{ $eq: ["$status", "vacant"]   }, 1, 0] } },
+    }},
   ]);
+
+  const totalUnits    = agg?.totalUnits    ?? 0;
+  const occupiedUnits = agg?.occupiedUnits ?? 0;
+  const vacantUnits   = agg?.vacantUnits   ?? 0;
 
   await Property.findByIdAndUpdate(propertyId, { totalUnits, occupiedUnits, vacantUnits });
 };
@@ -556,7 +564,8 @@ export const getUnits = async (req, res, next) => {
     // Phase 1: lightweight query to get all matching IDs + property refs for sort-by-name.
     // Sorting by property ObjectId groups same-ObjectId units but can split two properties
     // that share a name (e.g. duplicate property records). Sorting by name fixes this.
-    const allStubs = await Unit.find(filter).select("_id property unitNumber").lean();
+    // Cap at 10 000 stubs to prevent OOM on very large datasets.
+    const allStubs = await Unit.find(filter).select("_id property unitNumber").limit(10000).lean();
 
     const stubPropIds = [...new Set(allStubs.map((u) => String(u.property)))];
     const stubProps = stubPropIds.length

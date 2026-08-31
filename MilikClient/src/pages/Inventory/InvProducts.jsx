@@ -219,6 +219,15 @@ const InvProducts = () => {
   const total    = prodData?.total ?? 0;
   const pages    = Math.max(1, Math.ceil(total / pageSize));
 
+  const categoryOptions = useMemo(
+    () => categories.map((c) => ({ value: c._id, label: c.name })),
+    [categories]
+  );
+  const categoryOptionsWithNone = useMemo(
+    () => [{ value: "", label: "— None —" }, ...categoryOptions],
+    [categoryOptions]
+  );
+
   // Selection helpers
   const allPageIds = useMemo(() => products.map((p) => p._id), [products]);
   const allSelected = allPageIds.length > 0 && allPageIds.every((id) => selectedIds.has(id));
@@ -423,7 +432,7 @@ const InvProducts = () => {
               <AppSelect
                 value={categoryFilter}
                 onChange={(v) => { setCategoryFilter(v ?? ""); setPage(1); }}
-                options={categories.map((c) => ({ value: c._id, label: c.name }))}
+                options={categoryOptions}
                 placeholder="All Categories"
                 clearable size="sm" searchable
               />
@@ -637,7 +646,7 @@ const InvProducts = () => {
               <input className={inputClass} value={form.barcode} onChange={set("barcode")} placeholder="Scan or type" />
             </div>
             <div>
-              <AppSelect label="Category" value={form.category} onChange={(v) => setForm((f) => ({ ...f, category: v ?? "" }))} options={[{ value: "", label: "— None —" }, ...categories.map((c) => ({ value: c._id, label: c.name }))]} placeholder="— None —" size="md" searchable />
+              <AppSelect label="Category" value={form.category} onChange={(v) => setForm((f) => ({ ...f, category: v ?? "" }))} options={categoryOptionsWithNone} placeholder="— None —" size="md" searchable />
             </div>
             <div>
               <AppSelect label="Unit of Measure" value={UOM_OPTIONS.includes(form.unitOfMeasure) ? form.unitOfMeasure : "__custom"} onChange={(v) => { if (v && v !== "__custom") setForm((f) => ({ ...f, unitOfMeasure: v ?? "" })); }} options={[...UOM_OPTIONS.map((u) => ({ value: u, label: u })), ...(!UOM_OPTIONS.includes(form.unitOfMeasure) ? [{ value: "__custom", label: form.unitOfMeasure }] : []), { value: "__custom", label: "Other (custom)…" }]} size="md" />

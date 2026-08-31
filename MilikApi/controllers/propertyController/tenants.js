@@ -1604,7 +1604,7 @@ export const updateTenantStatus = async (req, res, next) => {
         req.params.id,
         { $set: updateData },
         { new: true, runValidators: true }
-      )
+      ).lean()
     );
 
     if (

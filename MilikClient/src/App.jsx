@@ -3,7 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-route
 import ScrollToTop from "./components/common/ScrollToTop";
 import { useDispatch, useSelector } from "react-redux";
 import { clearCurrentCompany, getCompanySuccess, setCurrentCompany } from "./redux/companiesRedux";
-import { initializeAuth, tokenRefreshed } from "./redux/authSlice";
+import { initializeAuth, tokenRefreshed, logoutSuccess } from "./redux/authSlice";
 import { getAccessibleCompanies, refreshAccessToken } from "./redux/apiCalls";
 import { fetchCompanySettings } from "./redux/companySettingsRedux";
 import useInactivityLogout from "./hooks/useInactivityLogout";
@@ -528,7 +528,13 @@ function App() {
       if (data?.token) {
         dispatch(tokenRefreshed(data.token));
       } else {
-        console.debug('[auth] silent refresh: no new token returned');
+        // Refresh failed — the stored token is expired or revoked.
+        // Clear the session so the next page load goes straight to login
+        // instead of looping through failed refresh attempts.
+        const storedToken = localStorage.getItem("milik_token");
+        if (storedToken && isTokenExpired(storedToken)) {
+          dispatch(logoutSuccess());
+        }
       }
     });
   }, [currentUser, token, dispatch]);
@@ -901,7 +907,7 @@ function App() {
 
             {/* ── Company & settings ────────────────────────────────────── */}
             <Route path="/company-setup" element={<Guard resource="companySettings" action="update"><CompanySetupPage /></Guard>} />
-            <Route path="/settings"      element={<Guard resource="companySettings"><CompanySettings /></Guard>} />
+            <Route path="/settings"      element={<Guard resource="companySettings" action="update"><CompanySettings /></Guard>} />
 
             {/* ── Help ──────────────────────────────────────────────────── */}
             <Route path="/help/documentation" element={<Guard><SupportDocumentation /></Guard>} />

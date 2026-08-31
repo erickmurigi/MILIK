@@ -28,7 +28,6 @@ export const landlordSlice = createSlice({
         getLandlordsFailure: (state) => {
             state.isFetching = false
             state.error = true
-            state.landlords = []
         },
 
         // Create landlord

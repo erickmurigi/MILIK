@@ -1110,10 +1110,9 @@ const applyTenantBalanceAndStatus = async ({
     updateFields.status = resolvedStatus;
   }
 
-  await Tenant.findOneAndUpdate(
+  await Tenant.updateOne(
     { _id: tenantId, business: businessId },
-    { $set: updateFields },
-    { new: true }
+    { $set: updateFields }
   );
 
   return {

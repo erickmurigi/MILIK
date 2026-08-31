@@ -37,7 +37,6 @@ const refreshLimiter = rateLimit({
 
 router.post('/login', loginLimiter, validateRequest(loginSchema), loginUser);
 router.post('/refresh', refreshLimiter, refreshToken);
-router.post('/super-admin', createSuperAdmin);
 
 router.post('/', verifyUser, validateRequest(createUserSchema), registerUser);
 router.get('/me', verifyUser, getCurrentUser);

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { selectCurrentCompany } from "../../redux/selectors";
+import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import toast from "react-hot-toast";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
@@ -919,6 +919,8 @@ export default function CompanySetupPage() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser    = useSelector(selectCurrentUser);
+  const canAccessCredentials = Boolean(currentUser?.adminAccess || currentUser?.isSystemAdmin || currentUser?.superAdminAccess || currentUser?.companySetupAccess);
   const [searchParams, setSearchParams] = useSearchParams();
   const [savingDetails, setSavingDetails] = useState(false);
   const [savingPayments, setSavingPayments] = useState(false);
@@ -1638,11 +1640,11 @@ export default function CompanySetupPage() {
   const tabs = useMemo(() => [
     { key: "details",    label: "PROFILE",    icon: <FaBuilding /> },
     ...(hasPM ? [{ key: "structure", label: "STRUCTURE", icon: <FaSitemap /> }] : []),
-    { key: "payments",  label: "PAYMENTS",   icon: <FaMoneyCheckAlt /> },
-    { key: "email",     label: "EMAIL",      icon: <FaEnvelope /> },
-    { key: "sms",       label: "SMS",        icon: <FaSms /> },
+    ...(canAccessCredentials ? [{ key: "payments",  label: "PAYMENTS",   icon: <FaMoneyCheckAlt /> }] : []),
+    ...(canAccessCredentials ? [{ key: "email",     label: "EMAIL",      icon: <FaEnvelope /> }] : []),
+    ...(canAccessCredentials ? [{ key: "sms",       label: "SMS",        icon: <FaSms /> }] : []),
     { key: "activities",label: "ACTIVITIES", icon: <FaHistory /> },
-  ], [hasPM]);
+  ], [hasPM, canAccessCredentials]);
 
   const emailUsageOptions = useMemo(() => [
     { value: "receipts",           label: "Receipts" },

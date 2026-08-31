@@ -4482,6 +4482,11 @@ export const fixTakeOnDepositClassification = async (req, res, next) => {
     const { businessId } = req.params;
     if (!businessId) return next(createError(400, "businessId is required"));
 
+    const authenticatedBusiness = String(req.user?.company?._id || req.user?.company || "");
+    if (!req.user?.isSystemAdmin && !req.user?.superAdminAccess && authenticatedBusiness !== String(businessId)) {
+      return next(createError(403, "Cross-company access not allowed"));
+    }
+
     // Find take-on balance receipts with deposit billItemKey misclassified as rent
     const affected = await RentPayment.find({
       business: businessId,

@@ -1397,6 +1397,10 @@ export const updateCompany = async (req, res, next) => {
       return next(createError(403, "You can only edit your own company"));
     }
 
+    if (!isSystemAdminUser(req.user) && !hasCompanySetupAccess(req.user)) {
+      return next(createError(403, "Company setup requires admin or setup access"));
+    }
+
     const allowedFields = [
       "companyName",
       "registrationNo",
@@ -1567,6 +1571,10 @@ export const testCompanyEmailProfile = async (req, res, next) => {
 
     if (!canAccessCompanyId(req.user, req.params.id)) {
       return next(createError(403, "You can only access your own company email settings"));
+    }
+
+    if (!isSystemAdminUser(req.user) && !hasCompanySetupAccess(req.user)) {
+      return next(createError(403, "Email profile testing requires admin or setup access"));
     }
 
     const profileId = normalizeText(req.body?.profileId);
@@ -1823,6 +1831,10 @@ export const getCompanyUsers = async (req, res, next) => {
 
     if (!canAccessCompanyId(req.user, req.params.id)) {
       return next(createError(403, "You can only view your company's users"));
+    }
+
+    if (!isSystemAdminUser(req.user) && !hasCompanySetupAccess(req.user) && !req.user?.adminAccess) {
+      return next(createError(403, "Viewing company users requires admin or setup access"));
     }
 
     const companyId = req.params.id;

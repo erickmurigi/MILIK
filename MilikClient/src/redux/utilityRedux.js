@@ -69,10 +69,8 @@ export const utilitySlice = createSlice({
         },
         deleteUtilitySuccess: (state, action) => {
             state.isFetching = false
-            state.utilities.splice(
-                state.utilities.findIndex((item) => item._id === action.payload),
-                1
-            )
+            const idx = state.utilities.findIndex((item) => item._id === action.payload)
+            if (idx !== -1) state.utilities.splice(idx, 1)
         },
         deleteUtilityFailure: (state) => {
             state.isFetching = false

@@ -1,6 +1,6 @@
 import express from "express";
 import mongoose from "mongoose";
-import { requireCompanyModule, verifyUser, GL_ACCESS_MODULES } from "../controllers/verifyToken.js";
+import { requireCompanyModule, verifyUser, verifyAdmin, GL_ACCESS_MODULES } from "../controllers/verifyToken.js";
 import ChartOfAccount from "../models/ChartOfAccount.js";
 import FinancialLedgerEntry from "../models/FinancialLedgerEntry.js";
 import TenantInvoice from "../models/TenantInvoice.js";
@@ -673,11 +673,8 @@ router.delete("/:id", verifyUser, requireCompanyModule("accounts"), async (req, 
 // One-time migration: remove property GL sub-accounts (1200-PRO001 etc.) and clean up
 // the stale propertyAccounts field from Property documents.
 // Safe to run multiple times. Requires admin access.
-router.post("/admin/cleanup-property-sub-accounts", verifyUser, async (req, res) => {
+router.post("/admin/cleanup-property-sub-accounts", verifyAdmin, requireCompanyModule("accounts"), async (req, res) => {
   try {
-    if (!req.user?.superAdminAccess && !req.user?.adminAccess && !req.user?.isSystemAdmin) {
-      return res.status(403).json({ error: "Admin access required." });
-    }
 
     const business = resolveBusiness(req);
     if (!business) {

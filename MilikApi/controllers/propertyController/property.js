@@ -600,30 +600,18 @@ export const createProperty = async (req, res) => {
       normalizedPropertyCode ||
       generateNextPropertyCode(maxNum > 0 ? [`${PROPERTY_CODE_PREFIX}${String(maxNum).padStart(3, "0")}`] : []);
 
-    const existingProperty = await Property.findOne({
-      business: businessId,
-      propertyCode: resolvedPropertyCode,
-    }).lean();
+    const [existingByCode, existingByLr] = await Promise.all([
+      Property.findOne({ business: businessId, propertyCode: resolvedPropertyCode }).select("_id").lean(),
+      normalizedLrNumber
+        ? Property.findOne({ business: businessId, lrNumber: normalizedLrNumber }).select("_id").lean()
+        : null,
+    ]);
 
-    if (existingProperty) {
-      return res.status(400).json({
-        success: false,
-        message: "Property with this code already exists",
-      });
+    if (existingByCode) {
+      return res.status(400).json({ success: false, message: "Property with this code already exists" });
     }
-
-    if (normalizedLrNumber) {
-      const existingLrProperty = await Property.findOne({
-        business: businessId,
-        lrNumber: normalizedLrNumber,
-      }).lean();
-
-      if (existingLrProperty) {
-        return res.status(400).json({
-          success: false,
-          message: "Property with this LR number already exists",
-        });
-      }
+    if (existingByLr) {
+      return res.status(400).json({ success: false, message: "Property with this LR number already exists" });
     }
 
     const [company, , createdById] = await Promise.all([
@@ -1636,6 +1624,7 @@ export const bulkImportProperties = async (req, res, next) => {
 
     const seenCodesInBatch = new Set();
     const seenLRInBatch = new Set();
+    const pendingControlAccounts = [];
 
     // For self-managing companies every property gets the same company-owner landlord — resolve once
     let cachedSelfManagingAssignment = null;
@@ -1759,7 +1748,18 @@ export const bulkImportProperties = async (req, res, next) => {
         });
 
         const savedProperty = await newProperty.save();
+        pendingControlAccounts.push({ savedProperty, propertyName: property.propertyName, code: generatedPropertyCode });
+      } catch (error) {
+        results.failed.push({
+          propertyName: property.propertyName || "",
+          error: error.message || "Failed to create property",
+        });
+      }
+    }
 
+    // Create control accounts in parallel, then bulk-update controlAccount field
+    const controlAccountUpdates = await Promise.allSettled(
+      pendingControlAccounts.map(async ({ savedProperty, propertyName, code }) => {
         try {
           const controlAccount = await ensurePropertyControlAccount({
             businessId,
@@ -1767,29 +1767,37 @@ export const bulkImportProperties = async (req, res, next) => {
             propertyCode: savedProperty.propertyCode,
             propertyName: savedProperty.propertyName,
           });
-
-          if (
-            controlAccount?._id &&
-            String(savedProperty.controlAccount || "") !== String(controlAccount._id)
-          ) {
-            savedProperty.controlAccount = controlAccount._id;
-            await savedProperty.save();
-          }
+          return { savedProperty, controlAccount, propertyName, code };
         } catch (accountingError) {
           await Property.findByIdAndDelete(savedProperty._id);
-          throw new Error(`Property control account creation failed: ${accountingError.message}`);
+          throw new Error(`${propertyName}: control account creation failed — ${accountingError.message}`);
         }
+      })
+    );
 
-        results.successful.push({
-          propertyName: property.propertyName,
-          code: generatedPropertyCode,
-        });
-      } catch (error) {
+    const controlAccountBulkOps = [];
+    for (const settled of controlAccountUpdates) {
+      if (settled.status === "fulfilled") {
+        const { savedProperty, controlAccount, propertyName, code } = settled.value;
+        results.successful.push({ propertyName, code });
+        if (controlAccount?._id && String(savedProperty.controlAccount || "") !== String(controlAccount._id)) {
+          controlAccountBulkOps.push({
+            updateOne: {
+              filter: { _id: savedProperty._id },
+              update: { $set: { controlAccount: controlAccount._id } },
+            },
+          });
+        }
+      } else {
         results.failed.push({
-          propertyName: property.propertyName || "",
-          error: error.message || "Failed to create property",
+          propertyName: settled.reason?.message?.split(":")[0] || "",
+          error: settled.reason?.message || "Failed to create property",
         });
       }
+    }
+
+    if (controlAccountBulkOps.length > 0) {
+      await Property.bulkWrite(controlAccountBulkOps, { ordered: false });
     }
 
     const allFailed = results.successful.length === 0 && results.failed.length > 0;

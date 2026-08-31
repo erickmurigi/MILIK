@@ -570,7 +570,7 @@ app.get("/api", (req, res) => {
 // Authenticated file serving — requires a valid, non-revoked session.
 app.use("/uploads", verifyToken, express.static(UPLOADS_ROOT));
 
-app.use("/api/auth", authLimiter, authRoutes);
+app.use("/api/auth", authRoutes);
 app.use("/api/trial", trialLimiter, trialRoutes);
 app.use("/api/public/listings", publicListingsLimiter, publicListingsRoute);
 app.use("/api/rental-leads", rentalListingLeadsRoute);

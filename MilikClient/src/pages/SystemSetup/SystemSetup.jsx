@@ -949,6 +949,8 @@ export default function SystemSetupPage() {
     if (!VALID_SECTIONS.includes(activeSection)) navigate("/system-setup/overview", { replace: true });
   }, [activeSection, navigate]);
 
+  const isSystemAdmin = Boolean(currentUser?.isSystemAdmin || currentUser?.superAdminAccess);
+
   // Pass high limits so system admin always sees all records, not the default 10.
   // Guard both fetches behind isSystemAdmin — non-admins get an access warning and
   // do not need this data. The API enforces auth server-side, but this avoids
@@ -956,8 +958,6 @@ export default function SystemSetupPage() {
   useEffect(() => { if (isSystemAdmin) dispatch(getCompanies({ includeDemo: true, limit: 200 })); }, [dispatch, isSystemAdmin]);
   useEffect(() => { if (isSystemAdmin) dispatch(getUsers(selectedCompanyId || undefined, { limit: 500 })); }, [dispatch, isSystemAdmin, selectedCompanyId]);
   useEffect(() => { setSelectedCompanyId(companyFilterFromQuery); }, [companyFilterFromQuery]);
-
-  const isSystemAdmin = Boolean(currentUser?.isSystemAdmin || currentUser?.superAdminAccess);
 
   const goToSection = (section, nextQuery = "") => navigate(`/system-setup/${section}${nextQuery}`);
 

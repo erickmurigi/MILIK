@@ -592,7 +592,22 @@ export default function AddUserPage() {
                     {/* Access toggles */}
                     <div className="mt-2 flex flex-wrap gap-2">
                       {[
-                        ['userControl',        'User control'],
+                        ['userControl', 'User control'],
+                      ].map(([field, label]) => (
+                        <label
+                          key={field}
+                          className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={Boolean(form[field])}
+                            onChange={(e) => updateForm(field, e.target.checked)}
+                            className="accent-[#0B3B2E]"
+                          />
+                          {label}
+                        </label>
+                      ))}
+                      {(currentUser?.adminAccess || isSystemAdmin) && [
                         ['adminAccess',        'Company admin'],
                         ['setupAccess',        'Operational settings'],
                         ['companySetupAccess', 'Company setup'],

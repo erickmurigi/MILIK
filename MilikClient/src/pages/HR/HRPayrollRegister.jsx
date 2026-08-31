@@ -33,9 +33,10 @@ export default function HRPayrollRegister() {
       .then((r) => {
         const list = r.data || [];
         setPeriods(list);
-        if (list.length) setPeriodId(String(list[0]._id));
+        setPeriodId((prev) => prev || (list.length ? String(list[0]._id) : prev));
       })
       .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const load = useCallback(async () => {

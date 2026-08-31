@@ -193,7 +193,7 @@ const AccountsDashboard = () => {
   const [monthlyData, setMonthlyData]   = useState([]);
   const [chartsLoading, setChartsLoading] = useState(true);
   const [currentPeriod, setCurrentPeriod] = useState(null);
-  const businessId = useMemo(() => currentCompany?._id || "", [currentCompany?._id]);
+  const businessId = currentCompany?._id || "";
   const companyName = String(currentCompany?.companyName || currentCompany?.name || "").trim();
 
   useEffect(() => {

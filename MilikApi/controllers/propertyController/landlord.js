@@ -268,15 +268,18 @@ export const getLandlords = async (req, res, next) => {
     );
     const landlordIds = landlords.map((l) => l._id);
 
-    const landlordById = new Map(landlords.map((l) => [String(l._id), l]));
-    const landlordByName = new Map(
-      landlords.flatMap((l) => (l.landlordName ? [[l.landlordName, l]] : []))
-    );
-
     const baseMatch = { business: businessId, landlord: { $in: landlordIds } };
 
-    const [allProperties, statementRows] = await Promise.all([
-      Property.find({ business: businessId }).select("landlords status").limit(2000).lean(),
+    const [propertyCountRows, statementRows] = await Promise.all([
+      Property.aggregate([
+        { $match: { business: businessId } },
+        { $unwind: "$landlords" },
+        { $match: { "landlords.landlordId": { $in: landlordIds } } },
+        { $group: {
+          _id: { landlordId: "$landlords.landlordId", status: "$status" },
+          count: { $sum: 1 },
+        }},
+      ]),
       ProcessedStatement.aggregate([
         {
           $match: {
@@ -293,18 +296,10 @@ export const getLandlords = async (req, res, next) => {
     const activeCounts = new Map();
     const archivedCounts = new Map();
 
-    for (const prop of allProperties) {
-      const seen = new Set();
-      for (const entry of prop.landlords || []) {
-        let matched = entry.landlordId ? landlordById.get(String(entry.landlordId)) : null;
-        if (!matched && entry.name) matched = landlordByName.get(entry.name);
-        if (!matched) continue;
-        const lid = String(matched._id);
-        if (seen.has(lid)) continue;
-        seen.add(lid);
-        const map = prop.status === "archived" ? archivedCounts : activeCounts;
-        map.set(lid, (map.get(lid) || 0) + 1);
-      }
+    for (const row of propertyCountRows) {
+      const lid = String(row._id.landlordId);
+      const map = row._id.status === "archived" ? archivedCounts : activeCounts;
+      map.set(lid, (map.get(lid) || 0) + row.count);
     }
 
     const balanceByLandlord = new Map(statementRows.map((r) => [String(r._id), Number(r.balance || 0)]));

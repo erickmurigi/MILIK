@@ -61,10 +61,8 @@ export const maintenanceSlice = createSlice({
         },
         deleteMaintenanceSuccess: (state, action) => {
             state.isFetching = false
-            state.maintenances.splice(
-                state.maintenances.findIndex((item) => item._id === action.payload),
-                1
-            )
+            const idx = state.maintenances.findIndex((item) => item._id === action.payload)
+            if (idx !== -1) state.maintenances.splice(idx, 1)
         },
         deleteMaintenanceFailure: (state) => {
             state.isFetching = false

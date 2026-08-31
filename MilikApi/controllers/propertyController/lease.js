@@ -342,6 +342,8 @@ export const createLease = async (req, res, next) => {
 export const getLeases = async (req, res, next) => {
   try {
     const { status, tenant, unit, property } = req.query;
+    const page  = Math.max(1, parseInt(req.query.page, 10)  || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
     const business = resolveBusinessId(req);
     const filter = business ? { business } : {};
 
@@ -353,8 +355,13 @@ export const getLeases = async (req, res, next) => {
       filter.unit = { $in: propertyUnits.map((item) => item._id) };
     }
 
-    const leases = await populateLeaseQuery(Lease.find(filter).sort({ startDate: -1, createdAt: -1 }).limit(2000)).lean();
-    return res.status(200).json(leases);
+    const [leases, total] = await Promise.all([
+      populateLeaseQuery(
+        Lease.find(filter).sort({ startDate: -1, createdAt: -1 }).skip((page - 1) * limit).limit(limit)
+      ).lean(),
+      Lease.countDocuments(filter),
+    ]);
+    return res.status(200).json({ data: leases, total, page, pages: Math.ceil(total / limit) });
   } catch (err) {
     next(err);
   }

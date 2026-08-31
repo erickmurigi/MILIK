@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { selectCurrentUser } from '../../redux/selectors';
 import { useTabState } from "../../hooks/useTabState";
 import {
   FaPlus, FaRedoAlt, FaPlay, FaCheck,
@@ -78,6 +80,8 @@ function NewPeriodForm({ onSave, onCancel, saving }) {
 export default function PayrollPeriods() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const currentUser = useSelector(selectCurrentUser);
+  const canManagePayroll = Boolean(currentUser?.adminAccess || currentUser?.isSystemAdmin || currentUser?.superAdminAccess);
   const [saving, setSaving]       = useState(false);
   const [running, setRunning]     = useState(null);
   const [showNew, setShowNew]     = useState(false);
@@ -249,7 +253,7 @@ export default function PayrollPeriods() {
                 >
                   <FaEye size={9} /> View
                 </button>
-                {['Draft', 'Processing'].includes(period.status) && (
+                {canManagePayroll && ['Draft', 'Processing'].includes(period.status) && (
                   <button
                     onClick={() => runPayroll(period)}
                     disabled={!!running}
@@ -258,7 +262,7 @@ export default function PayrollPeriods() {
                     <FaPlay size={8} /> {running === period._id ? 'Running…' : 'Run'}
                   </button>
                 )}
-                {period.status === 'Draft' && (
+                {canManagePayroll && period.status === 'Draft' && (
                   <button
                     onClick={() => deletePeriod(period)}
                     className="inline-flex items-center gap-1 rounded border border-rose-100 bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-500 hover:bg-rose-100"

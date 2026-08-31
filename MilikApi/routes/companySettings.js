@@ -50,21 +50,21 @@ router.use((req, res, next) => {
 router.get("/:businessId", verifyUser, getCompanySettings);
 
 // Utility Types
-router.post("/:businessId/utilities", verifyUser, addUtilityType);
-router.put("/:businessId/utilities/:utilityId", verifyUser, updateUtilityType);
-router.delete("/:businessId/utilities/:utilityId", verifyUser, deleteUtilityType);
+router.post("/:businessId/utilities", verifySetupAccess, addUtilityType);
+router.put("/:businessId/utilities/:utilityId", verifySetupAccess, updateUtilityType);
+router.delete("/:businessId/utilities/:utilityId", verifySetupAccess, deleteUtilityType);
 
 // Unit Types
 router.get("/:businessId/unit-types", verifyUser, getUnitTypes);
-router.post("/:businessId/unit-types", verifyUser, addUnitType);
-router.put("/:businessId/unit-types/:itemId", verifyUser, updateUnitType);
-router.delete("/:businessId/unit-types/:itemId", verifyUser, deleteUnitType);
+router.post("/:businessId/unit-types", verifySetupAccess, addUnitType);
+router.put("/:businessId/unit-types/:itemId", verifySetupAccess, updateUnitType);
+router.delete("/:businessId/unit-types/:itemId", verifySetupAccess, deleteUnitType);
 
 // Maintenance Categories
 router.get("/:businessId/maintenance-categories", verifyUser, getMaintenanceCategories);
-router.post("/:businessId/maintenance-categories", verifyUser, addMaintenanceCategory);
-router.put("/:businessId/maintenance-categories/:itemId", verifyUser, updateMaintenanceCategory);
-router.delete("/:businessId/maintenance-categories/:itemId", verifyUser, deleteMaintenanceCategory);
+router.post("/:businessId/maintenance-categories", verifySetupAccess, addMaintenanceCategory);
+router.put("/:businessId/maintenance-categories/:itemId", verifySetupAccess, updateMaintenanceCategory);
+router.delete("/:businessId/maintenance-categories/:itemId", verifySetupAccess, deleteMaintenanceCategory);
 
 // Billing Periods — setup/admin only
 router.post("/:businessId/periods", verifySetupAccess, addBillingPeriod);
