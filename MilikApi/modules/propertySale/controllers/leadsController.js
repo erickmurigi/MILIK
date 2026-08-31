@@ -11,6 +11,19 @@ import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationSer
 const fillPlaceholders = (text, vars) =>
   String(text || "").replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => vars[k] ?? `{${k}}`);
 
+// Coerce empty strings to the types Mongoose expects, preventing CastErrors on ObjectId/Date/Number fields.
+const sanitizeLeadBody = (body = {}) => ({
+  ...body,
+  assignedAgent:    body.assignedAgent    || null,
+  nextFollowUpDate: body.nextFollowUpDate || null,
+  lastContactDate:  body.lastContactDate  || null,
+  budgetMin: body.budgetMin !== "" && body.budgetMin != null ? Number(body.budgetMin) || 0 : 0,
+  budgetMax: body.budgetMax !== "" && body.budgetMax != null ? Number(body.budgetMax) || 0 : 0,
+  interestedListings: Array.isArray(body.interestedListings)
+    ? body.interestedListings.filter(Boolean)
+    : [],
+});
+
 export const listLeads = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -78,7 +91,7 @@ export const createLead = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
     const leadNumber = await generateSequentialNumber(SaleLead, business, "LDR");
-    const lead = await SaleLead.create({ ...req.body, business, leadNumber, createdBy: userId, updatedBy: userId });
+    const lead = await SaleLead.create({ ...sanitizeLeadBody(req.body), business, leadNumber, createdBy: userId, updatedBy: userId });
     res.status(201).json(lead);
   } catch (err) { next(err); }
 };
@@ -87,7 +100,8 @@ export const updateLead = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
-    const { business: _b, leadNumber: _n, createdBy: _c, convertedBuyer: _cv, convertedAt: _ca, ...updates } = req.body;
+    const { business: _b, leadNumber: _n, createdBy: _c, convertedBuyer: _cv, convertedAt: _ca, ...rawUpdates } = req.body;
+    const updates = sanitizeLeadBody(rawUpdates);
     // "converted" status must go through /convert (which creates the buyer record)
     if (updates.status === "converted") delete updates.status;
     const lead = await SaleLead.findOneAndUpdate(
