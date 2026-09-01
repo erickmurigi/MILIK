@@ -1227,17 +1227,35 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
                   </label>
                 </div>
 
-                {selectedSourceInvoice ? (
-                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                    <p><span className="font-semibold">{noteType === "CREDIT_NOTE" ? "Source Invoice" : "Linked Invoice"}:</span> {selectedSourceInvoice.invoiceNumber}</p>
-                    <p><span className="font-semibold">{termProperty}:</span> {resolvePropertyName(selectedSourceInvoice, propertyMap)}</p>
-                    <p><span className="font-semibold">Original Amount:</span> {formatCurrency(selectedSourceInvoice.amount)}</p>
-                    <p><span className="font-semibold">Net Amount:</span> {formatCurrency(selectedSourceInvoice.netAmount ?? selectedSourceInvoice.amount)}</p>
-                    {noteType === "CREDIT_NOTE" ? (
-                      <p><span className="font-semibold">Remaining Creditable:</span> {formatCurrency(selectedSourceInvoice.remainingCreditableAmount ?? 0)}</p>
-                    ) : null}
-                  </div>
-                ) : null}
+                {selectedSourceInvoice ? (() => {
+                  const remainingCreditable = Number(selectedSourceInvoice.remainingCreditableAmount ?? 0);
+                  const enteredAmount = Number(amount || 0);
+                  const remainingAfterNote = remainingCreditable - enteredAmount;
+                  const overCrediting = noteType === "CREDIT_NOTE" && enteredAmount > 0 && remainingAfterNote < -0.009;
+                  return (
+                    <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${overCrediting ? "border-red-300 bg-red-50 text-red-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
+                      <p><span className="font-semibold">{noteType === "CREDIT_NOTE" ? "Source Invoice" : "Linked Invoice"}:</span> {selectedSourceInvoice.invoiceNumber}</p>
+                      <p><span className="font-semibold">{termProperty}:</span> {resolvePropertyName(selectedSourceInvoice, propertyMap)}</p>
+                      <p><span className="font-semibold">Original Amount:</span> {formatCurrency(selectedSourceInvoice.amount)}</p>
+                      {noteType === "CREDIT_NOTE" ? (
+                        <>
+                          <p><span className="font-semibold">Remaining Creditable (before this note):</span> {formatCurrency(remainingCreditable)}</p>
+                          {enteredAmount > 0 && (
+                            <p>
+                              <span className="font-semibold">Remaining After This Note:</span>{" "}
+                              {formatCurrency(Math.max(remainingAfterNote, 0))}
+                              {overCrediting && (
+                                <span className="ml-2 font-bold">
+                                  — exceeds remaining creditable by {formatCurrency(Math.abs(remainingAfterNote))}
+                                </span>
+                              )}
+                            </p>
+                          )}
+                        </>
+                      ) : null}
+                    </div>
+                  );
+                })() : null}
               </div>
 
               <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-white px-5 py-4">
