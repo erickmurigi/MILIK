@@ -1126,7 +1126,7 @@ useEffect(() => {
   };
 
   const fullUtilityOptions = useMemo(
-    () => Array.from(new Set([...utilityOptions, "Water", "Garbage", "Electricity", "Service Charge", "Security", "Others"])),
+    () => (utilityOptions.length ? utilityOptions : ["Water", "Garbage", "Electricity", "Service Charge", "Security", "Others"]),
     [utilityOptions]
   );
 

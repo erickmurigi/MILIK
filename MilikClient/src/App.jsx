@@ -48,7 +48,6 @@ const HRPage            = lazy(() => import("./pages/Modules/HRPage"));
 const InventoryPage     = lazy(() => import("./pages/Modules/InventoryPage"));
 const PropertySalesPage = lazy(() => import("./pages/Modules/PropertySalesPage"));
 const Login             = lazy(() => import("./pages/Login/Login"));
-const SetupAdmin        = lazy(() => import("./pages/Login/SetupAdmin"));
 const FirstTimePassword = lazy(() => import("./pages/Login/FirstTimePassword"));
 
 // ESS Portal
@@ -527,17 +526,51 @@ function App() {
     refreshAccessToken().then((data) => {
       if (data?.token) {
         dispatch(tokenRefreshed(data.token));
-      } else {
-        // Refresh failed — the stored token is expired or revoked.
-        // Clear the session so the next page load goes straight to login
-        // instead of looping through failed refresh attempts.
-        const storedToken = localStorage.getItem("milik_token");
-        if (storedToken && isTokenExpired(storedToken)) {
-          dispatch(logoutSuccess());
-        }
+        return;
+      }
+
+      // Refresh failed. A definitive rejection (token revoked/blacklisted server-side)
+      // means the session can never recover even though its own exp claim may still
+      // be in the future — log out immediately rather than leaving the user stuck in
+      // a half-authenticated state that just repeats this same failed call on every
+      // page reload. A transient failure (network blip, rate-limited) is NOT treated
+      // as a logout signal — only the local exp-claim fallback applies there, so a
+      // momentary hiccup doesn't force a perfectly valid session out.
+      if (data?.definitivelyInvalid) {
+        dispatch(logoutSuccess());
+        return;
+      }
+
+      const storedToken = localStorage.getItem("milik_token");
+      if (storedToken && isTokenExpired(storedToken)) {
+        dispatch(logoutSuccess());
       }
     });
   }, [currentUser, token, dispatch]);
+
+  // Cross-tab session sync. Redux state lives in each tab's own memory, so logging out
+  // (or being force-logged-out) in one tab only clears localStorage there — sibling tabs
+  // keep a stale token in memory and go on behaving as logged in until their next API
+  // call 401s. Mirror both logout and silent-refresh token rotation across tabs instead.
+  useEffect(() => {
+    const handleStorageChange = (event) => {
+      if (event.key !== "milik_token") return;
+      if (!event.newValue) {
+        clearClientSessionStorage();
+        dispatch(logoutSuccess());
+        if (!window.location.pathname.startsWith("/login")) {
+          window.location.replace("/login");
+        }
+        return;
+      }
+      if (event.newValue !== event.oldValue) {
+        dispatch(tokenRefreshed(event.newValue));
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, [dispatch]);
 
   useEffect(() => {
     let cancelled = false;
@@ -634,7 +667,9 @@ function App() {
             <Route path="/inventory-pos" element={<InventoryPage />} />
             <Route path="/property-sales" element={<PropertySalesPage />} />
             <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
-            <Route path="/setup-admin" element={<SetupAdmin />} />
+            {/* Backend super-admin creation route (/auth/super-admin) was disabled — always 410s now.
+                Super admin access is via the embedded Milik admin credentials at /login instead. */}
+            <Route path="/setup-admin" element={<Navigate to="/login" replace />} />
             <Route path="/first-time-password" element={<Guard allowMustChangePassword><FirstTimePassword /></Guard>} />
 
             {/* ── Core dashboards ───────────────────────────────────────── */}

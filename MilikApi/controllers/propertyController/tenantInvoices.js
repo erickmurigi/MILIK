@@ -1491,6 +1491,14 @@ const buildSortedInvoiceSnapshots = (invoices = []) => {
 const TENANT_SNAPSHOT_INVOICE_FIELDS = [
   "_id",
   "tenant",
+  // Every consumer of these snapshots (e.g. getCreditableTenantInvoices, which feeds the
+  // Credit Note "Source Invoice" picker) returns the snapshot straight through to the
+  // frontend. InvoiceNotes.jsx's resolvePropertyId() reads invoice.property (falling back
+  // to invoice.unit.property, which is never populated here) to enforce the
+  // property-scoped picker — without "property" selected, every snapshot resolves to an
+  // empty property id and gets silently filtered out the moment a property is selected,
+  // for every invoice category alike. Keep this selected.
+  "property",
   "unit",
   "amount",
   "invoiceNumber",

@@ -318,8 +318,9 @@ function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSave
     }
   }, [storedSettings, company?._id, dispatch]);
 
-  // Produce { value, label } directly so the JSX prop needs no extra .map()
-  const allOptions = useMemo(() => Array.from(new Set([...utilityOptions, ...STANDARD_UTILITY_OPTIONS])).map((opt) => ({ value: opt, label: opt })), [utilityOptions]);
+  // Produce { value, label } directly so the JSX prop needs no extra .map(); fall back to the
+  // standard list only when the company has no configured utility types at all
+  const allOptions = useMemo(() => (utilityOptions.length ? utilityOptions : STANDARD_UTILITY_OPTIONS).map((opt) => ({ value: opt, label: opt })), [utilityOptions]);
 
   const addRow = () => setRows((prev) => [...prev, { utility: "", utilityLabel: "", unitCharge: "", isIncluded: false }]);
   const removeRow = (i) => setRows((prev) => prev.filter((_, idx) => idx !== i));

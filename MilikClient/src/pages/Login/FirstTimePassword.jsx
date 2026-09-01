@@ -122,7 +122,7 @@ function FirstTimePassword() {
             {renderField('newPassword', 'New password', 'Create a new password')}
             {renderField('confirmPassword', 'Confirm new password', 'Repeat your new password')}
             <button type="submit" disabled={loading} className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#0B3B2E] to-[#0A3127] px-4 py-3 font-extrabold tracking-wide text-white transition hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60">
-              {loading ? <><FaSpinner className="animate-spin" /> Updating...</> : 'Save Password and Continue'}
+              {loading ? <><Spinner size="sm" /> Updating...</> : 'Save Password and Continue'}
             </button>
           </form>
         </div>

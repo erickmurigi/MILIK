@@ -887,7 +887,7 @@ const EditProperty = () => {
   }, [currentCompany, dispatch, isSelfManagingLandlordMode]);
 
   useEffect(() => {
-    if (activeTab !== "utilityRates" || !currentCompany?._id) return;
+    if (!currentCompany?._id) return;
     let cancelled = false;
     setUtilityTypeOptionsLoading(true);
     adminRequests
@@ -904,7 +904,13 @@ const EditProperty = () => {
       .catch(() => {})
       .finally(() => { if (!cancelled) setUtilityTypeOptionsLoading(false); });
     return () => { cancelled = true; };
-  }, [activeTab, currentCompany?._id]);
+  }, [currentCompany?._id]);
+
+  // Names-only view of the same configured types, for dropdowns that don't need rate metadata
+  const standingChargeOptions = useMemo(
+    () => (utilityTypeOptions.length ? utilityTypeOptions.map((u) => u.name) : ["Water", "Garbage", "Electricity", "Service Charge", "Security", "Others"]),
+    [utilityTypeOptions]
+  );
 
   useEffect(() => {
     if (!draftStorageKey || !draftRestoredRef.current) return;
@@ -1520,7 +1526,7 @@ const EditProperty = () => {
                 <MilikSelect
                   label={`Service Charge/${termUtility}`}
                   placeholder="Select Type"
-                  items={["Water", "Garbage", "Electricity", "Service Charge", "Security", "Others"]}
+                  items={standingChargeOptions}
                   value={charge.serviceCharge}
                   onChange={(val) => {
                     const updated = [...formData.standingCharges];

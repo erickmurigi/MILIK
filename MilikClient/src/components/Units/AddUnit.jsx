@@ -985,7 +985,7 @@ const AddUnit = () => {
                           <MilikSelect
                             label="Service Charge/Utility"
                             placeholder="Select Type"
-                            items={Array.from(new Set([...utilityOptions, "Water", "Garbage", "Electricity", "Service Charge", "Security", "Others"]))}
+                            items={utilityOptions.length ? utilityOptions : ["Water", "Garbage", "Electricity", "Service Charge", "Security", "Others"]}
                             value={util.utility}
                             onChange={(val) => updateUtility(idx, "utility", val)}
                             getLabel={(x) => x}

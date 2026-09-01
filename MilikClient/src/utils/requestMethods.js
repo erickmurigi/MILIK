@@ -77,6 +77,13 @@ adminRequests.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// A page mount can fire several parallel authenticated requests at once (each widget
+// fetches its own data). If the token has gone bad, all of them 401 in the same tick —
+// without this guard each one independently re-assigns window.location.href, which is
+// what shows up as the page visibly flickering/reloading several times in a row before
+// it actually navigates away.
+let redirectingToLogin = false;
+
 // Response interceptor - handle common errors
 adminRequests.interceptors.response.use(
   (response) => response,
@@ -98,8 +105,11 @@ adminRequests.interceptors.response.use(
             authSelfUrl.includes("/auth/login") ||
             authSelfUrl.includes("/auth/refresh");
           if (isAuthFailure && !isAuthSelfEndpoint) {
-            clearAuthArtifacts();
-            window.location.href = "/login";
+            if (!redirectingToLogin) {
+              redirectingToLogin = true;
+              clearAuthArtifacts();
+              window.location.href = "/login";
+            }
           } else if (error.response.status === 403) {
             console.error(
               "Access forbidden:",

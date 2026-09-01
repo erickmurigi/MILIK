@@ -124,6 +124,7 @@ function TakeOnBalanceModal({
   properties = [],
   filterBillItemOptions,
   chartAccounts = [],
+  utilityTypeOptions = [],
   onClose,
   onSave,
   saving,
@@ -307,15 +308,7 @@ function TakeOnBalanceModal({
                     <AppSelect
                       value={form.utilityLabel}
                       onChange={(v) => setForm((prev) => ({ ...prev, utilityLabel: v ?? "" }))}
-                      options={[
-                        { value: "Water", label: "Water" },
-                        { value: "Electricity", label: "Electricity" },
-                        { value: "Gas", label: "Gas" },
-                        { value: "Garbage", label: "Garbage" },
-                        { value: "Internet", label: "Internet" },
-                        { value: "Security", label: "Security" },
-                        { value: "Service Charge", label: "Service Charge" },
-                      ]}
+                      options={(utilityTypeOptions.length ? utilityTypeOptions : ["Water", "Garbage", "Electricity", "Service Charge", "Security", "Others"]).map((name) => ({ value: name, label: name }))}
                       placeholder="Select type"
                       size="md"
                     />
@@ -539,6 +532,7 @@ const TakeOnBalances = () => {
   const [expandedBalanceId, setExpandedBalanceId] = useState(null);
   const [chartAccounts, setChartAccounts] = useState([]);
   const [fixingDeposits, setFixingDeposits] = useState(false);
+  const [utilityTypeOptions, setUtilityTypeOptions] = useState([]);
   const propertyOptions = useMemo(() => {
     const map = new Map();
 
@@ -613,6 +607,15 @@ const TakeOnBalances = () => {
         setChartAccounts([]);
       }
     })();
+    adminRequests
+      .get(`/company-settings/${currentCompany._id}`)
+      .then((res) => {
+        const names = Array.from(new Set(
+          (res?.data?.utilityTypes || []).filter((item) => item?.isActive !== false && item?.name).map((item) => String(item.name))
+        ));
+        setUtilityTypeOptions(names);
+      })
+      .catch(() => setUtilityTypeOptions([]));
   }, [dispatch, currentCompany?._id, loadRows]);
 
   const filteredRows = useMemo(() => {
@@ -1127,6 +1130,7 @@ const TakeOnBalances = () => {
         properties={propertyOptions}
         filterBillItemOptions={filterBillItemOptions}
         chartAccounts={chartAccounts}
+        utilityTypeOptions={utilityTypeOptions}
         onClose={() => {
           setShowModal(false);
           setSelectedRow(null);

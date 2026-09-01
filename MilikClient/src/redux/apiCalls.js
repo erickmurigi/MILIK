@@ -488,8 +488,14 @@ export const refreshAccessToken = async () => {
   try {
     const res = await adminRequests.post('/auth/refresh');
     return res.data;
-  } catch {
-    return null;
+  } catch (error) {
+    // Distinguish a definitive rejection (refresh token invalid/revoked — 401/403,
+    // e.g. blacklisted after logout-elsewhere or a password change) from a transient
+    // failure (network blip, 429 rate-limit, 5xx) — only the former should force a
+    // logout; retrying/limping along on the latter avoids compounding a rate-limit
+    // lockout with an extra redirect cycle.
+    const status = error?.response?.status;
+    return { token: null, definitivelyInvalid: status === 401 || status === 403 };
   }
 };
 
