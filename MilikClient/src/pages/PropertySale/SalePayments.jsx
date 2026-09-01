@@ -9,6 +9,7 @@ import PaginationBar from "../../components/PaginationBar";
 import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
 import AmountInput from "./AmountInput";
 import { useConfirm } from "../../context/ConfirmContext";
+import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
@@ -82,20 +83,21 @@ const SalePayments = () => {
   const [methodFilter, setMethodFilter] = useTabState("/sale/payments:methodFilter", "");
   const [statusFilter, setStatusFilter] = useTabState("/sale/payments:statusFilter", "");
   const [search,       setSearch]       = useTabState("/sale/payments:search", "");
+  const debouncedSearch = useDebounce(search, 400);
   const [dateFrom,     setDateFrom]     = useTabState("/sale/payments:dateFrom", "");
   const [dateTo,       setDateTo]       = useTabState("/sale/payments:dateTo", "");
   const [page,         setPage]         = useTabState("/sale/payments:page", 1);
   const [pageSize,     setPageSize]     = useTabState("/sale/payments:pageSize", PAGE_SIZE);
 
   const { data: paymentsData, isLoading: loading, isFetching } = useQuery({
-    queryKey: ["sale-payments", biz, dealFilter, typeFilter, methodFilter, statusFilter, search, dateFrom, dateTo, page, pageSize],
+    queryKey: ["sale-payments", biz, dealFilter, typeFilter, methodFilter, statusFilter, debouncedSearch, dateFrom, dateTo, page, pageSize],
     queryFn:  () => saleApi.listPayments({
       business: biz, limit: pageSize, page,
       ...(dealFilter   && { deal: dealFilter }),
       ...(typeFilter   && { paymentType: typeFilter }),
       ...(methodFilter && { paymentMethod: methodFilter }),
       ...(statusFilter && { status: statusFilter }),
-      ...(search       && { search }),
+      ...(debouncedSearch && { search: debouncedSearch }),
       ...(dateFrom     && { dateFrom }),
       ...(dateTo       && { dateTo }),
     }),

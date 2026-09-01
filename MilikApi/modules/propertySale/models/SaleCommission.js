@@ -5,7 +5,7 @@ const PAYOUT_METHODS = ["cash", "mpesa", "bank_transfer", "cheque", "other"];
 
 const saleCommissionSchema = new mongoose.Schema(
   {
-    business: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true, index: true },
+    business: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true },
     commissionNumber: { type: String, required: true, trim: true },
     deal: { type: mongoose.Schema.Types.ObjectId, ref: "SaleDeal", required: true, index: true },
     agent: { type: mongoose.Schema.Types.ObjectId, ref: "SaleAgent", required: true, index: true },

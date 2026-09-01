@@ -104,7 +104,8 @@ export const updateActivity = async (req, res, next) => {
     )
       .populate("relatedLead",  "leadNumber fullName")
       .populate("relatedBuyer", "buyerNumber fullName")
-      .populate("relatedDeal",  "dealNumber");
+      .populate("relatedDeal",  "dealNumber")
+      .lean();
 
     if (!activity) return next(createError(404, "Activity not found"));
 

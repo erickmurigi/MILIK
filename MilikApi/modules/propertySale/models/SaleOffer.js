@@ -4,7 +4,7 @@ const OFFER_STATUSES = ["pending", "negotiating", "accepted", "rejected", "expir
 
 const saleOfferSchema = new mongoose.Schema(
   {
-    business: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true, index: true },
+    business: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true },
     offerNumber: { type: String, required: true, trim: true },
     listing: { type: mongoose.Schema.Types.ObjectId, ref: "SaleListing", required: true, index: true },
     buyer: { type: mongoose.Schema.Types.ObjectId, ref: "SaleBuyer", required: true, index: true },

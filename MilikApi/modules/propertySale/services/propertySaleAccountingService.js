@@ -42,11 +42,22 @@ const dayRange = (value = new Date()) => {
 };
 
 // ─── Account resolution ───────────────────────────────────────────────────────
+//
+// These are fixed system accounts (one per business+code) whose _id never
+// changes once created, so the resolved id is cached in-process — closing a
+// deal with N pending commissions/deposits otherwise re-upserts the same two
+// or three ChartOfAccount docs N times.
+
+const accountIdCache = new Map(); // `${businessId}:${code}` -> ObjectId
 
 const resolvePSAccount = async (businessId, code) => {
+  const cacheKey = `${businessId}:${code}`;
+  const cachedId = accountIdCache.get(cacheKey);
+  if (cachedId) return { _id: cachedId };
+
   const tpl = PS_ACCOUNT_TEMPLATES[code];
   if (!tpl) throw new Error(`resolvePSAccount: unknown code "${code}"`);
-  return ChartOfAccount.findOneAndUpdate(
+  const acc = await ChartOfAccount.findOneAndUpdate(
     { business: businessId, code },
     {
       $setOnInsert: {
@@ -66,6 +77,8 @@ const resolvePSAccount = async (businessId, code) => {
     },
     { upsert: true, new: true }
   );
+  accountIdCache.set(cacheKey, acc._id);
+  return acc;
 };
 
 // ─── Payment received ─────────────────────────────────────────────────────────

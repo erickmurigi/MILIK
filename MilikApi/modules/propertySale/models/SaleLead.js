@@ -5,7 +5,7 @@ const LEAD_SOURCES  = ["walk_in", "referral", "online", "social_media", "agent",
 
 const saleLeadSchema = new mongoose.Schema(
   {
-    business:           { type: mongoose.Schema.Types.ObjectId, ref: "Company",    required: true, index: true },
+    business:           { type: mongoose.Schema.Types.ObjectId, ref: "Company",    required: true },
     leadNumber:         { type: String,  required: true, trim: true },
     fullName:           { type: String,  required: true, trim: true },
     phone:              { type: String,  trim: true, default: "" },

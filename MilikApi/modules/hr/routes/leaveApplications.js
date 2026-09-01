@@ -114,8 +114,8 @@ router.post('/', verifyUser, async (req, res) => {
     if (end < start) return res.status(400).json({ message: 'End date must be on or after start date' });
 
     const [emp, lt] = await Promise.all([
-      HREmployee.findOne({ _id: employee, company: companyId }),
-      HRLeaveType.findOne({ _id: leaveType, company: companyId, isActive: true }),
+      HREmployee.findOne({ _id: employee, company: companyId }).lean(),
+      HRLeaveType.findOne({ _id: leaveType, company: companyId, isActive: true }).lean(),
     ]);
     if (!emp) return res.status(404).json({ message: 'Employee not found' });
     if (!lt)  return res.status(404).json({ message: 'Leave type not found or inactive' });
@@ -128,7 +128,7 @@ router.post('/', verifyUser, async (req, res) => {
       $or: [
         { startDate: { $lte: end }, endDate: { $gte: start } },
       ],
-    });
+    }).lean();
     if (overlap) return res.status(400).json({ message: 'Employee already has an overlapping leave application for this period' });
 
     const days = workingDays(start, end);

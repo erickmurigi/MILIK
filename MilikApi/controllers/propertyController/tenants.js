@@ -1526,6 +1526,80 @@ export const deleteTenant = async (req, res, next) => {
   }
 };
 
+const invokeDeleteForTenant = ({ req, tenantId }) => {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const response = {
+      statusCode: 200,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload) {
+        if (!settled) {
+          settled = true;
+          resolve({ statusCode: this.statusCode || 200, payload });
+        }
+        return this;
+      },
+    };
+    const nextFn = (err) => {
+      if (!settled) {
+        settled = true;
+        reject(err || new Error("Failed to delete tenant."));
+      }
+    };
+
+    Promise.resolve(
+      deleteTenant({ ...req, params: { ...(req.params || {}), id: String(tenantId) } }, response, nextFn)
+    ).catch((err) => {
+      if (!settled) {
+        settled = true;
+        reject(err);
+      }
+    });
+  });
+};
+
+// Batch delete tenants: single client round trip, per-row processing preserved
+export const batchDeleteTenants = async (req, res, next) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const validIds = Array.from(
+      new Set(ids.map((id) => String(id || "").trim()).filter((id) => mongoose.Types.ObjectId.isValid(id)))
+    );
+
+    if (!validIds.length) {
+      return next(createError(400, "At least one tenant id is required."));
+    }
+
+    const succeeded = [];
+    const failed = [];
+
+    for (const tenantId of validIds) {
+      try {
+        const { statusCode, payload } = await invokeDeleteForTenant({ req, tenantId });
+        if (Number(statusCode || 200) >= 400) {
+          failed.push({ id: tenantId, reason: payload?.message || payload?.error || "Failed to delete tenant." });
+          continue;
+        }
+        succeeded.push({ id: tenantId, message: payload?.message || "Tenant deleted successfully" });
+      } catch (error) {
+        failed.push({ id: tenantId, reason: error?.message || "Failed to delete tenant." });
+      }
+    }
+
+    return res.status(200).json({
+      succeeded,
+      failed,
+      succeededCount: succeeded.length,
+      failedCount: failed.length,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Update tenant status
 export const updateTenantStatus = async (req, res, next) => {
   try {

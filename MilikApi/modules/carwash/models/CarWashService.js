@@ -6,7 +6,6 @@ const carWashServiceSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",
       required: true,
-      index: true,
     },
     name: { type: String, required: true, trim: true },
     category: { type: String, trim: true, default: "" },

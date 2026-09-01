@@ -5,7 +5,7 @@ const OUTCOMES       = ["positive", "neutral", "negative", "no_answer", "not_app
 
 const saleActivitySchema = new mongoose.Schema(
   {
-    business:        { type: mongoose.Schema.Types.ObjectId, ref: "Company",     required: true, index: true },
+    business:        { type: mongoose.Schema.Types.ObjectId, ref: "Company",     required: true },
     activityNumber:  { type: String, required: true, trim: true },
     type:            { type: String, enum: ACTIVITY_TYPES, required: true },
     subject:         { type: String, trim: true, default: "" },

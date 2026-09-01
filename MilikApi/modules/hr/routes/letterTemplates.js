@@ -56,7 +56,7 @@ router.put('/:letterType', async (req, res) => {
       { company: oid, letterType },
       { $set: { bodyHtml: bodyHtml.trim(), signatory: signatory || null, notes: notes || '', updatedBy: userId } },
       { upsert: true, new: true, runValidators: true }
-    );
+    ).lean();
     res.json(template);
   } catch (e) { res.status(500).json({ message: e.message }); }
 });

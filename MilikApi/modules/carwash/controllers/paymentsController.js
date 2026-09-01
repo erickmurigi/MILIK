@@ -403,7 +403,8 @@ export const updatePaymentReconciliation = async (req, res, next) => {
       .populate("job", "jobNumber plateNumber customerName serviceName price status paymentStatus phone")
       .populate("cashbookAccount", "code name type subGroup")
       .populate("receivedBy", "name username email")
-      .populate("reconciledBy", "name username email");
+      .populate("reconciledBy", "name username email")
+      .lean();
     if (!payment) return next(createError(404, "Car Wash payment not found"));
     res.status(200).json({ success: true, data: payment, payment, message: "Car Wash payment reconciliation updated" });
   } catch (error) {

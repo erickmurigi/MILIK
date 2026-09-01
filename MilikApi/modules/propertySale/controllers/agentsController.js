@@ -90,7 +90,7 @@ export const updateAgent = async (req, res, next) => {
       { _id: req.params.id, business },
       { ...updates, updatedBy: userId },
       { new: true, runValidators: true }
-    );
+    ).lean();
     if (!agent) return next(createError(404, "Agent not found"));
     res.status(200).json(agent);
   } catch (err) {

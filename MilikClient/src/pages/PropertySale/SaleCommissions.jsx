@@ -8,6 +8,7 @@ import { FilterDateRange } from "./SaleFilterBar";
 import PaginationBar from "../../components/PaginationBar";
 import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
+import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
@@ -52,6 +53,7 @@ const SaleCommissions = () => {
 
   const [statusFilter, setStatusFilter] = useTabState("/sale/commissions:statusFilter", "");
   const [search,       setSearch]       = useTabState("/sale/commissions:search", "");
+  const debouncedSearch = useDebounce(search, 400);
   const [agentFilt,    setAgentFilt]    = useTabState("/sale/commissions:agentFilt", "");
   const [dealFilt,     setDealFilt]     = useTabState("/sale/commissions:dealFilt", "");
   const [dateFrom,     setDateFrom]     = useTabState("/sale/commissions:dateFrom", "");
@@ -87,11 +89,11 @@ const SaleCommissions = () => {
   const dealsRef  = dealsData?.data  ?? [];
 
   const { data, isLoading: loading, isFetching } = useQuery({
-    queryKey: ["sale-commissions", biz, statusFilter, search, agentFilt, dealFilt, dateFrom, dateTo, page, pageSize],
+    queryKey: ["sale-commissions", biz, statusFilter, debouncedSearch, agentFilt, dealFilt, dateFrom, dateTo, page, pageSize],
     queryFn:  () => saleApi.listCommissions({
       business: biz, limit: pageSize, page,
       ...(statusFilter && { status:  statusFilter }),
-      ...(search       && { search }),
+      ...(debouncedSearch && { search: debouncedSearch }),
       ...(agentFilt    && { agentId: agentFilt }),
       ...(dealFilt     && { dealId:  dealFilt }),
       ...(dateFrom     && { dateFrom }),

@@ -5,7 +5,7 @@ const AGENT_STATUSES = ["active", "inactive"];
 
 const saleAgentSchema = new mongoose.Schema(
   {
-    business: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true, index: true },
+    business: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true },
     agentNumber: { type: String, required: true, trim: true },
     fullName: { type: String, required: true, trim: true },
     phone: { type: String, trim: true, default: "" },

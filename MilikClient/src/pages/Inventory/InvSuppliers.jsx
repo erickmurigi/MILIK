@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
+import useDebounce from "../../hooks/useDebounce";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaEdit, FaPlus, FaRedoAlt, FaSearch, FaTimes, FaTrash, FaTruck, FaSyncAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -18,6 +19,7 @@ const InvSuppliers = () => {
   const queryClient = useQueryClient();
   const confirm = useConfirm();
   const [search, setSearch] = useTabState("/inventory/suppliers:search", "");
+  const debSearch = useDebounce(search, 400);
   const [page, setPage] = useTabState("/inventory/suppliers:page", 1);
   const [pageSize, setPageSize] = useTabState("/inventory/suppliers:pageSize", 30);
   const [showModal, setShowModal] = useState(false);
@@ -29,9 +31,9 @@ const InvSuppliers = () => {
   const [backfilling, setBackfilling] = useState(false);
 
   const { data: suppData, isLoading: loading, error, refetch } = useQuery({
-    queryKey: ['inv-suppliers', search, page, pageSize],
+    queryKey: ['inv-suppliers', debSearch, page, pageSize],
     queryFn: async () => {
-      const res = await inventoryApi.listSuppliers({ search, page, limit: pageSize });
+      const res = await inventoryApi.listSuppliers({ search: debSearch, page, limit: pageSize });
       const list = Array.isArray(res) ? res : (res?.data ?? []);
       return { suppliers: list, total: res?.total ?? list.length };
     },

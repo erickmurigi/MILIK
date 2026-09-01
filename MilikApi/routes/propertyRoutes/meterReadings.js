@@ -6,8 +6,10 @@ import {
   createMeterReadingsBatch,
   updateMeterReading,
   deleteMeterReading,
+  deleteMeterReadingsBatch,
   voidMeterReading,
   billMeterReading,
+  billMeterReadingsBatch,
 } from "../../controllers/propertyController/meterReadings.js";
 
 const router = express.Router();
@@ -15,6 +17,8 @@ const router = express.Router();
 router.get("/", verifyUser, getMeterReadings);
 router.post("/", verifyUser, createMeterReading);
 router.post("/batch", verifyUser, createMeterReadingsBatch);
+router.post("/batch-bill", verifyUser, billMeterReadingsBatch);
+router.post("/batch-delete", verifyUser, deleteMeterReadingsBatch);
 router.put("/:id", verifyUser, updateMeterReading);
 router.delete("/:id", verifyUser, deleteMeterReading);
 router.patch("/:id/void", verifyUser, voidMeterReading);

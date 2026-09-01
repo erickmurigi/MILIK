@@ -6,7 +6,7 @@ const MONTH_NAMES = [
 ];
 
 const periodSchema = new mongoose.Schema({
-  company:  { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
+  company:  { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
   month:    { type: Number, required: true, min: 1, max: 12 },
   year:     { type: Number, required: true },
   label:    { type: String, trim: true, default: '' },

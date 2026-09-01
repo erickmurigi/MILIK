@@ -186,7 +186,7 @@ export const updateListingStatus = async (req, res, next) => {
       { _id: req.params.id, business },
       { status, updatedBy: userId },
       { new: true }
-    );
+    ).lean();
     res.status(200).json(listing);
   } catch (err) {
     next(err);

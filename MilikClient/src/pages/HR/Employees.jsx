@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { useTabState } from "../../hooks/useTabState";
+import useDebounce from '../../hooks/useDebounce';
 import {
   FaSearch, FaUserPlus, FaEdit, FaRedoAlt, FaUserTimes,
   FaUserCheck, FaEye, FaPrint,
@@ -47,12 +48,13 @@ export default function Employees() {
   const [page, setPage] = useTabState('/hr/employees:page', 1);
   const [pageSize, setPageSize] = useState(25);
   const [confirm, setConfirm] = useState({ isOpen: false });
+  const debouncedSearch = useDebounce(search, 350);
 
   const { data: empData, isLoading: loading, error, refetch } = useQuery({
-    queryKey: ['hr-employees', page, pageSize, search, deptFilter, statusFilter, typeFilter],
+    queryKey: ['hr-employees', page, pageSize, debouncedSearch, deptFilter, statusFilter, typeFilter],
     queryFn: async () => {
       const params = { page, limit: pageSize };
-      if (search) params.search = search;
+      if (debouncedSearch) params.search = debouncedSearch;
       if (deptFilter) params.department = deptFilter;
       if (statusFilter) params.status = statusFilter;
       if (typeFilter) params.employmentType = typeFilter;
@@ -69,7 +71,7 @@ export default function Employees() {
   });
 
   useEffect(() => { if (error) toast.error('Failed to load employees'); }, [error]);
-  useEffect(() => { setPage(1); }, [search, deptFilter, statusFilter, typeFilter]);
+  useEffect(() => { setPage(1); }, [debouncedSearch, deptFilter, statusFilter, typeFilter]);
 
   const employees = empData?.employees ?? [];
   const total = empData?.total ?? 0;

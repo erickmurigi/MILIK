@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FaBoxes, FaRedoAlt } from "react-icons/fa";
 import InventoryShell from "./InventoryShell";
@@ -30,13 +30,13 @@ const InvStockValuation = () => {
   const rows = valuationData?.rows ?? [];
   const grandTotal = valuationData?.grandTotal ?? 0;
 
-  const grouped = rows.reduce((acc, row) => {
+  const grouped = useMemo(() => rows.reduce((acc, row) => {
     const key = row.location?._id || "unknown";
     if (!acc[key]) acc[key] = { name: row.location?.name || "Unknown", rows: [], subtotal: 0 };
     acc[key].rows.push(row);
     acc[key].subtotal += row.totalValue || 0;
     return acc;
-  }, {});
+  }, {}), [rows]);
 
   return (
     <InventoryShell lockScroll>
@@ -91,7 +91,7 @@ const InvStockValuation = () => {
                     </td>
                   </tr>
                   {group.rows.map((row, i) => (
-                    <tr key={i} className="border-b border-slate-100 hover:bg-slate-50">
+                    <tr key={row.product?._id || i} className="border-b border-slate-100 hover:bg-slate-50">
                       <td className="px-3 py-2 font-semibold text-slate-800">{row.product?.name || "—"}</td>
                       <td className="px-3 py-2 font-mono text-[10px] text-slate-400">{row.product?.sku || "—"}</td>
                       <td className="px-3 py-2 text-slate-500">{row.product?.unitOfMeasure || "—"}</td>

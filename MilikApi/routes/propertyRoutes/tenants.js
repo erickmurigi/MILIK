@@ -7,6 +7,7 @@ import {
   getTenants,
   updateTenant,
   deleteTenant,
+  batchDeleteTenants,
   updateTenantStatus,
   getTenantPayments,
   getTenantBalance,
@@ -26,6 +27,9 @@ router.post("/", verifyUser, createTenant)
 
 // Bulk import tenants from Excel
 router.post("/bulk-import", verifyUser, bulkImportTenants)
+
+// Batch delete tenants
+router.post("/batch-delete", verifyUser, batchDeleteTenants)
 
 // Get all tenants
 router.get("/", verifyUser, getTenants)

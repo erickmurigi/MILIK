@@ -4534,6 +4534,83 @@ export const deleteTenantInvoice = async (req, res, next) => {
   }
 };
 
+const invokeDeleteForTenantInvoice = ({ req, invoiceId }) => {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const response = {
+      statusCode: 200,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload) {
+        if (!settled) {
+          settled = true;
+          resolve({ statusCode: this.statusCode || 200, payload });
+        }
+        return this;
+      },
+    };
+    const nextFn = (err) => {
+      if (!settled) {
+        settled = true;
+        reject(err || new Error("Failed to delete invoice."));
+      }
+    };
+
+    Promise.resolve(
+      deleteTenantInvoice({ ...req, params: { ...(req.params || {}), id: String(invoiceId) } }, response, nextFn)
+    ).catch((err) => {
+      if (!settled) {
+        settled = true;
+        reject(err);
+      }
+    });
+  });
+};
+
+export const deleteTenantInvoicesBatch = async (req, res, next) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const validIds = Array.from(
+      new Set(ids.map((id) => String(id || "").trim()).filter((id) => mongoose.Types.ObjectId.isValid(id)))
+    );
+
+    if (!validIds.length) {
+      return next(createError(400, "At least one invoice id is required."));
+    }
+
+    const succeeded = [];
+    const failed = [];
+
+    for (const invoiceId of validIds) {
+      try {
+        const { statusCode, payload } = await invokeDeleteForTenantInvoice({ req, invoiceId });
+        if (Number(statusCode || 200) >= 400) {
+          failed.push({ id: invoiceId, reason: payload?.message || payload?.error || "Failed to delete invoice." });
+          continue;
+        }
+        succeeded.push({
+          id: invoiceId,
+          invoiceNumber: payload?.invoiceNumber,
+          message: payload?.message || "Invoice deleted successfully.",
+        });
+      } catch (error) {
+        failed.push({ id: invoiceId, reason: error?.message || "Failed to delete invoice." });
+      }
+    }
+
+    return res.status(200).json({
+      succeeded,
+      failed,
+      succeededCount: succeeded.length,
+      failedCount: failed.length,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const bulkImportInvoiceNotes = async (req, res, next) => {
   try {
     const rows = Array.isArray(req.body.notes) ? req.body.notes : [];

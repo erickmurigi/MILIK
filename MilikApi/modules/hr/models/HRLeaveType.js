@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 const leaveTypeSchema = new mongoose.Schema(
   {
-    company:     { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
+    company:     { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
     name:        { type: String, required: true, trim: true },
     code:        { type: String, trim: true, uppercase: true },
     description: { type: String, trim: true },

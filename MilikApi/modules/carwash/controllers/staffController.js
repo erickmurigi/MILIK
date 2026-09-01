@@ -73,7 +73,7 @@ export const updateStaff = async (req, res, next) => {
       { _id: req.params.id, business },
       { ...payload, updatedBy: currentUserId(req) },
       { new: true, runValidators: true }
-    );
+    ).lean();
     if (!staff) return next(createError(404, "Car Wash staff member not found"));
     res.status(200).json({ success: true, data: staff, staff, message: "Car Wash staff member updated" });
   } catch (error) {

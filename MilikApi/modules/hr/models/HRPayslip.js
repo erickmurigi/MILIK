@@ -11,7 +11,7 @@ const deductionLineSchema = new mongoose.Schema(
 );
 
 const payslipSchema = new mongoose.Schema({
-  company:       { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
+  company:       { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
   payrollPeriod: { type: mongoose.Schema.Types.ObjectId, ref: 'HRPayrollPeriod', required: true },
   employee:      { type: mongoose.Schema.Types.ObjectId, ref: 'HREmployee', required: true },
 

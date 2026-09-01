@@ -62,19 +62,17 @@ export const createOffer = async (req, res, next) => {
     const userId = currentUserId(req);
     const body = sanitizeOfferBody(req.body);
 
-    const listing = await SaleListing.findOne({ _id: body.listing, business }).lean();
+    const [listing, buyer, agent] = await Promise.all([
+      SaleListing.findOne({ _id: body.listing, business }).lean(),
+      SaleBuyer.findOne({ _id: body.buyer, business }).lean(),
+      body.agent ? SaleAgent.findOne({ _id: body.agent, business, status: "active" }).lean() : Promise.resolve(null),
+    ]);
     if (!listing) return next(createError(400, "Listing not found"));
     if (!["available", "reserved"].includes(listing.status)) {
       return next(createError(400, `Cannot create an offer on a listing that is ${listing.status}`));
     }
-
-    const buyer = await SaleBuyer.findOne({ _id: body.buyer, business }).lean();
     if (!buyer) return next(createError(400, "Buyer not found"));
-
-    if (body.agent) {
-      const agent = await SaleAgent.findOne({ _id: body.agent, business, status: "active" }).lean();
-      if (!agent) return next(createError(400, "Agent not found or inactive"));
-    }
+    if (body.agent && !agent) return next(createError(400, "Agent not found or inactive"));
 
     const offerNumber = await generateSequentialNumber(SaleOffer, business, "OFR");
     const offer = await SaleOffer.create({
@@ -89,7 +87,7 @@ export const createOffer = async (req, res, next) => {
       await SaleListing.findByIdAndUpdate(listing._id, { status: "reserved" });
     }
 
-    const populated = await populateOffer(SaleOffer.findById(offer._id));
+    const populated = await populateOffer(SaleOffer.findById(offer._id)).lean();
     res.status(201).json(populated);
   } catch (err) {
     next(err);
@@ -108,7 +106,7 @@ export const updateOffer = async (req, res, next) => {
         { ...updates, updatedBy: userId },
         { new: true, runValidators: true }
       )
-    );
+    ).lean();
     if (!offer) return next(createError(404, "Offer not found"));
     res.status(200).json(offer);
   } catch (err) {
@@ -148,7 +146,7 @@ export const updateOfferStatus = async (req, res, next) => {
       { _id: req.params.id, business },
       update,
       { new: true }
-    ).populate("listing buyer agent");
+    ).populate("listing buyer agent").lean();
 
     if (!offer) return next(createError(404, "Offer not found")); // should not happen — already fetched above
 

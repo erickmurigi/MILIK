@@ -252,14 +252,14 @@ export const closeDeal = async (req, res, next) => {
 
     // Post all GL: commissions + deposit transfers + stamp duty — roll back if any fail
     try {
-      await Promise.all(
-        pendingCommissions.map((commission) =>
+      await Promise.all([
+        ...pendingCommissions.map((commission) =>
           postPropertySaleCommissionAccrual({ businessId: business, commission, userId })
-        )
-      );
-      for (const payment of depositPayments) {
-        await transferDepositToRevenue({ businessId: business, payment, userId });
-      }
+        ),
+        ...depositPayments.map((payment) =>
+          transferDepositToRevenue({ businessId: business, payment, userId })
+        ),
+      ]);
       if (stampDutyAmount > 0) {
         await postStampDutyEntry({
           businessId: business,
@@ -363,16 +363,18 @@ export const cancelDeal = async (req, res, next) => {
 export const deleteDeal = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const deal = await SaleDeal.findOne({ _id: req.params.id, business });
+    const deal = await SaleDeal.findOne({ _id: req.params.id, business }).lean();
     if (!deal) return next(createError(404, "Deal not found"));
     if (deal.status !== "cancelled") return next(createError(400, "Only cancelled deals can be deleted"));
 
     const paidPayments = await SalePayment.countDocuments({ business, deal: deal._id, status: "paid" });
     if (paidPayments > 0) return next(createError(400, "Cannot delete a deal with confirmed payments — void them first"));
 
-    await SalePayment.deleteMany({ business, deal: deal._id });
-    await SaleCommission.deleteMany({ business, deal: deal._id });
-    await SaleDeal.findByIdAndDelete(deal._id);
+    await Promise.all([
+      SalePayment.deleteMany({ business, deal: deal._id }),
+      SaleCommission.deleteMany({ business, deal: deal._id }),
+      SaleDeal.findByIdAndDelete(deal._id),
+    ]);
 
     res.status(200).json({ message: "Deal deleted" });
   } catch (err) {
@@ -472,7 +474,7 @@ export const createDealFromOffer = async (req, res, next) => {
     if (listing.status === "sold")           return next(createError(400, "Listing is already sold"));
     if (listing.status === "under_contract") return next(createError(400, "Listing already has an active deal"));
 
-    const existingDeal = await SaleDeal.findOne({ business, offer: offer._id });
+    const existingDeal = await SaleDeal.findOne({ business, offer: offer._id }).select("_id").lean();
     if (existingDeal) return next(createError(400, "A deal already exists for this offer"));
 
     const agreedPrice = Number(req.body.agreedPrice ?? offer.counterOfferAmount ?? offer.offerAmount);

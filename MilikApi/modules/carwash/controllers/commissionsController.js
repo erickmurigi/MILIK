@@ -91,7 +91,7 @@ export const upsertCommissionRule = async (req, res, next) => {
 
     let rule;
     if (req.params.id) {
-      rule = await CarWashCommissionRule.findOneAndUpdate({ _id: req.params.id, business }, payload, { new: true, runValidators: true });
+      rule = await CarWashCommissionRule.findOneAndUpdate({ _id: req.params.id, business }, payload, { new: true, runValidators: true }).lean();
       if (!rule) return next(createError(404, "Commission rule not found"));
     } else {
       rule = await CarWashCommissionRule.create({ ...payload, createdBy: currentUserId(req) });

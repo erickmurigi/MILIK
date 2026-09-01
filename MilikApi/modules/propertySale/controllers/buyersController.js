@@ -70,7 +70,7 @@ export const updateBuyer = async (req, res, next) => {
       { _id: req.params.id, business },
       { ...updates, updatedBy: userId },
       { new: true, runValidators: true }
-    );
+    ).lean();
     if (!buyer) return next(createError(404, "Buyer not found"));
     res.status(200).json(buyer);
   } catch (err) {

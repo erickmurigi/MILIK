@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 const leaveApplicationSchema = new mongoose.Schema(
   {
-    company:    { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
+    company:    { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
     employee:   { type: mongoose.Schema.Types.ObjectId, ref: 'HREmployee', required: true },
     leaveType:  { type: mongoose.Schema.Types.ObjectId, ref: 'HRLeaveType', required: true },
     // Dates

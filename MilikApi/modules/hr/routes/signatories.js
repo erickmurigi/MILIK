@@ -50,7 +50,7 @@ router.put('/:id', async (req, res) => {
       { _id: req.params.id, company: oid },
       { $set: { name: name?.trim(), title: title?.trim(), department: department?.trim() || '', isDefault: !!isDefault, letterTypes: letterTypes || [] } },
       { new: true, runValidators: true }
-    );
+    ).lean();
     if (!sig) return res.status(404).json({ message: 'Signatory not found' });
     res.json(sig);
   } catch (e) { res.status(500).json({ message: e.message }); }

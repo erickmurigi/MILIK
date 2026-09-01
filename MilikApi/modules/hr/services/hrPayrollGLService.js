@@ -114,9 +114,7 @@ export const postPayrollGLJournals = async (period, companyId, postedByUserId) =
     throw new Error(`No payroll amounts to post for ${period.label} — all components are zero.`);
   }
 
-  let entryCount = 0;
-
-  for (const component of components) {
+  const postings = components.flatMap((component) => {
     const journalGroupId = new mongoose.Types.ObjectId();
     const base = {
       business: businessId,
@@ -132,16 +130,15 @@ export const postPayrollGLJournals = async (period, companyId, postedByUserId) =
       createdBy: postedById,
       allowUnscoped: true,
     };
-
-    await Promise.all([
+    return [
       postEntry({ ...base, accountId: accounts.salaryExpense._id, direction: 'debit' }),
       postEntry({ ...base, accountId: component.account._id,      direction: 'credit' }),
-    ]);
+    ];
+  });
 
-    entryCount += 2;
-  }
+  await Promise.all(postings);
 
-  return { entryCount, alreadyPosted: false };
+  return { entryCount: postings.length, alreadyPosted: false };
 };
 
 // ─── Reversal function ────────────────────────────────────────────────────────
@@ -168,28 +165,25 @@ export const reversePayrollGLJournals = async (period, companyId, reversedByUser
   const reversalDate = new Date();
   const { start, end } = dayRange(reversalDate);
 
-  for (const entry of originals) {
-    const reversalGroupId = new mongoose.Types.ObjectId();
-    await Promise.all([
-      // Offsetting entry — flips direction to zero out the original
-      postEntry({
-        business: businessId,
-        accountId: entry.accountId,
-        direction: entry.direction === 'debit' ? 'credit' : 'debit',
-        amount: entry.amount,
-        transactionDate: reversalDate,
-        statementPeriodStart: start,
-        statementPeriodEnd: end,
-        journalGroupId: reversalGroupId,
-        sourceTransactionType: 'payroll_reversal',
-        sourceTransactionId: String(period._id),
-        category: 'PAYROLL_REVERSAL',
-        notes: `REVERSAL: ${entry.notes || period.label}`,
-        createdBy: reversedById,
-        allowUnscoped: true,
-      }),
-    ]);
-  }
+  // Offsetting entries — flips direction to zero out each original
+  await Promise.all(originals.map((entry) =>
+    postEntry({
+      business: businessId,
+      accountId: entry.accountId,
+      direction: entry.direction === 'debit' ? 'credit' : 'debit',
+      amount: entry.amount,
+      transactionDate: reversalDate,
+      statementPeriodStart: start,
+      statementPeriodEnd: end,
+      journalGroupId: new mongoose.Types.ObjectId(),
+      sourceTransactionType: 'payroll_reversal',
+      sourceTransactionId: String(period._id),
+      category: 'PAYROLL_REVERSAL',
+      notes: `REVERSAL: ${entry.notes || period.label}`,
+      createdBy: reversedById,
+      allowUnscoped: true,
+    })
+  ));
 
   // Mark all originals as reversed
   await FinancialLedgerEntry.updateMany(

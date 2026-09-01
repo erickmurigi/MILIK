@@ -4,7 +4,7 @@ const SESSION_STATUSES = ["open", "closed"];
 
 const posSessionSchema = new mongoose.Schema(
   {
-    business:        { type: mongoose.Schema.Types.ObjectId, ref: "Company",     required: true, index: true },
+    business:        { type: mongoose.Schema.Types.ObjectId, ref: "Company",     required: true },
     location:        { type: mongoose.Schema.Types.ObjectId, ref: "InvLocation", required: true, index: true },
     till:            { type: mongoose.Schema.Types.ObjectId, ref: "InvTill",     default: null },
     sessionNumber:   { type: String, required: true, trim: true },

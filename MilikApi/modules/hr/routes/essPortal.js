@@ -163,7 +163,7 @@ router.post('/my/leave-applications', async (req, res) => {
       company: companyId, employee,
       status: { $in: ['Pending', 'Approved'] },
       startDate: { $lte: end }, endDate: { $gte: start },
-    });
+    }).lean();
     if (overlap) {
       return res.status(400).json({ message: 'You already have an overlapping leave application for this period' });
     }
@@ -353,7 +353,7 @@ router.post('/my/attendance/check-in', async (req, res) => {
     // Prevent duplicate check-in on the same calendar day if still open
     const open = await HRAttendance.findOne({
       company: companyId, employee: id, date, checkOut: null,
-    });
+    }).lean();
     if (open) {
       return res.status(400).json({ message: 'You already have an open check-in for today. Please check out first.' });
     }

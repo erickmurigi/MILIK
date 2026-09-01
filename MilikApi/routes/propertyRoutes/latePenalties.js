@@ -12,6 +12,7 @@ import {
   deleteLatePenaltyBatch,
   reverseLatePenalty,
   deleteLatePenalty,
+  deleteLatePenaltiesBatch,
 } from "../../controllers/propertyController/latePenalties.js";
 
 const router = express.Router();
@@ -26,5 +27,6 @@ router.get("/batches", verifyUser, getLatePenaltyBatches);
 router.get("/batches/:id", verifyUser, getLatePenaltyBatch);
 router.delete("/batches/:id", verifyUser, deleteLatePenaltyBatch);
 router.post("/reverse", verifyUser, reverseLatePenalty);
+router.post("/delete-batch", verifyUser, deleteLatePenaltiesBatch);
 router.delete("/:id", verifyUser, deleteLatePenalty);
 export default router;

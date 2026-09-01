@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const scheduleItemSchema = new mongoose.Schema(
   {
-    business:         { type: mongoose.Schema.Types.ObjectId, ref: "Company",    required: true, index: true },
+    business:         { type: mongoose.Schema.Types.ObjectId, ref: "Company",    required: true },
     deal:             { type: mongoose.Schema.Types.ObjectId, ref: "SaleDeal",   required: true, index: true },
     installmentNumber:{ type: Number, required: true, min: 1 },
     dueDate:          { type: Date, required: true },

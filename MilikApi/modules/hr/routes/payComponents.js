@@ -56,7 +56,7 @@ router.put('/:id', async (req, res) => {
       { _id: req.params.id, company: oid },
       { $set: update },
       { new: true, runValidators: true }
-    );
+    ).lean();
     if (!comp) return res.status(404).json({ message: 'Component not found' });
     res.json(comp);
   } catch (e) {

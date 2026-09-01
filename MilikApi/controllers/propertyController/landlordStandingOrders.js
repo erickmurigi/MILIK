@@ -770,6 +770,110 @@ export const runLandlordStandingOrder = async (req, res, next) => {
   }
 };
 
+const invokeRunForStandingOrder = ({ req, standingOrderId, body }) => {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const response = {
+      statusCode: 200,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload) {
+        if (!settled) {
+          settled = true;
+          resolve({ statusCode: this.statusCode || 200, payload });
+        }
+        return this;
+      },
+    };
+    const nextFn = (err) => {
+      if (!settled) {
+        settled = true;
+        reject(err || new Error("Failed to process standing order run."));
+      }
+    };
+
+    Promise.resolve(
+      runLandlordStandingOrder(
+        {
+          ...req,
+          params: { ...(req.params || {}), id: String(standingOrderId) },
+          body: { ...(req.body || {}), ...body },
+        },
+        response,
+        nextFn
+      )
+    ).catch((err) => {
+      if (!settled) {
+        settled = true;
+        reject(err);
+      }
+    });
+  });
+};
+
+export const runLandlordStandingOrdersBatch = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return next(createError(400, "Company context is required"));
+
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (!items.length) {
+      return next(createError(400, "At least one standing order run is required."));
+    }
+
+    const succeeded = [];
+    const failed = [];
+
+    for (const item of items) {
+      const standingOrderId = String(item?.id || item?.standingOrderId || "").trim();
+      if (!isValidObjectId(standingOrderId)) {
+        failed.push({ id: standingOrderId, reason: "Invalid standing order id." });
+        continue;
+      }
+
+      try {
+        const { statusCode, payload } = await invokeRunForStandingOrder({
+          req,
+          standingOrderId,
+          body: {
+            business: businessId,
+            company: businessId,
+            periodKey: item?.periodKey,
+            amount: item?.amount,
+            note: item?.note,
+            runDate: item?.runDate,
+            paymentMethod: item?.paymentMethod,
+            cashbook: item?.cashbook,
+          },
+        });
+
+        if (Number(statusCode || 200) >= 400) {
+          failed.push({
+            id: standingOrderId,
+            reason: payload?.message || payload?.error || "Failed to run standing order.",
+          });
+          continue;
+        }
+
+        succeeded.push(payload);
+      } catch (error) {
+        failed.push({ id: standingOrderId, reason: error?.message || "Failed to run standing order." });
+      }
+    }
+
+    return res.status(200).json({
+      succeeded,
+      failed,
+      succeededCount: succeeded.length,
+      failedCount: failed.length,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const reverseLandlordStandingOrderRun = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);

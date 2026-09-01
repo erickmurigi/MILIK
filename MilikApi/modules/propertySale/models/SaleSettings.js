@@ -20,7 +20,7 @@ const commTemplateSchema = new mongoose.Schema({
 
 const saleSettingsSchema = new mongoose.Schema(
   {
-    business:     { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true, unique: true, index: true },
+    business:     { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true, unique: true },
     pipelineStages: { type: [stageSchema],        default: [] },
     leadSources:    { type: [simpleSchema],        default: [] },
     propertyTypes:  { type: [simpleSchema],        default: [] },

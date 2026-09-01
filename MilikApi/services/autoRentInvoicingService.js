@@ -104,17 +104,21 @@ const processCompany = async (businessId, settings, billingPeriods, today, force
     status: "active",
     autoInvoice: { $ne: false },
   })
-    .select("tenant unit property rentAmount description billingPeriodKey paymentDueDay startDate")
+    .select("tenant unit rentAmount description billingPeriodKey paymentDueDay startDate")
     .lean();
 
-  // Batch-load unit names for description embedding
+  // Lease has no `property` field of its own — it's only known via the unit,
+  // so batch-load units for both their label and their property reference.
   const allUnitIds = activeLeases.map((l) => l.unit).filter(Boolean);
   let unitMap = new Map();
   if (allUnitIds.length) {
     const unitRecords = await Unit.find({ _id: { $in: allUnitIds } })
-      .select("_id unitNumber unitName name")
+      .select("_id unitNumber unitName name property")
       .lean();
-    unitMap = new Map(unitRecords.map((u) => [String(u._id), u.unitNumber || u.unitName || u.name || ""]));
+    unitMap = new Map(unitRecords.map((u) => [
+      String(u._id),
+      { label: u.unitNumber || u.unitName || u.name || "", property: u.property || null },
+    ]));
   }
 
   // Batch-load tenant contact info when notifications are enabled
@@ -145,7 +149,8 @@ const processCompany = async (businessId, settings, billingPeriods, today, force
         skipped++;
         return;
       }
-      if (!lease.property) {
+      const unitInfo = unitMap.get(String(lease.unit));
+      if (!unitInfo?.property) {
         skipped++;
         return;
       }
@@ -165,7 +170,7 @@ const processCompany = async (businessId, settings, billingPeriods, today, force
       const dueDate = new Date(targetYear, targetMonth, leaseDueDay);
 
       const periodLabel = buildPeriodLabel(targetYear, targetMonth, durationInMonths);
-      const unitNumber = unitMap.get(String(lease.unit)) || "";
+      const unitNumber = unitInfo?.label || "";
 
       // Idempotency key: unique per tenant per billing cycle (target month encodes the cycle)
       const idempotencyKey = `auto_rent_${String(lease.tenant)}_${targetYear}_${String(targetMonth + 1).padStart(2, "0")}`;
@@ -177,7 +182,7 @@ const processCompany = async (businessId, settings, billingPeriods, today, force
             business: String(businessId),
             tenant: String(lease.tenant),
             unit: String(lease.unit),
-            property: String(lease.property),
+            property: String(unitInfo.property),
             category: "RENT_CHARGE",
             amount: Number(lease.rentAmount),
             description: unitNumber ? `Rent — ${periodLabel} · Unit ${unitNumber}` : `Rent — ${periodLabel}`,

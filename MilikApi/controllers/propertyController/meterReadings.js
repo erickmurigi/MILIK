@@ -983,3 +983,150 @@ export const billMeterReading = async (req, res, next) => {
     next(err);
   }
 };
+
+const invokeMeterReadingAction = ({ req, handler, readingId, body = {} }) => {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const response = {
+      statusCode: 200,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload) {
+        if (!settled) {
+          settled = true;
+          resolve({ statusCode: this.statusCode || 200, payload });
+        }
+        return this;
+      },
+    };
+    const nextFn = (err) => {
+      if (!settled) {
+        settled = true;
+        reject(err || new Error("Failed to process meter reading."));
+      }
+    };
+
+    Promise.resolve(
+      handler(
+        {
+          ...req,
+          params: { ...(req.params || {}), id: String(readingId) },
+          body: { ...(req.body || {}), ...body },
+        },
+        response,
+        nextFn
+      )
+    ).catch((err) => {
+      if (!settled) {
+        settled = true;
+        reject(err);
+      }
+    });
+  });
+};
+
+export const billMeterReadingsBatch = async (req, res, next) => {
+  try {
+    const ids = Array.isArray(req.body?.readingIds) ? req.body.readingIds : [];
+    const validIds = Array.from(
+      new Set(ids.map((id) => String(id || "").trim()).filter((id) => mongoose.Types.ObjectId.isValid(id)))
+    );
+
+    if (!validIds.length) {
+      return next(createError(400, "At least one meter reading id is required."));
+    }
+
+    const readings = await MeterReading.find({ _id: { $in: validIds } }).select("readingDate").lean();
+    const readingById = new Map(readings.map((r) => [String(r._id), r]));
+
+    const succeeded = [];
+    const failed = [];
+
+    for (const readingId of validIds) {
+      const readingDoc = readingById.get(readingId);
+      try {
+        const { statusCode, payload } = await invokeMeterReadingAction({
+          req,
+          handler: billMeterReading,
+          readingId,
+          body: {
+            invoiceDate: readingDoc?.readingDate,
+            dueDate: readingDoc?.readingDate,
+          },
+        });
+
+        if (Number(statusCode || 200) >= 400) {
+          failed.push({ id: readingId, reason: payload?.message || payload?.error || "Failed to bill meter reading." });
+          continue;
+        }
+
+        succeeded.push({
+          id: readingId,
+          reading: payload?.reading,
+          invoice: payload?.invoice,
+          message: payload?.message || "Meter reading billed successfully.",
+        });
+      } catch (error) {
+        failed.push({ id: readingId, reason: error?.message || "Failed to bill meter reading." });
+      }
+    }
+
+    return res.status(200).json({
+      succeeded,
+      failed,
+      succeededCount: succeeded.length,
+      failedCount: failed.length,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const deleteMeterReadingsBatch = async (req, res, next) => {
+  try {
+    const ids = Array.isArray(req.body?.readingIds) ? req.body.readingIds : [];
+    const validIds = Array.from(
+      new Set(ids.map((id) => String(id || "").trim()).filter((id) => mongoose.Types.ObjectId.isValid(id)))
+    );
+
+    if (!validIds.length) {
+      return next(createError(400, "At least one meter reading id is required."));
+    }
+
+    const succeeded = [];
+    const failed = [];
+
+    for (const readingId of validIds) {
+      try {
+        const { statusCode, payload } = await invokeMeterReadingAction({
+          req,
+          handler: deleteMeterReading,
+          readingId,
+        });
+
+        if (Number(statusCode || 200) >= 400) {
+          failed.push({ id: readingId, reason: payload?.message || payload?.error || "Failed to delete meter reading." });
+          continue;
+        }
+
+        succeeded.push({
+          id: readingId,
+          message: payload?.message || "Meter reading deleted successfully.",
+        });
+      } catch (error) {
+        failed.push({ id: readingId, reason: error?.message || "Failed to delete meter reading." });
+      }
+    }
+
+    return res.status(200).json({
+      succeeded,
+      failed,
+      succeededCount: succeeded.length,
+      failedCount: failed.length,
+    });
+  } catch (err) {
+    next(err);
+  }
+};

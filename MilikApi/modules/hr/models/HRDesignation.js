@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 const designationSchema = new mongoose.Schema({
-  company: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
+  company: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
   department: { type: mongoose.Schema.Types.ObjectId, ref: 'HRDepartment', default: null },
   name: { type: String, required: true, trim: true },
   gradeLevel: { type: String, trim: true, default: '' },

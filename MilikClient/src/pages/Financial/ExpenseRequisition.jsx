@@ -21,6 +21,7 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
 import { useConfirm } from "../../context/ConfirmContext";
 import {
+  batchDeleteExpenseRequisitions,
   createExpenseRequisition,
   deleteExpenseRequisition,
   getExpenseRequisitions,
@@ -326,16 +327,27 @@ const ExpenseRequisition = () => {
       return;
     }
     if (!await confirm({ title: "Delete Requisitions", message: `Delete ${selectedIds.length} selected requisitions?`, confirmText: "Delete", isDangerous: true })) return;
-    for (const id of selectedIds) {
-      const row = rows.find((item) => item._id === id);
-      if (!row) continue;
-      if (!["draft", "rejected", "cancelled"].includes(String(row.status || ""))) continue;
-      // eslint-disable-next-line no-await-in-loop
-      await deleteExpenseRequisition(id, { business: currentCompany?._id, company: currentCompany?._id }).catch(() => null);
+    try {
+      const response = await batchDeleteExpenseRequisitions(selectedIds, {
+        business: currentCompany?._id,
+        company: currentCompany?._id,
+      });
+      const succeededCount = response?.succeededCount ?? response?.succeeded?.length ?? 0;
+      const failedCount = response?.failedCount ?? response?.failed?.length ?? 0;
+
+      await loadRows();
+      setSelectedIds([]);
+
+      if (succeededCount > 0 && failedCount === 0) {
+        toast.success(`${succeededCount} requisition${succeededCount > 1 ? "s" : ""} deleted successfully.`);
+      } else if (succeededCount > 0 && failedCount > 0) {
+        toast.warn(`${succeededCount} deleted, ${failedCount} skipped (not eligible for deletion).`);
+      } else {
+        toast.info("No selected requisitions were eligible for deletion.");
+      }
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to delete selected requisitions");
     }
-    await loadRows();
-    setSelectedIds([]);
-    toast.success("Selected eligible requisitions cleaned up");
   };
 
   const handleCreateVoucher = (row) => {

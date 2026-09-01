@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTabState } from "../../hooks/useTabState";
+import useDebounce from '../../hooks/useDebounce';
 import {
   FaRedoAlt, FaChevronRight, FaTimes, FaCheck,
   FaClipboardCheck, FaUser, FaBuilding, FaUserTie,
@@ -51,6 +52,7 @@ export default function Appraisals() {
   const [saving, setSaving]           = useState(false);
   const [submitting, setSubmitting]   = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const debouncedSearch = useDebounce(search, 350);
 
   const { data: cycles = [] } = useQuery({
     queryKey: ['hr-appraisal-cycles-ref'],
@@ -59,12 +61,12 @@ export default function Appraisals() {
   });
 
   const { data: apprData, isLoading: loading, error, refetch } = useQuery({
-    queryKey: ['hr-appraisals', cycleId, statusFilter, search, page, pageSize],
+    queryKey: ['hr-appraisals', cycleId, statusFilter, debouncedSearch, page, pageSize],
     queryFn: async () => {
       const params = { page, limit: pageSize };
-      if (cycleId)      params.cycleId = cycleId;
-      if (statusFilter) params.status  = statusFilter;
-      if (search)       params.search  = search;
+      if (cycleId)         params.cycleId = cycleId;
+      if (statusFilter)    params.status  = statusFilter;
+      if (debouncedSearch) params.search  = debouncedSearch;
       const res = await adminRequests.get('/hr/appraisals', { params });
       return res.data;
     },
@@ -72,7 +74,7 @@ export default function Appraisals() {
   });
 
   useEffect(() => { if (error) toast.error('Failed to load appraisals'); }, [error]);
-  useEffect(() => { setPage(1); }, [cycleId, statusFilter, search]);
+  useEffect(() => { setPage(1); }, [cycleId, statusFilter, debouncedSearch]);
 
   const appraisals = apprData?.appraisals ?? [];
   const total = apprData?.total ?? 0;

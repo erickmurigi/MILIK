@@ -7,7 +7,7 @@ const LETTER_TYPES = [
 ];
 
 const hrLetterTemplateSchema = new mongoose.Schema({
-  company:    { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
+  company:    { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
   letterType: { type: String, enum: LETTER_TYPES, required: true },
   bodyHtml:   { type: String, required: true },   // HTML body with {{placeholders}} — no header/footer
   signatory:  { type: mongoose.Schema.Types.ObjectId, ref: 'HRSignatory', default: null },

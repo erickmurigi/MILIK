@@ -1,5 +1,6 @@
 ﻿import React, { useMemo, useEffect, useState, useCallback } from "react";
 import { useTabState } from "../../hooks/useTabState";
+import useDebounce from "../../hooks/useDebounce";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FaArrowDown, FaArrowUp, FaBarcode, FaBoxOpen, FaChartLine, FaCheck,
@@ -170,6 +171,7 @@ const ConfirmModal = ({ title, message, onConfirm, onCancel, danger }) => (
 const InvProducts = () => {
   const queryClient = useQueryClient();
   const [search, setSearch] = useTabState("/inventory/products:search", "");
+  const debSearch = useDebounce(search, 400);
   const [categoryFilter, setCategoryFilter] = useTabState("/inventory/products:categoryFilter", "");
   const [statusFilter, setStatusFilter] = useTabState("/inventory/products:statusFilter", "");   // "" | "active" | "inactive"
   const [trackFilter, setTrackFilter] = useTabState("/inventory/products:trackFilter", "");      // "" | "tracked" | "untracked"
@@ -196,9 +198,9 @@ const InvProducts = () => {
   });
 
   const { data: prodData, isLoading: loading, error, refetch } = useQuery({
-    queryKey: ['inv-products', search, categoryFilter, statusFilter, trackFilter, vatFilter, page, pageSize],
+    queryKey: ['inv-products', debSearch, categoryFilter, statusFilter, trackFilter, vatFilter, page, pageSize],
     queryFn: async () => {
-      const params = { search, page, limit: pageSize };
+      const params = { search: debSearch, page, limit: pageSize };
       if (categoryFilter) params.category = categoryFilter;
       if (statusFilter === "active")    params.active = true;
       if (statusFilter === "inactive")  params.active = false;

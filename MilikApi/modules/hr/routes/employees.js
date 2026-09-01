@@ -442,8 +442,10 @@ router.post('/:id/ess-invite', verifyUser, async (req, res) => {
     }
 
     // Hash password but don't write it yet — send email first
-    const hashed = await bcrypt.hash(String(plainPassword), 10);
-    const company = await Company.findById(companyId).lean();
+    const [hashed, company] = await Promise.all([
+      bcrypt.hash(String(plainPassword), 10),
+      Company.findById(companyId).lean(),
+    ]);
     const { subject, html, text } = buildESSInviteEmail({
       employee: emp,
       company:  company || {},

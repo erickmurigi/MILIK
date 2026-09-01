@@ -52,3 +52,25 @@ export const nextSequenceNumber = async (
 
   return `${prefix}-${String(seq).padStart(padLength, "0")}`;
 };
+
+/**
+ * Atomically reserves a contiguous block of `count` sequence numbers in one
+ * round trip (single $inc), instead of one findOneAndUpdate per document.
+ * Use for bulk-import/batch-create flows where numbers don't need the
+ * conflictCheck jump logic.
+ */
+export const reserveSequenceBlock = async (business, key, prefix, count, padLength = 5) => {
+  if (count <= 0) return [];
+  const counter = await SequenceCounter.findOneAndUpdate(
+    { business, key },
+    { $inc: { sequence: count } },
+    { new: true, upsert: true },
+  );
+  const last = counter.sequence;
+  const first = last - count + 1;
+  const numbers = [];
+  for (let seq = first; seq <= last; seq++) {
+    numbers.push(`${prefix}-${String(seq).padStart(padLength, "0")}`);
+  }
+  return numbers;
+};

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
+import useDebounce from "../../hooks/useDebounce";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaReceipt, FaRedoAlt, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -23,6 +24,7 @@ const POSSalesHistory = () => {
   const [dateFrom, setDateFrom] = useTabState("/pos/sales:dateFrom", () => todayISO());
   const [dateTo, setDateTo] = useTabState("/pos/sales:dateTo", () => todayISO());
   const [search, setSearch] = useTabState("/pos/sales:search", "");
+  const debSearch = useDebounce(search, 400);
   const [page, setPage] = useTabState("/pos/sales:page", 1);
   const [pageSize, setPageSize] = useTabState("/pos/sales:pageSize", 30);
   const [selected, setSelected] = useTabState("/pos/sales:selected", null);
@@ -39,14 +41,14 @@ const POSSalesHistory = () => {
   });
 
   const { data: salesData, isLoading: loading, error, refetch } = useQuery({
-    queryKey: ['inv-pos-sales', locationFilter, statusFilter, dateFrom, dateTo, search, page, pageSize],
+    queryKey: ['inv-pos-sales', locationFilter, statusFilter, dateFrom, dateTo, debSearch, page, pageSize],
     queryFn: async () => {
       const res = await inventoryApi.listSales({
         location: locationFilter || undefined,
         status: statusFilter || undefined,
         from: dateFrom || undefined,
         to: dateTo || undefined,
-        receiptNumber: search || undefined,
+        receiptNumber: debSearch || undefined,
         page,
         limit: pageSize,
       });

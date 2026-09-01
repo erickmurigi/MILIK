@@ -39,7 +39,7 @@ router.put('/', async (req, res) => {
       { company: companyId },
       { $set: { personalRelief, payeBands, shaRate, shaMin, nssfLower, nssfUpper, nssfRate, ahlRate, updatedBy: userId } },
       { upsert: true, new: true, runValidators: true }
-    );
+    ).lean();
     res.json(doc);
   } catch (err) {
     res.status(err.status || 500).json({ message: err.message });

@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 const hrPayComponentSchema = new mongoose.Schema({
-  company:     { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
+  company:     { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
   type:        { type: String, enum: ['allowance', 'deduction'], required: true },
   name:        { type: String, required: true, trim: true },
   code:        { type: String, required: true, trim: true, uppercase: true },

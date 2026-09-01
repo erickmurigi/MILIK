@@ -196,23 +196,37 @@ export const bulkImportProducts = async (req, res, next) => {
     const VAT_ALLOWED = new Set([0, 8, 16]);
     const results = { created: 0, skipped: 0, errors: [] };
 
-    for (let i = 0; i < rows.length; i++) {
-      const r = rows[i];
+    // Validate every row in memory first, then insert in one batch instead of
+    // one create() round trip per row.
+    const skuSeen = new Map();
+    const toInsert = [];
+    rows.forEach((r, i) => {
       const rowNum = i + 2; // 1-indexed + header
-      try {
-        const name = String(r.name || "").trim();
-        if (!name) { results.errors.push({ row: rowNum, reason: "Name is required" }); results.skipped++; continue; }
+      const name = String(r.name || "").trim();
+      if (!name) { results.errors.push({ row: rowNum, reason: "Name is required" }); results.skipped++; return; }
 
-        const sellingPrice = Number(r.sellingPrice ?? r.selling_price ?? 0);
-        if (isNaN(sellingPrice) || sellingPrice < 0) { results.errors.push({ row: rowNum, name, reason: "Invalid selling price" }); results.skipped++; continue; }
+      const sellingPrice = Number(r.sellingPrice ?? r.selling_price ?? 0);
+      if (isNaN(sellingPrice) || sellingPrice < 0) { results.errors.push({ row: rowNum, name, reason: "Invalid selling price" }); results.skipped++; return; }
 
-        const vatRate = Number(r.vatRate ?? r.vat_rate ?? r.vat ?? 16);
-        const resolvedVat = VAT_ALLOWED.has(vatRate) ? vatRate : 16;
+      const vatRate = Number(r.vatRate ?? r.vat_rate ?? r.vat ?? 16);
+      const resolvedVat = VAT_ALLOWED.has(vatRate) ? vatRate : 16;
 
-        const sku = r.sku ? String(r.sku).trim().toUpperCase() : null;
-        const barcode = r.barcode ? String(r.barcode).trim() : null;
+      const sku = r.sku ? String(r.sku).trim().toUpperCase() : null;
+      const barcode = r.barcode ? String(r.barcode).trim() : null;
 
-        await InvProduct.create({
+      // Catch in-batch duplicate SKUs up front — a unique-index race inside the
+      // same insertMany batch can't otherwise be attributed to a single row.
+      if (sku && skuSeen.has(sku)) {
+        results.errors.push({ row: rowNum, name, reason: `Duplicate SKU "${sku}" within this import` });
+        results.skipped++;
+        return;
+      }
+      if (sku) skuSeen.set(sku, rowNum);
+
+      toInsert.push({
+        rowNum,
+        name,
+        doc: {
           business,
           name,
           sku: sku || null,
@@ -226,12 +240,32 @@ export const bulkImportProducts = async (req, res, next) => {
           serialized: String(r.serialized ?? "false").toLowerCase() === "true",
           reorderLevel: Number(r.reorderLevel ?? r.reorder_level ?? 0),
           description: String(r.description || "").trim(),
-        });
-        results.created++;
-      } catch (err) {
-        const reason = err.code === 11000 ? "Duplicate SKU" : (err.message || "Unknown error");
-        results.errors.push({ row: rowNum, name: String(r.name || "").trim(), reason });
-        results.skipped++;
+        },
+      });
+    });
+
+    if (toInsert.length) {
+      try {
+        const inserted = await InvProduct.insertMany(toInsert.map((r) => r.doc), { ordered: false });
+        results.created += inserted.length;
+      } catch (bulkErr) {
+        const insertedDocs = bulkErr.insertedDocs || [];
+        results.created += insertedDocs.length;
+        const writeErrors = bulkErr.writeErrors || [];
+        if (writeErrors.length) {
+          for (const we of writeErrors) {
+            const row = toInsert[we.index];
+            const code = we.code ?? we.err?.code;
+            const reason = code === 11000 ? "Duplicate SKU" : (we.errmsg || we.err?.errmsg || "Insert failed");
+            results.errors.push({ row: row?.rowNum, name: row?.name, reason });
+            results.skipped++;
+          }
+        } else {
+          for (const row of toInsert) {
+            results.errors.push({ row: row.rowNum, name: row.name, reason: bulkErr.message || "Insert failed" });
+            results.skipped++;
+          }
+        }
       }
     }
 

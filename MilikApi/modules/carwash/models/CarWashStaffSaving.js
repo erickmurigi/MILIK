@@ -4,7 +4,7 @@ const { Schema, Types } = mongoose;
 
 const carWashStaffSavingSchema = new Schema(
   {
-    business:  { type: Types.ObjectId, ref: "Company",              required: true, index: true },
+    business:  { type: Types.ObjectId, ref: "Company",              required: true },
     branch:    { type: Types.ObjectId, ref: "CarWashBranch",        default: null,  index: true },
     staff:     { type: Types.ObjectId, ref: "CarWashStaff",         required: true, index: true },
     // "deduction"   — savings withheld from one commission payout, covering a calendar period

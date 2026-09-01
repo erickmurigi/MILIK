@@ -21,6 +21,7 @@ import {
   FaBolt,
   FaEdit,
   FaEnvelope,
+  FaFileInvoiceDollar,
   FaPlus,
   FaPrint,
   FaRedoAlt,
@@ -41,9 +42,11 @@ import { formatMoney } from "../../utils/money";
 import { fmtDate } from "../../utils/dates";
 import {
   billMeterReading,
+  billMeterReadingsBatch,
   createMeterReading,
   createMeterReadingsBatch,
   deleteMeterReading,
+  deleteMeterReadingsBatch,
   getMeterReadings,
   updateMeterReading,
   voidMeterReading,
@@ -77,6 +80,7 @@ const emptyForm = {
   rate: "",
   notes: "",
   isMeterReset: false,
+  allowVacant: false,
 };
 
 const emptyBatchForm = {
@@ -85,6 +89,7 @@ const emptyBatchForm = {
   billingPeriod: new Date().toISOString().slice(0, 7),
   readingDate: new Date().toISOString().slice(0, 10),
   isMeterReset: false,
+  allowVacant: false,
 };
 
 const emptyFilters = {
@@ -103,6 +108,11 @@ const getMeterPaymentStatus = (reading) => {
   const s = String(reading?.billedInvoice?.status || "").toLowerCase();
   if (s === "paid") return "paid";
   if (s === "partial") return "partial";
+  // No tenant on a still-draft reading means it can never be billed via the normal
+  // flow (billMeterReading requires an active tenant) — it's not a receivable yet,
+  // so it must not be counted as "unpaid" or it silently inflates the Unpaid KPI
+  // with money nobody actually owes. Edit + save once a tenant moves in to resolve it.
+  if (!reading?.tenant && String(reading?.status || "") === "draft") return "vacant";
   return "unpaid";
 };
 
@@ -110,6 +120,7 @@ const PAYMENT_BADGE = {
   paid:    "border border-green-200 bg-green-50 text-green-700",
   partial: "border border-amber-200 bg-amber-50 text-amber-700",
   unpaid:  "border border-red-200 bg-red-50 text-red-700",
+  vacant:  "border border-slate-300 bg-slate-50 text-slate-600",
   voided:  "border border-slate-200 bg-slate-100 text-slate-500",
 };
 
@@ -117,6 +128,7 @@ const PAYMENT_LABEL = {
   paid:    "Paid",
   partial: "Partially Paid",
   unpaid:  "Unpaid",
+  vacant:  "Vacant",
   voided:  "Voided",
 };
 
@@ -578,6 +590,13 @@ const MeterReadings = () => {
     return map;
   }, [readings, batchForm.property, batchForm.utilityType, batchForm.billingPeriod]);
 
+  const visibleBatchUnits = useMemo(() => {
+    if (batchForm.allowVacant) return batchUnits;
+    return batchUnits.filter((unit) => batchTenantByUnit.get(String(unit._id)));
+  }, [batchUnits, batchTenantByUnit, batchForm.allowVacant]);
+
+  const hiddenVacantCount = batchUnits.length - visibleBatchUnits.length;
+
   const batchUnitHasUtility = useMemo(() => {
     const map = new Map();
     if (!batchForm.utilityType) return map;
@@ -630,6 +649,18 @@ const MeterReadings = () => {
 
   const handleBatchFormChange = (field, value) => {
     setBatchForm((prev) => ({ ...prev, [field]: value }));
+
+    // Disallowing vacant units mid-flow drops any vacant rows already checked in.
+    if (field === "allowVacant" && !value) {
+      setBatchIncluded((prev) => {
+        const next = { ...prev };
+        batchUnits.forEach((unit) => {
+          const uid = String(unit._id);
+          if (!batchTenantByUnit.get(uid)) next[uid] = false;
+        });
+        return next;
+      });
+    }
   };
 
   const handleBatchRowChange = (unitId, field, value) => {
@@ -643,6 +674,8 @@ const MeterReadings = () => {
   };
 
   const toggleBatchInclude = (unitId) => {
+    const isVacant = !batchTenantByUnit.get(String(unitId));
+    if (isVacant && !batchForm.allowVacant) return; // vacant units are opt-in via the toggle above
     setBatchIncluded((prev) => ({ ...prev, [unitId]: !prev[unitId] }));
   };
 
@@ -668,6 +701,7 @@ const MeterReadings = () => {
         if (values.currentReading === undefined || values.currentReading === "") return null;
 
         const tenantId = batchTenantByUnit.get(uid)?._id || null;
+        if (!tenantId && !batchForm.allowVacant) return null; // vacant units are opt-in only
         const previousReading =
           values.previousReading !== undefined && values.previousReading !== ""
             ? Number(values.previousReading)
@@ -849,6 +883,10 @@ const MeterReadings = () => {
   const paidAmount = filteredReadings
     .filter((item) => getMeterPaymentStatus(item) === "paid")
     .reduce((sum, item) => sum + Number(item?.amount || 0), 0);
+  const vacantCount = filteredReadings.filter((item) => getMeterPaymentStatus(item) === "vacant").length;
+  const vacantAmount = filteredReadings
+    .filter((item) => getMeterPaymentStatus(item) === "vacant")
+    .reduce((sum, item) => sum + Number(item?.amount || 0), 0);
 
   const resetForm = () => {
     setForm(emptyForm);
@@ -954,6 +992,14 @@ const MeterReadings = () => {
       ) {
         toast.error(
           "Property, unit, utility type, billing period, and current reading are required."
+        );
+        setSaving(false);
+        return;
+      }
+
+      if (!editingId && !selectedAutoTenant && !form.allowVacant) {
+        toast.error(
+          `This ${termUnit.toLowerCase()} has no active ${termTenant.toLowerCase()} — check "Record this reading anyway for the vacant ${termUnit.toLowerCase()}" to proceed.`
         );
         setSaving(false);
         return;
@@ -1121,20 +1167,11 @@ const MeterReadings = () => {
 
     setBulkBilling(true);
     try {
-      let successCount = 0;
-      let failedCount = 0;
-
-      for (const reading of selectedDraftRows) {
-        try {
-          await billMeterReading(reading._id, {
-            invoiceDate: reading.readingDate,
-            dueDate: reading.readingDate,
-          });
-          successCount += 1;
-        } catch (error) {
-          failedCount += 1;
-        }
-      }
+      const response = await billMeterReadingsBatch(selectedDraftRows.map((reading) => reading._id));
+      const successCount = response?.succeededCount ?? response?.succeeded?.length ?? 0;
+      const failedCount = response?.failedCount ?? response?.failed?.length ?? 0;
+      const failedList = Array.isArray(response?.failed) ? response.failed : [];
+      const failedReasons = failedList.slice(0, 4).map((f) => f.reason).filter(Boolean).join("; ");
 
       await refreshReadings();
       setSelectedReadingIds([]);
@@ -1144,9 +1181,9 @@ const MeterReadings = () => {
           `${successCount} meter reading${successCount > 1 ? "s" : ""} billed successfully.`
         );
       } else if (successCount > 0 && failedCount > 0) {
-        toast.warn(`${successCount} billed, ${failedCount} failed.`);
+        toast.warn(`${successCount} billed, ${failedCount} failed${failedReasons ? ` — ${failedReasons}` : ""}.`);
       } else {
-        toast.error("No selected meter readings were billed.");
+        toast.error(`No selected meter readings were billed.${failedReasons ? ` ${failedReasons}` : ""}`);
       }
     } finally {
       setBulkBilling(false);
@@ -1168,17 +1205,9 @@ const MeterReadings = () => {
 
     setBulkDeleting(true);
     try {
-      let successCount = 0;
-      let failedCount = 0;
-
-      for (const reading of selectedDeletableRows) {
-        try {
-          await deleteMeterReading(reading._id);
-          successCount += 1;
-        } catch (error) {
-          failedCount += 1;
-        }
-      }
+      const response = await deleteMeterReadingsBatch(selectedDeletableRows.map((reading) => reading._id));
+      const successCount = response?.succeededCount ?? response?.succeeded?.length ?? 0;
+      const failedCount = response?.failedCount ?? response?.failed?.length ?? 0;
 
       await refreshReadings();
       setSelectedReadingIds([]);
@@ -1259,6 +1288,11 @@ const MeterReadings = () => {
             <div className="flex items-center gap-1 rounded border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-semibold text-green-700">
               <span className="opacity-70">Paid</span> <span className="font-black text-green-900">KES {paidAmount.toLocaleString()}</span>
             </div>
+            {vacantCount > 0 && (
+              <div className="flex items-center gap-1 rounded border border-slate-300 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600" title="Not counted as receivable — no active tenant to bill yet">
+                <span className="opacity-70">Vacant</span> <span className="font-black text-slate-800">KES {vacantAmount.toLocaleString()} ({vacantCount})</span>
+              </div>
+            )}
             <div className="ml-auto rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
               {currentCompany?.companyName || currentCompany?.name || "No company selected"}
             </div>
@@ -1330,7 +1364,18 @@ const MeterReadings = () => {
                               <span className="ml-2 font-normal text-emerald-600">· auto-detected</span>
                             </p>
                           ) : (
-                            <p className="text-xs font-semibold text-amber-800">No active tenant found for this unit</p>
+                            <>
+                              <p className="text-xs font-semibold text-amber-800">No active tenant found for this unit (vacant)</p>
+                              <label className="mt-1.5 flex items-center gap-2 text-[11px] font-medium text-amber-800">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(form.allowVacant)}
+                                  onChange={(e) => handleFormChange("allowVacant", e.target.checked)}
+                                  className="h-3.5 w-3.5 rounded border-amber-300"
+                                />
+                                Record this reading anyway for the vacant unit
+                              </label>
+                            </>
                           )}
                         </div>
                       </div>
@@ -1566,6 +1611,24 @@ const MeterReadings = () => {
                       </label>
                     </div>
 
+                    <label className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(batchForm.allowVacant)}
+                        onChange={(e) => handleBatchFormChange("allowVacant", e.target.checked)}
+                        className="h-4 w-4 rounded border-amber-300"
+                      />
+                      <span className="font-medium">
+                        Allow readings for {termUnits.toLowerCase()} with no active {termTenant.toLowerCase()} (vacant)
+                      </span>
+                    </label>
+
+                    {hiddenVacantCount > 0 && (
+                      <p className="text-[11px] font-medium text-slate-500">
+                        {hiddenVacantCount} vacant {hiddenVacantCount === 1 ? termUnit.toLowerCase() : termUnits.toLowerCase()} hidden — check "Allow readings for vacant {termUnits.toLowerCase()}" above to include{hiddenVacantCount === 1 ? " it" : " them"}.
+                      </p>
+                    )}
+
                     {/* ── Units table ── */}
                     {!batchForm.property ? (
                       <div className="rounded border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-xs font-semibold text-slate-500">
@@ -1575,9 +1638,11 @@ const MeterReadings = () => {
                       <div className="rounded border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-xs font-semibold text-slate-500">
                         Select a utility type to capture readings.
                       </div>
-                    ) : batchUnits.length === 0 ? (
+                    ) : visibleBatchUnits.length === 0 ? (
                       <div className="rounded border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-xs font-semibold text-slate-500">
-                        No {termUnits.toLowerCase()} found for this {termProperty.toLowerCase()}.
+                        {batchUnits.length === 0
+                          ? `No ${termUnits.toLowerCase()} found for this ${termProperty.toLowerCase()}.`
+                          : `All ${termUnits.toLowerCase()} for this ${termProperty.toLowerCase()} are vacant — check "Allow readings for vacant ${termUnits.toLowerCase()}" above to list them.`}
                       </div>
                     ) : (
                       <div className="overflow-x-auto rounded border border-slate-200">
@@ -1595,7 +1660,7 @@ const MeterReadings = () => {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
-                            {batchUnits.map((unit) => {
+                            {visibleBatchUnits.map((unit) => {
                               const uid = String(unit._id);
                               const included = Boolean(batchIncluded[uid]);
                               const values = batchValues[uid] || {};
@@ -1640,7 +1705,9 @@ const MeterReadings = () => {
                                         {tenant.name} <span className="font-normal text-slate-400">· auto</span>
                                       </span>
                                     ) : (
-                                      <span className="text-amber-600">No active {termTenant.toLowerCase()}</span>
+                                      <span className="text-amber-600" title="Vacant — opt in above to record a reading anyway">
+                                        No active {termTenant.toLowerCase()} (vacant)
+                                      </span>
                                     )}
                                   </td>
                                   <td className="px-1 py-1.5">
@@ -1739,8 +1806,18 @@ const MeterReadings = () => {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
             <div className="flex-none sticky top-0 z-20 border-b border-gray-200 bg-white shadow-sm">
               <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
-                {[{val:"ALL",label:"All"},{val:"paid",label:"Paid"},{val:"unpaid",label:"Unpaid"},{val:"partial",label:"Partial"},{val:"voided",label:"Voided"}].map(({val,label}) => (
-                  <button key={val} onClick={() => setDraftFilters((prev) => ({ ...prev, status: val }))} className={`h-[20px] shrink-0 px-1.5 text-[9px] font-semibold ${draftFilters.status === val ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}>{label}</button>
+                {[{val:"ALL",label:"All"},{val:"paid",label:"Paid"},{val:"unpaid",label:"Unpaid"},{val:"partial",label:"Partial"},{val:"vacant",label:"Vacant"},{val:"voided",label:"Voided"}].map(({val,label}) => (
+                  <button
+                    key={val}
+                    onClick={() => {
+                      // Status tabs are quick filters — apply immediately rather than
+                      // waiting for the Search button (unlike property/unit/search/period,
+                      // which stay staged in draftFilters until Search is pressed).
+                      setDraftFilters((prev) => ({ ...prev, status: val }));
+                      setAppliedFilters((prev) => ({ ...prev, status: val }));
+                    }}
+                    className={`h-[20px] shrink-0 px-1.5 text-[9px] font-semibold ${draftFilters.status === val ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}
+                  >{label}</button>
                 ))}
                 <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
                 <input type="text" value={draftFilters.search} onChange={setFilter("search")} placeholder="Search…" className="h-[20px] w-36 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
@@ -1837,7 +1914,10 @@ const MeterReadings = () => {
                       {(() => {
                         const ps = getMeterPaymentStatus(reading);
                         return (
-                          <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${PAYMENT_BADGE[ps]}`}>
+                          <span
+                            className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${PAYMENT_BADGE[ps]}`}
+                            title={ps === "vacant" ? "No active tenant to bill yet — edit and save once a tenant moves in, or void it" : undefined}
+                          >
                             {PAYMENT_LABEL[ps]}
                             {reading.isMeterReset && <span className="ml-1 opacity-70">· Reset</span>}
                           </span>
@@ -1851,11 +1931,20 @@ const MeterReadings = () => {
                 const isVoid = reading.status === "void";
                 const deleteBusy = rowActionKey === `delete-${reading._id}`;
                 const voidBusy = rowActionKey === `void-${reading._id}`;
+                const billBusy = rowActionKey === `bill-${reading._id}`;
+                // Billable one at a time: draft, has a linked tenant (vacant readings have
+                // no tenant to invoice — bill via bulk-select once one is attached instead).
+                const canBillThis = reading.status === "draft" && Boolean(reading?.tenant);
                 return (
                   <div className="flex justify-end gap-1">
                     {!isVoid && (
                       <button onClick={() => handleEdit(reading)} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800" title="Edit meter reading" disabled={!canUpdateReading}>
                         <FaEdit size={12} />
+                      </button>
+                    )}
+                    {canBillThis && (
+                      <button onClick={() => handleBillSingle(reading)} className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800" title="Generate utility invoice" disabled={!canProcessReading || billBusy}>
+                        <FaFileInvoiceDollar size={12} />
                       </button>
                     )}
                     {!isVoid && (

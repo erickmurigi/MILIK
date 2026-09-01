@@ -35,7 +35,7 @@ import {
   updateLeaseReviews,
   sendCommunicationMessage,
 } from "../../redux/apiCalls";
-import { deleteTenantInvoice } from "../../redux/invoiceApi";
+import { deleteTenantInvoicesBatch } from "../../redux/invoiceApi";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import Spinner from "../../components/common/Spinner";
 import SingleBookingModal from "./SingleBookingModal";
@@ -1752,10 +1752,20 @@ const TenantStatement = () => {
 
       try {
         setSavingScheduleAction(true);
-        for (const invoice of uniqueInvoices) {
-          await deleteTenantInvoice(invoice._id);
+        const response = await deleteTenantInvoicesBatch(uniqueInvoices.map((invoice) => invoice._id));
+        const succeededCount = response?.succeededCount ?? response?.succeeded?.length ?? 0;
+        const failedCount = response?.failedCount ?? response?.failed?.length ?? 0;
+
+        if (succeededCount > 0 && failedCount === 0) {
+          toast.success("Selected invoice booking(s) cancelled successfully.");
+        } else if (succeededCount > 0 && failedCount > 0) {
+          const reasons = (response?.failed || []).slice(0, 3).map((f) => f.reason).filter(Boolean).join("; ");
+          toast.warn(`${succeededCount} cancelled, ${failedCount} could not be cancelled.${reasons ? ` ${reasons}` : ""}`);
+        } else {
+          const reasons = (response?.failed || []).slice(0, 3).map((f) => f.reason).filter(Boolean).join("; ");
+          toast.error(reasons || "Failed to cancel selected invoice bookings");
         }
-        toast.success("Selected invoice booking(s) cancelled successfully.");
+
         setSelectedSchedules([]);
         setInvoiceRefresh((v) => v + 1);
         window.dispatchEvent(new Event("invoicesUpdated"));

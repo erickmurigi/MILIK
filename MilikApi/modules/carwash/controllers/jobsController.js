@@ -15,7 +15,7 @@ import { autoEnrollPlate, awardLoyaltyStamp } from "./loyaltyController.js";
 import { normalizePlate } from "../utils/plateUtils.js";
 import { sendAdHocSms, sendAdHocSmsToMasked } from "../../../services/communicationService.js";
 import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
-import { recomputeCustomerStats } from "../services/customerStatsService.js";
+import { recomputeCustomerStats, recomputeCustomerStatsForPlates } from "../services/customerStatsService.js";
 
 const JOB_STATUSES = new Set(["waiting", "washing", "drying", "ready", "done", "cancelled"]);
 const JOB_TYPES = new Set(["vehicle", "carpet", "balance_bf"]);
@@ -848,7 +848,7 @@ export const deleteJobsBulk = async (req, res, next) => {
       deletedCount = result.deletedCount || 0;
       // Recompute stats for each affected plate (deduplicated)
       const affectedPlates = [...new Set(jobs.filter((j) => safeIds.some((sid) => String(sid) === String(j._id)) && j.plateNumber).map((j) => j.plateNumber))];
-      for (const plate of affectedPlates) recomputeCustomerStats(business, plate).catch(() => {});
+      if (affectedPlates.length) recomputeCustomerStatsForPlates(business, affectedPlates).catch(() => {});
     }
 
     res.status(200).json({

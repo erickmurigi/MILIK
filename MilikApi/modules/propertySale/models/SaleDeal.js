@@ -4,7 +4,7 @@ const DEAL_STATUSES = ["active", "closed", "cancelled"];
 
 const saleDealSchema = new mongoose.Schema(
   {
-    business: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true, index: true },
+    business: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true },
     dealNumber: { type: String, required: true, trim: true },
     offer: { type: mongoose.Schema.Types.ObjectId, ref: "SaleOffer", default: null },
     listing: { type: mongoose.Schema.Types.ObjectId, ref: "SaleListing", required: true, index: true },

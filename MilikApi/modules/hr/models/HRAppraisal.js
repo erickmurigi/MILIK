@@ -14,7 +14,7 @@ const ratingSchema = new mongoose.Schema(
 
 const appraisalSchema = new mongoose.Schema(
   {
-    company:  { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
+    company:  { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
     cycle:    { type: mongoose.Schema.Types.ObjectId, ref: 'HRAppraisalCycle', required: true },
     employee: { type: mongoose.Schema.Types.ObjectId, ref: 'HREmployee', required: true },
     snapshot: {

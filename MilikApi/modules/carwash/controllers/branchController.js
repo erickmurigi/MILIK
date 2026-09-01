@@ -162,7 +162,7 @@ export const updateBranch = async (req, res, next) => {
       { _id: req.params.id, business },
       { ...payload, defaultCashbooks, updatedBy: currentUserId(req) },
       { new: true, runValidators: true }
-    ).populate("defaultCashbooks.cash defaultCashbooks.mpesa defaultCashbooks.bank defaultCashbooks.card defaultCashbooks.other", "code name");
+    ).populate("defaultCashbooks.cash defaultCashbooks.mpesa defaultCashbooks.bank defaultCashbooks.card defaultCashbooks.other", "code name").lean();
 
     if (!branch) return next(createError(404, "Car Wash branch not found"));
     res.status(200).json({ success: true, data: branch, branch, message: "Car Wash branch updated" });

@@ -485,14 +485,17 @@ const refreshStatementStatuses = async (business, accountId) => {
   const jobs = await CarWashJob.find({ _id: { $in: allJobIds } }, { _id: 1, paymentStatus: 1 }).lean();
   const jobMap = new Map(jobs.map((j) => [String(j._id), j.paymentStatus]));
 
-  await Promise.all(statements.map((stmt) => {
+  const updateOps = [];
+  for (const stmt of statements) {
     const statuses = stmt.jobs.map((l) => jobMap.get(String(l.job)) || "unpaid");
     const allPaid = statuses.every((s) => s === "paid");
     const anyPaid = statuses.some((s) => s !== "unpaid");
-    if (allPaid) stmt.status = "paid";
-    else if (anyPaid) stmt.status = "partial";
-    return stmt.save();
-  }));
+    const nextStatus = allPaid ? "paid" : anyPaid ? "partial" : stmt.status;
+    if (nextStatus !== stmt.status) {
+      updateOps.push({ updateOne: { filter: { _id: stmt._id }, update: { $set: { status: nextStatus } } } });
+    }
+  }
+  if (updateOps.length) await CarWashAccountStatement.bulkWrite(updateOps, { ordered: false });
 };
 
 export const generateStatement = async (req, res, next) => {

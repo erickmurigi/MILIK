@@ -17,7 +17,7 @@ const lineBreakdownSchema = new mongoose.Schema(
 
 const carWashStaffCommissionSchema = new mongoose.Schema(
   {
-    business: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true, index: true },
+    business: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true },
     branch: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashBranch", default: null, index: true },
     job: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashJob", required: true, index: true },
     staff: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashStaff", required: true, index: true },

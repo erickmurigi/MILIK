@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTabState } from "../../hooks/useTabState";
+import useDebounce from '../../hooks/useDebounce';
 import {
   FaPlus, FaRedoAlt, FaEdit, FaTrash, FaToggleOn, FaToggleOff,
   FaTimes, FaCheck,
@@ -44,21 +45,22 @@ export default function KpiLibrary() {
   const [form, setForm]             = useState(EMPTY);
   const [saving, setSaving]         = useState(false);
   const [deleting, setDeleting]     = useState(null);
+  const debouncedSearch = useDebounce(search, 350);
 
   const { data: kpis = [], isLoading: loading, error, refetch } = useQuery({
-    queryKey: ['hr-kpis', search, catFilter, activeOnly],
+    queryKey: ['hr-kpis', debouncedSearch, catFilter, activeOnly],
     queryFn: async () => {
       const params = {};
-      if (search)     params.search   = search;
-      if (catFilter)  params.category = catFilter;
-      if (activeOnly) params.isActive = 'true';
+      if (debouncedSearch) params.search   = debouncedSearch;
+      if (catFilter)       params.category = catFilter;
+      if (activeOnly)      params.isActive = 'true';
       const res = await adminRequests.get('/hr/kpis', { params });
       return res.data || [];
     },
   });
 
   useEffect(() => { if (error) toast.error('Failed to load KPIs'); }, [error]);
-  useEffect(() => { setPage(1); }, [search, catFilter, activeOnly]);
+  useEffect(() => { setPage(1); }, [debouncedSearch, catFilter, activeOnly]);
 
   const openCreate = () => { setForm(EMPTY); setModal('create'); };
   const openEdit   = (k)  => { setForm({ ...k }); setModal(k); };

@@ -46,11 +46,21 @@ const dayRange = (value = new Date()) => {
 };
 
 // ─── Account resolution ───────────────────────────────────────────────────────
+//
+// Fixed system accounts (one per business+code) whose _id never changes once
+// created — cached in-process so receiving N PO lines or ringing up N POS sales
+// doesn't re-upsert the same handful of ChartOfAccount docs N times.
+
+const invAccountIdCache = new Map(); // `${businessId}:${code}` -> ObjectId
 
 const resolveInvAccount = async (businessId, code) => {
+  const cacheKey = `${businessId}:${code}`;
+  const cachedId = invAccountIdCache.get(cacheKey);
+  if (cachedId) return { _id: cachedId };
+
   const tpl = INV_ACCOUNT_TEMPLATES[code];
   if (!tpl) throw new Error(`resolveInvAccount: unknown code "${code}"`);
-  return ChartOfAccount.findOneAndUpdate(
+  const acc = await ChartOfAccount.findOneAndUpdate(
     { business: businessId, code },
     {
       $setOnInsert: {
@@ -70,20 +80,30 @@ const resolveInvAccount = async (businessId, code) => {
     },
     { upsert: true, new: true }
   );
+  invAccountIdCache.set(cacheKey, acc._id);
+  return acc;
 };
 
 // ─── Supplier AP sub-account resolution ──────────────────────────────────────
 // Each supplier gets their own posting sub-account under 2000 (AP header).
 // The account is created on first use and linked back to the supplier record.
 
+const supplierApAccountIdCache = new Map(); // supplierId -> ObjectId
+
 export const resolveSupplierApAccount = async (businessId, supplierId) => {
+  const cachedId = supplierApAccountIdCache.get(String(supplierId));
+  if (cachedId) return { _id: cachedId };
+
   // Check supplier record first (fast path)
   const supplier = await InvSupplier.findOne({ _id: supplierId, business: businessId });
   if (!supplier) throw new Error(`Supplier ${supplierId} not found`);
 
   if (supplier.apAccountId) {
-    const existing = await ChartOfAccount.findById(supplier.apAccountId);
-    if (existing) return existing;
+    const existing = await ChartOfAccount.findById(supplier.apAccountId).select("_id").lean();
+    if (existing) {
+      supplierApAccountIdCache.set(String(supplierId), existing._id);
+      return existing;
+    }
   }
 
   // Ensure the 2000 header exists
@@ -122,6 +142,7 @@ export const resolveSupplierApAccount = async (businessId, supplierId) => {
 
   // Link back to supplier so we don't re-create next time
   await InvSupplier.updateOne({ _id: supplierId }, { $set: { apAccountId: account._id } });
+  supplierApAccountIdCache.set(String(supplierId), account._id);
   return account;
 };
 

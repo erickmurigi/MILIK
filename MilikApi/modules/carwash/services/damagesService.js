@@ -88,6 +88,7 @@ export const holdDamagesForPayout = async ({
 
   let totalHeld = 0;
   const now = new Date();
+  const updateOps = [];
 
   for (const rec of pending) {
     const available = round2(cap - totalHeld);
@@ -103,19 +104,23 @@ export const holdDamagesForPayout = async ({
     const newRecovered = round2((rec.amountRecovered || 0) + installment);
     const fullyRecovered = newRecovered >= rec.amount - 0.005;
 
-    await CarWashStaffDamage.updateOne(
-      { _id: rec._id },
-      {
-        $set: {
-          amountRecovered: newRecovered,
-          ...(fullyRecovered ? { status: "deducted", commissionPayout: commissionPayoutId } : {}),
+    updateOps.push({
+      updateOne: {
+        filter: { _id: rec._id },
+        update: {
+          $set: {
+            amountRecovered: newRecovered,
+            ...(fullyRecovered ? { status: "deducted", commissionPayout: commissionPayoutId } : {}),
+          },
+          $push: {
+            recoveryLog: { commissionPayout: commissionPayoutId, amount: installment, date: now },
+          },
         },
-        $push: {
-          recoveryLog: { commissionPayout: commissionPayoutId, amount: installment, date: now },
-        },
-      }
-    );
+      },
+    });
   }
+
+  if (updateOps.length) await CarWashStaffDamage.bulkWrite(updateOps, { ordered: false });
 
   return round2(totalHeld);
 };
@@ -132,23 +137,24 @@ export const releaseDamagesForPayout = async (businessId, commissionPayoutId) =>
     "recoveryLog.commissionPayout": payoutOid,
   }).lean();
 
-  for (const rec of affected) {
+  if (!affected.length) return;
+
+  const updateOps = affected.map((rec) => {
     const entries = (rec.recoveryLog || []).filter(
       (e) => String(e.commissionPayout) === String(commissionPayoutId)
     );
     const toReverse = round2(entries.reduce((s, e) => s + (e.amount || 0), 0));
     const newRecovered = round2(Math.max(0, (rec.amountRecovered || 0) - toReverse));
-
-    await CarWashStaffDamage.updateOne(
-      { _id: rec._id },
-      {
-        $set: {
-          amountRecovered: newRecovered,
-          status: "pending",
-          commissionPayout: null,
+    return {
+      updateOne: {
+        filter: { _id: rec._id },
+        update: {
+          $set: { amountRecovered: newRecovered, status: "pending", commissionPayout: null },
+          $pull: { recoveryLog: { commissionPayout: payoutOid } },
         },
-        $pull: { recoveryLog: { commissionPayout: payoutOid } },
-      }
-    );
-  }
+      },
+    };
+  });
+
+  await CarWashStaffDamage.bulkWrite(updateOps, { ordered: false });
 };

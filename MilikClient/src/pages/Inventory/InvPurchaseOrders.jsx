@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
+import useDebounce from "../../hooks/useDebounce";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaCheck, FaFileInvoice, FaLock, FaMoneyBillWave, FaPlus, FaRedoAlt, FaSearch, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -33,6 +34,7 @@ const InvPurchaseOrders = () => {
   const confirm = useConfirm();
   const [statusFilter, setStatusFilter] = useTabState("/inventory/purchase-orders:statusFilter", "");
   const [search, setSearch] = useTabState("/inventory/purchase-orders:search", "");
+  const debSearch = useDebounce(search, 400);
   const [page, setPage] = useTabState("/inventory/purchase-orders:page", 1);
   const [pageSize, setPageSize] = useTabState("/inventory/purchase-orders:pageSize", 30);
 
@@ -92,9 +94,9 @@ const InvPurchaseOrders = () => {
     enabled: showPaySupplier,
   });
   const { data: poData, isLoading: loading, error, refetch } = useQuery({
-    queryKey: ['inv-purchase-orders', statusFilter, search, page, pageSize],
+    queryKey: ['inv-purchase-orders', statusFilter, debSearch, page, pageSize],
     queryFn: async () => {
-      const res = await inventoryApi.listPurchaseOrders({ status: statusFilter || undefined, search: search || undefined, page, limit: pageSize });
+      const res = await inventoryApi.listPurchaseOrders({ status: statusFilter || undefined, search: debSearch || undefined, page, limit: pageSize });
       const list = Array.isArray(res) ? res : (res?.data ?? []);
       return { orders: list, total: res?.total ?? list.length };
     },

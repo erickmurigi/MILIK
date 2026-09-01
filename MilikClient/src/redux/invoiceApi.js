@@ -165,6 +165,16 @@ export const getTenantInvoices = async ({
   }
 };
 
+// Delete multiple tenant invoices in a single round trip
+export const deleteTenantInvoicesBatch = async (ids = []) => {
+  try {
+    const res = await adminRequests.post("/tenant-invoices/batch-delete", { ids });
+    return res.data;
+  } catch (err) {
+    throw extractApiError(err);
+  }
+};
+
 // Delete tenant invoice
 export const deleteTenantInvoice = async (invoiceId) => {
   try {

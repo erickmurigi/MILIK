@@ -5,7 +5,7 @@ const BUYER_SOURCES = ["walk_in", "referral", "online", "agent", "other"];
 
 const saleBuyerSchema = new mongoose.Schema(
   {
-    business: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true, index: true },
+    business: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true },
     buyerNumber: { type: String, required: true, trim: true },
     fullName: { type: String, required: true, trim: true },
     idNumber: { type: String, trim: true, default: "" },

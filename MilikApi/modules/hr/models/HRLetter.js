@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 const hrLetterSchema = new mongoose.Schema({
-  company:  { type: mongoose.Schema.Types.ObjectId, ref: 'Company',    required: true, index: true },
+  company:  { type: mongoose.Schema.Types.ObjectId, ref: 'Company',    required: true },
   employee: { type: mongoose.Schema.Types.ObjectId, ref: 'HREmployee', required: true, index: true },
   letterType: {
     type: String,

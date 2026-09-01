@@ -4,6 +4,7 @@ import {
   createTenantInvoice,
   createTenantInvoicesBatch,
   deleteTenantInvoice,
+  deleteTenantInvoicesBatch,
   createTenantInvoiceNote,
   reverseTenantInvoiceNote,
   getTenantInvoiceNotes,
@@ -28,6 +29,7 @@ router.get("/take-on-balances", verifyUser, getTakeOnBalances);
 
 router.post("/", verifyUser, createTenantInvoice);
 router.post("/batch", verifyUser, createTenantInvoicesBatch);
+router.post("/batch-delete", verifyUser, deleteTenantInvoicesBatch);
 router.post("/notes", verifyUser, createTenantInvoiceNote);
 router.post("/notes/bulk-import", verifyUser, bulkImportInvoiceNotes);
 router.post("/notes/:id/reverse", verifyUser, reverseTenantInvoiceNote);

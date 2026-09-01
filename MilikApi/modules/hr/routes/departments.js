@@ -55,7 +55,7 @@ router.post('/', verifyUser, async (req, res) => {
     const { name, code, description, manager } = req.body;
     if (!name?.trim()) return res.status(400).json({ message: 'Department name is required' });
 
-    const existing = await HRDepartment.findOne({ company: companyId, name: name.trim() });
+    const existing = await HRDepartment.findOne({ company: companyId, name: name.trim() }).lean();
     if (existing) return res.status(400).json({ message: 'A department with this name already exists' });
 
     const dept = await HRDepartment.create({
@@ -82,7 +82,7 @@ router.put('/:id', verifyUser, async (req, res) => {
     if (!dept) return res.status(404).json({ message: 'Department not found' });
 
     if (name?.trim() && name.trim() !== dept.name) {
-      const dup = await HRDepartment.findOne({ company: companyId, name: name.trim(), _id: { $ne: dept._id } });
+      const dup = await HRDepartment.findOne({ company: companyId, name: name.trim(), _id: { $ne: dept._id } }).lean();
       if (dup) return res.status(400).json({ message: 'A department with this name already exists' });
       dept.name = name.trim();
     }

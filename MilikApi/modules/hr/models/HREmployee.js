@@ -9,7 +9,7 @@ const salaryComponentSchema = new mongoose.Schema({
 }, { _id: true });
 
 const employeeSchema = new mongoose.Schema({
-  company: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
+  company: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
   employeeNumber: { type: String, trim: true, default: '' },
 
   // ── Personal Information ───────────────────────────────────────

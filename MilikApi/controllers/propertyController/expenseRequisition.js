@@ -602,3 +602,60 @@ export const deleteExpenseRequisition = async (req, res, next) => {
     next(error);
   }
 };
+
+export const batchDeleteExpenseRequisitions = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return next(createError(400, "Company context is required"));
+
+    const ids = Array.isArray(req.body.ids) ? req.body.ids : [];
+    const validIds = Array.from(
+      new Set(ids.map((id) => String(id || "").trim()).filter((id) => mongoose.Types.ObjectId.isValid(id)))
+    );
+
+    if (!validIds.length) {
+      return next(createError(400, "At least one requisition id is required."));
+    }
+
+    const rows = await ExpenseRequisition.find({ _id: { $in: validIds }, business: businessId });
+    const rowMap = new Map(rows.map((row) => [String(row._id), row]));
+
+    const succeeded = [];
+    const failed = [];
+    const deletableIds = [];
+
+    validIds.forEach((id) => {
+      const row = rowMap.get(id);
+      if (!row) {
+        failed.push({ id, reason: "Expense requisition not found." });
+        return;
+      }
+
+      if (!["draft", "rejected", "cancelled"].includes(String(row.status))) {
+        failed.push({ id, requisitionNo: row.requisitionNo, reason: "Only draft, rejected, or cancelled requisitions can be deleted." });
+        return;
+      }
+
+      if (row.linkedVoucher) {
+        failed.push({ id, requisitionNo: row.requisitionNo, reason: "This requisition is linked to a payment voucher and cannot be deleted." });
+        return;
+      }
+
+      deletableIds.push(row._id);
+      succeeded.push({ id, requisitionNo: row.requisitionNo });
+    });
+
+    if (deletableIds.length) {
+      await ExpenseRequisition.deleteMany({ _id: { $in: deletableIds }, business: businessId });
+    }
+
+    return res.status(200).json({
+      succeeded,
+      failed,
+      succeededCount: succeeded.length,
+      failedCount: failed.length,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

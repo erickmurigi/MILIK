@@ -41,7 +41,7 @@ router.post('/', verifyUser, async (req, res) => {
     const { name } = req.body;
     if (!name?.trim()) return res.status(400).json({ message: 'Leave type name is required' });
 
-    const existing = await HRLeaveType.findOne({ company: companyId, name: name.trim() });
+    const existing = await HRLeaveType.findOne({ company: companyId, name: name.trim() }).lean();
     if (existing) return res.status(400).json({ message: `Leave type "${name}" already exists` });
 
     const lt = new HRLeaveType({ ...req.body, company: companyId, createdBy: currentUserId(req) });
@@ -61,7 +61,7 @@ router.put('/:id', verifyUser, async (req, res) => {
     if (!lt) return res.status(404).json({ message: 'Leave type not found' });
 
     if (req.body.name && req.body.name.trim() !== lt.name) {
-      const clash = await HRLeaveType.findOne({ company: companyId, name: req.body.name.trim(), _id: { $ne: lt._id } });
+      const clash = await HRLeaveType.findOne({ company: companyId, name: req.body.name.trim(), _id: { $ne: lt._id } }).lean();
       if (clash) return res.status(400).json({ message: `Leave type "${req.body.name}" already exists` });
     }
 

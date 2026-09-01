@@ -66,6 +66,18 @@ export const deleteTenant = createAsyncThunk(
   }
 );
 
+export const batchDeleteTenants = createAsyncThunk(
+  'tenant/batchDelete',
+  async (ids, { rejectWithValue }) => {
+    try {
+      const response = await adminRequests.post("/tenants/batch-delete", { ids });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
 export const tenantSlice = createSlice({
     name: "tenant",
     initialState: {
@@ -231,6 +243,24 @@ export const tenantSlice = createSlice({
                 state.tenants = state.tenants.filter((item) => item._id !== action.payload);
             })
             .addCase(deleteTenant.rejected, (state) => {
+                state.isFetching = false;
+                state.error = true;
+            });
+
+        // Batch delete tenants
+        builder
+            .addCase(batchDeleteTenants.pending, (state) => {
+                state.isFetching = true;
+                state.error = false;
+            })
+            .addCase(batchDeleteTenants.fulfilled, (state, action) => {
+                state.isFetching = false;
+                const succeededIds = new Set(
+                    (action.payload?.succeeded || []).map((row) => String(row.id))
+                );
+                state.tenants = state.tenants.filter((item) => !succeededIds.has(String(item._id)));
+            })
+            .addCase(batchDeleteTenants.rejected, (state) => {
                 state.isFetching = false;
                 state.error = true;
             });

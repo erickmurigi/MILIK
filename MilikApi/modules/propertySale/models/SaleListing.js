@@ -6,7 +6,7 @@ const SIZE_UNITS = ["sqm", "sqft", "acres", "hectares"];
 
 const saleListingSchema = new mongoose.Schema(
   {
-    business: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true, index: true },
+    business: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true },
     listingNumber: { type: String, required: true, trim: true },
     title: { type: String, required: true, trim: true },
     propertyType: { type: String, enum: PROPERTY_TYPES, default: "plot" },

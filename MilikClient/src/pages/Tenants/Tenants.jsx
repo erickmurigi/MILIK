@@ -37,7 +37,7 @@ import {
   FaHandshake,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { getTenants, deleteTenant, updateTenant } from "../../redux/tenantsRedux";
+import { getTenants, batchDeleteTenants, updateTenant } from "../../redux/tenantsRedux";
 import { fetchCompanySettings, selectCompanySettings } from "../../redux/companySettingsRedux";
 import { getUnits } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
@@ -1915,15 +1915,22 @@ const confirmTransferUnit = useCallback(async () => {
     setSelectAll(false);
     setActionMenuOpen(false);
 
-    const deleteResults = await Promise.allSettled(
-      selectedDeletableTenants.map((tenant) => dispatch(deleteTenant(tenant.id)).unwrap())
-    );
-    const successCount = deleteResults.filter((r) => r.status === "fulfilled").length;
-    const failCount = deleteResults.filter((r) => r.status === "rejected").length;
+    const batchResult = await dispatch(
+      batchDeleteTenants(selectedDeletableTenants.map((tenant) => tenant.id))
+    ).unwrap().catch((error) => error);
+    const successCount = batchResult?.succeeded?.length ?? batchResult?.succeededCount ?? 0;
+    const failCount = batchResult?.failed?.length ?? batchResult?.failedCount ?? selectedDeletableTenants.length;
 
     if (successCount > 0) toast.success(`Successfully deleted ${successCount} tenant(s).`);
     if (skippedCount > 0) toast.info(`${skippedCount} tenant(s) skipped — they have balances or transaction history.`);
-    if (failCount > 0) toast.error(`Failed to delete ${failCount} tenant(s).`);
+    if (failCount > 0) {
+      const reasons = (batchResult?.failed || [])
+        .slice(0, 3)
+        .map((f) => f.reason)
+        .filter(Boolean)
+        .join("; ");
+      toast.error(`Failed to delete ${failCount} tenant(s).${reasons ? ` ${reasons}` : ""}`);
+    }
 
     if (currentCompany?._id) dispatch(getTenants(buildTenantParams()));
   };

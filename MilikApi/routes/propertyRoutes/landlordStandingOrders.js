@@ -6,6 +6,7 @@ import {
   getLandlordStandingOrders,
   reverseLandlordStandingOrderRun,
   runLandlordStandingOrder,
+  runLandlordStandingOrdersBatch,
   updateLandlordStandingOrder,
   updateLandlordStandingOrderStatus,
 } from "../../controllers/propertyController/landlordStandingOrders.js";
@@ -14,6 +15,7 @@ const router = express.Router();
 
 router.get("/", verifyUser, getLandlordStandingOrders);
 router.post("/", verifyUser, createLandlordStandingOrder);
+router.post("/batch-run", verifyUser, runLandlordStandingOrdersBatch);
 router.put("/:id", verifyUser, updateLandlordStandingOrder);
 router.put("/:id/status", verifyUser, updateLandlordStandingOrderStatus);
 router.post("/:id/run", verifyUser, runLandlordStandingOrder);

@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 const departmentSchema = new mongoose.Schema({
-  company: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
+  company: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
   name: { type: String, required: true, trim: true },
   code: { type: String, trim: true, uppercase: true, default: '' },
   description: { type: String, trim: true, default: '' },

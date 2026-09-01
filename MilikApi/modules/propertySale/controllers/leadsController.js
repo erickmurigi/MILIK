@@ -108,7 +108,7 @@ export const updateLead = async (req, res, next) => {
       { _id: req.params.id, business },
       { ...updates, updatedBy: userId },
       { new: true, runValidators: true }
-    ).populate("assignedAgent", "fullName");
+    ).populate("assignedAgent", "fullName").lean();
     if (!lead) return next(createError(404, "Lead not found"));
     res.status(200).json(lead);
   } catch (err) { next(err); }
@@ -226,14 +226,15 @@ export const convertLeadToOffer = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
 
-    const lead = await SaleLead.findOne({ _id: req.params.id, business }).lean();
-    if (!lead) return next(createError(404, "Lead not found"));
-
     const { listing: listingId, offerAmount, validityDate, agent, notes, idNumber = "" } = req.body;
     if (!listingId)  return next(createError(400, "Listing is required"));
     if (!offerAmount) return next(createError(400, "Offer amount is required"));
 
-    const listing = await SaleListing.findOne({ _id: listingId, business }).lean();
+    const [lead, listing] = await Promise.all([
+      SaleLead.findOne({ _id: req.params.id, business }).lean(),
+      SaleListing.findOne({ _id: listingId, business }).lean(),
+    ]);
+    if (!lead) return next(createError(404, "Lead not found"));
     if (!listing) return next(createError(400, "Listing not found"));
     if (!["available", "reserved"].includes(listing.status)) {
       return next(createError(400, `Cannot create an offer on a ${listing.status} listing`));

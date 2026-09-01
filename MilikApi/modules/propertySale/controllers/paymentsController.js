@@ -98,9 +98,13 @@ export const createPayment = async (req, res, next) => {
     if (!deal) return next(createError(400, "Deal not found"));
     if (deal.status !== "active") return next(createError(400, "Payments can only be recorded for active deals"));
 
-    const totalPaidResult = await SalePayment.aggregate([
-      { $match: { business: new mongoose.Types.ObjectId(String(business)), deal: deal._id, status: "paid" } },
-      { $group: { _id: null, total: { $sum: "$amount" } } },
+    // Resolve cashbook in parallel with the deal's paid-to-date total — independent lookups
+    const [totalPaidResult, cashbookAcc] = await Promise.all([
+      SalePayment.aggregate([
+        { $match: { business: new mongoose.Types.ObjectId(String(business)), deal: deal._id, status: "paid" } },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]),
+      resolveCashbook(business, req.body.cashbook),
     ]);
     const totalPaid  = totalPaidResult[0]?.total || 0;
     const remaining  = deal.agreedPrice - totalPaid;
@@ -108,8 +112,6 @@ export const createPayment = async (req, res, next) => {
       return next(createError(400, `Payment of ${Number(req.body.amount).toLocaleString()} exceeds remaining balance of ${remaining.toLocaleString("en-KE", { minimumFractionDigits: 2 })}`));
     }
 
-    // Resolve cashbook before saving — fail fast if invalid
-    const cashbookAcc = await resolveCashbook(business, req.body.cashbook);
     if (req.body.cashbook && !cashbookAcc) {
       return next(createError(400, "Selected cashbook account not found"));
     }
@@ -189,7 +191,7 @@ export const updatePayment = async (req, res, next) => {
         { ...updates, updatedBy: userId },
         { new: true, runValidators: true }
       )
-    );
+    ).lean();
     if (!payment) return next(createError(404, "Payment not found"));
 
     if (glCorrectionNeeded) {

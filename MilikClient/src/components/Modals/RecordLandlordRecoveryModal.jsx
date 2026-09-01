@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { FaTimes, FaMoneyBillWave } from "react-icons/fa";
+import { FaMoneyBillWave } from "react-icons/fa";
 import { useTerms } from "../../hooks/useTerm";
+import Modal from "../common/Modal";
+import FormField from "../common/FormField";
 
 const getOutstandingRecoveryBalance = (statement) =>
   Math.max(Number(statement?.amountPayableByLandlordToManager || 0) - Number(statement?.amountRecovered || 0), 0);
@@ -28,105 +30,89 @@ const RecordLandlordRecoveryModal = ({ statement, onClose, onSubmit, cashbookOpt
   const inputCls = "w-full border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-[#0B3B2E]";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
-        {/* Header */}
-        <div className="flex-shrink-0 flex items-center justify-between gap-3 border-b border-slate-700 bg-[#0B3B2E] px-4 py-3 text-white">
-          <div className="flex items-center gap-2">
-            <FaMoneyBillWave className="text-red-400" />
-            <h2 className="text-sm font-black uppercase tracking-wide">Record Recovery From {termLandlord}</h2>
-          </div>
-          <button onClick={onClose} className="text-white/60 hover:text-white transition-colors">
-            <FaTimes size={14} />
+    <Modal
+      title={`Record Recovery From ${termLandlord}`}
+      icon={<FaMoneyBillWave className="text-red-400" />}
+      onClose={onClose}
+      size="lg"
+      footer={
+        <>
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 text-sm font-bold text-slate-700 bg-slate-200 hover:bg-slate-300 transition-colors">
+            Cancel
           </button>
+          <button type="submit" form="record-recovery-form"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-white bg-[#0B3B2E] hover:bg-[#0A3127] transition-colors">
+            <FaMoneyBillWave size={11} /> Record Recovery
+          </button>
+        </>
+      }
+    >
+      <form id="record-recovery-form" onSubmit={(e) => { e.preventDefault(); onSubmit(formData); }} className="space-y-4">
+        {/* Statement details */}
+        <div className="bg-slate-50 border border-slate-200 p-4">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Processed Statement Details</p>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            {[
+              [termLandlord, statement?.landlord?.landlordName || "N/A"],
+              [termProperty, statement?.property?.propertyName || "N/A"],
+              ["Period", `${fmtDate(statement?.periodStart)} – ${fmtDate(statement?.periodEnd)}`],
+              ["Outstanding Recovery", fmt(outstandingRecovery)],
+            ].map(([label, val]) => (
+              <div key={label}>
+                <p className="text-xs text-slate-400">{label}</p>
+                <p className={`font-bold ${label === "Outstanding Recovery" ? "text-red-700 text-base" : "text-slate-800"}`}>{val}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <form onSubmit={(e) => { e.preventDefault(); onSubmit(formData); }} className="flex flex-col flex-1 min-h-0">
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-            {/* Statement details */}
-            <div className="bg-slate-50 border border-slate-200 p-4">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Processed Statement Details</p>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                {[
-                  [termLandlord, statement?.landlord?.landlordName || "N/A"],
-                  [termProperty, statement?.property?.propertyName || "N/A"],
-                  ["Period", `${fmtDate(statement?.periodStart)} – ${fmtDate(statement?.periodEnd)}`],
-                  ["Outstanding Recovery", fmt(outstandingRecovery)],
-                ].map(([label, val]) => (
-                  <div key={label}>
-                    <p className="text-xs text-slate-400">{label}</p>
-                    <p className={`font-bold ${label === "Outstanding Recovery" ? "text-red-700 text-base" : "text-slate-800"}`}>{val}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <FormField label="Recovery Date" required>
+            <input type="date" name="recoveryDate" value={formData.recoveryDate} required
+              onChange={(e) => set("recoveryDate", e.target.value)} className={inputCls} />
+          </FormField>
+          <FormField label="Amount (KES)" required>
+            <input type="number" name="amount" value={formData.amount} required min="0" step="0.01"
+              onChange={(e) => set("amount", e.target.value)} className={inputCls} />
+          </FormField>
+          <FormField label="Payment Method" required>
+            <select name="paymentMethod" value={formData.paymentMethod} required
+              onChange={(e) => set("paymentMethod", e.target.value)} className={inputCls}>
+              <option>Bank Transfer</option>
+              <option>Check</option>
+              <option>Cash</option>
+              <option value="Mobile Money">Mobile Money (M-Pesa)</option>
+              <option>Other</option>
+            </select>
+          </FormField>
+          <FormField label="Reference Number">
+            <input type="text" name="referenceNumber" value={formData.referenceNumber}
+              placeholder="Transaction / cheque / transfer ref"
+              onChange={(e) => set("referenceNumber", e.target.value)} className={inputCls} />
+          </FormField>
+          <FormField label="Cashbook" required className="sm:col-span-2">
+            <select name="cashbook" value={formData.cashbook} required
+              onChange={(e) => set("cashbook", e.target.value)} className={inputCls}>
+              {cashbookOptions.length === 0
+                ? <option value="">No cashbook accounts found</option>
+                : cashbookOptions.map((a) => (
+                    <option key={a._id || a.code || a.name} value={a.name}>
+                      {a.code ? `${a.code} - ${a.name}` : a.name}
+                    </option>
+                  ))}
+            </select>
+          </FormField>
+        </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-black uppercase tracking-wide text-slate-600 mb-1.5">Recovery Date <span className="text-red-500">*</span></label>
-                <input type="date" name="recoveryDate" value={formData.recoveryDate} required
-                  onChange={(e) => set("recoveryDate", e.target.value)} className={inputCls} />
-              </div>
-              <div>
-                <label className="block text-xs font-black uppercase tracking-wide text-slate-600 mb-1.5">Amount (KES) <span className="text-red-500">*</span></label>
-                <input type="number" name="amount" value={formData.amount} required min="0" step="0.01"
-                  onChange={(e) => set("amount", e.target.value)} className={inputCls} />
-              </div>
-              <div>
-                <label className="block text-xs font-black uppercase tracking-wide text-slate-600 mb-1.5">Payment Method <span className="text-red-500">*</span></label>
-                <select name="paymentMethod" value={formData.paymentMethod} required
-                  onChange={(e) => set("paymentMethod", e.target.value)} className={inputCls}>
-                  <option>Bank Transfer</option>
-                  <option>Check</option>
-                  <option>Cash</option>
-                  <option value="Mobile Money">Mobile Money (M-Pesa)</option>
-                  <option>Other</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-black uppercase tracking-wide text-slate-600 mb-1.5">Reference Number</label>
-                <input type="text" name="referenceNumber" value={formData.referenceNumber}
-                  placeholder="Transaction / cheque / transfer ref"
-                  onChange={(e) => set("referenceNumber", e.target.value)} className={inputCls} />
-              </div>
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-black uppercase tracking-wide text-slate-600 mb-1.5">Cashbook <span className="text-red-500">*</span></label>
-                <select name="cashbook" value={formData.cashbook} required
-                  onChange={(e) => set("cashbook", e.target.value)} className={inputCls}>
-                  {cashbookOptions.length === 0
-                    ? <option value="">No cashbook accounts found</option>
-                    : cashbookOptions.map((a) => (
-                        <option key={a._id || a.code || a.name} value={a.name}>
-                          {a.code ? `${a.code} - ${a.name}` : a.name}
-                        </option>
-                      ))}
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-black uppercase tracking-wide text-slate-600 mb-1.5">Notes</label>
-              <textarea name="notes" value={formData.notes} rows={3}
-                placeholder="Recovery details or notes…"
-                onChange={(e) => set("notes", e.target.value)}
-                className="w-full border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-[#0B3B2E] resize-none" />
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
-            <button type="button" onClick={onClose}
-              className="px-4 py-2 text-sm font-bold text-slate-700 bg-slate-200 hover:bg-slate-300 transition-colors">
-              Cancel
-            </button>
-            <button type="submit"
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-white bg-[#0B3B2E] hover:bg-[#0A3127] transition-colors">
-              <FaMoneyBillWave size={11} /> Record Recovery
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <FormField label="Notes">
+          <textarea name="notes" value={formData.notes} rows={3}
+            placeholder="Recovery details or notes…"
+            onChange={(e) => set("notes", e.target.value)}
+            className="w-full border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-[#0B3B2E] resize-none" />
+        </FormField>
+      </form>
+    </Modal>
   );
 };
 

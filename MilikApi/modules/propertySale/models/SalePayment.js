@@ -6,7 +6,7 @@ const PAYMENT_STATUSES = ["pending", "paid", "cancelled"];
 
 const salePaymentSchema = new mongoose.Schema(
   {
-    business: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true, index: true },
+    business: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true },
     paymentNumber: { type: String, required: true, trim: true },
     deal: { type: mongoose.Schema.Types.ObjectId, ref: "SaleDeal", required: true, index: true },
     listing: { type: mongoose.Schema.Types.ObjectId, ref: "SaleListing", default: null },

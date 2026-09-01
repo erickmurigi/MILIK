@@ -7,7 +7,7 @@ const LETTER_TYPES = [
 ];
 
 const hrSignatorySchema = new mongoose.Schema({
-  company:     { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
+  company:     { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
   name:        { type: String, required: true, trim: true },
   title:       { type: String, required: true, trim: true },
   department:  { type: String, trim: true, default: '' },

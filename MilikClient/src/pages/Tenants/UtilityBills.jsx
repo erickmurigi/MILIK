@@ -291,7 +291,14 @@ const UtilityBills = () => {
                 {selectedCount > 0 && <span className="shrink-0 rounded border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">{selectedCount} selected</span>}
                 <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
                 {STATUS_FILTERS.map(({ val, label }) => (
-                  <button key={val} onClick={() => setDraftFilters((prev) => ({ ...prev, status: val }))} className={`h-[20px] shrink-0 px-1.5 text-[9px] font-semibold ${draftFilters.status === val ? `${MILIK_GREEN} text-white` : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"}`}>{label}</button>
+                  <button
+                    key={val}
+                    onClick={() => {
+                      setDraftFilters((prev) => ({ ...prev, status: val }));
+                      setAppliedFilters((prev) => ({ ...prev, status: val }));
+                    }}
+                    className={`h-[20px] shrink-0 px-1.5 text-[9px] font-semibold ${draftFilters.status === val ? `${MILIK_GREEN} text-white` : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"}`}
+                  >{label}</button>
                 ))}
                 <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
                 <input type="text" value={draftFilters.invoiceNo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: e.target.value.toUpperCase() }))} placeholder="Invoice #" className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />

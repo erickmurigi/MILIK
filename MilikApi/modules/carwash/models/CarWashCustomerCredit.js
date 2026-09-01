@@ -4,7 +4,7 @@ const { Schema, Types: { ObjectId } } = mongoose;
 
 const carWashCustomerCreditSchema = new Schema(
   {
-    business:  { type: ObjectId, ref: 'Company',         required: true, index: true },
+    business:  { type: ObjectId, ref: 'Company',         required: true },
     customer:  { type: ObjectId, ref: 'CarWashCustomer', required: true },
     plates:    [{ type: String, uppercase: true, trim: true }],
     amount:    { type: Number, required: true, min: 0.01 },

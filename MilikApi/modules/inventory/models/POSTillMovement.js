@@ -4,7 +4,7 @@ const MOVEMENT_TYPES = ["opening_float", "closing_float", "cash_in", "cash_out"]
 
 const posTillMovementSchema = new mongoose.Schema(
   {
-    business:  { type: mongoose.Schema.Types.ObjectId, ref: "Company",     required: true, index: true },
+    business:  { type: mongoose.Schema.Types.ObjectId, ref: "Company",     required: true },
     session:   { type: mongoose.Schema.Types.ObjectId, ref: "POSSession",  required: true },
     till:      { type: mongoose.Schema.Types.ObjectId, ref: "InvTill",     required: true },
     location:  { type: mongoose.Schema.Types.ObjectId, ref: "InvLocation", required: true },

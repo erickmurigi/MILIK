@@ -20,7 +20,7 @@ import AppSelect from "../../components/common/AppSelect";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import StatusBadge from "../../components/common/StatusBadge";
 import {
-  deleteLatePenalty,
+  deleteLatePenaltiesBatch,
   deleteLatePenaltyBatch,
   getLatePenaltyBatch,
   getLatePenaltyBatches,
@@ -510,15 +510,11 @@ const LatePenalties = () => {
 
     try {
       setProcessingBatchAction(true);
-      for (const itemId of itemIds) {
-        // eslint-disable-next-line no-await-in-loop
-        await deleteLatePenalty(itemId, { business: businessId });
-      }
-      toast.success(
-        itemIds.length === 1
-          ? "Late penalty deleted successfully."
-          : "Selected late penalties deleted successfully."
-      );
+      const res = await deleteLatePenaltiesBatch({
+        business: businessId,
+        itemIds,
+      });
+      toast.success(res?.message || "Selected late penalties deleted successfully.");
       setSelectedBatchRows({});
       await refreshOpenBatch();
     } catch (error) {

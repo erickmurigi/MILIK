@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const carWashMpesaNotificationSchema = new mongoose.Schema(
   {
-    business:   { type: mongoose.Schema.Types.ObjectId, ref: "Company",       required: true, index: true },
+    business:   { type: mongoose.Schema.Types.ObjectId, ref: "Company",       required: true },
     branch:     { type: mongoose.Schema.Types.ObjectId, ref: "CarWashBranch", default: null },
     shortCode:  { type: String, trim: true, default: "" },
 

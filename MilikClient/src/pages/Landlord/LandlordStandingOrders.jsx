@@ -32,6 +32,7 @@ import {
   getLandlords,
   reverseLandlordStandingOrderRun,
   runLandlordStandingOrder,
+  runLandlordStandingOrdersBatch,
   updateLandlordStandingOrder,
   updateLandlordStandingOrderStatus,
 } from "../../redux/apiCalls";
@@ -516,50 +517,60 @@ const LandlordStandingOrders = () => {
     }
 
     setBulkRunning(true);
-    let successCount = 0;
-    let failureCount = 0;
-    const updatedRows = new Map();
 
-    for (const row of runnableRows) {
+    const items = [];
+    let skippedNoPeriod = 0;
+    runnableRows.forEach((row) => {
       const nextPeriod = row?.eligiblePeriods?.[0] || null;
       if (!nextPeriod?.periodKey) {
-        failureCount += 1;
-        continue;
+        skippedNoPeriod += 1;
+        return;
+      }
+      items.push({
+        id: row._id,
+        periodKey: nextPeriod.periodKey,
+        amount: Number(row.amount || 0),
+        note: row.narration || row.title || "",
+      });
+    });
+
+    try {
+      const response = items.length
+        ? await runLandlordStandingOrdersBatch(items, {
+            business: currentCompany?._id,
+            company: currentCompany?._id,
+          })
+        : { succeeded: [], failed: [] };
+
+      const succeeded = Array.isArray(response?.succeeded) ? response.succeeded : [];
+      const failed = Array.isArray(response?.failed) ? response.failed : [];
+      const successCount = succeeded.length;
+      const failureCount = failed.length + skippedNoPeriod;
+
+      if (succeeded.length > 0) {
+        const updatedRows = new Map(succeeded.map((saved) => [String(saved?._id), saved]));
+        setRows((prev) => prev.map((row) => updatedRows.get(String(row._id)) || row));
       }
 
-      try {
-        const saved = await runLandlordStandingOrder(row._id, {
-          business: currentCompany?._id,
-          company: currentCompany?._id,
-          periodKey: nextPeriod.periodKey,
-          amount: Number(row.amount || 0),
-          note: row.narration || row.title || "",
-        });
-        updatedRows.set(String(row._id), saved);
-        successCount += 1;
-      } catch (error) {
-        failureCount += 1;
+      failed.forEach((item) => {
+        const row = runnableRows.find((r) => String(r._id) === String(item.id));
         toast.error(
-          error?.response?.data?.message ||
-            `Failed to process ${row.standingOrderNo || row.referenceNo || "a selected standing order"}`
+          item.reason ||
+            `Failed to process ${row?.standingOrderNo || row?.referenceNo || "a selected standing order"}`
         );
+      });
+
+      setSelectedIds([]);
+
+      if (successCount > 0 && failureCount === 0) {
+        toast.success(`Processed ${successCount} standing order period${successCount === 1 ? "" : "s"}.`);
+      } else if (successCount > 0 || failureCount > 0) {
+        toast.info(`Bulk run complete. Success: ${successCount}. Failed: ${failureCount}.`);
       }
-    }
-
-    if (updatedRows.size > 0) {
-      setRows((prev) => prev.map((row) => updatedRows.get(String(row._id)) || row));
-    }
-
-    setSelectedIds([]);
-    setBulkRunning(false);
-
-    if (successCount > 0 && failureCount === 0) {
-      toast.success(`Processed ${successCount} standing order period${successCount === 1 ? "" : "s"}.`);
-      return;
-    }
-
-    if (successCount > 0 || failureCount > 0) {
-      toast.info(`Bulk run complete. Success: ${successCount}. Failed: ${failureCount}.`);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to run selected standing orders.");
+    } finally {
+      setBulkRunning(false);
     }
   };
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTabState } from "../../hooks/useTabState";
+import useDebounce from '../../hooks/useDebounce';
 import {
   FaTag, FaPlus, FaEdit, FaTrash, FaToggleOn, FaToggleOff,
   FaRedoAlt, FaCheck, FaTimes, FaSearch,
@@ -113,12 +114,13 @@ export default function LeaveTypes() {
   const [saving, setSaving]     = useState(false);
   const [formMode, setFormMode] = useState(null);
   const [confirm, setConfirm]   = useState({ isOpen: false });
+  const debouncedSearch = useDebounce(search, 350);
 
   const { data: types = [], isLoading: loading, error, refetch } = useQuery({
-    queryKey: ['hr-leave-types', search, showInactive],
+    queryKey: ['hr-leave-types', debouncedSearch, showInactive],
     queryFn: async () => {
       const res = await adminRequests.get('/hr/leave-types', {
-        params: { search: search || undefined, includeInactive: showInactive ? 'true' : undefined },
+        params: { search: debouncedSearch || undefined, includeInactive: showInactive ? 'true' : undefined },
       });
       return res.data || [];
     },

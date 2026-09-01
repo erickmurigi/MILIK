@@ -143,7 +143,7 @@ router.post('/periods', verifyUser, async (req, res) => {
     if (!month || !year) return res.status(400).json({ message: 'Month and year are required' });
     if (month < 1 || month > 12) return res.status(400).json({ message: 'Invalid month' });
 
-    const existing = await HRPayrollPeriod.findOne({ company: companyId, month, year });
+    const existing = await HRPayrollPeriod.findOne({ company: companyId, month, year }).lean();
     if (existing) return res.status(409).json({ message: `Payroll period for this month already exists (${existing.label})` });
 
     const period = new HRPayrollPeriod({ company: companyId, month, year, notes, createdBy: currentUserId(req) });

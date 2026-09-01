@@ -1518,6 +1518,15 @@ export const updateExpenseRequisitionStatus = async (id, payload) => {
   return res.data;
 };
 
+export const batchDeleteExpenseRequisitions = async (ids, context = {}) => {
+  const res = await adminRequests.post("/expense-requisitions/batch-delete", {
+    ids,
+    business: context.business,
+    company: context.company,
+  });
+  return res.data;
+};
+
 export const deleteExpenseRequisition = async (id, context = {}) => {
   const params = new URLSearchParams();
   if (context.business) params.append("business", context.business);
@@ -1604,6 +1613,15 @@ export const updateLandlordStandingOrderStatus = async (id, payload) => {
 
 export const runLandlordStandingOrder = async (id, payload) => {
   const res = await adminRequests.post(`/landlord-standing-orders/${id}/run`, payload);
+  return res.data;
+};
+
+export const runLandlordStandingOrdersBatch = async (items, context = {}) => {
+  const res = await adminRequests.post("/landlord-standing-orders/batch-run", {
+    items,
+    business: context.business,
+    company: context.company,
+  });
   return res.data;
 };
 
@@ -2145,6 +2163,16 @@ export const createMeterReadingsBatch = async (payload) => {
   return res.data;
 };
 
+export const billMeterReadingsBatch = async (readingIds) => {
+  const res = await adminRequests.post("/meter-readings/batch-bill", { readingIds });
+  return res.data;
+};
+
+export const deleteMeterReadingsBatch = async (readingIds) => {
+  const res = await adminRequests.post("/meter-readings/batch-delete", { readingIds });
+  return res.data;
+};
+
 // ========== LATE PENALTIES SECTION ==========
 
 export const getLatePenaltyPostingAccounts = async (business) => {
@@ -2224,6 +2252,11 @@ export const deleteLatePenalty = async (id, payload = {}) => {
   if (payload?.business) params.append("business", payload.business);
   const query = params.toString();
   const res = await adminRequests.delete(`/late-penalties/${id}${query ? `?${query}` : ""}`, { data: payload });
+  return res.data;
+};
+
+export const deleteLatePenaltiesBatch = async (payload = {}) => {
+  const res = await adminRequests.post("/late-penalties/delete-batch", payload);
   return res.data;
 };
 
@@ -2665,6 +2698,11 @@ export const createTenantInvoicesBatch = async ({ business = null, items = [] } 
 // Delete / cancel tenant invoice (soft-reversal — backend treats DELETE as reverse)
 export const deleteTenantInvoice = async (invoiceId) => {
   const res = await adminRequests.delete(`/tenant-invoices/${invoiceId}`);
+  return res.data;
+};
+
+export const deleteTenantInvoicesBatch = async (ids) => {
+  const res = await adminRequests.post("/tenant-invoices/batch-delete", { ids });
   return res.data;
 };
 

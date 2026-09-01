@@ -801,7 +801,14 @@ const TenantDeposits = () => {
                 <span className="shrink-0 border border-amber-200 bg-amber-50 px-1 py-0.5 text-[8px] font-bold text-amber-700">O/S: {formatCurrency(totals.outstanding)}</span>
                 <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
                 {DEPOSIT_STATUS_FILTERS.map(({val,label}) => (
-                  <button key={val} onClick={() => setDraftFilters((prev) => ({ ...prev, status: val }))} className={`h-[20px] shrink-0 px-1.5 text-[9px] font-semibold ${draftFilters.status === val ? `${MILIK_GREEN} text-white` : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"}`}>{label}</button>
+                  <button
+                    key={val}
+                    onClick={() => {
+                      setDraftFilters((prev) => ({ ...prev, status: val }));
+                      setAppliedFilters((prev) => ({ ...prev, status: val }));
+                    }}
+                    className={`h-[20px] shrink-0 px-1.5 text-[9px] font-semibold ${draftFilters.status === val ? `${MILIK_GREEN} text-white` : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"}`}
+                  >{label}</button>
                 ))}
                 <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
                 <input type="text" value={draftFilters.invoiceNo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: normalizeUppercaseInput(e.target.value) }))} placeholder="Invoice #" className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
