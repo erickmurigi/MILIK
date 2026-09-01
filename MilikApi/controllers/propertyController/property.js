@@ -386,22 +386,23 @@ const getPropertyDependencySummary = async (property) => {
     countByIds(Lease, "unit", unitIds),
     countByIds(Maintenance, "unit", unitIds),
     countByPropertyOrUnits({ Model: Inspection, propertyId, unitIds }),
-    TenantInvoice.countDocuments({ property: propertyId }),
-    TenantInvoiceNote.countDocuments({ property: propertyId }),
+    TenantInvoice.countDocuments({ business: property.business, property: propertyId }),
+    TenantInvoiceNote.countDocuments({ business: property.business, property: propertyId }),
     countByIds(RentPayment, "unit", unitIds),
-    Receipt.countDocuments({ property: propertyId }),
-    MeterReading.countDocuments({ property: propertyId }),
-    LatePenaltyBatch.countDocuments({ property: propertyId }),
-    ProcessedStatement.countDocuments({ property: propertyId }),
-    LandlordStatement.countDocuments({ property: propertyId }),
-    LandlordStandingOrder.countDocuments({ property: propertyId }),
-    LandlordAdvancement.countDocuments({ property: propertyId }),
-    LandlordReceipt.countDocuments({ property: propertyId }),
-    PaymentVoucher.countDocuments({ property: propertyId }),
-    ExpenseProperty.countDocuments({ property: propertyId }),
-    ExpenseRequisition.countDocuments({ property: propertyId }),
-    JournalEntry.countDocuments({ property: propertyId }),
+    Receipt.countDocuments({ business: property.business, property: propertyId }),
+    MeterReading.countDocuments({ business: property.business, property: propertyId }),
+    LatePenaltyBatch.countDocuments({ business: property.business, "items.property": propertyId }),
+    ProcessedStatement.countDocuments({ business: property.business, property: propertyId }),
+    LandlordStatement.countDocuments({ business: property.business, property: propertyId }),
+    LandlordStandingOrder.countDocuments({ business: property.business, property: propertyId }),
+    LandlordAdvancement.countDocuments({ business: property.business, property: propertyId }),
+    LandlordReceipt.countDocuments({ business: property.business, property: propertyId }),
+    PaymentVoucher.countDocuments({ business: property.business, property: propertyId }),
+    ExpenseProperty.countDocuments({ business: property.business, property: propertyId }),
+    ExpenseRequisition.countDocuments({ business: property.business, property: propertyId }),
+    JournalEntry.countDocuments({ business: property.business, property: propertyId }),
     FinancialLedgerEntry.countDocuments({
+      business: property.business,
       property: propertyId,
       status: { $nin: ["void", "draft"] },
     }),
@@ -1625,6 +1626,7 @@ export const bulkImportProperties = async (req, res, next) => {
     const seenCodesInBatch = new Set();
     const seenLRInBatch = new Set();
     const pendingControlAccounts = [];
+    const preparedDocs = [];
 
     // For self-managing companies every property gets the same company-owner landlord — resolve once
     let cachedSelfManagingAssignment = null;
@@ -1747,8 +1749,7 @@ export const bulkImportProperties = async (req, res, next) => {
           lettingFeeValue: withLettingFeeImport ? Math.max(0, parseFloat(property.lettingFeeValue) || 100) : 100,
         });
 
-        const savedProperty = await newProperty.save();
-        pendingControlAccounts.push({ savedProperty, propertyName: property.propertyName, code: generatedPropertyCode });
+        preparedDocs.push({ newProperty, propertyName: property.propertyName, code: generatedPropertyCode });
       } catch (error) {
         results.failed.push({
           propertyName: property.propertyName || "",
@@ -1756,6 +1757,24 @@ export const bulkImportProperties = async (req, res, next) => {
         });
       }
     }
+
+    // Fire all saves concurrently instead of one round-trip per property — pre-save
+    // hooks (slug generation, landlord normalization) still run per-document via .save(),
+    // just no longer serialized behind an await in the loop above.
+    const saveResults = await Promise.allSettled(
+      preparedDocs.map(({ newProperty }) => newProperty.save())
+    );
+    saveResults.forEach((settled, idx) => {
+      const { propertyName, code } = preparedDocs[idx];
+      if (settled.status === "fulfilled") {
+        pendingControlAccounts.push({ savedProperty: settled.value, propertyName, code });
+      } else {
+        results.failed.push({
+          propertyName: propertyName || "",
+          error: settled.reason?.message || "Failed to create property",
+        });
+      }
+    });
 
     // Create control accounts in parallel, then bulk-update controlAccount field
     const controlAccountUpdates = await Promise.allSettled(

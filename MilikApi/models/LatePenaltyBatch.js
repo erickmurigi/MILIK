@@ -167,5 +167,6 @@ const LatePenaltyBatchSchema = new mongoose.Schema(
 
 LatePenaltyBatchSchema.index({ business: 1, runDate: -1 });
 LatePenaltyBatchSchema.index({ business: 1, rule: 1, periodKey: 1 });
+LatePenaltyBatchSchema.index({ business: 1, "items.property": 1 });
 
 export default mongoose.model("LatePenaltyBatch", LatePenaltyBatchSchema);

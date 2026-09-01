@@ -52,3 +52,25 @@ jobs:
           set -e
           find . -path ./node_modules -prune -o -name '*.js' -print0 \
             | xargs -0 -P 4 -n 1 node --check
+
+  api-tests:
+    name: MilikApi tests (Vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: MilikApi
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: MilikApi/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests (Vitest + in-memory Mongo replica set)
+        run: npm test

@@ -155,8 +155,8 @@ export const createLandlord = async (req, res, next) => {
       }
 
       if (
-        existingLandlord.regId === regIdValue ||
-        existingLandlord.idNumber === idNumberValue
+        (regIdValue && existingLandlord.regId === regIdValue) ||
+        (idNumberValue && existingLandlord.idNumber === idNumberValue)
       ) {
         return next(createError(400, "Reg/ID number already exists. Please use a different Reg/ID number."));
       }

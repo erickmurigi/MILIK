@@ -1440,14 +1440,28 @@ export const updatePaymentVoucherStatus = async (id, statusData = {}, context = 
   return res.data;
 };
 
-// Get all landlord payment vouchers for a company
+// Get all landlord payment vouchers for a company.
+// Backend caps each page at 200 (parsePagination maxLimit) — loop pages so callers
+// that rely on this being the FULL set (financial totals, payment history) don't
+// silently see only the first 50-200 records for businesses with more history than that.
 export const getLandlordPayments = async (companyId) => {
   const params = new URLSearchParams();
   if (companyId) params.append("business", companyId);
   if (companyId) params.append("company", companyId);
-  const query = params.toString();
-  const res = await adminRequests.get(`/landlord-payments${query ? `?${query}` : ""}`);
-  return extractList(res.data);
+  params.append("limit", "200");
+
+  let page = 1;
+  let pages = 1;
+  const all = [];
+  do {
+    params.set("page", String(page));
+    const res = await adminRequests.get(`/landlord-payments?${params.toString()}`);
+    all.push(...extractList(res.data));
+    pages = Number(res.data?.pages) || 1;
+    page += 1;
+  } while (page <= pages);
+
+  return all;
 };
 
 export const getPaymentVouchers = async (filters = {}) => {

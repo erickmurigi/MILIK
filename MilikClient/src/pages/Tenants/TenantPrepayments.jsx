@@ -13,6 +13,7 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { listRentPaymentsPage } from "../../redux/apiCalls";
 import { useTerms } from "../../hooks/useTerm";
 import { useTabState } from "../../hooks/useTabState";
+import useDebounce from "../../hooks/useDebounce";
 import { getProperties } from "../../redux/propertyRedux";
 import AppSelect from "../../components/common/AppSelect";
 import { getTenantName } from "../../utils/tenantUtils";
@@ -64,6 +65,7 @@ const TenantPrepayments = () => {
   const properties = useSelector(selectAllProperties);
 
   const [search, setSearch] = useTabState("/receipts/prepayments:search", "");
+  const debouncedSearch = useDebounce(search, 400);
   const [propertyFilter, setPropertyFilter] = useTabState("/receipts/prepayments:propertyFilter", "all");
   const [statusFilter, setStatusFilter] = useTabState("/receipts/prepayments:statusFilter", "all");
   const [currentPage, setCurrentPage] = useTabState("/receipts/prepayments:currentPage", 1);
@@ -92,7 +94,7 @@ const TenantPrepayments = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, propertyFilter, statusFilter]);
+  }, [debouncedSearch, propertyFilter, statusFilter]);
 
   useEffect(() => {
     let isMounted = true;
@@ -129,8 +131,8 @@ const TenantPrepayments = () => {
           includeTotals: true,
           status: buildStatusParam(statusFilter),
           property: propertyFilter !== "all" ? propertyFilter : undefined,
-          search: search.trim() || undefined,
-          tenantSearch: search.trim() || undefined,
+          search: debouncedSearch.trim() || undefined,
+          tenantSearch: debouncedSearch.trim() || undefined,
         });
 
         if (!isMounted) return;
@@ -209,7 +211,7 @@ const TenantPrepayments = () => {
     return () => {
       isMounted = false;
     };
-  }, [currentCompany?._id, currentPage, propertyFilter, search, statusFilter, pageSize]);
+  }, [currentCompany?._id, currentPage, propertyFilter, debouncedSearch, statusFilter, pageSize]);
 
   const propertyOptions = useMemo(
     () =>

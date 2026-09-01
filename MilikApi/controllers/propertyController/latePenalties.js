@@ -999,8 +999,25 @@ export const reverseLatePenalty = async (req, res, next) => {
       : [];
     const invoiceByIdMap = new Map(preloadedInvoices.map((inv) => [String(inv._id), inv]));
 
+    const preloadedLedgerEntries = preloadedInvoiceIds.length
+      ? await FinancialLedgerEntry.find({
+          business: businessId,
+          sourceTransactionType: "invoice",
+          sourceTransactionId: { $in: preloadedInvoiceIds },
+          category: { $ne: "REVERSAL" },
+        })
+      : [];
+    const ledgerEntriesByInvoiceId = new Map();
+    for (const entry of preloadedLedgerEntries) {
+      const key = String(entry.sourceTransactionId);
+      if (!ledgerEntriesByInvoiceId.has(key)) ledgerEntriesByInvoiceId.set(key, []);
+      ledgerEntriesByInvoiceId.get(key).push(entry);
+    }
+
     const results = [];
     const touchedAccountIds = new Set();
+    const touchedBatches = new Set();
+    const touchedTenants = new Map();
 
     for (const itemId of requestedItemIds) {
       try {
@@ -1031,7 +1048,9 @@ export const reverseLatePenalty = async (req, res, next) => {
           : null;
 
         if (penaltyInvoice) {
-          const originalEntries = await getOriginalPenaltyLedgerEntries(penaltyInvoice);
+          const originalEntries = ledgerEntriesByInvoiceId.has(String(penaltyInvoice._id))
+            ? ledgerEntriesByInvoiceId.get(String(penaltyInvoice._id))
+            : await getOriginalPenaltyLedgerEntries(penaltyInvoice);
 
           if (originalEntries.length === 0) {
             results.push({
@@ -1071,10 +1090,9 @@ export const reverseLatePenalty = async (req, res, next) => {
           };
           await penaltyInvoice.save();
 
-          await recomputeTenantFinancialState({
-            businessId: penaltyInvoice.business,
-            tenantId: penaltyInvoice.tenant,
-          });
+          if (penaltyInvoice.tenant) {
+            touchedTenants.set(String(penaltyInvoice.tenant), penaltyInvoice.business);
+          }
         }
 
         if (!penaltyInvoice) {
@@ -1093,8 +1111,7 @@ export const reverseLatePenalty = async (req, res, next) => {
         item.reversedBy = actorUserId;
         item.reversalReason = req.body?.reason || "Late penalty reversed from workspace";
         batch.markModified("items");
-        refreshPenaltyItemBatchStatus(batch);
-        await batch.save();
+        touchedBatches.add(batch);
 
         results.push({
           itemId: String(item._id),
@@ -1112,6 +1129,17 @@ export const reverseLatePenalty = async (req, res, next) => {
 
     if (touchedAccountIds.size > 0) {
       await aggregateChartOfAccountBalances(businessId, Array.from(touchedAccountIds));
+    }
+
+    // One recompute per tenant (not per reversed invoice) — batches with several
+    // penalties for the same tenant used to redundantly recompute mid-batch.
+    for (const [tenantId, tenantBusinessId] of touchedTenants) {
+      await recomputeTenantFinancialState({ businessId: tenantBusinessId, tenantId });
+    }
+
+    for (const batch of touchedBatches) {
+      refreshPenaltyItemBatchStatus(batch);
+      await batch.save();
     }
 
     const failed = results.filter((row) => row.status === "failed");
@@ -1230,8 +1258,25 @@ export const deleteLatePenaltiesBatch = async (req, res, next) => {
       : [];
     const invoiceByIdMap = new Map(preloadedInvoices.map((inv) => [String(inv._id), inv]));
 
+    const preloadedLedgerEntries = preloadedInvoiceIds.length
+      ? await FinancialLedgerEntry.find({
+          business: businessId,
+          sourceTransactionType: "invoice",
+          sourceTransactionId: { $in: preloadedInvoiceIds },
+          category: { $ne: "REVERSAL" },
+        }).lean()
+      : [];
+    const ledgerEntriesByInvoiceId = new Map();
+    for (const entry of preloadedLedgerEntries) {
+      const key = String(entry.sourceTransactionId);
+      if (!ledgerEntriesByInvoiceId.has(key)) ledgerEntriesByInvoiceId.set(key, []);
+      ledgerEntriesByInvoiceId.get(key).push(entry);
+    }
+
     const results = [];
     const touchedBatches = new Set();
+    const invoiceIdsToDelete = [];
+    const touchedTenants = new Map();
 
     for (const itemId of itemIds) {
       try {
@@ -1262,7 +1307,9 @@ export const deleteLatePenaltiesBatch = async (req, res, next) => {
           : null;
 
         if (penaltyInvoice) {
-          const originalEntries = await getOriginalPenaltyLedgerEntries(penaltyInvoice);
+          const originalEntries = ledgerEntriesByInvoiceId.has(String(penaltyInvoice._id))
+            ? ledgerEntriesByInvoiceId.get(String(penaltyInvoice._id))
+            : await getOriginalPenaltyLedgerEntries(penaltyInvoice);
           const hasJournalEntries = Array.isArray(penaltyInvoice.ledgerEntries) && penaltyInvoice.ledgerEntries.length > 0
             ? true
             : originalEntries.length > 0;
@@ -1277,11 +1324,10 @@ export const deleteLatePenaltiesBatch = async (req, res, next) => {
           }
 
           if (!["cancelled", "reversed"].includes(String(penaltyInvoice.status || "").toLowerCase())) {
-            await TenantInvoice.deleteOne({ _id: penaltyInvoice._id, business: businessId });
-            await recomputeTenantFinancialState({
-              businessId: penaltyInvoice.business,
-              tenantId: penaltyInvoice.tenant,
-            });
+            invoiceIdsToDelete.push(penaltyInvoice._id);
+            if (penaltyInvoice.tenant) {
+              touchedTenants.set(String(penaltyInvoice.tenant), penaltyInvoice.business);
+            }
           }
         }
 
@@ -1303,6 +1349,16 @@ export const deleteLatePenaltiesBatch = async (req, res, next) => {
           message: error.message || "Failed to delete late penalty.",
         });
       }
+    }
+
+    if (invoiceIdsToDelete.length > 0) {
+      await TenantInvoice.deleteMany({ _id: { $in: invoiceIdsToDelete }, business: businessId });
+    }
+
+    // One recompute per tenant (not per deleted invoice) — batches with several
+    // penalties for the same tenant used to redundantly recompute mid-batch.
+    for (const [tenantId, tenantBusinessId] of touchedTenants) {
+      await recomputeTenantFinancialState({ businessId: tenantBusinessId, tenantId });
     }
 
     for (const batch of touchedBatches) {

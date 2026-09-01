@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import ProcessedStatement from "../../models/ProcessedStatement.js";
 import Property from "../../models/Property.js";
+import Landlord from "../../models/Landlord.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import LandlordStatement from "../../models/LandlordStatement.js";
 import SequenceCounter from "../../models/SequenceCounter.js";
@@ -1208,6 +1209,25 @@ export const getStatementsByBusiness = async (req, res, next) => {
       }
     }
 
+    // Resolve search into a DB-level filter BEFORE pagination — filtering the
+    // already skip/limit'ed page in JS undercounted results and broke `total`/`pages`.
+    if (search) {
+      const term = String(search).trim();
+      if (term) {
+        const regex = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+        const [matchingLandlords, matchingProperties] = await Promise.all([
+          Landlord.find({ company: scopedBusinessId, landlordName: regex }).select("_id").lean(),
+          Property.find({ business: scopedBusinessId, $or: [{ propertyCode: regex }, { propertyName: regex }] }).select("_id").lean(),
+        ]);
+        query.$or = [
+          { landlord: { $in: matchingLandlords.map((l) => l._id) } },
+          { property: { $in: matchingProperties.map((p) => p._id) } },
+          { managementFeeInvoiceNumber: regex },
+          { sourceStatementNumber: regex },
+        ];
+      }
+    }
+
     const { page: pageNum, limit: limitNum, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 500 });
     const sortOrder = sortBy === "date-asc" ? { closedAt: 1 } : { closedAt: -1 };
 
@@ -1249,27 +1269,12 @@ export const getStatementsByBusiness = async (req, res, next) => {
       }
     }
 
-    // Apply text search post-populate (landlord name, property code/name, invoice number)
-    const filtered = search
-      ? statements.filter((s) => {
-          const q = String(search).toLowerCase();
-          return (
-            String(s.landlord?.landlordName || "").toLowerCase().includes(q) ||
-            String(s.property?.propertyCode || "").toLowerCase().includes(q) ||
-            String(s.property?.propertyName || s.property?.name || "").toLowerCase().includes(q) ||
-            String(s.managementFeeInvoiceNumber || "").toLowerCase().includes(q) ||
-            String(s.sourceStatementNumber || "").toLowerCase().includes(q)
-          );
-        })
-      : statements;
-
-    const resolvedTotal = search ? filtered.length : total;
     res.status(200).json({
       success: true,
-      statements: filtered,
-      total: resolvedTotal,
+      statements,
+      total,
       page: pageNum,
-      pages: Math.ceil(resolvedTotal / limitNum),
+      pages: Math.ceil(total / limitNum),
       limit: limitNum,
     });
   } catch (error) {

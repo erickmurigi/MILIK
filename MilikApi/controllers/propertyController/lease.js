@@ -200,7 +200,7 @@ const ensureNoConflictingAgreement = async ({
   return Lease.findOne(filter).select("_id agreementNumber status").lean();
 };
 
-const sanitizeLeasePayload = async ({ req, payload = {}, existingLease = null } = {}) => {
+const sanitizeLeasePayload = async ({ req, payload = {}, existingLease = null, excludeLeaseId = null } = {}) => {
   const businessId = resolveBusinessId(req);
   if (!businessId) {
     const error = new Error("Business context is required to manage agreements.");
@@ -243,7 +243,7 @@ const sanitizeLeasePayload = async ({ req, payload = {}, existingLease = null } 
     businessId,
     tenantId,
     unitId,
-    excludeLeaseId: existingLease?._id,
+    excludeLeaseId: excludeLeaseId || existingLease?._id,
     desiredStatus: status,
   });
 
@@ -622,6 +622,11 @@ export const renewLease = async (req, res, next) => {
         autoCreatedFromTenant: false,
         billingScheduleAdjustments: [],
       },
+      // The lease being renewed is still "active" at this point (it is only
+      // flipped to "renewed" further below) — without this, the conflicting-
+      // agreement check matches the lease against itself and renewal always
+      // fails with "Another active agreement already exists...".
+      excludeLeaseId: lease._id,
     });
 
     await Lease.findByIdAndUpdate(lease._id, {
