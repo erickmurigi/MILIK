@@ -47,6 +47,7 @@ import {
   createMeterReadingsBatch,
   deleteMeterReading,
   deleteMeterReadingsBatch,
+  downloadInvoicePdf,
   getMeterReadings,
   updateMeterReading,
   voidMeterReading,
@@ -90,6 +91,7 @@ const emptyBatchForm = {
   readingDate: new Date().toISOString().slice(0, 10),
   isMeterReset: false,
   allowVacant: false,
+  generateInvoices: true,
 };
 
 const emptyFilters = {
@@ -740,23 +742,53 @@ const MeterReadings = () => {
         readings: readingsPayload,
       });
 
-      await refreshReadings();
-
       const createdCount = response?.createdCount ?? response?.created?.length ?? 0;
       const skippedCount = response?.skippedCount ?? response?.skipped?.length ?? 0;
       const skippedList = Array.isArray(response?.skipped) ? response.skipped : [];
+      const createdIds = Array.isArray(response?.created) ? response.created.map((r) => r._id) : [];
 
-      if (createdCount > 0 && skippedCount === 0) {
-        toast.success(`${createdCount} meter reading${createdCount > 1 ? "s" : ""} captured successfully.`);
-      } else if (createdCount > 0 && skippedCount > 0) {
-        const reasons = skippedList
-          .slice(0, 4)
-          .map((s) => `${s.unitNumber || s.unit}: ${s.reason}`)
-          .join("; ");
-        toast.warn(`${createdCount} captured, ${skippedCount} skipped — ${reasons}`);
+      // Chain straight into billing so a batch capture becomes a batch of invoices in one
+      // step, unless the admin explicitly wants to review the drafts first (the "Bill
+      // Selected" bulk action already covers that path for any reading left as a draft).
+      let billedCount = 0;
+      let billFailedCount = 0;
+      let billFailedList = [];
+      if (batchForm.generateInvoices && createdIds.length) {
+        try {
+          const billResponse = await billMeterReadingsBatch(createdIds);
+          billedCount = billResponse?.succeededCount ?? billResponse?.succeeded?.length ?? 0;
+          billFailedCount = billResponse?.failedCount ?? billResponse?.failed?.length ?? 0;
+          billFailedList = Array.isArray(billResponse?.failed) ? billResponse.failed : [];
+        } catch (billError) {
+          billFailedCount = createdIds.length;
+          billFailedList = [{ reason: billError.response?.data?.message || "Invoice generation failed." }];
+        }
+      }
+
+      await refreshReadings();
+
+      const skipReasons = skippedList
+        .slice(0, 3)
+        .map((s) => `${s.unitNumber || s.unit}: ${s.reason}`)
+        .join("; ");
+      const billFailReasons = billFailedList.slice(0, 3).map((f) => f.reason).filter(Boolean).join("; ");
+      const parts = [];
+      if (createdCount > 0) {
+        parts.push(
+          batchForm.generateInvoices
+            ? `${billedCount} of ${createdCount} captured reading${createdCount > 1 ? "s" : ""} invoiced`
+            : `${createdCount} meter reading${createdCount > 1 ? "s" : ""} captured`
+        );
+      }
+      if (skippedCount > 0) parts.push(`${skippedCount} skipped (${skipReasons})`);
+      if (billFailedCount > 0) parts.push(`${billFailedCount} invoice generation failed (${billFailReasons})`);
+
+      if (createdCount === 0) {
+        toast.error(`No meter readings were captured.${skipReasons ? ` ${skipReasons}` : ""}`);
+      } else if (skippedCount === 0 && billFailedCount === 0) {
+        toast.success(parts.join(" — "));
       } else {
-        const reasons = skippedList.slice(0, 4).map((s) => s.reason).join("; ");
-        toast.error(`No meter readings were captured.${reasons ? ` ${reasons}` : ""}`);
+        toast.warn(parts.join(" — "));
       }
 
       setShowBatchModal(false);
@@ -1124,6 +1156,22 @@ const MeterReadings = () => {
       );
     } finally {
       setRowActionKey("");
+    }
+  };
+
+  // Reuses the same PDF endpoint/template as Rental Invoices — a billed meter reading
+  // is a real TenantInvoice (category UTILITY_CHARGE) under the hood, so no separate
+  // print pipeline is needed here.
+  const handlePrintInvoice = async (reading) => {
+    const invoiceId = reading?.billedInvoice?._id || reading?.billedInvoice;
+    if (!invoiceId) return;
+    try {
+      await downloadInvoicePdf(invoiceId, {
+        preview: true,
+        filename: `Invoice-${reading.billedInvoice?.invoiceNumber || invoiceId}.pdf`,
+      });
+    } catch {
+      toast.error("Failed to open invoice PDF. Try again.");
     }
   };
 
@@ -1629,6 +1677,21 @@ const MeterReadings = () => {
                       </p>
                     )}
 
+                    <label className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(batchForm.generateInvoices)}
+                        onChange={(e) => handleBatchFormChange("generateInvoices", e.target.checked)}
+                        className="h-4 w-4 rounded border-emerald-300"
+                      />
+                      <span className="font-medium">
+                        Generate invoices immediately after saving
+                      </span>
+                      <span className="text-emerald-700/70">
+                        — unchecked, readings are saved as drafts to review and bill later
+                      </span>
+                    </label>
+
                     {/* ── Units table ── */}
                     {!batchForm.property ? (
                       <div className="rounded border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-xs font-semibold text-slate-500">
@@ -1793,8 +1856,8 @@ const MeterReadings = () => {
                       >
                         <FaSave />{" "}
                         {batchSaving
-                          ? "Saving..."
-                          : `Save ${batchIncludedCount} Reading${batchIncludedCount === 1 ? "" : "s"}`}
+                          ? (batchForm.generateInvoices ? "Saving & invoicing..." : "Saving...")
+                          : `${batchForm.generateInvoices ? "Save & Invoice" : "Save"} ${batchIncludedCount} Reading${batchIncludedCount === 1 ? "" : "s"}`}
                       </button>
                     </div>
                   </div>
@@ -1945,6 +2008,11 @@ const MeterReadings = () => {
                     {canBillThis && (
                       <button onClick={() => handleBillSingle(reading)} className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800" title="Generate utility invoice" disabled={!canProcessReading || billBusy}>
                         <FaFileInvoiceDollar size={12} />
+                      </button>
+                    )}
+                    {reading.status === "billed" && reading?.billedInvoice && (
+                      <button onClick={() => handlePrintInvoice(reading)} className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800" title="Print invoice">
+                        <FaPrint size={12} />
                       </button>
                     )}
                     {!isVoid && (

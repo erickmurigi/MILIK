@@ -14,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
   FaArrowRight,
+  FaBolt,
   FaEnvelope,
   FaEye,
   FaFileInvoice,
@@ -35,7 +36,7 @@ import { useConfirm } from "../../context/ConfirmContext";
 import { getTenants } from "../../redux/tenantsRedux";
 import { getUnits } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
-import { createTenantInvoice, deleteTenantInvoice, getTenantInvoices } from "../../redux/invoiceApi";
+import { createTenantInvoice, createTenantInvoicesBatch, deleteTenantInvoice, getTenantInvoices } from "../../redux/invoiceApi";
 import { adminRequests } from "../../utils/requestMethods";
 import { fetchCompanySettings, selectCompanySettings } from "../../redux/companySettingsRedux";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
@@ -188,6 +189,13 @@ const fallbackDepositType = {
   isFallback: true,
 };
 
+// Only the rent deposit has a real, tenant-specific known value (set when the tenant/lease
+// was created — resolveTenantContext's depositAmount). Every other deposit type has no such
+// preset anywhere in the system, so its amount is never guessed — same "rent" substring
+// convention already used for Property.securityDeposits elsewhere in this codebase.
+const isRentDepositType = (depositType) =>
+  /rent/i.test(String(depositType?.name || "")) || /rent/i.test(String(depositType?.code || ""));
+
 const TenantDeposits = () => {
   const [pageSize, setPageSize] = useState(50);
   const confirm = useConfirm();
@@ -223,6 +231,16 @@ const TenantDeposits = () => {
   const selectedInvoicesSet = useMemo(() => new Set(selectedInvoices), [selectedInvoices]);
   const [selectAll, setSelectAll] = useState(false);
   const [showDepositModal, setShowDepositModal] = useState(false);
+  const [showBatchDepositModal, setShowBatchDepositModal] = useState(false);
+  const [batchDepositForm, setBatchDepositForm] = useState({
+    propertyId: "",
+    depositTypeId: "",
+    invoiceDate: todayInput(),
+    dueDate: todayInput(),
+  });
+  const [batchDepositIncluded, setBatchDepositIncluded] = useState({});
+  const [batchDepositAmounts, setBatchDepositAmounts] = useState({});
+  const [batchDepositSaving, setBatchDepositSaving] = useState(false);
   const [communicationModal, setCommunicationModal] = useState(null);
   const [tenantPropertyFilter, setTenantPropertyFilter] = useTabState("/tenants/deposits:tenantPropertyFilter", "any");
   const [depositForm, setDepositForm] = useState({
@@ -353,6 +371,142 @@ const TenantDeposits = () => {
     },
     [isLandlordWorkspace, propertyLookup, tenantLookup, unitLookup]
   );
+
+  // ── Batch deposit add: pure client-side derivation over already-loaded tenants/units ──
+  const batchDepositType = useMemo(
+    () => depositTypeLookup.get(String(batchDepositForm.depositTypeId || "")) || activeDepositTypes[0] || fallbackDepositType,
+    [depositTypeLookup, activeDepositTypes, batchDepositForm.depositTypeId]
+  );
+
+  const batchTenantRows = useMemo(() => {
+    if (!batchDepositForm.propertyId) return [];
+    return tenants
+      .filter((tenant) => ["active", "overdue"].includes(String(tenant?.status || "").trim().toLowerCase()))
+      .map((tenant) => resolveTenantContext(safeId(tenant)))
+      .filter((context) => context && String(context.propertyId) === String(batchDepositForm.propertyId));
+  }, [tenants, batchDepositForm.propertyId, resolveTenantContext]);
+
+  const batchDepositIncludedCount = batchTenantRows.filter((row) => batchDepositIncluded[row.tenantId]).length;
+
+  const resetBatchDepositForm = () => {
+    setBatchDepositForm({ propertyId: "", depositTypeId: "", invoiceDate: todayInput(), dueDate: todayInput() });
+    setBatchDepositIncluded({});
+    setBatchDepositAmounts({});
+  };
+
+  const openBatchDepositModal = () => {
+    resetBatchDepositForm();
+    const firstType = activeDepositTypes[0] || fallbackDepositType;
+    setBatchDepositForm((prev) => ({ ...prev, depositTypeId: String(firstType?._id || firstType?.code || "") }));
+    setShowBatchDepositModal(true);
+  };
+
+  const closeBatchDepositModal = () => {
+    if (batchDepositSaving) return;
+    setShowBatchDepositModal(false);
+  };
+
+  const handleBatchDepositFormChange = (field, value) => {
+    setBatchDepositForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const toggleBatchDepositInclude = (tenantId) => {
+    setBatchDepositIncluded((prev) => ({ ...prev, [tenantId]: !prev[tenantId] }));
+  };
+
+  const handleBatchDepositAmountChange = (tenantId, value) => {
+    setBatchDepositAmounts((prev) => ({ ...prev, [tenantId]: value }));
+  };
+
+  const handleBatchDepositSubmit = async (e) => {
+    e.preventDefault();
+    if (!currentCompany?._id) {
+      toast.error("Select a company first.");
+      return;
+    }
+    if (!batchDepositForm.propertyId || !batchDepositForm.depositTypeId) {
+      toast.error(`${termProperty} and deposit type are required.`);
+      return;
+    }
+
+    const items = batchTenantRows
+      .filter((row) => batchDepositIncluded[row.tenantId])
+      .map((row) => {
+        const rawAmount = batchDepositAmounts[row.tenantId];
+        const amount = Number(
+          rawAmount !== undefined && rawAmount !== ""
+            ? rawAmount
+            : (isRentDepositType(batchDepositType) ? row.depositAmount : 0)
+        );
+        if (!(amount > 0)) return null;
+
+        const depositTypeKey = slugify(batchDepositType?.code || batchDepositType?.name || "deposit");
+        return {
+          business: currentCompany._id,
+          property: row.propertyId,
+          landlord: row.landlordId || undefined,
+          tenant: row.tenantId,
+          unit: row.unitId,
+          category: "DEPOSIT_CHARGE",
+          amount,
+          depositHeldBy: row.depositHeldBy,
+          description: buildDepositDescription({
+            depositType: batchDepositType,
+            tenantName: row.tenantName,
+            invoiceDate: batchDepositForm.invoiceDate,
+          }),
+          invoiceDate: batchDepositForm.invoiceDate,
+          dueDate: batchDepositForm.dueDate,
+          metadata: {
+            billItemKey: `deposit:${depositTypeKey}`,
+            billItemLabel: batchDepositType?.name || "Deposit",
+            depositTypeId: batchDepositType?.isFallback ? "" : safeId(batchDepositType),
+            depositTypeCode: batchDepositType?.code || "",
+            depositTypeName: batchDepositType?.name || "Deposit",
+            refundable: batchDepositType?.refundable !== false,
+            invoicePriorityCategory: "deposit",
+            sourceTransactionType: "tenant_deposit_module",
+            includeInLandlordStatement: false,
+            includeInCategoryTotals: false,
+            depositHeldBy: row.depositHeldBy,
+            ledgerMode: row.depositHeldBy === "landlord" ? "off_ledger" : "on_ledger",
+          },
+        };
+      })
+      .filter(Boolean);
+
+    if (!items.length) {
+      toast.error(`Select at least one ${termTenant.toLowerCase()} and enter a deposit amount.`);
+      return;
+    }
+
+    setBatchDepositSaving(true);
+    try {
+      const response = await createTenantInvoicesBatch({ business: currentCompany._id, items });
+      const createdCount = response?.summary?.created ?? 0;
+      const failedCount = response?.summary?.failed ?? 0;
+      const failedList = (response?.results || []).filter((r) => !r.success);
+
+      await loadDepositInvoices();
+
+      if (createdCount > 0 && failedCount === 0) {
+        toast.success(`${createdCount} deposit invoice${createdCount > 1 ? "s" : ""} created successfully.`);
+      } else if (createdCount > 0 && failedCount > 0) {
+        const reasons = failedList.slice(0, 4).map((f) => f.error).filter(Boolean).join("; ");
+        toast.warn(`${createdCount} created, ${failedCount} failed — ${reasons}`);
+      } else {
+        const reasons = failedList.slice(0, 4).map((f) => f.error).filter(Boolean).join("; ");
+        toast.error(`No deposit invoices were created.${reasons ? ` ${reasons}` : ""}`);
+      }
+
+      setShowBatchDepositModal(false);
+      resetBatchDepositForm();
+    } catch (error) {
+      toast.error(error?.message || "Failed to save batch deposit invoices.");
+    } finally {
+      setBatchDepositSaving(false);
+    }
+  };
 
   const loadDepositInvoices = useCallback(async () => {
     if (!currentCompany?._id) {
@@ -528,9 +682,7 @@ const TenantDeposits = () => {
   const syncDepositFormDefaults = ({ tenantId, unitId, depositTypeId, invoiceDate = todayInput(), dueDate = todayInput() }) => {
     const context = resolveTenantContext(tenantId, unitId);
     const depositType = depositTypeLookup.get(String(depositTypeId || "")) || activeDepositTypes[0] || fallbackDepositType;
-    const amount = Number(depositType?.defaultAmount || 0) > 0
-      ? Number(depositType.defaultAmount)
-      : Number(context?.depositAmount || 0);
+    const amount = isRentDepositType(depositType) ? Number(context?.depositAmount || 0) : 0;
     const holder = context?.depositHeldBy || (isLandlordWorkspace ? "landlord" : "manager");
 
     return {
@@ -869,6 +1021,7 @@ const TenantDeposits = () => {
                 ><FaEnvelope size={7} /> Email</button>
                 <button onClick={handlePrintList} disabled={!canExportInvoice || totalFilteredCount === 0} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white shadow-sm ${totalFilteredCount > 0 ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"}`}><FaPrint size={7} /> Print</button>
                 <button type="button" onClick={openDepositModal} disabled={!canCreateInvoice} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white shadow-sm ${canCreateInvoice ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"}`}><FaPlus size={7} /> Deposit</button>
+                <button type="button" onClick={openBatchDepositModal} disabled={!canCreateInvoice} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white shadow-sm ${canCreateInvoice ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"}`}><FaBolt size={7} /> Batch Add</button>
               </div>
             </div>
 
@@ -1081,6 +1234,154 @@ const TenantDeposits = () => {
                 {saving ? "Saving..." : "Create Deposit Invoice"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showBatchDepositModal && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="flex w-full max-w-5xl max-h-[90vh] flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">Batch Add Deposit Invoices</h3>
+              <button onClick={closeBatchDepositModal} className="text-white/70 transition-colors hover:text-white">
+                <FaTimes />
+              </button>
+            </div>
+
+            <form className="flex flex-col flex-1 overflow-hidden" onSubmit={handleBatchDepositSubmit}>
+              <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-4">
+                <div className="grid gap-4 md:grid-cols-4">
+                  <div>
+                    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                      {termProperty} <span className="text-red-500">*</span>
+                    </label>
+                    <AppSelect
+                      size="md"
+                      searchable
+                      placeholder={`Select ${termProperty.toLowerCase()}`}
+                      value={batchDepositForm.propertyId}
+                      onChange={(v) => handleBatchDepositFormChange("propertyId", v ?? "")}
+                      options={activePropertyOptions}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                      Deposit Type <span className="text-red-500">*</span>
+                    </label>
+                    <AppSelect
+                      size="md"
+                      value={batchDepositForm.depositTypeId}
+                      onChange={(v) => handleBatchDepositFormChange("depositTypeId", v ?? "")}
+                      options={depositTypeFormOptions}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Invoice Date</label>
+                    <input
+                      type="date"
+                      value={batchDepositForm.invoiceDate}
+                      onChange={(e) => handleBatchDepositFormChange("invoiceDate", e.target.value)}
+                      className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Due Date</label>
+                    <input
+                      type="date"
+                      value={batchDepositForm.dueDate}
+                      onChange={(e) => handleBatchDepositFormChange("dueDate", e.target.value)}
+                      className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    />
+                  </div>
+                </div>
+
+                {batchDepositForm.depositTypeId && (
+                  <p className="text-[11px] font-medium text-slate-500">
+                    {isRentDepositType(batchDepositType)
+                      ? `Amount auto-fills from each ${termTenant.toLowerCase()}'s rent security deposit on file — edit any row if needed.`
+                      : `"${batchDepositType?.name || "This type"}" has no preset amount per ${termTenant.toLowerCase()} — enter each amount manually below.`}
+                  </p>
+                )}
+
+                {!batchDepositForm.propertyId ? (
+                  <div className="rounded border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-xs font-semibold text-slate-500">
+                    Select a {termProperty.toLowerCase()} to list its {termTenants.toLowerCase()}.
+                  </div>
+                ) : batchTenantRows.length === 0 ? (
+                  <div className="rounded border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-xs font-semibold text-slate-500">
+                    No active {termTenants.toLowerCase()} found for this {termProperty.toLowerCase()}.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded border border-slate-200">
+                    <table className="min-w-full text-xs">
+                      <thead className="bg-slate-100">
+                        <tr>
+                          <th className="px-2 py-2 text-left text-[10px] font-black uppercase tracking-wide text-slate-500"></th>
+                          <th className="px-2 py-2 text-left text-[10px] font-black uppercase tracking-wide text-slate-500">{termTenant}</th>
+                          <th className="px-2 py-2 text-left text-[10px] font-black uppercase tracking-wide text-slate-500">{termUnit}</th>
+                          <th className="px-2 py-2 text-right text-[10px] font-black uppercase tracking-wide text-slate-500">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {batchTenantRows.map((row) => {
+                          const included = Boolean(batchDepositIncluded[row.tenantId]);
+                          const defaultAmount = isRentDepositType(batchDepositType) ? row.depositAmount : 0;
+                          const value =
+                            batchDepositAmounts[row.tenantId] !== undefined
+                              ? batchDepositAmounts[row.tenantId]
+                              : (defaultAmount > 0 ? String(defaultAmount) : "");
+
+                          return (
+                            <tr key={row.tenantId} className={included ? "bg-emerald-50/40" : undefined}>
+                              <td className="px-2 py-1.5">
+                                <input
+                                  type="checkbox"
+                                  checked={included}
+                                  onChange={() => toggleBatchDepositInclude(row.tenantId)}
+                                  className="h-3.5 w-3.5 rounded border-slate-300"
+                                />
+                              </td>
+                              <td className="px-2 py-1.5 whitespace-nowrap font-semibold text-slate-900">{row.tenantName}</td>
+                              <td className="px-2 py-1.5 whitespace-nowrap text-slate-600">{row.unitName}</td>
+                              <td className="px-1 py-1.5">
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  disabled={!included}
+                                  value={value}
+                                  onChange={(e) => handleBatchDepositAmountChange(row.tenantId, e.target.value.replace(/[^\d.]/g, ""))}
+                                  className="w-28 border border-slate-200 bg-white px-2 py-1 text-right text-xs text-slate-900 outline-none focus:border-[#0B3B2E] disabled:bg-slate-50"
+                                  placeholder="0"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-3">
+                <span className="text-[11px] font-semibold text-slate-500">
+                  {batchDepositIncludedCount} {termTenant.toLowerCase()}{batchDepositIncludedCount === 1 ? "" : "s"} included
+                </span>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={closeBatchDepositModal} className="border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={batchDepositSaving || batchDepositIncludedCount === 0}
+                    className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-black uppercase text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60 ${MILIK_GREEN}`}
+                  >
+                    {batchDepositSaving ? <Spinner size="sm" /> : <FaMoneyBillWave />}
+                    {batchDepositSaving ? "Saving..." : `Create ${batchDepositIncludedCount} Deposit Invoice${batchDepositIncludedCount === 1 ? "" : "s"}`}
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}
