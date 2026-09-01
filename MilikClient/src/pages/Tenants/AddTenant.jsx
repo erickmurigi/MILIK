@@ -1167,7 +1167,7 @@ useEffect(() => {
       errors.additionalUnits = `Additional ${termUnits.toLowerCase()} cannot include the primary ${termUnit.toLowerCase()}`;
     }
     if (!formData.moveInDate) errors.moveInDate = "Move-in date is required (billing anchor)";
-    if (!formData.rent || parseFloat(formData.rent) <= 0) {
+    if (formData.rent === "" || formData.rent === null || Number.isNaN(parseFloat(formData.rent)) || parseFloat(formData.rent) < 0) {
       errors.rent = "Valid monthly rent is required";
     }
     if (formData.depositAmount === "" || Number(formData.depositAmount) < 0) {
