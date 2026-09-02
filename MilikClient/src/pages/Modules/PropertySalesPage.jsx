@@ -6,7 +6,6 @@ import {
 } from "react-icons/fa";
 import ModulePageShell from "./ModulePageShell";
 import { setTitle, setDesc, setKeywords, setCanonical, setOg, setTw, setSchema, removeSchema } from "../../utils/pageMeta";
-import propertySalesImg from "../../assets/landing/PROPERTY SALE.png";
 
 const SITE = "https://milikproperty.com";
 
@@ -200,7 +199,87 @@ export default function PropertySalesPage() {
                 </div>
                 <div className="module-hero-img-shell lg:h-full">
                   <div className="module-hero-img-frame lg:h-full">
-                    <img src={propertySalesImg} alt="Property sales agent using Milik" loading="eager" className="lg:h-full lg:object-cover" />
+                    <div className="module-hero-visual">
+                      <svg viewBox="0 0 380 480" fill="none" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                        <defs>
+                          <linearGradient id="psSky" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#d1fae5" />
+                            <stop offset="100%" stopColor="#a7f3d0" />
+                          </linearGradient>
+                          <linearGradient id="psRoof" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stopColor="#065f46" />
+                            <stop offset="100%" stopColor="#047857" />
+                          </linearGradient>
+                          <linearGradient id="psWall" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stopColor="#ecfdf5" />
+                            <stop offset="100%" stopColor="#d1fae5" />
+                          </linearGradient>
+                          <linearGradient id="psGround" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#a7f3d0" />
+                            <stop offset="100%" stopColor="#6ee7b7" />
+                          </linearGradient>
+                        </defs>
+
+                        <rect width="380" height="480" fill="url(#psSky)" />
+
+                        <circle cx="330" cy="50" r="28" fill="#fff9cc" opacity="0.55" />
+                        <circle cx="330" cy="50" r="17" fill="#ffe566" opacity="0.45" />
+                        <ellipse cx="66" cy="58" rx="34" ry="15" fill="white" opacity="0.65" />
+                        <ellipse cx="94" cy="50" rx="24" ry="12" fill="white" opacity="0.65" />
+
+                        <rect x="0" y="400" width="380" height="80" fill="url(#psGround)" />
+                        <rect x="0" y="398" width="380" height="5" fill="#34d399" opacity="0.6" />
+                        <rect x="150" y="400" width="80" height="80" fill="#bbf3da" opacity="0.7" />
+                        <rect x="162" y="408" width="56" height="3" rx="1.5" fill="white" opacity="0.4" />
+                        <rect x="162" y="418" width="56" height="3" rx="1.5" fill="white" opacity="0.32" />
+
+                        <ellipse cx="190" cy="404" rx="150" ry="14" fill="#065f46" opacity="0.12" />
+
+                        <rect x="88" y="228" width="204" height="172" fill="url(#psWall)" />
+                        <polygon points="80,228 190,140 300,228" fill="url(#psRoof)" />
+                        <rect x="176" y="118" width="16" height="34" fill="#065f46" />
+                        <rect x="170" y="112" width="28" height="10" rx="2" fill="#047857" />
+
+                        <rect x="104" y="252" width="50" height="50" rx="4" fill="#a7f3d0" opacity="0.7" />
+                        <rect x="104" y="252" width="50" height="50" rx="4" fill="none" stroke="#047857" strokeWidth="4" />
+                        <rect x="127" y="252" width="4" height="50" fill="#047857" />
+                        <rect x="104" y="275" width="50" height="4" fill="#047857" />
+
+                        <rect x="226" y="252" width="50" height="50" rx="4" fill="#a7f3d0" opacity="0.7" />
+                        <rect x="226" y="252" width="50" height="50" rx="4" fill="none" stroke="#047857" strokeWidth="4" />
+                        <rect x="249" y="252" width="4" height="50" fill="#047857" />
+                        <rect x="226" y="275" width="50" height="4" fill="#047857" />
+
+                        <rect x="166" y="320" width="48" height="80" rx="4" fill="#047857" />
+                        <rect x="170" y="324" width="40" height="72" rx="3" fill="#065f46" />
+                        <circle cx="200" cy="362" r="3" fill="#d1fae5" />
+
+                        <rect x="88" y="228" width="204" height="8" fill="#047857" opacity="0.5" />
+
+                        <rect x="20" y="392" width="6" height="60" fill="#065f46" />
+                        <circle cx="23" cy="378" r="26" fill="#34d399" opacity="0.75" />
+                        <circle cx="8" cy="392" r="16" fill="#34d399" opacity="0.65" />
+                        <circle cx="38" cy="390" r="18" fill="#34d399" opacity="0.7" />
+
+                        <circle cx="340" cy="398" r="14" fill="#34d399" opacity="0.6" />
+                        <circle cx="356" cy="404" r="10" fill="#34d399" opacity="0.5" />
+
+                        <rect x="322" y="278" width="7" height="122" fill="#065f46" />
+                        <rect x="298" y="238" width="70" height="46" rx="4" fill="white" />
+                        <rect x="298" y="238" width="70" height="46" rx="4" fill="none" stroke="#047857" strokeWidth="3" />
+                        <rect x="306" y="246" width="54" height="6" rx="3" fill="#047857" opacity="0.35" />
+                        <rect x="306" y="256" width="40" height="5" rx="2.5" fill="#047857" opacity="0.25" />
+                        <polygon points="292,268 374,254 374,278 292,292" fill="#f59e0b" opacity="0.95" />
+                        <text x="333" y="276" textAnchor="middle" fontSize="15" fontWeight="800" fill="#3f1d00" transform="rotate(-8 333 273)">SOLD</text>
+
+                        <g transform="translate(96,352)">
+                          <circle cx="0" cy="0" r="30" fill="white" opacity="0.9" />
+                          <path d="M-14 2 l7 -7 h9 l6 6 6 -6 h5 l-9 11 -8 8 -8 -3 z" fill="#047857" />
+                          <path d="M-16 -2 l-6 6 8 8 6 -3 z" fill="#065f46" opacity="0.85" />
+                          <path d="M18 -2 l6 6 -8 8 -6 -3 z" fill="#34d399" opacity="0.85" />
+                        </g>
+                      </svg>
+                    </div>
                     <div className="absolute inset-0 bg-gradient-to-t from-emerald-900/45 via-transparent to-transparent" />
                     <div className="module-hero-badge bg-emerald-700/90 text-white">
                       <div>

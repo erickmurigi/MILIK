@@ -11,6 +11,27 @@ const unitUtilitySchema = new mongoose.Schema(
   { _id: true }
 );
 
+// Mirrors Property.securityDeposits' sub-schema shape (depositType/chargeMode/amount/currency/refundable)
+// so non-rent deposit types configured on the property can be propagated down to a unit and edited per-unit.
+const unitDepositSchema = new mongoose.Schema(
+  {
+    depositType: { type: String, trim: true },
+    amount: { type: Number, default: 0, min: 0 },
+    chargeMode: {
+      type: String,
+      enum: ["Percentage", "Fixed Amount"],
+      default: "Fixed Amount",
+    },
+    refundable: { type: Boolean, default: true },
+    currency: {
+      type: String,
+      enum: ["KES", "USD"],
+      default: "KES",
+    },
+  },
+  { _id: true }
+);
+
 const UnitSchema = new mongoose.Schema(
   {
     unitNumber: {
@@ -54,6 +75,11 @@ const UnitSchema = new mongoose.Schema(
 
     utilities: {
       type: [unitUtilitySchema],
+      default: [],
+    },
+
+    deposits: {
+      type: [unitDepositSchema],
       default: [],
     },
 
@@ -166,6 +192,17 @@ UnitSchema.pre("validate", function (next) {
       utility: typeof item?.utility === "string" ? item.utility.trim() : item?.utility,
       unitCharge: Number(item?.unitCharge || 0),
       isIncluded: !!item?.isIncluded,
+    }));
+  }
+
+  if (Array.isArray(this.deposits)) {
+    this.deposits = this.deposits.map((item) => ({
+      ...item,
+      depositType: typeof item?.depositType === "string" ? item.depositType.trim() : item?.depositType,
+      amount: Number(item?.amount || 0),
+      chargeMode: item?.chargeMode === "Percentage" ? "Percentage" : "Fixed Amount",
+      refundable: item?.refundable !== false,
+      currency: item?.currency === "USD" ? "USD" : "KES",
     }));
   }
 

@@ -6,7 +6,6 @@ import {
 } from "react-icons/fa";
 import ModulePageShell from "./ModulePageShell";
 import { setTitle, setDesc, setKeywords, setCanonical, setOg, setTw, setSchema, removeSchema } from "../../utils/pageMeta";
-import inventoryImg from "../../assets/landing/INVENTORY AND POS.png";
 
 const SITE = "https://milikproperty.com";
 
@@ -200,7 +199,104 @@ export default function InventoryPage() {
                 </div>
                 <div className="module-hero-img-shell lg:h-full">
                   <div className="module-hero-img-frame lg:h-full">
-                    <img src={inventoryImg} alt="Inventory manager using Milik POS system" loading="eager" className="lg:h-full lg:object-cover" />
+                    <div className="module-hero-visual">
+                      <svg viewBox="0 0 380 480" fill="none" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                        <defs>
+                          <linearGradient id="ivWall" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#ffedd5" />
+                            <stop offset="100%" stopColor="#fed7aa" />
+                          </linearGradient>
+                          <linearGradient id="ivShelf" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#9a3412" />
+                            <stop offset="100%" stopColor="#7c2d12" />
+                          </linearGradient>
+                          <linearGradient id="ivFloor" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#fdba74" />
+                            <stop offset="100%" stopColor="#fb923c" />
+                          </linearGradient>
+                          <linearGradient id="ivCounter" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#c2410c" />
+                            <stop offset="100%" stopColor="#9a3412" />
+                          </linearGradient>
+                          <linearGradient id="ivScreen" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#fff7ed" />
+                            <stop offset="100%" stopColor="#fed7aa" />
+                          </linearGradient>
+                        </defs>
+
+                        <rect width="380" height="480" fill="url(#ivWall)" />
+
+                        <ellipse cx="100" cy="60" rx="46" ry="10" fill="white" opacity="0.4" />
+                        <polygon points="100,52 130,86 70,86" fill="#fed7aa" opacity="0.55" />
+
+                        <rect x="0" y="404" width="380" height="76" fill="url(#ivFloor)" />
+                        <rect x="0" y="402" width="380" height="5" fill="#f97316" opacity="0.5" />
+                        <rect x="10" y="420" width="360" height="3" fill="#c2410c" opacity="0.25" />
+                        <rect x="10" y="440" width="360" height="3" fill="#c2410c" opacity="0.2" />
+                        <rect x="10" y="460" width="360" height="3" fill="#c2410c" opacity="0.18" />
+
+                        <rect x="30" y="86" width="150" height="16" rx="3" fill="url(#ivShelf)" />
+                        <rect x="30" y="150" width="150" height="16" rx="3" fill="url(#ivShelf)" />
+                        <rect x="30" y="214" width="150" height="16" rx="3" fill="url(#ivShelf)" />
+                        <rect x="30" y="278" width="150" height="16" rx="3" fill="url(#ivShelf)" />
+                        <rect x="30" y="86" width="14" height="208" fill="url(#ivShelf)" />
+                        <rect x="166" y="86" width="14" height="208" fill="url(#ivShelf)" />
+
+                        <rect x="48" y="106" width="36" height="40" rx="3" fill="#c2410c" />
+                        <rect x="48" y="106" width="36" height="6" fill="#ea580c" />
+                        <rect x="64" y="106" width="4" height="40" fill="#7c2d12" />
+                        <rect x="90" y="112" width="30" height="34" rx="3" fill="#fb923c" />
+                        <rect x="90" y="112" width="30" height="5" fill="#fdba74" />
+                        <rect x="128" y="100" width="34" height="46" rx="3" fill="#ea580c" />
+                        <rect x="128" y="100" width="34" height="6" fill="#fb923c" />
+                        <rect x="134" y="112" width="2" height="28" fill="white" opacity="0.6" />
+                        <rect x="138" y="112" width="2" height="28" fill="white" opacity="0.4" />
+                        <rect x="142" y="112" width="2" height="28" fill="white" opacity="0.6" />
+                        <rect x="146" y="112" width="2" height="28" fill="white" opacity="0.4" />
+
+                        <rect x="48" y="172" width="30" height="38" rx="3" fill="#fb923c" />
+                        <rect x="82" y="166" width="36" height="44" rx="3" fill="#c2410c" />
+                        <rect x="82" y="166" width="36" height="6" fill="#ea580c" />
+                        <rect x="122" y="174" width="32" height="36" rx="3" fill="#ea580c" />
+
+                        <rect x="52" y="236" width="34" height="38" rx="3" fill="#ea580c" />
+                        <rect x="90" y="240" width="34" height="34" rx="3" fill="#fb923c" />
+                        <rect x="128" y="232" width="34" height="42" rx="3" fill="#c2410c" />
+                        <rect x="128" y="232" width="34" height="6" fill="#ea580c" />
+
+                        <rect x="46" y="298" width="140" height="10" rx="3" fill="#7c2d12" opacity="0.35" />
+                        <rect x="52" y="296" width="60" height="22" rx="3" fill="#9a3412" />
+                        <rect x="118" y="292" width="44" height="28" rx="3" fill="#c2410c" />
+                        <path d="M56 316 v10 M64 316 v10 M72 316 v10 M80 316 v10 M88 316 v10 M96 316 v10 M104 316 v10" stroke="#3f1c0f" strokeWidth="1.6" opacity="0.55" />
+
+                        <rect x="212" y="252" width="150" height="120" rx="10" fill="url(#ivCounter)" />
+                        <rect x="212" y="252" width="150" height="14" rx="6" fill="#ea580c" />
+                        <rect x="224" y="284" width="46" height="6" rx="3" fill="#fdba74" opacity="0.6" />
+                        <rect x="224" y="296" width="60" height="6" rx="3" fill="#fdba74" opacity="0.45" />
+
+                        <rect x="288" y="180" width="66" height="76" rx="6" fill="#431407" />
+                        <rect x="294" y="186" width="54" height="46" rx="3" fill="url(#ivScreen)" />
+                        <polyline points="298,222 310,206 320,214 334,196 344,204" stroke="#ea580c" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                        <rect x="316" y="236" width="20" height="10" fill="#7c2d12" />
+                        <rect x="306" y="246" width="40" height="6" rx="3" fill="#3f1c0f" />
+
+                        <rect x="248" y="204" width="44" height="14" rx="4" fill="#1c0a03" transform="rotate(-18 270 211)" />
+                        <circle cx="253" cy="220" r="5" fill="#fb923c" transform="rotate(-18 270 211)" />
+                        <rect x="240" y="208" width="16" height="4" fill="#ef4444" opacity="0.85" transform="rotate(-18 270 211)" />
+
+                        <rect x="234" y="272" width="52" height="34" rx="3" fill="#fdba74" />
+                        <rect x="238" y="276" width="2" height="26" fill="#7c2d12" opacity="0.7" />
+                        <rect x="243" y="276" width="2" height="26" fill="#7c2d12" opacity="0.5" />
+                        <rect x="248" y="276" width="2" height="26" fill="#7c2d12" opacity="0.7" />
+                        <rect x="253" y="276" width="2" height="26" fill="#7c2d12" opacity="0.5" />
+                        <rect x="258" y="276" width="2" height="26" fill="#7c2d12" opacity="0.7" />
+                        <rect x="263" y="276" width="2" height="26" fill="#7c2d12" opacity="0.5" />
+                        <rect x="268" y="276" width="2" height="26" fill="#7c2d12" opacity="0.7" />
+                        <rect x="273" y="276" width="2" height="26" fill="#7c2d12" opacity="0.5" />
+
+                        <ellipse cx="190" cy="404" rx="150" ry="14" fill="#7c2d12" opacity="0.15" />
+                      </svg>
+                    </div>
                     <div className="absolute inset-0 bg-gradient-to-t from-orange-900/45 via-transparent to-transparent" />
                     <div className="module-hero-badge bg-orange-700/90 text-white">
                       <div>

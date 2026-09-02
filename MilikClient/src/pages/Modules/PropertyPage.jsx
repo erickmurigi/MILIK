@@ -6,7 +6,6 @@ import {
 } from "react-icons/fa";
 import ModulePageShell from "./ModulePageShell";
 import { setTitle, setDesc, setKeywords, setCanonical, setOg, setTw, setSchema, removeSchema } from "../../utils/pageMeta";
-import propertyImg from "../../assets/landing/PROPERTY MANAGEMENT.png";
 
 const SITE = "https://milikproperty.com";
 
@@ -201,7 +200,174 @@ export default function PropertyPage() {
                 </div>
                 <div className="module-hero-img-shell lg:h-full">
                   <div className="module-hero-img-frame lg:h-full">
-                    <img src={propertyImg} alt="Property manager using Milik software" loading="eager" className="lg:h-full lg:object-cover" />
+                    <div className="module-hero-visual">
+                      <svg viewBox="0 0 380 480" fill="none" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                        <defs>
+                          <linearGradient id="pSky" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#e8f5ef" />
+                            <stop offset="100%" stopColor="#cde8da" />
+                          </linearGradient>
+                          <linearGradient id="pBldg" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stopColor="#0e4535" />
+                            <stop offset="100%" stopColor="#0B3B2E" />
+                          </linearGradient>
+                          <linearGradient id="pGround" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#b8dfc8" />
+                            <stop offset="100%" stopColor="#9ecdb4" />
+                          </linearGradient>
+                          <linearGradient id="pLitWin" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#ffffff" />
+                            <stop offset="100%" stopColor="#dff5ea" />
+                          </linearGradient>
+                        </defs>
+
+                        <rect width="380" height="480" fill="url(#pSky)" />
+
+                        <circle cx="344" cy="42" r="28" fill="#fff9cc" opacity="0.55" />
+                        <circle cx="344" cy="42" r="17" fill="#ffe566" opacity="0.42" />
+
+                        <ellipse cx="68" cy="56" rx="38" ry="18" fill="white" opacity="0.7" />
+                        <ellipse cx="98" cy="47" rx="28" ry="14" fill="white" opacity="0.7" />
+                        <ellipse cx="46" cy="63" rx="23" ry="12" fill="white" opacity="0.7" />
+                        <ellipse cx="288" cy="38" rx="30" ry="13" fill="white" opacity="0.48" />
+                        <ellipse cx="312" cy="30" rx="21" ry="11" fill="white" opacity="0.48" />
+
+                        <rect x="6" y="290" width="50" height="150" rx="4" fill="#0B3B2E" opacity="0.11" />
+                        <rect x="324" y="300" width="50" height="140" rx="4" fill="#0B3B2E" opacity="0.1" />
+                        <rect x="18" y="300" width="10" height="12" rx="2" fill="white" opacity="0.2" />
+                        <rect x="34" y="300" width="10" height="12" rx="2" fill="white" opacity="0.2" />
+                        <rect x="18" y="322" width="10" height="12" rx="2" fill="white" opacity="0.2" />
+                        <rect x="34" y="322" width="10" height="12" rx="2" fill="white" opacity="0.2" />
+                        <rect x="334" y="312" width="30" height="10" rx="2" fill="white" opacity="0.15" />
+                        <rect x="334" y="332" width="30" height="10" rx="2" fill="white" opacity="0.15" />
+
+                        <rect x="0" y="418" width="380" height="62" fill="url(#pGround)" />
+                        <rect x="0" y="416" width="380" height="5" fill="#8ecbaa" opacity="0.65" />
+
+                        <rect x="148" y="418" width="84" height="62" rx="3" fill="#c5e6d2" opacity="0.8" />
+                        <rect x="162" y="426" width="56" height="3" rx="1" fill="white" opacity="0.4" />
+                        <rect x="162" y="436" width="56" height="3" rx="1" fill="white" opacity="0.32" />
+                        <rect x="162" y="446" width="56" height="3" rx="1" fill="white" opacity="0.28" />
+
+                        <rect x="66" y="420" width="248" height="10" rx="5" fill="#0B3B2E" opacity="0.11" />
+
+                        <rect x="70" y="90" width="240" height="332" rx="8" fill="url(#pBldg)" />
+
+                        <rect x="62" y="82" width="256" height="14" rx="6" fill="#073029" />
+                        <rect x="78" y="66" width="224" height="20" rx="5" fill="#082d22" />
+
+                        <rect x="164" y="48" width="52" height="20" rx="4" fill="#051e14" />
+                        <ellipse cx="190" cy="48" rx="26" ry="11" fill="#073328" />
+                        <rect x="166" y="36" width="48" height="14" rx="5" fill="#082d22" />
+                        <rect x="186" y="58" width="5" height="10" rx="2" fill="#051e14" />
+                        <rect x="194" y="58" width="5" height="10" rx="2" fill="#051e14" />
+
+                        <rect x="189" y="12" width="3" height="26" fill="#062820" />
+                        <polygon points="192,12 208,18 192,24" fill="#C96F00" />
+
+                        <rect x="70" y="170" width="240" height="5" rx="1" fill="#062820" />
+                        <rect x="70" y="250" width="240" height="5" rx="1" fill="#062820" />
+                        <rect x="70" y="330" width="240" height="5" rx="1" fill="#062820" />
+
+                        <rect x="84" y="100" width="38" height="60" rx="4" fill="#18a06f" opacity="0.35" />
+                        <rect x="86" y="102" width="34" height="56" rx="3" fill="url(#pLitWin)" />
+                        <rect x="86" y="102" width="14" height="56" rx="2" fill="white" opacity="0.28" />
+                        <rect x="132" y="100" width="38" height="60" rx="4" fill="#18a06f" opacity="0.25" />
+                        <rect x="134" y="102" width="34" height="56" rx="3" fill="#0d4f38" opacity="0.82" />
+                        <rect x="180" y="100" width="38" height="60" rx="4" fill="#18a06f" opacity="0.35" />
+                        <rect x="182" y="102" width="34" height="56" rx="3" fill="url(#pLitWin)" />
+                        <rect x="182" y="102" width="14" height="56" rx="2" fill="white" opacity="0.28" />
+                        <rect x="228" y="100" width="38" height="60" rx="4" fill="#18a06f" opacity="0.28" />
+                        <rect x="230" y="102" width="34" height="56" rx="3" fill="#dff5ea" opacity="0.55" />
+
+                        <rect x="76" y="157" width="228" height="5" rx="2" fill="#C96F00" opacity="0.78" />
+                        <rect x="78" y="143" width="3" height="18" fill="#C96F00" opacity="0.52" />
+                        <rect x="122" y="143" width="3" height="18" fill="#C96F00" opacity="0.52" />
+                        <rect x="168" y="143" width="3" height="18" fill="#C96F00" opacity="0.52" />
+                        <rect x="214" y="143" width="3" height="18" fill="#C96F00" opacity="0.52" />
+                        <rect x="298" y="143" width="3" height="18" fill="#C96F00" opacity="0.52" />
+
+                        <rect x="84" y="180" width="38" height="60" rx="4" fill="#18a06f" opacity="0.25" />
+                        <rect x="86" y="182" width="34" height="56" rx="3" fill="#0d4f38" opacity="0.78" />
+                        <rect x="132" y="180" width="38" height="60" rx="4" fill="#18a06f" opacity="0.35" />
+                        <rect x="134" y="182" width="34" height="56" rx="3" fill="url(#pLitWin)" />
+                        <rect x="134" y="182" width="14" height="56" rx="2" fill="white" opacity="0.25" />
+                        <rect x="180" y="180" width="38" height="60" rx="4" fill="#18a06f" opacity="0.35" />
+                        <rect x="182" y="182" width="34" height="56" rx="3" fill="#dff5ea" opacity="0.88" />
+                        <rect x="182" y="182" width="34" height="16" rx="2" fill="white" opacity="0.32" />
+                        <rect x="228" y="180" width="38" height="60" rx="4" fill="#18a06f" opacity="0.35" />
+                        <rect x="230" y="182" width="34" height="56" rx="3" fill="url(#pLitWin)" />
+
+                        <rect x="76" y="237" width="228" height="5" rx="2" fill="#C96F00" opacity="0.72" />
+                        <rect x="78" y="223" width="3" height="18" fill="#C96F00" opacity="0.5" />
+                        <rect x="122" y="223" width="3" height="18" fill="#C96F00" opacity="0.5" />
+                        <rect x="168" y="223" width="3" height="18" fill="#C96F00" opacity="0.5" />
+                        <rect x="214" y="223" width="3" height="18" fill="#C96F00" opacity="0.5" />
+                        <rect x="298" y="223" width="3" height="18" fill="#C96F00" opacity="0.5" />
+
+                        <rect x="84" y="259" width="38" height="61" rx="4" fill="#18a06f" opacity="0.35" />
+                        <rect x="86" y="261" width="34" height="57" rx="3" fill="url(#pLitWin)" />
+                        <rect x="132" y="259" width="38" height="61" rx="4" fill="#18a06f" opacity="0.35" />
+                        <rect x="134" y="261" width="34" height="57" rx="3" fill="#dff5ea" opacity="0.88" />
+                        <rect x="134" y="261" width="34" height="16" rx="2" fill="white" opacity="0.3" />
+                        <rect x="134" y="277" width="14" height="41" rx="2" fill="#c8eeda" opacity="0.55" />
+                        <rect x="180" y="259" width="38" height="61" rx="4" fill="#18a06f" opacity="0.25" />
+                        <rect x="182" y="261" width="34" height="57" rx="3" fill="#0d4f38" opacity="0.78" />
+                        <rect x="228" y="259" width="38" height="61" rx="4" fill="#18a06f" opacity="0.35" />
+                        <rect x="230" y="261" width="34" height="57" rx="3" fill="url(#pLitWin)" />
+                        <rect x="230" y="261" width="13" height="57" rx="2" fill="white" opacity="0.28" />
+
+                        <rect x="76" y="317" width="228" height="5" rx="2" fill="#C96F00" opacity="0.72" />
+                        <rect x="78" y="303" width="3" height="18" fill="#C96F00" opacity="0.5" />
+                        <rect x="122" y="303" width="3" height="18" fill="#C96F00" opacity="0.5" />
+                        <rect x="168" y="303" width="3" height="18" fill="#C96F00" opacity="0.5" />
+                        <rect x="214" y="303" width="3" height="18" fill="#C96F00" opacity="0.5" />
+                        <rect x="298" y="303" width="3" height="18" fill="#C96F00" opacity="0.5" />
+
+                        <rect x="84" y="339" width="54" height="79" rx="4" fill="#082d22" />
+                        <rect x="86" y="354" width="50" height="36" rx="3" fill="#0d4f38" opacity="0.72" />
+                        <rect x="90" y="341" width="42" height="11" rx="3" fill="#C96F00" opacity="0.82" />
+
+                        <rect x="148" y="335" width="84" height="83" rx="6" fill="#062820" />
+                        <rect x="150" y="337" width="80" height="17" rx="4" fill="#0B3B2E" opacity="0.5" />
+                        <rect x="150" y="354" width="38" height="64" rx="4" fill="#18a06f" opacity="0.48" />
+                        <rect x="192" y="354" width="38" height="64" rx="4" fill="#18a06f" opacity="0.48" />
+                        <rect x="159" y="358" width="14" height="14" rx="2" fill="#ccf0e2" opacity="0.68" />
+                        <rect x="207" y="358" width="14" height="14" rx="2" fill="#ccf0e2" opacity="0.68" />
+                        <circle cx="188" cy="388" r="3" fill="#C96F00" />
+                        <circle cx="192" cy="388" r="3" fill="#C96F00" />
+
+                        <rect x="242" y="339" width="54" height="79" rx="4" fill="#082d22" />
+                        <rect x="244" y="354" width="50" height="36" rx="3" fill="#0d4f38" opacity="0.72" />
+                        <rect x="248" y="341" width="42" height="11" rx="3" fill="#18a06f" opacity="0.58" />
+
+                        <rect x="140" y="334" width="100" height="17" rx="4" fill="#062820" />
+                        <rect x="143" y="337" width="94" height="11" rx="3" fill="#C96F00" opacity="0.22" />
+
+                        <rect x="140" y="414" width="100" height="6" rx="2" fill="#062820" opacity="0.38" />
+                        <rect x="148" y="419" width="84" height="4" rx="2" fill="#062820" opacity="0.22" />
+
+                        <circle cx="76" cy="92" r="4" fill="#C96F00" opacity="0.88" />
+                        <circle cx="304" cy="92" r="4" fill="#C96F00" opacity="0.88" />
+                        <circle cx="190" cy="86" r="5" fill="#C96F00" opacity="0.82" />
+
+                        <rect x="26" y="375" width="12" height="48" rx="4" fill="#062820" />
+                        <circle cx="32" cy="355" r="30" fill="#18a06f" opacity="0.78" />
+                        <circle cx="14" cy="369" r="18" fill="#18a06f" opacity="0.68" />
+                        <circle cx="50" cy="367" r="20" fill="#18a06f" opacity="0.72" />
+                        <circle cx="26" cy="343" r="12" fill="#28c98a" opacity="0.28" />
+
+                        <rect x="342" y="382" width="10" height="42" rx="3" fill="#062820" />
+                        <circle cx="347" cy="366" r="24" fill="#18a06f" opacity="0.74" />
+                        <circle cx="332" cy="378" r="14" fill="#18a06f" opacity="0.64" />
+                        <circle cx="360" cy="376" r="16" fill="#18a06f" opacity="0.68" />
+
+                        <circle cx="74" cy="420" r="11" fill="#18a06f" opacity="0.58" />
+                        <circle cx="62" cy="424" r="8" fill="#18a06f" opacity="0.48" />
+                        <circle cx="306" cy="420" r="11" fill="#18a06f" opacity="0.58" />
+                        <circle cx="318" cy="424" r="8" fill="#18a06f" opacity="0.48" />
+                      </svg>
+                    </div>
                     <div className="absolute inset-0 bg-gradient-to-t from-[#0B3B2E]/40 via-transparent to-transparent" />
                     <div className="module-hero-badge bg-[#0B3B2E]/90 text-white">
                       <div>

@@ -6,7 +6,6 @@ import {
 } from "react-icons/fa";
 import ModulePageShell from "./ModulePageShell";
 import { setTitle, setDesc, setKeywords, setCanonical, setOg, setTw, setSchema, removeSchema } from "../../utils/pageMeta";
-import carWashImg from "../../assets/landing/CAR WASH.png";
 
 const SITE = "https://milikproperty.com";
 
@@ -205,7 +204,110 @@ export default function CarWashPage() {
                 </div>
                 <div className="module-hero-img-shell lg:h-full">
                   <div className="module-hero-img-frame lg:h-full">
-                    <img src={carWashImg} alt="Car wash staff using Milik management system" loading="eager" className="lg:h-full lg:object-cover" />
+                    <div className="module-hero-visual">
+                      <svg viewBox="0 0 380 480" fill="none" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                        <defs>
+                          <linearGradient id="cwSky" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#7dd3fc" />
+                            <stop offset="100%" stopColor="#0369a1" />
+                          </linearGradient>
+                          <linearGradient id="cwFloor" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#bae6fd" />
+                            <stop offset="100%" stopColor="#7dd3fc" />
+                          </linearGradient>
+                          <linearGradient id="cwGantry" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#0c4a6e" />
+                            <stop offset="100%" stopColor="#082f49" />
+                          </linearGradient>
+                          <linearGradient id="cwBody" x1="0" y1="0" x2="1" y2="0.4">
+                            <stop offset="0%" stopColor="#f0f9ff" />
+                            <stop offset="55%" stopColor="#bae6fd" />
+                            <stop offset="100%" stopColor="#38bdf8" />
+                          </linearGradient>
+                          <linearGradient id="cwGlass" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#e0f2fe" />
+                            <stop offset="100%" stopColor="#7dd3fc" />
+                          </linearGradient>
+                        </defs>
+
+                        <rect width="380" height="480" fill="url(#cwSky)" />
+
+                        <circle cx="322" cy="54" r="30" fill="#fff9cc" opacity="0.5" />
+                        <circle cx="322" cy="54" r="18" fill="#ffe566" opacity="0.5" />
+
+                        <ellipse cx="64" cy="60" rx="36" ry="16" fill="white" opacity="0.55" />
+                        <ellipse cx="92" cy="52" rx="24" ry="12" fill="white" opacity="0.55" />
+                        <ellipse cx="252" cy="88" rx="30" ry="12" fill="white" opacity="0.4" />
+
+                        <rect x="0" y="392" width="380" height="88" fill="url(#cwFloor)" />
+                        <rect x="0" y="390" width="380" height="5" fill="#0ea5e9" opacity="0.5" />
+                        <rect x="10" y="410" width="360" height="4" rx="2" fill="#0284c7" opacity="0.25" />
+                        <rect x="10" y="430" width="360" height="4" rx="2" fill="#0284c7" opacity="0.2" />
+                        <rect x="10" y="450" width="360" height="4" rx="2" fill="#0284c7" opacity="0.18" />
+                        <ellipse cx="190" cy="452" rx="118" ry="16" fill="#0c4a6e" opacity="0.18" />
+
+                        <rect x="52" y="96" width="20" height="300" rx="8" fill="url(#cwGantry)" />
+                        <rect x="308" y="96" width="20" height="300" rx="8" fill="url(#cwGantry)" />
+                        <rect x="44" y="80" width="292" height="30" rx="12" fill="url(#cwGantry)" />
+                        <rect x="56" y="88" width="268" height="8" rx="4" fill="#38bdf8" opacity="0.4" />
+
+                        <rect x="68" y="112" width="8" height="46" rx="4" fill="#0ea5e9" opacity="0.75" />
+                        <rect x="98" y="112" width="8" height="38" rx="4" fill="#0ea5e9" opacity="0.65" />
+                        <rect x="272" y="112" width="8" height="42" rx="4" fill="#0ea5e9" opacity="0.7" />
+                        <rect x="302" y="112" width="8" height="34" rx="4" fill="#0ea5e9" opacity="0.6" />
+
+                        <circle cx="80" cy="94" r="6" fill="#e0f2fe" opacity="0.9" />
+                        <circle cx="140" cy="94" r="6" fill="#e0f2fe" opacity="0.9" />
+                        <circle cx="190" cy="94" r="6" fill="#e0f2fe" opacity="0.9" />
+                        <circle cx="240" cy="94" r="6" fill="#e0f2fe" opacity="0.9" />
+                        <circle cx="300" cy="94" r="6" fill="#e0f2fe" opacity="0.9" />
+
+                        <line x1="80" y1="100" x2="58" y2="150" stroke="#e0f2fe" strokeWidth="3" strokeLinecap="round" opacity="0.55" />
+                        <line x1="140" y1="100" x2="122" y2="158" stroke="#e0f2fe" strokeWidth="3" strokeLinecap="round" opacity="0.5" />
+                        <line x1="240" y1="100" x2="258" y2="158" stroke="#e0f2fe" strokeWidth="3" strokeLinecap="round" opacity="0.5" />
+                        <line x1="300" y1="100" x2="322" y2="150" stroke="#e0f2fe" strokeWidth="3" strokeLinecap="round" opacity="0.55" />
+
+                        <circle cx="96" cy="176" r="5" fill="white" opacity="0.85" />
+                        <circle cx="112" cy="196" r="3.5" fill="white" opacity="0.75" />
+                        <circle cx="84" cy="210" r="4" fill="white" opacity="0.65" />
+                        <circle cx="278" cy="182" r="4.5" fill="white" opacity="0.8" />
+                        <circle cx="296" cy="204" r="3" fill="white" opacity="0.7" />
+                        <circle cx="266" cy="222" r="4" fill="white" opacity="0.6" />
+
+                        <ellipse cx="190" cy="392" rx="108" ry="14" fill="#082f49" opacity="0.22" />
+
+                        <rect x="94" y="284" width="192" height="72" rx="24" fill="url(#cwBody)" />
+                        <path d="M120 284 Q150 232 190 232 Q230 232 260 284 Z" fill="url(#cwBody)" />
+                        <path d="M132 280 Q156 246 190 246 Q224 246 248 280 Z" fill="url(#cwGlass)" opacity="0.9" />
+                        <rect x="188" y="252" width="4" height="28" fill="#0284c7" opacity="0.5" />
+                        <rect x="94" y="330" width="192" height="14" rx="4" fill="#0284c7" opacity="0.35" />
+                        <rect x="104" y="296" width="46" height="8" rx="4" fill="white" opacity="0.55" />
+
+                        <circle cx="140" cy="356" r="26" fill="#0c4a6e" />
+                        <circle cx="140" cy="356" r="12" fill="#7dd3fc" />
+                        <circle cx="238" cy="356" r="26" fill="#0c4a6e" />
+                        <circle cx="238" cy="356" r="12" fill="#7dd3fc" />
+
+                        <rect x="86" y="300" width="10" height="20" rx="3" fill="#0ea5e9" opacity="0.8" />
+                        <rect x="284" y="300" width="10" height="20" rx="3" fill="#0ea5e9" opacity="0.8" />
+
+                        <g opacity="0.55">
+                          <rect x="20" y="316" width="42" height="4" rx="2" fill="white" />
+                          <rect x="14" y="330" width="34" height="4" rx="2" fill="white" opacity="0.7" />
+                          <rect x="318" y="316" width="42" height="4" rx="2" fill="white" />
+                          <rect x="332" y="330" width="34" height="4" rx="2" fill="white" opacity="0.7" />
+                        </g>
+
+                        <circle cx="150" cy="270" r="6" fill="white" opacity="0.8" />
+                        <circle cx="230" cy="264" r="4" fill="white" opacity="0.7" />
+                        <circle cx="170" cy="256" r="3" fill="white" opacity="0.6" />
+
+                        <rect x="30" y="140" width="18" height="60" rx="6" fill="#0c4a6e" opacity="0.85" />
+                        <rect x="26" y="128" width="26" height="16" rx="4" fill="#082f49" />
+                        <rect x="30" y="200" width="18" height="8" rx="3" fill="#082f49" />
+                        <text x="39" y="140" textAnchor="middle" fontSize="9" fontWeight="800" fill="#e0f2fe" transform="rotate(-90 39 140)">WASH</text>
+                      </svg>
+                    </div>
                     <div className="absolute inset-0 bg-gradient-to-t from-sky-900/45 via-transparent to-transparent" />
                     <div className="module-hero-badge bg-sky-700/90 text-white">
                       <div>

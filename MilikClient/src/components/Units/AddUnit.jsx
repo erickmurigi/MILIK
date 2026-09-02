@@ -189,6 +189,7 @@ const AddUnit = () => {
     description: "",
     amenities: "",
     utilities: [],
+    deposits: [],
     billingFrequency: "monthly",
     furnished: "unfurnished",
     listingEnabled: false,
@@ -213,11 +214,13 @@ const AddUnit = () => {
   const [fieldErrors, setFieldErrors] = useState({});
   const [generalError, setGeneralError] = useState("");
   const [utilityOptions, setUtilityOptions] = useState([]);
+  const [depositTypeOptions, setDepositTypeOptions] = useState([]);
   const [billingPeriodOptions, setBillingPeriodOptions] = useState([{ key: "monthly", name: "Monthly", durationInMonths: 1 }]);
   const [configuredUnitTypes, setConfiguredUnitTypes] = useState([]);
   const [depositTouched, setDepositTouched] = useState(Boolean(isEditMode));
   const [rentTouched, setRentTouched] = useState(Boolean(isEditMode));
   const [utilitiesTouched, setUtilitiesTouched] = useState(Boolean(isEditMode));
+  const [unitDepositsTouched, setUnitDepositsTouched] = useState(Boolean(isEditMode));
   const draftStorageKey = currentCompany?._id
     ? `milik:${isEditMode ? "edit" : "new"}-unit-draft:${currentCompany._id}${unitId ? `:${unitId}` : ""}`
     : null;
@@ -239,6 +242,10 @@ const AddUnit = () => {
           const names = Array.from(new Set((res?.data?.utilityTypes || [])
             .filter((item) => item?.isActive !== false && item?.name)
             .map((item) => String(item.name))));
+          const depositNames = Array.from(new Set((res?.data?.depositTypes || [])
+            .filter((item) => item?.isActive !== false && item?.name)
+            .map((item) => String(item.name))));
+          setDepositTypeOptions(depositNames);
           const periods = Array.isArray(res?.data?.billingPeriods)
             ? res.data.billingPeriods
                 .filter((item) => item?.isActive !== false)
@@ -257,6 +264,7 @@ const AddUnit = () => {
         })
         .catch(() => {
           setUtilityOptions([]);
+          setDepositTypeOptions([]);
           setBillingPeriodOptions([{ key: "monthly", name: "Monthly", durationInMonths: 1 }]);
         });
     }
@@ -280,6 +288,7 @@ const AddUnit = () => {
           description: existingUnit.description || "",
           amenities: existingUnit.amenities?.join(", ") || "",
           utilities: existingUnit.utilities || [],
+          deposits: existingUnit.deposits || [],
           billingFrequency: canonicalBillingPeriodKey(existingUnit.billingPeriodKey || existingUnit.billingFrequency || "monthly"),
           furnished: existingUnit.furnished || "unfurnished",
           listingEnabled: Boolean(existingUnit.listingEnabled),
@@ -448,6 +457,23 @@ const AddUnit = () => {
     });
   }, [isEditMode, selectedProperty, utilitiesTouched]);
 
+  // Every non-rent deposit type configured on the property auto-populates here (unlike utilities,
+  // which start empty) — the rent/security deposit stays exclusively on the dedicated preview above.
+  useEffect(() => {
+    if (!selectedProperty || isEditMode || unitDepositsTouched) return;
+    const propertyDeposits = Array.isArray(selectedProperty.securityDeposits) ? selectedProperty.securityDeposits : [];
+    const derived = propertyDeposits
+      .filter((d) => d?.depositType && !String(d.depositType).toLowerCase().includes("rent"))
+      .map((d) => ({
+        depositType: d.depositType,
+        amount: d.amount != null ? String(d.amount) : "",
+        chargeMode: d.chargeMode === "Percentage" ? "Percentage" : "Fixed Amount",
+        refundable: d.refundable !== false,
+        currency: d.currency || "KES",
+      }));
+    setFormData((prev) => ({ ...prev, deposits: derived }));
+  }, [isEditMode, selectedProperty, unitDepositsTouched]);
+
   // Input classes for consistency
   const inputClass =
     "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
@@ -471,6 +497,7 @@ const AddUnit = () => {
       setRentTouched(false);
       setDepositTouched(false);
       setUtilitiesTouched(false);
+      setUnitDepositsTouched(false);
     }
 
     setFormData((prev) => {
@@ -512,6 +539,31 @@ const AddUnit = () => {
       const updated = [...prev.utilities];
       updated[index] = { ...updated[index], [field]: value };
       return { ...prev, utilities: updated };
+    });
+  };
+
+  const addDeposit = () => {
+    setUnitDepositsTouched(true);
+    setFormData((prev) => ({
+      ...prev,
+      deposits: [...prev.deposits, { depositType: "", amount: "", chargeMode: "Fixed Amount", refundable: true, currency: "KES" }]
+    }));
+  };
+
+  const removeDeposit = (index) => {
+    setUnitDepositsTouched(true);
+    setFormData((prev) => ({
+      ...prev,
+      deposits: prev.deposits.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateDeposit = (index, field, value) => {
+    setUnitDepositsTouched(true);
+    setFormData((prev) => {
+      const updated = [...prev.deposits];
+      updated[index] = { ...updated[index], [field]: value };
+      return { ...prev, deposits: updated };
     });
   };
 
@@ -633,6 +685,15 @@ const AddUnit = () => {
           isIncluded: u.isIncluded,
           unitCharge: u.unitCharge ? parseFloat(u.unitCharge) : 0
         })),
+      deposits: formData.deposits
+        .filter((d) => d.depositType) // Only include deposits with a selected type
+        .map((d) => ({
+          depositType: d.depositType,
+          amount: d.amount ? parseFloat(d.amount) : 0,
+          chargeMode: d.chargeMode === "Percentage" ? "Percentage" : "Fixed Amount",
+          refundable: Boolean(d.refundable),
+          currency: d.currency || "KES",
+        })),
       billingFrequency: canonicalBillingPeriodKey(formData.billingFrequency || "monthly"),
       billingPeriodKey: canonicalBillingPeriodKey(formData.billingFrequency || "monthly"),
       furnished: formData.furnished || "unfurnished",
@@ -705,7 +766,7 @@ const AddUnit = () => {
     if (isEditMode) return;
     setFormData({
       unitNumber: "", property: "", unitType: "", areaSqFt: "", rent: "", deposit: "",
-      status: "vacant", description: "", amenities: "", utilities: [], billingFrequency: "monthly",
+      status: "vacant", description: "", amenities: "", utilities: [], deposits: [], billingFrequency: "monthly",
       furnished: "unfurnished", listingEnabled: false, ownerOccupied: false,
       listingTitle: "", bedrooms: "", bathrooms: "", parkingSpaces: "", floorNumber: "",
       petsAllowed: false, rentNegotiable: false, minimumLeaseTermMonths: "",
@@ -1129,6 +1190,106 @@ const AddUnit = () => {
                       are already included in the monthly rent.
                     </div>
                   </div>
+                </div>
+              )}
+            </div>
+
+            {/* Unit-Specific Deposits */}
+            <div className="xl:col-span-12 bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-lg p-4 space-y-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 tracking-tight">{termUnit}-Specific Deposits</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Auto-filled from the {termProperty.toLowerCase()}'s configured deposit types (excluding the {termRent.toLowerCase()} deposit above) — edit or remove any row.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={addDeposit}
+                  className="h-8 px-3 text-xs font-semibold bg-[#0B3B2E] hover:bg-[#0A3127] text-white rounded-md flex items-center gap-2 transition-colors"
+                >
+                  <FaPlus /> Add Deposit
+                </button>
+              </div>
+
+              {formData.deposits.length === 0 ? (
+                <div className="text-center py-6 text-slate-500 text-sm">
+                  No additional deposits. Select a {termProperty.toLowerCase()} with configured deposit types to auto-fill, or click "Add Deposit".
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {formData.deposits.map((dep, idx) => {
+                    return (
+                      <div
+                        key={idx}
+                        className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end p-3 bg-white border border-slate-200 rounded-lg hover:shadow-sm transition-shadow"
+                      >
+                        <div>
+                          <MilikSelect
+                            label="Deposit Type"
+                            placeholder="Select Type"
+                            items={depositTypeOptions.length ? depositTypeOptions : ["Water Security Deposit", "Electricity Security Deposit", "Others"]}
+                            value={dep.depositType}
+                            onChange={(val) => updateDeposit(idx, "depositType", val)}
+                            getLabel={(x) => x}
+                            getValue={(x) => x}
+                            disabled={loading}
+                          />
+                        </div>
+
+                        <div>
+                          <label className={labelClass}>{dep.chargeMode === "Percentage" ? `Percentage (% of ${termRent})` : "Amount (KES)"}</label>
+                          <input
+                            type="number"
+                            value={dep.amount}
+                            onChange={(e) => updateDeposit(idx, "amount", e.target.value)}
+                            placeholder="0.00"
+                            min="0"
+                            step="0.01"
+                            className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
+                            disabled={loading}
+                          />
+                        </div>
+
+                        <div>
+                          <MilikSelect
+                            label="Charge Mode"
+                            placeholder="Select Mode"
+                            items={["Fixed Amount", "Percentage"]}
+                            value={dep.chargeMode}
+                            onChange={(val) => updateDeposit(idx, "chargeMode", val)}
+                            getLabel={(x) => x}
+                            getValue={(x) => x}
+                            disabled={loading}
+                          />
+                        </div>
+
+                        <div className="flex items-center h-10">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={dep.refundable}
+                              onChange={(e) => updateDeposit(idx, "refundable", e.target.checked)}
+                              className="rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]/30"
+                              disabled={loading}
+                            />
+                            <span className="text-xs font-medium text-slate-700">Refundable</span>
+                          </label>
+                        </div>
+
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => removeDeposit(idx)}
+                            className="h-10 px-3 rounded-md bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 transition-colors flex items-center justify-center"
+                            disabled={loading}
+                          >
+                            <FaTrash className="text-xs" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

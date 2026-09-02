@@ -1053,10 +1053,27 @@ body {
   object-position: center;
 }
 
+.module-hero-visual {
+  position: relative;
+  width: 100%;
+  height: 500px;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.module-hero-visual svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 @media (min-width: 1024px) {
   .module-hero-img-shell { height: 100%; }
   .module-hero-img-frame { height: 100%; }
   .module-hero-img-frame img { height: 100%; max-height: none; }
+  .module-hero-visual { height: 100%; }
 }
 
 .module-hero-badge {
@@ -1119,11 +1136,13 @@ body {
 
 @media (max-width: 768px) {
   .module-hero-img-frame img { height: 380px; }
+  .module-hero-visual { height: 380px; }
 }
 
 @media (max-width: 480px) {
   .module-hero-img-frame img { height: 300px; }
   .module-hero-img-frame { border-radius: 24px; }
+  .module-hero-visual { height: 300px; }
 }
 
 @media (max-width: 640px) {

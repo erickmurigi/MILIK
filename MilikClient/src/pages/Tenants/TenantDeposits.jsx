@@ -189,12 +189,25 @@ const fallbackDepositType = {
   isFallback: true,
 };
 
-// Only the rent deposit has a real, tenant-specific known value (set when the tenant/lease
-// was created — resolveTenantContext's depositAmount). Every other deposit type has no such
-// preset anywhere in the system, so its amount is never guessed — same "rent" substring
-// convention already used for Property.securityDeposits elsewhere in this codebase.
-const isRentDepositType = (depositType) =>
-  /rent/i.test(String(depositType?.name || "")) || /rent/i.test(String(depositType?.code || ""));
+// Only the rent/security deposit has a real, tenant-specific known value (set on the tenant
+// when added — resolveTenantContext's depositAmount, labeled "Deposit Amount" on the Edit
+// Tenant form). Matches both "rent" and "security" naming since this system's own default
+// type (fallbackDepositType) is named "Security Deposit" with no "rent" in it at all.
+const isRentDepositType = (depositType) => {
+  const text = `${depositType?.name || ""} ${depositType?.code || ""}`.toLowerCase();
+  return /rent|security/.test(text);
+};
+
+// A non-rent deposit type has no tenant-level preset, but may have a per-unit amount
+// configured (propagated down from the property's own non-rent security deposit list —
+// see Unit-Specific Deposits in AddUnit.jsx). Matched by name, same convention as elsewhere.
+const resolveUnitDepositAmount = (unit, depositType) => {
+  const typeName = String(depositType?.name || "").trim().toLowerCase();
+  if (!typeName) return 0;
+  const rows = Array.isArray(unit?.deposits) ? unit.deposits : [];
+  const match = rows.find((d) => String(d?.depositType || "").trim().toLowerCase() === typeName);
+  return match ? Number(match.amount || 0) : 0;
+};
 
 const TenantDeposits = () => {
   const [pageSize, setPageSize] = useState(50);
@@ -388,6 +401,11 @@ const TenantDeposits = () => {
 
   const batchDepositIncludedCount = batchTenantRows.filter((row) => batchDepositIncluded[row.tenantId]).length;
 
+  const batchHasUnitDepositPreset = useMemo(
+    () => batchTenantRows.some((row) => resolveUnitDepositAmount(row.unit, batchDepositType) > 0),
+    [batchTenantRows, batchDepositType]
+  );
+
   const resetBatchDepositForm = () => {
     setBatchDepositForm({ propertyId: "", depositTypeId: "", invoiceDate: todayInput(), dueDate: todayInput() });
     setBatchDepositIncluded({});
@@ -412,6 +430,18 @@ const TenantDeposits = () => {
 
   const toggleBatchDepositInclude = (tenantId) => {
     setBatchDepositIncluded((prev) => ({ ...prev, [tenantId]: !prev[tenantId] }));
+  };
+
+  const batchDepositAllSelected = batchTenantRows.length > 0 && batchDepositIncludedCount === batchTenantRows.length;
+
+  const toggleBatchDepositSelectAll = () => {
+    setBatchDepositIncluded((prev) => {
+      const next = { ...prev };
+      batchTenantRows.forEach((row) => {
+        next[row.tenantId] = !batchDepositAllSelected;
+      });
+      return next;
+    });
   };
 
   const handleBatchDepositAmountChange = (tenantId, value) => {
@@ -682,7 +712,9 @@ const TenantDeposits = () => {
   const syncDepositFormDefaults = ({ tenantId, unitId, depositTypeId, invoiceDate = todayInput(), dueDate = todayInput() }) => {
     const context = resolveTenantContext(tenantId, unitId);
     const depositType = depositTypeLookup.get(String(depositTypeId || "")) || activeDepositTypes[0] || fallbackDepositType;
-    const amount = isRentDepositType(depositType) ? Number(context?.depositAmount || 0) : 0;
+    const amount = isRentDepositType(depositType)
+      ? Number(context?.depositAmount || 0)
+      : resolveUnitDepositAmount(context?.unit, depositType);
     const holder = context?.depositHeldBy || (isLandlordWorkspace ? "landlord" : "manager");
 
     return {
@@ -1242,7 +1274,7 @@ const TenantDeposits = () => {
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
           <div className="flex w-full max-w-5xl max-h-[90vh] flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
             <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
-              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">Batch Add Deposit Invoices</h3>
+              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">Batch add deposit invoices</h3>
               <button onClick={closeBatchDepositModal} className="text-white/70 transition-colors hover:text-white">
                 <FaTimes />
               </button>
@@ -1299,6 +1331,8 @@ const TenantDeposits = () => {
                   <p className="text-[11px] font-medium text-slate-500">
                     {isRentDepositType(batchDepositType)
                       ? `Amount auto-fills from each ${termTenant.toLowerCase()}'s rent security deposit on file — edit any row if needed.`
+                      : batchHasUnitDepositPreset
+                      ? `Amount auto-fills from each ${termUnit.toLowerCase()}'s configured "${batchDepositType?.name || "deposit"}" where set — edit any row if needed.`
                       : `"${batchDepositType?.name || "This type"}" has no preset amount per ${termTenant.toLowerCase()} — enter each amount manually below.`}
                   </p>
                 )}
@@ -1316,7 +1350,14 @@ const TenantDeposits = () => {
                     <table className="min-w-full text-xs">
                       <thead className="bg-slate-100">
                         <tr>
-                          <th className="px-2 py-2 text-left text-[10px] font-black uppercase tracking-wide text-slate-500"></th>
+                          <th className="px-2 py-2 text-left text-[10px] font-black uppercase tracking-wide text-slate-500">
+                            <input
+                              type="checkbox"
+                              checked={batchDepositAllSelected}
+                              onChange={toggleBatchDepositSelectAll}
+                              className="h-3.5 w-3.5 rounded border-slate-300"
+                            />
+                          </th>
                           <th className="px-2 py-2 text-left text-[10px] font-black uppercase tracking-wide text-slate-500">{termTenant}</th>
                           <th className="px-2 py-2 text-left text-[10px] font-black uppercase tracking-wide text-slate-500">{termUnit}</th>
                           <th className="px-2 py-2 text-right text-[10px] font-black uppercase tracking-wide text-slate-500">Amount</th>
@@ -1325,7 +1366,9 @@ const TenantDeposits = () => {
                       <tbody className="divide-y divide-slate-100">
                         {batchTenantRows.map((row) => {
                           const included = Boolean(batchDepositIncluded[row.tenantId]);
-                          const defaultAmount = isRentDepositType(batchDepositType) ? row.depositAmount : 0;
+                          const defaultAmount = isRentDepositType(batchDepositType)
+                            ? row.depositAmount
+                            : resolveUnitDepositAmount(row.unit, batchDepositType);
                           const value =
                             batchDepositAmounts[row.tenantId] !== undefined
                               ? batchDepositAmounts[row.tenantId]

@@ -46,6 +46,20 @@ const sanitizeUtilities = (utilities = []) => {
   }));
 };
 
+const sanitizeDeposits = (deposits = []) => {
+  if (!Array.isArray(deposits)) return [];
+
+  return deposits
+    .map((item) => ({
+      depositType: typeof item?.depositType === "string" ? item.depositType.trim() : "",
+      amount: Number(item?.amount || 0),
+      chargeMode: item?.chargeMode === "Percentage" ? "Percentage" : "Fixed Amount",
+      refundable: item?.refundable !== false,
+      currency: item?.currency === "USD" ? "USD" : "KES",
+    }))
+    .filter((item) => item.depositType);
+};
+
 const sanitizeAmenities = (amenities = []) => {
   if (!Array.isArray(amenities)) return [];
   return amenities
@@ -467,6 +481,7 @@ export const createUnit = async (req, res, next) => {
       areaSqFt: Number(req.body.areaSqFt || 0),
       amenities: sanitizeAmenities(req.body.amenities),
       utilities: sanitizeUtilities(req.body.utilities),
+      deposits: sanitizeDeposits(req.body.deposits),
       status: requestedStatus,
       isVacant: true,
       vacantSince: new Date(),
@@ -783,6 +798,10 @@ export const updateUnit = async (req, res, next) => {
 
     if (Array.isArray(req.body.utilities)) {
       unit.utilities = sanitizeUtilities(req.body.utilities);
+    }
+
+    if (Array.isArray(req.body.deposits)) {
+      unit.deposits = sanitizeDeposits(req.body.deposits);
     }
 
     if (req.body.areaSqFt !== undefined) {

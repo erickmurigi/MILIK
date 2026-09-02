@@ -2,6 +2,7 @@ import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from "rea
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import AppSelect from "../common/AppSelect";
 import {
   FaSave,
   FaTimes,
@@ -16,7 +17,6 @@ import {
   FaHome,
   FaWarehouse,
   FaSpinner,
-  FaChevronDown,
   FaCog,
   FaArrowLeft,
 } from "react-icons/fa";
@@ -96,103 +96,6 @@ function Modal({ open, title, onClose, children, maxWidthClass = "max-w-lg" }) {
           <div className="p-4">{children}</div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function MilikSelect({
-  label,
-  required,
-  placeholder = "Select...",
-  items = [],
-  value,
-  onChange,
-  getLabel,
-  getValue,
-  disabled,
-  className = "",
-}) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef(null);
-
-  const selectedItem = useMemo(
-    () => items.find((it) => getValue(it) === value) || null,
-    [items, value, getValue]
-  );
-
-  useEffect(() => {
-    const onClickOutside = (e) => {
-      if (!wrapRef.current) return;
-      if (!wrapRef.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (e) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open]);
-
-  return (
-    <div className={`${className} relative`} ref={wrapRef}>
-      {label ? (
-        <label className="mb-0.5 block text-xs font-semibold text-slate-700">
-          {label} {required ? <span className="text-red-600">*</span> : null}
-        </label>
-      ) : null}
-
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setOpen((s) => !s)}
-        className={[
-          "w-full h-8 px-3 rounded border border-slate-200 bg-white text-slate-900",
-          "transition focus:outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20",
-          "flex items-center justify-between gap-2",
-          disabled ? "opacity-50 cursor-not-allowed" : "",
-        ].join(" ")}
-      >
-        <span className="text-xs font-semibold truncate">
-          {selectedItem ? getLabel(selectedItem) : <span className="text-slate-400">{placeholder}</span>}
-        </span>
-        <FaChevronDown className="text-slate-600" size={10} />
-      </button>
-
-      {open && !disabled && (
-        <div className="absolute z-50 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg overflow-hidden">
-          <div className="max-h-56 overflow-auto">
-            {items.length === 0 ? (
-              <div className="px-3 py-3 text-sm text-slate-500">No items</div>
-            ) : (
-              items.map((it) => {
-                const v = getValue(it);
-                const isSelected = v === value;
-                return (
-                  <button
-                    type="button"
-                    key={v}
-                    onClick={() => {
-                      onChange?.(v, it);
-                      setOpen(false);
-                    }}
-                    className={[
-                      "w-full text-left px-3 py-1.5 text-xs font-semibold transition-colors",
-                      isSelected ? `${MILIK_ORANGE_BG} text-white` : "text-slate-800 hover:bg-slate-50",
-                    ].join(" ")}
-                  >
-                    {getLabel(it)}
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -330,6 +233,7 @@ const AddProperty = () => {
   });
   const [utilityTypeOptions, setUtilityTypeOptions] = useState([]);
   const [utilityTypeOptionsLoading, setUtilityTypeOptionsLoading] = useState(false);
+  const [depositTypeOptions, setDepositTypeOptions] = useState([]);
 
   const clearDraftState = () => {
     if (!draftStorageKey || typeof window === "undefined" || !window.sessionStorage) return;
@@ -773,6 +677,11 @@ const AddProperty = () => {
               (u) => u?.isActive !== false
             )
           );
+          setDepositTypeOptions(
+            (Array.isArray(res?.data?.depositTypes) ? res.data.depositTypes : []).filter(
+              (d) => d?.isActive !== false
+            )
+          );
         }
       })
       .catch(() => {})
@@ -784,6 +693,13 @@ const AddProperty = () => {
   const standingChargeOptions = useMemo(
     () => (utilityTypeOptions.length ? utilityTypeOptions.map((u) => u.name) : ["Water", "Garbage", "Electricity", "Service Charge", "Security", "Others"]),
     [utilityTypeOptions]
+  );
+
+  // Real company-configured deposit types, falling back to the same single default
+  // ("Security Deposit") TenantDeposits.jsx uses when a company has none configured.
+  const securityDepositTypeOptions = useMemo(
+    () => (depositTypeOptions.length ? depositTypeOptions.map((d) => d.name) : ["Security Deposit"]),
+    [depositTypeOptions]
   );
 
   useEffect(() => {
@@ -837,6 +753,7 @@ const AddProperty = () => {
     const getLandlordLabel = (l) => l?.fullName || l?.name || l?.landlordName || l?.email || "Unnamed";
 
     const selectedLandlordId = formData.landlords?.[0]?.landlordId?._id || formData.landlords?.[0]?.landlordId || "";
+    const landlordOptions = landlordItems.map((l) => ({ value: getLandlordId(l), label: getLandlordLabel(l) }));
 
     return (
       <div className="space-y-4">
@@ -855,15 +772,13 @@ const AddProperty = () => {
           </div>
 
           <div>
-            <MilikSelect
+            <AppSelect
               label="Let/Manage"
               required
               placeholder="Select..."
-              items={["Managing", "Letting", "Both"]}
+              options={["Managing", "Letting", "Both"].map((x) => ({ value: x, label: x }))}
               value={formData.letManage}
               onChange={(val) => handleChange({ target: { name: "letManage", value: val } })}
-              getLabel={(x) => x}
-              getValue={(x) => x}
             />
             {formData.letManage === "Letting" && (
               <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -943,18 +858,15 @@ const AddProperty = () => {
 
 
           <div>
-            <MilikSelect
+            <AppSelect
               label={`${termProperty} Type`}
               required
               placeholder="Select Type"
-              items={propertyTypes}
+              options={propertyTypes.map((x) => ({ value: x, label: x }))}
               value={formData.propertyType}
               onChange={(val) => handleChange({ target: { name: "propertyType", value: val } })}
-              getLabel={(x) => x}
-              getValue={(x) => x}
-              className={fieldErrors.propertyType ? "border-red-500" : ""}
+              error={fieldErrors.propertyType}
             />
-            {fieldErrors.propertyType && <p className="mt-1 text-xs text-red-600">{fieldErrors.propertyType}</p>}
           </div>
 
 
@@ -1020,14 +932,12 @@ const AddProperty = () => {
           </div>
 
           <div>
-            <MilikSelect
+            <AppSelect
               label="Zone/Region"
               placeholder="Select Zone"
-              items={zones}
+              options={zones.map((x) => ({ value: x, label: x }))}
               value={formData.zoneRegion}
               onChange={(val) => handleChange({ target: { name: "zoneRegion", value: val } })}
-              getLabel={(x) => x}
-              getValue={(x) => x}
             />
           </div>
         </div>
@@ -1088,18 +998,17 @@ const AddProperty = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
               <div>
-                <MilikSelect
+                <AppSelect
                   label={`${termLandlord} Name`}
                   required
+                  searchable
                   placeholder={landlordItems.length ? `Select ${termLandlord}` : `No ${termLandlords} loaded`}
-                  items={landlordItems}
+                  options={landlordOptions}
                   value={selectedLandlordId}
                   disabled={loading}
-                  getLabel={getLandlordLabel}
-                  getValue={getLandlordId}
-                  onChange={(id, obj) => handleSelectLandlord(id, obj)}
+                  onChange={(id) => handleSelectLandlord(id, landlordItems.find((l) => getLandlordId(l) === id))}
+                  error={fieldErrors.landlord}
                 />
-                {fieldErrors.landlord && <p className="mt-1 text-xs text-red-600">{fieldErrors.landlord}</p>}
                 <p className="mt-1 text-xs text-slate-500">
                   Select an existing landlord from the database.
                 </p>
@@ -1197,14 +1106,15 @@ const AddProperty = () => {
     <div className="space-y-5">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
-          <MilikSelect
+          <AppSelect
             label="Account Ledger Type"
             placeholder="Select Ledger Type"
-            items={["in-gl", "property-gl"]}
+            options={["in-gl", "property-gl"].map((x) => ({
+              value: x,
+              label: x === "property-gl" ? `${termProperty} GL` : "In-GL (Company General Ledger)",
+            }))}
             value={formData.accountLedgerType}
             onChange={(val) => handleChange({ target: { name: "accountLedgerType", value: val } })}
-            getLabel={(x) => x === "property-gl" ? `${termProperty} GL` : "In-GL (Company General Ledger)"}
-            getValue={(x) => x}
           />
           {formData.accountLedgerType === "in-gl" && (
             <p className="mt-1 text-[11px] text-blue-600">{termInvoices} and {termReceipts.toLowerCase()} post journal entries into the company GL. Appears in Trial Balance, P&amp;L, and Balance Sheet.</p>
@@ -1346,14 +1256,12 @@ const AddProperty = () => {
           </div>
 
           <div>
-            <MilikSelect
+            <AppSelect
               label={`${termUnit} Measurement`}
               placeholder="Select Measurement"
-              items={["Sq Ft", "Sq M", "Acres", "Hectares"]}
+              options={["Sq Ft", "Sq M", "Acres", "Hectares"].map((x) => ({ value: x, label: x }))}
               value={formData.unitMeasurement}
               onChange={(val) => handleChange({ target: { name: "unitMeasurement", value: val } })}
-              getLabel={(x) => x}
-              getValue={(x) => x}
             />
           </div>
 
@@ -1372,19 +1280,17 @@ const AddProperty = () => {
           </div>
 
           <div>
-            <MilikSelect
+            <AppSelect
               label={`${termRent} Currency`}
               placeholder="Select Currency"
-              items={[
+              options={[
                 "Kenyan Shilling [KES]",
                 "US Dollar [USD]",
                 "Euro [EUR]",
                 "British Pound [GBP]",
-              ]}
+              ].map((x) => ({ value: x, label: x }))}
               value={formData.rentCurrency}
               onChange={(val) => handleChange({ target: { name: "rentCurrency", value: val } })}
-              getLabel={(x) => x}
-              getValue={(x) => x}
             />
           </div>
         </div>
@@ -1450,50 +1356,44 @@ const AddProperty = () => {
               className="grid grid-cols-1 md:grid-cols-7 gap-3 items-end p-3 border border-slate-200 rounded-lg bg-slate-50/40"
             >
               <div>
-                <MilikSelect
+                <AppSelect
                   label={`Service Charge/${termUtility}`}
                   placeholder="Select Type"
-                  items={standingChargeOptions}
+                  options={standingChargeOptions.map((x) => ({ value: x, label: x }))}
                   value={charge.serviceCharge}
                   onChange={(val) => {
                     const updated = [...formData.standingCharges];
                     updated[index].serviceCharge = val;
                     setFormData((p) => ({ ...p, standingCharges: updated }));
                   }}
-                  getLabel={(x) => x}
-                  getValue={(x) => x}
                 />
               </div>
 
               <div>
-                <MilikSelect
+                <AppSelect
                   label="Charge Mode"
                   placeholder="Select Mode"
-                  items={["Monthly", "Quarterly", "Annual", "One-time"]}
+                  options={["Monthly", "Quarterly", "Annual", "One-time"].map((x) => ({ value: x, label: x }))}
                   value={charge.chargeMode}
                   onChange={(val) => {
                     const updated = [...formData.standingCharges];
                     updated[index].chargeMode = val;
                     setFormData((p) => ({ ...p, standingCharges: updated }));
                   }}
-                  getLabel={(x) => x}
-                  getValue={(x) => x}
                 />
               </div>
 
               <div>
-                <MilikSelect
+                <AppSelect
                   label="Billing Currency"
                   placeholder="Select Currency"
-                  items={["KES", "USD"]}
+                  options={["KES", "USD"].map((x) => ({ value: x, label: x }))}
                   value={charge.billingCurrency}
                   onChange={(val) => {
                     const updated = [...formData.standingCharges];
                     updated[index].billingCurrency = val;
                     setFormData((p) => ({ ...p, standingCharges: updated }));
                   }}
-                  getLabel={(x) => x}
-                  getValue={(x) => x}
                 />
               </div>
 
@@ -1528,18 +1428,16 @@ const AddProperty = () => {
               </div>
 
               <div>
-                <MilikSelect
+                <AppSelect
                   label="VAT Rate"
                   placeholder="Select Rate"
-                  items={["0%", "8%", "16%"]}
+                  options={["0%", "8%", "16%"].map((x) => ({ value: x, label: x }))}
                   value={charge.vatRate}
                   onChange={(val) => {
                     const updated = [...formData.standingCharges];
                     updated[index].vatRate = val;
                     setFormData((p) => ({ ...p, standingCharges: updated }));
                   }}
-                  getLabel={(x) => x}
-                  getValue={(x) => x}
                 />
               </div>
 
@@ -1596,39 +1494,30 @@ const AddProperty = () => {
               className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end p-3 border border-slate-200 rounded-lg bg-slate-50/40"
             >
               <div>
-                <MilikSelect
+                <AppSelect
                   label="Deposit Type"
                   placeholder="Select Type"
-                  items={[
-                    `${termRent} Security Deposit`,
-                    "Water Security Deposit",
-                    "Electricity Security Deposit",
-                    "Others",
-                  ]}
+                  options={securityDepositTypeOptions.map((x) => ({ value: x, label: x }))}
                   value={deposit.depositType}
                   onChange={(val) => {
                     const updated = [...formData.securityDeposits];
                     updated[index].depositType = val;
                     setFormData((p) => ({ ...p, securityDeposits: updated }));
                   }}
-                  getLabel={(x) => x}
-                  getValue={(x) => x}
                 />
               </div>
 
               <div>
-                <MilikSelect
+                <AppSelect
                   label="Charge Mode"
                   placeholder="Select Mode"
-                  items={["Percentage", "Fixed Amount"]}
+                  options={["Percentage", "Fixed Amount"].map((x) => ({ value: x, label: x }))}
                   value={deposit.chargeMode}
                   onChange={(val) => {
                     const updated = [...formData.securityDeposits];
                     updated[index].chargeMode = val;
                     setFormData((p) => ({ ...p, securityDeposits: updated }));
                   }}
-                  getLabel={(x) => x}
-                  getValue={(x) => x}
                 />
               </div>
 
@@ -1653,18 +1542,16 @@ const AddProperty = () => {
               </div>
 
               <div>
-                <MilikSelect
+                <AppSelect
                   label="Currency"
                   placeholder="Select Currency"
-                  items={["KES", "USD"]}
+                  options={["KES", "USD"].map((x) => ({ value: x, label: x }))}
                   value={deposit.currency}
                   onChange={(val) => {
                     const updated = [...formData.securityDeposits];
                     updated[index].currency = val;
                     setFormData((p) => ({ ...p, securityDeposits: updated }));
                   }}
-                  getLabel={(x) => x}
-                  getValue={(x) => x}
                 />
               </div>
 
@@ -2098,12 +1985,13 @@ const AddProperty = () => {
                 className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end p-3 border border-slate-200 rounded-lg bg-slate-50/40"
               >
                 <div>
-                  <MilikSelect
+                  <AppSelect
                     label={`${termUtility} Type`}
                     placeholder={utilityTypeOptionsLoading ? "Loading..." : `Select ${termUtility}`}
-                    items={utilityTypeOptions}
+                    options={utilityTypeOptions.map((x) => ({ value: x.name, label: x.name }))}
                     value={rate.utilityType}
-                    onChange={(val, item) => {
+                    onChange={(val) => {
+                      const item = utilityTypeOptions.find((x) => x.name === val);
                       const updated = [...formData.utilityRates];
                       updated[index] = {
                         ...updated[index],
@@ -2113,8 +2001,6 @@ const AddProperty = () => {
                       };
                       setFormData((p) => ({ ...p, utilityRates: updated }));
                     }}
-                    getLabel={(x) => x.name}
-                    getValue={(x) => x.name}
                     disabled={utilityTypeOptionsLoading}
                   />
                 </div>
@@ -2136,18 +2022,19 @@ const AddProperty = () => {
                 </div>
 
                 <div>
-                  <MilikSelect
+                  <AppSelect
                     label="Billing Cycle"
                     placeholder="Select Cycle"
-                    items={["monthly", "quarterly", "annually", "per_use"]}
+                    options={["monthly", "quarterly", "annually", "per_use"].map((x) => ({
+                      value: x,
+                      label: x.charAt(0).toUpperCase() + x.slice(1).replace("_", " "),
+                    }))}
                     value={rate.billingCycle}
                     onChange={(val) => {
                       const updated = [...formData.utilityRates];
                       updated[index] = { ...updated[index], billingCycle: val };
                       setFormData((p) => ({ ...p, utilityRates: updated }));
                     }}
-                    getLabel={(x) => x.charAt(0).toUpperCase() + x.slice(1).replace("_", " ")}
-                    getValue={(x) => x}
                   />
                 </div>
 

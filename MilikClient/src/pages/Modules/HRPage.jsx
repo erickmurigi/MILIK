@@ -6,7 +6,6 @@ import {
 } from "react-icons/fa";
 import ModulePageShell from "./ModulePageShell";
 import { setTitle, setDesc, setKeywords, setCanonical, setOg, setTw, setSchema, removeSchema } from "../../utils/pageMeta";
-import hrImg from "../../assets/landing/HR.png";
 
 const SITE = "https://milikproperty.com";
 
@@ -200,7 +199,97 @@ export default function HRPage() {
                 </div>
                 <div className="module-hero-img-shell lg:h-full">
                   <div className="module-hero-img-frame lg:h-full">
-                    <img src={hrImg} alt="HR manager using Milik payroll software" loading="eager" className="lg:h-full lg:object-cover" />
+                    <div className="module-hero-visual">
+                      <svg viewBox="0 0 380 480" fill="none" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                        <defs>
+                          <linearGradient id="hrWall" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#ede9fe" />
+                            <stop offset="100%" stopColor="#ddd6fe" />
+                          </linearGradient>
+                          <linearGradient id="hrWindow" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#c4b5fd" />
+                            <stop offset="100%" stopColor="#7c3aed" />
+                          </linearGradient>
+                          <linearGradient id="hrDesk" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#5b21b6" />
+                            <stop offset="100%" stopColor="#4c1d95" />
+                          </linearGradient>
+                          <linearGradient id="hrScreen" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#f5f3ff" />
+                            <stop offset="100%" stopColor="#ddd6fe" />
+                          </linearGradient>
+                          <linearGradient id="hrFloor" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#c4b5fd" />
+                            <stop offset="100%" stopColor="#a78bfa" />
+                          </linearGradient>
+                        </defs>
+
+                        <rect width="380" height="480" fill="url(#hrWall)" />
+
+                        <rect x="46" y="40" width="120" height="150" rx="10" fill="url(#hrWindow)" opacity="0.85" />
+                        <rect x="46" y="40" width="120" height="150" rx="10" fill="none" stroke="#4c1d95" strokeWidth="6" opacity="0.5" />
+                        <rect x="104" y="40" width="6" height="150" fill="#4c1d95" opacity="0.4" />
+                        <rect x="46" y="112" width="120" height="6" fill="#4c1d95" opacity="0.4" />
+                        <circle cx="128" cy="76" r="20" fill="#fff9cc" opacity="0.5" />
+                        <ellipse cx="80" cy="150" rx="26" ry="12" fill="white" opacity="0.35" />
+
+                        <rect x="220" y="60" width="100" height="70" rx="10" fill="white" opacity="0.5" />
+                        <rect x="234" y="74" width="30" height="6" rx="3" fill="#7c3aed" opacity="0.55" />
+                        <rect x="234" y="86" width="52" height="5" rx="2.5" fill="#a78bfa" opacity="0.5" />
+                        <rect x="234" y="98" width="40" height="5" rx="2.5" fill="#a78bfa" opacity="0.4" />
+                        <rect x="234" y="110" width="46" height="5" rx="2.5" fill="#a78bfa" opacity="0.4" />
+
+                        <rect x="0" y="392" width="380" height="88" fill="url(#hrFloor)" />
+                        <rect x="0" y="390" width="380" height="5" fill="#8b5cf6" opacity="0.5" />
+                        <ellipse cx="190" cy="424" rx="150" ry="18" fill="#4c1d95" opacity="0.15" />
+
+                        <rect x="52" y="248" width="276" height="18" rx="6" fill="url(#hrDesk)" />
+                        <rect x="60" y="266" width="14" height="120" rx="4" fill="#4c1d95" opacity="0.75" />
+                        <rect x="306" y="266" width="14" height="120" rx="4" fill="#4c1d95" opacity="0.75" />
+
+                        <rect x="140" y="196" width="100" height="60" rx="6" fill="#3b0764" />
+                        <rect x="146" y="200" width="88" height="48" rx="4" fill="url(#hrScreen)" />
+                        <rect x="154" y="208" width="40" height="6" rx="3" fill="#8b5cf6" opacity="0.7" />
+                        <rect x="154" y="220" width="72" height="4" rx="2" fill="#c4b5fd" />
+                        <rect x="154" y="228" width="60" height="4" rx="2" fill="#c4b5fd" opacity="0.8" />
+                        <rect x="154" y="236" width="66" height="4" rx="2" fill="#c4b5fd" opacity="0.6" />
+                        <rect x="176" y="256" width="28" height="10" fill="#2e1065" />
+                        <rect x="164" y="264" width="52" height="6" rx="3" fill="#1e0a45" />
+
+                        <rect x="86" y="212" width="34" height="6" rx="3" fill="#3b0764" />
+                        <rect x="86" y="220" width="34" height="34" rx="4" fill="#f5f3ff" />
+                        <rect x="90" y="226" width="26" height="3" rx="1.5" fill="#7c3aed" />
+                        <rect x="90" y="232" width="20" height="3" rx="1.5" fill="#a78bfa" />
+                        <rect x="90" y="238" width="24" height="3" rx="1.5" fill="#a78bfa" />
+                        <path d="M92 246 l4 4 l8 -9" stroke="#7c3aed" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+
+                        <circle cx="258" cy="228" r="10" fill="#f5f3ff" />
+                        <rect x="250" y="224" width="16" height="10" rx="2" fill="#c4b5fd" />
+                        <rect x="253" y="238" width="10" height="14" rx="3" fill="#7c3aed" />
+
+                        <g>
+                          <rect x="150" y="298" width="34" height="88" rx="14" fill="#6d28d9" />
+                          <circle cx="167" cy="288" r="18" fill="#fcd9b8" />
+                          <path d="M149 284 q18 -26 36 0 l-4 10 q-14 -16 -28 0 z" fill="#3b0764" />
+                          <rect x="140" y="386" width="54" height="10" rx="5" fill="#4c1d95" />
+                        </g>
+
+                        <g>
+                          <rect x="212" y="292" width="30" height="94" rx="13" fill="#8b5cf6" />
+                          <circle cx="227" cy="280" r="16" fill="#fcd9b8" />
+                          <path d="M212 278 q15 -22 30 0 l-3 8 q-12 -13 -24 0 z" fill="#2e1065" />
+                          <rect x="204" y="386" width="50" height="10" rx="5" fill="#4c1d95" />
+                        </g>
+
+                        <rect x="290" y="330" width="16" height="56" rx="8" fill="#7c3aed" opacity="0.85" />
+                        <ellipse cx="298" cy="322" rx="20" ry="14" fill="#a78bfa" opacity="0.8" />
+                        <ellipse cx="286" cy="314" rx="12" ry="9" fill="#8b5cf6" opacity="0.7" />
+                        <ellipse cx="308" cy="316" rx="12" ry="9" fill="#8b5cf6" opacity="0.7" />
+
+                        <circle cx="88" cy="176" r="18" fill="white" opacity="0.9" />
+                        <path d="M80 176 l6 6 l12 -13" stroke="#7c3aed" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                      </svg>
+                    </div>
                     <div className="absolute inset-0 bg-gradient-to-t from-violet-900/45 via-transparent to-transparent" />
                     <div className="module-hero-badge bg-violet-700/90 text-white">
                       <div>
