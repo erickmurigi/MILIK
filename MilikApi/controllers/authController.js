@@ -39,7 +39,17 @@ const getJWTSecret = () => {
 const JWT_ISSUER = "milik-api";
 const JWT_AUDIENCE = "milik-client";
 const JWT_OPTIONS        = { expiresIn: "7d",  issuer: JWT_ISSUER, audience: JWT_AUDIENCE };
-const JWT_REFRESH_OPTIONS = { expiresIn: "30d", issuer: JWT_ISSUER, audience: JWT_AUDIENCE };
+
+// /auth/refresh only rotates the token once it's within this window of its own
+// expiry, instead of on every single call. There is only one token type here
+// (no separate long-lived refresh token) — "refresh" re-mints the same 7-day JWT
+// and immediately blacklists the one it replaces. Rotating on every page mount
+// (the client called this unconditionally on every load) meant every browser
+// refresh invalidated the token for every OTHER open tab and any in-flight
+// request still carrying it, surfacing as a spurious logout on an actively-used
+// tab. Gating rotation to "actually close to expiring" makes that race rare
+// instead of guaranteed, without weakening revocation once it does rotate.
+const REFRESH_ROTATION_WINDOW_MS = 2 * 24 * 60 * 60 * 1000; // rotate only when <2d of the 7d life remain
 
 // Pre-computed dummy hash — used to pad response timing when a login email is not found,
 // preventing user enumeration via timing attacks.
@@ -715,6 +725,16 @@ export const refreshToken = async (req, res) => {
     const revoked = await isBlacklistedAsync(token);
     if (revoked) {
       return res.status(401).json({ success: false, message: EXPIRED_MSG });
+    }
+
+    const msRemaining = Number(decoded.exp) * 1000 - Date.now();
+    if (msRemaining > REFRESH_ROTATION_WINDOW_MS) {
+      // Still well within its life — re-assert the cookie (keeps it sliding/fresh)
+      // but hand back the SAME token rather than rotating. Rotating here would
+      // blacklist a token every other open tab (and any request already in
+      // flight with it) may still be using, logging them out for no reason.
+      attachAuthCookie(res, token);
+      return res.status(200).json({ success: true, token, user: decoded });
     }
 
     // createAuthToken expects user._id; the decoded payload carries id.

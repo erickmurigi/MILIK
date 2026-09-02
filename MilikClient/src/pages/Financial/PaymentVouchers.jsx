@@ -141,6 +141,9 @@ const PaymentVouchers = () => {
   const [serverPages, setServerPages] = useState(1);
   const [pendingPayVoucher, setPendingPayVoucher] = useState(null);
   const [pendingPaySettlementId, setPendingPaySettlementId] = useState("");
+  // Lazy initializer avoids a flash of the list on a direct/refreshed load of the
+  // "/new" URL — the sync effect below (which reruns on every subsequent route
+  // change, not just mount) is what actually fixes the stale-modal bug.
   const [showModal, setShowModal] = useState(() => location.pathname === "/accounts/payment-vouchers/new");
   const [editingVoucherId, setEditingVoucherId] = useState("");
   const [glVoucher, setGlVoucher] = useState(null);
@@ -181,6 +184,19 @@ const PaymentVouchers = () => {
     if (!currentCompany?._id || !hasPMS) return;
     if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
   }, [currentCompany?._id, hasPMS]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // "/accounts/payment-vouchers" and "/accounts/payment-vouchers/new" both render
+  // this same component, and React re-renders the SAME mounted instance across
+  // that route change instead of remounting it (same component, same position).
+  // Navigating between them via the tab bar (or back/forward, or a direct URL
+  // load) only ever changes location.pathname — it never runs openCreate()'s or
+  // closeForm()'s own setShowModal() calls. Without this, the "new voucher" form
+  // stayed on screen after switching to a different tab because nothing told
+  // showModal to close. This only fires when the route itself actually changes,
+  // so it never fights openEdit() (which opens the modal without navigating).
+  useEffect(() => {
+    setShowModal(location.pathname === "/accounts/payment-vouchers/new");
+  }, [location.pathname]);
 
   useEffect(() => {
     if (!location.state) return;

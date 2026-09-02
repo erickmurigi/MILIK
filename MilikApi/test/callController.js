@@ -42,6 +42,11 @@ export const callController = (handlerFn, { params = {}, query = {}, body = {}, 
         }
         return this;
       },
+      // No-op stand-ins so controllers that set/clear the auth cookie (login,
+      // refresh, switchCompany, changePasswordFirstLogin) don't throw on a bare
+      // fake res — nothing here asserts on cookies, they're just harmless calls.
+      cookie() { return this; },
+      clearCookie() { return this; },
     };
 
     const next = (err) => {

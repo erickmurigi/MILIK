@@ -1,5 +1,10 @@
 const AUTH_COOKIE_NAME = String(process.env.AUTH_COOKIE_NAME || "milik_auth").trim() || "milik_auth";
-const AUTH_COOKIE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+// Must match the JWT's own life (JWT_OPTIONS.expiresIn in authController.js = 7d).
+// This was 24h while the token itself stayed valid for 7d, so the httpOnly
+// cookie silently expired days before the token it carried did — any request
+// that relied on the cookie alone (no explicit Authorization header) would stop
+// authenticating well before the token was actually due to expire.
+const AUTH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const parseBoolean = (value, fallback = false) => {
   if (typeof value === "boolean") return value;

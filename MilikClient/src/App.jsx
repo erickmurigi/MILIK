@@ -514,14 +514,29 @@ function App() {
     dispatch(initializeAuth({ user: storedUser, token: storedToken }));
   }, [currentUser, dispatch]);
 
-  // Silent token refresh on mount — runs once when the user is logged in.
+  // Silent token refresh on mount — runs once per distinct token value, and only
+  // when that token is actually close to expiring (server applies the same gate
+  // independently — see REFRESH_ROTATION_WINDOW_MS in authController.js). The
+  // backend rotates the token in place and immediately revokes the one it
+  // replaces; calling this unconditionally on every page load meant every
+  // browser refresh in any tab could invalidate the token every OTHER open tab
+  // (or an in-flight request in the same tab) was still using, surfacing as a
+  // spurious "logged out while actively using it". Skipping the call entirely
+  // while the token still has most of its life left removes that race for the
+  // overwhelming majority of page loads instead of triggering it on every one.
   // If refresh succeeds the new token is stored in Redux + localStorage.
   // If it fails the existing 401 interceptor in requestMethods.js handles logout.
-  const tokenRefreshAttempted = useRef(false);
+  const REFRESH_THRESHOLD_MS = 2 * 24 * 60 * 60 * 1000; // matches server's rotation window
+  const lastRefreshAttemptTokenRef = useRef(null);
   useEffect(() => {
     if (!currentUser || !token) return;
-    if (tokenRefreshAttempted.current) return;
-    tokenRefreshAttempted.current = true;
+    if (lastRefreshAttemptTokenRef.current === token) return;
+
+    const payload = decodeTokenPayload(token);
+    const msRemaining = payload?.exp ? Number(payload.exp) * 1000 - Date.now() : 0;
+    if (msRemaining > REFRESH_THRESHOLD_MS) return; // plenty of life left — nothing to do yet
+
+    lastRefreshAttemptTokenRef.current = token;
 
     refreshAccessToken().then((data) => {
       if (data?.token) {
