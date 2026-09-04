@@ -277,7 +277,7 @@ const resolveCommissionIncomeAccount = async (businessId) => {
   return fallback;
 };
 
-const postCommissionAccrualForProcessedStatement = async ({ processedStatement, approvedStatement, userId }) => {
+export const postCommissionAccrualForProcessedStatement = async ({ processedStatement, approvedStatement, userId }) => {
   const commissionAmount = numberOrZero(processedStatement?.commissionAmount);
   const commissionTaxAmount = numberOrZero(processedStatement?.commissionTaxAmount);
   const commissionGrossAmount = numberOrZero(processedStatement?.commissionGrossAmount || commissionAmount + commissionTaxAmount);
@@ -1199,7 +1199,13 @@ export const getStatementsByBusiness = async (req, res, next) => {
       query.isNegativeStatement = true;
       query.status = { $ne: "reversed" };
     } else if (tab === "paid") {
-      query.status = "paid";
+      // "paid" (was owed, then settled) and "processed" (netAmountDue was already <= 0
+      // at creation, so nothing was ever owed) are both "fully settled" from the
+      // landlord's point of view — group them here. Without "processed" a $0-net
+      // statement matched no tab at all (not unpaid/part_paid, not negative, not
+      // literally "paid"), making it permanently unreachable in this list — including
+      // its Reverse action, which only renders for rows this query returns.
+      query.status = { $in: ["paid", "processed"] };
       query.isNegativeStatement = { $ne: true };
     } else if (tab === "management_fees") {
       query.commissionGrossAmount = { $gt: 0 };
