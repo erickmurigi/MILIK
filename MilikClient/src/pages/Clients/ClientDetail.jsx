@@ -13,17 +13,23 @@ import {
   FaComments,
   FaEnvelope,
   FaEdit,
+  FaFileAlt,
   FaFileInvoice,
   FaHandshake,
   FaPhone,
   FaPlus,
   FaSave,
+  FaSms,
   FaStickyNote,
   FaTimes,
   FaTrash,
 } from 'react-icons/fa';
 import ClientsShell from './ClientsShell';
 import { clientsApi } from '../../services/clientsApi';
+import RecordClientPaymentModal from '../../components/Modals/RecordClientPaymentModal';
+import PaginationBar from '../../components/PaginationBar';
+import MilikTable from '../../components/common/MilikTable';
+import StatementLedgerTab from '../../components/common/StatementLedgerTab';
 
 // ─── Formatting helpers ───────────────────────────────────────────────────────
 
@@ -89,7 +95,7 @@ const CATEGORIES      = ['enterprise', 'sme', 'individual'];
 const SOURCES         = ['referral', 'direct', 'online', 'other'];
 const BILLING_CYCLES  = ['monthly', 'quarterly', 'annually'];
 const RENEWAL_STAGES  = ['due', 'contacted', 'negotiating', 'renewed', 'lost'];
-const INTERACTION_TYPES = ['note', 'email', 'call', 'meeting'];
+const INTERACTION_TYPES = ['note', 'email', 'call', 'meeting', 'sms'];
 
 // ─── Shared sub-components ────────────────────────────────────────────────────
 
@@ -199,11 +205,15 @@ const ProfileTab = ({ client, summary, onRefresh }) => {
     return <div className="py-12 text-center text-sm text-slate-400">Loading profile…</div>;
   }
 
+  // Plain label-over-value typography instead of a boxed/greyed field — this
+  // is a read-only profile display, not a disabled form. Matches the compact
+  // label style used throughout the app (StatTile above, PayLandlordModal's
+  // summary rows, etc.): tiny bold uppercase tracked-out label, bold value.
   const FieldView = ({ label, value }) => (
     <div>
-      <p className={labelClass}>{label}</p>
-      <p className="text-sm text-slate-800 py-2 px-3 bg-slate-50 rounded-md">
-        {value || <span className="italic text-slate-400">—</span>}
+      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+      <p className="mt-0.5 text-[13px] font-semibold text-slate-800">
+        {value || <span className="font-normal italic text-slate-300">—</span>}
       </p>
     </div>
   );
@@ -241,7 +251,7 @@ const ProfileTab = ({ client, summary, onRefresh }) => {
   return (
     <div className="space-y-3">
       {/* Stats row */}
-      <div className="grid grid-cols-3 gap-1.5">
+      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
         <StatTile
           label="Active Contracts"
           value={summary?.activeContracts ?? '…'}
@@ -250,6 +260,11 @@ const ProfileTab = ({ client, summary, onRefresh }) => {
         <StatTile
           label="Total Invoiced"
           value={summary ? fmtKES(summary.totalInvoiced) : '…'}
+        />
+        <StatTile
+          label="Total Paid"
+          value={summary ? fmtKES(summary.totalPaid) : '…'}
+          color="text-emerald-700"
         />
         <StatTile
           label="Outstanding"
@@ -291,7 +306,7 @@ const ProfileTab = ({ client, summary, onRefresh }) => {
           )
         }
       >
-        <div className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="p-3 grid grid-cols-1 gap-x-6 gap-y-2.5 sm:grid-cols-2 lg:grid-cols-3">
           {editMode ? (
             <>
               <FieldEdit label="Name"            field="name" />
@@ -304,7 +319,7 @@ const ProfileTab = ({ client, summary, onRefresh }) => {
               <FieldEdit label="Company Reg #"   field="companyRegistration" />
               <FieldEdit label="Address Line 1"  field="address.line1" />
               <FieldEdit label="City"            field="address.city" />
-              <div className="sm:col-span-2">
+              <div className="sm:col-span-2 lg:col-span-3">
                 <FieldEdit label="Notes" field="notes" type="textarea" />
               </div>
             </>
@@ -320,7 +335,7 @@ const ProfileTab = ({ client, summary, onRefresh }) => {
               <FieldView label="Company Reg #"   value={client.companyRegistration} />
               <FieldView label="Address"         value={client.address?.line1} />
               <FieldView label="City"            value={client.address?.city} />
-              <div className="sm:col-span-2">
+              <div className="sm:col-span-2 lg:col-span-3">
                 <FieldView label="Notes" value={client.notes} />
               </div>
             </>
@@ -492,7 +507,7 @@ const AddContractModal = ({ clientId, onClose, onCreated }) => {
         </>
       }
     >
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2.5">
         <div className="col-span-2">
           <label className={labelClass}>Description *</label>
           <input
@@ -607,18 +622,23 @@ const RenewContractModal = ({ contract, onClose, onRenewed }) => {
         </>
       }
     >
-      <div className="space-y-3">
-        <div className="rounded border border-slate-200 bg-slate-50 p-3 text-xs space-y-1">
-          <div className="flex justify-between">
-            <span className="text-slate-500">Current Value</span>
-            <span className="font-semibold text-slate-800">{fmtKES(currentVal)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-slate-500">New Value ({contract?.escalationPercent ?? 10}% escalation)</span>
-            <span className="font-bold text-[#0B3B2E]">{fmtKES(proposedVal)}</span>
+      <div className="space-y-2.5">
+        <div className="border border-slate-200 bg-slate-50 p-3">
+          <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Renewal Summary</p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Current Value</p>
+              <p className="mt-0.5 text-[13px] font-semibold text-slate-800">{fmtKES(currentVal)}</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                New Value ({contract?.escalationPercent ?? 10}% escalation)
+              </p>
+              <p className="mt-0.5 text-[13px] font-bold text-[#0B3B2E]">{fmtKES(proposedVal)}</p>
+            </div>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2.5">
           <div>
             <label className={labelClass}>New Start Date</label>
             <input type="date" className={inputClass} value={form.startDate} onChange={(e) => set('startDate', e.target.value)} />
@@ -684,10 +704,12 @@ const TerminateContractModal = ({ contract, onClose, onTerminated }) => {
   );
 };
 
-const ContractsTab = ({ clientId }) => {
+const ContractsTab = ({ clientId, onSummaryChange }) => {
   const [contracts, setContracts]     = useState([]);
+  const [pagination, setPagination]   = useState({ total: 0, page: 1, pages: 1 });
   const [loading, setLoading]         = useState(true);
-  const loadedRef                     = useRef(false);
+  const [page, setPage]               = useState(1);
+  const [limit, setLimit]             = useState(25);
   const [showAdd, setShowAdd]         = useState(false);
   const [renewTarget, setRenewTarget] = useState(null);
   const [termTarget, setTermTarget]   = useState(null);
@@ -696,25 +718,31 @@ const ContractsTab = ({ clientId }) => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await clientsApi.listContracts({ clientId });
+      const { data } = await clientsApi.listContracts({ clientId, page, limit });
       setContracts(data?.contracts || data?.data || []);
-      loadedRef.current = true;
+      setPagination(data?.pagination || { total: 0, page: 1, pages: 1 });
     } catch (err) {
       toast.error(err?.response?.data?.message || err?.message || 'Failed to load contracts');
     } finally {
       setLoading(false);
     }
-  }, [clientId]);
+  }, [clientId, page, limit]);
 
-  useEffect(() => {
-    if (!loadedRef.current) load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
+
+  // Contract count/status changes affect the Profile tab's "Active Contracts"
+  // stat, which otherwise only refreshes on initial page load — call this
+  // instead of load() alone after anything that changes a contract's status.
+  const refresh = useCallback(() => {
+    load();
+    onSummaryChange?.();
+  }, [load, onSummaryChange]);
 
   const handleActivate = async (c) => {
     try {
       await clientsApi.activateContract(c._id);
       toast.success('Contract activated');
-      load();
+      refresh();
     } catch (err) {
       toast.error(err?.response?.data?.message || err?.message || 'Failed to activate');
     }
@@ -745,115 +773,115 @@ const ContractsTab = ({ clientId }) => {
         </button>
       </div>
 
-      {loading ? (
-        <div className="py-12 text-center text-sm text-slate-400">Loading contracts…</div>
-      ) : !contracts.length ? (
-        <div className="py-12 text-center text-sm text-slate-400">No contracts on record.</div>
-      ) : (
-        <div className="overflow-x-auto rounded border border-slate-200">
-          <table className="w-full min-w-[820px] text-xs">
-            <thead>
-              <tr className="bg-[#0B3B2E]">
-                {['Contract #', 'Description', 'Period', 'Value (KES)', 'Billing', 'Status', 'Expires', 'Actions'].map(
-                  (h) => (
-                    <th
-                      key={h}
-                      className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white"
-                    >
-                      {h}
-                    </th>
-                  )
+      <MilikTable
+        columns={[
+          { label: 'Contract #' },
+          { label: 'Description' },
+          { label: 'Period' },
+          { label: 'Value (KES)' },
+          { label: 'Billing' },
+          { label: 'Status' },
+          { label: 'Expires' },
+        ]}
+        rows={contracts}
+        rowKey="_id"
+        loading={loading}
+        empty="No contracts on record."
+        renderRow={(c) => {
+          const days = c.endDate ? daysUntil(c.endDate) : null;
+          return (
+            <>
+              <td className="px-3 py-2.5 font-mono text-[11px] text-[#0B3B2E]">
+                {c.contractNumber || c._id?.slice(-6).toUpperCase()}
+              </td>
+              <td className="px-3 py-2.5 max-w-[160px] truncate font-semibold text-slate-800">
+                {c.description || '—'}
+              </td>
+              <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">
+                {fmtDate(c.startDate)} –{' '}
+                {c.openEnded || !c.endDate
+                  ? <span className="font-semibold text-emerald-700">Ongoing</span>
+                  : fmtDate(c.endDate)}
+              </td>
+              <td className="px-3 py-2.5 tabular-nums font-semibold text-slate-700">
+                {fmtKES(c.currentValue || c.baseValue)}
+              </td>
+              <td className="px-3 py-2.5 text-slate-500 capitalize">{c.billingCycle || '—'}</td>
+              <td className="px-3 py-2.5">
+                <span
+                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${contractStatusBadge(c.status)}`}
+                >
+                  {c.status || '—'}
+                </span>
+              </td>
+              <td className="px-3 py-2.5 whitespace-nowrap">
+                {c.status === 'active' && days !== null ? (
+                  <span className={`tabular-nums text-[11px] ${daysColor(days)}`}>
+                    {days < 0 ? `${Math.abs(days)}d overdue` : `${days}d`}
+                  </span>
+                ) : (
+                  <span className="text-slate-400">—</span>
                 )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {contracts.map((c, idx) => {
-                const days = c.endDate ? daysUntil(c.endDate) : null;
-                return (
-                  <tr key={c._id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
-                    <td className="px-3 py-2.5 font-mono text-[11px] text-[#0B3B2E]">
-                      {c.contractNumber || c._id?.slice(-6).toUpperCase()}
-                    </td>
-                    <td className="px-3 py-2.5 max-w-[160px] truncate font-semibold text-slate-800">
-                      {c.description || '—'}
-                    </td>
-                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">
-                      {fmtDate(c.startDate)} –{' '}
-                      {c.openEnded || !c.endDate
-                        ? <span className="font-semibold text-emerald-700">Ongoing</span>
-                        : fmtDate(c.endDate)}
-                    </td>
-                    <td className="px-3 py-2.5 tabular-nums font-semibold text-slate-700">
-                      {fmtKES(c.currentValue || c.baseValue)}
-                    </td>
-                    <td className="px-3 py-2.5 text-slate-500 capitalize">{c.billingCycle || '—'}</td>
-                    <td className="px-3 py-2.5">
-                      <span
-                        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${contractStatusBadge(c.status)}`}
-                      >
-                        {c.status || '—'}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 whitespace-nowrap">
-                      {c.status === 'active' && days !== null ? (
-                        <span className={`tabular-nums text-[11px] ${daysColor(days)}`}>
-                          {days < 0 ? `${Math.abs(days)}d overdue` : `${days}d`}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex flex-wrap items-center gap-1">
-                        {c.status === 'draft' && (
-                          <button
-                            type="button"
-                            onClick={() => handleActivate(c)}
-                            className="border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-2 py-0.5 rounded text-[10px] font-semibold"
-                          >
-                            Activate
-                          </button>
-                        )}
-                        {c.status === 'active' && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => setRenewTarget(c)}
-                              className="border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 px-2 py-0.5 rounded text-[10px] font-semibold"
-                            >
-                              Renew
-                            </button>
-                            <AppSelect
-                              size="sm"
-                              value={c.renewalStage || 'not_started'}
-                              onChange={(v) => handleRenewalStage(c._id, v ?? 'not_started')}
-                              disabled={stageUpdating[c._id]}
-                              options={RENEWAL_STAGES.map((s) => ({ value: s, label: s.replace(/_/g, ' ') }))}
-                            />
-                          </>
-                        )}
-                        {(c.status === 'active' || c.status === 'draft') && (
-                          <button
-                            type="button"
-                            onClick={() => setTermTarget(c)}
-                            className="border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 px-2 py-0.5 rounded text-[10px] font-semibold"
-                          >
-                            Terminate
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </td>
+            </>
+          );
+        }}
+        renderActions={(c) => (
+          <div className="flex flex-wrap items-center gap-1">
+            {c.status === 'draft' && (
+              <button
+                type="button"
+                onClick={() => handleActivate(c)}
+                className="border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-2 py-0.5 rounded text-[10px] font-semibold"
+              >
+                Activate
+              </button>
+            )}
+            {c.status === 'active' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setRenewTarget(c)}
+                  className="border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 px-2 py-0.5 rounded text-[10px] font-semibold"
+                >
+                  Renew
+                </button>
+                <AppSelect
+                  size="sm"
+                  value={c.renewalStage || 'not_started'}
+                  onChange={(v) => handleRenewalStage(c._id, v ?? 'not_started')}
+                  disabled={stageUpdating[c._id]}
+                  options={RENEWAL_STAGES.map((s) => ({ value: s, label: s.replace(/_/g, ' ') }))}
+                />
+              </>
+            )}
+            {(c.status === 'active' || c.status === 'draft') && (
+              <button
+                type="button"
+                onClick={() => setTermTarget(c)}
+                className="border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 px-2 py-0.5 rounded text-[10px] font-semibold"
+              >
+                Terminate
+              </button>
+            )}
+          </div>
+        )}
+      />
 
-      {showAdd   && <AddContractModal clientId={clientId} onClose={() => setShowAdd(false)} onCreated={load} />}
-      {renewTarget && <RenewContractModal contract={renewTarget} onClose={() => setRenewTarget(null)} onRenewed={load} />}
-      {termTarget  && <TerminateContractModal contract={termTarget} onClose={() => setTermTarget(null)} onTerminated={load} />}
+      <PaginationBar
+        page={page}
+        pages={pagination.pages || 1}
+        total={pagination.total || 0}
+        pageSize={limit}
+        onPageChange={setPage}
+        onPageSizeChange={(n) => { setLimit(n); setPage(1); }}
+        loading={loading}
+        label="contracts"
+      />
+
+      {showAdd   && <AddContractModal clientId={clientId} onClose={() => setShowAdd(false)} onCreated={refresh} />}
+      {renewTarget && <RenewContractModal contract={renewTarget} onClose={() => setRenewTarget(null)} onRenewed={refresh} />}
+      {termTarget  && <TerminateContractModal contract={termTarget} onClose={() => setTermTarget(null)} onTerminated={refresh} />}
     </div>
   );
 };
@@ -943,8 +971,8 @@ const CreateInvoiceModal = ({ clientId, contracts, onClose, onCreated }) => {
         </>
       }
     >
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-2.5">
           {contracts.length > 0 && (
             <div className="col-span-2">
               <label className={labelClass}>Contract (optional)</label>
@@ -1049,28 +1077,28 @@ const CreateInvoiceModal = ({ clientId, contracts, onClose, onCreated }) => {
           </div>
 
           {/* Totals */}
-          <div className="mt-2 space-y-1 text-xs border border-slate-200 rounded p-3 bg-slate-50">
-            <div className="flex justify-between">
-              <span className="text-slate-500">Subtotal</span>
-              <span className="tabular-nums font-semibold text-slate-700">{fmtKES(subtotal)}</span>
+          <div className="mt-2 space-y-1.5 border border-slate-200 bg-slate-50 p-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Subtotal</span>
+              <span className="text-[13px] tabular-nums font-semibold text-slate-700">{fmtKES(subtotal)}</span>
             </div>
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-500">VAT</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">VAT</span>
                 <input
                   type="number"
-                  className="w-14 border border-slate-200 rounded px-1 py-0.5 text-xs"
+                  className="w-12 border border-slate-200 rounded px-1 py-0.5 text-[11px]"
                   value={form.vatRate}
                   onChange={(e) => set('vatRate', e.target.value)}
                   min="0"
                   max="100"
                 />
-                <span className="text-slate-400">%</span>
+                <span className="text-[10px] text-slate-400">%</span>
               </div>
-              <span className="tabular-nums font-semibold text-slate-700">{fmtKES(vatAmt)}</span>
+              <span className="text-[13px] tabular-nums font-semibold text-slate-700">{fmtKES(vatAmt)}</span>
             </div>
-            <div className="flex justify-between border-t border-slate-200 pt-1">
-              <span className="font-bold text-slate-800">Total</span>
+            <div className="flex items-center justify-between border-t border-slate-200 pt-1.5">
+              <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Total</span>
               <span className="tabular-nums font-black text-[#0B3B2E] text-sm">{fmtKES(total)}</span>
             </div>
           </div>
@@ -1090,93 +1118,14 @@ const CreateInvoiceModal = ({ clientId, contracts, onClose, onCreated }) => {
   );
 };
 
-const MarkPaidModal = ({ invoice, onClose, onPaid }) => {
-  const balance = Math.max(0, (invoice?.total || 0) - (invoice?.paidAmount || 0));
-  const [form, setForm] = useState({
-    paidAmount:       String(balance || ''),
-    paidAt:           todayISO(),
-    paymentMethod:    'Bank Transfer',
-    paymentReference: '',
-  });
-  const [saving, setSaving] = useState(false);
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-
-  const handleSubmit = async () => {
-    if (!form.paidAmount || isNaN(Number(form.paidAmount))) { toast.error('Valid amount required'); return; }
-    setSaving(true);
-    try {
-      await clientsApi.markPaid(invoice._id, {
-        paidAmount:       Number(form.paidAmount),
-        paidAt:           form.paidAt,
-        paymentMethod:    form.paymentMethod,
-        paymentReference: form.paymentReference.trim() || undefined,
-      });
-      toast.success('Invoice marked as paid');
-      onPaid();
-      onClose();
-    } catch (err) {
-      toast.error(err?.response?.data?.message || err?.message || 'Failed to record payment');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Modal
-      title="Mark Invoice Paid"
-      onClose={onClose}
-      footer={
-        <>
-          <button type="button" onClick={onClose} className={btnSecondary}>Cancel</button>
-          <button type="button" onClick={handleSubmit} disabled={saving} className={btnPrimary}>
-            {saving ? 'Saving…' : 'Mark Paid'}
-          </button>
-        </>
-      }
-    >
-      <div className="space-y-3">
-        {(invoice?.paidAmount > 0) && (
-          <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            <span className="font-semibold">Partially paid:</span> {fmtKES(invoice.paidAmount)} of {fmtKES(invoice.total)} — balance {fmtKES(balance)}
-          </div>
-        )}
-        <div>
-          <label className={labelClass}>Amount Paying Now (KES) *</label>
-          <input type="number" className={inputClass} value={form.paidAmount} onChange={(e) => set('paidAmount', e.target.value)} min="0.01" step="0.01" />
-        </div>
-        <div>
-          <label className={labelClass}>Payment Date</label>
-          <input type="date" className={inputClass} value={form.paidAt} onChange={(e) => set('paidAt', e.target.value)} />
-        </div>
-        <div>
-          <label className={labelClass}>Payment Method</label>
-          <AppSelect
-            size="md"
-            value={form.paymentMethod}
-            onChange={(v) => set('paymentMethod', v ?? 'Bank Transfer')}
-            options={['Bank Transfer', 'M-Pesa', 'Cash', 'Cheque'].map((m) => ({ value: m, label: m }))}
-          />
-        </div>
-        <div>
-          <label className={labelClass}>Payment Reference</label>
-          <input
-            className={inputClass}
-            value={form.paymentReference}
-            onChange={(e) => set('paymentReference', e.target.value)}
-            placeholder="Transaction ID / cheque no…"
-          />
-        </div>
-      </div>
-    </Modal>
-  );
-};
-
-const InvoicesTab = ({ clientId, contracts }) => {
+const InvoicesTab = ({ clientId, contracts, onSummaryChange }) => {
   const navigate = useNavigate();
   const confirm  = useConfirm();
-  const [invoices, setInvoices] = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const loadedRef               = useRef(false);
+  const [invoices, setInvoices]     = useState([]);
+  const [pagination, setPagination] = useState({ total: 0, page: 1, pages: 1 });
+  const [loading, setLoading]       = useState(true);
+  const [page, setPage]             = useState(1);
+  const [limit, setLimit]           = useState(25);
   const [showCreate, setShowCreate]     = useState(false);
   const [markPaidTarget, setMarkPaidTarget] = useState(null);
   const [sending, setSending]       = useState({});
@@ -1185,24 +1134,32 @@ const InvoicesTab = ({ clientId, contracts }) => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await clientsApi.listInvoices({ clientId });
+      const { data } = await clientsApi.listInvoices({ clientId, page, limit });
       setInvoices(data?.invoices || data?.data || []);
-      loadedRef.current = true;
+      setPagination(data?.pagination || { total: 0, page: 1, pages: 1 });
     } catch (err) {
       toast.error(err?.response?.data?.message || err?.message || 'Failed to load invoices');
     } finally {
       setLoading(false);
     }
-  }, [clientId]);
+  }, [clientId, page, limit]);
 
-  useEffect(() => { if (!loadedRef.current) load(); }, [load]);
+  useEffect(() => { load(); }, [load]);
+
+  // Sending/paying/cancelling an invoice changes the Profile tab's Total
+  // Invoiced/Total Paid/Outstanding stats, which otherwise only refresh on
+  // initial page load — call this instead of load() alone after any of them.
+  const refresh = useCallback(() => {
+    load();
+    onSummaryChange?.();
+  }, [load, onSummaryChange]);
 
   const handleSend = async (inv) => {
     setSending((p) => ({ ...p, [inv._id]: true }));
     try {
       await clientsApi.sendInvoice(inv._id);
       toast.success('Invoice sent');
-      load();
+      refresh();
     } catch (err) {
       toast.error(err?.response?.data?.message || err?.message || 'Failed to send invoice');
     } finally {
@@ -1216,7 +1173,7 @@ const InvoicesTab = ({ clientId, contracts }) => {
     try {
       await clientsApi.cancelInvoice(inv._id);
       toast.success('Invoice cancelled');
-      load();
+      refresh();
     } catch (err) {
       toast.error(err?.response?.data?.message || err?.message || 'Failed to cancel invoice');
     } finally {
@@ -1236,112 +1193,116 @@ const InvoicesTab = ({ clientId, contracts }) => {
         </button>
       </div>
 
-      {loading ? (
-        <div className="py-12 text-center text-sm text-slate-400">Loading invoices…</div>
-      ) : !invoices.length ? (
-        <div className="py-12 text-center text-sm text-slate-400">No invoices on record.</div>
-      ) : (
-        <div className="overflow-x-auto rounded border border-slate-200">
-          <table className="w-full min-w-[860px] text-xs">
-            <thead>
-              <tr className="bg-[#0B3B2E]">
-                {['Invoice #', 'Period', 'Issue Date', 'Due Date', 'Total', 'Paid', 'Balance', 'Status', 'Actions'].map(
-                  (h) => (
-                    <th key={h} className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">
-                      {h}
-                    </th>
-                  )
-                )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {invoices.map((inv, idx) => {
-                const balance = (inv.total || 0) - (inv.paidAmount || 0);
-                return (
-                  <tr key={inv._id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
-                    <td className="px-3 py-2.5 font-mono text-[11px] text-[#0B3B2E]">
-                      {inv.invoiceNumber || inv._id?.slice(-6).toUpperCase()}
-                    </td>
-                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">
-                      {inv.periodStart ? `${fmtDate(inv.periodStart)} – ${fmtDate(inv.periodEnd)}` : '—'}
-                    </td>
-                    <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{fmtDate(inv.issueDate)}</td>
-                    <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{fmtDate(inv.dueDate)}</td>
-                    <td className="px-3 py-2.5 tabular-nums font-semibold text-slate-700">
-                      {fmtKES(inv.total)}
-                    </td>
-                    <td className="px-3 py-2.5 tabular-nums text-emerald-700">{fmtKES(inv.paidAmount || 0)}</td>
-                    <td className={`px-3 py-2.5 tabular-nums font-semibold ${balance > 0 ? 'text-red-600' : 'text-slate-400'}`}>
-                      {fmtKES(balance)}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <span
-                        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${invoiceStatusBadge(inv.status)}`}
-                      >
-                        {inv.status || '—'}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex flex-wrap items-center gap-1">
-                        {(inv.status === 'draft' || inv.status === 'sent') && (
-                          <button
-                            type="button"
-                            onClick={() => handleSend(inv)}
-                            disabled={sending[inv._id]}
-                            className="border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 px-2 py-0.5 rounded text-[10px] font-semibold disabled:opacity-50"
-                          >
-                            {sending[inv._id] ? '…' : 'Send'}
-                          </button>
-                        )}
-                        {inv.status !== 'paid' && inv.status !== 'cancelled' && (
-                          <button
-                            type="button"
-                            onClick={() => setMarkPaidTarget(inv)}
-                            className="border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-2 py-0.5 rounded text-[10px] font-semibold"
-                          >
-                            Mark Paid
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/clients/invoices/${inv._id}/print`)}
-                          className="border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 px-2 py-0.5 rounded text-[10px] font-semibold"
-                        >
-                          Print
-                        </button>
-                        {inv.status !== 'paid' && inv.status !== 'cancelled' && (
-                          <button
-                            type="button"
-                            onClick={() => handleCancel(inv)}
-                            disabled={cancelling[inv._id]}
-                            className="border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 px-2 py-0.5 rounded text-[10px] font-semibold disabled:opacity-50"
-                          >
-                            {cancelling[inv._id] ? '…' : 'Cancel'}
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <MilikTable
+        columns={[
+          { label: 'Invoice #' },
+          { label: 'Period' },
+          { label: 'Issue Date' },
+          { label: 'Due Date' },
+          { label: 'Total' },
+          { label: 'Paid' },
+          { label: 'Balance' },
+          { label: 'Status' },
+        ]}
+        rows={invoices}
+        rowKey="_id"
+        loading={loading}
+        empty="No invoices on record."
+        renderRow={(inv) => {
+          const balance = (inv.total || 0) - (inv.paidAmount || 0);
+          return (
+            <>
+              <td className="px-3 py-2.5 font-mono text-[11px] text-[#0B3B2E]">
+                {inv.invoiceNumber || inv._id?.slice(-6).toUpperCase()}
+              </td>
+              <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">
+                {inv.periodStart ? `${fmtDate(inv.periodStart)} – ${fmtDate(inv.periodEnd)}` : '—'}
+              </td>
+              <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{fmtDate(inv.issueDate)}</td>
+              <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{fmtDate(inv.dueDate)}</td>
+              <td className="px-3 py-2.5 tabular-nums font-semibold text-slate-700">
+                {fmtKES(inv.total)}
+              </td>
+              <td className="px-3 py-2.5 tabular-nums text-emerald-700">{fmtKES(inv.paidAmount || 0)}</td>
+              <td className={`px-3 py-2.5 tabular-nums font-semibold ${balance > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                {fmtKES(balance)}
+              </td>
+              <td className="px-3 py-2.5">
+                <span
+                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${invoiceStatusBadge(inv.status)}`}
+                >
+                  {inv.status || '—'}
+                </span>
+              </td>
+            </>
+          );
+        }}
+        renderActions={(inv) => (
+          <div className="flex flex-wrap items-center gap-1">
+            {(inv.status === 'draft' || inv.status === 'sent') && (
+              <button
+                type="button"
+                onClick={() => handleSend(inv)}
+                disabled={sending[inv._id]}
+                className="border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 px-2 py-0.5 rounded text-[10px] font-semibold disabled:opacity-50"
+              >
+                {sending[inv._id] ? '…' : 'Send'}
+              </button>
+            )}
+            {inv.status !== 'paid' && inv.status !== 'cancelled' && (
+              <button
+                type="button"
+                onClick={() => setMarkPaidTarget(inv)}
+                className="border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-2 py-0.5 rounded text-[10px] font-semibold"
+              >
+                Mark Paid
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => navigate(`/clients/invoices/${inv._id}/print`)}
+              className="border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 px-2 py-0.5 rounded text-[10px] font-semibold"
+            >
+              Print
+            </button>
+            {inv.status !== 'paid' && inv.status !== 'cancelled' && (
+              <button
+                type="button"
+                onClick={() => handleCancel(inv)}
+                disabled={cancelling[inv._id]}
+                className="border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 px-2 py-0.5 rounded text-[10px] font-semibold disabled:opacity-50"
+              >
+                {cancelling[inv._id] ? '…' : 'Cancel'}
+              </button>
+            )}
+          </div>
+        )}
+      />
+
+      <PaginationBar
+        page={page}
+        pages={pagination.pages || 1}
+        total={pagination.total || 0}
+        pageSize={limit}
+        onPageChange={setPage}
+        onPageSizeChange={(n) => { setLimit(n); setPage(1); }}
+        loading={loading}
+        label="invoices"
+      />
 
       {showCreate && (
         <CreateInvoiceModal
           clientId={clientId}
           contracts={contracts}
           onClose={() => setShowCreate(false)}
-          onCreated={load}
+          onCreated={refresh}
         />
       )}
       {markPaidTarget && (
-        <MarkPaidModal
+        <RecordClientPaymentModal
           invoice={markPaidTarget}
           onClose={() => setMarkPaidTarget(null)}
-          onPaid={load}
+          onRecorded={refresh}
         />
       )}
     </div>
@@ -1353,7 +1314,7 @@ const InvoicesTab = ({ clientId, contracts }) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const typeIcon = (type) => {
-  const map = { email: FaEnvelope, call: FaPhone, meeting: FaCalendar, note: FaStickyNote };
+  const map = { email: FaEnvelope, call: FaPhone, meeting: FaCalendar, note: FaStickyNote, sms: FaSms };
   return map[type] || FaStickyNote;
 };
 
@@ -1363,6 +1324,7 @@ const typeColorCls = (type) => {
     call:    'text-emerald-700 bg-emerald-50 border-emerald-200',
     meeting: 'text-violet-700 bg-violet-50 border-violet-200',
     note:    'text-amber-700 bg-amber-50 border-amber-200',
+    sms:     'text-cyan-700 bg-cyan-50 border-cyan-200',
   };
   return map[type] || 'text-slate-600 bg-slate-50 border-slate-200';
 };
@@ -1402,7 +1364,7 @@ const LogInteractionModal = ({ clientId, defaultType, onClose, onCreated }) => {
     }
   };
 
-  const titles = { note: 'Add Note', email: 'Log Email', call: 'Log Call', meeting: 'Log Meeting' };
+  const titles = { note: 'Add Note', email: 'Log Email', call: 'Log Call', meeting: 'Log Meeting', sms: 'Log SMS' };
 
   return (
     <Modal
@@ -1464,29 +1426,101 @@ const LogInteractionModal = ({ clientId, defaultType, onClose, onCreated }) => {
   );
 };
 
-const CommunicationsTab = ({ clientId }) => {
+// Sends a real ad-hoc SMS via the shared communicationService (see
+// clientsController.sendClientSms) and logs it as an interaction on the
+// backend — distinct from LogInteractionModal, which only records that a
+// contact happened without actually dispatching anything.
+const SendSmsModal = ({ clientId, defaultPhone, onClose, onSent }) => {
+  const [phone, setPhone] = useState(defaultPhone || '');
+  const [body, setBody]   = useState('');
+  const [sending, setSending] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!phone.trim()) { toast.error('Phone number required'); return; }
+    if (!body.trim())  { toast.error('Message required'); return; }
+    setSending(true);
+    try {
+      const { data } = await clientsApi.sendSms(clientId, { phone: phone.trim(), body: body.trim() });
+      if (data?.success === false || (data?.message && /could not be confirmed/i.test(data.message))) {
+        toast.warning(data?.message || 'SMS dispatch could not be confirmed');
+      } else {
+        toast.success('SMS sent');
+      }
+      onSent?.();
+      onClose();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err?.message || 'Failed to send SMS');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="Send SMS"
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" onClick={onClose} className={btnSecondary}>Cancel</button>
+          <button type="button" onClick={handleSubmit} disabled={sending} className={btnPrimary}>
+            {sending ? 'Sending…' : 'Send'}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <div>
+          <label className={labelClass}>Phone Number</label>
+          <input
+            className={inputClass}
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="07XXXXXXXX"
+          />
+        </div>
+        <div>
+          <label className={labelClass}>Message *</label>
+          <textarea
+            className={`${inputClass} resize-none`}
+            rows={5}
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder="Message content…"
+            maxLength={480}
+          />
+          <p className="mt-0.5 text-right text-[10px] text-slate-400">{body.length}/480</p>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+const CommunicationsTab = ({ clientId, clientPhone }) => {
   const confirm = useConfirm();
   const [interactions, setInteractions] = useState([]);
+  const [pagination, setPagination]     = useState({ total: 0, page: 1, pages: 1 });
   const [loading, setLoading]           = useState(true);
+  const [page, setPage]                 = useState(1);
+  const [limit, setLimit]               = useState(25);
   const [expanded, setExpanded]         = useState({});
   const [showLog, setShowLog]           = useState(null);
+  const [showSms, setShowSms]           = useState(false);
   const [deleting, setDeleting]         = useState({});
-  const loadedRef                       = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await clientsApi.listInteractions({ clientId });
+      const { data } = await clientsApi.listInteractions({ clientId, page, limit });
       setInteractions(data?.interactions || data?.data || []);
-      loadedRef.current = true;
+      setPagination(data?.pagination || { total: 0, page: 1, pages: 1 });
     } catch (err) {
       toast.error(err?.response?.data?.message || err?.message || 'Failed to load interactions');
     } finally {
       setLoading(false);
     }
-  }, [clientId]);
+  }, [clientId, page, limit]);
 
-  useEffect(() => { if (!loadedRef.current) load(); }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const toggleExpand = (id) => setExpanded((p) => ({ ...p, [id]: !p[id] }));
 
@@ -1514,6 +1548,13 @@ const CommunicationsTab = ({ clientId }) => {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap justify-end gap-1.5">
+        <button
+          type="button"
+          onClick={() => setShowSms(true)}
+          className={`inline-flex h-7 items-center gap-1.5 px-3 text-xs font-semibold rounded ${btnPrimary}`}
+        >
+          <FaSms size={9} /> Send SMS
+        </button>
         {LOG_BUTTONS.map(({ type, label, cls }) => {
           const Icon = typeIcon(type);
           return (
@@ -1542,12 +1583,12 @@ const CommunicationsTab = ({ clientId }) => {
             const preview    = body.length > 100 ? body.slice(0, 100) + '…' : body;
 
             return (
-              <div key={item._id} className="rounded border border-slate-200 bg-white">
-                <div className="flex items-start gap-3 px-4 py-3">
+              <div key={item._id} className="border border-slate-200 bg-white">
+                <div className="flex items-start gap-2.5 px-3 py-2.5">
                   <div
-                    className={`mt-0.5 flex-shrink-0 flex h-7 w-7 items-center justify-center rounded-full border ${typeColorCls(item.type)}`}
+                    className={`mt-0.5 flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-full border ${typeColorCls(item.type)}`}
                   >
-                    <Icon size={11} />
+                    <Icon size={10} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1597,12 +1638,31 @@ const CommunicationsTab = ({ clientId }) => {
         </div>
       )}
 
+      <PaginationBar
+        page={page}
+        pages={pagination.pages || 1}
+        total={pagination.total || 0}
+        pageSize={limit}
+        onPageChange={setPage}
+        onPageSizeChange={(n) => { setLimit(n); setPage(1); }}
+        loading={loading}
+        label="interactions"
+      />
+
       {showLog && (
         <LogInteractionModal
           clientId={clientId}
           defaultType={showLog}
           onClose={() => setShowLog(null)}
           onCreated={load}
+        />
+      )}
+      {showSms && (
+        <SendSmsModal
+          clientId={clientId}
+          defaultPhone={clientPhone}
+          onClose={() => setShowSms(false)}
+          onSent={load}
         />
       )}
     </div>
@@ -1617,8 +1677,53 @@ const TABS = [
   { key: 'profile',        label: 'Profile',        icon: FaBuilding },
   { key: 'contracts',      label: 'Contracts',      icon: FaHandshake },
   { key: 'invoices',       label: 'Invoices',       icon: FaFileInvoice },
+  { key: 'statement',      label: 'Statement',      icon: FaFileAlt },
   { key: 'communications', label: 'Communications', icon: FaComments },
 ];
+
+// Client Management has no debit-note/credit-note concept yet (see
+// StatementLedgerTab's own doc comment) — a reduced type set vs. the tenant
+// statement's four types.
+const CLIENT_STATEMENT_TYPE_OPTIONS = [
+  { value: 'CHARGE',  label: 'Invoices' },
+  { value: 'PAYMENT', label: 'Receipts' },
+];
+const CLIENT_STATEMENT_TYPE_META = {
+  CHARGE:  { label: 'Invoice', cls: 'text-red-700 bg-red-50 ring-1 ring-red-200' },
+  PAYMENT: { label: 'Receipt', cls: 'text-emerald-700 bg-emerald-50 ring-1 ring-emerald-200' },
+};
+
+const StatementTab = ({ clientId, activeContracts }) => {
+  const [statementData, setStatementData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await clientsApi.getStatement(clientId);
+      setStatementData(data?.data || data);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err?.message || 'Failed to load statement');
+    } finally {
+      setLoading(false);
+    }
+  }, [clientId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading && !statementData) {
+    return <div className="py-16 text-center text-sm text-slate-400">Loading statement…</div>;
+  }
+
+  return (
+    <StatementLedgerTab
+      statementData={statementData}
+      extraKpi={{ label: 'Active Contracts', value: String(activeContracts || 0), color: 'text-white' }}
+      typeOptions={CLIENT_STATEMENT_TYPE_OPTIONS}
+      typeMeta={CLIENT_STATEMENT_TYPE_META}
+    />
+  );
+};
 
 const ClientDetail = () => {
   const { id }   = useParams();
@@ -1648,6 +1753,22 @@ const ClientDetail = () => {
       setError(err?.response?.data?.message || err?.message || 'Failed to load client');
     } finally {
       setLoading(false);
+    }
+  }, [id]);
+
+  // Silent sibling of loadClient — re-fetches only the summary stats, without
+  // toggling `loading`. Contracts/Invoices tabs call this after any action
+  // that changes Active Contracts/Total Invoiced/Total Paid/Outstanding (send,
+  // record payment, cancel, activate, renew, terminate) so the Profile tab's
+  // stat row doesn't go stale until a full page reload. loadClient itself
+  // would work too, but it flips `loading` and would flash the whole detail
+  // page (all tabs) to the loading state on every such action.
+  const refreshSummary = useCallback(async () => {
+    try {
+      const { data } = await clientsApi.getSummary(id);
+      setSummary(data?.summary || data);
+    } catch (_err) {
+      // Non-fatal — the stat row just keeps its last known values.
     }
   }, [id]);
 
@@ -1704,18 +1825,27 @@ const ClientDetail = () => {
                     {client.phone}
                   </p>
                 </div>
-                <span
-                  className={`flex-shrink-0 inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${clientStatusCls(client.status)}`}
-                >
-                  {client.status || '—'}
-                </span>
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('statement')}
+                    className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    <FaFileAlt size={10} /> View Statement
+                  </button>
+                  <span
+                    className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${clientStatusCls(client.status)}`}
+                  >
+                    {client.status || '—'}
+                  </span>
+                </div>
               </div>
             </div>
           )}
 
           {/* Tab nav */}
           <div className="flex-shrink-0 border-b border-slate-200 bg-white px-4 overflow-x-auto">
-            <div className="flex gap-0 min-w-max">
+            <div className="flex items-center gap-0.5 min-w-max py-1.5">
               {TABS.map((tab) => {
                 const Icon = tab.icon;
                 return (
@@ -1723,13 +1853,13 @@ const ClientDetail = () => {
                     key={tab.key}
                     type="button"
                     onClick={() => setActiveTab(tab.key)}
-                    className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
+                    className={`h-[20px] shrink-0 inline-flex items-center gap-0.5 px-1.5 text-[9px] font-bold whitespace-nowrap ${
                       activeTab === tab.key
-                        ? 'border-[#0B3B2E] text-[#0B3B2E]'
-                        : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-200'
+                        ? 'bg-[#0B3B2E] text-white'
+                        : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
                     }`}
                   >
-                    <Icon size={10} /> {tab.label}
+                    <Icon size={7} /> {tab.label}
                   </button>
                 );
               })}
@@ -1746,13 +1876,16 @@ const ClientDetail = () => {
                   <ProfileTab client={client} summary={summary} onRefresh={loadClient} />
                 )}
                 {activeTab === 'contracts' && (
-                  <ContractsTab clientId={id} />
+                  <ContractsTab clientId={id} onSummaryChange={refreshSummary} />
                 )}
                 {activeTab === 'invoices' && (
-                  <InvoicesTab clientId={id} contracts={contracts} />
+                  <InvoicesTab clientId={id} contracts={contracts} onSummaryChange={refreshSummary} />
+                )}
+                {activeTab === 'statement' && (
+                  <StatementTab clientId={id} activeContracts={summary?.activeContracts} />
                 )}
                 {activeTab === 'communications' && (
-                  <CommunicationsTab clientId={id} />
+                  <CommunicationsTab clientId={id} clientPhone={client?.phone} />
                 )}
               </>
             )}

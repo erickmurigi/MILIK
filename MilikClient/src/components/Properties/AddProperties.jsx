@@ -634,6 +634,24 @@ const AddProperty = () => {
   const isFirstTab = activeTabIndex === 0;
   const isLastTab = activeTabIndex === tabs.length - 1;
 
+  // The "Next" and "Save Property" buttons occupy the exact same footer slot —
+  // clicking Next on the second-to-last tab swaps that spot to a submit button
+  // in the same instant. A rapid double-click (or a second click that lands a
+  // beat late) can hit the newly-appeared submit button before the user ever
+  // sees the tab they just navigated to, saving the property unintentionally.
+  // Brief disable window right after the swap closes that gap without adding
+  // any friction to a genuine, deliberate Save click.
+  const [justEnteredLastTab, setJustEnteredLastTab] = useState(false);
+  useEffect(() => {
+    if (!isLastTab) {
+      setJustEnteredLastTab(false);
+      return;
+    }
+    setJustEnteredLastTab(true);
+    const timer = setTimeout(() => setJustEnteredLastTab(false), 500);
+    return () => clearTimeout(timer);
+  }, [isLastTab]);
+
   const handleNextTab = () => {
     if (activeTabIndex < tabs.length - 1) setActiveTab(tabs[activeTabIndex + 1].id);
   };
@@ -2176,7 +2194,7 @@ const AddProperty = () => {
                 <button
                   type="submit"
                   form="add-property-form"
-                  disabled={loading}
+                  disabled={loading || justEnteredLastTab}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-2 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? <><FaSpinner className="animate-spin" /> Saving…</> : <><FaSave /> Save {termProperty}</>}

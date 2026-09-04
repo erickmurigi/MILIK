@@ -3,8 +3,10 @@ import Client from "../models/Client.js";
 import ClientContract from "../models/ClientContract.js";
 import ClientInvoice from "../models/ClientInvoice.js";
 import ClientInteraction from "../models/ClientInteraction.js";
+import ClientPayment from "../models/ClientPayment.js";
 import { resolveActiveBusinessId, currentUserId, escapeRegex } from "../services/businessScope.js";
 import { nextClientCode } from "../services/clientSequenceService.js";
+import { sendAdHocSms } from "../../../services/communicationService.js";
 
 // ─── Sanitizers ──────────────────────────────────────────────────────────────
 
@@ -185,7 +187,11 @@ export const getClientSummary = async (req, res, next) => {
     const [activeContracts, invoiceAgg, interactionCount] = await Promise.all([
       ClientContract.countDocuments({ client: clientId, business, status: "active" }),
       ClientInvoice.aggregate([
-        { $match: { client: client._id, business: client.business } },
+        // Only invoices that were actually sent (and so posted to the GL) count
+        // here — a draft never posted, and a cancelled one had its posting
+        // reversed. Counting either would overstate the client's real
+        // position and disagree with getClientStatement's identical exclusion.
+        { $match: { client: client._id, business: client.business, status: { $nin: ["draft", "cancelled"] } } },
         {
           $group: {
             _id:            null,
@@ -216,6 +222,126 @@ export const getClientSummary = async (req, res, next) => {
         },
       },
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Client statement — a running-balance ledger of every invoice (charge) and
+// payment (credit) for one client. Shaped to match the existing
+// TenantStatementTab component's `statementData` contract (transactions,
+// totalCharges, totalPayments, operationalOutstanding, unappliedCredits,
+// currentBalance) so the same statement UI pattern renders this too.
+export const getClientStatement = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const clientId = req.params.id;
+
+    const client = await Client.findOne({ _id: clientId, business }).lean();
+    if (!client) return next(createError(404, "Client not found"));
+
+    const [invoices, payments] = await Promise.all([
+      // Only invoices that were actually sent (and so posted to the GL) belong
+      // on the statement — a draft never posted, and a cancelled one had its
+      // posting reversed. Including either would show a "charge" with nothing
+      // behind it in the actual ledger.
+      ClientInvoice.find({ client: clientId, business, status: { $nin: ["draft", "cancelled"] } })
+        .select("invoiceNumber issueDate total status")
+        .sort({ issueDate: 1 })
+        .lean(),
+      ClientPayment.find({ client: clientId, business, status: { $ne: "reversed" } })
+        .select("invoice amount paymentDate paymentMethod paymentReference")
+        .sort({ paymentDate: 1 })
+        .lean(),
+    ]);
+
+    const invoiceNumberById = new Map(invoices.map((inv) => [String(inv._id), inv.invoiceNumber]));
+
+    const transactions = [
+      ...invoices.map((inv) => ({
+        id: String(inv._id),
+        date: inv.issueDate,
+        description: `Invoice ${inv.invoiceNumber}`,
+        type: "CHARGE",
+        transactionCode: inv.invoiceNumber,
+        amount: inv.total,
+        sourceKind: "invoice",
+        sourceId: String(inv._id),
+      })),
+      ...payments.map((pay) => {
+        const forInvoice = invoiceNumberById.get(String(pay.invoice));
+        return {
+          id: String(pay._id),
+          date: pay.paymentDate,
+          description: `Payment received${forInvoice ? ` — ${forInvoice}` : ""}`,
+          type: "PAYMENT",
+          transactionCode: pay.paymentReference || "",
+          amount: pay.amount,
+          sourceKind: "receipt",
+          sourceId: String(pay._id),
+        };
+      }),
+    ].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Running balance: charges increase what the client owes, payments reduce it.
+    let running = 0;
+    for (const tx of transactions) {
+      running += tx.type === "CHARGE" ? tx.amount : -tx.amount;
+      tx.balance = Math.round(running * 100) / 100;
+    }
+
+    const totalCharges = Math.round(invoices.reduce((sum, inv) => sum + inv.total, 0) * 100) / 100;
+    const totalPayments = Math.round(payments.reduce((sum, pay) => sum + pay.amount, 0) * 100) / 100;
+    const currentBalance = Math.round((totalCharges - totalPayments) * 100) / 100;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        client,
+        transactions,
+        totalCharges,
+        totalPayments,
+        operationalOutstanding: Math.max(0, currentBalance),
+        unappliedCredits: Math.max(0, -currentBalance),
+        currentBalance,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Sends an ad-hoc SMS to a client (or a specific contact person's number) and
+// logs it as a ClientInteraction — reuses the shared communicationService's
+// sendAdHocSms (the same one-off-send helper Property Sale's buyers/deals/leads
+// controllers and Car Wash's manual-SMS actions already use), rather than
+// building a separate SMS integration for this module.
+export const sendClientSms = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId   = currentUserId(req);
+    const client = await Client.findOne({ _id: req.params.id, business }).lean();
+    if (!client) return next(createError(404, "Client not found"));
+
+    const phone = String(req.body.phone || client.phone || "").trim();
+    const body  = String(req.body.body || "").trim();
+    if (!phone) return next(createError(400, "No phone number available — provide one or add it to the client"));
+    if (!body)  return next(createError(400, "Message body is required"));
+
+    const result = await sendAdHocSms({ businessId: business, phone, body, templateKey: "client_manual", recipientName: client.name });
+    const wasSent = Boolean(result?.messageId || result?.status);
+
+    const interaction = await ClientInteraction.create({
+      business,
+      client: client._id,
+      type: "sms",
+      subject: `SMS to ${phone}`,
+      body,
+      emailStatus: wasSent ? "sent" : "failed",
+      createdBy: userId,
+    });
+
+    res.status(200).json({ success: true, message: wasSent ? "SMS sent" : "SMS dispatch could not be confirmed", interaction });
   } catch (error) {
     next(error);
   }

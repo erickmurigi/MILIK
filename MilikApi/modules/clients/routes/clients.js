@@ -8,6 +8,8 @@ import {
   updateClient,
   deleteClient,
   getClientSummary,
+  getClientStatement,
+  sendClientSms,
 } from "../controllers/clientsController.js";
 
 const router = express.Router();
@@ -18,6 +20,8 @@ router.get("/",                            listClients);
 router.post("/",                           createClient);
 router.get("/:id",    validateParamId(),   getClient);
 router.get("/:id/summary", validateParamId(), getClientSummary);
+router.get("/:id/statement", validateParamId(), getClientStatement);
+router.post("/:id/send-sms", validateParamId(), sendClientSms);
 router.put("/:id",    validateParamId(),   updateClient);
 router.delete("/:id", validateParamId(),   deleteClient);
 

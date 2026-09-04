@@ -5,6 +5,8 @@ export const clientsApi = {
   list: (params = {}) => adminRequests.get('/clients', { params }),
   get: (id) => adminRequests.get(`/clients/${id}`),
   getSummary: (id) => adminRequests.get(`/clients/${id}/summary`),
+  getStatement: (id) => adminRequests.get(`/clients/${id}/statement`),
+  sendSms: (id, data) => adminRequests.post(`/clients/${id}/send-sms`, data),
   create: (data) => adminRequests.post('/clients', data),
   update: (id, data) => adminRequests.put(`/clients/${id}`, data),
   remove: (id) => adminRequests.delete(`/clients/${id}`),
@@ -24,9 +26,12 @@ export const clientsApi = {
   getInvoice: (id) => adminRequests.get(`/clients/invoices/${id}`),
   createInvoice: (data) => adminRequests.post('/clients/invoices', data),
   updateInvoice: (id, data) => adminRequests.put(`/clients/invoices/${id}`, data),
-  markPaid: (id, data) => adminRequests.patch(`/clients/invoices/${id}/mark-paid`, data),
+  listPayments: (invoiceId, params = {}) => adminRequests.get(`/clients/invoices/${invoiceId}/payments`, { params }),
+  recordPayment: (invoiceId, data) => adminRequests.post(`/clients/invoices/${invoiceId}/payments`, data),
+  reversePayment: (invoiceId, paymentId, data = {}) =>
+    adminRequests.post(`/clients/invoices/${invoiceId}/payments/${paymentId}/reverse`, data),
   sendInvoice: (id) => adminRequests.post(`/clients/invoices/${id}/send`),
-  cancelInvoice: (id) => adminRequests.delete(`/clients/invoices/${id}`),
+  cancelInvoice: (id, data = {}) => adminRequests.delete(`/clients/invoices/${id}`, { data }),
 
   // ─── Interactions ────────────────────────────────────────────────────────────
   listInteractions: (params = {}) => adminRequests.get('/clients/interactions', { params }),

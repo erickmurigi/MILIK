@@ -173,6 +173,11 @@ export const getPageTitle = (pathname) => {
   if (
     /^\/(financial|accounts|carwash|hr|sale)\/chart-of-accounts\/.+\/activity$/.test(pathname)
   ) return 'Ledger Activity';
+  // Low-priority fallback for a raw/refreshed load of a client detail page —
+  // callers that navigate here normally pass the real client name via
+  // location.state.tabTitle (see ClientsList.jsx etc.), which takes priority
+  // over this. Without it the tab title fell back to the raw ObjectId.
+  if (/^\/clients\/[a-f0-9]{24}$/i.test(pathname)) return 'Client Details';
 
   if (parts.length > 0) {
     const last = parts[parts.length - 1];

@@ -53,8 +53,15 @@ const resolveAction = (method = "GET", path = "") => {
   if (lowerPath.includes("/confirm")) return "process";
   if (lowerPath.includes("/process")) return "process";
   if (lowerPath.includes("/post") || lowerPath.includes("post-commission")) return "process";
-  if (lowerPath.includes("/pay")) return "process";
-  if (lowerPath.includes("/bill")) return "process";
+  // "/pay" and "/bill" are substrings of plain read paths too ("/payments",
+  // "/billing", "/payroll", "/payslips" all contain "/pay") — a GET against one
+  // of those was being upgraded from "view" to "process", requiring a
+  // stronger permission just to read (found via /api/clients/invoices/:id/payments,
+  // and reproduces today on the pre-existing GET /api/tenants/payments/:id too).
+  // Restricting these two to non-GET keeps the intended behavior (POST .../pay
+  // still resolves to "process") without misclassifying reads.
+  if (method !== "GET" && lowerPath.includes("/pay")) return "process";
+  if (method !== "GET" && lowerPath.includes("/bill")) return "process";
   if (lowerPath.includes("/toggle-lock")) return "update";
   if (lowerPath.includes("/reclassify")) return "update";
   if (lowerPath.includes("/revise")) return "update";

@@ -86,6 +86,34 @@ const getChargeTypeLabel = (chargeType = "rent") => {
   return "Rent";
 };
 
+// Builds a human, type-aware narration for an invoice/note so both the
+// Invoice Preview table and the Receipt Allocation Preview read like real
+// billing narration instead of a bare invoice number — e.g. "Water Bill —
+// Sep 2026" rather than "INV00023". A genuinely custom description (an
+// ad-hoc charge, a manually-worded debit note, etc.) always wins over the
+// generic type+period fallback since it carries more real information.
+const buildInvoiceNarration = ({ chargeType, period, specificUtilityName, rawDescription }) => {
+  const description = String(rawDescription || "").trim();
+  const isGeneric = !description || /^(invoice|charge)\b/i.test(description);
+
+  if (!isGeneric) return description;
+
+  switch (chargeType) {
+    case "utility":
+      return `${specificUtilityName || "Utility"} Bill — ${period}`;
+    case "deposit":
+      return `Security Deposit — ${period}`;
+    case "late_fee":
+      return `Late Payment Penalty — ${period}`;
+    case "debit_note":
+      return `Debit Note — ${period}`;
+    case "combined":
+      return `Rent + Utility — ${period}`;
+    default:
+      return `Rent — ${period}`;
+  }
+};
+
 const mapOutstandingInvoiceStatus = ({ rawStatus = "", outstanding = 0, paid = 0 }) => {
   const normalizedStatus = String(rawStatus || "").toLowerCase();
 
@@ -398,6 +426,12 @@ const AddReceipt = () => {
           ? (metadata.utilityName || metadata.utilityType || metadata.takeOnBillItemLabel || "").trim()
           : "";
         const chargeTypeLabel = specificUtilityName || getChargeTypeLabel(chargeType);
+        const narration = buildInvoiceNarration({
+          chargeType,
+          period: periodLabel,
+          specificUtilityName,
+          rawDescription: inv?.description,
+        });
 
         return {
           invoiceId: String(inv._id || ""),
@@ -405,6 +439,7 @@ const AddReceipt = () => {
           period: periodLabel,
           invoiceNumber: String(inv?.invoiceNumber || "").trim(),
           invoiceLabel,
+          narration,
           chargeType,
           chargeTypeLabel,
           billedAmount,
@@ -480,6 +515,8 @@ const AddReceipt = () => {
         invoiceId: String(invoice.invoiceId || invoice.invoiceKey || ""),
         invoiceKey: invoice.invoiceKey,
         period: invoice.period,
+        invoiceNumber: invoice.invoiceNumber,
+        narration: invoice.narration,
         chargeType: invoice.chargeType,
         chargeTypeLabel: invoice.chargeTypeLabel || getChargeTypeLabel(invoice.chargeType),
         beforeOutstanding: invoice.outstanding,
@@ -1190,8 +1227,15 @@ const AddReceipt = () => {
                                       className="h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
                                     />
                                   </td>
-                                  <td className="max-w-[180px] truncate px-3 py-1.5 font-semibold text-slate-800" title={invoice.invoiceLabel}>
-                                    {invoice.invoiceNumber || invoice.invoiceLabel || invoice.period}
+                                  <td className="max-w-[220px] px-3 py-1.5" title={invoice.narration || invoice.invoiceLabel}>
+                                    <p className="truncate font-semibold text-slate-800">
+                                      {invoice.narration || invoice.invoiceLabel || invoice.period}
+                                    </p>
+                                    {invoice.invoiceNumber && (
+                                      <p className="truncate text-[9px] font-medium text-slate-400">
+                                        {invoice.invoiceNumber}
+                                      </p>
+                                    )}
                                   </td>
                                   <td className="whitespace-nowrap px-3 py-1.5 text-slate-500">{invoice.period}</td>
                                   <td className="whitespace-nowrap px-3 py-1.5">
@@ -1269,8 +1313,15 @@ const AddReceipt = () => {
                               key={`${line.period}-${line.chargeType}-${idx}`}
                               className="flex items-center justify-between border border-amber-100 bg-white px-3 py-1.5 text-xs text-amber-900"
                             >
-                              <span>{line.period} — {line.chargeTypeLabel || line.chargeType}</span>
-                              <span className="font-semibold">
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate font-medium">
+                                  {line.narration || `${line.period} — ${line.chargeTypeLabel || line.chargeType}`}
+                                </span>
+                                {line.invoiceNumber && (
+                                  <span className="block text-[10px] text-amber-700/70">{line.invoiceNumber}</span>
+                                )}
+                              </span>
+                              <span className="flex-shrink-0 whitespace-nowrap pl-3 font-semibold">
                                 {line.invoiceId === PREPAYMENT_OPTION_KEY
                                   ? `Hold Ksh ${line.apply.toLocaleString()} as prepayment`
                                   : `Apply Ksh ${line.apply.toLocaleString()} · Remaining: Ksh ${line.afterOutstanding.toLocaleString()}`}

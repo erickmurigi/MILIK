@@ -1,7 +1,8 @@
 import ClientContract from "../models/ClientContract.js";
 import Client from "../models/Client.js";
 import Company from "../../../models/Company.js";
-import { sendRenewalNoticeEmail } from "./clientEmailService.js";
+import { sendRenewalNoticeEmail, formatCurrency, formatDate } from "./clientEmailService.js";
+import { sendAdHocSms } from "../../../services/communicationService.js";
 
 const THRESHOLDS = [
   { days: 90, field: "days90" },
@@ -9,6 +10,32 @@ const THRESHOLDS = [
   { days: 30, field: "days30" },
   { days: 7,  field: "days7"  },
 ];
+
+// SMS fallback for renewal reminders. Previously a client with a phone but
+// no email address never received any reminder at all (the old code did
+// `if (!client?.email) continue;`, skipping the contract entirely). This
+// only fires when the email channel didn't succeed, so a client with a
+// working email isn't double-notified on every run — see processRenewalReminders.
+const sendRenewalNoticeSms = async ({ contract, client, business, daysLeft }) => {
+  const phone = String(client?.phone || "").trim();
+  if (!phone) return false;
+
+  const currency = contract.currency || "KES";
+  const body =
+    `Contract ${contract.contractNumber} renewal in ${daysLeft} day${daysLeft === 1 ? "" : "s"} ` +
+    `(ends ${formatDate(contract.endDate)}). Current value: ${formatCurrency(contract.currentValue, currency)}. ` +
+    `Please contact us to discuss renewal terms.`;
+
+  const result = await sendAdHocSms({
+    businessId: business,
+    phone,
+    body,
+    templateKey: "client_renewal_reminder",
+    recipientName: client?.name || "",
+  });
+
+  return Boolean(result?.messageId || result?.status);
+};
 
 export const processRenewalReminders = async () => {
   const now = new Date();
@@ -34,10 +61,22 @@ export const processRenewalReminders = async () => {
           Company.findById(contract.business).lean(),
         ]);
 
-        if (!client?.email) continue;
+        if (!client) continue;
 
-        const result = await sendRenewalNoticeEmail(contract, client, company, days);
-        if (result.success) {
+        let notified = false;
+
+        if (client.email) {
+          const result = await sendRenewalNoticeEmail(contract, client, company, days);
+          if (result.success) notified = true;
+        }
+
+        // SMS fallback: only when the email channel wasn't available or didn't
+        // succeed, so clients with a working email aren't SMS'd on top of it.
+        if (!notified) {
+          notified = await sendRenewalNoticeSms({ contract, client, business: contract.business, daysLeft: days });
+        }
+
+        if (notified) {
           await ClientContract.updateOne(
             { _id: contract._id },
             { $set: { [`remindersSent.${field}`]: new Date() } }

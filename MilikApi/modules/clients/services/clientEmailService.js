@@ -16,7 +16,9 @@ const escapeHtml = (value = "") =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
-const formatCurrency = (value, currency = "KES") => {
+// Exported so renewalReminderService.js's SMS fallback formats amounts/dates
+// identically to this file's own emails, instead of re-implementing them.
+export const formatCurrency = (value, currency = "KES") => {
   const amount = Number(value || 0);
   return `${currency} ${amount.toLocaleString("en-KE", {
     minimumFractionDigits: 2,
@@ -24,7 +26,7 @@ const formatCurrency = (value, currency = "KES") => {
   })}`;
 };
 
-const formatDate = (value) => {
+export const formatDate = (value) => {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";

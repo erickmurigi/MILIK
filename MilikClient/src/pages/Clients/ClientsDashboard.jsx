@@ -171,7 +171,7 @@ const ClientsDashboard = () => {
                       {['Client', 'Contract #', 'Value (KES)', 'Ends On', 'Days Left', 'Status'].map((h) => (
                         <th
                           key={h}
-                          className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white"
+                          className="px-3 py-1.5 text-left text-[10px] font-black uppercase tracking-widest text-white"
                         >
                           {h}
                         </th>
@@ -185,22 +185,22 @@ const ClientsDashboard = () => {
                         <tr
                           key={c._id}
                           className={`border-b border-slate-100 hover:bg-slate-50 cursor-pointer ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}
-                          onClick={() => navigate(`/clients/${c.client?._id || c.client}`)}
+                          onClick={() => navigate(`/clients/${c.client?._id || c.client}`, { state: { tabTitle: c.client?.name || c.clientName } })}
                         >
-                          <td className="px-3 py-2 font-semibold text-slate-800">
+                          <td className="px-3 py-2.5 font-semibold text-slate-800">
                             {c.client?.name || c.clientName || '—'}
                           </td>
-                          <td className="px-3 py-2 font-mono text-[11px] text-[#0B3B2E]">
+                          <td className="px-3 py-2.5 font-mono text-[11px] text-[#0B3B2E]">
                             {c.contractNumber || c._id?.slice(-6).toUpperCase() || '—'}
                           </td>
-                          <td className="px-3 py-2 tabular-nums text-slate-700">
+                          <td className="px-3 py-2.5 tabular-nums text-slate-700">
                             {fmtKES(c.currentValue || c.baseValue)}
                           </td>
-                          <td className="px-3 py-2 text-slate-600">{fmtDate(c.endDate)}</td>
-                          <td className={`px-3 py-2 tabular-nums ${daysColor(days)}`}>
+                          <td className="px-3 py-2.5 text-slate-600">{fmtDate(c.endDate)}</td>
+                          <td className={`px-3 py-2.5 tabular-nums ${daysColor(days)}`}>
                             {days < 0 ? `${Math.abs(days)} overdue` : `${days} days`}
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-2.5">
                             <StatusBadge status={c.status} map={CONTRACT_STATUS_MAP} />
                           </td>
                         </tr>
@@ -234,8 +234,8 @@ const ClientsDashboard = () => {
                 {clients.map((cl) => (
                   <div
                     key={cl._id}
-                    className="flex items-center justify-between gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"
-                    onClick={() => navigate(`/clients/${cl._id}`)}
+                    className="flex items-center justify-between gap-2 px-3 py-2.5 hover:bg-slate-50 cursor-pointer"
+                    onClick={() => navigate(`/clients/${cl._id}`, { state: { tabTitle: cl.name } })}
                   >
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-slate-800 truncate">{cl.name}</p>

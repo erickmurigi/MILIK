@@ -2,11 +2,18 @@ import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
 import ClientInvoice from "../models/ClientInvoice.js";
 import ClientInteraction from "../models/ClientInteraction.js";
+import ClientPayment from "../models/ClientPayment.js";
 import Client from "../models/Client.js";
 import Company from "../../../models/Company.js";
+import ChartOfAccount from "../../../models/ChartOfAccount.js";
+import FinancialLedgerEntry from "../../../models/FinancialLedgerEntry.js";
 import { resolveActiveBusinessId, currentUserId, escapeRegex } from "../services/businessScope.js";
 import { nextInvoiceNumber } from "../services/clientSequenceService.js";
 import { sendInvoiceEmail, sendReceiptEmail } from "../services/clientEmailService.js";
+import { postClientInvoiceLedger, postClientPaymentLedger } from "../services/clientAccountingService.js";
+import { postReversal } from "../../../services/ledgerPostingService.js";
+
+const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
 // ─── Sanitizers ──────────────────────────────────────────────────────────────
 
@@ -118,6 +125,11 @@ export const createInvoice = async (req, res, next) => {
 
     const invoiceNumber = await nextInvoiceNumber(business);
 
+    // No GL posting here — this creates a draft, and updateInvoice explicitly
+    // allows edits while status is "draft" (line amounts, VAT, everything can
+    // still change). Posting happens in sendInvoice(), the moment the invoice
+    // becomes a real, binding claim and can no longer be edited — so posted
+    // entries can never go stale from a subsequent draft edit.
     const invoice = await ClientInvoice.create({
       ...payload,
       invoiceNumber,
@@ -160,40 +172,95 @@ export const updateInvoice = async (req, res, next) => {
   }
 };
 
-export const markPaid = async (req, res, next) => {
+const resolveClientCashbookAccount = async ({ businessId, cashbookAccountId }) => {
+  if (!mongoose.Types.ObjectId.isValid(String(cashbookAccountId || ""))) return null;
+  return ChartOfAccount.findOne({
+    _id: cashbookAccountId,
+    business: businessId,
+    isPosting: { $ne: false },
+    isHeader: { $ne: true },
+    type: "asset",
+  }).lean();
+};
+
+// Records one payment against an invoice as its own ClientPayment document
+// (audit trail — see models/ClientPayment.js) and posts the matching GL entries,
+// rather than overwriting a single paymentMethod/paymentReference field on the
+// invoice each time, which silently lost every payment but the last.
+export const recordPayment = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    const userId   = currentUserId(req);
 
     const invoice = await ClientInvoice.findOne({
       _id: req.params.id,
       business,
-      status: { $nin: ["paid", "cancelled"] },
+      status: { $nin: ["paid", "cancelled", "draft"] },
     });
-    if (!invoice) return next(createError(404, "Invoice not found, already paid, or is cancelled"));
+    if (!invoice) {
+      return next(createError(404, "Invoice not found, is a draft (send it first), already paid, or is cancelled"));
+    }
 
-    const paymentAmount = Number(req.body.paidAmount);
+    const paymentAmount = round2(Number(req.body.amount ?? req.body.paidAmount));
     if (!paymentAmount || paymentAmount <= 0) {
       return next(createError(400, "Payment amount must be greater than zero"));
     }
 
-    const paidAt           = req.body.paidAt ? new Date(req.body.paidAt) : new Date();
-    const paymentMethod    = String(req.body.paymentMethod    || "").trim();
-    const paymentReference = String(req.body.paymentReference || "").trim();
-
-    // Accumulate — cap at invoice total so overpayment doesn't inflate paidAmount
-    const newPaidAmount = Math.min(invoice.total, (invoice.paidAmount || 0) + paymentAmount);
-
-    invoice.paidAmount       = newPaidAmount;
-    invoice.paidAt           = paidAt;
-    invoice.paymentMethod    = paymentMethod;
-    invoice.paymentReference = paymentReference;
-
-    if (newPaidAmount >= invoice.total) {
-      invoice.status = "paid";
-    } else if (newPaidAmount > 0) {
-      invoice.status = "partial";
+    const remaining = round2(invoice.total - (invoice.paidAmount || 0));
+    if (paymentAmount > remaining + 0.01) {
+      return next(createError(400, `Payment amount (${paymentAmount}) exceeds the outstanding balance (${remaining})`));
     }
 
+    const paymentMethod    = String(req.body.paymentMethod || "").trim();
+    const paymentReference = String(req.body.paymentReference || "").trim();
+    const paymentDate      = req.body.paymentDate ? new Date(req.body.paymentDate) : new Date();
+    const notes            = String(req.body.notes || "").trim();
+
+    const ALLOWED_METHODS = ["bank_transfer", "mobile_money", "cash", "check", "credit_card", "other"];
+    if (!ALLOWED_METHODS.includes(paymentMethod)) {
+      return next(createError(400, `paymentMethod must be one of: ${ALLOWED_METHODS.join(", ")}`));
+    }
+
+    const cashbookAccount = await resolveClientCashbookAccount({ businessId: business, cashbookAccountId: req.body.cashbookAccountId });
+    if (!cashbookAccount?._id) {
+      return next(createError(400, "A valid cashbook account is required to record this payment"));
+    }
+
+    const payment = await ClientPayment.create({
+      business,
+      client: invoice.client,
+      invoice: invoice._id,
+      amount: paymentAmount,
+      paymentDate,
+      paymentMethod,
+      paymentReference,
+      cashbookAccountId: cashbookAccount._id,
+      cashbookAccountCode: cashbookAccount.code,
+      notes,
+      createdBy: userId,
+    });
+
+    try {
+      const ledgerEntries = await postClientPaymentLedger({ payment, invoice, userId });
+      payment.ledgerEntries = ledgerEntries.map((e) => e._id);
+      await payment.save();
+    } catch (glError) {
+      await Promise.all([
+        ClientPayment.deleteOne({ _id: payment._id }).catch(() => {}),
+        FinancialLedgerEntry.deleteMany({
+          sourceTransactionType: "client_payment",
+          sourceTransactionId: String(payment._id),
+        }).catch(() => {}),
+      ]);
+      throw glError;
+    }
+
+    const newPaidAmount = Math.min(invoice.total, round2((invoice.paidAmount || 0) + paymentAmount));
+    invoice.paidAmount       = newPaidAmount;
+    invoice.paidAt           = paymentDate;
+    invoice.paymentMethod    = paymentMethod;
+    invoice.paymentReference = paymentReference;
+    invoice.status           = newPaidAmount >= invoice.total ? "paid" : "partial";
     await invoice.save();
 
     // Fire-and-forget receipt email — don't block the response
@@ -205,7 +272,82 @@ export const markPaid = async (req, res, next) => {
       })
       .catch((err) => console.error("[invoicesController] Receipt email error:", err.message));
 
-    res.status(200).json({ success: true, data: invoice, invoice, message: "Payment recorded" });
+    res.status(200).json({ success: true, data: { invoice, payment }, invoice, payment, message: "Payment recorded" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Payment history for one invoice — the audit trail markPaid's old single-field
+// overwrite couldn't provide.
+export const listPayments = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const filter = { business };
+    if (req.params.id) filter.invoice = req.params.id;
+    else if (req.query.clientId) filter.client = String(req.query.clientId).trim();
+    else if (req.query.invoiceId) filter.invoice = String(req.query.invoiceId).trim();
+
+    const limit = Math.min(Math.max(Number(req.query.limit || 25), 1), 200);
+    const page  = Math.max(Number(req.query.page || 1), 1);
+    const skip  = (page - 1) * limit;
+
+    const [payments, total] = await Promise.all([
+      ClientPayment.find(filter)
+        .populate("cashbookAccountId", "code name")
+        .sort({ paymentDate: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      ClientPayment.countDocuments(filter),
+    ]);
+
+    const pagination = { page, limit, total, pages: Math.max(Math.ceil(total / limit), 1) };
+    res.status(200).json({ success: true, data: { payments, pagination }, payments, pagination });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Reverses one payment: reverses its GL entries, marks it reversed, and rolls
+// the invoice's cached paidAmount/status back — mirrors reverseStatement's
+// shape (controllers/propertyController/processedStatements.js).
+export const reversePayment = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId   = currentUserId(req);
+    const reason   = String(req.body?.reason || "Client payment reversed").trim();
+
+    const payment = await ClientPayment.findOne({ _id: req.params.paymentId, business, invoice: req.params.id });
+    if (!payment) return next(createError(404, "Payment not found"));
+    if (payment.status === "reversed") return next(createError(400, "Payment is already reversed"));
+
+    const invoice = await ClientInvoice.findOne({ _id: payment.invoice, business });
+    if (!invoice) return next(createError(404, "Invoice not found"));
+
+    if (payment.ledgerEntries?.length) {
+      const originals = await FinancialLedgerEntry.find({
+        _id: { $in: payment.ledgerEntries },
+        status: { $ne: "reversed" },
+      }).select("_id").lean();
+      // Let a failed reversal throw and abort the whole operation — swallowing
+      // it here would mark the payment "reversed" while its GL entries silently
+      // stayed live, corrupting the books with no visible sign anything failed.
+      await Promise.all(originals.map((entry) => postReversal({ entryId: entry._id, reason, userId })));
+    }
+
+    payment.status         = "reversed";
+    payment.reversedBy     = userId;
+    payment.reversedAt     = new Date();
+    payment.reversalReason = reason;
+    await payment.save();
+
+    const newPaidAmount = Math.max(0, round2((invoice.paidAmount || 0) - payment.amount));
+    invoice.paidAmount = newPaidAmount;
+    invoice.status = newPaidAmount <= 0 ? "sent" : "partial";
+    await invoice.save();
+
+    res.status(200).json({ success: true, data: { invoice, payment }, invoice, payment, message: "Payment reversed" });
   } catch (error) {
     next(error);
   }
@@ -230,11 +372,26 @@ export const sendInvoice = async (req, res, next) => {
 
     if (!client) return next(createError(404, "Client not found"));
 
+    // GL posting happens here, on the draft → sent transition — this is the
+    // moment the invoice becomes a real, binding claim against the client.
+    // Required to succeed: unlike the email below (best-effort, logged either
+    // way), a send that didn't reach the ledger must not be recorded as sent —
+    // it stays in "draft" so it can be retried. postClientInvoiceLedger is
+    // itself idempotent (guards on sourceTransactionId), so a resend of an
+    // already-posted invoice is a safe no-op here.
+    const wasDraft = invoice.status === "draft";
+    if (wasDraft) {
+      const ledgerEntries = await postClientInvoiceLedger({ invoice, userId });
+      if (ledgerEntries.length) {
+        invoice.ledgerEntries = ledgerEntries.map((e) => e._id);
+      }
+    }
+
     const emailResult = await sendInvoiceEmail(invoice.toObject(), client, company);
 
     const now = new Date();
     invoice.sentAt = now;
-    if (invoice.status === "draft") invoice.status = "sent";
+    if (wasDraft) invoice.status = "sent";
     await invoice.save();
 
     // Log the interaction
@@ -266,18 +423,35 @@ export const sendInvoice = async (req, res, next) => {
 export const cancelInvoice = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    const userId   = currentUserId(req);
+    const reason   = String(req.body?.reason || "Client invoice cancelled").trim();
 
-    const invoice = await ClientInvoice.findOneAndUpdate(
-      { _id: req.params.id, business, status: { $nin: ["paid", "cancelled"] } },
-      { status: "cancelled" },
-      { new: true }
-    );
+    const invoice = await ClientInvoice.findOne({ _id: req.params.id, business });
+    if (!invoice) return next(createError(404, "Invoice not found"));
 
-    if (!invoice) {
-      const existing = await ClientInvoice.findOne({ _id: req.params.id, business }).lean();
-      if (!existing) return next(createError(404, "Invoice not found"));
-      return next(createError(400, `Invoice cannot be cancelled in '${existing.status}' status`));
+    if (["paid", "partial", "cancelled"].includes(invoice.status)) {
+      return next(createError(
+        400,
+        invoice.status === "cancelled"
+          ? "Invoice is already cancelled"
+          : `Invoice has recorded payment activity (status '${invoice.status}') and cannot be cancelled directly. Reverse the payment(s) first.`
+      ));
     }
+
+    // Reverse any GL entries posted when this invoice was sent (a still-draft
+    // invoice never posted anything, so this is a no-op for those). A failed
+    // reversal throws and aborts the cancel — see reversePayment for why this
+    // must not be swallowed.
+    if (invoice.ledgerEntries?.length) {
+      const originals = await FinancialLedgerEntry.find({
+        _id: { $in: invoice.ledgerEntries },
+        status: { $ne: "reversed" },
+      }).select("_id").lean();
+      await Promise.all(originals.map((entry) => postReversal({ entryId: entry._id, reason, userId })));
+    }
+
+    invoice.status = "cancelled";
+    await invoice.save();
 
     res.status(200).json({ success: true, data: invoice, invoice, message: "Invoice cancelled" });
   } catch (error) {

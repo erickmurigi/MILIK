@@ -1,21 +1,36 @@
 /**
- * TenantStatementTab
- * ──────────────────
- * A clean, standalone statement view. Accepts pre-computed data from
- * TenantStatement.jsx (no API calls here — all data flows in via props).
+ * StatementLedgerTab
+ * ───────────────────
+ * Shared running-balance statement ledger — hero balance banner, date-preset
+ * filter bar, opening/closing balance rows, transaction table, footer summary.
+ * Originally Tenants/TenantStatementTab.jsx; generalized here (moved to
+ * components/common/) so any per-entity statement (tenant, client, …) renders
+ * through the same component instead of a copy-adapted duplicate. All new
+ * props are optional and default to reproducing the original tenant behavior
+ * exactly, so TenantStatement.jsx's call site needed no changes.
  *
  * Props:
  *  statementData       – { transactions, totalCharges, totalPayments,
  *                          operationalOutstanding, unappliedCredits, currentBalance }
- *  tenant              – tenant document (name, rent, unit, etc.)
- *  tenantLease         – lease document (rentAmount)
- *  onOpenAllocationTrace – fn({ kind, id }) called when user traces a row
- *  onOpenReceiptWorkspace – fn(receiptId?) — opens receipt allocation page
+ *  tenant, tenantLease – (tenant usage) drive the default 4th KPI ("Monthly Rent")
+ *  extraKpi            – { label, value, color } — supply this to override the
+ *                         4th KPI slot for a non-tenant caller (e.g. client
+ *                         statements pass "Active Contracts" here instead)
+ *  typeOptions         – [{ value, label }] for the type filter dropdown;
+ *                         defaults to the tenant set (Invoice/Debit/Credit/Receipt)
+ *  typeMeta            – { [type]: { label, cls } } for the row badge; defaults
+ *                         to the tenant set matching typeOptions
+ *  onOpenAllocationTrace – fn({ kind, id }) — the per-row "Trace" button only
+ *                           renders when this is supplied
+ *  onOpenReceiptWorkspace – fn(receiptId?) — the "Allocate Now" unapplied-credit
+ *                           callout only renders when this is supplied
  *  allocationTracePanel  – JSX to render below the table (from parent)
+ *  from/to/typeFilter, onFromChange/onToChange/onTypeFilterChange – controlled
+ *                         filter state; falls back to local state if omitted
  */
 
 import React, { useState, useMemo, useCallback } from "react";
-import AppSelect from "../../components/common/AppSelect";
+import AppSelect from "./AppSelect";
 import { FaLink } from "react-icons/fa";
 import { fmtDate } from "../../utils/dates";
 import { useTerm } from "../../hooks/useTerm";
@@ -28,7 +43,6 @@ const formatInputDate = (d) => {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
 };
 
-
 const fmtMoney = (n) =>
   `KES ${Math.abs(Number(n || 0)).toLocaleString("en-KE", {
     minimumFractionDigits: 2,
@@ -37,12 +51,19 @@ const fmtMoney = (n) =>
 
 const balSuffix = (n) => (n > 0.005 ? " DR" : n < -0.005 ? " CR" : "");
 
-const TYPE_META = {
+const DEFAULT_TYPE_META = {
   CHARGE:      { label: "Invoice",    cls: "text-red-700 bg-red-50 ring-1 ring-red-200"          },
   DEBIT_NOTE:  { label: "Debit Note", cls: "text-rose-700 bg-rose-50 ring-1 ring-rose-200"       },
   CREDIT_NOTE: { label: "Credit",     cls: "text-sky-700 bg-sky-50 ring-1 ring-sky-200"          },
   PAYMENT:     { label: "Receipt",    cls: "text-emerald-700 bg-emerald-50 ring-1 ring-emerald-200" },
 };
+
+const DEFAULT_TYPE_OPTIONS = [
+  { value: "CHARGE",      label: "Invoices"     },
+  { value: "DEBIT_NOTE",  label: "Debit Notes"  },
+  { value: "CREDIT_NOTE", label: "Credit Notes" },
+  { value: "PAYMENT",     label: "Receipts"     },
+];
 
 const now     = () => new Date();
 const todayStr   = () => formatInputDate(now());
@@ -58,14 +79,17 @@ const ago3m    = () => {
 };
 
 // ── Component ──────────────────────────────────────────────────────────────────
-export default function TenantStatementTab({
+export default function StatementLedgerTab({
   statementData,
   tenant,
   tenantLease,
+  extraKpi,
+  typeOptions = DEFAULT_TYPE_OPTIONS,
+  typeMeta = DEFAULT_TYPE_META,
   onOpenAllocationTrace,
   onOpenReceiptWorkspace,
   allocationTracePanel,
-  // Controlled filter state (lifted to TenantStatement.jsx)
+  // Controlled filter state (lifted to the parent page)
   from: fromProp,
   to: toProp,
   typeFilter: typeFilterProp,
@@ -122,10 +146,13 @@ export default function TenantStatementTab({
     [visibleTx, hasBbf, bbf]
   );
 
+  const debitTypes  = useMemo(() => new Set(["CHARGE", "DEBIT_NOTE"]),  []);
+  const creditTypes = useMemo(() => new Set(["PAYMENT", "CREDIT_NOTE"]), []);
+
   const { periodDebits, periodCredits } = useMemo(() => ({
-    periodDebits:  visibleTx.reduce((s, t) => ["CHARGE","DEBIT_NOTE"].includes(t.type)  ? s + Math.abs(t.amount) : s, 0),
-    periodCredits: visibleTx.reduce((s, t) => ["PAYMENT","CREDIT_NOTE"].includes(t.type) ? s + Math.abs(t.amount) : s, 0),
-  }), [visibleTx]);
+    periodDebits:  visibleTx.reduce((s, t) => debitTypes.has(t.type)  ? s + Math.abs(t.amount) : s, 0),
+    periodCredits: visibleTx.reduce((s, t) => creditTypes.has(t.type) ? s + Math.abs(t.amount) : s, 0),
+  }), [visibleTx, debitTypes, creditTypes]);
 
   // Balance hero values (all-time, not period-filtered)
   const netBalance   = statementData?.currentBalance ?? 0;
@@ -170,6 +197,13 @@ export default function TenantStatementTab({
     ? { bg: "bg-sky-700",     label: "In Credit",        valueColor: "text-white", subColor: "text-sky-200"   }
     : { bg: "bg-[#0B3B2E]",   label: "Balance Due",      valueColor: "text-white", subColor: "text-emerald-300" };
 
+  const kpis = [
+    extraKpi || { label: `Monthly ${termRent}`, value: fmtMoney(rent), color: "text-white" },
+    { label: "Total Invoiced", value: fmtMoney(statementData?.totalCharges || 0),  color: "text-white"       },
+    { label: "Total Received", value: fmtMoney(statementData?.totalPayments || 0), color: "text-emerald-300" },
+    ...(outstanding > 0.009 ? [{ label: "Outstanding", value: fmtMoney(outstanding), color: "text-amber-300" }] : []),
+  ];
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
@@ -196,12 +230,7 @@ export default function TenantStatementTab({
 
           {/* KPI strip */}
           <div className="flex items-center gap-3">
-            {[
-              { label: `Monthly ${termRent}`, value: fmtMoney(rent),                          color: "text-white"       },
-              { label: "Total Invoiced", value: fmtMoney(statementData?.totalCharges || 0),  color: "text-white"       },
-              { label: "Total Received", value: fmtMoney(statementData?.totalPayments || 0), color: "text-emerald-300" },
-              ...(outstanding > 0.009 ? [{ label: "Outstanding", value: fmtMoney(outstanding), color: "text-amber-300" }] : []),
-            ].map((kpi) => (
+            {kpis.map((kpi) => (
               <div key={kpi.label} className="flex flex-col items-end border-l border-white/15 pl-3">
                 <p className="text-[8px] font-bold uppercase tracking-wider text-white/50">{kpi.label}</p>
                 <p className={`text-xs font-black tabular-nums ${kpi.color}`}>{kpi.value}</p>
@@ -221,13 +250,15 @@ export default function TenantStatementTab({
               This credit is reducing the balance but is not linked to a specific charge.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => onOpenReceiptWorkspace?.()}
-            className="shrink-0 rounded-md bg-amber-500 px-3 py-1.5 text-[11px] font-black text-white hover:bg-amber-600 transition-colors"
-          >
-            Allocate Now →
-          </button>
+          {onOpenReceiptWorkspace && (
+            <button
+              type="button"
+              onClick={() => onOpenReceiptWorkspace?.()}
+              className="shrink-0 rounded-md bg-amber-500 px-3 py-1.5 text-[11px] font-black text-white hover:bg-amber-600 transition-colors"
+            >
+              Allocate Now →
+            </button>
+          )}
         </div>
       )}
 
@@ -265,12 +296,7 @@ export default function TenantStatementTab({
             <AppSelect
               value={typeFilter}
               onChange={(v) => setTypeFilter(v ?? "ALL")}
-              options={[
-                { value: "CHARGE",      label: "Invoices"     },
-                { value: "DEBIT_NOTE",  label: "Debit Notes"  },
-                { value: "CREDIT_NOTE", label: "Credit Notes" },
-                { value: "PAYMENT",     label: "Receipts"     },
-              ]}
+              options={typeOptions}
               placeholder="All Types"
               clearable
               size="sm"
@@ -384,7 +410,7 @@ export default function TenantStatementTab({
                     </p>
                     <p className="mt-1 text-[12px] text-slate-400">
                       {typeFilter !== "ALL"
-                        ? `No ${TYPE_META[typeFilter]?.label ?? typeFilter} entries in this period. Try switching to "All Types".`
+                        ? `No ${typeMeta[typeFilter]?.label ?? typeFilter} entries in this period. Try switching to "All Types".`
                         : allTx.length === 0
                         ? "Invoices and receipts will appear here once they are created."
                         : "Try widening the date range — click 'All Time' to see everything."}
@@ -395,10 +421,10 @@ export default function TenantStatementTab({
             )}
 
             {visibleTx.map((tx, idx) => {
-              const isDebit  = ["CHARGE", "DEBIT_NOTE"].includes(tx.type);
-              const isCredit = ["PAYMENT", "CREDIT_NOTE"].includes(tx.type);
-              const meta     = TYPE_META[tx.type] || { label: tx.type, cls: "bg-slate-100 text-slate-600" };
-              const canTrace = ["invoice", "receipt", "note"].includes(String(tx.sourceKind || ""));
+              const isDebit  = debitTypes.has(tx.type);
+              const isCredit = creditTypes.has(tx.type);
+              const meta     = typeMeta[tx.type] || { label: tx.type, cls: "bg-slate-100 text-slate-600" };
+              const canTrace = !!onOpenAllocationTrace && ["invoice", "receipt", "note"].includes(String(tx.sourceKind || ""));
               const balColor = tx.balance > 0.005 ? "text-red-700" : tx.balance < -0.005 ? "text-emerald-700" : "text-slate-400";
 
               return (

@@ -11,6 +11,7 @@ import {
   FaDownload,
   FaEnvelope,
   FaHourglass,
+  FaMinusCircle,
   FaMoneyBillWave,
   FaPrint,
   FaUndo,
@@ -582,6 +583,7 @@ const ProcessedStatements = () => {
                 <button onClick={() => handleTabChange("outstanding")} className={`h-[20px] shrink-0 inline-flex items-center gap-0.5 px-1.5 text-[9px] font-bold ${activeTab === "outstanding" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass size={7} /> Outstanding {activeTab === "outstanding" ? `(${pagination.total})` : ""}</button>
                 <button onClick={() => handleTabChange("recoveries")} className={`h-[20px] shrink-0 inline-flex items-center gap-0.5 px-1.5 text-[9px] font-bold ${activeTab === "recoveries" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass size={7} /> Recoveries {activeTab === "recoveries" ? `(${pagination.total})` : ""}</button>
                 <button onClick={() => handleTabChange("paid")} className={`h-[20px] shrink-0 inline-flex items-center gap-0.5 px-1.5 text-[9px] font-bold ${activeTab === "paid" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaCheckCircle size={7} /> Paid {activeTab === "paid" ? `(${pagination.total})` : ""}</button>
+                <button onClick={() => handleTabChange("processed")} title="Statements with zero net payable — nothing was ever owed to the landlord" className={`h-[20px] shrink-0 inline-flex items-center gap-0.5 px-1.5 text-[9px] font-bold ${activeTab === "processed" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaMinusCircle size={7} /> Processed {activeTab === "processed" ? `(${pagination.total})` : ""}</button>
                 <button onClick={() => handleTabChange("management_fees")} className={`h-[20px] shrink-0 inline-flex items-center gap-0.5 px-1.5 text-[9px] font-bold ${activeTab === "management_fees" ? "bg-[#FF8C00] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaDownload size={7} /> Mgmt Fees {activeTab === "management_fees" ? `(${pagination.total})` : ""}</button>
                 <input type="text" placeholder="Search landlord, property…" value={searchText} onChange={(e) => handleSearchChange(e.target.value)} onBlur={applySearch} onKeyDown={(e) => e.key === "Enter" && applySearch()} className="h-[20px] w-36 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 <AppSelect

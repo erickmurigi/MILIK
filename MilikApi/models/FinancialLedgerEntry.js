@@ -45,6 +45,8 @@ const LEDGER_CATEGORIES = [
   "JOURNAL_ENTRY",
   "TAX_REMITTANCE",
   "YEAR_END_CLOSE",
+  "CLIENT_INVOICE",
+  "CLIENT_PAYMENT",
 ];
 
 const SOURCE_TYPES = [
@@ -88,12 +90,14 @@ const SOURCE_TYPES = [
   "tax_remittance",
   "year_end_close",
   "expense_requisition",
+  "client_invoice",
+  "client_payment",
   "other",
 ];
 
 const ENTRY_STATUS = ["draft", "approved", "reversed", "void"];
 
-const RECEIVER_TYPES = ["manager", "landlord", "tenant", "vendor", "staff", "system", "n/a"];
+const RECEIVER_TYPES = ["manager", "landlord", "tenant", "vendor", "staff", "system", "client", "n/a"];
 
 const DIRECTION_TYPES = ["debit", "credit"];
 

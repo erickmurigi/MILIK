@@ -1199,14 +1199,15 @@ export const getStatementsByBusiness = async (req, res, next) => {
       query.isNegativeStatement = true;
       query.status = { $ne: "reversed" };
     } else if (tab === "paid") {
-      // "paid" (was owed, then settled) and "processed" (netAmountDue was already <= 0
-      // at creation, so nothing was ever owed) are both "fully settled" from the
-      // landlord's point of view — group them here. Without "processed" a $0-net
-      // statement matched no tab at all (not unpaid/part_paid, not negative, not
-      // literally "paid"), making it permanently unreachable in this list — including
-      // its Reverse action, which only renders for rows this query returns.
-      query.status = { $in: ["paid", "processed"] };
+      query.status = "paid";
       query.isNegativeStatement = { $ne: true };
+    } else if (tab === "processed") {
+      // netAmountDue was already <= 0 when this statement was created, so nothing was
+      // ever owed — distinct from "paid" (was owed, then settled by an actual landlord
+      // payment). Previously had no tab at all: not unpaid/part_paid, not negative, not
+      // literally "paid" — making it permanently unreachable in this list, including its
+      // Reverse action, which only renders for rows this query returns.
+      query.status = "processed";
     } else if (tab === "management_fees") {
       query.commissionGrossAmount = { $gt: 0 };
       query.status = { $ne: "reversed" };

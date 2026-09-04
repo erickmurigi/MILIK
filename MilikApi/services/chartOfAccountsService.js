@@ -77,28 +77,39 @@ const SYSTEM_CHART_TEMPLATE = [
   { code: "5401", name: "Employer NHIF Contribution", type: "expense", group: "expenses", subGroup: "HR & Payroll Expenses", isSystem: true, isHeader: false, isPosting: true },
   { code: "5402", name: "Employer NSSF Contribution", type: "expense", group: "expenses", subGroup: "HR & Payroll Expenses", isSystem: true, isHeader: false, isPosting: true },
   { code: "5403", name: "Employer AHL Levy", type: "expense", group: "expenses", subGroup: "HR & Payroll Expenses", isSystem: true, isHeader: false, isPosting: true },
+
+  // Client Management accounts
+  { code: "1260", name: "Client Receivables", type: "asset", group: "assets", subGroup: "Current Assets", isSystem: true, isHeader: false, isPosting: true },
+  { code: "4520", name: "Client Service Income", type: "income", group: "income", subGroup: "Operating Income", isSystem: true, isHeader: false, isPosting: true },
 ];
 
 const SYSTEM_CHART_CODES = SYSTEM_CHART_TEMPLATE.map((account) => account.code);
 const ensureCache = new Map();
 const ENSURE_CACHE_TTL_MS = 5 * 60 * 1000;
-const VALID_MODULE_SCOPES = new Set(["general", "propertyManagement", "carwash", "hr", "propertySale", "inventory"]);
+const VALID_MODULE_SCOPES = new Set(["general", "propertyManagement", "carwash", "hr", "propertySale", "inventory", "clients"]);
 const CARWASH_ACCOUNT_CODES = new Set(["2160", "2161", "4400", "5310", "5311", "5312"]);
 const SHARED_CASHBOOK_CODES = new Set(["1100", "1110", "1130"]);
 const HR_ACCOUNT_CODES = new Set(["2170", "2171", "2172", "2173", "2174", "2175", "5400", "5401", "5402", "5403"]);
 const SALE_ACCOUNT_CODES = new Set(["1240", "1250", "2180", "2181", "4500", "4510", "5500", "5501", "5502"]);
 const INVENTORY_ACCOUNT_CODES = new Set(["1300", "1310", "2000", "2190", "4000", "5000", "5010"]);
+const CLIENTS_ACCOUNT_CODES = new Set(["1260", "4520"]);
+// 2190 (Output VAT Payable) started as POS-only but is a genuinely shared,
+// module-agnostic liability — Client Management invoices need it too, and any
+// future module charging VAT on a customer-facing invoice will as well.
+const SHARED_OUTPUT_VAT_CODES = new Set(["2190"]);
 
 export const moduleScopesForAccount = (account = {}) => {
   const code = String(account.code || "").trim().toUpperCase();
   const name = String(account.name || "").toLowerCase();
   const subGroup = String(account.subGroup || "").toLowerCase();
 
-  if (SHARED_CASHBOOK_CODES.has(code)) return ["propertyManagement", "carwash", "propertySale", "hr"];
+  if (SHARED_CASHBOOK_CODES.has(code)) return ["propertyManagement", "carwash", "propertySale", "hr", "clients"];
+  if (SHARED_OUTPUT_VAT_CODES.has(code)) return ["inventory", "clients"];
   if (CARWASH_ACCOUNT_CODES.has(code) || name.includes("car wash") || subGroup.includes("car wash")) return ["carwash"];
   if (HR_ACCOUNT_CODES.has(code) || subGroup.includes("hr & payroll") || name.includes("payroll") || name.includes("paye") || name.includes("nhif") || name.includes("nssf") || name.includes("ahl levy")) return ["hr"];
   if (SALE_ACCOUNT_CODES.has(code) || subGroup.includes("sale ")) return ["propertySale"];
   if (INVENTORY_ACCOUNT_CODES.has(code) || subGroup.includes("payables") || subGroup.includes("inventory") || subGroup.includes("cost of revenue") || subGroup.includes("sales revenue") || subGroup.includes("tax liabilities")) return ["inventory"];
+  if (CLIENTS_ACCOUNT_CODES.has(code) || name.includes("client")) return ["clients"];
   if (["3100", "3200"].includes(code)) return ["general"];
   return ["propertyManagement"];
 };
@@ -115,6 +126,7 @@ const getActiveModuleScopes = (modules = {}) => {
   if (modules.hr)                 scopes.add("hr");
   if (modules.propertySale)       scopes.add("propertySale");
   if (modules.inventory)          scopes.add("inventory");
+  if (modules.clients)            scopes.add("clients");
   return [...scopes];
 };
 
@@ -213,7 +225,7 @@ export const findChartOfAccounts = async ({
   const scopes = moduleScope
     ? normalizeModuleScopes(moduleScope)
     : await getCompanyActiveScopes(normalizedBusinessId);
-  await ensureSystemChartOfAccounts(normalizedBusinessId, { force: scopes.includes("carwash") || scopes.includes("hr") || scopes.includes("inventory") });
+  await ensureSystemChartOfAccounts(normalizedBusinessId, { force: scopes.includes("carwash") || scopes.includes("hr") || scopes.includes("inventory") || scopes.includes("clients") });
 
   const query = { business: normalizedBusinessId };
 

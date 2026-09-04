@@ -1,7 +1,7 @@
 import React, { useCallback, useState, useEffect, useMemo } from "react";
 import { fmtDate } from "../../utils/dates";
 import { useTerms } from "../../hooks/useTerm";
-import TenantStatementTab from "./TenantStatementTab";
+import StatementLedgerTab from "../../components/common/StatementLedgerTab";
 import { useTabState } from "../../hooks/useTabState";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
@@ -1588,7 +1588,7 @@ const TenantStatement = () => {
   };
 
   const renderStatement = () => (
-    <TenantStatementTab
+    <StatementLedgerTab
       statementData={statementData}
       tenant={tenant}
       tenantLease={tenantLease}

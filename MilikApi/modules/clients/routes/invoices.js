@@ -6,7 +6,9 @@ import {
   getInvoice,
   createInvoice,
   updateInvoice,
-  markPaid,
+  recordPayment,
+  listPayments,
+  reversePayment,
   sendInvoice,
   cancelInvoice,
 } from "../controllers/invoicesController.js";
@@ -19,7 +21,9 @@ router.get("/",                              listInvoices);
 router.post("/",                             createInvoice);
 router.get("/:id",    validateParamId(),     getInvoice);
 router.put("/:id",    validateParamId(),     updateInvoice);
-router.patch("/:id/mark-paid", validateParamId(), markPaid);
+router.get("/:id/payments",                  validateParamId(), listPayments);
+router.post("/:id/payments",                 validateParamId(), recordPayment);
+router.post("/:id/payments/:paymentId/reverse", validateParamId(), validateParamId("paymentId"), reversePayment);
 router.post("/:id/send",       validateParamId(), sendInvoice);
 router.delete("/:id",          validateParamId(), cancelInvoice);
 

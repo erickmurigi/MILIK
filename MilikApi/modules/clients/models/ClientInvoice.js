@@ -49,6 +49,7 @@ const clientInvoiceSchema = new mongoose.Schema(
     paymentReference: { type: String, default: "" },
     sentAt:           { type: Date, default: null },
     notes:            { type: String, default: "" },
+    ledgerEntries:    [{ type: mongoose.Schema.Types.ObjectId, ref: "FinancialLedgerEntry" }],
     createdBy:        { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
