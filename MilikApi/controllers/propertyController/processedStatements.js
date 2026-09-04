@@ -320,9 +320,15 @@ const postCommissionAccrualForProcessedStatement = async ({ processedStatement, 
 
   const entries = [];
   const touchedAccounts = [String(propertyControlAccount._id)];
+  // Declared here (not inside the block below) because the VAT leg further down
+  // is a separate sibling `if` block that also needs to reference it as
+  // metadata.offsetOfEntryId — a `const` scoped to the commission block only
+  // made that a ReferenceError ("debitLeg is not defined") whenever a
+  // landlord's commission actually had tax applied.
+  let debitLeg;
 
   if (!skipCommission) {
-    const debitLeg = await postEntry({
+    debitLeg = await postEntry({
       business: processedStatement.business,
       property: processedStatement.property,
       landlord: processedStatement.landlord,
