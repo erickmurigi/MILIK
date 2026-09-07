@@ -21,6 +21,14 @@ const STATUS_BADGE = {
   Draft:     'border-indigo-200 bg-indigo-50 text-indigo-600',
 };
 
+const STATUS_TABS = [
+  { value: '',          label: 'All' },
+  { value: 'Pending',   label: 'Pending' },
+  { value: 'Approved',  label: 'Approved' },
+  { value: 'Rejected',  label: 'Rejected' },
+  { value: 'Cancelled', label: 'Cancelled' },
+];
+
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
 
@@ -55,13 +63,13 @@ function ApplyLeaveModal({ employees = [], leaveTypes = [], onClose, onSaved }) 
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-2xl">
+      <div className="w-full max-w-lg border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
           <div>
             <div className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Leave Management</div>
             <h2 className="text-sm font-black text-slate-900">Apply for Leave</h2>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><FaTimes size={12} /></button>
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:bg-slate-100"><FaTimes size={12} /></button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3 p-5">
@@ -109,10 +117,10 @@ function ApplyLeaveModal({ employees = [], leaveTypes = [], onClose, onSaved }) 
           </div>
 
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+            <button type="button" onClick={onClose} className="rounded-md border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
               Cancel
             </button>
-            <button type="submit" disabled={saving} className="rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
+            <button type="submit" disabled={saving} className="rounded-md bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
               {saving ? 'Submitting…' : 'Submit Application'}
             </button>
           </div>
@@ -224,17 +232,17 @@ export default function LeaveApplications() {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
 
         {/* Header */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-5 py-3 shadow-sm">
+        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-3 py-2">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">Human Resource · Leave</div>
               <h1 className="text-sm font-black text-slate-900 leading-tight">Leave Applications</h1>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={refetch} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+              <button onClick={refetch} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50">
                 <FaRedoAlt size={10} /> Refresh
               </button>
-              <button onClick={() => setShowApply(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#FF8C00] px-3 py-1.5 text-xs font-black text-white hover:bg-[#e67e00]">
+              <button onClick={() => setShowApply(true)} className="inline-flex h-7 items-center gap-1.5 rounded bg-[#FF8C00] px-3 text-xs font-black text-white hover:bg-[#e67e00]">
                 <FaPlus size={10} /> Apply Leave
               </button>
             </div>
@@ -242,30 +250,39 @@ export default function LeaveApplications() {
         </div>
 
         {/* Filters */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-4 py-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <AppSelect
-              value={statusFilter}
-              onChange={(v) => setStatusFilter(v ?? '')}
-              options={[
-                { value: 'Pending', label: 'Pending' },
-                { value: 'Approved', label: 'Approved' },
-                { value: 'Rejected', label: 'Rejected' },
-                { value: 'Cancelled', label: 'Cancelled' },
-              ]}
-              placeholder="All statuses"
-              clearable
-              size="sm"
-            />
-            <AppSelect
-              value={typeFilter}
-              onChange={(v) => setTypeFilter(v ?? '')}
-              options={leaveTypes.map((l) => ({ value: l._id, label: l.name }))}
-              placeholder="All leave types"
-              clearable
-              size="sm"
-            />
-            <span className="ml-auto text-[11px] font-semibold text-slate-500">{total} result{total !== 1 ? 's' : ''}</span>
+        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-2 py-1.5">
+          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto">
+            <div className="flex shrink-0 items-center gap-1">
+              {STATUS_TABS.map((tab) => (
+                <button
+                  key={tab.value}
+                  type="button"
+                  onClick={() => setStatusFilter(tab.value)}
+                  className={`h-7 shrink-0 rounded px-2.5 text-[11px] font-semibold transition-colors ${
+                    statusFilter === tab.value
+                      ? 'bg-[#0B3B2E] text-white'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+
+            <div className="shrink-0">
+              <AppSelect
+                value={typeFilter}
+                onChange={(v) => setTypeFilter(v ?? '')}
+                options={leaveTypes.map((l) => ({ value: l._id, label: l.name }))}
+                placeholder="All leave types"
+                clearable
+                size="sm"
+              />
+            </div>
+
+            <span className="ml-auto shrink-0 whitespace-nowrap text-[10px] font-semibold text-slate-400">{total} result{total !== 1 ? 's' : ''}</span>
           </div>
         </div>
 

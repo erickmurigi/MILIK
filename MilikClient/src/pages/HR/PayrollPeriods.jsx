@@ -48,10 +48,10 @@ function NewPeriodForm({ onSave, onCancel, saving }) {
   const [year, setYear]   = useState(currentYear);
   const [notes, setNotes] = useState('');
 
-  const inputCls = 'h-8 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]';
+  const inputCls = 'h-7 w-full rounded border border-slate-200 bg-white px-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]';
 
   return (
-    <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
+    <div className="border border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
       <div className="text-xs font-black text-slate-700 uppercase tracking-widest">New Payroll Period</div>
       <div className="grid grid-cols-3 gap-3">
         <div>
@@ -66,10 +66,10 @@ function NewPeriodForm({ onSave, onCancel, saving }) {
         </div>
       </div>
       <div className="flex justify-end gap-2">
-        <button onClick={onCancel} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+        <button onClick={onCancel} className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50">
           <FaTimes size={9} /> Cancel
         </button>
-        <button onClick={() => onSave({ month, year, notes })} disabled={saving} className="inline-flex items-center gap-1 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0a2e23] disabled:opacity-50">
+        <button onClick={() => onSave({ month, year, notes })} disabled={saving} className="inline-flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23] disabled:opacity-50">
           <FaCheck size={9} /> {saving ? 'Creating…' : 'Create Period'}
         </button>
       </div>
@@ -172,10 +172,10 @@ export default function PayrollPeriods() {
               <h1 className="text-sm font-black text-slate-900 leading-tight">Payroll Periods</h1>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={refetch} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+              <button onClick={refetch} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50">
                 <FaRedoAlt size={10} />
               </button>
-              <button onClick={() => setShowNew(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#FF8C00] px-3 py-1.5 text-xs font-black text-white hover:bg-[#e67e00]">
+              <button onClick={() => setShowNew(true)} className="inline-flex h-7 items-center gap-1.5 rounded bg-[#FF8C00] px-3 text-xs font-black text-white hover:bg-[#e67e00]">
                 <FaPlus size={10} /> New Period
               </button>
             </div>
@@ -183,20 +183,21 @@ export default function PayrollPeriods() {
         </div>
 
         {/* Filter bar */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-4 py-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <FaFilter size={9} className="text-slate-400" />
+        <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-2 py-1.5">
+          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto">
+            <FaFilter size={9} className="shrink-0 text-slate-400" />
             <AppSelect value={yearFilter} onChange={(v) => setYearFilter(v ?? "")} options={YEAR_OPTIONS} placeholder="All years" clearable size="sm" />
             <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? "")} options={PAYROLL_STATUS_OPTIONS} placeholder="All statuses" clearable size="sm" />
             {hasFilters && (
               <button
                 onClick={() => { setYearFilter(''); setStatusFilter(''); }}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-bold text-slate-500 hover:bg-slate-100"
+                className="inline-flex h-7 shrink-0 items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-[10px] font-bold text-slate-500 hover:bg-slate-100"
               >
                 <FaTimes size={8} /> Clear
               </button>
             )}
-            <span className="ml-auto text-[11px] font-semibold text-slate-500">{total} result{total !== 1 ? 's' : ''}</span>
+            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+            <span className="ml-auto shrink-0 whitespace-nowrap text-[10px] font-semibold text-slate-400">{total} result{total !== 1 ? 's' : ''}</span>
           </div>
         </div>
 
@@ -249,7 +250,7 @@ export default function PayrollPeriods() {
               <div className="flex justify-end gap-1">
                 <button
                   onClick={() => navigate(`/hr/payroll/${period._id}`)}
-                  className="inline-flex items-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-black text-indigo-700 hover:bg-indigo-100"
+                  className="inline-flex items-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-black text-indigo-700 hover:bg-indigo-100"
                 >
                   <FaEye size={9} /> View
                 </button>
@@ -257,7 +258,7 @@ export default function PayrollPeriods() {
                   <button
                     onClick={() => runPayroll(period)}
                     disabled={!!running}
-                    className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
                   >
                     <FaPlay size={8} /> {running === period._id ? 'Running…' : 'Run'}
                   </button>
@@ -265,7 +266,7 @@ export default function PayrollPeriods() {
                 {canManagePayroll && period.status === 'Draft' && (
                   <button
                     onClick={() => deletePeriod(period)}
-                    className="inline-flex items-center gap-1 rounded border border-rose-100 bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-500 hover:bg-rose-100"
+                    className="inline-flex items-center gap-1 rounded border border-rose-100 bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-500 hover:bg-rose-100"
                   >
                     <FaTrash size={8} />
                   </button>

@@ -65,8 +65,8 @@ function DeptForm({ initial = DEPT_BLANK, onSave, onCancel, saving }) {
       </div>
       <div><Label>Description</Label><input value={f.description} onChange={set('description')} className={inp} placeholder="Optional" /></div>
       <div className="flex justify-end gap-2">
-        <button onClick={onCancel} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50"><FaTimes size={9}/> Cancel</button>
-        <button onClick={() => onSave(f)} disabled={saving || !f.name.trim()} className="inline-flex items-center gap-1 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0a2e23] disabled:opacity-50"><FaCheck size={9}/> {saving ? 'Saving…' : 'Save'}</button>
+        <button onClick={onCancel} className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50"><FaTimes size={9}/> Cancel</button>
+        <button onClick={() => onSave(f)} disabled={saving || !f.name.trim()} className="inline-flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23] disabled:opacity-50"><FaCheck size={9}/> {saving ? 'Saving…' : 'Save'}</button>
       </div>
     </div>
   );
@@ -83,8 +83,8 @@ function DesigForm({ initial = DESIG_BLANK, onSave, onCancel, saving }) {
       </div>
       <div><Label>Description</Label><input value={f.description} onChange={set('description')} className={inp} placeholder="Optional" /></div>
       <div className="flex justify-end gap-2">
-        <button onClick={onCancel} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50"><FaTimes size={9}/> Cancel</button>
-        <button onClick={() => onSave(f)} disabled={saving || !f.name.trim()} className="inline-flex items-center gap-1 rounded-lg bg-[#FF8C00] px-3 py-1.5 text-xs font-black text-white hover:bg-[#e67e00] disabled:opacity-50"><FaCheck size={9}/> {saving ? 'Saving…' : 'Save'}</button>
+        <button onClick={onCancel} className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50"><FaTimes size={9}/> Cancel</button>
+        <button onClick={() => onSave(f)} disabled={saving || !f.name.trim()} className="inline-flex h-7 items-center gap-1 rounded bg-[#FF8C00] px-3 text-xs font-black text-white hover:bg-[#e67e00] disabled:opacity-50"><FaCheck size={9}/> {saving ? 'Saving…' : 'Save'}</button>
       </div>
     </div>
   );
@@ -129,8 +129,8 @@ function SignatoryForm({ initial = SIG_BLANK, onSave, onCancel, saving }) {
         </div>
       </div>
       <div className="flex justify-end gap-2">
-        <button onClick={onCancel} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50"><FaTimes size={9}/> Cancel</button>
-        <button onClick={() => onSave(f)} disabled={saving || !f.name.trim() || !f.title.trim()} className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-black text-white hover:bg-indigo-700 disabled:opacity-50"><FaCheck size={9}/> {saving ? 'Saving…' : 'Save'}</button>
+        <button onClick={onCancel} className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50"><FaTimes size={9}/> Cancel</button>
+        <button onClick={() => onSave(f)} disabled={saving || !f.name.trim() || !f.title.trim()} className="inline-flex h-7 items-center gap-1 rounded bg-indigo-600 px-3 text-xs font-black text-white hover:bg-indigo-700 disabled:opacity-50"><FaCheck size={9}/> {saving ? 'Saving…' : 'Save'}</button>
       </div>
     </div>
   );
@@ -166,8 +166,8 @@ function PayCompForm({ type, initial = COMP_BLANK, onSave, onCancel, saving }) {
         )}
       </div>
       <div className="flex justify-end gap-2">
-        <button onClick={onCancel} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50"><FaTimes size={9}/> Cancel</button>
-        <button onClick={() => onSave({ ...f, type })} disabled={saving || !f.name.trim() || !f.code.trim()} className={`inline-flex items-center gap-1 rounded-lg bg-${color}-600 px-3 py-1.5 text-xs font-black text-white hover:bg-${color}-700 disabled:opacity-50`}><FaCheck size={9}/> {saving ? 'Saving…' : 'Save'}</button>
+        <button onClick={onCancel} className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50"><FaTimes size={9}/> Cancel</button>
+        <button onClick={() => onSave({ ...f, type })} disabled={saving || !f.name.trim() || !f.code.trim()} className={`inline-flex h-7 items-center gap-1 rounded bg-${color}-600 px-3 text-xs font-black text-white hover:bg-${color}-700 disabled:opacity-50`}><FaCheck size={9}/> {saving ? 'Saving…' : 'Save'}</button>
       </div>
     </div>
   );
@@ -526,28 +526,28 @@ export default function HRSetup() {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
 
         {/* Header */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-5 py-3 shadow-sm">
+        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-4 py-2.5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">Human Resource</div>
               <h1 className="text-sm font-black text-slate-900 leading-tight">HR Setup & Configuration</h1>
             </div>
             {tab === 'org' && (
-              <div className="flex items-center gap-2">
-                <button onClick={() => setShowInactive((p) => !p)} className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold ${showInactive ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
+              <div className="flex items-center gap-1.5">
+                <button onClick={() => setShowInactive((p) => !p)} className={`inline-flex h-7 items-center gap-1.5 rounded border px-3 text-xs font-bold ${showInactive ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
                   {showInactive ? <FaToggleOn size={10}/> : <FaToggleOff size={10}/>} {showInactive ? 'Showing Inactive' : 'Active Only'}
                 </button>
-                <button onClick={loadDepts} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50"><FaRedoAlt size={10}/> Refresh</button>
+                <button onClick={loadDepts} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50"><FaRedoAlt size={10}/> Refresh</button>
               </div>
             )}
           </div>
 
           {/* Tabs */}
-          <div className="mt-3 flex gap-1 border-b border-slate-100 pb-0">
+          <div className="mt-2 flex gap-1">
             {TABS.map(({ id, label, icon: Icon }) => (
               <button key={id} onClick={() => setTab(id)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-black rounded-t-lg border-b-2 transition-colors ${tab === id ? 'border-[#0B3B2E] text-[#0B3B2E] bg-emerald-50/60' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>
-                <Icon size={9}/> {label}
+                className={`inline-flex h-[20px] items-center gap-1 px-1.5 text-[9px] font-bold transition-colors ${tab === id ? 'bg-[#0B3B2E] text-white' : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-100'}`}>
+                <Icon size={7}/> {label}
               </button>
             ))}
           </div>
@@ -569,7 +569,7 @@ export default function HRSetup() {
                       <span className="text-[11px] font-black uppercase tracking-widest text-slate-700">Departments</span>
                       <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{departments.length}</span>
                     </div>
-                    <button onClick={() => setDeptFormMode('new')} className="inline-flex items-center gap-1 rounded-lg bg-[#0B3B2E] px-2.5 py-1.5 text-[10px] font-black text-white hover:bg-[#0a2e23]"><FaPlus size={8}/> New</button>
+                    <button onClick={() => setDeptFormMode('new')} className="inline-flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-[10px] font-black text-white hover:bg-[#0a2e23]"><FaPlus size={8}/> New</button>
                   </div>
                   <div className="relative mt-2">
                     <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400"/>
@@ -617,7 +617,7 @@ export default function HRSetup() {
                       <span className="text-[11px] font-black uppercase tracking-widest text-slate-700">Designations</span>
                       {selectedDept && <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{designations.length}</span>}
                     </div>
-                    {selectedDept && <button onClick={() => setDesigFormMode('new')} className="inline-flex items-center gap-1 rounded-lg bg-[#FF8C00] px-2.5 py-1.5 text-[10px] font-black text-white hover:bg-[#e67e00]"><FaPlus size={8}/> New</button>}
+                    {selectedDept && <button onClick={() => setDesigFormMode('new')} className="inline-flex h-7 items-center gap-1 rounded bg-[#FF8C00] px-2.5 text-[10px] font-black text-white hover:bg-[#e67e00]"><FaPlus size={8}/> New</button>}
                   </div>
                   {selectedDept && (
                     <div className="relative mt-2">
@@ -676,7 +676,7 @@ export default function HRSetup() {
                       <FaUserTie size={10} className="text-indigo-600"/>
                       <span className="text-[11px] font-black uppercase tracking-widest text-slate-700">Signatories</span>
                     </div>
-                    <button onClick={() => setSigFormMode('new')} className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-[10px] font-black text-white hover:bg-indigo-700"><FaPlus size={8}/> Add</button>
+                    <button onClick={() => setSigFormMode('new')} className="inline-flex h-7 items-center gap-1 rounded bg-indigo-600 px-2.5 text-[10px] font-black text-white hover:bg-indigo-700"><FaPlus size={8}/> Add</button>
                   </div>
                 </div>
                 {sigFormMode === 'new' && <div className="flex-shrink-0 border-b border-slate-100 p-3"><SignatoryForm onSave={saveSig} onCancel={() => setSigFormMode(null)} saving={sigSaving}/></div>}
@@ -730,8 +730,8 @@ export default function HRSetup() {
                     </div>
                     <div className="flex items-center gap-2">
                       {tplIsCustom && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black text-emerald-700">Custom Active</span>}
-                      {tplIsCustom && <button onClick={resetTpl} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50"><FaUndo size={8}/> Reset Default</button>}
-                      <button onClick={saveTpl} disabled={tplSaving} className="inline-flex items-center gap-1 rounded-lg bg-[#0B3B2E] px-2.5 py-1.5 text-[10px] font-black text-white hover:bg-[#0a2e23] disabled:opacity-50"><FaCheck size={8}/> {tplSaving ? 'Saving…' : 'Save Template'}</button>
+                      {tplIsCustom && <button onClick={resetTpl} className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50"><FaUndo size={8}/> Reset Default</button>}
+                      <button onClick={saveTpl} disabled={tplSaving} className="inline-flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-[10px] font-black text-white hover:bg-[#0a2e23] disabled:opacity-50"><FaCheck size={8}/> {tplSaving ? 'Saving…' : 'Save Template'}</button>
                     </div>
                   </div>
                 </div>
@@ -764,7 +764,7 @@ export default function HRSetup() {
                             <button
                               type="button"
                               onClick={() => setTplPreview((p) => !p)}
-                              className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold transition-colors ${tplPreview ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+                              className={`inline-flex h-7 items-center gap-1 rounded border px-2 text-[10px] font-bold transition-colors ${tplPreview ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
                             >
                               {tplPreview ? <><FaCode size={8}/> Edit HTML</> : <><FaEye size={8}/> Preview</>}
                             </button>
@@ -785,7 +785,7 @@ export default function HRSetup() {
                           {tplPreview ? (
                             <iframe
                               srcDoc={previewDoc}
-                              className="flex-1 w-full rounded-lg border border-slate-200 bg-white"
+                              className="flex-1 w-full rounded border border-slate-200 bg-white"
                               sandbox="allow-same-origin"
                               title="Letter preview"
                             />
@@ -794,7 +794,7 @@ export default function HRSetup() {
                               ref={tplBodyRef}
                               value={tplBody}
                               onChange={(e) => setTplBody(e.target.value)}
-                              className="flex-1 w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-[11px] font-mono text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] resize-none"
+                              className="flex-1 w-full rounded border border-slate-200 bg-slate-50 p-3 text-[11px] font-mono text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] resize-none"
                               placeholder="Enter HTML body with {{placeholders}}…"
                               spellCheck={false}
                             />
@@ -805,7 +805,7 @@ export default function HRSetup() {
                           </div>
                         </div>
                         {/* Placeholder reference */}
-                        <div className="w-52 flex-shrink-0 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50 p-3">
+                        <div className="w-52 flex-shrink-0 overflow-y-auto rounded border border-slate-100 bg-slate-50 p-3">
                           <div className="flex items-center gap-1 mb-1.5">
                             <FaInfoCircle size={9} className="text-slate-400"/>
                             <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Placeholders</span>
@@ -851,7 +851,7 @@ export default function HRSetup() {
                       <span className="text-[11px] font-black uppercase tracking-widest text-slate-700">Allowances</span>
                       <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{allowances.length}</span>
                     </div>
-                    <button onClick={() => setCompFormMode({ type: 'allowance' })} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[10px] font-black text-white hover:bg-emerald-700"><FaPlus size={8}/> Add</button>
+                    <button onClick={() => setCompFormMode({ type: 'allowance' })} className="inline-flex h-7 items-center gap-1 rounded bg-emerald-600 px-2.5 text-[10px] font-black text-white hover:bg-emerald-700"><FaPlus size={8}/> Add</button>
                   </div>
                 </div>
                 {compFormMode?.type === 'allowance' && !compFormMode.editing && (
@@ -872,7 +872,7 @@ export default function HRSetup() {
                       <span className="text-[11px] font-black uppercase tracking-widest text-slate-700">Deductions</span>
                       <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{deductions.length}</span>
                     </div>
-                    <button onClick={() => setCompFormMode({ type: 'deduction' })} className="inline-flex items-center gap-1 rounded-lg bg-rose-500 px-2.5 py-1.5 text-[10px] font-black text-white hover:bg-rose-600"><FaPlus size={8}/> Add</button>
+                    <button onClick={() => setCompFormMode({ type: 'deduction' })} className="inline-flex h-7 items-center gap-1 rounded bg-rose-500 px-2.5 text-[10px] font-black text-white hover:bg-rose-600"><FaPlus size={8}/> Add</button>
                   </div>
                 </div>
                 {compFormMode?.type === 'deduction' && !compFormMode.editing && (
@@ -892,7 +892,7 @@ export default function HRSetup() {
               <div className="mx-auto max-w-2xl space-y-5">
 
                 {/* Relief + other rates */}
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="mb-3 flex items-center gap-2">
                     <FaPercent size={11} className="text-emerald-700"/>
                     <span className="text-xs font-black uppercase tracking-widest text-slate-700">Rates & Relief</span>
@@ -910,13 +910,13 @@ export default function HRSetup() {
                 </div>
 
                 {/* PAYE bands */}
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="mb-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <FaPercent size={11} className="text-emerald-700"/>
                       <span className="text-xs font-black uppercase tracking-widest text-slate-700">PAYE Tax Bands</span>
                     </div>
-                    <button onClick={() => setPayeBands((p) => [...p.slice(0, -1), { upTo: '', rate: '' }, { upTo: '', rate: p[p.length - 1]?.rate || '' }])} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-black text-slate-600 hover:bg-slate-50"><FaPlus size={8}/> Add Band</button>
+                    <button onClick={() => setPayeBands((p) => [...p.slice(0, -1), { upTo: '', rate: '' }, { upTo: '', rate: p[p.length - 1]?.rate || '' }])} className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-[10px] font-black text-slate-600 hover:bg-slate-50"><FaPlus size={8}/> Add Band</button>
                   </div>
                   <div className="space-y-1.5">
                     <div className="grid grid-cols-[1fr_1fr_auto] gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">
@@ -935,8 +935,8 @@ export default function HRSetup() {
 
                 {/* Actions */}
                 <div className="flex justify-between">
-                  <button onClick={resetStatutory} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"><FaUndo size={10}/> Reset to Kenya Defaults</button>
-                  <button onClick={saveStatutory} disabled={statSaving} className="inline-flex items-center gap-1.5 rounded-xl bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0a2e23] disabled:opacity-50"><FaCheck size={10}/> {statSaving ? 'Saving…' : 'Save Rates'}</button>
+                  <button onClick={resetStatutory} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 hover:bg-slate-50"><FaUndo size={10}/> Reset to Kenya Defaults</button>
+                  <button onClick={saveStatutory} disabled={statSaving} className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-4 text-xs font-black text-white hover:bg-[#0a2e23] disabled:opacity-50"><FaCheck size={10}/> {statSaving ? 'Saving…' : 'Save Rates'}</button>
                 </div>
               </div>
             </div>

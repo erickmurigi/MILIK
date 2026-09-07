@@ -456,8 +456,11 @@ const Receipts = ({ viewMode = "tenant" }) => {
     if (filters.tenantSearch) params.tenantSearch = filters.tenantSearch;
     if (filters.from) params.from = filters.from;
     if (filters.to) params.to = filters.to;
-    if (!isCompanyLandlordMode) {
-      params.paidDirectToLandlord = isLandlordReceiptView;
+    if (!isCompanyLandlordMode && isLandlordReceiptView) {
+      // Landlord-receipts sub-view: restrict to direct-to-landlord receipts only.
+      // Default (Rental Receipts) view intentionally omits this filter so both
+      // regular and direct-to-landlord receipts show up inline (see getCashbookLabel).
+      params.paidDirectToLandlord = true;
     }
     const { propertiesLoaded, tenantsLoaded } = entityCacheRef.current;
     try {

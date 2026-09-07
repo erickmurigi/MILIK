@@ -178,15 +178,15 @@ export default function HRRemittance() {
                 searchable
                 size="sm"
               />
-              <button onClick={load} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+              <button onClick={load} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50">
                 <FaRedoAlt size={9} />
               </button>
               {data && rows.length > 0 && (
                 <>
-                  <button onClick={() => setShowEmail(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                  <button onClick={() => setShowEmail(true)} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
                     <FaEnvelope size={9} /> Email
                   </button>
-                  <button onClick={printRemittance} className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0a2e23]">
+                  <button onClick={printRemittance} className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23]">
                     <FaPrint size={9} /> Print
                   </button>
                 </>
@@ -195,13 +195,15 @@ export default function HRRemittance() {
           </div>
 
           {/* Report type tabs */}
-          <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5">
+          <div className="mt-2 flex items-center gap-1 overflow-x-auto">
             {REPORT_TYPES.map((rt2) => (
               <button
                 key={rt2.key}
                 onClick={() => setReportType(rt2.key)}
-                className={`shrink-0 rounded-lg border-b-2 px-3 py-1.5 text-[11px] font-black transition-colors ${
-                  reportType === rt2.key ? COLOR[rt2.color].tab : 'border-transparent text-slate-500 hover:bg-slate-50'
+                className={`h-[20px] shrink-0 inline-flex items-center px-1.5 text-[9px] font-bold whitespace-nowrap ${
+                  reportType === rt2.key
+                    ? 'bg-[#0B3B2E] text-white'
+                    : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
                 }`}
               >
                 {rt2.label}

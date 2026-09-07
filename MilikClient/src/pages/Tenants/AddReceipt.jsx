@@ -8,7 +8,6 @@ import {
   selectCurrentUser,
   selectCurrentCompany,
   selectAllProperties,
-  selectAllTenants,
 } from "../../redux/selectors";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -17,7 +16,7 @@ import AppSelect from "../../components/common/AppSelect";
 import { buildTenantOption, getTenantName } from "../../utils/tenantUtils";
 import { createRentPayment, getTenantInvoices, getChartOfAccounts } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
-import { getTenants } from "../../redux/tenantsRedux";
+import { adminRequests } from "../../utils/requestMethods";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { isCashbookAccount } from "../../utils/cashbookUtils";
@@ -159,14 +158,12 @@ const AddReceipt = () => {
   const currentUser = useSelector(selectCurrentUser);
   const canSaveReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "create", "propertyManagement");
   const rawProperties = useSelector(selectAllProperties);
-  const rawTenants = useSelector(selectAllTenants);
 
   const properties = ensureArray(rawProperties);
   const activeProperties = useMemo(
     () => properties.filter((property) => !isArchivedRecord(property)),
     [properties]
   );
-  const tenants = ensureArray(rawTenants);
 
   const receiptDraftKey = buildScopedDraftKey({
     page: "add-receipt",
@@ -208,6 +205,13 @@ const AddReceipt = () => {
       priorityInvoiceKeys: typeof updater === "function" ? updater(prev.priorityInvoiceKeys || []) : updater,
     }));
   };
+  // Property-scoped tenant list for the Tenant dropdown, fetched directly from the
+  // backend (server-side filtered by property) instead of client-filtering the giant,
+  // page-1-capped Redux `tenants` list — see AddReceipt tenant-dropdown fix notes.
+  const [propertyTenants, setPropertyTenants] = useState([]);
+  const [propertyTenantsLoading, setPropertyTenantsLoading] = useState(false);
+  const propertyTenantsRequestIdRef = useRef(0);
+
   const [tenantInvoices, setTenantInvoices] = useState([]);
   const [cashbookOptions, setCashbookOptions] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
@@ -266,14 +270,13 @@ const AddReceipt = () => {
     if (!currentCompany?._id) return;
 
     const load = async () => {
-      const { propertiesLoaded, tenantsLoaded } = entityCacheRef.current;
+      const { propertiesLoaded } = entityCacheRef.current;
       try {
         // Keep invoiceRows/chartRows at fixed indices — entity dispatches run in parallel but don't affect position
         const [invoiceRows, chartRows] = await Promise.all([
           getTenantInvoices({ business: currentCompany._id, includeSnapshots: true }),
           getChartOfAccounts({ business: currentCompany._id, type: "asset" }),
           ...(propertiesLoaded ? [] : [dispatch(getProperties({ business: currentCompany._id }))]),
-          ...(tenantsLoaded ? [] : [dispatch(getTenants({ business: currentCompany._id }))]),
         ]);
 
         const normalizedInvoices = ensureArray(invoiceRows);
@@ -306,44 +309,126 @@ const AddReceipt = () => {
     load();
   }, [currentCompany?._id, dispatch]);
 
+  // Resolve a tenant preselected via the URL — either `?tenant=<id>` (the common case,
+  // e.g. arriving from a tenant's own profile) or `?tnt=<code>`/`?tenantCode=<code>` (e.g.
+  // an external reference link) — with one targeted fetch instead of scanning the shared,
+  // page-1-capped company-wide tenant list. That old approach silently failed to resolve
+  // (and therefore never auto-filled the property below) for any company with more
+  // tenants than the default fetch page size, if the preselected tenant wasn't on that
+  // first page — the same bug class the property-scoped dropdown fetch above fixes.
+  const [preselectedTenant, setPreselectedTenant] = useState(null);
+
+  useEffect(() => {
+    if (!currentCompany?._id) return;
+    let cancelled = false;
+
+    if (preselectedTenantId) {
+      adminRequests
+        .get(`/tenants/${preselectedTenantId}`, { params: { business: currentCompany._id } })
+        .then((response) => {
+          if (cancelled) return;
+          const tenant = response?.data?.data || response?.data;
+          if (tenant?._id) setPreselectedTenant(tenant);
+        })
+        .catch(() => {
+          if (!cancelled) toast.error(`Failed to load the selected ${termTenant.toLowerCase()}`);
+        });
+    } else if (prefilledTenantCode) {
+      // tenantCode is a substring match server-side, so fetch a small bounded batch of
+      // candidates and pick the exact (case-insensitive) match client-side — preserves
+      // the original exact-match semantics without scanning the whole company roster.
+      adminRequests
+        .get("/tenants", { params: { business: currentCompany._id, tenantCode: prefilledTenantCode, limit: 50 } })
+        .then((response) => {
+          if (cancelled) return;
+          const candidates = ensureArray(response?.data);
+          const exactMatch = candidates.find(
+            (t) => String(t?.tenantCode || "").trim().toLowerCase() === String(prefilledTenantCode || "").trim().toLowerCase()
+          );
+          if (exactMatch) setPreselectedTenant(exactMatch);
+        })
+        .catch(() => {});
+    }
+
+    return () => { cancelled = true; };
+  }, [currentCompany?._id, preselectedTenantId, prefilledTenantCode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (preselectedTenantId || formData.tenantId || !prefilledTenantCode || !preselectedTenant) return;
+    setFormData((prev) => (prev.tenantId ? prev : { ...prev, tenantId: String(preselectedTenant._id) }));
+  }, [formData.tenantId, prefilledTenantCode, preselectedTenantId, preselectedTenant]);
+
   useEffect(() => {
     if (!formData.tenantId || formData.propertyId) return;
-    const selected = tenants.find((tenant) => String(tenant._id) === String(formData.tenantId));
-    if (!selected) return;
-
-    const tenantPropertyId = getTenantPropertyId(selected);
+    if (!preselectedTenant || String(preselectedTenant._id) !== String(formData.tenantId)) return;
+    const tenantPropertyId = getTenantPropertyId(preselectedTenant);
     if (tenantPropertyId) {
       setFormData((prev) => ({ ...prev, propertyId: String(tenantPropertyId) }));
     }
-  }, [formData.tenantId, formData.propertyId, tenants]);
+  }, [formData.tenantId, formData.propertyId, preselectedTenant]);
+
+  // Fetch tenants for the selected property directly from the backend (server-side
+  // `property` filter), rather than relying on the shared, page-1-capped Redux
+  // `tenants` list. This is what makes the dropdown correct for companies with
+  // more tenants than the default fetch page size — see fix notes at top of file.
+  useEffect(() => {
+    if (!currentCompany?._id || !formData.propertyId) {
+      setPropertyTenants([]);
+      setPropertyTenantsLoading(false);
+      return;
+    }
+
+    const requestId = ++propertyTenantsRequestIdRef.current;
+    setPropertyTenantsLoading(true);
+
+    adminRequests
+      .get("/tenants", {
+        params: {
+          business: currentCompany._id,
+          property: formData.propertyId,
+          limit: 500,
+        },
+      })
+      .then((response) => {
+        if (propertyTenantsRequestIdRef.current !== requestId) return; // stale response, a newer property was selected
+        setPropertyTenants(ensureArray(response?.data));
+      })
+      .catch(() => {
+        if (propertyTenantsRequestIdRef.current !== requestId) return;
+        setPropertyTenants([]);
+        toast.error(`Failed to load ${termTenant.toLowerCase()}s for the selected ${termProperty.toLowerCase()}`);
+      })
+      .finally(() => {
+        if (propertyTenantsRequestIdRef.current !== requestId) return;
+        setPropertyTenantsLoading(false);
+      });
+  }, [currentCompany?._id, formData.propertyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tenantOptions = useMemo(() => {
     if (!formData.propertyId) return [];
-    return tenants.filter((tenant) => {
+    return propertyTenants.filter((tenant) => {
       const belongsToSelectedProperty = String(getTenantPropertyId(tenant) || "") === String(formData.propertyId);
       if (!belongsToSelectedProperty) return false;
       if (includeTerminatedTenants) return true;
       return !isTerminatedTenant(tenant);
     });
-  }, [tenants, formData.propertyId, includeTerminatedTenants]);
+  }, [propertyTenants, formData.propertyId, includeTerminatedTenants]);
 
-  const selectedTenant = useMemo(
-    () => tenants.find((tenant) => String(tenant._id) === String(formData.tenantId)),
-    [formData.tenantId, tenants]
-  );
+  // Prefer the property-scoped list (always complete for the selected property);
+  // fall back to the single-tenant preselection fetch above for the moment before
+  // that property-scoped list has resolved (e.g. a fresh deep link).
+  const selectedTenant = useMemo(() => {
+    const fromPropertyScoped = propertyTenants.find((tenant) => String(tenant._id) === String(formData.tenantId));
+    if (fromPropertyScoped) return fromPropertyScoped;
+    if (preselectedTenant && String(preselectedTenant._id) === String(formData.tenantId)) return preselectedTenant;
+    return null;
+  }, [formData.tenantId, propertyTenants, preselectedTenant]);
 
   useEffect(() => {
     if (selectedTenant && isTerminatedTenant(selectedTenant) && !includeTerminatedTenants) {
       setIncludeTerminatedTenants(true);
     }
   }, [includeTerminatedTenants, selectedTenant]);
-
-  useEffect(() => {
-    if (preselectedTenantId || formData.tenantId || !prefilledTenantCode || tenants.length === 0) return;
-    const matchedTenant = tenants.find((tenant) => String(tenant?.tenantCode || "").trim().toLowerCase() === String(prefilledTenantCode || "").trim().toLowerCase());
-    if (!matchedTenant?._id) return;
-    setFormData((prev) => ({ ...prev, tenantId: String(matchedTenant._id) }));
-  }, [formData.tenantId, prefilledTenantCode, preselectedTenantId, tenants]);
 
   const isDirectToLandlord = Boolean(formData.paidDirectToLandlord);
   const backToPath = isLandlordMode
@@ -879,10 +964,16 @@ const AddReceipt = () => {
                       value={formData.tenantId}
                       onChange={(v) => setFormData((prev) => ({ ...prev, tenantId: v ?? "" }))}
                       options={tenantOptions.map((t) => buildTenantOption(t))}
-                      placeholder={formData.propertyId ? "Select tenant…" : "Select property first"}
+                      placeholder={
+                        !formData.propertyId
+                          ? "Select property first"
+                          : propertyTenantsLoading
+                          ? "Loading tenants…"
+                          : "Select tenant…"
+                      }
                       searchable
                       clearable
-                      disabled={!formData.propertyId}
+                      disabled={!formData.propertyId || propertyTenantsLoading}
                       size="sm"
                     />
                     {selectedTenant?.unit?.unitNumber && (

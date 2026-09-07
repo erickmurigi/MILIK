@@ -28,7 +28,7 @@ function LeaveTypeForm({ initial = BLANK, onSave, onCancel, saving }) {
   const inputCls = 'w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20';
 
   return (
-    <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
+    <div className="border border-emerald-200 bg-emerald-50/50 p-3 space-y-3">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <div>
           <label className="mb-0.5 block text-xs font-semibold text-slate-700">Name *</label>
@@ -96,10 +96,10 @@ function LeaveTypeForm({ initial = BLANK, onSave, onCancel, saving }) {
       </div>
 
       <div className="flex justify-end gap-2">
-        <button onClick={onCancel} type="button" className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+        <button onClick={onCancel} type="button" className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50">
           <FaTimes size={9} /> Cancel
         </button>
-        <button onClick={() => onSave(f)} type="button" disabled={saving || !f.name.trim()} className="inline-flex items-center gap-1 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0a2e23] disabled:opacity-50">
+        <button onClick={() => onSave(f)} type="button" disabled={saving || !f.name.trim()} className="inline-flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23] disabled:opacity-50">
           <FaCheck size={9} /> {saving ? 'Saving…' : 'Save'}
         </button>
       </div>
@@ -179,21 +179,21 @@ export default function LeaveTypes() {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
 
         {/* Header */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-5 py-3 shadow-sm">
+        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-3 py-2">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">Human Resource · Leave</div>
               <h1 className="text-sm font-black text-slate-900 leading-tight">Leave Types</h1>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={() => setShowInactive((p) => !p)} className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold ${showInactive ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
+              <button onClick={() => setShowInactive((p) => !p)} className={`inline-flex h-7 items-center gap-1.5 rounded border px-3 text-xs font-bold ${showInactive ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
                 {showInactive ? <FaToggleOn size={10} /> : <FaToggleOff size={10} />}
                 {showInactive ? 'Showing Inactive' : 'Active Only'}
               </button>
-              <button onClick={refetch} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+              <button onClick={refetch} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50">
                 <FaRedoAlt size={10} />
               </button>
-              <button onClick={() => setFormMode('new')} className="inline-flex items-center gap-1.5 rounded-lg bg-[#FF8C00] px-3 py-1.5 text-xs font-black text-white hover:bg-[#e67e00]">
+              <button onClick={() => setFormMode('new')} className="inline-flex h-7 items-center gap-1.5 rounded bg-[#FF8C00] px-3 text-xs font-black text-white hover:bg-[#e67e00]">
                 <FaPlus size={10} /> New Leave Type
               </button>
             </div>
@@ -206,9 +206,9 @@ export default function LeaveTypes() {
 
             {/* Search */}
             <div className="relative">
-              <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
+              <FaSearch className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={10} />
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search leave types..."
-                className="h-8 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                className="h-7 w-full rounded border border-slate-200 bg-white pl-7 pr-3 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/30" />
             </div>
 
             {/* New form */}
@@ -236,8 +236,8 @@ export default function LeaveTypes() {
                         saving={saving}
                       />
                     ) : (
-                      <div className={`flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-opacity ${!lt.isActive ? 'opacity-50' : ''}`}>
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+                      <div className={`flex items-start gap-3 border border-slate-200 bg-white p-3 shadow-sm transition-opacity ${!lt.isActive ? 'opacity-50' : ''}`}>
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-emerald-100 text-emerald-700">
                           <FaTag size={14} />
                         </div>
                         <div className="min-w-0 flex-1">

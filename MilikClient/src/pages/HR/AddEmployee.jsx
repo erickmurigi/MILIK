@@ -179,7 +179,7 @@ export default function AddEmployee() {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
 
         {/* Header */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-5 py-2.5 shadow-sm">
+        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-3 py-1.5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <button onClick={() => navigate('/hr/employees')} className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0B3B2E] hover:underline">
@@ -200,20 +200,20 @@ export default function AddEmployee() {
           <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
 
             {/* Tab nav */}
-            <div className="flex-shrink-0 border-b border-slate-200 bg-white px-5">
-              <div className="flex gap-0">
+            <div className="flex-shrink-0 border-b border-slate-200 bg-white px-3 py-1.5">
+              <div className="flex items-center gap-1">
                 {TABS.map((t) => (
                   <button
                     key={t.key}
                     type="button"
                     onClick={() => setTab(t.key)}
-                    className={`inline-flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-semibold transition-colors ${
+                    className={`h-[20px] shrink-0 inline-flex items-center gap-0.5 px-1.5 text-[9px] font-bold whitespace-nowrap ${
                       tab === t.key
-                        ? 'border-[#0B3B2E] text-[#0B3B2E]'
-                        : 'border-transparent text-slate-500 hover:text-slate-700'
+                        ? 'bg-[#0B3B2E] text-white'
+                        : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
                     }`}
                   >
-                    <t.icon size={10} /> {t.label}
+                    <t.icon size={7} /> {t.label}
                   </button>
                 ))}
               </div>
@@ -487,7 +487,7 @@ export default function AddEmployee() {
             </div>
 
             {/* Sticky footer */}
-            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-5 py-2.5 shadow-sm">
+            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-3 py-1.5 shadow-sm">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex gap-1">
                   {TABS.map((t, i) => (
@@ -496,11 +496,11 @@ export default function AddEmployee() {
                     />
                   ))}
                 </div>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => navigate('/hr/employees')} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                <div className="flex gap-1.5">
+                  <button type="button" onClick={() => navigate('/hr/employees')} className="inline-flex h-7 items-center rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
                     Cancel
                   </button>
-                  <button type="submit" disabled={saving} className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
+                  <button type="submit" disabled={saving} className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
                     <FaSave size={10} /> {saving ? 'Saving...' : (isEditing ? 'Update Employee' : 'Create Employee')}
                   </button>
                 </div>

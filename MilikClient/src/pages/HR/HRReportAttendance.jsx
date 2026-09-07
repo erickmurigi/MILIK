@@ -148,76 +148,54 @@ export default function HRReportAttendance() {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full flex-col overflow-hidden">
 
-        {/* Header */}
-        <div className="flex flex-none items-center justify-between border-b border-slate-200 bg-white px-4 py-2.5">
-          <div>
-            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">Human Resource · Reports</div>
-            <h1 className="text-sm font-black leading-tight text-slate-900">Attendance Report</h1>
-          </div>
-          <div className="flex items-center gap-2">
+        {/* Toolbar */}
+        <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
+          <div className="filter-bar flex items-center gap-1 overflow-x-auto px-2 py-1.5">
+            <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-emerald-700">Attendance Report</span>
+            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+            <AppSelect
+              value={month}
+              onChange={(v) => setMonth(v ?? String(thisMonth))}
+              options={MONTHS.slice(1).map((m, i) => ({ value: String(i + 1), label: m }))}
+              size="sm"
+            />
+            <AppSelect
+              value={year}
+              onChange={(v) => setYear(v ?? String(thisYear))}
+              options={yearOpts.map((y) => ({ value: String(y), label: String(y) }))}
+              size="sm"
+            />
+            <button
+              onClick={() => setCommitted({ month, year })}
+              className="flex h-7 shrink-0 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0a2e23]"
+            >
+              <FaChartBar size={9} /> Generate
+            </button>
             {rows.length > 0 && (
-              <button onClick={handlePrint} className="flex h-7 items-center gap-1 rounded border border-slate-200 px-2.5 text-[11px] font-semibold text-slate-500 hover:bg-slate-50">
+              <div className="relative shrink-0">
+                <FaSearch size={9} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Filter by name…" className={`${F} w-36 pl-7`} />
+              </div>
+            )}
+            {data && rows.length > 0 && (
+              <>
+                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+                <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">Working days {workingDays}</span>
+                <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold ${avgAttPct >= 90 ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : avgAttPct >= 70 ? 'border-amber-200 bg-amber-50 text-amber-600' : 'border-rose-200 bg-rose-50 text-rose-600'}`}>Avg attendance {avgAttPct}%</span>
+                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Present days {totalPresent}</span>
+                <span className="shrink-0 rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[9px] font-bold text-rose-600">Absent days {totalAbsent}</span>
+                <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">Hours {totalHours.toFixed(0)}h</span>
+              </>
+            )}
+            <span className="shrink-0 text-[10px] text-slate-400">{filtered.length} employee{filtered.length !== 1 ? 's' : ''}</span>
+            {rows.length > 0 && (
+              <button onClick={handlePrint} className="ml-auto flex h-7 shrink-0 items-center gap-1 rounded border border-slate-200 px-2.5 text-xs font-semibold text-slate-500 hover:bg-slate-50">
                 <FaPrint size={9} /> Print
               </button>
             )}
           </div>
         </div>
-
-        {/* Filters */}
-        <div className="flex flex-none flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2">
-          <AppSelect
-            value={month}
-            onChange={(v) => setMonth(v ?? String(thisMonth))}
-            options={MONTHS.slice(1).map((m, i) => ({ value: String(i + 1), label: m }))}
-            size="md"
-          />
-          <AppSelect
-            value={year}
-            onChange={(v) => setYear(v ?? String(thisYear))}
-            options={yearOpts.map((y) => ({ value: String(y), label: String(y) }))}
-            size="md"
-          />
-          <button
-            onClick={() => setCommitted({ month, year })}
-            className="flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0a2e23]"
-          >
-            <FaChartBar size={9} /> Generate
-          </button>
-          {rows.length > 0 && (
-            <div className="relative">
-              <FaSearch size={9} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input value={search} onChange={(e) => setSearch(e.target.value)}
-                placeholder="Filter by name…" className={`${F} w-40 pl-7`} />
-            </div>
-          )}
-          <span className="ml-auto text-[11px] text-slate-400">{filtered.length} employee{filtered.length !== 1 ? 's' : ''}</span>
-        </div>
-
-        {/* KPI strip */}
-        {data && rows.length > 0 && (
-          <div className="flex flex-none gap-6 border-b border-slate-100 bg-white px-4 py-2">
-            <div>
-              <div className="text-[10px] text-slate-400">Working days</div>
-              <div className="text-sm font-black text-slate-900">{workingDays}</div>
-            </div>
-            <div>
-              <div className="text-[10px] text-slate-400">Avg attendance</div>
-              <div className={`text-sm font-black ${pctColor(avgAttPct)}`}>{avgAttPct}%</div>
-            </div>
-            <div>
-              <div className="text-[10px] text-slate-400">Total presence days</div>
-              <div className="text-sm font-black text-emerald-700">{totalPresent}</div>
-            </div>
-            <div>
-              <div className="text-[10px] text-slate-400">Total absence days</div>
-              <div className="text-sm font-black text-rose-600">{totalAbsent}</div>
-            </div>
-            <div>
-              <div className="text-[10px] text-slate-400">Total hours worked</div>
-              <div className="text-sm font-black text-slate-900">{totalHours.toFixed(0)}h</div>
-            </div>
-          </div>
-        )}
 
         {/* Table */}
         <div className="min-h-0 flex-1 overflow-auto">

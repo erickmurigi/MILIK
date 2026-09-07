@@ -479,7 +479,7 @@ export default function HRLetters() {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
 
         {/* Header */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-5 py-3 shadow-sm print-hide">
+        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-4 py-2.5 shadow-sm print-hide">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">Human Resource</div>
@@ -487,7 +487,7 @@ export default function HRLetters() {
             </div>
             <button
               onClick={() => setShowCompose(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[#0B3B2E] px-3 py-2 text-xs font-black text-white hover:bg-[#0a2e23]"
+              className="flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23]"
             >
               <FaPlus size={9} /> New Letter
             </button>
@@ -584,20 +584,20 @@ export default function HRLetters() {
                     </div>
                     <div className="text-xs font-black text-slate-900 truncate max-w-xs">{selected.subject}</div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     {selected.status === 'draft' && (
                       <>
                         <button
                           onClick={handleIssue}
                           disabled={issuing}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-black text-white hover:bg-emerald-700 disabled:opacity-50"
+                          className="flex h-7 items-center gap-1.5 rounded bg-emerald-600 px-3 text-xs font-black text-white hover:bg-emerald-700 disabled:opacity-50"
                         >
                           <FaCheck size={9} /> {issuing ? 'Issuing…' : 'Mark as Issued'}
                         </button>
                         <button
                           onClick={handleDelete}
                           disabled={deleting}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-black text-rose-600 hover:bg-rose-100 disabled:opacity-50"
+                          className="flex h-7 items-center gap-1.5 rounded border border-rose-200 bg-rose-50 px-3 text-xs font-black text-rose-600 hover:bg-rose-100 disabled:opacity-50"
                         >
                           <FaTrash size={9} /> {deleting ? '…' : 'Delete'}
                         </button>
@@ -606,20 +606,20 @@ export default function HRLetters() {
                     {selected.status === 'issued' && currentUser?.adminAccess && (
                       <button
                         onClick={() => setRevokeDialog({ isOpen: true, reason: '', busy: false })}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-black text-rose-700 hover:bg-rose-100"
+                        className="flex h-7 items-center gap-1.5 rounded border border-rose-300 bg-rose-50 px-3 text-xs font-black text-rose-700 hover:bg-rose-100"
                       >
                         <FaBan size={9} /> Revoke
                       </button>
                     )}
                     <button
                       onClick={() => setShowEmail(true)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                      className="flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
                     >
                       <FaEnvelope size={9} /> Email
                     </button>
                     <button
                       onClick={printLetter}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0a2e23]"
+                      className="flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23]"
                     >
                       <FaPrint size={9} /> Print
                     </button>

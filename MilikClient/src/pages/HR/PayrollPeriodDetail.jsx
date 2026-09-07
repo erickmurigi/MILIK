@@ -27,9 +27,9 @@ const fmtKES = (n) =>
 
 function StatCard({ label, value, sub, color = 'text-slate-900', border = 'border-slate-200' }) {
   return (
-    <div className={`rounded-xl border ${border} bg-white p-4 shadow-sm`}>
-      <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</div>
-      <div className={`text-xl font-black leading-tight mt-1 ${color}`}>{value}</div>
+    <div className={`border ${border} bg-white px-3 py-2`}>
+      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</div>
+      <div className={`text-lg font-black leading-tight mt-0.5 ${color}`}>{value}</div>
       {sub && <div className="text-[10px] text-slate-400 mt-0.5">{sub}</div>}
     </div>
   );
@@ -376,33 +376,33 @@ export default function PayrollPeriodDetail() {
             </div>
             {period && (
               <div className="flex items-center gap-2">
-                <button onClick={load} className="print-hide inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+                <button onClick={load} className="print-hide inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50">
                   <FaRedoAlt size={9} />
                 </button>
                 {payslips.length > 0 && (
-                  <button onClick={handlePrint} className="print-hide inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+                  <button onClick={handlePrint} className="print-hide inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50">
                     <FaPrint size={9} /> Print Register
                   </button>
                 )}
                 {canManagePayroll && isDraft && (
-                  <button onClick={runPayroll} disabled={running} className="print-hide inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0a2e23] disabled:opacity-50">
+                  <button onClick={runPayroll} disabled={running} className="print-hide inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23] disabled:opacity-50">
                     <FaPlay size={9} /> {running ? 'Running…' : period.employeeCount > 0 ? 'Re-run Payroll' : 'Run Payroll'}
                   </button>
                 )}
                 {canManagePayroll && period.status === 'Draft' && period.employeeCount > 0 && (
-                  <button onClick={approve} className="print-hide inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-black text-white hover:bg-blue-700">
+                  <button onClick={approve} className="print-hide inline-flex h-7 items-center gap-1.5 rounded bg-blue-600 px-3 text-xs font-black text-white hover:bg-blue-700">
                     <FaCheck size={9} /> Approve
                   </button>
                 )}
                 {canManagePayroll && isApproved && (
-                  <button onClick={markPaid} className="print-hide inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-black text-white hover:bg-emerald-700">
+                  <button onClick={markPaid} className="print-hide inline-flex h-7 items-center gap-1.5 rounded bg-emerald-600 px-3 text-xs font-black text-white hover:bg-emerald-700">
                     <FaHandHolding size={9} /> Mark Paid
                   </button>
                 )}
                 {canReverse && canManagePayroll && (
                   <button
                     onClick={() => setReverseDialog({ isOpen: true, reason: '', busy: false })}
-                    className="print-hide inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-black text-rose-700 hover:bg-rose-100"
+                    className="print-hide inline-flex h-7 items-center gap-1.5 rounded border border-rose-300 bg-rose-50 px-3 text-xs font-black text-rose-700 hover:bg-rose-100"
                   >
                     <FaUndo size={9} /> Reverse
                   </button>
@@ -439,19 +439,19 @@ export default function PayrollPeriodDetail() {
               {/* Statutory breakdown */}
               {period.totalGross > 0 && (
                 <div className="print-card grid grid-cols-4 gap-3">
-                  <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <div className="border border-slate-200 bg-white px-3 py-2">
                     <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">PAYE</div>
                     <div className="text-sm font-black text-rose-600">{fmtKES(period.totalPAYE)}</div>
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <div className="border border-slate-200 bg-white px-3 py-2">
                     <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">SHA / NHIF</div>
                     <div className="text-sm font-black text-rose-600">{fmtKES(period.totalNHIF)}</div>
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <div className="border border-slate-200 bg-white px-3 py-2">
                     <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">NSSF</div>
                     <div className="text-sm font-black text-rose-600">{fmtKES(period.totalNSSF)}</div>
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <div className="border border-slate-200 bg-white px-3 py-2">
                     <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Housing Levy</div>
                     <div className="text-sm font-black text-rose-600">{fmtKES(period.totalAHL)}</div>
                   </div>

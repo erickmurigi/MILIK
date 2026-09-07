@@ -211,56 +211,39 @@ export default function HRAttendance() {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full flex-col overflow-hidden">
 
-        {/* Header */}
-        <div className="flex flex-none items-center justify-between border-b border-slate-200 bg-white px-4 py-2.5">
-          <div>
-            <h1 className="text-[11px] font-extrabold uppercase tracking-widest text-[#0B3B2E]">Attendance</h1>
-            <p className="text-[10px] text-slate-400 leading-tight">View and manage employee check-in/out records</p>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <button onClick={refetch} className="flex h-7 items-center gap-1 rounded border border-slate-200 px-2.5 text-[11px] font-semibold text-slate-500 hover:bg-slate-50">
-              <FaRedoAlt size={9} /> Refresh
-            </button>
-            <button onClick={() => setModal('add')} className="flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0a3127]">
-              <FaPlus size={9} /> Add Record
-            </button>
+        {/* Toolbar */}
+        <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
+          <div className="filter-bar flex items-center gap-1 overflow-x-auto px-2 py-1.5">
+            <span className="shrink-0 text-[9px] font-extrabold uppercase tracking-widest text-[#0B3B2E]">Attendance</span>
+            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+            <AppSelect value={empFilter} onChange={(v) => { setEmpFilter(v ?? ""); setPage(1); }} options={employees.map((e) => ({ value: e._id, label: `${e.surname} ${e.otherNames}` }))} placeholder="All employees" clearable searchable size="sm" />
+            <AppSelect value={monthFilter} onChange={(v) => { setMonthFilter(v ?? ""); setPage(1); }} options={MONTH_OPTIONS} placeholder="All months" clearable size="sm" />
+            <AppSelect value={yearFilter} onChange={(v) => { setYearFilter(v ?? String(thisYear)); setPage(1); }} options={YEAR_OPTIONS} size="sm" />
+            <div className="relative shrink-0">
+              <FaSearch size={10} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name…"
+                className={`${F} h-7 w-36 pl-7`} />
+            </div>
+            {records.length > 0 && (
+              <>
+                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+                <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">Shown {records.length}</span>
+                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Out {present}</span>
+                <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-600">Still in {absent}</span>
+                <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">Avg {fmtDur(Math.round(avgDur))}</span>
+              </>
+            )}
+            <span className="shrink-0 text-[10px] text-slate-400">{total} record{total !== 1 ? 's' : ''}</span>
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+              <button onClick={refetch} className="flex h-7 items-center gap-1 rounded border border-slate-200 px-2.5 text-xs font-semibold text-slate-500 hover:bg-slate-50">
+                <FaRedoAlt size={9} /> Refresh
+              </button>
+              <button onClick={() => setModal('add')} className="flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0a3127]">
+                <FaPlus size={9} /> Add Record
+              </button>
+            </div>
           </div>
         </div>
-
-        {/* Filters */}
-        <div className="flex flex-none flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2">
-          <AppSelect value={empFilter} onChange={(v) => { setEmpFilter(v ?? ""); setPage(1); }} options={employees.map((e) => ({ value: e._id, label: `${e.surname} ${e.otherNames}` }))} placeholder="All employees" clearable searchable size="sm" />
-          <AppSelect value={monthFilter} onChange={(v) => { setMonthFilter(v ?? ""); setPage(1); }} options={MONTH_OPTIONS} placeholder="All months" clearable size="sm" />
-          <AppSelect value={yearFilter} onChange={(v) => { setYearFilter(v ?? String(thisYear)); setPage(1); }} options={YEAR_OPTIONS} size="sm" />
-          <div className="relative">
-            <FaSearch size={10} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name…"
-              className={`${F} w-40 pl-7`} />
-          </div>
-          <span className="ml-auto text-[11px] text-slate-400">{total} record{total !== 1 ? 's' : ''}</span>
-        </div>
-
-        {/* KPI strip */}
-        {records.length > 0 && (
-          <div className="flex flex-none gap-4 border-b border-slate-100 bg-white px-4 py-2">
-            <div className="text-center">
-              <div className="text-xs font-black text-slate-900">{records.length}</div>
-              <div className="text-[10px] text-slate-400">Shown</div>
-            </div>
-            <div className="text-center">
-              <div className="text-xs font-black text-emerald-700">{present}</div>
-              <div className="text-[10px] text-slate-400">Checked out</div>
-            </div>
-            <div className="text-center">
-              <div className="text-xs font-black text-amber-600">{absent}</div>
-              <div className="text-[10px] text-slate-400">Still in</div>
-            </div>
-            <div className="text-center">
-              <div className="text-xs font-black text-slate-700">{fmtDur(Math.round(avgDur))}</div>
-              <div className="text-[10px] text-slate-400">Avg duration</div>
-            </div>
-          </div>
-        )}
 
         {/* Table */}
         <MilikTable

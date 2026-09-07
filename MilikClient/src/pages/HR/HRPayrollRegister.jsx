@@ -191,15 +191,15 @@ export default function HRPayrollRegister() {
                 searchable
                 size="sm"
               />
-              <button onClick={load} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 print-hide">
+              <button onClick={load} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50 print-hide">
                 <FaRedoAlt size={9} />
               </button>
               {data && rows.length > 0 && (
                 <>
-                  <button onClick={() => setShowEmail(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 print-hide">
+                  <button onClick={() => setShowEmail(true)} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 print-hide">
                     <FaEnvelope size={9} /> Email
                   </button>
-                  <button onClick={printRegister} className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0a2e23] print-hide">
+                  <button onClick={printRegister} className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23] print-hide">
                     <FaPrint size={9} /> Print Register
                   </button>
                 </>
@@ -239,8 +239,8 @@ export default function HRPayrollRegister() {
                   { label: 'Total Deductions', value: fmtKES(totals.totalDeductions), cls: 'text-rose-600' },
                   { label: 'Total Net Pay',    value: fmtKES(totals.netSalary),    cls: 'text-emerald-700' },
                 ].map((c) => (
-                  <div key={c.label} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">{c.label}</div>
+                  <div key={c.label} className="border border-slate-200 bg-white px-3 py-2">
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{c.label}</div>
                     <div className={`text-sm font-black mt-0.5 ${c.cls}`}>{c.value}</div>
                   </div>
                 ))}

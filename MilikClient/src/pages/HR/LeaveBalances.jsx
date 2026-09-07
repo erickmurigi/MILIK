@@ -157,25 +157,23 @@ export default function LeaveBalances() {
     win.onload = () => { win.focus(); win.print(); };
   }, [rows, year, departmentId, departments, totalEntitled, totalUsed, totalRemaining, avgUtil, company]);
 
-  const inputCls = 'h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]';
-
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
 
         {/* Header */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-5 py-3 shadow-sm print-hide">
+        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-3 py-2 print-hide">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">Human Resource · Leave</div>
               <h1 className="text-sm font-black text-slate-900 leading-tight">Leave Balances</h1>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={refetch} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+              <button onClick={refetch} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50">
                 <FaRedoAlt size={10} />
               </button>
               {rows.length > 0 && (
-                <button onClick={handlePrint} className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0a2e23]">
+                <button onClick={handlePrint} className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23]">
                   <FaPrint size={10} /> Print
                 </button>
               )}
@@ -184,14 +182,14 @@ export default function LeaveBalances() {
         </div>
 
         {/* Filters */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-4 py-2.5 print-hide">
-          <div className="flex flex-wrap items-center gap-2">
-            <FaFilter size={10} className="text-slate-400" />
-            <AppSelect value={year} onChange={(v) => setYear(Number(v ?? currentYear))} options={YEARS.map((y) => ({ value: y, label: String(y) }))} size="sm" />
-            <AppSelect value={departmentId} onChange={(v) => setDeptId(v ?? "")} options={departments.map((d) => ({ value: d._id, label: d.name }))} placeholder="All departments" clearable searchable size="sm" />
-            <AppSelect value={leaveTypeId} onChange={(v) => setLtId(v ?? "")} options={leaveTypes.map((t) => ({ value: t._id, label: t.name }))} placeholder="All leave types" clearable size="sm" />
+        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-2 py-1.5 print-hide">
+          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto">
+            <FaFilter size={10} className="shrink-0 text-slate-400" />
+            <div className="shrink-0"><AppSelect value={year} onChange={(v) => setYear(Number(v ?? currentYear))} options={YEARS.map((y) => ({ value: y, label: String(y) }))} size="sm" /></div>
+            <div className="shrink-0"><AppSelect value={departmentId} onChange={(v) => setDeptId(v ?? "")} options={departments.map((d) => ({ value: d._id, label: d.name }))} placeholder="All departments" clearable searchable size="sm" /></div>
+            <div className="shrink-0"><AppSelect value={leaveTypeId} onChange={(v) => setLtId(v ?? "")} options={leaveTypes.map((t) => ({ value: t._id, label: t.name }))} placeholder="All leave types" clearable size="sm" /></div>
             {rows.length > 0 && (
-              <span className="ml-auto text-[11px] font-semibold text-slate-500">
+              <span className="ml-auto shrink-0 whitespace-nowrap text-[10px] font-semibold text-slate-400">
                 {rows.length} balance{rows.length !== 1 ? 's' : ''} · {uniqueEmployeeCount} employees
               </span>
             )}
@@ -226,7 +224,7 @@ export default function LeaveBalances() {
                   { label: 'Days Remaining',     value: `${totalRemaining} days`, color: 'border-emerald-200' },
                   { label: 'Avg Utilisation',    value: `${avgUtil}%`,           color: 'border-amber-200' },
                 ].map(({ label, value, color }) => (
-                  <div key={label} className={`rounded-lg border ${color} bg-white px-3 py-2.5 shadow-sm`}>
+                  <div key={label} className={`border ${color} bg-white px-3 py-2.5`}>
                     <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</div>
                     <div className="text-lg font-black text-slate-900 mt-0.5">{value}</div>
                   </div>
@@ -234,7 +232,7 @@ export default function LeaveBalances() {
               </div>
 
               {/* Table */}
-              <div className="print-card overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="print-card overflow-hidden border border-slate-200 bg-white">
                 <table className="min-w-full text-[11px] border-collapse">
                   <thead>
                     <tr className="bg-[#0B3B2E] text-white">

@@ -24,6 +24,12 @@ const STATUS_PILL = {
 const currentYear = new Date().getFullYear();
 const YEARS = Array.from({ length: 7 }, (_, i) => currentYear - 2 + i);
 const EMPTY = { name: '', year: currentYear, periodType: 'Annual', startDate: '', endDate: '', notes: '', kpis: [] };
+const STATUS_TABS = [
+  { value: '',       label: 'All' },
+  { value: 'Draft',  label: 'Draft' },
+  { value: 'Open',   label: 'Open' },
+  { value: 'Closed', label: 'Closed' },
+];
 
 const F  = 'h-7 rounded border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]';
 const FW = `${F} w-full`;
@@ -173,7 +179,22 @@ export default function AppraisalCycles() {
           <span className="text-[11px] font-bold text-rose-500 tabular-nums whitespace-nowrap">{nClosed} <span className="font-normal text-slate-400">closed</span></span>
           <div className="h-4 w-px bg-slate-300 mx-0.5" />
           <AppSelect value={yearFilter} onChange={(v) => setYearFilter(v ?? "")} options={YEARS.map((y) => ({ value: y, label: String(y) }))} placeholder="All years" clearable size="sm" />
-          <AppSelect value={statusFilter} onChange={(v) => setStatus(v ?? "")} options={[{ value: "Draft", label: "Draft" }, { value: "Open", label: "Open" }, { value: "Closed", label: "Closed" }]} placeholder="All statuses" clearable size="sm" />
+          <div className="flex shrink-0 items-center gap-1">
+            {STATUS_TABS.map((tab) => (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => setStatus(tab.value)}
+                className={`h-7 shrink-0 rounded px-2.5 text-[11px] font-semibold transition-colors ${
+                  statusFilter === tab.value
+                    ? 'bg-[#0B3B2E] text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
           {(yearFilter || statusFilter) && (
             <button onClick={() => { setYearFilter(''); setStatus(''); }} className="flex h-7 items-center gap-0.5 rounded border border-slate-200 bg-white px-2 text-[10px] text-slate-400 hover:text-slate-600">
               <FaTimes size={8} /> Clear
@@ -264,7 +285,7 @@ export default function AppraisalCycles() {
       {/* ── Modal ── */}
       {modal !== null && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 px-4 py-8">
-          <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl">
+          <div className="w-full max-w-2xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
               <h2 className="text-[11px] font-black uppercase tracking-widest text-[#0B3B2E]">
                 {modal === 'create' ? 'New Appraisal Cycle' : 'Edit Cycle'}

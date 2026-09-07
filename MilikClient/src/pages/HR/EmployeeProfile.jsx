@@ -45,10 +45,10 @@ const SectionHeader = ({ icon: Icon, label, color = 'text-emerald-700' }) => (
 
 const Field = ({ label, value, icon: Icon, mono }) => (
   <div className="flex flex-col gap-0.5">
-    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</span>
-    <span className={`flex items-center gap-1.5 text-xs font-semibold text-slate-800 ${mono ? 'font-mono' : ''}`}>
+    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</span>
+    <span className={`flex items-center gap-1.5 text-[13px] font-semibold text-slate-800 ${mono ? 'font-mono' : ''}`}>
       {Icon && <Icon size={10} className="shrink-0 text-slate-400" />}
-      {value || <span className="text-slate-300">—</span>}
+      {value || <span className="font-normal italic text-slate-300">—</span>}
     </span>
   </div>
 );
@@ -375,7 +375,7 @@ export default function EmployeeProfile() {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
 
         {/* Header */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-5 py-3 shadow-sm">
+        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-3 py-1.5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <button onClick={() => navigate('/hr/employees')} className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0B3B2E] hover:underline">
@@ -389,22 +389,22 @@ export default function EmployeeProfile() {
             </div>
 
             {emp && (
-              <div className="flex items-center gap-2">
-                <button onClick={load} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+              <div className="flex items-center gap-1.5">
+                <button onClick={load} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
                   <FaRedoAlt size={9} />
                 </button>
-                <button onClick={printProfile} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+                <button onClick={printProfile} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50">
                   <FaPrint size={9} /> Print
                 </button>
-                <button onClick={() => navigate(`/hr/employees/${id}/edit`)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                <button onClick={() => navigate(`/hr/employees/${id}/edit`)} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
                   <FaEdit size={9} /> Edit
                 </button>
                 {emp.status !== 'Terminated' ? (
-                  <button onClick={handleTerminate} className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-black text-rose-700 hover:bg-rose-100">
+                  <button onClick={handleTerminate} className="inline-flex h-7 items-center gap-1.5 rounded border border-rose-200 bg-rose-50 px-3 text-xs font-black text-rose-700 hover:bg-rose-100">
                     <FaUserTimes size={9} /> Terminate
                   </button>
                 ) : (
-                  <button onClick={handleReinstate} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700 hover:bg-emerald-100">
+                  <button onClick={handleReinstate} className="inline-flex h-7 items-center gap-1.5 rounded border border-emerald-200 bg-emerald-50 px-3 text-xs font-black text-emerald-700 hover:bg-emerald-100">
                     <FaUserCheck size={9} /> Reinstate
                   </button>
                 )}

@@ -146,29 +146,27 @@ export default function HRReportPayroll() {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
 
-        {/* Header */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-5 py-3 shadow-sm print-hide">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">Human Resource · Reports</div>
-              <h1 className="text-sm font-black text-slate-900 leading-tight">Payroll Summary</h1>
+        {/* Toolbar */}
+        <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm print-hide">
+          <div className="filter-bar flex items-center gap-1 overflow-x-auto px-2 py-1.5">
+            <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-emerald-700">Payroll Summary</span>
+            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+            {/* Year nav */}
+            <div className="flex h-7 shrink-0 items-center gap-1 rounded border border-slate-200 bg-white px-1.5">
+              <button onClick={() => setYear((y) => y - 1)} disabled={year <= currentYear - 5} className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30">
+                <FaChevronLeft size={9} />
+              </button>
+              <span className="min-w-[3rem] text-center text-xs font-black text-slate-900">{year}</span>
+              <button onClick={() => setYear((y) => y + 1)} disabled={year >= currentYear} className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30">
+                <FaChevronRight size={9} />
+              </button>
             </div>
-            <div className="flex items-center gap-2">
-              {/* Year nav */}
-              <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1">
-                <button onClick={() => setYear((y) => y - 1)} disabled={year <= currentYear - 5} className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30">
-                  <FaChevronLeft size={9} />
-                </button>
-                <span className="min-w-[3rem] text-center text-xs font-black text-slate-900">{year}</span>
-                <button onClick={() => setYear((y) => y + 1)} disabled={year >= currentYear} className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30">
-                  <FaChevronRight size={9} />
-                </button>
-              </div>
-              <button onClick={load} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+              <button onClick={load} className="flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
                 <FaRedoAlt size={10} />
               </button>
               {months.length > 0 && (
-                <button onClick={handlePrint} className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0a2e23]">
+                <button onClick={handlePrint} className="flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23]">
                   <FaPrint size={10} /> Print
                 </button>
               )}
@@ -207,7 +205,7 @@ export default function HRReportPayroll() {
                   { label: 'Net Pay',        value: fmtKES(t.net),        color: 'text-emerald-700', border: 'border-emerald-200' },
                   { label: 'Months',         value: months.length,        color: 'text-slate-900',   border: 'border-slate-200' },
                 ].map(({ label, value, color, border }) => (
-                  <div key={label} className={`rounded-lg border ${border} bg-white px-3 py-2 shadow-sm`}>
+                  <div key={label} className={`border ${border} bg-white px-3 py-2 shadow-sm`}>
                     <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</div>
                     <div className={`text-sm font-black leading-tight mt-0.5 ${color}`}>{value}</div>
                   </div>
@@ -216,7 +214,7 @@ export default function HRReportPayroll() {
 
               {/* Monthly bar chart (screen only) */}
               {months.length > 0 && (
-                <div className="print-hide rounded-lg border border-slate-200 bg-white px-4 pt-3 pb-2 shadow-sm">
+                <div className="print-hide border border-slate-200 bg-white px-4 pt-3 pb-2 shadow-sm">
                   <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Monthly Gross Pay</div>
                   <div className="flex items-end gap-1.5" style={{ height: '72px' }}>
                     {months.map((m) => (
@@ -236,7 +234,7 @@ export default function HRReportPayroll() {
               )}
 
               {/* Monthly detail table */}
-              <div className="print-card overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="print-card overflow-hidden border border-slate-200 bg-white shadow-sm">
                 <table className="min-w-full text-[11px] border-collapse">
                   <thead>
                     <tr className="bg-[#0B3B2E] text-white">

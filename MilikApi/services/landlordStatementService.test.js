@@ -92,4 +92,57 @@ describe("generateLandlordStatement", () => {
     expect(statement.metadata.totals.invoicedRent).toBe(10000);
     expect(statement.metadata.totals.paidRent).toBe(4000);
   }, 60000);
+
+  it("counts a confirmed paidDirectToLandlord receipt in the landlord's direct-collection totals", async () => {
+    const leaseBundle = await createTestLease({ rentAmount: 15000 });
+    const { property, landlord, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const invoiceDate = periodStart;
+    const paymentDate = new Date(periodStart.getTime() + 60 * 1000);
+
+    const invoiceBundle = await createTestInvoice({
+      leaseBundle,
+      category: "RENT_CHARGE",
+      amount: 15000,
+      invoiceDate,
+      dueDate: new Date(periodStart.getTime() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    // A receipt marked "Direct to Landlord" (cashbook bypassed) and confirmed — this is
+    // the combination the bug report claims does not flow into the landlord statement.
+    await createTestReceipt({
+      invoiceBundle,
+      amount: 15000,
+      paymentDate,
+      allocate: true,
+      isConfirmed: true,
+      paidDirectToLandlord: true,
+      cashbook: "",
+    });
+
+    const statement = await generateLandlordStatement({
+      propertyId: String(property._id),
+      landlordId: String(landlord._id),
+      statementPeriodStart: periodStart,
+      statementPeriodEnd: new Date(),
+    });
+
+    // Tenant-level ledger reflects the rent as paid regardless of who received it.
+    expect(statement.metadata.totals.paidRent).toBe(15000);
+    expect(statement.closingBalance).toBe(0);
+
+    // The receipt must be bucketed as a direct-to-landlord collection, not a manager one.
+    expect(statement.metadata.summary.totalRentReceivedLandlord).toBe(15000);
+    expect(statement.metadata.summary.totalRentReceivedManager).toBe(0);
+    expect(statement.metadata.summary.directRentCollections).toBe(15000);
+    expect(statement.metadata.summary.directToLandlordCollections).toBe(15000);
+    expect(statement.metadata.summary.managerCollections).toBe(0);
+
+    // It should also appear as its own line item for the statement's direct-receipts section.
+    expect(statement.metadata.directToLandlordRows).toHaveLength(1);
+    expect(statement.metadata.directToLandlordRows[0].amount).toBe(15000);
+  }, 60000);
 });

@@ -27,7 +27,7 @@ const TYPE_COLORS = {
 
 function SummaryCard({ icon: Icon, label, value, color = 'border-slate-200' }) {
   return (
-    <div className={`rounded-lg border ${color} bg-white px-3 py-2.5 shadow-sm`}>
+    <div className={`border ${color} bg-white px-3 py-2.5 shadow-sm`}>
       <div className="flex items-center gap-2">
         <Icon className="text-sm text-slate-400 shrink-0" />
         <div>
@@ -148,17 +148,17 @@ ${joinRows?`<div class="sec-head">Recent Joiners (Last 90 Days)</div>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
 
         {/* Header */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-5 py-3 shadow-sm print-hide">
+        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-4 py-2.5 shadow-sm print-hide">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">Human Resource · Reports</div>
               <h1 className="text-sm font-black text-slate-900 leading-tight">Headcount Report</h1>
             </div>
-            <div className="flex items-center gap-2">
-              <button onClick={load} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+            <div className="flex items-center gap-1.5">
+              <button onClick={load} className="flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50">
                 <FaRedoAlt size={10} />
               </button>
-              <button onClick={handlePrint} className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0a2e23]">
+              <button onClick={handlePrint} className="flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23]">
                 <FaPrint size={10} /> Print Report
               </button>
             </div>
@@ -189,7 +189,7 @@ ${joinRows?`<div class="sec-head">Recent Joiners (Last 90 Days)</div>
               <div className="grid gap-4 lg:grid-cols-2">
 
                 {/* By Department */}
-                <div className="print-card rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <div className="print-card border border-slate-200 bg-white shadow-sm overflow-hidden">
                   <div className="bg-[#0B3B2E] px-4 py-2.5 flex items-center gap-2">
                     <FaBuilding size={11} className="text-emerald-300" />
                     <span className="text-[11px] font-black uppercase tracking-widest text-white">By Department</span>
@@ -224,7 +224,7 @@ ${joinRows?`<div class="sec-head">Recent Joiners (Last 90 Days)</div>
                 </div>
 
                 {/* By Employment Type */}
-                <div className="print-card rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <div className="print-card border border-slate-200 bg-white shadow-sm overflow-hidden">
                   <div className="bg-[#FF8C00] px-4 py-2.5 flex items-center gap-2">
                     <FaUsers size={11} className="text-white" />
                     <span className="text-[11px] font-black uppercase tracking-widest text-white">By Employment Type</span>
@@ -258,7 +258,7 @@ ${joinRows?`<div class="sec-head">Recent Joiners (Last 90 Days)</div>
 
               {/* Recent Joiners */}
               {(data?.recentJoiners || []).length > 0 && (
-                <div className="print-card rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <div className="print-card border border-slate-200 bg-white shadow-sm overflow-hidden">
                   <div className="bg-slate-700 px-4 py-2.5 flex items-center gap-2">
                     <FaUserPlus size={11} className="text-slate-200" />
                     <span className="text-[11px] font-black uppercase tracking-widest text-white">Recent Joiners (Last 90 Days)</span>

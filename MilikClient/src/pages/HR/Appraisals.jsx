@@ -21,6 +21,12 @@ const STATUS_PILL = {
   Submitted:  'border-emerald-300 bg-emerald-50 text-emerald-700',
 };
 const DEFAULT_PAGE_SIZE = 25;
+const STATUS_TABS = [
+  { value: '',           label: 'All' },
+  { value: 'Pending',    label: 'Pending' },
+  { value: 'InProgress', label: 'In Progress' },
+  { value: 'Submitted',  label: 'Submitted' },
+];
 const F  = 'h-7 rounded border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]';
 const FW = `${F} w-full`;
 
@@ -168,18 +174,22 @@ export default function Appraisals() {
             clearable
             size="sm"
           />
-          <AppSelect
-            value={statusFilter}
-            onChange={(v) => setStatus(v ?? '')}
-            options={[
-              { value: 'Pending', label: 'Pending' },
-              { value: 'InProgress', label: 'In Progress' },
-              { value: 'Submitted', label: 'Submitted' },
-            ]}
-            placeholder="All statuses"
-            clearable
-            size="sm"
-          />
+          <div className="flex shrink-0 items-center gap-1">
+            {STATUS_TABS.map((tab) => (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => setStatus(tab.value)}
+                className={`h-7 shrink-0 rounded px-2.5 text-[11px] font-semibold transition-colors ${
+                  statusFilter === tab.value
+                    ? 'bg-[#0B3B2E] text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
           <input className={`${F} w-40`} placeholder="Search employee…" value={search} onChange={(e) => setSearch(e.target.value)} />
           {(cycleId || statusFilter || search) && (
             <button onClick={() => { setCycleId(''); setStatus(''); setSearch(''); }} className="flex h-7 items-center gap-0.5 rounded border border-slate-200 bg-white px-2 text-[10px] text-slate-400 hover:text-slate-600">

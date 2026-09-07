@@ -45,7 +45,7 @@ export default function HRReportLeave() {
 
   const set = (k) => (e) => setFilters((p) => ({ ...p, [k]: e.target.value }));
 
-  const inputCls = 'h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]';
+  const inputCls = 'h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]';
 
   const company = useSelector(selectCurrentCompany) || {};
 
@@ -131,36 +131,18 @@ export default function HRReportLeave() {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
 
-        {/* Header */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-5 py-3 shadow-sm print-hide">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">Human Resource · Reports</div>
-              <h1 className="text-sm font-black text-slate-900 leading-tight">Leave Summary</h1>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={load} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
-                <FaRedoAlt size={10} />
-              </button>
-              {data && (
-                <button onClick={handlePrint} className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0a2e23]">
-                  <FaPrint size={10} /> Print
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-4 py-2.5 print-hide">
-          <div className="flex flex-wrap items-center gap-2">
-            <FaFilter size={10} className="text-slate-400" />
-            <div className="flex items-center gap-1.5">
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">From</label>
+        {/* Toolbar */}
+        <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm print-hide">
+          <div className="filter-bar flex items-center gap-1 overflow-x-auto px-2 py-1.5">
+            <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-emerald-700">Leave Summary</span>
+            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+            <FaFilter size={10} className="shrink-0 text-slate-400" />
+            <div className="flex shrink-0 items-center gap-1">
+              <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">From</label>
               <input type="date" value={filters.startDate} onChange={set('startDate')} className={inputCls} />
             </div>
-            <div className="flex items-center gap-1.5">
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">To</label>
+            <div className="flex shrink-0 items-center gap-1">
+              <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">To</label>
               <input type="date" value={filters.endDate} onChange={set('endDate')} className={inputCls} />
             </div>
             <AppSelect
@@ -173,10 +155,23 @@ export default function HRReportLeave() {
               size="sm"
             />
             {data && (
-              <span className="ml-auto text-[11px] font-semibold text-slate-500">
-                {data.totals.count} application{data.totals.count !== 1 ? 's' : ''} · {data.totals.totalDays} day{data.totals.totalDays !== 1 ? 's' : ''}
-              </span>
+              <>
+                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+                <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">
+                  {data.totals.count} application{data.totals.count !== 1 ? 's' : ''} · {data.totals.totalDays} day{data.totals.totalDays !== 1 ? 's' : ''}
+                </span>
+              </>
             )}
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+              <button onClick={load} className="flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+                <FaRedoAlt size={10} />
+              </button>
+              {data && (
+                <button onClick={handlePrint} className="flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23]">
+                  <FaPrint size={10} /> Print
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -196,15 +191,15 @@ export default function HRReportLeave() {
 
               {/* Totals */}
               <div className="print-card grid grid-cols-3 gap-2">
-                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+                <div className="border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
                   <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Total Applications</div>
                   <div className="text-lg font-black text-slate-900 mt-0.5">{data.totals.count}</div>
                 </div>
-                <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5 shadow-sm">
+                <div className="border border-emerald-200 bg-white px-3 py-2.5 shadow-sm">
                   <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Total Days Taken</div>
                   <div className="text-lg font-black text-emerald-700 mt-0.5">{data.totals.totalDays}</div>
                 </div>
-                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+                <div className="border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
                   <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Leave Types Used</div>
                   <div className="text-lg font-black text-slate-900 mt-0.5">{data.byType.length}</div>
                 </div>
@@ -213,7 +208,7 @@ export default function HRReportLeave() {
               <div className="grid gap-5 lg:grid-cols-2">
 
                 {/* By Leave Type */}
-                <div className="print-card rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <div className="print-card border border-slate-200 bg-white shadow-sm overflow-hidden">
                   <div className="bg-emerald-700 px-4 py-2.5 flex items-center gap-2">
                     <FaTag size={11} className="text-emerald-200" />
                     <span className="text-[11px] font-black uppercase tracking-widest text-white">By Leave Type</span>
@@ -248,7 +243,7 @@ export default function HRReportLeave() {
                 </div>
 
                 {/* By Employee */}
-                <div className="print-card rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <div className="print-card border border-slate-200 bg-white shadow-sm overflow-hidden">
                   <div className="bg-[#FF8C00] px-4 py-2.5 flex items-center gap-2">
                     <FaUsers size={11} className="text-white" />
                     <span className="text-[11px] font-black uppercase tracking-widest text-white">By Employee (Top 20)</span>

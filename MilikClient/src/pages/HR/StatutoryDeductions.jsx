@@ -153,10 +153,10 @@ export default function StatutoryDeductions() {
 
   const calc = useMemo(() => (cfg ? computeClientAll(preview, cfg) : null), [cfg, preview]);
 
-  const cardCls = 'rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden';
+  const cardCls = 'border border-slate-200 bg-white shadow-sm overflow-hidden';
   const sectionHead = (label, color = 'bg-[#0B3B2E]') =>
-    <div className={`${color} px-4 py-2.5`}>
-      <span className="text-[11px] font-black uppercase tracking-widest text-white">{label}</span>
+    <div className={`${color} px-3 py-1.5`}>
+      <span className="text-[10px] font-black uppercase tracking-widest text-white">{label}</span>
     </div>;
 
   return (
@@ -171,14 +171,14 @@ export default function StatutoryDeductions() {
               <h1 className="text-sm font-black text-slate-900 leading-tight">Statutory Deductions Configuration</h1>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={handleReset} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+              <button onClick={handleReset} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50">
                 <FaUndo size={9} /> Reset to Defaults
               </button>
-              <button onClick={load} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+              <button onClick={load} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50">
                 <FaRedoAlt size={9} />
               </button>
               {dirty && (
-                <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0a2e23] disabled:opacity-60">
+                <button onClick={handleSave} disabled={saving} className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23] disabled:opacity-60">
                   <FaSave size={9} /> {saving ? 'Saving…' : 'Save Changes'}
                 </button>
               )}
@@ -234,7 +234,7 @@ export default function StatutoryDeductions() {
                           <button
                             onClick={() => removeBand(i)}
                             disabled={cfg.payeBands.length <= 1}
-                            className="rounded-lg border border-rose-200 bg-rose-50 p-1.5 text-rose-500 hover:bg-rose-100 disabled:opacity-30"
+                            className="rounded border border-rose-200 bg-rose-50 p-1.5 text-rose-500 hover:bg-rose-100 disabled:opacity-30"
                           >
                             <FaTrash size={9} />
                           </button>
@@ -243,7 +243,7 @@ export default function StatutoryDeductions() {
                     })}
                     <button
                       onClick={addBand}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-500 hover:border-slate-400 hover:bg-slate-50"
+                      className="inline-flex h-7 items-center gap-1.5 rounded border border-dashed border-slate-300 px-3 text-xs font-bold text-slate-500 hover:border-slate-400 hover:bg-slate-50"
                     >
                       <FaPlus size={9} /> Add Band
                     </button>
@@ -338,8 +338,8 @@ export default function StatutoryDeductions() {
               {/* Right column — Preview calculator */}
               <div className="space-y-4">
                 <div className={cardCls}>
-                  <div className="bg-slate-700 px-4 py-2.5">
-                    <span className="text-[11px] font-black uppercase tracking-widest text-white">Live Calculator</span>
+                  <div className="bg-slate-700 px-3 py-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-white">Live Calculator</span>
                   </div>
                   <div className="p-4 space-y-3">
                     <div>
@@ -379,8 +379,8 @@ export default function StatutoryDeductions() {
 
                 {/* Summary of current rates */}
                 <div className={cardCls}>
-                  <div className="bg-slate-100 px-4 py-2.5 border-b border-slate-200">
-                    <span className="text-[11px] font-black uppercase tracking-widest text-slate-600">Rate Summary</span>
+                  <div className="bg-slate-100 px-3 py-1.5 border-b border-slate-200">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">Rate Summary</span>
                   </div>
                   <div className="p-4 space-y-2 text-xs">
                     <div className="flex justify-between">

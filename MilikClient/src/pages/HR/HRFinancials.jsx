@@ -62,14 +62,14 @@ const ACCOUNT_TYPE_COLORS = {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 const KpiCard = ({ icon: Icon, label, value, sub, accent }) => (
-  <div className="flex items-center gap-3 bg-white px-4 py-3">
-    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${accent || "bg-slate-100"}`}>
-      <Icon className="text-sm text-white" />
+  <div className="flex items-center gap-2 bg-white px-3 py-2">
+    <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded ${accent || "bg-slate-100"}`}>
+      <Icon className="text-xs text-white" />
     </div>
     <div className="min-w-0">
-      <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</div>
+      <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">{label}</div>
       <div className="text-sm font-black leading-tight text-slate-900">{value ?? "—"}</div>
-      {sub && <div className="text-[10px] text-slate-400 mt-0.5">{sub}</div>}
+      {sub && <div className="text-[9px] text-slate-400 mt-0.5">{sub}</div>}
     </div>
   </div>
 );
@@ -202,7 +202,7 @@ export default function HRFinancials() {
 
             <div className="flex flex-wrap items-center gap-2">
               {/* Date Range */}
-              <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5 rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs">
                 <FaCalendarAlt size={10} className="shrink-0 text-slate-400" />
                 <input
                   type="date"
@@ -221,7 +221,7 @@ export default function HRFinancials() {
 
               <button
                 onClick={handleRefresh}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
               >
                 <FaRedoAlt size={10} /> Refresh
               </button>
@@ -229,7 +229,7 @@ export default function HRFinancials() {
               {hasFullAccounts && (
                 <button
                   onClick={() => navigate("/financial/journals")}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#092f24] transition-colors"
+                  className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#092f24] transition-colors"
                 >
                   <FaExternalLinkAlt size={9} /> Full Accounts
                 </button>
@@ -271,15 +271,15 @@ export default function HRFinancials() {
         </div>
 
         {/* ── Tabs ──────────────────────────────────────────────────────────── */}
-        <div className="flex-shrink-0 flex gap-0 border-b border-slate-200 bg-white px-3 sm:px-5">
+        <div className="flex-shrink-0 flex items-center gap-1 border-b border-slate-200 bg-white px-3 py-1.5 sm:px-5">
           {TABS.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`border-b-2 px-4 py-2.5 text-[11px] font-black uppercase tracking-widest transition-colors ${
+              className={`h-[20px] shrink-0 px-1.5 text-[9px] font-bold uppercase tracking-widest transition-colors ${
                 tab === t.id
-                  ? "border-emerald-700 text-emerald-700"
-                  : "border-transparent text-slate-400 hover:text-slate-700"
+                  ? "bg-[#0B3B2E] text-white"
+                  : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
               }`}
             >
               {t.label}
@@ -294,21 +294,21 @@ export default function HRFinancials() {
           {tab === "journals" && (
             <>
               {/* Filter bar */}
-              <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-white px-3 sm:px-5 py-2.5">
-                <div className="relative min-w-0 flex-1 max-w-xs sm:min-w-[180px]">
-                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={10} />
+              <div className="filter-bar flex items-center gap-1.5 overflow-x-auto border-b border-slate-100 bg-white px-2 py-1.5">
+                <div className="relative w-52 shrink-0">
+                  <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={10} />
                   <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search journal #, narration…"
-                    className="w-full rounded-lg border border-slate-200 py-1.5 pl-8 pr-8 text-xs text-slate-700 placeholder-slate-400 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20/20"
+                    className="h-7 w-full rounded border border-slate-200 pl-7 pr-6 text-xs text-slate-700 placeholder-slate-400 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/30"
                   />
                   {search && (
                     <button
                       onClick={() => setSearch("")}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
                     >
-                      <FaTimes size={10} />
+                      <FaTimes size={9} />
                     </button>
                   )}
                 </div>
@@ -327,12 +327,13 @@ export default function HRFinancials() {
                 {(search || statusFilter) && (
                   <button
                     onClick={() => { setSearch(""); setStatusFilter(""); }}
-                    className="text-[10px] font-bold text-slate-500 hover:text-rose-600 transition-colors"
+                    className="shrink-0 text-[10px] font-bold text-slate-500 hover:text-rose-600 transition-colors"
                   >
                     Clear filters
                   </button>
                 )}
-                <span className="ml-auto text-[10px] font-bold text-slate-400">
+                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+                <span className="ml-auto shrink-0 whitespace-nowrap text-[10px] font-semibold text-slate-400">
                   {journals.length.toLocaleString()} {journals.length === 1 ? "entry" : "entries"}
                 </span>
               </div>
@@ -419,7 +420,7 @@ export default function HRFinancials() {
           {tab === "accounts" && (
             <div className="p-4">
               {!canViewAccounts ? (
-                <div className="flex h-40 items-center justify-center rounded-xl border border-slate-200 bg-white">
+                <div className="flex h-40 items-center justify-center rounded-lg border border-slate-200 bg-white">
                   <p className="text-xs text-slate-400">
                     You do not have permission to view the chart of accounts.
                   </p>
@@ -434,7 +435,7 @@ export default function HRFinancials() {
                   message="No accounts found. Chart of accounts is provisioned automatically the first time it is initialised for this company."
                 />
               ) : (
-                <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
                   <table className="w-full min-w-[580px] border-collapse text-[11px]">
                     <thead className="bg-[#0B3B2E] text-white">
                       <tr>

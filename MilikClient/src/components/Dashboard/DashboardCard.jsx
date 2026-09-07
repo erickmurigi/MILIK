@@ -10,15 +10,20 @@ const STAT_TONES = {
   violet: "bg-violet-700 border-violet-700",
 };
 
-export const DashboardStatCard = ({ label, value, sub, icon: Icon, tone = "green" }) => {
+export const DashboardStatCard = ({ label, value, sub, icon: Icon, tone = "green", onClick }) => {
   const bg = STAT_TONES[tone] ?? STAT_TONES.green;
+  const Tag = onClick ? "button" : "div";
   return (
-    <div className={`relative overflow-hidden border ${bg} px-4 py-3 shadow-sm`}>
+    <Tag
+      type={onClick ? "button" : undefined}
+      onClick={onClick}
+      className={`relative overflow-hidden border ${bg} px-4 py-3 shadow-sm w-full text-left ${onClick ? "cursor-pointer hover:brightness-110 transition-all" : ""}`}
+    >
       {Icon && <Icon className="absolute right-3 top-2.5 h-10 w-10 text-white/10" />}
       <p className="text-[9px] font-extrabold uppercase tracking-widest text-white/60">{label}</p>
       <p className="mt-1.5 text-2xl font-black leading-none text-white">{value}</p>
       {sub && <p className="mt-1 text-[10px] text-white/50">{sub}</p>}
-    </div>
+    </Tag>
   );
 };
 

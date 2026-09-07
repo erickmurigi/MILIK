@@ -227,7 +227,7 @@ export default function KpiLibrary() {
       {/* ── Modal ── */}
       {modal !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
+          <div className="w-full max-w-md border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
               <h2 className="text-[11px] font-black uppercase tracking-widest text-[#0B3B2E]">
                 {modal === 'create' ? 'New KPI' : 'Edit KPI'}

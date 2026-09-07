@@ -177,7 +177,7 @@ export default function HRReportP9() {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
 
         {/* Header */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-5 py-3 shadow-sm print-hide">
+        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-4 py-2.5 shadow-sm print-hide">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">Human Resource · Reports</div>
@@ -185,7 +185,7 @@ export default function HRReportP9() {
             </div>
             <div className="flex items-center gap-2">
               {data && months.length > 0 && (
-                <button onClick={handlePrint} className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0a2e23]">
+                <button onClick={handlePrint} className="flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23]">
                   <FaPrint size={10} /> Print P9
                 </button>
               )}

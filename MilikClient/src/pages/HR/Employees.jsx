@@ -256,20 +256,20 @@ export default function Employees() {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
 
         {/* Header */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-5 py-3 shadow-sm">
+        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-3 py-1.5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">Human Resource</div>
               <h1 className="text-sm font-black text-slate-900 leading-tight">Employees</h1>
             </div>
-            <div className="flex items-center gap-2">
-              <button onClick={refetch} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+            <div className="flex items-center gap-1.5">
+              <button onClick={refetch} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50">
                 <FaRedoAlt size={10} /> Refresh
               </button>
-              <button onClick={printAllEmployees} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">
+              <button onClick={printAllEmployees} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
                 <FaPrint size={10} /> Print List
               </button>
-              <button onClick={() => navigate('/hr/employees/new')} className="inline-flex items-center gap-1.5 rounded-lg bg-[#FF8C00] px-3 py-1.5 text-xs font-black text-white hover:bg-[#e67e00]">
+              <button onClick={() => navigate('/hr/employees/new')} className="inline-flex h-7 items-center gap-1.5 rounded bg-[#FF8C00] px-3 text-xs font-black text-white hover:bg-[#e67e00]">
                 <FaUserPlus size={10} /> Add Employee
               </button>
             </div>
@@ -277,21 +277,22 @@ export default function Employees() {
         </div>
 
         {/* Filters */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-4 py-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-[220px] flex-1">
-              <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
+        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-2 py-1.5">
+          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto">
+            <div className="relative w-56 shrink-0">
+              <FaSearch className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={10} />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search name, phone, email, ID number..."
-                className="h-8 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                className="h-7 w-full rounded border border-slate-200 bg-white pl-7 pr-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
             </div>
-            <AppSelect value={deptFilter} onChange={(v) => setDeptFilter(v ?? '')} options={departmentOptions} placeholder="All departments" clearable searchable size="sm" />
-            <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? '')} options={STATUS_OPTIONS} placeholder="All statuses" clearable size="sm" />
-            <AppSelect value={typeFilter} onChange={(v) => setTypeFilter(v ?? '')} options={TYPE_OPTIONS} placeholder="All types" clearable size="sm" />
-            <span className="ml-auto text-[11px] font-semibold text-slate-500">{total} result{total !== 1 ? 's' : ''}</span>
+            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+            <div className="shrink-0"><AppSelect value={deptFilter} onChange={(v) => setDeptFilter(v ?? '')} options={departmentOptions} placeholder="All departments" clearable searchable size="sm" /></div>
+            <div className="shrink-0"><AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? '')} options={STATUS_OPTIONS} placeholder="All statuses" clearable size="sm" /></div>
+            <div className="shrink-0"><AppSelect value={typeFilter} onChange={(v) => setTypeFilter(v ?? '')} options={TYPE_OPTIONS} placeholder="All types" clearable size="sm" /></div>
+            <span className="ml-auto shrink-0 whitespace-nowrap text-[10px] font-semibold text-slate-400">{total} result{total !== 1 ? 's' : ''}</span>
           </div>
         </div>
 
