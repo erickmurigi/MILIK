@@ -272,17 +272,12 @@ const AddReceipt = () => {
     const load = async () => {
       const { propertiesLoaded } = entityCacheRef.current;
       try {
-        // Keep invoiceRows/chartRows at fixed indices — entity dispatches run in parallel but don't affect position
-        const [invoiceRows, chartRows] = await Promise.all([
-          getTenantInvoices({ business: currentCompany._id, includeSnapshots: true }),
+        const [chartRows] = await Promise.all([
           getChartOfAccounts({ business: currentCompany._id, type: "asset" }),
           ...(propertiesLoaded ? [] : [dispatch(getProperties({ business: currentCompany._id }))]),
         ]);
 
-        const normalizedInvoices = ensureArray(invoiceRows);
         const normalizedChartRows = ensureArray(chartRows);
-
-        setTenantInvoices(normalizedInvoices);
         const liveCashbooks = normalizedChartRows.filter(isCashbookAccount);
         setCashbookOptions(liveCashbooks);
 
@@ -300,7 +295,6 @@ const AddReceipt = () => {
           }));
         }
       } catch (error) {
-        setTenantInvoices([]);
         setCashbookOptions([]);
         toast.error("Failed to load receipt setup data");
       }
@@ -308,6 +302,32 @@ const AddReceipt = () => {
 
     load();
   }, [currentCompany?._id, dispatch]);
+
+  // Load open invoices for the selected tenant only, scoped server-side, instead of the
+  // whole company's invoice history (previously fetched unbounded on every page load —
+  // capped at 5000 rows server-side and included every tenant's full snapshot data even
+  // though only the selected tenant's invoices are ever used below). Mirrors the same
+  // scoped-fetch fix applied to the tenant dropdown above.
+  useEffect(() => {
+    if (!currentCompany?._id || !formData.tenantId) {
+      setTenantInvoices([]);
+      return;
+    }
+
+    let cancelled = false;
+    getTenantInvoices({ business: currentCompany._id, tenantId: formData.tenantId, includeSnapshots: true })
+      .then((invoiceRows) => {
+        if (cancelled) return;
+        setTenantInvoices(ensureArray(invoiceRows));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setTenantInvoices([]);
+        toast.error(`Failed to load ${termTenant.toLowerCase()} invoices`);
+      });
+
+    return () => { cancelled = true; };
+  }, [currentCompany?._id, formData.tenantId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Resolve a tenant preselected via the URL — either `?tenant=<id>` (the common case,
   // e.g. arriving from a tenant's own profile) or `?tnt=<code>`/`?tenantCode=<code>` (e.g.
