@@ -303,6 +303,16 @@ const getCachedPdfBuffer = (cacheKey) => {
   return Buffer.from(cached);
 };
 
+// Lets a caller check for a cached PDF using only cheap, unpopulated fields (_id/status/
+// updatedAt/generatedAt — the same fields buildStatementPdfCacheKey reads) so it can skip
+// the property/landlord/business populate joins entirely on the common "already rendered,
+// print/preview/download it again" path. Safe by construction: the cache key depends only
+// on these fields, so a lean document produces the exact same key a fully populated one
+// would, and generateStatementPdf() re-checks the cache itself regardless — this is purely
+// an opportunity for the caller to avoid an unnecessary fetch, never a correctness risk.
+export const isPdfCached = (leanStatement = {}) =>
+  pdfBufferCache.has(buildStatementPdfCacheKey(leanStatement));
+
 const withTimeout = (promise, ms, message) =>
   Promise.race([
     promise,
@@ -449,7 +459,23 @@ const normalizePrintableRow = (item = {}) => ({
   sourceId: String(item.sourceId || item.sourceTransactionId || item._id || "").trim(),
 });
 
-const sanitizePrintableSections = ({
+// Direct-to-landlord rows print a per-tenant table (Unit / Tenant / Type / Reference),
+// not just a date+description+amount line like the other sections below — normalizePrintableRow
+// stripped those extra fields, which is why the printed PDF showed "-" for Unit/Tenant/Reference
+// even though the on-screen workspace (reading the same generateLandlordStatement() rows before
+// this normalizer runs) displayed them correctly.
+const normalizeDirectToLandlordRow = (item = {}) => ({
+  ...normalizePrintableRow(item),
+  unit: String(item.unit || "").trim(),
+  tenantName: String(item.tenantName || item.description || "").trim(),
+  paymentType: String(item.paymentType || "").trim(),
+  typeLabel: String(item.typeLabel || "").trim(),
+  receiptRef: String(item.receiptRef || "").trim(),
+});
+
+// Exported so its field-preservation behaviour (see normalizeDirectToLandlordRow above) can
+// be regression-tested directly, without rendering an actual PDF via Puppeteer.
+export const sanitizePrintableSections = ({
   additionRows = [],
   expenseRows = [],
   directToLandlordRows = [],
@@ -459,11 +485,16 @@ const sanitizePrintableSections = ({
   additionRows: additionRows
     .map(normalizePrintableRow)
     .filter((row) => row.amount > 0 && String(row.category || "") !== "deposit_remittance"),
+  // "deposit_direct_offset" rows exist purely to cancel out the matching addition above
+  // (a landlord-direct deposit receipt was never held by the manager, so it can't be a
+  // real expense/deduction) — they're already shown once, correctly, in the Deposit
+  // Remittance section below. Printing them here as an "expense" was misleading the
+  // landlord into thinking money was being taken from them.
   expenseRows: expenseRows
     .map(normalizePrintableRow)
-    .filter((row) => row.amount > 0),
+    .filter((row) => row.amount > 0 && String(row.category || "") !== "deposit_direct_offset"),
   directToLandlordRows: directToLandlordRows
-    .map(normalizePrintableRow)
+    .map(normalizeDirectToLandlordRow)
     .filter((row) => row.amount > 0),
   advanceRecoveryRows: advanceRecoveryRows
     .map(normalizePrintableRow)
@@ -642,6 +673,10 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
     const totalAdvanceRecoveries = advanceRecoveryRows.reduce((s, r) => s + r.amount, 0);
 
     const summary = workspace.summary || {};
+    // Self-managing landlord companies have no manager to report to — this prints as a
+    // "Property Performance Statement" (their own monthly record) instead of a remittance
+    // document, with the manager/commission-specific rows and labels removed below.
+    const isSelfManaged = Boolean(summary.isSelfManaged);
 
     const depositSettlement = workspace.depositSettlement || {};
     const depositSettlementAllRows = Array.isArray(depositSettlement.rows) ? depositSettlement.rows : [];
@@ -662,7 +697,6 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
       }
       return Array.from(map.values());
     })();
-    const depositSettlementOffsetRows = depositSettlementAllRows.filter((r) => r.effect === "offset");
     const broughtForwardCreditApplications = workspace.broughtForwardCreditApplications || {};
     const broughtForwardCreditApplicationRows = Array.isArray(broughtForwardCreditApplications.rows)
       ? broughtForwardCreditApplications.rows
@@ -779,7 +813,7 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
     <html>
       <head>
         <meta charset="utf-8" />
-        <title>Landlord Statement</title>
+        <title>${isSelfManaged ? "Property Performance Statement" : "Landlord Statement"}</title>
         <style>
           @page { size: A4 landscape; margin: 8mm 6mm; }
           * { box-sizing: border-box; }
@@ -848,7 +882,7 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
                 <div class="business-line">${businessPhone ? `Tel: ${esc(businessPhone)}` : ""}${businessPhone && businessEmail ? " &bull; " : ""}${businessEmail ? esc(businessEmail) : ""}</div>
               </td>
               <td class="period-cell">
-                <div class="period-badge">LANDLORD STATEMENT</div>
+                <div class="period-badge">${isSelfManaged ? "PROPERTY PERFORMANCE STATEMENT" : "LANDLORD STATEMENT"}</div>
                 <div>Ref: ${esc(statement.statementNumber || "-")}</div>
                 <div>Generated: ${formatDate(statement.generatedAt || statement.updatedAt || new Date())}</div>
               </td>
@@ -858,7 +892,7 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
           <div class="accent-bar"></div>
 
           <div class="statement-title">${esc(String(statement?.metadata?.statementType || statement?.metadata?.workspace?.statementType || statement?.statementType || "Provisional Statement").toUpperCase())}</div>
-          <div class="statement-subtitle">Property management schedule and settlement summary</div>
+          <div class="statement-subtitle">${isSelfManaged ? "Monthly income, expenses and occupancy record" : "Property management schedule and settlement summary"}</div>
 
           <table class="meta-table" style="margin-bottom:8px">
             <tr>
@@ -939,15 +973,15 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
               </table>
 
               ${broughtForwardCreditApplicationRows.length > 0 ? `
-                <div class="section-title">B/F Credits Applied</div>
+                <div class="section-title">B/F Prepayments Applied</div>
                 <table class="simple-table">
                   <thead>
-                    <tr><th>Receipt / Credit</th><th>Applied To</th><th class="num">Amount</th></tr>
+                    <tr><th>Receipt / Prepayment</th><th>Applied To</th><th class="num">Amount</th></tr>
                   </thead>
                   <tbody>
                     ${broughtForwardCreditApplicationRows.map((row) => `
                       <tr>
-                        <td>${esc(row.receiptReference || row.description || "B/F credit")}</td>
+                        <td>${esc(row.receiptReference || row.description || "B/F prepayment")}</td>
                         <td>${esc(row.chargeReference || row.description || "Applied charge")}</td>
                         <td class="num">${formatCurrency(row.amount || 0)}</td>
                       </tr>`).join("")}
@@ -958,6 +992,7 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
                 </table>` : ""}
             </td>
             <td>
+              ${!isSelfManaged ? `
               <div class="section-title" style="color:#0B3B2E;border-color:#0B3B2E;">Payments Collected Directly by Landlord</div>
               ${directToLandlordRows.length === 0
                 ? `<p style="font-size:9px;color:#64748b;padding:6px 0;">No payments collected directly by landlord this period.</p>`
@@ -988,6 +1023,7 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
               <p style="font-size:8.5px;color:#64748b;margin-top:4px;font-style:italic;">
                 These amounts were received directly by you from tenants and are NOT included in the manager's remittance transfer.
               </p>`}
+              ` : ""}
 
               ${earlyPayoutRows.length > 0 ? `
                 <div class="section-title" style="color:#92400e;border-color:#92400e;">Early Payouts to Landlord</div>
@@ -1005,32 +1041,24 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
                   <tfoot><tr><td colspan="2" class="num">Total</td><td class="num">${formatCurrency(totalAdvanceRecoveries)}</td></tr></tfoot>
                 </table>` : ""}
 
-              ${depositSettlementAllRows.length > 0 ? `
-                <div class="section-title">Deposit Remittance</div>
+              ${depositSettlementAdditionRows.length > 0 ? `
+                <div class="section-title">Deposits You Now Hold</div>
                 <table class="simple-table">
                   <thead>
-                    <tr><th>#</th><th>Description</th><th>Type</th><th class="num">Amount</th></tr>
+                    <tr><th>#</th><th>Description</th><th class="num">Amount</th></tr>
                   </thead>
                   <tbody>
                     ${depositSettlementAdditionRows.map((item, i) => `
                       <tr>
                         <td class="muted" style="width:20px">${i + 1}</td>
                         <td>${esc(item.description || "Deposit remittance")}${item.unit ? ` <span style="font-size:7px;color:#6b7280;">(${esc(item.unit)})</span>` : ""}</td>
-                        <td><span style="font-size:7px;font-weight:700;color:#065f46;">${item.holder === "landlord" ? "Landlord-held" : "Settlement"}</span></td>
                         <td class="num" style="color:#065f46;">${formatCurrency(item.amount)}</td>
-                      </tr>`).join("")}
-                    ${depositSettlementOffsetRows.map((item, i) => `
-                      <tr>
-                        <td class="muted" style="width:20px">${depositSettlementAdditionRows.length + i + 1}</td>
-                        <td>${esc(item.description || "Deposit offset")}${item.unit ? ` <span style="font-size:7px;color:#6b7280;">(${esc(item.unit)})</span>` : ""}</td>
-                        <td><span style="font-size:7px;font-weight:700;color:#92400e;">Direct offset</span></td>
-                        <td class="num" style="color:#92400e;">(${formatCurrency(item.amount)})</td>
                       </tr>`).join("")}
                   </tbody>
                   <tfoot>
                     <tr>
-                      <td colspan="3" class="num" style="font-weight:700;">Net Added to Landlord</td>
-                      <td class="num" style="font-weight:700;">${formatCurrency((depositSettlementTotals.additions || 0) - (depositSettlementTotals.offsets || 0))}</td>
+                      <td colspan="2" class="num" style="font-weight:700;">Total</td>
+                      <td class="num" style="font-weight:700;">${formatCurrency(depositSettlementTotals.additions || 0)}</td>
                     </tr>
                   </tfoot>
                 </table>` : ""}
@@ -1052,10 +1080,12 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
                   ${invoiceVatPassThroughAmount > 0 ? `<tr><td class="label">${esc(invoiceVatPassThroughLabel)}</td><td class="num">${formatCurrency(invoiceVatPassThroughAmount)}</td></tr>` : ""}
 
                   <!-- FEES & DEDUCTIONS -->
-                  <tr class="summary-section"><td colspan="2">Management Fees &amp; Deductions</td></tr>
-                  <tr><td class="label">Management commission</td><td class="num negative">(${formatCurrency(commissionAmount)})</td></tr>
+                  ${(commissionAmount > 0 || nonCommissionDeductions > 0) ? `
+                  <tr class="summary-section"><td colspan="2">${isSelfManaged ? "Deductions" : "Management Fees &amp; Deductions"}</td></tr>
+                  ${commissionAmount > 0 ? `<tr><td class="label">Management commission</td><td class="num negative">(${formatCurrency(commissionAmount)})</td></tr>` : ""}
                   ${commissionTaxAmount > 0 ? `<tr><td class="label">VAT on management commission${commissionTaxRate > 0 ? ` (${commissionTaxRate}%)` : ""}</td><td class="num negative">(${formatCurrency(commissionTaxAmount)})</td></tr>` : ""}
-                  ${nonCommissionDeductions > 0 ? `<tr><td class="label">Other expenses &amp; deductions</td><td class="num negative">(${formatCurrency(nonCommissionDeductions)})</td></tr>` : ""}
+                  ${nonCommissionDeductions > 0 ? `<tr><td class="label">${isSelfManaged ? "Expenses &amp; deductions" : "Other expenses &amp; deductions"}</td><td class="num negative">(${formatCurrency(nonCommissionDeductions)})</td></tr>` : ""}
+                  ` : ""}
 
                   <!-- PRE-PAYOUT SUBTOTAL if there are payouts/recoveries -->
                   ${(totalEarlyPayouts > 0 || totalAdvanceRecoveries > 0) ? `
@@ -1064,14 +1094,15 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
                   ${totalAdvanceRecoveries > 0 ? `<tr><td class="label">Advance recovery deduction</td><td class="num negative">(${formatCurrency(totalAdvanceRecoveries)})</td></tr>` : ""}
                   ` : ""}
 
-                  <!-- MANAGER TRANSFER -->
+                  <!-- MANAGER TRANSFER (or, for a self-managed property, Net Operating Income) -->
                   <tr class="summary-transfer">
-                    <td class="label">Manager will transfer to you</td>
+                    <td class="label">${isSelfManaged ? esc(settlement.label) : "Manager will transfer to you"}</td>
                     <td class="num ${settlement.isNegative ? "negative" : ""}">${settlement.isNegative ? `(${formatCurrency(settlement.amount)})` : formatCurrency(settlement.amount)}</td>
                   </tr>
 
-                  <!-- TOTAL INCOME if direct collections exist -->
-                  ${directToLandlordAmount > 0 ? `
+                  <!-- TOTAL INCOME if direct collections exist (never applies to a self-managed
+                       property — there's no manager to distinguish "direct" collections from) -->
+                  ${(!isSelfManaged && directToLandlordAmount > 0) ? `
                   <tr class="summary-section"><td colspan="2">Your Total Income This Period</td></tr>
                   <tr><td class="label">Manager transfer to you</td><td class="num">${formatCurrency(Math.max(0, settlement.amount))}</td></tr>
                   <tr><td class="label">Received directly from tenants</td><td class="num">${formatCurrency(directToLandlordAmount)}</td></tr>
@@ -1079,6 +1110,14 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
                     <td class="label" style="padding-top:5px;padding-bottom:5px;">Total income this period</td>
                     <td class="num" style="padding-top:5px;padding-bottom:5px;">${formatCurrency(Math.max(0, settlement.amount) + directToLandlordAmount)}</td>
                   </tr>
+                  ` : ""}
+
+                  <!-- DEPOSITS HELD note — not part of your income above; it's tenant money you now
+                       hold on their behalf. Shown here only as a recap of the "Deposits You Now
+                       Hold" table above; it does not add into any total on this page. -->
+                  ${Number(depositSettlementTotals.additions || 0) > 0 ? `
+                  <tr class="summary-section"><td colspan="2">Deposits You Now Hold</td></tr>
+                  <tr><td class="label">Recognised this period (not income — held for tenants)</td><td class="num">${formatCurrency(depositSettlementTotals.additions || 0)}</td></tr>
                   ` : ""}
 
                 </tbody>
@@ -1145,4 +1184,4 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
   }
 };
 
-export default { generateStatementPdf };
+export default { generateStatementPdf, sanitizePrintableSections, isPdfCached };

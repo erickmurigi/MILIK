@@ -80,6 +80,7 @@ const blankForm = {
   amount: "",
   whtAmount: "",
   serviceProviderId: "",
+  payeeName: "",
   dueDate: new Date().toISOString().split("T")[0],
   narration: "",
   status: "draft",
@@ -177,6 +178,17 @@ const PaymentVouchers = () => {
     sourceRequisitionId: voucher?.sourceRequisition?._id || voucher?.sourceRequisition || voucher?.sourceRequisitionId || "",
     sourceRequisitionNo: voucher?.sourceRequisition?.requisitionNo || voucher?.sourceRequisition?.referenceNo || voucher?.sourceRequisitionNo || "",
     serviceProviderId: voucher?.serviceProvider?._id || voucher?.serviceProvider || voucher?.serviceProviderId || "",
+    serviceProviderName: voucher?.serviceProvider?.name || voucher?.serviceProviderName || "",
+    payeeName: voucher?.payeeName || "",
+    // Who this voucher is actually payable to, across every category — a registered
+    // landlord, a registered Service Provider, or a free-text payee name, in that
+    // order. Drives the "Payee" list column and GL detail panel (see below); the
+    // print template's own "Landlord / Owner" field intentionally keeps using
+    // landlordName directly since it's landlord-specific, not a general payee.
+    payeeDisplay:
+      voucher?.landlord?.landlordName || voucher?.landlord?.name || voucher?.landlordName ||
+      voucher?.serviceProvider?.name  || voucher?.serviceProviderName ||
+      voucher?.payeeName || "",
     whtAmount: voucher?.whtAmount != null ? String(voucher.whtAmount) : "",
   });
 
@@ -340,6 +352,7 @@ const PaymentVouchers = () => {
       amount: voucher.amount || "",
       whtAmount: voucher.whtAmount != null ? String(voucher.whtAmount) : "",
       serviceProviderId: voucher.serviceProviderId || "",
+      payeeName: voucher.payeeName || "",
       dueDate: voucher.dueDate ? new Date(voucher.dueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
       narration: voucher.narration || "",
       status: voucher.status || "draft",
@@ -377,6 +390,7 @@ const PaymentVouchers = () => {
       amount: Number(form.amount),
       whtAmount: Number(form.whtAmount || 0),
       serviceProvider: form.serviceProviderId || undefined,
+      payeeName: form.serviceProviderId ? undefined : (form.payeeName || undefined),
       dueDate: form.dueDate,
       narration: form.narration,
       status: form.status,
@@ -805,7 +819,7 @@ const PaymentVouchers = () => {
                   <h2 className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Amount & Notes</h2>
                 </div>
                 <div className="space-y-3">
-                  {serviceProvidersList.length > 0 && (
+                  <div>
                     <AppSelect
                       label="Service Provider (optional)"
                       value={form.serviceProviderId}
@@ -818,11 +832,33 @@ const PaymentVouchers = () => {
                         setForm((prev) => ({ ...prev, serviceProviderId: spId, whtAmount: newWht }));
                       }}
                       options={serviceProvidersList.map((sp) => ({ value: sp._id, label: `${sp.name}${sp.subjectToWht ? ` (WHT ${sp.whtRate}%)` : ""}` }))}
-                      placeholder="— None —"
+                      placeholder={serviceProvidersList.length > 0 ? "— None —" : "No registered vendors yet"}
                       size="md"
                       searchable
                       clearable
+                      disabled={serviceProvidersList.length === 0}
                     />
+                    {serviceProvidersList.length === 0 && (
+                      <p className="mt-1 text-[10px] text-slate-400">
+                        No registered vendors yet —{" "}
+                        <a href="/accounts/service-providers" target="_blank" rel="noreferrer" className="font-semibold text-[#0B3B2E] hover:underline">
+                          add one in Service Providers
+                        </a>{" "}
+                        or enter a payee name below for a one-off payment.
+                      </p>
+                    )}
+                  </div>
+                  {!form.serviceProviderId && (
+                    <label className="block">
+                      <span className="text-xs font-bold text-slate-600">Payee Name (optional)</span>
+                      <input
+                        value={form.payeeName}
+                        onChange={(e) => setForm((prev) => ({ ...prev, payeeName: e.target.value }))}
+                        placeholder="Who is this payment to? e.g. an individual or one-off vendor"
+                        className="mt-1 w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none placeholder:text-slate-300 focus:border-[#0B3B2E]"
+                      />
+                      <p className="mt-1 text-[10px] text-slate-400">Shown as the Payee on this voucher's list and GL detail. Leave blank if not applicable (e.g. a petty cash float top-up).</p>
+                    </label>
                   )}
                   <label className="block">
                     <span className="text-xs font-bold text-slate-600">Amount (KES) *</span>
@@ -1078,7 +1114,7 @@ const PaymentVouchers = () => {
                         <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900 whitespace-nowrap" title={voucher.narration || ""}>{voucher.voucherNo}</td>
                         <td className="px-3 py-1 border-r border-gray-100 text-slate-600 max-w-[110px] truncate">{isRawObjectId(voucher.reference) ? "—" : voucher.reference || "—"}</td>
                         <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[160px] truncate">{categories.find((c) => c.value === voucher.category)?.label || voucher.category}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900 max-w-[160px] truncate">{voucher.landlordName || "—"}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900 max-w-[160px] truncate">{voucher.payeeDisplay || "—"}</td>
                         <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[140px] truncate">{voucher.propertyName || "—"}</td>
                         <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{Number(voucher.amount || 0).toLocaleString()}</td>
                         <td className={`px-3 py-1 border-r border-gray-100 whitespace-nowrap ${isOverdue ? "text-red-600 font-semibold" : "text-slate-700"}`}>{voucher.dueDate ? new Date(voucher.dueDate).toLocaleDateString("en-GB") : "—"}{isOverdue && <span className="ml-1 text-[9px] font-bold">OVERDUE</span>}</td>
@@ -1167,7 +1203,7 @@ const PaymentVouchers = () => {
         contextFields={glVoucher ? [
           { label: "Category",   value: categories.find((c) => c.value === glVoucher.category)?.label || glVoucher.category },
           { label: "Reference",  value: isRawObjectId(glVoucher.reference) ? undefined : (glVoucher.reference || undefined) },
-          { label: isLandlordWorkspace ? "Owner" : "Payee", value: glVoucher.landlordName },
+          { label: isLandlordWorkspace ? "Owner" : "Payee", value: isLandlordWorkspace ? glVoucher.landlordName : glVoucher.payeeDisplay },
           { label: "Property",   value: glVoucher.propertyName },
           { label: "Narration",  value: glVoucher.narration },
           { label: "Paid Date",  value: glVoucher.paidDate ? new Date(glVoucher.paidDate).toLocaleDateString("en-GB") : "—" },

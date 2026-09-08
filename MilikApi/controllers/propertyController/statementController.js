@@ -11,7 +11,7 @@ import {
   createRevision,
   validateStatementAudit,
 } from "../../services/statementSnapshotService.js";
-import { generateStatementPdf } from "../../services/statementPdfService.js";
+import { generateStatementPdf, isPdfCached } from "../../services/statementPdfService.js";
 import { emitToCompany } from "../../utils/socketManager.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { createError } from "../../utils/error.js";
@@ -421,14 +421,14 @@ export const getStatement = async (req, res, next) => {
     if (!businessId) {
       return next(createError(403, "Access denied"));
     }
-    const exists = await LandlordStatement.exists({ _id: statementId, business: businessId });
-    if (!exists) {
-      return next(createError(404, "Statement not found or access denied"));
-    }
 
+    // businessId scopes the lookup in getStatementById's own query instead of a separate
+    // existence check first — this was fetching the same LandlordStatement document twice
+    // on every "open a statement" request.
     const result = await getStatementById(statementId, {
       includeLines: includeLines === "true",
       populateRefs: populateRefs === "true",
+      businessId,
     });
 
     res.status(200).json({
@@ -773,11 +773,25 @@ export const generatePdf = async (req, res, next) => {
       return next(createError(403, "Access denied"));
     }
 
-    const statement = await LandlordStatement.findOne({ _id: statementId, business: businessId })
-      .populate("property", "propertyCode propertyName name address city commissionPercentage commissionRecognitionBasis commissionPaymentMode commissionFixedAmount totalUnits")
-      .populate("landlord", "firstName lastName landlordName email phone phoneNumber")
-      .populate("business", "companyName name address phone phoneNo email slogan logo postalAddress roadStreet town country POBOX Street City")
-      .lean();
+    // Cheap existence + cache-key check first (a repeated print/preview/download of an
+    // already-rendered statement is the common case) — only pay for the property/landlord/
+    // business populate joins below when the PDF isn't already cached.
+    const leanStatement = await LandlordStatement.findOne(
+      { _id: statementId, business: businessId },
+      "_id status updatedAt generatedAt statementNumber"
+    ).lean();
+
+    if (!leanStatement) {
+      return next(createError(404, "Statement not found or access denied"));
+    }
+
+    const statement = isPdfCached(leanStatement)
+      ? leanStatement
+      : await LandlordStatement.findOne({ _id: statementId, business: businessId })
+          .populate("property", "propertyCode propertyName name address city commissionPercentage commissionRecognitionBasis commissionPaymentMode commissionFixedAmount totalUnits")
+          .populate("landlord", "firstName lastName landlordName email phone phoneNumber")
+          .populate("business", "companyName name address phone phoneNo email slogan logo postalAddress roadStreet town country POBOX Street City")
+          .lean();
 
     if (!statement) {
       return next(createError(404, "Statement not found or access denied"));

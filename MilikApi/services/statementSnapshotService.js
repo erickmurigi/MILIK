@@ -521,17 +521,22 @@ export const approveStatement = async (statementId, userId, approvalNotes = "") 
  * @param {Object} options - Query options
  * @param {boolean} options.includeLines - Include statement lines (default: true)
  * @param {boolean} options.populateRefs - Populate landlord/property references (default: false)
+ * @param {string} [options.businessId] - When supplied, scopes the lookup to this business in
+ *   the same query (instead of the caller doing a separate existence check first) — pass it
+ *   whenever statementId comes from untrusted input (a route param) so a statement belonging
+ *   to another company can't be fetched by guessing its id.
  *
  * @returns {Promise<Object>} Statement with optional lines
  */
 export const getStatementById = async (statementId, options = {}) => {
-  const { includeLines = true, populateRefs = false } = options;
+  const { includeLines = true, populateRefs = false, businessId = null } = options;
 
   if (!statementId) {
     throw new Error("statementId is required");
   }
 
-  let query = LandlordStatement.findById(statementId);
+  const findFilter = businessId ? { _id: statementId, business: businessId } : { _id: statementId };
+  let query = LandlordStatement.findOne(findFilter);
 
   if (populateRefs) {
     query = query
@@ -554,7 +559,9 @@ export const getStatementById = async (statementId, options = {}) => {
   ]);
 
   if (!statement) {
-    throw new Error("Statement not found");
+    const err = new Error("Statement not found or access denied");
+    err.status = 404;
+    throw err;
   }
 
   return {

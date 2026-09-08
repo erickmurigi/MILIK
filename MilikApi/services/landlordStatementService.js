@@ -13,6 +13,8 @@ import ProcessedStatement from "../models/ProcessedStatement.js";
 import LandlordStatement from "../models/LandlordStatement.js";
 import LandlordStatementTenantBalance from "../models/LandlordStatementTenantBalance.js";
 import CompanySettings from "../models/CompanySettings.js";
+import Company from "../models/Company.js";
+import { isSelfManagingLandlordCompany } from "../utils/companyModules.js";
 import { buildCommissionTaxSnapshot, getCompanyTaxConfiguration } from "./taxCalculationService.js";
 
 const round2 = (value) =>
@@ -1318,7 +1320,7 @@ export const generateLandlordStatement = async ({
   // Round-trip 2: statement window resolution + last-approved lookup in parallel.
   // lastApproved uses statementPeriodStart directly (safe — effectiveStartAt can only be
   // equal to or later than startOfDay(statementPeriodStart), never earlier).
-  const [windowResult, lastApproved, companySettingsDoc] = await Promise.all([
+  const [windowResult, lastApproved, companySettingsDoc, companyDoc] = await Promise.all([
     resolveEffectiveStatementWindow({
       businessId: businessObjectId,
       propertyId: propertyObjectId,
@@ -1339,10 +1341,17 @@ export const generateLandlordStatement = async ({
       .select("_id periodEnd approvedAt")
       .lean(),
     CompanySettings.findOne({ company: businessObjectId }).select("incomeRules").lean(),
+    Company.findById(businessObjectId, { companyMode: 1 }).lean(),
   ]);
 
   const latePenaltyToLandlord =
     (companySettingsDoc?.incomeRules?.latePenaltyBeneficiary || "manager") === "landlord";
+  // Self-managing landlord companies have no manager, no commission, and no manager/
+  // landlord deposit-holder split — this statement becomes a "Property Performance
+  // Statement" for their own records rather than a remittance document. The row-building
+  // logic below is identical either way (same tenants/invoices/receipts/expenses); only
+  // the commission and a handful of display labels change for this mode.
+  const selfManaged = isSelfManagingLandlordCompany(companyDoc || {});
 
   const {
     effectiveStartAt,
@@ -2000,7 +2009,7 @@ export const generateLandlordStatement = async ({
             date: getReceiptStatementDate(receipt) || receipt.paymentDate,
             receiptDate: receipt.paymentDate,
             chargeDate: sourceInvoiceDate,
-            description: `B/F credit ${receiptReference} applied to ${appliedDocumentReference} - ${row.tenantName}`,
+            description: `B/F prepayment ${receiptReference} applied to ${appliedDocumentReference} - ${row.tenantName}`,
             amount: grossAppliedAmount,
             rentApplied,
             utilityApplied,
@@ -2155,6 +2164,11 @@ export const generateLandlordStatement = async ({
   let totalExtraDeductions = 0;
   let totalAdvanceRecoveries = 0;
   let totalEarlyPayouts = 0;
+  // Display-only: the portion of totalAdditions that is a landlord-held deposit
+  // recognition (category "deposit_remittance"). It's already shown once, correctly, in
+  // the Deposit Remittance / "Deposits You Now Hold" section, so it's excluded from the
+  // generic Additions total shown to the landlord (see displayAdditionsTotal below).
+  let depositRemittanceAdditionsTotal = 0;
 
   for (const note of notesInPeriod) {
     if (!shouldIncludeNoteInLandlordStatement(note)) continue;
@@ -2457,6 +2471,7 @@ export const generateLandlordStatement = async ({
       : `Landlord-held deposit remittance - ${row.tenantName}`;
 
     totalAdditions = round2(totalAdditions + amount);
+    depositRemittanceAdditionsTotal = round2(depositRemittanceAdditionsTotal + amount);
     additionRows.push({
       date: getReceiptStatementDate(receipt) || receipt.paymentDate,
       description: additionDescription,
@@ -3024,14 +3039,17 @@ export const generateLandlordStatement = async ({
     filteredTenantRows.reduce((sum, row) => sum + row.balanceCF, 0)
   );
 
-  const commissionPct = Number(property.commissionPercentage || 0);
+  // No manager, no management commission — force to 0 regardless of whatever stray
+  // commissionPercentage/commissionFixedAmount the property record happens to carry
+  // (e.g. left over from a mode switch), rather than trusting that data is always clean.
+  const commissionPct = selfManaged ? 0 : Number(property.commissionPercentage || 0);
   const recognitionBasis = normalizeCommissionRecognitionBasis(
     property.commissionRecognitionBasis || "received"
   );
   const commissionPaymentMode = String(
     property.commissionPaymentMode || "percentage"
   ).toLowerCase();
-  const commissionFixedAmount = Number(property.commissionFixedAmount || 0);
+  const commissionFixedAmount = selfManaged ? 0 : Number(property.commissionFixedAmount || 0);
 
   let commissionBase = totalRentReceived;
   let commissionBaseLabel = "Total rent received";
@@ -3141,7 +3159,7 @@ export const generateLandlordStatement = async ({
   );
   const settlementBasisLabel = usesExpectedRentSettlement
     ? "Rent expected (Invoiced/Accrual)"
-    : "Manager-held collections"
+    : (selfManaged ? "Total collections" : "Manager-held collections")
   ;
   const utilityPassThroughAmount = round2(
     usesExpectedRentSettlement ? totalUtilityInvoiced : 0
@@ -3160,7 +3178,7 @@ export const generateLandlordStatement = async ({
   );
   const settlementCollectionsLabel = usesExpectedRentSettlement
     ? "Expected rent + utilities + VAT"
-    : "Manager-held collections";
+    : (selfManaged ? "Total collections" : "Manager-held collections");
   const basisCollections = settlementBasisAmount;
   const basisCollectionsLabel = settlementBasisLabel;
 
@@ -3169,6 +3187,21 @@ export const generateLandlordStatement = async ({
   const landlordOffsets = round2(directToLandlordOffset);
   const additionsTotal = round2(totalAdditions || 0);
   const extraDeductionsTotal = round2(totalExtraDeductions || 0);
+  // Display-only figures for the Additions / Expenses & Deductions breakdowns (and the
+  // workspace Expenses KPI): a landlord-direct deposit receipt is booked as BOTH an
+  // addition (money now recognised as held by the landlord) AND an equal offsetting
+  // deduction (since the manager never actually held it) — the pair always nets to zero
+  // and never changes netRemittance below, but showing both halves separately made the
+  // Additions and Expenses totals look inflated by the exact same deposit amount, and the
+  // "Offset for landlord-direct deposit receipt" line reads like money being taken from
+  // the landlord. That deposit is already shown once, correctly, in the Deposit
+  // Remittance / "Deposits You Now Hold" section — so it's excluded here.
+  const displayAdditionsTotal = round2(
+    Math.max(additionsTotal - depositRemittanceAdditionsTotal, 0)
+  );
+  const displayNonCommissionDeductions = round2(
+    Math.max(nonCommissionDeductions - (depositSettlementTotals.offsets || 0), 0)
+  );
   const advanceRecoveriesTotal = round2(totalAdvanceRecoveries || 0);
   const earlyPayoutsTotal = round2(totalEarlyPayouts || 0);
   const openingSettlementBalance = round2(openingLandlordSettlementBalance);
@@ -3316,7 +3349,7 @@ export const generateLandlordStatement = async ({
       utilities: utilityColumns,
       utilityPaid: totalUtilityCollected,
       utilityInvoiced: totalUtilityInvoiced,
-      expenses: nonCommissionDeductions,
+      expenses: displayNonCommissionDeductions,
       totalPaid: round2(totalRentReceived + totalUtilityCollected + totalInvoiceVatReceived),
       closingBalance: totalBalanceCF,
     },
@@ -3385,11 +3418,11 @@ export const generateLandlordStatement = async ({
       directUtilityCollections,
       openingLandlordSettlementBalance: openingSettlementBalance,
       openingSettlementBalance,
-      additions: additionsTotal,
-      totalAdditions: additionsTotal,
+      additions: displayAdditionsTotal,
+      totalAdditions: displayAdditionsTotal,
       deductions,
       totalDeductions: deductions,
-      nonCommissionDeductions,
+      nonCommissionDeductions: displayNonCommissionDeductions,
       totalExpenses: round2(totalExpenses),
       advanceRecoveries: advanceRecoveriesTotal,
       totalAdvanceRecoveries: advanceRecoveriesTotal,
@@ -3407,8 +3440,10 @@ export const generateLandlordStatement = async ({
         netRemittance < 0 ? Math.abs(netRemittance) : 0,
       settlementAmount:
         netRemittance < 0 ? Math.abs(netRemittance) : netRemittance,
-      settlementLabel:
-        netRemittance < 0 ? "Landlord owes manager" : "Net payable to landlord",
+      settlementLabel: selfManaged
+        ? "Net Operating Income This Period"
+        : (netRemittance < 0 ? "Landlord owes manager" : "Net payable to landlord"),
+      isSelfManaged: selfManaged,
       propertyExpenses: round2(totalExpenses),
       extraDeductions: extraDeductionsTotal,
       depositsHeldByManager,

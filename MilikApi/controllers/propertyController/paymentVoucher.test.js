@@ -3,8 +3,9 @@
 // and the settlement leg (Dr Liability / Cr Cashbook) to the GL, and the
 // combined set of ledger rows for that voucher must balance to zero.
 import { describe, it, expect } from "vitest";
-import { createPaymentVoucher } from "./paymentVoucher.js";
+import { createPaymentVoucher, updatePaymentVoucher, getPaymentVoucher, getPaymentVouchers } from "./paymentVoucher.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
+import ServiceProvider from "../../models/ServiceProvider.js";
 import { callController } from "../../test/callController.js";
 import { createTestCompany, createTestChartOfAccounts, createTestUser } from "../../test/factories.js";
 import { getAccountByCode } from "../../test/factories.financial.js";
@@ -69,5 +70,92 @@ describe("paymentVoucher controller", () => {
       expect(e.status).toBe("approved");
       expect(e.journalGroupId).toBeTruthy();
     });
+  });
+});
+
+// Regression coverage for the Payee field — previously the create/update controllers
+// never accepted a free-text payee, populateVoucherQuery never populated the existing
+// `serviceProvider` link, and the list/detail Payee column only ever read `landlordName`
+// (always blank for non-landlord categories). See paymentVoucher.js's payload/allowedFields
+// and normalizeVoucher()'s payeeDisplay in PaymentVouchers.jsx.
+describe("paymentVoucher payee handling", () => {
+  const draftVoucherBody = async (company) => {
+    const debitAccount = await getAccountByCode(company._id, "5200");
+    const liabilityAccount = await getAccountByCode(company._id, "2120");
+    return {
+      category: "company_operational",
+      debitAccount: String(debitAccount._id),
+      liabilityAccount: String(liabilityAccount._id),
+      amount: 1000,
+      dueDate: new Date(),
+      reference: "TEST-PAYEE",
+      narration: "Test payee handling",
+      status: "draft",
+    };
+  };
+
+  it("saves a free-text payeeName when no service provider is linked", async () => {
+    const company = await createTestCompany();
+    await createTestChartOfAccounts(company._id);
+    const user = await createTestUser({ company });
+
+    const result = await callController(createPaymentVoucher, {
+      user,
+      body: { ...(await draftVoucherBody(company)), payeeName: "Jane Wanjiru (one-off)" },
+    });
+
+    expect(result.statusCode).toBe(201);
+    expect(result.payload.payeeName).toBe("Jane Wanjiru (one-off)");
+    expect(result.payload.serviceProvider).toBeFalsy();
+  });
+
+  it("clears payeeName and populates the service provider's name when serviceProvider is linked", async () => {
+    const company = await createTestCompany();
+    await createTestChartOfAccounts(company._id);
+    const user = await createTestUser({ company });
+    const provider = await ServiceProvider.create({ business: company._id, providerCode: "SP-ACME", name: "Acme Plumbing Ltd", subjectToWht: true, whtRate: 5 });
+
+    const created = await callController(createPaymentVoucher, {
+      user,
+      body: {
+        ...(await draftVoucherBody(company)),
+        serviceProvider: String(provider._id),
+        payeeName: "This should be ignored", // serviceProvider wins — see createPaymentVoucher
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.payload.payeeName).toBe("");
+
+    const fetched = await callController(getPaymentVoucher, { user, params: { id: created.payload._id } });
+    expect(fetched.payload.serviceProvider?.name).toBe("Acme Plumbing Ltd");
+
+    const listed = await callController(getPaymentVouchers, { user, query: { search: "TEST-PAYEE" } });
+    expect(listed.payload.data[0].serviceProvider?.name).toBe("Acme Plumbing Ltd");
+  });
+
+  it("lets a draft voucher's payee be updated, enforcing the same mutual-exclusivity rule", async () => {
+    const company = await createTestCompany();
+    await createTestChartOfAccounts(company._id);
+    const user = await createTestUser({ company });
+    const provider = await ServiceProvider.create({ business: company._id, providerCode: "SP-BETA", name: "Beta Electricals" });
+
+    const created = await callController(createPaymentVoucher, {
+      user,
+      body: { ...(await draftVoucherBody(company)), payeeName: "Original ad-hoc payee" },
+    });
+    expect(created.payload.payeeName).toBe("Original ad-hoc payee");
+
+    // Switch to a registered provider — payeeName must clear.
+    const updated = await callController(updatePaymentVoucher, {
+      user,
+      params: { id: created.payload._id },
+      body: { serviceProvider: String(provider._id) },
+    });
+    expect(updated.statusCode).toBe(200);
+    // updatePaymentVoucher runs the result through populateVoucherQuery, same as
+    // create/get/list, so serviceProvider comes back populated, not a raw id.
+    expect(String(updated.payload.serviceProvider?._id)).toBe(String(provider._id));
+    expect(updated.payload.serviceProvider?.name).toBe("Beta Electricals");
+    expect(updated.payload.payeeName).toBe("");
   });
 });

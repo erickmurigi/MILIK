@@ -4,6 +4,7 @@ import {
   deleteTenantInvoice,
   getTakeOnBalances,
   createTenantInvoiceNote,
+  getTenantInvoicesList,
 } from "./tenantInvoices.js";
 import { callController } from "../../test/callController.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
@@ -215,5 +216,46 @@ describe("debit notes", () => {
     expect(noteInDb).toBeTruthy();
     expect(noteInDb.amount).toBe(2500);
     expect(noteInDb.postingStatus).toBe("posted");
+  });
+
+  // Regression test: a tenant whose only charge is a standalone debit note (no regular
+  // TenantInvoice — e.g. a brand-new customer whose first-ever charge is a one-off
+  // connection/setup fee) never appeared as an open item on Add Receipt. Root cause: the
+  // snapshot computation in getTenantInvoicesList was gated on `adjustedInvoices.length > 0`,
+  // which is derived from the tenant's regular TenantInvoice records — zero for a tenant
+  // with no invoices yet, so the whole snapshot+debit-note-append step was skipped.
+  it("a standalone debit note (no source invoice, tenant has no regular invoices) still appears as an open item via includeSnapshots", async () => {
+    const { tenant, property, company } = await createTestLease({});
+    await createTestChartOfAccounts(company._id);
+    const user = await createTestUser({ company });
+
+    const tenantHasInvoices = await TenantInvoice.exists({ business: company._id, tenant: tenant._id });
+    expect(tenantHasInvoices).toBeFalsy();
+
+    const { statusCode: createStatus, payload: createdNote } = await callController(createTenantInvoiceNote, {
+      body: {
+        noteType: "DEBIT_NOTE",
+        tenantId: String(tenant._id),
+        propertyId: String(property._id),
+        category: "UTILITY_CHARGE",
+        amount: 15000,
+        description: "CONNECTION FEE - WATER",
+      },
+      user,
+    });
+
+    expect(createStatus).toBe(201);
+    expect(createdNote.noteType).toBe("DEBIT_NOTE");
+
+    const { statusCode, payload } = await callController(getTenantInvoicesList, {
+      query: { tenant: String(tenant._id), includeSnapshots: "1" },
+      user,
+    });
+
+    expect(statusCode).toBe(200);
+    const items = Array.isArray(payload) ? payload : payload?.data || [];
+    const noteItem = items.find((item) => item.noteType === "DEBIT_NOTE");
+    expect(noteItem).toBeTruthy();
+    expect(noteItem.outstanding).toBe(15000);
   });
 });

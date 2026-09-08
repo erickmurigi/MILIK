@@ -868,6 +868,10 @@ function App() {
             <Route path="/landlord-payments"            element={<Guard companyMode={{ allowLandlord: false }} resource="landlordPayments" moduleKey="accounts"><LandlordPayments /></Guard>} />
             <Route path="/landlord-payment-history"     element={<Guard companyMode={{ allowLandlord: false }} resource="landlordPayments" moduleKey="accounts"><LandlordPaymentHistory /></Guard>} />
             <Route path="/financial/landlord-statement" element={<Guard companyMode={{ allowLandlord: false }} resource="statements" moduleKey="propertyManagement"><LandlordCommissionsStatement /></Guard>} />
+            {/* Self-managing landlord companies' equivalent — same page (it self-adapts based on
+                company mode into a "Property Performance Statement"), reached via its own route
+                since the manager-mode route above is deliberately blocked for landlord mode. */}
+            <Route path="/financial/property-performance-statement" element={<Guard resource="statements" moduleKey="propertyManagement"><LandlordCommissionsStatement /></Guard>} />
             <Route path="/invoices/landlord"            element={<Navigate to="/landlord/statements" replace />} />
             <Route path="/landlord/processed-statements"element={<Guard companyMode={{ allowLandlord: false }} resource="processedStatements" moduleKey="accounts"><ProcessedStatements /></Guard>} />
             <Route path="/landlord/management-fee-invoices" element={<Guard companyMode={{ allowLandlord: false }} resource="processedStatements" moduleKey="accounts"><ManagementFeeInvoices /></Guard>} />

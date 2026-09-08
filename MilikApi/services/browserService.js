@@ -3,10 +3,30 @@
 // Keeps one pre-warmed page ready so the next PDF render skips newPage() latency.
 import puppeteer from "puppeteer";
 
+// Standard headless-Chromium flags for server-side PDF rendering: none of these change
+// rendered output (no GPU compositing, extensions, translate UI, or audio are ever visible
+// in a printed PDF) — they only cut the background work Chromium otherwise does by default,
+// shaving time off both browser launch and each page's render.
 const LAUNCH_ARGS = [
   "--no-sandbox",
   "--disable-setuid-sandbox",
   "--disable-dev-shm-usage",
+  "--disable-gpu",
+  "--disable-extensions",
+  "--disable-default-apps",
+  "--disable-background-networking",
+  "--disable-background-timer-throttling",
+  "--disable-backgrounding-occluded-windows",
+  "--disable-renderer-backgrounding",
+  "--disable-breakpad",
+  "--disable-component-extensions-with-background-pages",
+  "--disable-ipc-flooding-protection",
+  "--disable-features=TranslateUI,BlinkGenPropertyTrees",
+  "--force-color-profile=srgb",
+  "--metrics-recording-only",
+  "--mute-audio",
+  "--no-first-run",
+  "--no-default-browser-check",
 ];
 
 let browser = null;

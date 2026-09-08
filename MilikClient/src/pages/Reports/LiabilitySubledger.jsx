@@ -13,14 +13,21 @@ import {
   FaLayerGroup, FaUser, FaCalendarAlt, FaExclamationTriangle,
 } from "react-icons/fa";
 import { useTerms } from "../../hooks/useTerm";
+import { hasCompanyModule } from "../../utils/companyModules";
 
 const GRN = "#0B3B2E";
 const RED = "#DC2626";
 
+// `requiresModule` gates a sub-ledger to companies that actually have that module —
+// deposits/landlord/unallocated are tenant- and landlord-specific concepts that make
+// no sense for a Car Wash- or Property Sale-only company. Tax/WHT payable are left
+// ungated: they're a shared, module-agnostic accounts concept (any company posting a
+// Payment Voucher with withholding tax posts to 2141, regardless of which business
+// modules it has — see paymentVoucher.js).
 const TABS = [
-  { key: "deposits",     label: "Tenant Deposits",     code: "2100", desc: "Deposits held on behalf of tenants" },
-  { key: "landlord",    label: "Landlord Payables",    code: "2110", desc: "Amounts owed to landlords" },
-  { key: "unallocated", label: "Unallocated Receipts", code: "2130", desc: "Tenant overpayments / prepayments" },
+  { key: "deposits",     label: "Tenant Deposits",     code: "2100", desc: "Deposits held on behalf of tenants",        requiresModule: "propertyManagement" },
+  { key: "landlord",    label: "Landlord Payables",    code: "2110", desc: "Amounts owed to landlords",                 requiresModule: "propertyManagement" },
+  { key: "unallocated", label: "Unallocated Receipts", code: "2130", desc: "Tenant overpayments / prepayments",         requiresModule: "propertyManagement" },
   { key: "tax",         label: "Tax Payable",          code: "2140", desc: "Output VAT / tax collected not yet remitted" },
   { key: "wht",         label: "WHT Payable",          code: "2141", desc: "Withholding tax not yet remitted" },
 ];
@@ -341,11 +348,26 @@ const LiabilitySubledger = () => {
 
   const businessName = currentCompany?.companyName || currentUser?.company?.companyName || "";
 
+  const visibleTabs = useMemo(
+    () => TABS.filter((t) => !t.requiresModule || hasCompanyModule(currentCompany, t.requiresModule)),
+    [currentCompany]
+  );
+
   const [tab,     setTab]     = useTabState("lsl:tab",     "deposits");
   const [filters, setFilters] = useTabState("lsl:filters", { asOf: today(), property: "" });
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(false);
   const abortRef = useRef(null);
+
+  // The persisted tab (from a previous visit, possibly on a different company) may no
+  // longer be visible — e.g. "deposits" was open, then the user switched to a company
+  // without Property Management. Fall back to the first tab this company can actually see.
+  useEffect(() => {
+    if (visibleTabs.length === 0) return;
+    if (!visibleTabs.some((t) => t.key === tab)) {
+      setTab(visibleTabs[0].key);
+    }
+  }, [visibleTabs, tab, setTab]);
 
   const activeProperties = useMemo(
     () => allProperties.filter((p) => String(p.status || "").toLowerCase() !== "archived"),
@@ -380,7 +402,7 @@ const LiabilitySubledger = () => {
 
   useEffect(() => { load(tab, filters); }, [tab, filters, load]);
 
-  const tabDef = TABS.find((t) => t.key === tab) || TABS[0];
+  const tabDef = visibleTabs.find((t) => t.key === tab) || visibleTabs[0] || TABS[0];
   const total  = data?.total   || 0;
   const groups = data?.groups  || [];
   const count  = groups.reduce((s, g) => s + (g.rows?.length ?? 1), 0);
@@ -419,7 +441,7 @@ const LiabilitySubledger = () => {
 
       {/* ── Tabs ── */}
       <div className="mb-3 flex gap-0 border-b border-slate-200">
-        {TABS.map((t) => {
+        {visibleTabs.map((t) => {
           const active = tab === t.key;
           return (
             <button

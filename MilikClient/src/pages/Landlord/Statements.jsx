@@ -17,6 +17,7 @@ import { getProperties } from "../../redux/propertyRedux";
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectAllLandlords } from "../../redux/selectors";
 import { adminRequests } from "../../utils/requestMethods";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
 
 const _KES_FMT = new Intl.NumberFormat("en-KE", {
@@ -25,6 +26,15 @@ const _KES_FMT = new Intl.NumberFormat("en-KE", {
   minimumFractionDigits: 2,
 });
 const currency = (value) => _KES_FMT.format(Number(value || 0));
+// Compact, no-currency-symbol whole-number format for the dense per-tenant schedule grid —
+// that table is read as a fast scan of many rows, so "Ksh 17,000.00" everywhere is noise;
+// a bare "17,000" (or "—" for nothing) reads faster at a glance. Used only in that table —
+// every other total/figure on the page keeps the full currency() formatting.
+const compactAmount = (value) => {
+  const n = Number(value || 0);
+  if (Math.abs(n) < 0.005) return "—";
+  return Math.round(n).toLocaleString("en-KE");
+};
 
 
 // Returns payment status for a single statement row.
@@ -433,7 +443,7 @@ const paidCellDisplay = (val, isVacant, isNoBill) => {
   if (isVacant || isNoBill) return { text: "—", cls: "text-slate-300" };
   const n = Number(val || 0);
   return n > 0.005
-    ? { text: currency(n), cls: "text-emerald-700 font-medium" }
+    ? { text: compactAmount(n), cls: "text-slate-800 font-medium" }
     : { text: "—", cls: "text-slate-300" };
 };
 
@@ -521,7 +531,7 @@ const SearchableSelect = ({ value, onChange, options, placeholder = "Select..." 
 };
 
 const PdfPreviewModal = React.memo(function PdfPreviewModal({
-  open, statementId, propertyLabel, periodStart, periodEnd, onClose,
+  open, statementId, propertyLabel, periodStart, periodEnd, onClose, isSelfManaged = false,
 }) {
   const [phase, setPhase]           = useState("idle"); // idle | loading | ready
   const [blobUrl, setBlobUrl]       = useState(null);
@@ -642,7 +652,7 @@ const PdfPreviewModal = React.memo(function PdfPreviewModal({
         {/* Toolbar */}
         <div className="flex flex-none items-center gap-3 bg-[#0B3B2E] px-5 py-3 shadow-xl">
           <div className="flex min-w-0 flex-col">
-            <span className="text-xs font-black uppercase tracking-widest text-white">Landlord Statement</span>
+            <span className="text-xs font-black uppercase tracking-widest text-white">{isSelfManaged ? "Property Performance Statement" : "Landlord Statement"}</span>
             {(propertyLabel || periodLabel) && (
               <span className="truncate text-[10px] text-white/50">
                 {propertyLabel}{periodLabel ? ` · ${periodLabel}` : ""}
@@ -1038,6 +1048,11 @@ const Statements = () => {
 
   const workspace = draftStatement?.metadata?.workspace || null;
   const summary = workspace?.summary || {};
+  // Self-managing landlord companies have no manager — this page renders as their own
+  // "Property Performance Statement" instead of a remittance document. Company-level check
+  // covers UI that renders before any statement is drafted (title, nav); summary.isSelfManaged
+  // (set server-side from the same company-mode check) covers everything statement-derived.
+  const isSelfManaged = isSelfManagingLandlordCompany(currentCompany) || Boolean(summary?.isSelfManaged);
   const rows = workspace?.rows || [];
   const depositMemo = workspace?.depositMemo || {};
   const depositMemoRows = Array.isArray(depositMemo?.rows) ? depositMemo.rows : [];
@@ -1225,7 +1240,6 @@ const Statements = () => {
       );
   }, [collapseAdditionalUnitRows, preparedRows, statementColumns, tenantUnitMeta]);
   const [rowFilter, setRowFilter] = useTabState(`${location.pathname}:rowFilter`, "all");
-  const [kpiExpanded, setKpiExpanded] = useTabState(`${location.pathname}:kpiExpanded`, false);
 
   const collectionStats = useMemo(() => {
     if (!draftStatement || !preparedRows.length) return null;
@@ -1277,13 +1291,6 @@ const Statements = () => {
     }
     return Array.from(map.values());
   }, [depositSettlementRows]);
-  const depositSettlementOffsetRows = useMemo(
-    () =>
-      depositSettlementRows.filter(
-        (item) => String(item?.effect || "").toLowerCase() === "offset"
-      ),
-    [depositSettlementRows]
-  );
   const hasWorkspaceDetailSections =
     nonDepositExpenseRows.length > 0 ||
     nonDepositAdditionRows.length > 0 ||
@@ -1617,9 +1624,13 @@ const Statements = () => {
         <div className="flex-shrink-0 bg-white shadow-[0_1px_4px_rgba(0,0,0,0.08)]">
           <div className="h-0.5 bg-gradient-to-r from-[#0B3B2E] via-[#1a6b4e] to-[#0B3B2E]" />
 
-          {/* Filter grid */}
-          <div className="grid grid-cols-2 items-start gap-x-2 gap-y-1 px-3 py-1.5 sm:grid-cols-3 xl:grid-cols-7">
-            <div>
+          {/* Filter row — grouped: Type/Property, then Quick Period (drives Period
+              Start's suggestion below — see buildPeriod effect), then the actual
+              Statement Period (Locked/Custom badges unchanged), then Generate.
+              Every field, value, handler and conditional below is unchanged from
+              before — only the grouping/spacing changed. */}
+          <div className="flex flex-wrap items-end gap-3 px-3 py-1.5">
+            <div className="w-32">
               <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Statement Type</label>
               <SearchableSelect
                 value={statementType}
@@ -1632,7 +1643,7 @@ const Statements = () => {
               />
             </div>
 
-            <div className="col-span-2 xl:col-span-1">
+            <div className="w-56">
               <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Property</label>
               <SearchableSelect
                 value={selectedPropertyId}
@@ -1642,80 +1653,80 @@ const Statements = () => {
               />
             </div>
 
-            <div>
-              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Month</label>
-              <SearchableSelect
-                value={month}
-                onChange={setMonth}
-                options={MONTH_SELECT_OPTIONS}
-                placeholder="Select month"
-              />
-            </div>
+            <div className="h-8 w-px shrink-0 bg-slate-200" />
 
             <div>
-              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Year</label>
-              <input
-                type="number"
-                value={year}
-                onChange={(e) => setYear(e.target.value)}
-                className="h-7 w-full rounded-md border border-orange-400 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                Period Start
-              </label>
-              {latestProcessedCutoffAt ? (
-                // Locked — must continue from the day after the last statement closed
-                <div className="flex h-7 w-full items-center gap-1.5 rounded-md border border-slate-300 bg-slate-100 px-2 text-[11px] font-semibold text-slate-500">
-                  <span className="truncate">{periodStart || "—"}</span>
-                  <span className="ml-auto shrink-0 rounded bg-slate-200 px-1 py-0.5 text-[9px] font-bold uppercase text-slate-500">locked</span>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Quick Period</label>
+              <div className="flex items-center gap-1">
+                <div className="w-28">
+                  <SearchableSelect
+                    value={month}
+                    onChange={setMonth}
+                    options={MONTH_SELECT_OPTIONS}
+                    placeholder="Select month"
+                  />
                 </div>
-              ) : (
-                // First statement — freely editable
                 <input
-                  type="date"
-                  value={periodStart}
-                  max={todayIso}
-                  onChange={(e) => setPeriodStart(e.target.value)}
-                  title="First statement — pick a start date"
-                  className="h-7 w-full rounded-md border border-orange-400 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+                  type="number"
+                  value={year}
+                  onChange={(e) => setYear(e.target.value)}
+                  className="h-7 w-16 rounded-md border border-orange-400 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
-              )}
+              </div>
             </div>
+
+            <FaSyncAlt size={10} className="mb-1.5 shrink-0 rotate-90 text-slate-300 sm:rotate-0" />
 
             <div>
               <label className="mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                Period End
+                Statement Period
                 {periodEnd && periodEnd !== todayIso && (
                   <span className="rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-700 normal-case tracking-normal">
                     Custom
                   </span>
                 )}
               </label>
-              <input
-                type="date"
-                value={periodEnd}
-                min={periodStart || undefined}
-                max={todayIso}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setPeriodEnd(v);
-                  setPeriodEndIsCustom(v !== todayIso && v !== "");
-                }}
-                className="h-7 w-full rounded-md border border-orange-400 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-                title="Defaults to today — change to close the period earlier"
-              />
+              <div className="flex items-center gap-1">
+                {latestProcessedCutoffAt ? (
+                  // Locked — must continue from the day after the last statement closed
+                  <div className="flex h-7 w-32 items-center gap-1.5 rounded-md border border-slate-300 bg-slate-100 px-2 text-[11px] font-semibold text-slate-500">
+                    <span className="truncate">{periodStart || "—"}</span>
+                    <span className="ml-auto shrink-0 rounded bg-slate-200 px-1 py-0.5 text-[9px] font-bold uppercase text-slate-500">locked</span>
+                  </div>
+                ) : (
+                  // First statement — freely editable
+                  <input
+                    type="date"
+                    value={periodStart}
+                    max={todayIso}
+                    onChange={(e) => setPeriodStart(e.target.value)}
+                    title="First statement — pick a start date"
+                    className="h-7 w-32 rounded-md border border-orange-400 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+                  />
+                )}
+                <span className="text-slate-300">–</span>
+                <input
+                  type="date"
+                  value={periodEnd}
+                  min={periodStart || undefined}
+                  max={todayIso}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setPeriodEnd(v);
+                    setPeriodEndIsCustom(v !== todayIso && v !== "");
+                  }}
+                  className="h-7 w-32 rounded-md border border-orange-400 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+                  title="Defaults to today — change to close the period earlier"
+                />
+              </div>
             </div>
 
-            <div>
-              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-transparent select-none">·</label>
+            <div className="ml-auto">
               <button
                 type="button"
                 onClick={() => loadDraftWorkspace({ refresh: true })}
                 disabled={!canCreateStatement || !selectedPropertyId || loadingDraft || loadingProcessedContext || !hasValidPeriodSelection}
-                className="inline-flex h-7 w-full items-center justify-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 text-[11px] font-bold text-white shadow-sm transition-colors hover:bg-[#0a3228] disabled:cursor-not-allowed disabled:opacity-55"
+                className="inline-flex h-7 items-center justify-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 text-[11px] font-bold text-white shadow-sm transition-colors hover:bg-[#0a3228] disabled:cursor-not-allowed disabled:opacity-55"
               >
                 <FaSyncAlt className={loadingDraft ? "animate-spin" : ""} size={11} />
                 {loadingDraft ? "Loading…" : loadingProcessedContext ? "Checking…" : "Generate"}
@@ -1852,7 +1863,7 @@ const Statements = () => {
                 <div className="flex-shrink-0 bg-[#0B3B2E] px-5 py-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-green-200/50">Landlord Statement · Summary</p>
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-green-200/50">{isSelfManaged ? "Property Performance Statement · Summary" : "Landlord Statement · Summary"}</p>
                       <h3 className="mt-1 text-sm font-bold text-white">
                         {selectedProperty ? getPropertyLabel(selectedProperty) : "Statement Summary"}
                       </h3>
@@ -1950,20 +1961,24 @@ const Statements = () => {
                             <td className="px-5 py-3 font-medium text-slate-700">Expenses &amp; other deductions</td>
                             <td className="px-5 py-3 text-right font-semibold text-slate-900">{currency(nonCommissionDeductions)}</td>
                           </tr>
-                          <tr className="transition-colors hover:bg-slate-50/60">
-                            <td className="px-5 py-3 font-medium text-slate-700">Commission</td>
-                            <td className="px-5 py-3 text-right font-semibold text-slate-900">{currency(commissionAmount)}</td>
-                          </tr>
+                          {commissionAmount > 0 && (
+                            <tr className="transition-colors hover:bg-slate-50/60">
+                              <td className="px-5 py-3 font-medium text-slate-700">Commission</td>
+                              <td className="px-5 py-3 text-right font-semibold text-slate-900">{currency(commissionAmount)}</td>
+                            </tr>
+                          )}
                           {commissionTaxAmount > 0 && (
                             <tr className="transition-colors hover:bg-slate-50/60">
                               <td className="px-5 py-3 font-medium text-slate-700">VAT on commission</td>
                               <td className="px-5 py-3 text-right font-semibold text-slate-900">{currency(commissionTaxAmount)}</td>
                             </tr>
                           )}
-                          <tr className="transition-colors hover:bg-slate-50/60">
-                            <td className="px-5 py-3 font-medium text-slate-700">Direct to landlord collections</td>
-                            <td className="px-5 py-3 text-right font-semibold text-slate-900">{currency(directToLandlordAmount)}</td>
-                          </tr>
+                          {!isSelfManaged && (
+                            <tr className="transition-colors hover:bg-slate-50/60">
+                              <td className="px-5 py-3 font-medium text-slate-700">Direct to landlord collections</td>
+                              <td className="px-5 py-3 text-right font-semibold text-slate-900">{currency(directToLandlordAmount)}</td>
+                            </tr>
+                          )}
                           {Number(summary?.totalEarlyPayouts || 0) > 0 && (
                             <tr className="transition-colors hover:bg-slate-50/60">
                               <td className="px-5 py-3 font-medium text-slate-700">Early payout already paid to landlord</td>
@@ -2037,11 +2052,8 @@ const Statements = () => {
                               <span className="text-red-300/80"> · {collectionStats.unpaid} unpaid</span>
                             )}
                           </span>
-                          <span className={`ml-auto text-[10px] font-bold tabular-nums ${
-                            settlement.isNegative ? "text-red-300" : "text-emerald-300"
-                          }`}>
-                            {currency(settlement.amount)} net
-                          </span>
+                          {/* "Net to Landlord" used to repeat here too — dropped since the
+                              KPI strip right below already shows it clearly. */}
                         </div>
                       )}
                     </div>
@@ -2064,7 +2076,7 @@ const Statements = () => {
                               key={chip.key}
                               type="button"
                               onClick={() => setRowFilter(chip.key)}
-                              className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold transition-colors ${chip.cls} ${
+                              className={`border px-2 py-0.5 text-[9px] font-semibold transition-colors ${chip.cls} ${
                                 rowFilter === chip.key
                                   ? "ring-1 ring-white/60 opacity-100"
                                   : "opacity-50 hover:opacity-90"
@@ -2092,51 +2104,14 @@ const Statements = () => {
                       >
                         {collapseAdditionalUnitRows ? "Multi ▲" : "Multi ▼"}
                       </button>
-
-                      {/* KPI details toggle */}
-                      {collectionStats && (
-                        <button
-                          type="button"
-                          onClick={() => setKpiExpanded((v) => !v)}
-                          className="rounded border border-white/20 bg-white/10 px-2 py-1 text-[9px] font-semibold text-green-100/60 transition-colors hover:bg-white/20"
-                        >
-                          {kpiExpanded ? "Details ▲" : "Details ▼"}
-                        </button>
-                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* ── Expandable KPI strip (collapsed by default) ── */}
-                {kpiExpanded && collectionStats && (
-                  <div className="flex-shrink-0 grid grid-cols-5 divide-x divide-slate-100 border-b border-slate-200 bg-white">
-                    {[
-                      {
-                        label: "Units",
-                        value: `${collectionStats.occupied} occ`,
-                        sub: collectionStats.vacant > 0 ? `${collectionStats.vacant} vacant` : collectionStats.nobill > 0 ? `${collectionStats.nobill} no bill` : "fully occupied",
-                        color: "text-slate-800",
-                        subColor: collectionStats.vacant > 0 ? "text-amber-500" : collectionStats.nobill > 0 ? "text-slate-500" : "text-emerald-500",
-                      },
-                      { label: "Paid in Full", value: collectionStats.paid,   sub: "tenants", color: collectionStats.paid > 0    ? "text-emerald-700" : "text-slate-400", subColor: "text-slate-400" },
-                      { label: "Partial",      value: collectionStats.partial, sub: "tenants", color: collectionStats.partial > 0 ? "text-amber-700"   : "text-slate-400", subColor: "text-slate-400" },
-                      { label: "Not Paid",     value: collectionStats.unpaid,  sub: "tenants", color: collectionStats.unpaid > 0  ? "text-red-600"     : "text-slate-400", subColor: "text-slate-400" },
-                      {
-                        label: "Net to Landlord",
-                        value: currency(settlement.amount),
-                        sub: settlement.isNegative ? settlement.label : "Incl. b/f balances & adj.",
-                        color: settlement.isNegative ? "text-red-700" : "text-[#0B3B2E]",
-                        subColor: "text-slate-400",
-                      },
-                    ].map((kpi) => (
-                      <div key={kpi.label} className="px-3 py-1.5">
-                        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">{kpi.label}</p>
-                        <p className={`mt-0.5 text-sm font-bold ${kpi.color}`}>{kpi.value}</p>
-                        {kpi.sub && <p className={`text-[9px] ${kpi.subColor || "text-slate-400"}`}>{kpi.sub}</p>}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                {/* KPI strip removed — every figure it showed (occupancy, paid/partial/
+                    unpaid counts, Net to Landlord) already appears either in the status
+                    chips directly above or the totals footer below; showing it a third
+                    time was pure duplication. */}
 
                 {/* Scrollable table + detail sections */}
                 <div className="min-h-0 flex-1 overflow-auto bg-white">
@@ -2254,25 +2229,26 @@ const Statements = () => {
                           const paidTaxCell    = paidCellDisplay(row.paidTax, isVacant, isNoBill);
                           const totalPaidCell  = paidCellDisplay(row.totalPaid, isVacant, isNoBill);
 
-                          // Only show the inline badge for PAID and PARTIAL — those are the meaningful exceptions.
-                          const showBadge = status === "paid" || status === "partial";
+                          // Show the inline badge for PAID, PARTIAL and UNPAID — the meaningful exceptions
+                          // (a bare "no bill"/vacant row needs no badge at all).
+                          const showBadge = status === "paid" || status === "partial" || status === "unpaid";
 
                           return (
                             <tr
                               key={row.unitId ? `u-${row.unitId}` : row._id ? `d-${row._id}` : `n-${row.unitNumber || index}`}
                               className={`${rowBase} border-b border-slate-100 transition-colors hover:bg-orange-50/70`}
                             >
-                              <td className={`sticky left-0 z-10 w-[56px] min-w-[56px] max-w-[56px] overflow-hidden ${rowBase} ${st.border} px-2 py-1 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
-                                <div className={`truncate text-xs font-semibold ${isVacant ? "text-slate-400" : "text-slate-900"}`} title={row.displayUnitLabel || row.unit || row.unitNumber || ""}>{row.displayUnitLabel || row.unit || row.unitNumber || "—"}</div>
+                              <td className={`sticky left-0 z-10 w-[56px] min-w-[56px] max-w-[56px] overflow-hidden ${rowBase} ${st.border} px-2 py-0.5 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
+                                <div className={`truncate text-[11px] font-semibold ${isVacant ? "text-slate-400" : "text-slate-900"}`} title={row.displayUnitLabel || row.unit || row.unitNumber || ""}>{row.displayUnitLabel || row.unit || row.unitNumber || "—"}</div>
                               </td>
-                              <td className={`sticky left-[56px] z-10 w-[130px] min-w-[130px] max-w-[130px] overflow-hidden ${rowBase} border-r border-slate-100 px-2 py-1 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
+                              <td className={`sticky left-[56px] z-10 w-[130px] min-w-[130px] max-w-[130px] overflow-hidden ${rowBase} border-r border-slate-100 px-2 py-0.5 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
                                 <div className="flex items-center gap-1.5">
                                   {showBadge && (
                                     <span className={`shrink-0 rounded px-1 py-px text-[8px] font-bold uppercase tracking-wide ${st.badge}`}>
                                       {st.label}
                                     </span>
                                   )}
-                                  <div className={`truncate text-[11px] font-semibold ${isVacant ? "text-slate-400 italic" : "text-slate-800"}`}>
+                                  <div className={`truncate text-[10.5px] font-semibold ${isVacant ? "text-slate-400 italic" : "text-slate-800"}`}>
                                     {row.tenantName || "—"}
                                   </div>
                                 </div>
@@ -2283,42 +2259,42 @@ const Statements = () => {
                                 )}
                               </td>
                               {/* Bal B/F — muted, context only */}
-                              <td className="px-2 py-1 text-right text-slate-400 text-[10px]">
-                                {(isVacant || isNoBill) ? "—" : (Number(row.openingBalance ?? row.balanceBF ?? 0) !== 0 ? currency(row.openingBalance ?? row.balanceBF ?? 0) : "—")}
+                              <td className="px-2 py-0.5 text-right text-slate-400 text-[10px]">
+                                {(isVacant || isNoBill) ? "—" : compactAmount(row.openingBalance ?? row.balanceBF ?? 0)}
                               </td>
                               {/* ── INVOICED block ── */}
-                              <td className={`border-l border-slate-100 px-2 py-1 text-right text-[11px] ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-700"}`}>
-                                {(isVacant || isNoBill) ? "—" : currency(row.invoicedRent)}
+                              <td className={`border-l border-slate-100 px-2 py-0.5 text-right text-[10.5px] ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-700"}`}>
+                                {(isVacant || isNoBill) ? "—" : compactAmount(row.invoicedRent)}
                               </td>
                               {hasInvoiceVatColumn && (
-                                <td className={`px-2 py-1 text-right text-[11px] ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-500"}`}>
-                                  {(isVacant || isNoBill) ? "—" : currency(row.invoicedTax ?? 0)}
+                                <td className={`px-2 py-0.5 text-right text-[10.5px] ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-500"}`}>
+                                  {(isVacant || isNoBill) ? "—" : compactAmount(row.invoicedTax ?? 0)}
                                 </td>
                               )}
                               {statementColumns.map((column) => {
                                 const invVal = getPreparedStatementColumnValue(row, column.key, "invoiced");
                                 return (
-                                  <td key={`inv-${row.unitId || row.unitNumber || "row"}-${column.key}`} className={`px-2 py-1 text-right text-[11px] ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-700"}`}>
-                                    {(isVacant || isNoBill) ? "—" : currency(invVal)}
+                                  <td key={`inv-${row.unitId || row.unitNumber || "row"}-${column.key}`} className={`px-2 py-0.5 text-right text-[10.5px] ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-700"}`}>
+                                    {(isVacant || isNoBill) ? "—" : compactAmount(invVal)}
                                   </td>
                                 );
                               })}
                               {/* ── PAID block ── */}
-                              <td className={`border-l border-slate-100 px-2 py-1 text-right text-[11px] ${paidRentCell.cls}`}>{paidRentCell.text}</td>
+                              <td className={`border-l border-slate-100 px-2 py-0.5 text-right text-[10.5px] ${paidRentCell.cls}`}>{paidRentCell.text}</td>
                               {hasInvoiceVatColumn && (
-                                <td className={`px-2 py-1 text-right text-[11px] ${paidTaxCell.cls}`}>{paidTaxCell.text}</td>
+                                <td className={`px-2 py-0.5 text-right text-[10.5px] ${paidTaxCell.cls}`}>{paidTaxCell.text}</td>
                               )}
                               {statementColumns.map((column) => {
                                 const padVal = paidCellDisplay(getPreparedStatementColumnValue(row, column.key, "paid"), isVacant, isNoBill);
                                 return (
-                                  <td key={`paid-${row.unitId || row.unitNumber || "row"}-${column.key}`} className={`px-2 py-1 text-right text-[11px] ${padVal.cls}`}>{padVal.text}</td>
+                                  <td key={`paid-${row.unitId || row.unitNumber || "row"}-${column.key}`} className={`px-2 py-0.5 text-right text-[10.5px] ${padVal.cls}`}>{padVal.text}</td>
                                 );
                               })}
                               {/* Total Paid */}
-                              <td className={`border-l border-slate-100 px-2 py-1 text-right text-[11px] ${totalPaidCell.cls}`}>{totalPaidCell.text}</td>
+                              <td className={`border-l border-slate-100 px-2 py-0.5 text-right text-[10.5px] font-semibold ${totalPaidCell.cls}`}>{totalPaidCell.text}</td>
                               {/* Bal C/F — positive = arrears (red), negative = credit (green) */}
-                              <td className={`px-2 py-1 text-right text-[11px] ${balCls}`}>
-                                {(isVacant || isNoBill) ? "—" : closingBal !== 0 ? currency(closingBal) : "—"}
+                              <td className={`px-2 py-0.5 text-right text-[10.5px] ${balCls}`}>
+                                {(isVacant || isNoBill) ? "—" : compactAmount(closingBal)}
                               </td>
                             </tr>
                           );
@@ -2356,28 +2332,25 @@ const Statements = () => {
                   {/* Detail sections */}
                   {hasWorkspaceDetailSections && (
                     <div className="space-y-3 border-t border-slate-200 bg-slate-50 px-4 py-3">
-                      {depositSettlementRows.length > 0 && (
+                      {depositSettlementAdditionRows.length > 0 && (
                         <div>
-                          <div className="mb-1.5 flex items-center gap-1">
-                            <h4 className="border-l-2 border-[#0B3B2E] pl-2 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">Deposit Remittance</h4>
-                            <div className="ml-auto flex items-center gap-3 rounded-md bg-white border border-slate-200 px-3 py-1 text-[11px]">
-                              <span className="text-[9px] font-bold uppercase tracking-wide text-emerald-600">Added</span>
-                              <span className="font-bold text-emerald-800">{currency(depositSettlementTotals.additions)}</span>
-                              <span className="text-slate-200">|</span>
-                              <span className="text-[9px] font-bold uppercase tracking-wide text-amber-600">Offsets</span>
-                              <span className="font-bold text-amber-800">{currency(depositSettlementTotals.offsets)}</span>
-                              <span className="text-slate-200">|</span>
-                              <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Net</span>
-                              <span className="font-bold text-slate-900">{currency(depositSettlementTotals.netImpact)}</span>
+                          {/* Offset rows deliberately not shown here — they duplicate what's
+                              already listed in "Payments Collected Directly by Landlord" below,
+                              and reading "Offset ... [Tenant] ... Ksh X" in a deductions-styled
+                              table was easy to misread as money being taken from the landlord.
+                              This section is purely informational (it doesn't feed the Net to
+                              Landlord total anywhere) — it just records that you, not the
+                              manager, now hold these tenants' deposits. */}
+                          <div className="overflow-hidden border border-[#0B3B2E]/20 bg-white">
+                            <div className="flex items-center justify-between bg-[#EDF5F1] px-3 py-1.5">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">Deposits You Now Hold</span>
+                              <span className="text-[10px] font-black text-[#0B3B2E]">{currency(depositSettlementTotals.additions)}</span>
                             </div>
-                          </div>
-                          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
                             <table className="min-w-full text-[11px]">
                               <thead>
                                 <tr className="border-b border-slate-200 bg-slate-50">
                                   <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-slate-400">#</th>
                                   <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-slate-400">Description</th>
-                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-slate-400">Type</th>
                                   <th className="px-2 py-1 text-right text-[9px] font-bold uppercase tracking-wide text-slate-400">Amount</th>
                                 </tr>
                               </thead>
@@ -2389,25 +2362,9 @@ const Statements = () => {
                                       {item.description || "Deposit remittance"}
                                       {item.unit && <span className="ml-1.5 rounded bg-slate-100 px-1 py-px text-[9px] font-semibold text-slate-500">{item.unit}</span>}
                                     </td>
-                                    <td className="px-2 py-0.5"><span className="rounded bg-emerald-100 px-1 py-px text-[9px] font-semibold text-emerald-700">{item.holder === "landlord" ? "Landlord-held" : "Settlement"}</span></td>
                                     <td className="px-2 py-0.5 text-right font-semibold text-emerald-700">{currency(item.amount)}</td>
                                   </tr>
                                 ))}
-                                {depositSettlementOffsetRows.map((item, index) => (
-                                  <tr key={item._id || item.id || `deposit-settlement-offset-${index}`} className="odd:bg-white even:bg-amber-50/20 hover:bg-orange-50/50 transition-colors">
-                                    <td className="px-2 py-0.5 text-[10px] text-slate-400">{depositSettlementAdditionRows.length + index + 1}</td>
-                                    <td className="px-2 py-0.5 text-slate-700">
-                                      {item.description || "Deposit offset"}
-                                      {item.unit && <span className="ml-1.5 rounded bg-slate-100 px-1 py-px text-[9px] font-semibold text-slate-500">{item.unit}</span>}
-                                    </td>
-                                    <td className="px-2 py-0.5"><span className="rounded bg-amber-100 px-1 py-px text-[9px] font-semibold text-amber-700">Direct offset</span></td>
-                                    <td className="px-2 py-0.5 text-right font-semibold text-amber-700">{currency(item.amount)}</td>
-                                  </tr>
-                                ))}
-                                <tr className="border-t border-slate-200 bg-slate-50">
-                                  <td colSpan={3} className="px-2 py-0.5 text-[10px] font-bold text-slate-700">Total Added to Landlord</td>
-                                  <td className="px-2 py-0.5 text-right text-[11px] font-bold text-emerald-800">{currency(depositSettlementTotals.additions)}</td>
-                                </tr>
                               </tbody>
                             </table>
                           </div>
@@ -2416,16 +2373,11 @@ const Statements = () => {
 
                       {broughtForwardCreditApplicationRows.length > 0 && (
                         <div>
-                          <div className="mb-1.5 flex items-center gap-1">
-                            <h4 className="border-l-2 border-[#0B3B2E] pl-2 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">Brought Forward Credits</h4>
-                            <div className="ml-auto flex items-center gap-3 rounded-md bg-white border border-slate-200 px-3 py-1 text-[11px]">
-                              <span className="text-[9px] font-bold uppercase tracking-wide text-sky-600">Total</span>
-                              <span className="font-bold text-sky-800">{currency(broughtForwardCreditApplicationTotals.totalApplied || 0)}</span>
-                              {broughtForwardCreditApplicationTotals.rentApplied > 0 && <><span className="text-slate-200">|</span><span className="text-[9px] text-slate-500">Rent <span className="font-semibold text-slate-700">{currency(broughtForwardCreditApplicationTotals.rentApplied)}</span></span></>}
-                              {broughtForwardCreditApplicationTotals.utilityApplied > 0 && <><span className="text-slate-200">|</span><span className="text-[9px] text-slate-500">Utils <span className="font-semibold text-slate-700">{currency(broughtForwardCreditApplicationTotals.utilityApplied)}</span></span></>}
+                          <div className="overflow-hidden border border-[#0B3B2E]/20 bg-white">
+                            <div className="flex items-center justify-between bg-[#EDF5F1] px-3 py-1.5">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">Brought Forward Prepayments</span>
+                              <span className="text-[10px] font-black text-[#0B3B2E]">{currency(broughtForwardCreditApplicationTotals.totalApplied || 0)}</span>
                             </div>
-                          </div>
-                          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
                             <table className="min-w-full text-[11px]">
                               <thead>
                                 <tr className="border-b border-slate-200 bg-slate-50">
@@ -2440,7 +2392,7 @@ const Statements = () => {
                                 {broughtForwardCreditApplicationRows.map((item, index) => (
                                   <tr key={item._id || item.id || `bf-credit-${index}`} className="odd:bg-white even:bg-sky-50/20 hover:bg-orange-50/50 transition-colors">
                                     <td className="px-2 py-0.5 text-[10px] text-slate-400">{index + 1}</td>
-                                    <td className="px-2 py-0.5 text-slate-700">{item.description || "B/F credit applied"}</td>
+                                    <td className="px-2 py-0.5 text-slate-700">{item.description || "B/F prepayment applied"}</td>
                                     <td className="px-2 py-0.5 text-slate-500">{item.receiptReference || "—"}</td>
                                     <td className="px-2 py-0.5 text-slate-500">{item.unit || "—"}</td>
                                     <td className="px-2 py-0.5 text-right font-semibold text-sky-700">{currency(item.amount)}</td>
@@ -2455,8 +2407,11 @@ const Statements = () => {
 
                       {nonDepositExpenseRows.length > 0 && (
                         <div>
-                          <h4 className="mb-1 border-l-2 border-[#0B3B2E] pl-2 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">Deductions / Expenses</h4>
-                          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                          <div className="overflow-hidden border border-[#0B3B2E]/20 bg-white">
+                            <div className="flex items-center justify-between bg-[#EDF5F1] px-3 py-1.5">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">Deductions / Expenses</span>
+                              <span className="text-[10px] font-black text-rose-700">{currency(nonDepositExpenseRows.reduce((s, r) => s + Number(r.amount || 0), 0))}</span>
+                            </div>
                             <table className="min-w-full text-[11px]">
                               <thead>
                                 <tr className="border-b border-slate-200 bg-slate-50">
@@ -2470,13 +2425,9 @@ const Statements = () => {
                                   <tr key={item._id || item.id || `expense-${index}`} className="odd:bg-white even:bg-slate-50/60 hover:bg-orange-50/50 transition-colors">
                                     <td className="px-2 py-0.5 text-[10px] text-slate-400">{index + 1}</td>
                                     <td className="px-2 py-0.5 text-slate-700">{item.description || item.name || "Expense"}</td>
-                                    <td className="px-2 py-0.5 text-right font-semibold text-slate-800">{currency(item.amount)}</td>
+                                    <td className="px-2 py-0.5 text-right font-semibold text-rose-700">{currency(item.amount)}</td>
                                   </tr>
                                 ))}
-                                <tr className="border-t border-slate-200 bg-slate-50">
-                                  <td colSpan={2} className="px-2 py-0.5 text-[10px] font-bold text-slate-700">Total</td>
-                                  <td className="px-2 py-0.5 text-right text-[11px] font-bold text-slate-900">{currency(nonDepositExpenseRows.reduce((s, r) => s + Number(r.amount || 0), 0))}</td>
-                                </tr>
                               </tbody>
                             </table>
                           </div>
@@ -2485,8 +2436,11 @@ const Statements = () => {
 
                       {nonDepositAdditionRows.length > 0 && (
                         <div>
-                          <h4 className="mb-1 border-l-2 border-[#0B3B2E] pl-2 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">Additions</h4>
-                          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                          <div className="overflow-hidden border border-[#0B3B2E]/20 bg-white">
+                            <div className="flex items-center justify-between bg-[#EDF5F1] px-3 py-1.5">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">Additions</span>
+                              <span className="text-[10px] font-black text-[#0B3B2E]">{currency(nonDepositAdditionRows.reduce((s, r) => s + Number(r.amount || 0), 0))}</span>
+                            </div>
                             <table className="min-w-full text-[11px]">
                               <thead>
                                 <tr className="border-b border-slate-200 bg-slate-50">
@@ -2503,10 +2457,6 @@ const Statements = () => {
                                     <td className="px-2 py-0.5 text-right font-semibold text-emerald-700">{currency(item.amount)}</td>
                                   </tr>
                                 ))}
-                                <tr className="border-t border-slate-200 bg-emerald-50/40">
-                                  <td colSpan={2} className="px-2 py-0.5 text-[10px] font-bold text-emerald-800">Total</td>
-                                  <td className="px-2 py-0.5 text-right text-[11px] font-bold text-emerald-800">{currency(nonDepositAdditionRows.reduce((s, r) => s + Number(r.amount || 0), 0))}</td>
-                                </tr>
                               </tbody>
                             </table>
                           </div>
@@ -2515,8 +2465,11 @@ const Statements = () => {
 
                       {earlyPayoutRows.length > 0 && (
                         <div>
-                          <h4 className="mb-1 border-l-2 border-amber-400 pl-2 text-[10px] font-bold uppercase tracking-widest text-amber-700">Early Payouts to Landlord</h4>
-                          <div className="overflow-hidden rounded-lg border border-amber-200 bg-white">
+                          <div className="overflow-hidden border border-amber-300/60 bg-white">
+                            <div className="flex items-center justify-between bg-amber-50 px-3 py-1.5">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-amber-700">Early Payouts to Landlord</span>
+                              <span className="text-[10px] font-black text-amber-800">({currency(Number(summary?.totalEarlyPayouts || 0))})</span>
+                            </div>
                             <table className="min-w-full text-[11px]">
                               <thead>
                                 <tr className="border-b border-amber-200 bg-amber-50/60">
@@ -2535,10 +2488,6 @@ const Statements = () => {
                                     <td className="px-2 py-0.5 text-right font-semibold text-amber-700">({currency(item.amount)})</td>
                                   </tr>
                                 ))}
-                                <tr className="border-t border-amber-200 bg-amber-50">
-                                  <td colSpan={3} className="px-2 py-0.5 text-[10px] font-bold text-amber-800">Total</td>
-                                  <td className="px-2 py-0.5 text-right text-[11px] font-bold text-amber-800">({currency(Number(summary?.totalEarlyPayouts || 0))})</td>
-                                </tr>
                               </tbody>
                             </table>
                           </div>
@@ -2547,8 +2496,11 @@ const Statements = () => {
 
                       {advanceRecoveryRows.length > 0 && (
                         <div>
-                          <h4 className="mb-1 border-l-2 border-red-400 pl-2 text-[10px] font-bold uppercase tracking-widest text-red-700">Advance Recoveries</h4>
-                          <div className="overflow-hidden rounded-lg border border-red-200 bg-white">
+                          <div className="overflow-hidden border border-red-300/60 bg-white">
+                            <div className="flex items-center justify-between bg-red-50 px-3 py-1.5">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-red-700">Advance Recoveries</span>
+                              <span className="text-[10px] font-black text-red-800">({currency(Number(summary?.totalAdvanceRecoveries || 0))})</span>
+                            </div>
                             <table className="min-w-full text-[11px]">
                               <thead>
                                 <tr className="border-b border-red-200 bg-red-50/60">
@@ -2567,50 +2519,38 @@ const Statements = () => {
                                     <td className="px-2 py-0.5 text-right font-semibold text-red-600">({currency(item.amount)})</td>
                                   </tr>
                                 ))}
-                                <tr className="border-t border-red-200 bg-red-50">
-                                  <td colSpan={3} className="px-2 py-0.5 text-[10px] font-bold text-red-800">Total</td>
-                                  <td className="px-2 py-0.5 text-right text-[11px] font-bold text-red-800">({currency(Number(summary?.totalAdvanceRecoveries || 0))})</td>
-                                </tr>
                               </tbody>
                             </table>
                           </div>
                         </div>
                       )}
 
-                      {directToLandlordRows.length > 0 && (
+                      {/* Meaningless for a self-managed property — there's no manager to
+                          distinguish "direct" collections from; everything is direct. */}
+                      {!isSelfManaged && directToLandlordRows.length > 0 && (
                         <div>
-                          <h4 className="mb-2 border-l-2 border-[#0B3B2E] pl-2.5 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">
-                            Payments Collected Directly by Landlord
-                          </h4>
                           <div className="overflow-hidden border border-[#0B3B2E]/20 bg-white">
-                            <div className="grid grid-cols-[80px_60px_1fr_60px_80px_90px] gap-0 border-b border-slate-200 bg-slate-50 px-3 py-1.5">
-                              {["Date", "Unit", "Tenant", "Type", "Reference", "Amount"].map((h) => (
+                            <div className="flex items-center justify-between bg-[#EDF5F1] px-3 py-1.5">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">Payments Collected Directly by Landlord</span>
+                              <span className="text-[10px] font-black text-[#0B3B2E]">{currency(directToLandlordAmount)}</span>
+                            </div>
+                            <div className="grid grid-cols-[80px_60px_1fr_80px_80px_90px] gap-0 border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+                              {["Date", "Unit", "Tenant", "A/C No.", "Reference", "Amount"].map((h) => (
                                 <span key={h} className="text-[9px] font-black uppercase tracking-widest text-slate-500">{h}</span>
                               ))}
                             </div>
                             {directToLandlordRows.map((item, index) => (
-                              <div key={item._id || item.id || `direct-${index}`} className={`grid grid-cols-[80px_60px_1fr_60px_80px_90px] gap-0 border-b border-slate-100 px-3 py-2 last:border-0 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
+                              <div key={item._id || item.id || `direct-${index}`} className={`grid grid-cols-[80px_60px_1fr_80px_80px_90px] gap-0 border-b border-slate-100 px-3 py-1.5 last:border-0 items-center ${index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
                                 <span className="text-[10px] text-slate-600">
                                   {item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : "—"}
                                 </span>
                                 <span className="text-[10px] font-semibold text-slate-700">{item.unit || "—"}</span>
-                                <div>
-                                  <span className="block text-[10px] font-semibold text-slate-800">{item.tenantName || item.description || "—"}</span>
-                                  {item.tenantCode && item.tenantCode !== "-" && (
-                                    <span className="text-[9px] text-slate-400">{item.tenantCode}</span>
-                                  )}
-                                </div>
-                                <span className={`text-[9px] font-black uppercase tracking-wide ${item.paymentType === "utility" ? "text-blue-600" : "text-[#0B3B2E]"}`}>
-                                  {item.typeLabel || "Rent"}
-                                </span>
+                                <span className="text-[10px] font-semibold text-slate-800 truncate">{item.tenantName || item.description || "—"}</span>
+                                <span className="text-[10px] text-slate-400">{item.tenantCode && item.tenantCode !== "-" ? item.tenantCode : "—"}</span>
                                 <span className="text-[10px] text-slate-500 truncate">{item.receiptRef || "—"}</span>
                                 <span className="text-[10px] font-bold text-slate-900 text-right">{currency(item.amount)}</span>
                               </div>
                             ))}
-                            <div className="flex items-center justify-between border-t-2 border-[#0B3B2E]/20 bg-[#EDF5F1] px-3 py-2">
-                              <span className="text-[10px] font-black uppercase tracking-wide text-[#0B3B2E]">Total received directly by landlord</span>
-                              <span className="text-[10px] font-black text-[#0B3B2E]">{currency(directToLandlordAmount)}</span>
-                            </div>
                           </div>
                           <p className="mt-1.5 text-[9px] italic text-slate-400 leading-4">
                             These payments were made directly to you by tenants and are NOT included in the manager&apos;s remittance transfer below.
@@ -2694,7 +2634,7 @@ const Statements = () => {
                     {/* Net to Landlord */}
                     <div className={`px-3 py-2 ${settlement.isNegative ? "bg-red-50" : "bg-[#0B3B2E]"}`}>
                       <p className={`text-[9px] font-bold uppercase tracking-widest ${settlement.isNegative ? "text-red-500" : "text-green-200/60"}`}>
-                        Net to Landlord
+                        {isSelfManaged ? "Net Operating Income" : "Net to Landlord"}
                       </p>
                       <p className={`mt-1 text-base font-black ${settlement.isNegative ? "text-red-700" : "text-white"}`}>
                         {currency(settlement.amount)}
@@ -2704,22 +2644,41 @@ const Statements = () => {
                       </p>
                     </div>
                   </div>
-                  {directToLandlordAmount > 0 && (
+                  {(directToLandlordAmount > 0 || Number(depositSettlementTotals.additions || 0) > 0) && (
                     <div className="border-t border-[#0B3B2E]/20 bg-[#EDF5F1] px-3 py-1.5">
                       <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex items-center gap-4 text-xs">
-                          <span className="text-slate-600">
-                            Manager transfers: <strong className="text-slate-900">{currency(Math.max(0, settlement.amount))}</strong>
-                          </span>
-                          <span className="text-slate-400">+</span>
-                          <span className="text-slate-600">
-                            Already with you: <strong className="text-[#0B3B2E]">{currency(directToLandlordAmount)}</strong>
-                          </span>
+                        <div className="flex flex-wrap items-center gap-4 text-xs">
+                          {/* Self-managed: there's no manager, so no manager-vs-direct split to
+                              show — Net Operating Income above already covers the full period;
+                              this recap reduces to just the deposits-held figure. */}
+                          {!isSelfManaged && (
+                            <span className="text-slate-600">
+                              Manager transfers: <strong className="text-slate-900">{currency(Math.max(0, settlement.amount))}</strong>
+                            </span>
+                          )}
+                          {!isSelfManaged && directToLandlordAmount > 0 && (
+                            <>
+                              <span className="text-slate-400">+</span>
+                              <span className="text-slate-600">
+                                Receipts to Landlord: <strong className="text-[#0B3B2E]">{currency(directToLandlordAmount)}</strong>
+                              </span>
+                            </>
+                          )}
+                          {Number(depositSettlementTotals.additions || 0) > 0 && (
+                            <>
+                              {!isSelfManaged && <span className="text-slate-400">+</span>}
+                              <span className="text-slate-600">
+                                Deposits You Now Hold: <strong className="text-[#0B3B2E]">{currency(depositSettlementTotals.additions)}</strong>
+                              </span>
+                            </>
+                          )}
                         </div>
-                        <div className="text-right">
-                          <p className="text-[9px] font-black uppercase tracking-widest text-[#0B3B2E]">Total Income This Period</p>
-                          <p className="text-base font-black text-[#0B3B2E]">{currency(Math.max(0, settlement.amount) + directToLandlordAmount)}</p>
-                        </div>
+                        {!isSelfManaged && (
+                          <div className="text-right">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-[#0B3B2E]">Total Income This Period</p>
+                            <p className="text-base font-black text-[#0B3B2E]">{currency(Math.max(0, settlement.amount) + directToLandlordAmount)}</p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -2738,6 +2697,7 @@ const Statements = () => {
         periodStart={periodStart}
         periodEnd={periodEnd}
         onClose={handlePdfPreviewClose}
+        isSelfManaged={isSelfManaged}
       />
     </DashboardLayout>
   );

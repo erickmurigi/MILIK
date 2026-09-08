@@ -67,6 +67,7 @@ const MENU_PERMISSION_MAP = {
   "chart-of-accounts": { resource: "chartOfAccounts", action: "view", moduleKey: "accounts" },
   journals: { resource: "journals", action: "view", moduleKey: "accounts" },
   "landlord-statements": { resource: "statements", action: "view", moduleKey: "propertyManagement" },
+  "property-performance-statement": { resource: "statements", action: "view", moduleKey: "propertyManagement" },
   "statement-allocations": { resource: "statements", action: "view", moduleKey: "propertyManagement" },
   "processed-statements": { resource: "processedStatements", action: "view", moduleKey: "accounts" },
   "management-fee-invoices": { resource: "processedStatements", action: "view", moduleKey: "accounts" },
@@ -932,6 +933,7 @@ const TopToolbar = ({
       "processed-statements": "/landlord/processed-statements",
       "management-fee-invoices": "/landlord/management-fee-invoices",
       "landlord-statements": "/landlord/statements",
+      "property-performance-statement": "/financial/property-performance-statement",
       "statement-allocations": "/landlord/statement-allocations",
       "rental-collection": "/reports/rental-collection",
       "paid-balance": "/reports/paid-balance",
@@ -1625,6 +1627,10 @@ const TopToolbar = ({
                   return subItem;
                 }),
               { id: "property-expenses", label: `${termProperty} Expenses`, icon: FaMoneyBillWave },
+              // "landlord-payments" (which held the manager-mode Landlord Statement) is removed
+              // above — this is the self-managed replacement: same underlying statement engine,
+              // reframed as your own monthly record instead of a manager's remittance document.
+              { id: "property-performance-statement", label: "Property Performance Statement", icon: FaFileAlt },
             ],
           };
         }

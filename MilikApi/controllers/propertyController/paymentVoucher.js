@@ -490,7 +490,8 @@ const populateVoucherQuery = (query) =>
     .populate("debitAccount", "code name type accountType nature accountNature")
     .populate("settlementAccount", "code name type accountType nature accountNature group subGroup")
     .populate("expenseRecord", "property unit category amount description date receiptNumber receiptImage paidBy paymentMethod cashbook")
-    .populate("sourceRequisition", "requisitionNo referenceNo status title amount property linkedVoucher");
+    .populate("sourceRequisition", "requisitionNo referenceNo status title amount property linkedVoucher")
+    .populate("serviceProvider", "name subjectToWht whtRate");
 
 const createExpenseRecordForVoucher = async (voucher, { statementDate = null } = {}) => {
   const expenseCategory = getExpenseCategory(voucher.category);
@@ -1068,6 +1069,9 @@ export const createPaymentVoucher = async (req, res, next) => {
       whtNetAmount: Math.max(0, Math.round((amount - whtAmt) * 100) / 100),
       whtAccountId: req.body?.whtAccountId || null,
       serviceProvider: req.body?.serviceProvider && isValidObjectId(req.body.serviceProvider) ? req.body.serviceProvider : null,
+      // Only kept when there's no registered service provider — that name is the
+      // source of truth for the Payee display once one is linked.
+      payeeName: req.body?.serviceProvider && isValidObjectId(req.body.serviceProvider) ? "" : String(req.body?.payeeName || "").trim(),
       dueDate: req.body.dueDate,
       paidDate: req.body.paidDate || null,
       reference: req.body.reference,
@@ -1199,6 +1203,8 @@ export const updatePaymentVoucher = async (req, res, next) => {
       "reference",
       "narration",
       "sourceRequisition",
+      "serviceProvider",
+      "payeeName",
     ];
 
     const payload = Object.fromEntries(
@@ -1207,6 +1213,15 @@ export const updatePaymentVoucher = async (req, res, next) => {
 
     if (Object.prototype.hasOwnProperty.call(payload, "landlord") && !payload.landlord) {
       payload.landlord = null;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, "serviceProvider")) {
+      payload.serviceProvider = payload.serviceProvider && isValidObjectId(payload.serviceProvider) ? payload.serviceProvider : null;
+      // A linked service provider's own name is the source of truth for Payee display —
+      // clear any free-text payeeName so the two can't disagree.
+      payload.payeeName = payload.serviceProvider ? "" : String(payload.payeeName || "").trim();
+    } else if (Object.prototype.hasOwnProperty.call(payload, "payeeName")) {
+      payload.payeeName = String(payload.payeeName || "").trim();
     }
 
     const existing = await PaymentVoucher.findOne({ _id: req.params.id, business }).lean();

@@ -2608,12 +2608,23 @@ export const getTenantInvoicesList = async (req, res, next) => {
 
     let hydratedInvoices = adjustedInvoices;
 
-    if (includeSnapshots && adjustedInvoices.length > 0) {
-      const tenantIds = [...new Set(
-        adjustedInvoices
-          .map((invoice) => normalizeEntityId(invoice?.tenant))
-          .filter(Boolean)
-      )];
+    // Tenant ids for the snapshot batch: from the fetched invoices (existing behaviour) PLUS
+    // whatever tenant the request was actually scoped to. A tenant whose only charge so far
+    // is a standalone debit note (no regular TenantInvoice yet — e.g. a brand-new customer
+    // whose first-ever charge is a one-off connection/setup fee) has zero adjustedInvoices,
+    // so relying on adjustedInvoices alone skipped the snapshot computation entirely and that
+    // debit note was never offered as an open item on Add Receipt.
+    const queriedTenantIds = query.tenant
+      ? (typeof query.tenant === "object" && Array.isArray(query.tenant.$in)
+          ? query.tenant.$in.map((id) => normalizeEntityId(id)).filter(Boolean)
+          : [normalizeEntityId(query.tenant)].filter(Boolean))
+      : [];
+
+    if (includeSnapshots && (adjustedInvoices.length > 0 || queriedTenantIds.length > 0)) {
+      const tenantIds = [...new Set([
+        ...adjustedInvoices.map((invoice) => normalizeEntityId(invoice?.tenant)).filter(Boolean),
+        ...queriedTenantIds,
+      ])];
 
       const snapshotMap = await computeTenantInvoiceSnapshotsBatch({
         businessId,

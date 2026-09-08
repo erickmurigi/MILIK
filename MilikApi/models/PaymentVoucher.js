@@ -28,6 +28,10 @@ const PaymentVoucherSchema = new mongoose.Schema(
     whtNetAmount: { type: Number, min: 0, default: 0 },
     whtAccountId: { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
     serviceProvider: { type: mongoose.Schema.Types.ObjectId, ref: "ServiceProvider", default: null },
+    // Free-text payee fallback for a one-off vendor/individual not worth registering as
+    // a full Service Provider record. Ignored (left blank) when serviceProvider is set —
+    // the provider's own name is the source of truth in that case.
+    payeeName: { type: String, trim: true, default: "" },
     dueDate: { type: Date, required: true },
     paidDate: { type: Date },
     reference: { type: String },
