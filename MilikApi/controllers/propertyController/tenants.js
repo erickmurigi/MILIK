@@ -1079,7 +1079,10 @@ export const getTenants = async (req, res, next) => {
     const [tenants, total] = await Promise.all([
       populateTenantQuery(
         Tenant.find(filter)
-          .select("-unitTransferHistory")
+          // Keep only the most recent transfer entry — enough for the list/menu to know
+          // whether a "Rollback Transfer" action is available, without shipping the tenant's
+          // full transfer history on every row.
+          .select({ unitTransferHistory: { $slice: -1 } })
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(limit)
@@ -2142,6 +2145,118 @@ export const transferTenantUnit = async (req, res, next) => {
       success: true,
       data: updatedTenant,
       message: "Tenant unit transferred successfully",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Undo the tenant's most recent unit transfer, moving them back to the unit they occupied
+// before it. Only the single most recent, not-already-rolled-back transfer is eligible —
+// and only while the tenant's current unit still matches where that transfer moved them to,
+// so this never silently clobbers a later transfer or manual edit.
+export const rollbackTenantTransfer = async (req, res, next) => {
+  try {
+    const tenant = await Tenant.findById(req.params.id).lean();
+
+    const access = authorizeTenantAccess(req, tenant);
+    if (!access.allowed) {
+      return next(createError(access.status, access.message.replace("access", "roll back a transfer for")));
+    }
+
+    const history = Array.isArray(tenant.unitTransferHistory) ? tenant.unitTransferHistory : [];
+    const lastIndex = history.length - 1;
+    const lastEntry = lastIndex >= 0 ? history[lastIndex] : null;
+
+    if (!lastEntry || lastEntry.rolledBack) {
+      return next(createError(400, "There is no recent unit transfer to roll back for this tenant."));
+    }
+
+    const targetUnitId = toObjectIdString(lastEntry.fromUnit);
+    if (!targetUnitId) {
+      return next(createError(400, "This transfer has no previous unit on record to roll back to."));
+    }
+
+    const currentPrimaryUnitId = toObjectIdString(tenant.unit);
+    if (currentPrimaryUnitId !== toObjectIdString(lastEntry.toUnit)) {
+      // Something has moved this tenant again since — another transfer or a manual edit.
+      // Refuse rather than guess which state to restore.
+      return next(
+        createError(409, "This tenant's unit has changed since that transfer — rollback is no longer safe. Use Transfer Unit instead.")
+      );
+    }
+
+    const previousAdditionalUnitIds = uniqueUnitIds(lastEntry.previousAdditionalUnits || []);
+    const requestedUnits = buildRequestedTenantUnits({
+      primaryUnitId: targetUnitId,
+      additionalUnits: previousAdditionalUnitIds,
+    });
+
+    const requestedUnitDocs = await ensureUnitsBelongToBusiness({
+      businessId: tenant.business,
+      unitIds: requestedUnits.all,
+    });
+
+    await ensureUnitsAvailableForTenant({
+      businessId: tenant.business,
+      unitDocs: requestedUnitDocs,
+      currentTenantId: tenant._id,
+      currentlyAssignedUnitIds: getTenantAssignedUnitIds(tenant),
+    });
+
+    const rolledBackByUserId =
+      req.user?.id && mongoose.Types.ObjectId.isValid(String(req.user.id)) ? req.user.id : null;
+
+    const updatedTenant = await populateTenantQuery(
+      Tenant.findByIdAndUpdate(
+        tenant._id,
+        {
+          $set: {
+            unit: requestedUnits.primary,
+            additionalUnits: requestedUnits.additional,
+            rent: calculateTenantAssignedRent(requestedUnitDocs, tenant.rent || 0),
+            utilities: deriveAssignedUtilitiesFromUnitDocs(requestedUnitDocs),
+            [`unitTransferHistory.${lastIndex}.rolledBack`]: true,
+            [`unitTransferHistory.${lastIndex}.rolledBackAt`]: new Date(),
+            [`unitTransferHistory.${lastIndex}.rolledBackBy`]: rolledBackByUserId,
+          },
+        },
+        { new: true, runValidators: true }
+      ).lean()
+    );
+
+    await syncTenantLeaseRecord({ tenantDoc: updatedTenant, action: "upsert" }).catch((err) =>
+      console.error("Lease sync after transfer rollback failed:", err?.message)
+    );
+
+    await syncTenantAssignedUnitOccupancy({
+      previousUnitIds: getTenantAssignedUnitIds(tenant),
+      nextUnitIds: getTenantAssignedUnitIds(updatedTenant),
+      tenantId: tenant._id,
+      effectiveDate: new Date(),
+    });
+
+    await logAuditEvent({
+      req,
+      company: tenant.business,
+      action: "tenants.rollback_transfer",
+      category: "property",
+      severity: "critical",
+      targetType: "Tenant",
+      targetId: tenant._id,
+      targetName: tenantLabel(updatedTenant),
+      message: `Rolled back unit transfer for ${tenantLabel(updatedTenant)} to their previous unit`,
+      metadata: {
+        rolledBackFromUnit: toObjectIdString(lastEntry.toUnit),
+        rolledBackToUnit: targetUnitId,
+        previousAdditionalUnits: previousAdditionalUnitIds,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: updatedTenant,
+      message: "Unit transfer rolled back successfully",
     });
   } catch (err) {
     next(err);

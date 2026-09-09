@@ -118,6 +118,13 @@ const TenantSchema = new mongoose.Schema(
             ],
             default: [],
           },
+          rolledBack: { type: Boolean, default: false },
+          rolledBackAt: { type: Date, default: null },
+          rolledBackBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            default: null,
+          },
         },
       ],
       default: [],
@@ -305,6 +312,9 @@ TenantSchema.pre("validate", function (next) {
       nextAdditionalUnits: Array.isArray(entry?.nextAdditionalUnits)
         ? Array.from(new Set(entry.nextAdditionalUnits.map((item) => String(item)).filter(Boolean)))
         : [],
+      rolledBack: !!entry?.rolledBack,
+      rolledBackAt: entry?.rolledBackAt || null,
+      rolledBackBy: entry?.rolledBackBy || null,
     }));
   } else {
     this.unitTransferHistory = [];

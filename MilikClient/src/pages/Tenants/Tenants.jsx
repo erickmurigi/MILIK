@@ -32,6 +32,7 @@ import {
   FaPrint,
   FaSms,
   FaExchangeAlt,
+  FaUndoAlt,
   FaUserSlash,
   FaTimes,
   FaHandshake,
@@ -727,6 +728,9 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
   const [showRestoreModal, setShowRestoreModal] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [restoreForm, setRestoreForm] = useState({ tenantId: "", notes: "" });
+  const [showRollbackTransferModal, setShowRollbackTransferModal] = useState(false);
+  const [isRollingBackTransfer, setIsRollingBackTransfer] = useState(false);
+  const [rollbackTransferTenantId, setRollbackTransferTenantId] = useState("");
   const [invoiceRefreshTick, setInvoiceRefreshTick] = useState(0);
   // Loaded per-tenant when deposit settlement modal opens
   const [tenantInvoices, setTenantInvoices] = useState([]);
@@ -1022,6 +1026,13 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
       const canTerminate = tenantOperationalStatus === "active";
       const canTransfer = tenantOperationalStatus === "active";
       const canRestore = tenantOperationalStatus === "terminated";
+      const lastTransfer = Array.isArray(tenant.unitTransferHistory) && tenant.unitTransferHistory.length > 0
+        ? tenant.unitTransferHistory[tenant.unitTransferHistory.length - 1]
+        : null;
+      // Only offer rollback while the tenant's current unit still matches where that
+      // transfer moved them to — mirrors the backend's own safety check.
+      const canRollbackTransfer = !!lastTransfer && !lastTransfer.rolledBack &&
+        normalizeId(lastTransfer.toUnit) === normalizeId(tenant.unit);
       const canDelete = !hasBalance && leaseCount === 0 && invoiceCount === 0 && invoiceNoteCount === 0 && paymentCount === 0;
       const deleteBlockedReason = hasBalance
         ? "This tenant still has an outstanding balance."
@@ -1071,6 +1082,7 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
         canTerminate,
         canTransfer,
         canRestore,
+        canRollbackTransfer,
         deleteBlockedReason,
       };
     });
@@ -1150,6 +1162,7 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
   const menuHasOneSel = selectedTenants.length === 1;
   const menuHasMulti = selectedTenants.length > 1;
   const menuCanTransfer = menuHasOneSel && !!selectedPrimaryTenant?.canTransfer && !isTerminatedView;
+  const menuCanRollbackTransfer = menuHasOneSel && !!selectedPrimaryTenant?.canRollbackTransfer && !isTerminatedView;
   const menuCanTerminate = menuHasOneSel && !!selectedPrimaryTenant?.canTerminate && !isTerminatedView;
   const menuCanRestore = menuHasOneSel && !!selectedPrimaryTenant?.canRestore;
   const menuHasDeletable = selectedDeletableTenants.length > 0;
@@ -1838,6 +1851,42 @@ const confirmTransferUnit = useCallback(async () => {
     }
   };
 
+  const handleOpenRollbackTransfer = () => {
+    if (!canUpdateTenant) { toast.warning("You do not have permission to update tenants"); return; }
+    if (selectedTenants.length !== 1) { toast.warning("Select exactly one tenant to roll back"); return; }
+    if (!selectedPrimaryTenant?.canRollbackTransfer) { toast.warning("This tenant has no recent unit transfer to roll back"); return; }
+    setRollbackTransferTenantId(selectedTenants[0]);
+    setShowRollbackTransferModal(true);
+    setActionMenuOpen(false);
+  };
+
+  const confirmRollbackTransfer = async () => {
+    if (!canUpdateTenant) { toast.warning("You do not have permission to update tenants"); return; }
+    if (!rollbackTransferTenantId) { toast.error(`No ${termTenant.toLowerCase()} selected`); return; }
+    setIsRollingBackTransfer(true);
+    try {
+      const response = await adminRequests.post(`/tenants/${rollbackTransferTenantId}/rollback-transfer`, {
+        business: currentCompany?._id,
+      });
+      toast.success(response?.data?.message || "Unit transfer rolled back successfully");
+      setShowRollbackTransferModal(false);
+      setRollbackTransferTenantId("");
+      await Promise.allSettled([
+        dispatch(getTenants(buildTenantParams())),
+        dispatch(getUnits({ business: currentCompany._id })),
+      ]);
+    } catch (error) {
+      toast.error(
+        error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          error?.message ||
+          "Failed to roll back unit transfer"
+      );
+    } finally {
+      setIsRollingBackTransfer(false);
+    }
+  };
+
   const handleMoveOutInspection = useCallback((tenantId) => {
     const rawTenant = (Array.isArray(tenantsData) ? tenantsData : []).find(
       (t) => normalizeId(t._id) === normalizeId(tenantId)
@@ -2187,6 +2236,11 @@ const confirmTransferUnit = useCallback(async () => {
                           <FaExchangeAlt size={12} /> Transfer Unit
                           {!menuHasOneSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
                           {menuHasOneSel && !selectedPrimaryTenant?.canTransfer && <span className="ml-auto text-[10px] text-slate-400">not eligible</span>}
+                        </button>
+                        <button onClick={handleOpenRollbackTransfer} disabled={!menuCanRollbackTransfer}
+                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuCanRollbackTransfer ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
+                          <FaUndoAlt size={12} /> Rollback Last Transfer
+                          {menuHasOneSel && !selectedPrimaryTenant?.canRollbackTransfer && <span className="ml-auto text-[10px] text-slate-400">not eligible</span>}
                         </button>
                         <button onClick={handleReviewRent} disabled={!menuHasOneSel}
                           className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuHasOneSel ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
@@ -2858,6 +2912,61 @@ const confirmTransferUnit = useCallback(async () => {
                 disabled={!canUpdateTenant || isRestoring}
                 className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0d5442] disabled:opacity-50">
                 {isRestoring ? "Restoring…" : `Restore ${termTenant}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRollbackTransferModal && (
+        <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <div className="flex items-center gap-2.5">
+                <FaUndoAlt size={14} />
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">Rollback</p>
+                  <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">Rollback Last Transfer</h3>
+                </div>
+              </div>
+              <button onClick={() => { if (!isRollingBackTransfer) setShowRollbackTransferModal(false); }}
+                className="text-white/70 transition-colors hover:text-white">
+                <FaTimes size={13} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-4">
+              <div className="border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                <p className="font-semibold">This moves the {termTenant.toLowerCase()} back to the unit they occupied before their most recent transfer.</p>
+                <p className="mt-0.5 text-amber-700">It only proceeds if their current unit hasn't changed since that transfer, and the previous unit is still available.</p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{termTenant}</p>
+                  <p className="mt-1 text-xs font-bold text-slate-900">{selectedPrimaryTenant?.tenantName || "-"}</p>
+                  <p className="text-[11px] text-slate-500">{selectedPrimaryTenant?.tenantCode || "-"}</p>
+                </div>
+                <div className="border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Current {termUnit}</p>
+                  <p className="mt-1 text-xs font-bold text-slate-900">{selectedPrimaryTenant?.unitNumber || "-"}</p>
+                  <p className="text-[11px] text-slate-500">{selectedPrimaryTenant?.propertyName || "-"}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <button
+                onClick={() => { if (!isRollingBackTransfer) setShowRollbackTransferModal(false); }}
+                disabled={isRollingBackTransfer}
+                className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-100 disabled:opacity-50">
+                Cancel
+              </button>
+              <button
+                onClick={confirmRollbackTransfer}
+                disabled={!canUpdateTenant || isRollingBackTransfer}
+                className="flex items-center gap-2 bg-amber-600 px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-amber-700 disabled:opacity-50">
+                {isRollingBackTransfer ? "Rolling back…" : "Rollback Transfer"}
               </button>
             </div>
           </div>

@@ -614,7 +614,13 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
         .join(" ")
         .toLowerCase();
       return haystack.includes(query);
-    });
+    }).sort((a, b) =>
+      String(resolveUnitName(a, tenantMap) || "").localeCompare(
+        String(resolveUnitName(b, tenantMap) || ""),
+        undefined,
+        { numeric: true, sensitivity: "base" }
+      ) || new Date(a?.noteDate || a?.createdAt || 0) - new Date(b?.noteDate || b?.createdAt || 0)
+    );
   }, [notes, effectiveFilters, isLocked, lockedBillItemKey, propertyMap, tenantMap]);
 
   const totalPages = Math.max(1, Math.ceil(filteredNotes.length / pageSize));

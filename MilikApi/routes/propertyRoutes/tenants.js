@@ -16,6 +16,7 @@ import {
   migrateTenantCodes,
   bulkImportTenants,
   transferTenantUnit,
+  rollbackTenantTransfer,
   backfillMissingLeases,
 } from "../../controllers/propertyController/tenants.js"
 import { verifyUser } from "../../controllers/verifyToken.js"
@@ -45,6 +46,9 @@ router.put("/:id", verifyUser, updateTenant)
 
 // Transfer tenant primary unit
 router.post("/:id/transfer-unit", verifyUser, transferTenantUnit)
+
+// Undo the tenant's most recent unit transfer
+router.post("/:id/rollback-transfer", verifyUser, rollbackTenantTransfer)
 
 // Delete tenant
 router.delete("/:id", verifyUser, deleteTenant)

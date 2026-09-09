@@ -1125,35 +1125,23 @@ const Statements = () => {
     [rows, statementColumns]
   );
 
-  const tenantUnitMeta = useMemo(() => {
-    const meta = new Map();
-
-    preparedRows.forEach((row) => {
-      const tenantKey = String(row?.tenantId || "");
-      if (!tenantKey) return;
-      const current = meta.get(tenantKey) || {
-        count: 0,
-        unitLabels: [],
-      };
-      current.count += 1;
-      if (row?.unit && !current.unitLabels.includes(String(row.unit))) {
-        current.unitLabels.push(String(row.unit));
-      }
-      meta.set(tenantKey, current);
-    });
-
-    return meta;
-  }, [preparedRows]);
-
+  // Genuine concurrent multi-unit occupancy only, as computed by the backend from
+  // tenant.additionalUnits (see ensureRow in landlordStatementService.js). A tenant with
+  // several rows this period purely from transaction history (a mid-period transfer, or a
+  // stray invoice at an old unit) is NOT "multi-unit" — the Multi toggle must not merge or
+  // badge those rows. Only rows where the backend reports multiUnitCount > 1 qualify.
   const statementDisplayRows = useMemo(() => {
     if (!collapseAdditionalUnitRows) {
       return preparedRows.map((row) => {
-        const tenantMeta = tenantUnitMeta.get(String(row?.tenantId || "")) || null;
+        const backendCount = Number(row?.multiUnitCount || 1);
+        const backendLabels = Array.isArray(row?.multiUnitLabels) && row.multiUnitLabels.length > 0
+          ? row.multiUnitLabels
+          : [row.unit].filter(Boolean);
         return {
           ...row,
-          multiUnitCount: Number(tenantMeta?.count || 1),
+          multiUnitCount: backendCount,
           displayUnitLabel: row.unit,
-          allUnitLabels: tenantMeta?.unitLabels || [row.unit].filter(Boolean),
+          allUnitLabels: backendLabels,
         };
       });
     }
@@ -1162,8 +1150,12 @@ const Statements = () => {
 
     preparedRows.forEach((row) => {
       const tenantKey = String(row?.tenantId || "");
-      if (!tenantKey) {
-        const uniqueKey = `vacant:${row?.unitId || row?.unit || Math.random()}`;
+      const isGenuineMultiUnit = tenantKey && Number(row?.multiUnitCount || 1) > 1;
+      if (!isGenuineMultiUnit) {
+        // Not genuine multi-unit occupancy (vacant, or a tenant whose multiple rows this
+        // period are just transaction-history artifacts) — keep as its own separate,
+        // unmerged, unbadged row.
+        const uniqueKey = `single:${row?.unitId || row?.unit || Math.random()}:${tenantKey || "vacant"}`;
         grouped.set(uniqueKey, {
           ...row,
           multiUnitCount: 1,
@@ -1177,15 +1169,16 @@ const Statements = () => {
       if (!existing) {
         grouped.set(tenantKey, {
           ...row,
-          multiUnitCount: 1,
-          allUnitLabels: [row.unit].filter(Boolean),
+          multiUnitCount: Number(row?.multiUnitCount || 1),
+          allUnitLabels: Array.isArray(row?.multiUnitLabels) && row.multiUnitLabels.length > 0
+            ? [...row.multiUnitLabels]
+            : [row.unit].filter(Boolean),
           displayUnitLabel: row.unit,
           __utilityMap: { ...(row.__utilityMap || {}) },
         });
         return;
       }
 
-      existing.multiUnitCount += 1;
       if (row?.unit && !existing.allUnitLabels.includes(String(row.unit))) {
         existing.allUnitLabels.push(String(row.unit));
       }
@@ -1238,7 +1231,7 @@ const Statements = () => {
           { numeric: true }
         )
       );
-  }, [collapseAdditionalUnitRows, preparedRows, statementColumns, tenantUnitMeta]);
+  }, [collapseAdditionalUnitRows, preparedRows, statementColumns]);
   const [rowFilter, setRowFilter] = useTabState(`${location.pathname}:rowFilter`, "all");
 
   const collectionStats = useMemo(() => {
@@ -2251,9 +2244,19 @@ const Statements = () => {
                                   <div className={`truncate text-[10.5px] font-semibold ${isVacant ? "text-slate-400 italic" : "text-slate-800"}`}>
                                     {row.tenantName || "—"}
                                   </div>
+                                  {/* Account code, always shown when known — two rows can share a name
+                                      while being genuinely different tenant records; the code is the
+                                      only reliable way to tell whether a "X units" badge really means
+                                      one tenant spanning multiple units, or two separate people. */}
+                                  {!isVacant && row.accountNo && row.accountNo !== "-" && (
+                                    <span className="shrink-0 text-[9px] text-slate-400">{row.accountNo}</span>
+                                  )}
                                 </div>
                                 {Number(row.multiUnitCount || 1) > 1 && (
-                                  <div className="mt-0.5 inline-flex rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-700">
+                                  <div
+                                    className="mt-0.5 inline-flex rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-700"
+                                    title={Array.isArray(row.allUnitLabels) && row.allUnitLabels.length > 0 ? `Units: ${row.allUnitLabels.join(", ")}` : undefined}
+                                  >
                                     {row.multiUnitCount} units
                                   </div>
                                 )}

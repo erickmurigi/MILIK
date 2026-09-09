@@ -226,7 +226,7 @@ describe("generateLandlordStatement", () => {
     expect(row.tenantName).toBe("VACANT");
   }, 60000);
 
-  it("a tenant terminated mid-period still shows their pre-termination transactions from that period", async () => {
+  it("a tenant terminated mid-period (even with real transactions from before the termination) is fully excluded — no date carve-out", async () => {
     const leaseBundle = await createTestLease({ rentAmount: 12000 });
     const { tenant, property, landlord, company } = leaseBundle;
     await createTestChartOfAccounts(company._id);
@@ -251,7 +251,9 @@ describe("generateLandlordStatement", () => {
       allocate: true,
     });
 
-    // Terminated AFTER the invoice/receipt above — a real mid-period departure.
+    // Terminated AFTER the invoice/receipt above — a real mid-period departure. Per the
+    // simplified rule, terminated status alone excludes them regardless of when relative
+    // to the period the termination happened.
     const terminationDate = new Date(paymentDate.getTime() + 60 * 1000);
     await Tenant.findByIdAndUpdate(tenant._id, {
       status: "terminated",
@@ -270,9 +272,7 @@ describe("generateLandlordStatement", () => {
       (r) => String(r.unitId) === String(tenant.unit)
     );
     expect(row).toBeTruthy();
-    expect(row.tenantName).not.toBe("VACANT");
-    expect(row.invoicedRent).toBe(12000);
-    expect(row.paidRent).toBe(12000);
+    expect(row.tenantName).toBe("VACANT");
   }, 60000);
 
   it("a tenant terminated BEFORE this statement period does not show by name even if a stray invoice landed inside the period", async () => {
@@ -298,6 +298,44 @@ describe("generateLandlordStatement", () => {
       leaseBundle,
       category: "RENT_CHARGE",
       amount: 9000,
+      invoiceDate: periodStart,
+      dueDate: new Date(periodStart.getTime() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    const statement = await generateLandlordStatement({
+      propertyId: String(property._id),
+      landlordId: String(landlord._id),
+      statementPeriodStart: periodStart,
+      statementPeriodEnd: new Date(),
+    });
+
+    const row = statement.metadata.rows.find(
+      (r) => String(r.unitId) === String(tenant.unit)
+    );
+    expect(row).toBeTruthy();
+    expect(row.tenantName).toBe("VACANT");
+  }, 60000);
+
+  it("a tenant marked terminated with no terminationDate/moveOutDate on record does not show by name (fails safe, not open)", async () => {
+    const leaseBundle = await createTestLease({ rentAmount: 11000 });
+    const { tenant, property, landlord, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // status set to terminated, but no date recorded at all — e.g. a code path that
+    // updated status without going through the normal termination flow.
+    await Tenant.findByIdAndUpdate(tenant._id, {
+      status: "terminated",
+      terminationDate: null,
+      moveOutDate: null,
+    });
+
+    await createTestInvoice({
+      leaseBundle,
+      category: "RENT_CHARGE",
+      amount: 11000,
       invoiceDate: periodStart,
       dueDate: new Date(periodStart.getTime() + 7 * 24 * 60 * 60 * 1000),
     });

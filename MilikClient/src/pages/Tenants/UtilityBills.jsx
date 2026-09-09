@@ -200,7 +200,10 @@ const UtilityBills = () => {
         dueDateLabel: formatDateDisplay(invoice?.dueDate),
         createdDate: formatDateDisplay(invoice?.createdAt || invoiceDate),
       };
-    }).sort((a, b) => new Date(b.invoiceDate || 0) - new Date(a.invoiceDate || 0));
+    }).sort((a, b) =>
+      String(a.unitName || "").localeCompare(String(b.unitName || ""), undefined, { numeric: true, sensitivity: "base" })
+      || new Date(a.invoiceDate || 0) - new Date(b.invoiceDate || 0)
+    );
   }, [invoices, tenantLookup, unitLookup, propertyLookup]);
 
   const utilityTypeOptions = useMemo(

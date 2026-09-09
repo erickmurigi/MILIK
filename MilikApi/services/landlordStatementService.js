@@ -1541,7 +1541,7 @@ export const generateLandlordStatement = async ({
       status: { $nin: ["inactive", "moved_out", "evicted"] },
     })
       .select(
-        "_id name tenantCode rent status unit utilities paymentMethod balance moveInDate createdAt depositHeldBy terminationDate moveOutDate"
+        "_id name tenantCode rent status unit additionalUnits utilities paymentMethod balance moveInDate createdAt depositHeldBy terminationDate moveOutDate"
       )
       .lean(),
 
@@ -1680,21 +1680,13 @@ export const generateLandlordStatement = async ({
       ? tenantMap.get(resolvedTenantId) || {}
       : {};
 
-    // A tenant terminated BEFORE this statement period started must not show on it at
-    // all — even if a stray invoice/receipt/note somehow lands inside the period (e.g. a
-    // recurring invoice generated a few days in advance, before the termination was
-    // processed). This is the "terminated out of period" half of the rule: terminated
-    // WITHIN the period with real activity → still shows (handled naturally above, since
-    // that tenant remains resolvable); terminated before it → never shows, regardless of
-    // any leftover invoice. Clearing resolvedTenantId folds this into the same "vacant"
+    // A terminated tenant is fully excluded from the landlord statement, unconditionally —
+    // no date comparison. Clearing resolvedTenantId folds this into the same "vacant"
     // bucket as the unit's current-occupancy placeholder, so the amount still counts
     // toward the property's totals without being attributed to their name.
-    if (String(tenant?.status || "").toLowerCase() === "terminated") {
-      const effectiveTerminationDate = tenant.terminationDate || tenant.moveOutDate || null;
-      if (effectiveTerminationDate && new Date(effectiveTerminationDate).getTime() < periodStart.getTime()) {
-        tenant = {};
-        resolvedTenantId = "";
-      }
+    if (["terminated", "moved_out"].includes(String(tenant?.status || "").toLowerCase())) {
+      tenant = {};
+      resolvedTenantId = "";
     }
 
     const key = `${resolvedUnitId}:${String(tenant._id || resolvedTenantId || "vacant")}`;
@@ -1712,6 +1704,23 @@ export const generateLandlordStatement = async ({
 
     if (!rowsMap.has(key)) {
       const tenantSnapshot = snapshotMap.get(key);
+      // Genuine concurrent multi-unit occupancy only — tenant.unit + tenant.additionalUnits
+      // is the one place this is actually configured. This is what the "X units" badge and
+      // the Multi toggle's merge in the client are driven by: a tenant with multiple rows
+      // this period purely from transaction history (a mid-period transfer, or a stray
+      // invoice at an old unit) is NOT "multi-unit" — each such row stays its own separate,
+      // unmerged, unbadged line. Only an actual additionalUnits assignment counts.
+      const concurrentUnitIds = tenant._id
+        ? [
+            ...new Set(
+              [getEntityId(tenant.unit), ...(Array.isArray(tenant.additionalUnits) ? tenant.additionalUnits.map((id) => getEntityId(id)) : [])]
+                .filter((id) => id && unitMap.has(id))
+            ),
+          ]
+        : [];
+      const concurrentUnitLabels = concurrentUnitIds
+        .map((id) => unitMap.get(id)?.unitNumber || unitMap.get(id)?.name)
+        .filter(Boolean);
       rowsMap.set(key, {
         key,
         tenantId: String(tenant._id || resolvedTenantId || ""),
@@ -1719,6 +1728,8 @@ export const generateLandlordStatement = async ({
         unit: unit.unitNumber || unit.name || fallback.unitLabel || "-",
         accountNo: tenant.tenantCode || fallback.accountNo || "-",
         tenantName: tenant.name || fallback.tenantName || "VACANT",
+        multiUnitCount: concurrentUnitIds.length,
+        multiUnitLabels: concurrentUnitLabels,
         perMonth: Number(tenant.rent || unit.rent || fallback.perMonth || 0),
         balanceBF: tenantSnapshot ? round2(tenantSnapshot.balanceCF) : 0,
         invoicedRent: 0,
