@@ -17,6 +17,7 @@ import {
   FaEnvelope,
   FaEye,
   FaMoneyBillWave,
+  FaPrint,
   FaRedoAlt,
   FaSearch,
   FaSms,
@@ -277,6 +278,152 @@ const UtilityBills = () => {
   const applySearch = useCallback(() => setAppliedFilters({ ...draftFilters }), [draftFilters]);
   const resetFilters = useCallback(() => { setDraftFilters(emptyFilters); setAppliedFilters(emptyFilters); }, []);
 
+  // Reuses the print pattern from PaidBalanceReport.jsx: build a self-contained HTML
+  // document (own header/company block/table styling) in a new window and trigger the
+  // browser's print dialog — prints exactly what's currently filtered on screen, grouped
+  // by property, with a grand-total row.
+  const handlePrint = useCallback(() => {
+    const GRN = "#0B3B2E";
+    const allRows = filteredRows;
+    const companyName = currentCompany?.name || currentCompany?.companyName || currentCompany?.businessName || "Milik";
+    const co = {
+      name: companyName,
+      logo: currentCompany?.logo || "",
+      phone: currentCompany?.phone || currentCompany?.phoneNo || currentCompany?.phoneNumber || "",
+      email: currentCompany?.email || currentCompany?.companyEmail || "",
+      address: [currentCompany?.address || currentCompany?.postalAddress || "", currentCompany?.town || currentCompany?.city || ""].filter(Boolean).join(", "),
+    };
+    const infoLine = [co.address, co.phone, co.email].filter(Boolean).join(" · ");
+    const dateRange = [appliedFilters.fromDate && formatDateDisplay(appliedFilters.fromDate), appliedFilters.toDate && formatDateDisplay(appliedFilters.toDate)].filter(Boolean).join(" – ");
+
+    const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const mon = (v) => esc(formatCurrency(v));
+    const dash = (v) => Number(v || 0) === 0 ? "—" : mon(v);
+    const statusColor = (s) => s === "Unpaid" ? "#dc2626" : s === "Partially Paid" ? "#d97706" : s === "Paid" ? "#059669" : "#64748b";
+
+    const groups = (() => {
+      const map = new Map();
+      for (const row of allRows) {
+        const key = String(row.propertyId || row.propertyName || "Unknown");
+        if (!map.has(key)) map.set(key, { name: row.propertyName || "Unknown Property", rows: [] });
+        map.get(key).rows.push(row);
+      }
+      return [...map.values()];
+    })();
+
+    let rowsHtml = "";
+    let grandAmount = 0, grandPaid = 0, grandBalance = 0;
+
+    groups.forEach((group) => {
+      const gr = group.rows;
+      const gAmount = gr.reduce((s, r) => s + r.amount, 0);
+      const gPaid = gr.reduce((s, r) => s + r.appliedAmount, 0);
+      const gBalance = gr.reduce((s, r) => s + r.outstanding, 0);
+      grandAmount += gAmount; grandPaid += gPaid; grandBalance += gBalance;
+
+      rowsHtml += `<tr class="prop-hdr">
+        <td colspan="5"><span class="prop-name">${esc(group.name)}</span> <span class="prop-meta">${gr.length} bill${gr.length !== 1 ? "s" : ""}</span></td>
+        <td style="text-align:right">${mon(gAmount)}</td>
+        <td style="text-align:right;color:#059669;font-weight:700">${dash(gPaid)}</td>
+        <td style="text-align:right;${gBalance > 0 ? "color:#dc2626;font-weight:700" : "color:#94a3b8"}">${dash(gBalance)}</td>
+        <td></td>
+      </tr>`;
+
+      gr.forEach((row, i) => {
+        rowsHtml += `<tr class="${i % 2 === 1 ? "alt" : ""}">
+          <td>${esc(row.id)}</td>
+          <td>${esc(row.tenantName)}</td>
+          <td>${esc(row.unitName)}</td>
+          <td>${esc(row.utilityTypeLabel)}</td>
+          <td>${esc(row.invoiceDateLabel)}</td>
+          <td style="text-align:right">${mon(row.amount)}</td>
+          <td style="text-align:right;${row.appliedAmount > 0.005 ? "color:#059669;font-weight:600" : "color:#cbd5e1"}">${dash(row.appliedAmount)}</td>
+          <td style="text-align:right;${row.outstanding > 0.005 ? "color:#dc2626;font-weight:700" : "color:#cbd5e1"}">${dash(row.outstanding)}</td>
+          <td style="color:${statusColor(row.status)};font-weight:700">${esc(row.status)}</td>
+        </tr>`;
+      });
+    });
+
+    rowsHtml += `<tr class="grand-total">
+      <td>GRAND TOTAL</td>
+      <td colspan="4" style="color:rgba(255,255,255,.6)">${allRows.length} bill${allRows.length !== 1 ? "s" : ""}</td>
+      <td style="text-align:right">${mon(grandAmount)}</td>
+      <td style="text-align:right">${mon(grandPaid)}</td>
+      <td style="text-align:right">${mon(grandBalance)}</td>
+      <td></td>
+    </tr>`;
+
+    const css = `
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; background: #fff; padding: 22px 26px; font-size: 11px; }
+      .hdr { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding-bottom: 14px; gap: 16px; }
+      .hdr-center { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+      .logo-fallback { width: 52px; height: 52px; background: ${GRN}; color: #fff; font-size: 20px; font-weight: 900; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
+      .logo-img { max-height: 52px; max-width: 140px; object-fit: contain; border-radius: 6px; }
+      .co-name { font-size: 16px; font-weight: 900; color: #0f172a; margin-top: 5px; }
+      .co-sub { font-size: 9px; color: #64748b; }
+      .rpt-title { font-size: 13px; font-weight: 800; color: #1e293b; margin-top: 5px; }
+      .rpt-sub { font-size: 10px; color: #475569; margin-top: 2px; }
+      .hdr-right { text-align: right; align-self: flex-start; }
+      .print-date { font-size: 9px; color: #64748b; line-height: 1.7; }
+      .divider { height: 2px; background: ${GRN}; margin: 12px 0; }
+      .summary-bar { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 10px; color: #334155; background: #f8fafc; border-left: 3px solid ${GRN}; padding: 7px 10px; margin-bottom: 12px; border-radius: 0 4px 4px 0; }
+      table { width: 100%; border-collapse: collapse; font-size: 10px; }
+      thead tr { background: ${GRN}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      thead th { color: #fff; padding: 7px 8px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; border-right: 1px solid rgba(255,255,255,.15); white-space: nowrap; }
+      tbody td { padding: 6px 8px; border: 1px solid #e2e8f0; vertical-align: middle; white-space: nowrap; }
+      tbody tr.alt td { background: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      tr.prop-hdr td { background: #f0faf5; border-top: 2px solid ${GRN}; border-bottom: 1px solid #b7c9c0; padding: 6px 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .prop-name { font-weight: 900; color: ${GRN}; text-transform: uppercase; letter-spacing: .06em; font-size: 9px; }
+      .prop-meta { font-size: 8.5px; color: #64748b; margin-left: 8px; }
+      tr.grand-total td { background: ${GRN}; color: #fff; font-weight: 700; font-size: 10px; padding: 7px 8px; border: 1px solid rgba(255,255,255,.15); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      @media print { body { padding: 10px 12px; } @page { size: A4 landscape; margin: 8mm; } }
+    `;
+
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/><title>Utility Bills</title><style>${css}</style></head>
+<body>
+<div class="hdr">
+  <div></div>
+  <div class="hdr-center">
+    ${co.logo ? `<img src="${esc(co.logo)}" class="logo-img" alt="logo"/>` : `<div class="logo-fallback">${esc(co.name.slice(0,1).toUpperCase())}</div>`}
+    <div class="co-name">${esc(co.name)}</div>
+    ${infoLine ? `<div class="co-sub">${esc(infoLine)}</div>` : ""}
+    <div class="rpt-title">Utility Bills</div>
+    <div class="rpt-sub">${dateRange ? esc(dateRange) : "All dates"}</div>
+  </div>
+  <div class="hdr-right"><div class="print-date">Printed: ${new Date().toLocaleDateString("en-KE", { day:"2-digit", month:"long", year:"numeric", hour:"2-digit", minute:"2-digit" })}<br/>${groups.length} ${groups.length === 1 ? "property" : "properties"} &middot; ${allRows.length} bills</div></div>
+</div>
+<div class="divider"></div>
+<div class="summary-bar">
+  <span>Bills: <b>${totals.count}</b></span>
+  <span>Total Amount: <b>${mon(totals.amount)}</b></span>
+  <span>Paid: <b style="color:#059669">${mon(totals.paid)}</b></span>
+  <span>Outstanding: <b style="color:#dc2626">${mon(totals.outstanding)}</b></span>
+</div>
+<table>
+  <thead><tr>
+    <th style="text-align:left">Invoice #</th>
+    <th style="text-align:left">${termTenant}</th>
+    <th style="text-align:left">${termUnit}</th>
+    <th style="text-align:left">Utility Type</th>
+    <th style="text-align:left">Invoice Date</th>
+    <th style="text-align:right">Amount</th>
+    <th style="text-align:right">Paid</th>
+    <th style="text-align:right">Balance</th>
+    <th style="text-align:left">Status</th>
+  </tr></thead>
+  <tbody>${rowsHtml}</tbody>
+</table>
+</body></html>`;
+
+    const win = window.open("", "_blank", "width=1200,height=800");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    setTimeout(() => { win.focus(); win.print(); }, 450);
+  }, [filteredRows, totals, currentCompany, appliedFilters, termTenant, termUnit]);
+
   return (
     <DashboardLayout lockContentScroll>
       <div className="h-[calc(100dvh-152px)] max-h-[calc(100dvh-152px)] overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
@@ -311,6 +458,7 @@ const UtilityBills = () => {
                 <button onClick={applySearch} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSearch size={7} /> Search</button>
                 <button onClick={resetFilters} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={7} /> Reset</button>
                 <button onClick={loadData} disabled={loading} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-gray-300 bg-white px-1.5 text-[9px] text-gray-700 hover:bg-gray-50 disabled:opacity-60"><FaRedoAlt size={7} /> Refresh</button>
+                <button onClick={handlePrint} disabled={filteredRows.length === 0} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-gray-300 bg-white px-1.5 text-[9px] text-gray-700 hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint size={7} /> Print</button>
                 <button onClick={() => setCommunicationModal({ contextType: "invoice", recordIds: selectedRows, title: `SMS ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, allowedChannels: ["sms"], defaultChannel: "sms" })} disabled={selectedCount === 0} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white ${selectedCount > 0 ? "bg-teal-600 hover:bg-teal-700" : "cursor-not-allowed bg-gray-400"}`}><FaSms size={7} /> SMS</button>
                 <button onClick={() => setCommunicationModal({ contextType: "invoice", recordIds: selectedRows, title: `Email ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, allowedChannels: ["email"], defaultChannel: "email" })} disabled={selectedCount === 0} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white ${selectedCount > 0 ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-gray-400"}`}><FaEnvelope size={7} /> Email</button>
               </div>
