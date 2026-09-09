@@ -1112,6 +1112,7 @@ const getVoucherExpenseCategory = (voucherCategory = "") => {
   const normalized = safeName(voucherCategory);
   if (normalized === "landlord_maintenance") return "maintenance";
   if (normalized === "landlord_other") return "other";
+  if (normalized === "manager_property") return "operating_expense";
   return "";
 };
 
@@ -1435,7 +1436,11 @@ export const generateLandlordStatement = async ({
     PaymentVoucher.find({
       property: propertyObjectId,
       business: businessObjectId,
-      category: { $in: ["landlord_maintenance", "landlord_other"] },
+      // "manager_property" ("Operating Expense (Property)" in the voucher form) is just as
+      // much a landlord-borne cost as landlord_maintenance/landlord_other — it's a
+      // property-scoped, PMS-only category the manager pays on the landlord's behalf.
+      // Missing it here meant those vouchers never appeared as a statement deduction.
+      category: { $in: ["landlord_maintenance", "landlord_other", "manager_property"] },
       status: { $in: ["approved", "paid"] },
       sourceProcessedStatement: null, // exclude landlord remittance vouchers — they settle prior statements
       $and: [
@@ -1536,7 +1541,7 @@ export const generateLandlordStatement = async ({
       status: { $nin: ["inactive", "moved_out", "evicted"] },
     })
       .select(
-        "_id name tenantCode rent status unit utilities paymentMethod balance moveInDate createdAt depositHeldBy"
+        "_id name tenantCode rent status unit utilities paymentMethod balance moveInDate createdAt depositHeldBy terminationDate moveOutDate"
       )
       .lean(),
 
@@ -1607,11 +1612,20 @@ export const generateLandlordStatement = async ({
 
   const tenantsByUnit = new Map();
 
-  tenants.forEach((tenant) => {
-    const key = String(tenant.unit);
-    if (!tenantsByUnit.has(key)) tenantsByUnit.set(key, []);
-    tenantsByUnit.get(key).push(tenant);
-  });
+  // Only actively-occupying tenants seed a unit's "current occupant" row below — a
+  // terminated tenant's tenant.unit is never cleared on termination, so without this
+  // filter they'd keep getting a row generated for a unit they no longer occupy on every
+  // later statement (even one showing someone else living there now). This doesn't affect
+  // a terminated tenant's OWN legitimate transactions within the period — those are
+  // resolved separately via tenantMap (still built from the unfiltered `tenants` array)
+  // as each invoice/receipt/note is processed below.
+  tenants
+    .filter((tenant) => String(tenant.status || "").toLowerCase() !== "terminated")
+    .forEach((tenant) => {
+      const key = String(tenant.unit);
+      if (!tenantsByUnit.has(key)) tenantsByUnit.set(key, []);
+      tenantsByUnit.get(key).push(tenant);
+    });
 
 
   const notesBefore = [];
@@ -1661,11 +1675,40 @@ export const generateLandlordStatement = async ({
   const ensureRow = (tenantId, unitId, fallback = {}) => {
     const resolvedUnitId = getEntityId(unitId || fallback.unitId || fallback.unit);
     const unit = unitMap.get(resolvedUnitId) || {};
-    const resolvedTenantId = getEntityId(tenantId || fallback.tenantId || fallback.tenant);
-    const tenant = resolvedTenantId
+    let resolvedTenantId = getEntityId(tenantId || fallback.tenantId || fallback.tenant);
+    let tenant = resolvedTenantId
       ? tenantMap.get(resolvedTenantId) || {}
       : {};
+
+    // A tenant terminated BEFORE this statement period started must not show on it at
+    // all — even if a stray invoice/receipt/note somehow lands inside the period (e.g. a
+    // recurring invoice generated a few days in advance, before the termination was
+    // processed). This is the "terminated out of period" half of the rule: terminated
+    // WITHIN the period with real activity → still shows (handled naturally above, since
+    // that tenant remains resolvable); terminated before it → never shows, regardless of
+    // any leftover invoice. Clearing resolvedTenantId folds this into the same "vacant"
+    // bucket as the unit's current-occupancy placeholder, so the amount still counts
+    // toward the property's totals without being attributed to their name.
+    if (String(tenant?.status || "").toLowerCase() === "terminated") {
+      const effectiveTerminationDate = tenant.terminationDate || tenant.moveOutDate || null;
+      if (effectiveTerminationDate && new Date(effectiveTerminationDate).getTime() < periodStart.getTime()) {
+        tenant = {};
+        resolvedTenantId = "";
+      }
+    }
+
     const key = `${resolvedUnitId}:${String(tenant._id || resolvedTenantId || "vacant")}`;
+
+    // A real tenant/transaction row supersedes a "vacant" placeholder already seeded for
+    // the same unit — that placeholder only exists because no tenant currently occupies
+    // this unit (e.g. the tenant who was here this period has since been terminated, so
+    // the current-occupancy seeding step above deliberately excluded them). Once we know
+    // there was real activity here, the unit clearly wasn't vacant for that part of the
+    // period, so drop the stale placeholder rather than showing both.
+    if (!key.endsWith(":vacant")) {
+      const vacantKey = `${resolvedUnitId}:vacant`;
+      if (rowsMap.has(vacantKey)) rowsMap.delete(vacantKey);
+    }
 
     if (!rowsMap.has(key)) {
       const tenantSnapshot = snapshotMap.get(key);

@@ -1187,6 +1187,27 @@ export const updateTenant = async (req, res, next) => {
     delete normalizedPayload.createdAt;
     delete normalizedPayload.updatedAt;
 
+    // A terminated tenant is a historical record — plain data corrections (name, phone,
+    // email, etc.) stay allowed here, but unit/status changes must go through the
+    // dedicated Restore/Transfer flows instead, which correctly clear termination fields,
+    // check the target unit's availability, and sync occupancy. Letting this generic edit
+    // form touch unit/status directly is what let a terminated tenant's `unit` field drift
+    // out of sync with reality — which the landlord statement (and other reports keyed off
+    // tenant.unit) then trusted at face value.
+    if (String(tenant.status || "").toLowerCase() === "terminated") {
+      const blockedFields = ["unit", "additionalUnits", "status"].filter((field) =>
+        Object.prototype.hasOwnProperty.call(normalizedPayload, field)
+      );
+      if (blockedFields.length > 0) {
+        return next(
+          createError(
+            400,
+            `Cannot change ${blockedFields.join("/")} on a terminated tenant from this form. Use "Restore" to reactivate them, or the Transfer flow to reassign their unit.`
+          )
+        );
+      }
+    }
+
     if (normalizedPayload.name !== undefined) {
       normalizedPayload.name = normalizeString(normalizedPayload.name);
     }
@@ -1728,7 +1749,17 @@ export const updateTenantStatus = async (req, res, next) => {
       },
     });
 
-    const tenantObj = updatedTenant.toObject({ virtuals: true });
+    if (!updatedTenant) {
+      return next(createError(404, "Tenant not found"));
+    }
+
+    // updatedTenant is a plain object (the findByIdAndUpdate query above is .lean()'d for
+    // performance) — it has no .toObject() method, so calling it here threw a TypeError on
+    // every single status change (terminate included), which surfaced to the user as a
+    // generic 500 "Internal Server Error" even though the update itself had already
+    // succeeded. The Tenant schema defines no virtuals, so there's nothing .toObject({
+    // virtuals: true }) was actually adding — a plain shallow copy is equivalent.
+    const tenantObj = { ...updatedTenant };
     tenantObj.status = computeOperationalTenantStatus({ tenant: updatedTenant });
     return res.status(200).json({ success: true, data: tenantObj, message: status === "terminated" ? "Tenant terminated successfully" : "Tenant status updated successfully" });
   } catch (err) {
@@ -1980,6 +2011,36 @@ export const transferTenantUnit = async (req, res, next) => {
     const reduceDepositToNewUnit = Boolean(req.body?.reduceDepositToNewUnit);
     const previousPrimaryUnitId = toObjectIdString(tenant.unit);
     const previousAdditionalUnitIds = uniqueUnitIds(tenant.additionalUnits || []);
+
+    // A transfer must not leave an unpaid invoice sitting against a unit the tenant no
+    // longer occupies — that invoice keeps showing up on the landlord statement for a
+    // unit that's now someone else's, misleadingly merged into the moved tenant's row.
+    // Require the manager to cancel/resolve it first, so the statement stays clean.
+    if (previousPrimaryUnitId && previousPrimaryUnitId !== nextPrimaryUnitId && !keepPreviousUnitAssigned) {
+      const effectiveDayStart = new Date(effectiveDate);
+      effectiveDayStart.setHours(0, 0, 0, 0);
+
+      const openInvoicesAtPreviousUnit = await TenantInvoice.find({
+        tenant: tenant._id,
+        unit: previousPrimaryUnitId,
+        business: tenant.business,
+        status: { $in: ["pending", "partially_paid"] },
+        invoiceDate: { $gte: effectiveDayStart },
+      })
+        .select("_id invoiceNumber amount invoiceDate category")
+        .limit(20)
+        .lean();
+
+      if (openInvoicesAtPreviousUnit.length > 0) {
+        const err = new Error(
+          `This tenant has ${openInvoicesAtPreviousUnit.length} unpaid invoice(s) at their current unit dated on or after the transfer date (e.g. ${openInvoicesAtPreviousUnit[0].invoiceNumber || openInvoicesAtPreviousUnit[0]._id}). Cancel or resolve them before transferring, so the landlord statement doesn't keep showing charges for a unit they no longer occupy.`
+        );
+        err.statusCode = 409;
+        err.code = "OPEN_INVOICES_AT_PREVIOUS_UNIT";
+        err.openInvoiceIds = openInvoicesAtPreviousUnit.map((inv) => String(inv._id));
+        return next(err);
+      }
+    }
 
     const nextAdditionalUnits = keepPreviousUnitAssigned && previousPrimaryUnitId && previousPrimaryUnitId !== nextPrimaryUnitId
       ? uniqueUnitIds([...previousAdditionalUnitIds, previousPrimaryUnitId]).filter((item) => item !== nextPrimaryUnitId)

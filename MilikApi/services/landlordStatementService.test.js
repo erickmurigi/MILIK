@@ -4,6 +4,8 @@ import { describe, it, expect } from "vitest";
 import { generateLandlordStatement } from "./landlordStatementService.js";
 import { createTestLease, createTestChartOfAccounts } from "../test/factories.js";
 import { createTestInvoice, createTestReceipt } from "../test/factories.landlord.js";
+import PaymentVoucher from "../models/PaymentVoucher.js";
+import Tenant from "../models/Tenant.js";
 
 describe("generateLandlordStatement", () => {
   it("reflects rent invoiced and rent collected for the statement period", async () => {
@@ -144,5 +146,173 @@ describe("generateLandlordStatement", () => {
     // It should also appear as its own line item for the statement's direct-receipts section.
     expect(statement.metadata.directToLandlordRows).toHaveLength(1);
     expect(statement.metadata.directToLandlordRows[0].amount).toBe(15000);
+  }, 60000);
+
+  // Regression test: a Payment Voucher categorized "manager_property" ("Operating Expense
+  // (Property)" in the voucher form) — a property-scoped expense the manager pays on the
+  // landlord's behalf, same as landlord_maintenance/landlord_other — never appeared as a
+  // statement deduction. Root cause: both the PaymentVoucher query's category filter and
+  // getVoucherExpenseCategory() only recognized landlord_maintenance/landlord_other.
+  it("includes an approved manager_property (Operating Expense - Property) payment voucher as an expense row", async () => {
+    const leaseBundle = await createTestLease({ rentAmount: 15000 });
+    const { property, landlord, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const paidDate = new Date(periodStart.getTime() + 60 * 1000);
+
+    await PaymentVoucher.create({
+      voucherNo: `PV-TEST-${Date.now()}`,
+      category: "manager_property",
+      status: "paid",
+      business: company._id,
+      property: property._id,
+      landlord: landlord._id,
+      amount: 8500,
+      dueDate: paidDate,
+      paidDate,
+      narration: "Gate repair — operating expense",
+    });
+
+    const statement = await generateLandlordStatement({
+      propertyId: String(property._id),
+      landlordId: String(landlord._id),
+      statementPeriodStart: periodStart,
+      statementPeriodEnd: new Date(),
+    });
+
+    const voucherRow = statement.metadata.expenseRows.find(
+      (row) => row.category === "operating_expense"
+    );
+    expect(voucherRow).toBeTruthy();
+    expect(voucherRow.amount).toBe(8500);
+  }, 60000);
+
+  // Regression test: terminating a tenant never clears their tenant.unit field, and the
+  // tenants query behind the schedule's "who currently occupies this unit" row seeding
+  // only excluded status inactive/moved_out/evicted — not "terminated", the actual value
+  // updateTenantStatus stores. So a terminated tenant kept getting a row generated for a
+  // unit they no longer occupy on every later statement, even one where someone else now
+  // lives there. Fixed by excluding terminated tenants from that specific "current
+  // occupant" seeding step (their own legitimate transactions within the period, from
+  // before termination, are unaffected — see the second test below).
+  it("a terminated tenant with no transactions this period no longer occupies their old unit's row", async () => {
+    const leaseBundle = await createTestLease({ rentAmount: 15000 });
+    const { tenant, property, landlord, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Terminated with no invoices/receipts at all in the statement period below.
+    await Tenant.findByIdAndUpdate(tenant._id, {
+      status: "terminated",
+      terminationDate: periodStart,
+      moveOutDate: periodStart,
+    });
+
+    const statement = await generateLandlordStatement({
+      propertyId: String(property._id),
+      landlordId: String(landlord._id),
+      statementPeriodStart: periodStart,
+      statementPeriodEnd: new Date(),
+    });
+
+    const row = statement.metadata.rows.find(
+      (r) => String(r.unitId) === String(tenant.unit)
+    );
+    expect(row).toBeTruthy();
+    expect(row.tenantName).toBe("VACANT");
+  }, 60000);
+
+  it("a tenant terminated mid-period still shows their pre-termination transactions from that period", async () => {
+    const leaseBundle = await createTestLease({ rentAmount: 12000 });
+    const { tenant, property, landlord, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const invoiceDate = periodStart;
+    const paymentDate = new Date(periodStart.getTime() + 60 * 1000);
+
+    const invoiceBundle = await createTestInvoice({
+      leaseBundle,
+      category: "RENT_CHARGE",
+      amount: 12000,
+      invoiceDate,
+      dueDate: new Date(periodStart.getTime() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    await createTestReceipt({
+      invoiceBundle,
+      amount: 12000,
+      paymentDate,
+      allocate: true,
+    });
+
+    // Terminated AFTER the invoice/receipt above — a real mid-period departure.
+    const terminationDate = new Date(paymentDate.getTime() + 60 * 1000);
+    await Tenant.findByIdAndUpdate(tenant._id, {
+      status: "terminated",
+      terminationDate,
+      moveOutDate: terminationDate,
+    });
+
+    const statement = await generateLandlordStatement({
+      propertyId: String(property._id),
+      landlordId: String(landlord._id),
+      statementPeriodStart: periodStart,
+      statementPeriodEnd: new Date(),
+    });
+
+    const row = statement.metadata.rows.find(
+      (r) => String(r.unitId) === String(tenant.unit)
+    );
+    expect(row).toBeTruthy();
+    expect(row.tenantName).not.toBe("VACANT");
+    expect(row.invoicedRent).toBe(12000);
+    expect(row.paidRent).toBe(12000);
+  }, 60000);
+
+  it("a tenant terminated BEFORE this statement period does not show by name even if a stray invoice landed inside the period", async () => {
+    const leaseBundle = await createTestLease({ rentAmount: 9000 });
+    const { tenant, property, landlord, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Terminated BEFORE the period start.
+    const terminationDate = new Date(periodStart.getTime() - 24 * 60 * 60 * 1000);
+    await Tenant.findByIdAndUpdate(tenant._id, {
+      status: "terminated",
+      terminationDate,
+      moveOutDate: terminationDate,
+    });
+
+    // A stray invoice erroneously dated INSIDE the period (e.g. auto-generated a few days
+    // ahead, before the termination was processed) — per the stated rule, this must not
+    // make the terminated tenant show up.
+    await createTestInvoice({
+      leaseBundle,
+      category: "RENT_CHARGE",
+      amount: 9000,
+      invoiceDate: periodStart,
+      dueDate: new Date(periodStart.getTime() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    const statement = await generateLandlordStatement({
+      propertyId: String(property._id),
+      landlordId: String(landlord._id),
+      statementPeriodStart: periodStart,
+      statementPeriodEnd: new Date(),
+    });
+
+    const row = statement.metadata.rows.find(
+      (r) => String(r.unitId) === String(tenant.unit)
+    );
+    expect(row).toBeTruthy();
+    expect(row.tenantName).toBe("VACANT");
   }, 60000);
 });
