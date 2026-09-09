@@ -19,7 +19,6 @@ import {
   FaMoneyBillWave,
   FaPrint,
   FaRedoAlt,
-  FaSearch,
   FaSms,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -101,8 +100,13 @@ const UtilityBills = () => {
 
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [draftFilters, setDraftFilters] = useState(emptyFilters);
-  const [appliedFilters, setAppliedFilters] = useState(emptyFilters);
+  // A single live filter state — every field (text, dropdown, date, status) takes effect
+  // immediately on change. Previously this was split into draftFilters/appliedFilters with
+  // a "Search" button required to commit the draft, but every field except the status
+  // quick-buttons wrote only to the draft — so picking a property, unit, utility type, or
+  // date range appeared to do nothing until Search was clicked, which read as "the filter
+  // doesn't work." One live state removes that trap entirely.
+  const [filters, setFilters] = useState(emptyFilters);
   const [selectedRows, setSelectedRows] = useState([]);
   const selectedRowsSet = useMemo(() => new Set(selectedRows), [selectedRows]);
   const [selectAll, setSelectAll] = useState(false);
@@ -115,7 +119,7 @@ const UtilityBills = () => {
 
   // useCallback: prevents a new function identity on every render so filter inputs don't re-render
   const setFilter = useCallback(
-    (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value })),
+    (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value })),
     []
   );
 
@@ -223,15 +227,15 @@ const UtilityBills = () => {
   );
 
   const unitFilterOptions = useMemo(() => {
-    const scoped = appliedFilters.propertyId !== "any"
-      ? (units || []).filter((u) => safeId(u?.property) === String(appliedFilters.propertyId))
+    const scoped = filters.propertyId !== "any"
+      ? (units || []).filter((u) => safeId(u?.property) === String(filters.propertyId))
       : units || [];
     return scoped.map((u) => ({ value: safeId(u), label: u?.unitNumber || u?.name || "-" }));
-  }, [units, appliedFilters.propertyId]);
+  }, [units, filters.propertyId]);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
-      const { status, invoiceNo, tenantName, propertyId, unitId, utilityType, fromDate, toDate } = appliedFilters;
+      const { status, invoiceNo, tenantName, propertyId, unitId, utilityType, fromDate, toDate } = filters;
       if (status === "ACTIVE" && ["cancelled", "reversed"].includes(row.rawStatus)) return false;
       if (status === "Unpaid" && !["Unpaid", "Partially Paid"].includes(row.status)) return false;
       if (status === "Partially Paid" && row.status !== "Partially Paid") return false;
@@ -246,7 +250,7 @@ const UtilityBills = () => {
       if (toDate && t > new Date(`${toDate}T23:59:59`).getTime()) return false;
       return true;
     });
-  }, [appliedFilters, rows]);
+  }, [filters, rows]);
 
   const totals = useMemo(
     () => filteredRows.reduce(
@@ -266,7 +270,7 @@ const UtilityBills = () => {
   );
   const selectedCount = selectedRows.length;
 
-  useEffect(() => { setCurrentPage(1); setSelectedRows([]); setSelectAll(false); }, [appliedFilters]);
+  useEffect(() => { setCurrentPage(1); setSelectedRows([]); setSelectAll(false); }, [filters]);
   useEffect(() => { if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage); }, [currentPage, safeCurrentPage]);
   useEffect(() => {
     const keys = currentPageRows.map((r) => r.key);
@@ -284,8 +288,7 @@ const UtilityBills = () => {
     else setSelectedRows((prev) => [...new Set([...prev, ...keys])]);
   }, [currentPageRows, selectAll]);
 
-  const applySearch = useCallback(() => setAppliedFilters({ ...draftFilters }), [draftFilters]);
-  const resetFilters = useCallback(() => { setDraftFilters(emptyFilters); setAppliedFilters(emptyFilters); }, []);
+  const resetFilters = useCallback(() => setFilters(emptyFilters), []);
 
   // Reuses the exact print pattern from MeterReadings.jsx's "Register" print (buildRegisterPrintHtml
   // / handlePrintList): flat table (no grouping), a <tfoot> total row instead of a
@@ -449,22 +452,18 @@ const UtilityBills = () => {
                 {STATUS_FILTERS.map(({ val, label }) => (
                   <button
                     key={val}
-                    onClick={() => {
-                      setDraftFilters((prev) => ({ ...prev, status: val }));
-                      setAppliedFilters((prev) => ({ ...prev, status: val }));
-                    }}
-                    className={`h-[20px] shrink-0 px-1.5 text-[9px] font-semibold ${draftFilters.status === val ? `${MILIK_GREEN} text-white` : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"}`}
+                    onClick={() => setFilters((prev) => ({ ...prev, status: val }))}
+                    className={`h-[20px] shrink-0 px-1.5 text-[9px] font-semibold ${filters.status === val ? `${MILIK_GREEN} text-white` : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"}`}
                   >{label}</button>
                 ))}
                 <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-                <input type="text" value={draftFilters.invoiceNo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: e.target.value.toUpperCase() }))} placeholder="Invoice #" className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <input type="text" value={draftFilters.tenantName} onChange={setFilter("tenantName")} placeholder={termTenant} className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <AppSelect compact clearable searchable placeholder={termProperty} value={draftFilters.propertyId} onChange={(v) => setDraftFilters((prev) => ({ ...prev, propertyId: v ?? "any", unitId: "any" }))} options={activePropertyOptions} />
-                <AppSelect compact clearable placeholder={termUnit} value={draftFilters.unitId} onChange={(v) => setDraftFilters((prev) => ({ ...prev, unitId: v ?? "any" }))} options={unitFilterOptions} />
-                <AppSelect compact clearable placeholder="Utility Type" value={draftFilters.utilityType} onChange={(v) => setDraftFilters((prev) => ({ ...prev, utilityType: v ?? "any" }))} options={utilityTypeOptions} />
-                <input type="date" value={draftFilters.fromDate} onChange={setFilter("fromDate")} className="h-[20px] w-[5.5rem] shrink-0 border border-slate-200 bg-white px-1 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <input type="date" value={draftFilters.toDate} onChange={setFilter("toDate")} className="h-[20px] w-[5.5rem] shrink-0 border border-slate-200 bg-white px-1 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <button onClick={applySearch} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSearch size={7} /> Search</button>
+                <input type="text" value={filters.invoiceNo} onChange={(e) => setFilters((prev) => ({ ...prev, invoiceNo: e.target.value.toUpperCase() }))} placeholder="Invoice #" className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <input type="text" value={filters.tenantName} onChange={setFilter("tenantName")} placeholder={termTenant} className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <AppSelect compact clearable searchable placeholder={termProperty} value={filters.propertyId} onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "any", unitId: "any" }))} options={activePropertyOptions} />
+                <AppSelect compact clearable placeholder={termUnit} value={filters.unitId} onChange={(v) => setFilters((prev) => ({ ...prev, unitId: v ?? "any" }))} options={unitFilterOptions} />
+                <AppSelect compact clearable placeholder="Utility Type" value={filters.utilityType} onChange={(v) => setFilters((prev) => ({ ...prev, utilityType: v ?? "any" }))} options={utilityTypeOptions} />
+                <input type="date" value={filters.fromDate} onChange={setFilter("fromDate")} className="h-[20px] w-[5.5rem] shrink-0 border border-slate-200 bg-white px-1 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <input type="date" value={filters.toDate} onChange={setFilter("toDate")} className="h-[20px] w-[5.5rem] shrink-0 border border-slate-200 bg-white px-1 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 <button onClick={resetFilters} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={7} /> Reset</button>
                 <button onClick={loadData} disabled={loading} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-gray-300 bg-white px-1.5 text-[9px] text-gray-700 hover:bg-gray-50 disabled:opacity-60"><FaRedoAlt size={7} /> Refresh</button>
                 <button onClick={handlePrint} disabled={filteredRows.length === 0} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-gray-300 bg-white px-1.5 text-[9px] text-gray-700 hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint size={7} /> Print</button>
