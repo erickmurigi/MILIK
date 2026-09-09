@@ -353,4 +353,84 @@ describe("generateLandlordStatement", () => {
     expect(row).toBeTruthy();
     expect(row.tenantName).toBe("VACANT");
   }, 60000);
+
+  it("a tenant prepayment is excluded from Paid/collections when received, and recognised exactly once when later applied to a real charge", async () => {
+    const leaseBundle = await createTestLease({ rentAmount: 15000 });
+    const { property, landlord, unit } = leaseBundle;
+    await createTestChartOfAccounts(leaseBundle.company._id);
+
+    const now = new Date();
+    const periodNStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const periodNEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+    const periodN1Start = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Tenant pays 15,000 last period with no invoice yet to apply it to — a pure
+    // prepayment, mirrored as an unapplied receipt (allocate: false).
+    const prepaymentDate = new Date(periodNStart.getTime() + 60 * 1000);
+    const { receipt } = await createTestReceipt({
+      invoiceBundle: leaseBundle,
+      amount: 15000,
+      paymentDate: prepaymentDate,
+      allocate: false,
+    });
+
+    const statementN = await generateLandlordStatement({
+      propertyId: String(property._id),
+      landlordId: String(landlord._id),
+      statementPeriodStart: periodNStart,
+      statementPeriodEnd: periodNEnd,
+    });
+
+    // Received but not yet applied to any charge — must not show as collected this period.
+    expect(statementN.metadata.totals.paidRent).toBe(0);
+    expect(statementN.metadata.summary.totalRentReceived).toBe(0);
+    expect(statementN.metadata.summary.managerCollections).toBe(0);
+    const rowN = statementN.metadata.rows.find((r) => String(r.unitId) === String(unit._id));
+    expect(rowN.unappliedCredits).toBe(15000);
+
+    // This period, a real rent invoice is raised and the prepayment gets applied to it —
+    // mirroring what production allocation does to the same receipt document.
+    const { invoice } = await createTestInvoice({
+      leaseBundle,
+      category: "RENT_CHARGE",
+      amount: 15000,
+      invoiceDate: periodN1Start,
+      dueDate: new Date(periodN1Start.getTime() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    receipt.allocations.push({
+      invoice: invoice._id,
+      invoiceNumber: invoice.invoiceNumber,
+      category: invoice.category,
+      priorityGroup: "",
+      appliedAmount: 15000,
+      beforeOutstanding: 15000,
+      afterOutstanding: 0,
+      invoiceDate: invoice.invoiceDate,
+      dueDate: invoice.dueDate,
+      description: invoice.description || "",
+    });
+    receipt.allocationSummary.unapplied = 0;
+    receipt.allocationSummary.rent = 15000;
+    await receipt.save();
+    invoice.outstanding = 0;
+    invoice.status = "paid";
+    await invoice.save();
+
+    const statementN1 = await generateLandlordStatement({
+      propertyId: String(property._id),
+      landlordId: String(landlord._id),
+      statementPeriodStart: periodN1Start,
+      statementPeriodEnd: new Date(),
+    });
+
+    expect(statementN1.metadata.totals.invoicedRent).toBe(15000);
+    // Recognised exactly once, now — in the period it's actually applied to a real charge.
+    expect(statementN1.metadata.totals.paidRent).toBe(15000);
+    expect(statementN1.metadata.summary.totalRentReceived).toBe(15000);
+    expect(statementN1.metadata.summary.managerCollections).toBeGreaterThan(0);
+    expect(statementN1.metadata.broughtForwardCreditApplications.totals.rentApplied).toBe(15000);
+    const rowN1 = statementN1.metadata.rows.find((r) => String(r.unitId) === String(unit._id));
+    expect(rowN1.closingBalance).toBe(0);
+  }, 60000);
 });

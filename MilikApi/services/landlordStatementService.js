@@ -1982,6 +1982,18 @@ export const generateLandlordStatement = async ({
     taxApplied: 0,
   };
 
+  // Declared here (rather than after the current-period invoice loop below) so the
+  // brought-forward credit-application loop can also feed them: a prior-period prepayment
+  // that gets applied to a charge dated in THIS period is real cash recognised for the
+  // first time this period, and must be counted in this period's collections exactly once —
+  // see the "sourceInCurrentPeriod" branch inside the receiptsBefore loop.
+  let totalRentReceivedManager = 0;
+  let totalRentReceivedLandlord = 0;
+  let totalUtilityReceivedManager = 0;
+  let totalUtilityReceivedLandlord = 0;
+  let totalInvoiceTaxReceivedManager = 0;
+  let totalInvoiceTaxReceivedLandlord = 0;
+
   for (const invoice of invoicesBefore) {
     if (!shouldIncludeInvoiceInLandlordStatement(invoice)) continue;
 
@@ -2037,16 +2049,26 @@ export const generateLandlordStatement = async ({
           row,
         });
 
-        broughtForwardReduction = round2(
-          broughtForwardReduction + Number(impact.statementRelevantAmount || 0)
-        );
-
         const sourceInvoiceDate = sourceInvoice ? getInvoiceStatementDate(sourceInvoice) : null;
         const sourceInvoiceTime = sourceInvoiceDate ? new Date(sourceInvoiceDate).getTime() : Number.NaN;
         const sourceInCurrentPeriod =
           Number.isFinite(sourceInvoiceTime) &&
           sourceInvoiceTime >= periodStart.getTime() &&
           sourceInvoiceTime <= periodEnd.getTime();
+
+        // Only reduce the balance carried INTO this period when the applied-against
+        // charge is itself from before this period — i.e. this old receipt paid off a
+        // debt the tenant already owed as of periodStart. When the charge is dated THIS
+        // period instead, the credit isn't paying off a pre-existing debt at all — it's
+        // being matched, for the first time, against a charge that itself only exists
+        // this period. That case is handled below as a fresh in-period recognition
+        // instead, so it must NOT also reduce Balance B/F (that would double-subtract the
+        // same dollar: once via the opening credit, again via "Paid" this period).
+        if (!sourceInCurrentPeriod) {
+          broughtForwardReduction = round2(
+            broughtForwardReduction + Number(impact.statementRelevantAmount || 0)
+          );
+        }
 
         if (sourceInCurrentPeriod && Math.abs(Number(impact.statementRelevantAmount || 0)) > 0) {
           const grossAppliedAmount = round2(Math.abs(Number(allocationRow?.appliedAmount || 0)));
@@ -2088,6 +2110,53 @@ export const generateLandlordStatement = async ({
           broughtForwardCreditApplicationTotals.taxApplied = round2(
             broughtForwardCreditApplicationTotals.taxApplied + taxApplied
           );
+
+          // Recognise this as an actual collection for THIS period — this is the period
+          // the prepayment is first attributed to a real charge, so it belongs in Paid /
+          // collections / net remittance now. It was deliberately excluded from those
+          // totals in the period it was originally received (still just an unapplied
+          // credit then), and a receipt never re-enters receiptsInPeriod once its own
+          // paymentDate has passed, so this is the only place it's ever counted — exactly
+          // once, never twice.
+          const rentRecognized = round2(Number(impact.rentAmount || 0));
+          const utilityRecognized = round2(Number(impact.utilityAmount || 0));
+          const taxRecognized = round2(Number(impact.taxAmount || 0));
+
+          if (rentRecognized !== 0) {
+            row.paidRent += rentRecognized;
+            if (receipt.paidDirectToLandlord) totalRentReceivedLandlord += rentRecognized;
+            else totalRentReceivedManager += rentRecognized;
+          }
+
+          if (utilityRecognized !== 0) {
+            const impactUtilities = Array.isArray(impact.utilities) ? impact.utilities : [];
+            if (impactUtilities.length > 0) {
+              impactUtilities.forEach((item) => {
+                applyUtility(
+                  row,
+                  "receipt",
+                  Number(item.amount || 0),
+                  item.label || appliedDocumentReference || "",
+                  {
+                    utilityType: item.label,
+                    meterUtilityType: item.label,
+                    statementUtilityType: item.label,
+                  }
+                );
+              });
+            } else {
+              applyUtility(row, "receipt", utilityRecognized, appliedDocumentReference || "");
+            }
+
+            if (receipt.paidDirectToLandlord) totalUtilityReceivedLandlord += utilityRecognized;
+            else totalUtilityReceivedManager += utilityRecognized;
+          }
+
+          if (taxRecognized !== 0) {
+            row.paidTax += taxRecognized;
+            if (receipt.paidDirectToLandlord) totalInvoiceTaxReceivedLandlord += taxRecognized;
+            else totalInvoiceTaxReceivedManager += taxRecognized;
+          }
         }
       });
       row.balanceBF = round2(row.balanceBF - broughtForwardReduction);
@@ -2203,12 +2272,6 @@ export const generateLandlordStatement = async ({
     });
   }
 
-  let totalRentReceivedManager = 0;
-  let totalRentReceivedLandlord = 0;
-  let totalUtilityReceivedManager = 0;
-  let totalUtilityReceivedLandlord = 0;
-  let totalInvoiceTaxReceivedManager = 0;
-  let totalInvoiceTaxReceivedLandlord = 0;
   let directToLandlordOffset = 0;
   const additionRows = [];
   const extraDeductionRows = [];
@@ -2400,11 +2463,18 @@ export const generateLandlordStatement = async ({
       row.unappliedCredits += unappliedAllocated;
     }
 
+    // Legacy fallback for receipts with no allocation breakdown at all (no allocations
+    // array, no allocationSummary) — treat the whole amount as rent/utility collected,
+    // since there's no way to know otherwise. Gated on unappliedAllocated === 0 so a
+    // receipt that DOES carry a summary explicitly marking itself as an unapplied
+    // prepayment (allocationSummary.unapplied > 0, everything else 0) is correctly left
+    // out of Paid/collections instead of being double-booked here.
     if (
       allocationRows.length === 0 &&
       rentAllocated === 0 &&
       utilityAllocated === 0 &&
       depositAllocated === 0 &&
+      unappliedAllocated === 0 &&
       receipt.paymentType === "rent"
     ) {
       row.paidRent += amount;
@@ -2415,6 +2485,7 @@ export const generateLandlordStatement = async ({
       rentAllocated === 0 &&
       utilityAllocated === 0 &&
       depositAllocated === 0 &&
+      unappliedAllocated === 0 &&
       receipt.paymentType === "utility"
     ) {
       applyUtility(row, "receipt", amount, receipt.description || "");

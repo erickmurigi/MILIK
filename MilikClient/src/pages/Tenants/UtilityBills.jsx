@@ -128,12 +128,18 @@ const UtilityBills = () => {
         getTenantInvoiceNotes({ business: currentCompany._id }),
       ]);
 
-      // Include service charge debit notes alongside utility invoices
-      const serviceChargeNotes = (Array.isArray(allNotes) ? allNotes : [])
+      // Include every utility-related credit/debit note alongside utility invoices — any
+      // note posted with category UTILITY_CHARGE (garbage, water, electricity, etc, however
+      // the bill item is tagged via metadata.billItemKey), plus the "service_charge" bill
+      // item which historically posts under a different category but has always been
+      // shown here too.
+      const utilityNotes = (Array.isArray(allNotes) ? allNotes : [])
         .filter((note) => {
+          const category = String(note?.category || "").toUpperCase();
           const key = String(note?.metadata?.billItemKey || "").trim();
           const status = String(note?.status || "").toLowerCase();
-          return key === "service_charge" && status !== "reversed" && status !== "cancelled";
+          if (status === "reversed" || status === "cancelled") return false;
+          return category === "UTILITY_CHARGE" || key === "service_charge";
         })
         .map((note) => ({
           ...note,
@@ -141,7 +147,7 @@ const UtilityBills = () => {
           invoiceNumber: note.noteNumber || note.invoiceNumber,
         }));
 
-      setInvoices([...(Array.isArray(utilityInvoices) ? utilityInvoices : []), ...serviceChargeNotes]);
+      setInvoices([...(Array.isArray(utilityInvoices) ? utilityInvoices : []), ...utilityNotes]);
     } catch (err) {
       console.error("Failed to load utility bills:", err);
       toast.error("Failed to load utility bills.");
