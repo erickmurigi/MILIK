@@ -65,14 +65,20 @@ const formatDateDisplay = (value) => {
 
 const normalizeStatus = (value = "") => String(value || "").trim().toLowerCase();
 
-// Sort helper: converts a date-ish value into a timestamp for comparison, treating
-// missing/unparsable dates as "sorts last" (not 1970-epoch, which would incorrectly
-// push them to the front of an ascending sort).
-const SORT_DATE_MISSING = Number.MAX_SAFE_INTEGER;
-const dateSortValue = (value) => {
-  if (!value) return SORT_DATE_MISSING;
+// Sort helpers. monthKey() buckets a date into year*12+month for the primary
+// "newest month first" ordering (all September rows before all August rows);
+// tsValue() is the raw timestamp for the within-unit "newest bill first" tiebreak.
+// Missing/unparsable dates get the smallest possible value so they sort LAST under
+// the descending comparisons below.
+const monthKey = (value) => {
+  if (!value) return -Infinity;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? -Infinity : d.getFullYear() * 12 + d.getMonth();
+};
+const tsValue = (value) => {
+  if (!value) return 0;
   const t = new Date(value).getTime();
-  return Number.isNaN(t) ? SORT_DATE_MISSING : t;
+  return Number.isNaN(t) ? 0 : t;
 };
 
 const mapStatusLabel = ({ rawStatus = "", outstanding = 0, appliedAmount = 0 }) => {
@@ -232,16 +238,24 @@ const UtilityBills = () => {
         dueDateLabel: formatDateDisplay(invoice?.dueDate),
         createdDate: formatDateDisplay(invoice?.createdAt || invoiceDate),
       };
-    }).sort((a, b) =>
-      // Unit ascending (natural/numeric), then invoice date ascending (missing dates
-      // sort last), then invoice/note number, then the row's own unique key — so
-      // genuine ties (same unit + same date + same number) still resolve to a fully
-      // deterministic, stable order rather than falling back to incoming array order.
-      String(a.unitName || "").localeCompare(String(b.unitName || ""), undefined, { numeric: true, sensitivity: "base" })
-      || (dateSortValue(a.invoiceDate) - dateSortValue(b.invoiceDate))
-      || String(a.id || "").localeCompare(String(b.id || ""), undefined, { numeric: true, sensitivity: "base" })
-      || String(a.key || "").localeCompare(String(b.key || ""))
-    );
+    }).sort((a, b) => {
+      // 1. Newest month first — every September bill before every August bill, matching
+      //    how the Rental Invoices page orders by period.
+      const mk = monthKey(b.invoiceDate) - monthKey(a.invoiceDate);
+      if (mk) return mk;
+      // 2. Within a month, units in ascending natural order (K1, K2, S1, S2, … S10).
+      const unitCmp = String(a.unitName || "").localeCompare(
+        String(b.unitName || ""), undefined, { numeric: true, sensitivity: "base" }
+      );
+      if (unitCmp) return unitCmp;
+      // 3. Within a unit, newest bill first.
+      const td = tsValue(b.invoiceDate) - tsValue(a.invoiceDate);
+      if (td) return td;
+      // 4-5. Deterministic tiebreak so identical (month, unit, date) rows never fall
+      //      back to incoming array order.
+      return String(a.id || "").localeCompare(String(b.id || ""), undefined, { numeric: true, sensitivity: "base" })
+        || String(a.key || "").localeCompare(String(b.key || ""));
+    });
   }, [invoices, tenantLookup, unitLookup, propertyLookup]);
 
   const utilityTypeOptions = useMemo(
