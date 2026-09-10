@@ -65,6 +65,16 @@ const formatDateDisplay = (value) => {
 
 const normalizeStatus = (value = "") => String(value || "").trim().toLowerCase();
 
+// Sort helper: converts a date-ish value into a timestamp for comparison, treating
+// missing/unparsable dates as "sorts last" (not 1970-epoch, which would incorrectly
+// push them to the front of an ascending sort).
+const SORT_DATE_MISSING = Number.MAX_SAFE_INTEGER;
+const dateSortValue = (value) => {
+  if (!value) return SORT_DATE_MISSING;
+  const t = new Date(value).getTime();
+  return Number.isNaN(t) ? SORT_DATE_MISSING : t;
+};
+
 const mapStatusLabel = ({ rawStatus = "", outstanding = 0, appliedAmount = 0 }) => {
   const s = normalizeStatus(rawStatus);
   if (s === "paid") return "Paid";
@@ -151,7 +161,19 @@ const UtilityBills = () => {
           invoiceNumber: note.noteNumber || note.invoiceNumber,
         }));
 
-      setInvoices([...(Array.isArray(utilityInvoices) ? utilityInvoices : []), ...utilityNotes]);
+      // getTenantInvoices(..., includeSnapshots: true) separately re-surfaces standalone
+      // outstanding debit notes as synthetic pseudo-invoice entries (tagged noteType:
+      // "DEBIT_NOTE" — see getTenantInvoicesList's "Append outstanding debit notes as
+      // separate selectable items" block; plain TenantInvoice records never carry a
+      // noteType field). That's needed elsewhere (e.g. Add Receipt) but here it means the
+      // SAME TenantInvoiceNote document (like a standalone garbage debit note) lands in
+      // this array a second time on top of utilityNotes above. Strip those synthetic
+      // entries out so every note is represented exactly once, sourced only from
+      // getTenantInvoiceNotes.
+      const dedupedUtilityInvoices = (Array.isArray(utilityInvoices) ? utilityInvoices : [])
+        .filter((invoice) => !invoice?.noteType);
+
+      setInvoices([...dedupedUtilityInvoices, ...utilityNotes]);
     } catch (err) {
       console.error("Failed to load utility bills:", err);
       toast.error("Failed to load utility bills.");
@@ -211,8 +233,14 @@ const UtilityBills = () => {
         createdDate: formatDateDisplay(invoice?.createdAt || invoiceDate),
       };
     }).sort((a, b) =>
+      // Unit ascending (natural/numeric), then invoice date ascending (missing dates
+      // sort last), then invoice/note number, then the row's own unique key — so
+      // genuine ties (same unit + same date + same number) still resolve to a fully
+      // deterministic, stable order rather than falling back to incoming array order.
       String(a.unitName || "").localeCompare(String(b.unitName || ""), undefined, { numeric: true, sensitivity: "base" })
-      || new Date(a.invoiceDate || 0) - new Date(b.invoiceDate || 0)
+      || (dateSortValue(a.invoiceDate) - dateSortValue(b.invoiceDate))
+      || String(a.id || "").localeCompare(String(b.id || ""), undefined, { numeric: true, sensitivity: "base" })
+      || String(a.key || "").localeCompare(String(b.key || ""))
     );
   }, [invoices, tenantLookup, unitLookup, propertyLookup]);
 

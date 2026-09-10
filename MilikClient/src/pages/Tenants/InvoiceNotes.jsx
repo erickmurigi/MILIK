@@ -127,6 +127,16 @@ const resolveUnitName = (record, tenantMap) => {
   return tenant?.unit?.unitNumber || tenant?.unit?.unitName || tenant?.unit?.name || tenant?.unitName || "-";
 };
 
+// Sort helper: converts a date-ish value into a timestamp for comparison, treating
+// missing/unparsable dates as "sorts last" (not 1970-epoch, which would incorrectly
+// push them to the front of an ascending sort).
+const SORT_DATE_MISSING = Number.MAX_SAFE_INTEGER;
+const dateSortValue = (value) => {
+  if (!value) return SORT_DATE_MISSING;
+  const t = new Date(value).getTime();
+  return Number.isNaN(t) ? SORT_DATE_MISSING : t;
+};
+
 const getStatusChip = (status) => {
   const normalized = String(status || "draft").toLowerCase();
   if (normalized === "posted") return "border-slate-300 bg-slate-50 text-slate-600";
@@ -615,11 +625,19 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
         .toLowerCase();
       return haystack.includes(query);
     }).sort((a, b) =>
+      // Unit ascending (natural/numeric), then note date ascending (missing dates sort
+      // last; uses the same noteDate → invoiceDate → createdAt fallback chain the row
+      // itself displays), then note/invoice number, then the row's own unique _id — so
+      // genuine ties (same unit + same date + same number) still resolve to a fully
+      // deterministic, stable order rather than falling back to incoming array order.
       String(resolveUnitName(a, tenantMap) || "").localeCompare(
         String(resolveUnitName(b, tenantMap) || ""),
         undefined,
         { numeric: true, sensitivity: "base" }
-      ) || new Date(a?.noteDate || a?.createdAt || 0) - new Date(b?.noteDate || b?.createdAt || 0)
+      )
+      || (dateSortValue(a?.noteDate || a?.invoiceDate || a?.createdAt) - dateSortValue(b?.noteDate || b?.invoiceDate || b?.createdAt))
+      || String(a?.noteNumber || a?.invoiceNumber || "").localeCompare(String(b?.noteNumber || b?.invoiceNumber || ""), undefined, { numeric: true, sensitivity: "base" })
+      || String(a?._id || "").localeCompare(String(b?._id || ""))
     );
   }, [notes, effectiveFilters, isLocked, lockedBillItemKey, propertyMap, tenantMap]);
 
