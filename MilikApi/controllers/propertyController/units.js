@@ -4,6 +4,7 @@ import { getFieldOfficerPropertyIds } from "../../utils/fieldOfficerScope.js";
 import { slugifyWithSuffix } from "../../utils/slugify.js";
 import Tenant from "../../models/Tenant.js";
 import Property from "../../models/Property.js";
+import CompanySettings from "../../models/CompanySettings.js";
 import Lease from "../../models/Lease.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
 import TenantInvoiceNote from "../../models/TenantInvoiceNote.js";
@@ -26,6 +27,49 @@ const MAX_UNIT_IMAGES = 12;
 
 const OCCUPYING_TENANT_STATUSES = ["active", "overdue"];
 const NON_OCCUPIABLE_UNIT_STATUSES = ["vacant", "maintenance", "reserved", "archived"];
+
+// The 6 values Unit.unitType used to hard-code as a schema enum. Existing units still
+// carry these, so they stay permanently valid alongside whatever a company configures
+// under Operational Settings -> Unit Types.
+const LEGACY_UNIT_TYPES = ["studio", "1bed", "2bed", "3bed", "4bed", "commercial"];
+
+const unitTypeKey = (value) =>
+  String(value || "").trim().toLowerCase().replace(/\s+/g, "");
+
+const loadConfiguredUnitTypeNames = async (businessId) => {
+  const settings = await CompanySettings.findOne({ company: businessId })
+    .select("unitTypes")
+    .lean();
+  return (settings?.unitTypes || [])
+    .filter((t) => t?.isActive !== false && t?.name)
+    .map((t) => String(t.name).trim());
+};
+
+// Resolves a submitted unitType to its canonical stored form (the exact configured
+// `name`, or the legacy string lower-cased), or throws a 400 if it is neither a
+// configured type for this company nor a legacy value. Matching is case- and
+// whitespace-insensitive so the frontend can send "Suit", "suit", or "SUIT" and the
+// stored value still matches the Operational Settings list exactly.
+const resolveUnitTypeAgainst = (rawValue, configuredNames = []) => {
+  const submitted = String(rawValue || "").trim();
+  if (!submitted) {
+    throw createError(400, "Unit type is required.");
+  }
+
+  const key = unitTypeKey(submitted);
+  if (LEGACY_UNIT_TYPES.includes(key)) return key;
+
+  const match = configuredNames.find((name) => unitTypeKey(name) === key);
+  if (match) return String(match).trim();
+
+  throw createError(
+    400,
+    `'${submitted}' is not a configured unit type for this company. Add it under Operational Settings → Unit Types first.`
+  );
+};
+
+const resolveUnitType = async (rawValue, businessId) =>
+  resolveUnitTypeAgainst(rawValue, await loadConfiguredUnitTypeNames(businessId));
 
 const normalizePropertyId = (propertyValue) => {
   if (!propertyValue) return null;
@@ -455,6 +499,8 @@ export const createUnit = async (req, res, next) => {
       return next(createError(400, "Unit number is required."));
     }
 
+    const resolvedUnitType = await resolveUnitType(req.body.unitType, businessId);
+
     // New units must always start as vacant. Occupancy is controlled by tenant assignment,
     // not by the create-unit form payload. This keeps the Add Unit UI simple and prevents
     // orphan occupied/reserved/maintenance states during creation.
@@ -474,6 +520,7 @@ export const createUnit = async (req, res, next) => {
     const newUnit = new Unit({
       ...req.body,
       unitNumber: normalizedUnitNumber,
+      unitType: resolvedUnitType,
       property: property._id,
       business: businessId,
       rent: resolvedRent,
@@ -790,6 +837,10 @@ export const updateUnit = async (req, res, next) => {
 
     if (typeof req.body.unitNumber === "string") {
       unit.unitNumber = req.body.unitNumber.trim();
+    }
+
+    if (req.body.unitType !== undefined) {
+      unit.unitType = await resolveUnitType(req.body.unitType, businessId);
     }
 
     if (Array.isArray(req.body.amenities)) {
@@ -1186,6 +1237,9 @@ export const bulkImportUnits = async (req, res, next) => {
       properties.map((p) => [String(p.propertyCode || "").toLowerCase(), p])
     );
 
+    // Loaded once, not per row — every imported unit's type is validated against this.
+    const configuredUnitTypeNames = await loadConfiguredUnitTypeNames(businessId);
+
     // Phase 1: validate rows and build unit documents in memory (no DB writes)
     const validUnits = []; // each entry includes _importRow for error mapping
     const failed = [];
@@ -1205,9 +1259,11 @@ export const bulkImportUnits = async (req, res, next) => {
         continue;
       }
 
-      const normalizedUnitType = typeof row.unitType === "string" ? row.unitType.trim() : String(row.unitType || "").trim();
-      if (!normalizedUnitType) {
-        failed.push({ row: i + 2, unitNumber: normalizedUnitNumber, error: "Unit type is required" });
+      let normalizedUnitType;
+      try {
+        normalizedUnitType = resolveUnitTypeAgainst(row.unitType, configuredUnitTypeNames);
+      } catch (err) {
+        failed.push({ row: i + 2, unitNumber: normalizedUnitNumber, error: err.message });
         continue;
       }
 

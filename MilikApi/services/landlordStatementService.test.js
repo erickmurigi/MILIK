@@ -2,7 +2,7 @@
 // reflects rent invoiced and rent collected for the period from real invoice/receipt data.
 import { describe, it, expect } from "vitest";
 import { generateLandlordStatement } from "./landlordStatementService.js";
-import { createTestLease, createTestChartOfAccounts } from "../test/factories.js";
+import { createTestLease, createTestChartOfAccounts, createTestUnit } from "../test/factories.js";
 import { createTestInvoice, createTestReceipt } from "../test/factories.landlord.js";
 import PaymentVoucher from "../models/PaymentVoucher.js";
 import Tenant from "../models/Tenant.js";
@@ -432,5 +432,85 @@ describe("generateLandlordStatement", () => {
     expect(statementN1.metadata.broughtForwardCreditApplications.totals.rentApplied).toBe(15000);
     const rowN1 = statementN1.metadata.rows.find((r) => String(r.unitId) === String(unit._id));
     expect(rowN1.closingBalance).toBe(0);
+  }, 60000);
+
+  it("a tenant occupying several units in one property is shown as ONE consolidated row, like the Paid & Balance report", async () => {
+    const leaseBundle = await createTestLease({ rentAmount: 12000 });
+    const { tenant, unit: unitA, property, landlord, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+
+    // Second unit in the SAME property, assigned to the same tenant as an additional unit.
+    const { unit: unitB } = await createTestUnit({ property, company, rent: 8000 });
+    await Tenant.findByIdAndUpdate(tenant._id, { additionalUnits: [unitB._id] });
+
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const invoiceDate = periodStart;
+    const dueDate = new Date(periodStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const invoiceBundleA = await createTestInvoice({
+      leaseBundle, category: "RENT_CHARGE", amount: 12000, invoiceDate, dueDate,
+    });
+    const invoiceBundleB = await createTestInvoice({
+      leaseBundle: { ...leaseBundle, unit: unitB },
+      category: "RENT_CHARGE", amount: 8000, invoiceDate, dueDate,
+    });
+
+    // One receipt of 20,000, recorded against unit A, allocated across BOTH rent invoices —
+    // the exact shape that makes the per-unit rows individually misleading (A overpaid,
+    // B unpaid) while the tenant's real position is settled.
+    const paymentDate = new Date(periodStart.getTime() + 60 * 1000);
+    const { receipt } = await createTestReceipt({
+      invoiceBundle: invoiceBundleA, amount: 20000, paymentDate, allocate: false,
+    });
+    receipt.allocations = [
+      {
+        invoice: invoiceBundleA.invoice._id, invoiceNumber: invoiceBundleA.invoice.invoiceNumber,
+        category: "RENT_CHARGE", appliedAmount: 12000, beforeOutstanding: 12000, afterOutstanding: 0,
+        invoiceDate, dueDate,
+      },
+      {
+        invoice: invoiceBundleB.invoice._id, invoiceNumber: invoiceBundleB.invoice.invoiceNumber,
+        category: "RENT_CHARGE", appliedAmount: 8000, beforeOutstanding: 8000, afterOutstanding: 0,
+        invoiceDate, dueDate,
+      },
+    ];
+    receipt.allocationSummary = { rent: 20000, deposit: 0, utility: 0, latePenalty: 0, debitNote: 0, other: 0, unapplied: 0 };
+    await receipt.save();
+    for (const inv of [invoiceBundleA.invoice, invoiceBundleB.invoice]) {
+      inv.outstanding = 0;
+      inv.status = "paid";
+      await inv.save();
+    }
+
+    const statement = await generateLandlordStatement({
+      propertyId: String(property._id),
+      landlordId: String(landlord._id),
+      statementPeriodStart: periodStart,
+      statementPeriodEnd: new Date(),
+    });
+
+    const tenantRows = statement.metadata.rows.filter(
+      (r) => String(r.tenantId) === String(tenant._id)
+    );
+    // Exactly one consolidated row for the tenant — not one per unit.
+    expect(tenantRows).toHaveLength(1);
+    const row = tenantRows[0];
+    expect(row.consolidatedUnitCount).toBe(2);
+    expect(Array.isArray(row.unitBreakdown)).toBe(true);
+    expect(row.unitBreakdown).toHaveLength(2);
+    // Both unit numbers listed together in the label.
+    expect(row.unit).toContain(unitA.unitNumber);
+    expect(row.unit).toContain(unitB.unitNumber);
+    // The consolidated position is settled (12000 + 8000 invoiced, 20000 paid) — even
+    // though a per-unit split would show A at -8000 and B at +8000.
+    expect(row.closingBalance).toBe(0);
+    expect(row.invoicedRent).toBe(20000);
+    expect(row.totalPaid).toBe(20000);
+    // Column totals are unchanged — merging preserves every sum.
+    expect(statement.metadata.totals.invoicedRent).toBe(20000);
+    expect(statement.metadata.totals.paidRent).toBe(20000);
+    // Both units still counted as occupied.
+    expect(statement.metadata.summary.occupiedUnits).toBeGreaterThanOrEqual(2);
   }, 60000);
 });

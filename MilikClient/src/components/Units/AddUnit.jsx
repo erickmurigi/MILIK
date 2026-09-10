@@ -786,9 +786,22 @@ const AddUnit = () => {
     { value: "4bed", label: "4 Bedrooms" },
     { value: "commercial", label: "Commercial" },
   ];
-  const unitTypes = configuredUnitTypes.length
-    ? configuredUnitTypes.map((t) => ({ value: t.name.toLowerCase().replace(/\s+/g, ""), label: t.name }))
-    : DEFAULT_UNIT_TYPES;
+  // Store the configured type name verbatim ("Suit"), not a slug — the backend validates
+  // against Operational Settings -> Unit Types and keeps that exact name, so a slug here
+  // would never match. Fall back to the 6 legacy values only when nothing is configured
+  // (those still resolve server-side).
+  const unitTypes = (() => {
+    const base = configuredUnitTypes.length
+      ? configuredUnitTypes.map((t) => ({ value: String(t.name).trim(), label: String(t.name).trim() }))
+      : DEFAULT_UNIT_TYPES;
+    // When editing a unit whose stored type isn't in the current list (an old legacy value,
+    // or a type since renamed/removed), keep it selectable rather than silently blanking.
+    const current = String(formData.unitType || "").trim();
+    if (current && !base.some((o) => o.value === current)) {
+      return [...base, { value: current, label: current }];
+    }
+    return base;
+  })();
 
   const statusOptions = useMemo(() => {
     const baseOptions = [

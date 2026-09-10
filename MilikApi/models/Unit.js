@@ -46,9 +46,12 @@ const UnitSchema = new mongoose.Schema(
       required: true,
     },
 
+    // No schema enum: valid unit types are whatever a company configures under
+    // Operational Settings -> Unit Types (plus 6 legacy values still on existing units).
+    // The controller validates against that list — see resolveUnitType in
+    // controllers/propertyController/units.js.
     unitType: {
       type: String,
-      enum: ["studio", "1bed", "2bed", "3bed", "4bed", "commercial"],
       required: true,
       trim: true,
     },

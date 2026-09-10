@@ -3087,7 +3087,98 @@ export const generateLandlordStatement = async ({
     });
   });
 
-  const filteredTenantRows = tenantRows
+  // A tenant who occupies several units (tenant.unit + tenant.additionalUnits, all within
+  // this property) has ONE ledger, not one per unit — a rent payment is recorded against a
+  // single unit, so the per-(unit,tenant) rows built above would show that unit hugely
+  // overpaid and the others unpaid even though the tenant's real position nets out. This
+  // folds those rows into one consolidated row (all figures summed, units listed together),
+  // matching how the Tenant Paid & Balance report presents multi-unit tenants, so the
+  // schedule grid, its PDF, and the stored processed-statement rows all show the true
+  // position. The underlying per-transaction LandlordStatementLine records and every
+  // summary aggregate are built from `entries`, not these rows, so they are unaffected —
+  // merging preserves all column sums by construction. Per-unit invoiced detail is kept on
+  // `unitBreakdown` for an expandable view. VACANT and single-unit rows pass through as-is.
+  const consolidateMultiUnitTenantRows = (rows) => {
+    const SUM_FIELDS = [
+      "balanceBF", "invoicedRent", "invoicedGarbage", "invoicedWater", "invoicedTax",
+      "paidRent", "paidGarbage", "paidWater", "paidTax", "unappliedCredits",
+      "totalUtilityInvoiced", "totalUtilityPaid", "perMonth",
+    ];
+    const groups = new Map();
+    const passthrough = [];
+    for (const row of rows) {
+      const tenantId = String(row?.tenantId || "").trim();
+      if (!tenantId || Number(row?.multiUnitCount || 1) <= 1) {
+        passthrough.push(row);
+        continue;
+      }
+      if (!groups.has(tenantId)) groups.set(tenantId, []);
+      groups.get(tenantId).push(row);
+    }
+
+    const mergedRows = [];
+    for (const group of groups.values()) {
+      if (group.length === 1) {
+        // Their other units live in another property — nothing to consolidate here.
+        mergedRows.push(group[0]);
+        continue;
+      }
+
+      const base = { ...group[0] };
+      SUM_FIELDS.forEach((f) => {
+        base[f] = round2(group.reduce((sum, r) => sum + Number(r[f] || 0), 0));
+      });
+
+      const utilities = {};
+      for (const r of group) {
+        for (const [key, item] of Object.entries(r.utilities || {})) {
+          if (!utilities[key]) {
+            utilities[key] = { key: item?.key || key, label: item?.label || key, invoiced: 0, paid: 0 };
+          }
+          utilities[key].invoiced = round2(utilities[key].invoiced + Number(item?.invoiced || 0));
+          utilities[key].paid = round2(utilities[key].paid + Number(item?.paid || 0));
+        }
+      }
+      base.utilities = utilities;
+      base.balanceCF = round2(
+        base.balanceBF + base.invoicedRent + base.totalUtilityInvoiced + base.invoicedTax
+        - base.paidRent - base.totalUtilityPaid - base.paidTax
+      );
+
+      const unitLabels = (
+        Array.isArray(group[0].multiUnitLabels) && group[0].multiUnitLabels.length > 0
+          ? [...group[0].multiUnitLabels]
+          : Array.from(new Set(group.map((r) => r.unit).filter(Boolean)))
+      ).sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+      base.unit = unitLabels.join(", ");
+      base.unitNumber = base.unit;
+      base.referenceNumbers = Array.from(
+        new Set(group.flatMap((r) => r.referenceNumbers || []).filter(Boolean))
+      );
+      base.hasTransactionInPeriod = group.some((r) => r.hasTransactionInPeriod === true);
+      base.consolidatedUnitCount = group.length;
+      base.unitBreakdown = group.map((r) => ({
+        unit: r.unit,
+        unitId: r.unitId,
+        balanceBF: round2(Number(r.balanceBF || 0)),
+        invoicedRent: round2(Number(r.invoicedRent || 0)),
+        invoicedTax: round2(Number(r.invoicedTax || 0)),
+        totalUtilityInvoiced: round2(Number(r.totalUtilityInvoiced || 0)),
+        paidRent: round2(Number(r.paidRent || 0)),
+        totalUtilityPaid: round2(Number(r.totalUtilityPaid || 0)),
+        paidTax: round2(Number(r.paidTax || 0)),
+        balanceCF: round2(Number(r.balanceCF || 0)),
+      }));
+
+      mergedRows.push(base);
+    }
+
+    return [...passthrough, ...mergedRows].sort((a, b) =>
+      String(a.unit).localeCompare(String(b.unit), undefined, { numeric: true })
+    );
+  };
+
+  let filteredTenantRows = tenantRows
     .filter((row) => {
       if (String(row?.tenantName || "").toUpperCase() === "VACANT") return true;
 
@@ -3120,6 +3211,8 @@ export const generateLandlordStatement = async ({
     .sort((a, b) =>
       String(a.unit).localeCompare(String(b.unit), undefined, { numeric: true })
     );
+
+  filteredTenantRows = consolidateMultiUnitTenantRows(filteredTenantRows);
 
   const utilityColumns = buildUtilityColumns(filteredTenantRows);
   const utilityTotalsMap = utilityColumns.reduce((acc, item) => {
@@ -3373,7 +3466,8 @@ export const generateLandlordStatement = async ({
   let vacantUnits = 0;
   for (const row of filteredTenantRows) {
     if (row.tenantName === "VACANT") vacantUnits++;
-    else occupiedUnits++;
+    // A consolidated multi-unit tenant row still represents several occupied units.
+    else occupiedUnits += Number(row.consolidatedUnitCount || 1);
   }
 
   const expenseRows = [
