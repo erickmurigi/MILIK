@@ -4059,6 +4059,25 @@ export const createTenantInvoice = async (req, res, next) => {
       if (touchedAccountIds.length > 0) {
         await aggregateChartOfAccountBalances(businessId, touchedAccountIds);
       }
+
+      // Auto-apply any tagged prepayments that match this invoice's type — mirrors what
+      // createTenantInvoiceRecord already does for its own non-deferred path. This
+      // endpoint defers that internal call (deferPostProcessing: true) to control ordering
+      // itself, but was never re-running it here, so a tenant's tagged "Rent Prepayment"/
+      // "Water Prepayment" credit only ever auto-consumed when their NEXT invoice happened
+      // to come from the scheduled auto-invoicing job — never from a manually created one.
+      try {
+        const { autoApplyPrepayments } = await import("./rentPayment.js");
+        await autoApplyPrepayments({
+          businessId: String(businessId),
+          tenantId: String(tenantId),
+          invoice: deferredInvoice,
+          actorId: req.body.createdBy || req.user?._id || req.user?.id || null,
+        });
+      } catch (prepErr) {
+        console.error("[createTenantInvoice] prepayment auto-apply failed:", prepErr.message);
+      }
+
       await recomputeTenantFinancialState({ businessId, tenantId });
       invoice = await TenantInvoice.findById(deferredInvoice._id)
         .populate("chartAccount", "code name type")

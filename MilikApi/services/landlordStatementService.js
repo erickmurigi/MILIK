@@ -2108,14 +2108,28 @@ export const generateLandlordStatement = async ({
   }
 
   for (const receipt of receiptsBefore) {
-    const row = ensureRow(receipt.tenant, receipt.unit);
+    const defaultRow = ensureRow(receipt.tenant, receipt.unit);
     const allocationRows = getReceiptAllocationRows(receipt);
     const unappliedAllocated = getReceiptSummaryAmount(receipt, "unapplied");
 
+    // Cash this old receipt never applied to any charge is a genuine credit carried
+    // forward — it must sit in unappliedCredits, never silently reduce Balance B/F as if
+    // it had repaid a real debt (that conflated "prepayment held" with "debt settled" and
+    // shifted the opening balance by the unapplied amount every time one existed).
+    if (unappliedAllocated !== 0) {
+      defaultRow.unappliedCredits += unappliedAllocated;
+    }
+
     if (allocationRows.length > 0) {
-      let broughtForwardReduction = round2(unappliedAllocated);
       allocationRows.forEach((allocationRow) => {
         const sourceInvoice = invoiceStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
+        // A single receipt can span more than one of the tenant's units (e.g. one payment
+        // settling both BAR's and S7's rent for a two-unit tenant) — resolve each
+        // allocation row against the unit its own source invoice actually belongs to,
+        // not the receipt's own top-level unit field. Falls back to the receipt's unit
+        // only when the source can't be resolved (a debit note, or a pure prepayment
+        // placeholder row with no linked invoice at all).
+        const row = ensureRow(receipt.tenant, sourceInvoice?.unit || receipt.unit);
         const impact = getReceiptAllocationStatementImpact({
           allocationRow,
           sourceInvoice,
@@ -2138,9 +2152,7 @@ export const generateLandlordStatement = async ({
         // instead, so it must NOT also reduce Balance B/F (that would double-subtract the
         // same dollar: once via the opening credit, again via "Paid" this period).
         if (!sourceInCurrentPeriod) {
-          broughtForwardReduction = round2(
-            broughtForwardReduction + Number(impact.statementRelevantAmount || 0)
-          );
+          row.balanceBF = round2(row.balanceBF - Number(impact.statementRelevantAmount || 0));
         }
 
         if (sourceInCurrentPeriod && Math.abs(Number(impact.statementRelevantAmount || 0)) > 0) {
@@ -2233,11 +2245,10 @@ export const generateLandlordStatement = async ({
           }
         }
       });
-      row.balanceBF = round2(row.balanceBF - broughtForwardReduction);
       continue;
     }
 
-    row.balanceBF = round2(row.balanceBF - Number(receipt.amount || 0));
+    defaultRow.balanceBF = round2(defaultRow.balanceBF - Number(receipt.amount || 0));
   }
 
   // Receipts whose paymentDate was in a previously approved period but whose booking date
@@ -2886,6 +2897,9 @@ export const generateLandlordStatement = async ({
     const depositReceiptUnapplied = getReceiptSummaryAmount(receipt, "unapplied");
     if (depositReceiptUnapplied !== 0) {
       unappliedRow.unappliedCredits += depositReceiptUnapplied;
+      // Real cash, just not deposit — counts toward Total Paid / raw Bal C/F same as any
+      // other in-period cash (see the receiptsInPeriod loop's rawReceivedThisPeriod).
+      unappliedRow.rawReceivedThisPeriod = round2(Number(unappliedRow.rawReceivedThisPeriod || 0) + depositReceiptUnapplied);
       if (prepaymentRecognition === "on_receipt") {
         unappliedRow.paidRent += depositReceiptUnapplied;
         if (receipt.paidDirectToLandlord) totalRentReceivedLandlord += depositReceiptUnapplied;
@@ -2927,6 +2941,14 @@ export const generateLandlordStatement = async ({
         });
       });
     });
+
+    const mixedNonDepositCash = round2(mixedRent + mixedUtility + mixedTax);
+    if (mixedNonDepositCash !== 0) {
+      // Same reasoning as the unapplied portion above — this is real, non-deposit cash
+      // that was just bundled onto a deposit-type receipt; it belongs in Total Paid /
+      // raw Bal C/F like any other in-period cash.
+      mixedRow.rawReceivedThisPeriod = round2(Number(mixedRow.rawReceivedThisPeriod || 0) + mixedNonDepositCash);
+    }
 
     if (mixedRent !== 0) {
       mixedRow.paidRent += mixedRent;
@@ -3233,9 +3255,66 @@ export const generateLandlordStatement = async ({
     });
   }
 
+  // Bal B/F / Bal C/F show the tenant's TRUE running balance — the same figure their own
+  // Tenant Statement and Paid & Balance report already show — computed as a plain raw
+  // ledger (gross invoices minus gross cash received, no allocation-row tracing) so the
+  // two always reconcile with each other by construction. This is purely a balance/
+  // display figure: commission and remittance totals are computed separately, above, from
+  // row.paidRent / unappliedCredits (which stay capped/deferred under "on_invoice_
+  // allocation" so a manager never earns commission on cash before it's actually rent, or
+  // remits a prepayment twice) — nothing about that math changes here. Total Paid follows
+  // the same logic: it shows the real cash received this period, not the capped/recognised
+  // paidRent figure.
+  for (const invoice of invoicesBefore) {
+    if (!shouldIncludeInvoiceInLandlordStatement(invoice)) continue;
+    if (invoice.category !== "RENT_CHARGE" && invoice.category !== "UTILITY_CHARGE") continue;
+    const row = ensureRow(invoice.tenant, invoice.unit);
+    row.rawBalanceBF = round2(Number(row.rawBalanceBF || 0) + Number(invoice.amount || 0));
+  }
+  for (const note of notesBefore) {
+    if (!shouldIncludeNoteInLandlordStatement(note)) continue;
+    if (note.category !== "RENT_CHARGE" && note.category !== "UTILITY_CHARGE") continue;
+    const row = ensureRow(note.tenant, note.unit);
+    row.rawBalanceBF = round2(Number(row.rawBalanceBF || 0) + Number(getSignedNoteAmount(note) || 0));
+  }
+  // A receipt's FULL amount is not automatically rent-ledger cash — it may also cover a
+  // deposit, a late penalty, or some other non-rent charge bundled onto the same receipt
+  // (e.g. "first month rent + security deposit" paid together, tagged paymentType "rent"
+  // as a whole even though part of it is really a deposit). Only the portion that is
+  // actually rent/utility (or genuinely unapplied, still real rent-ledger cash just not
+  // yet matched to a bill) belongs here — reusing the same per-row classification the
+  // invoiced side already uses so the two never drift apart.
+  const getReceiptRentLedgerCash = (receipt) => {
+    const allocationRows = getReceiptAllocationRows(receipt);
+    let cash = round2(Number(getReceiptSummaryAmount(receipt, "unapplied") || 0));
+    if (allocationRows.length > 0) {
+      allocationRows.forEach((allocationRow) => {
+        const sourceInvoice = invoiceStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
+        const impact = getReceiptAllocationStatementImpact({ allocationRow, sourceInvoice, row: null });
+        cash = round2(cash + Number(impact.statementRelevantAmount || 0));
+      });
+    } else {
+      cash = round2(
+        cash +
+          Number(getReceiptSummaryAmount(receipt, "rent") || 0) +
+          Number(getReceiptSummaryAmount(receipt, "utility") || 0)
+      );
+    }
+    return cash;
+  };
+
+  for (const receipt of receiptsBefore) {
+    const row = ensureRow(receipt.tenant, receipt.unit);
+    row.rawBalanceBF = round2(Number(row.rawBalanceBF || 0) - getReceiptRentLedgerCash(receipt));
+  }
+  for (const receipt of receiptsInPeriod) {
+    const row = ensureRow(receipt.tenant, receipt.unit);
+    row.rawReceivedThisPeriod = round2(Number(row.rawReceivedThisPeriod || 0) + getReceiptRentLedgerCash(receipt));
+  }
+
   const tenantRows = Array.from(rowsMap.values())
     .map((row) => {
-      row.balanceBF = round2(row.balanceBF);
+      row.balanceBF = round2(Number(row.rawBalanceBF || 0));
       row.invoicedRent = round2(row.invoicedRent);
       row.invoicedGarbage = round2(row.invoicedGarbage);
       row.invoicedWater = round2(row.invoicedWater);
@@ -3277,14 +3356,11 @@ export const generateLandlordStatement = async ({
       );
       row.totalDepositInvoiced = round2(sumDepositPhase(row, "invoice"));
       row.totalDepositPaid = round2(sumDepositPhase(row, "receipt"));
+      // Raw ledger: gross invoiced minus gross cash actually received this period —
+      // deliberately NOT row.paidRent (that figure stays capped/deferred by the
+      // recognition logic above, which protects commission/remittance math only).
       row.balanceCF = round2(
-        row.balanceBF +
-          row.invoicedRent +
-          row.totalUtilityInvoiced +
-          row.invoicedTax -
-          row.paidRent -
-          row.totalUtilityPaid -
-          row.paidTax
+        row.balanceBF + row.invoicedRent + row.totalUtilityInvoiced + row.invoicedTax - Number(row.rawReceivedThisPeriod || 0)
       );
       row.referenceNumbers = Array.from(
         new Set((row.referenceNumbers || []).filter(Boolean))
@@ -3331,6 +3407,7 @@ export const generateLandlordStatement = async ({
       "balanceBF", "invoicedRent", "invoicedGarbage", "invoicedWater", "invoicedTax",
       "paidRent", "paidGarbage", "paidWater", "paidTax", "unappliedCredits",
       "totalUtilityInvoiced", "totalUtilityPaid", "totalDepositInvoiced", "totalDepositPaid", "perMonth",
+      "rawReceivedThisPeriod",
     ];
     const groups = new Map();
     const passthrough = [];
@@ -3382,8 +3459,7 @@ export const generateLandlordStatement = async ({
       base.deposits = deposits;
 
       base.balanceCF = round2(
-        base.balanceBF + base.invoicedRent + base.totalUtilityInvoiced + base.invoicedTax
-        - base.paidRent - base.totalUtilityPaid - base.paidTax
+        base.balanceBF + base.invoicedRent + base.totalUtilityInvoiced + base.invoicedTax - base.rawReceivedThisPeriod
       );
 
       const unitLabels = (
@@ -3504,6 +3580,9 @@ export const generateLandlordStatement = async ({
   );
   const totalBalanceCF = round2(
     filteredTenantRows.reduce((sum, row) => sum + row.balanceCF, 0)
+  );
+  const totalRawReceived = round2(
+    filteredTenantRows.reduce((sum, row) => sum + Number(row.rawReceivedThisPeriod || 0), 0)
   );
 
   // No manager, no management commission — force to 0 regardless of whatever stray
@@ -3799,7 +3878,11 @@ export const generateLandlordStatement = async ({
       unitNumber: row.unit,
       openingBalance: row.balanceBF,
       closingBalance: row.balanceCF,
-      totalPaid: round2(row.paidRent + row.totalUtilityPaid + Number(row.paidTax || 0)),
+      // Real rent-ledger cash received this period (rent + utility + tax + any leftover
+      // unapplied cash) — not row.paidRent alone, which stays capped for commission
+      // purposes. Deposits are excluded here, same as elsewhere, since they're shown in
+      // their own dedicated Deposit column rather than folded into rent-ledger totals.
+      totalPaid: round2(Number(row.rawReceivedThisPeriod || 0)),
       unappliedCredits: round2(row.unappliedCredits || 0),
       balance: row.balanceCF,
     })),
@@ -3822,7 +3905,7 @@ export const generateLandlordStatement = async ({
       depositPaid: totalDepositCollected,
       depositInvoiced: totalDepositInvoiced,
       expenses: displayNonCommissionDeductions,
-      totalPaid: round2(totalRentReceived + totalUtilityCollected + totalInvoiceVatReceived),
+      totalPaid: totalRawReceived,
       closingBalance: totalBalanceCF,
     },
     expenseRows,

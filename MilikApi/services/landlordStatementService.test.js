@@ -7,6 +7,7 @@ import { createTestInvoice, createTestReceipt } from "../test/factories.landlord
 import PaymentVoucher from "../models/PaymentVoucher.js";
 import Tenant from "../models/Tenant.js";
 import Property from "../models/Property.js";
+import Company from "../models/Company.js";
 
 describe("generateLandlordStatement", () => {
   it("reflects rent invoiced and rent collected for the statement period", async () => {
@@ -515,6 +516,91 @@ describe("generateLandlordStatement", () => {
     expect(statement.metadata.summary.occupiedUnits).toBeGreaterThanOrEqual(2);
   }, 60000);
 
+  it("carries forward the correct opening balance for a multi-unit tenant paid off by one PRIOR-period receipt spanning both units, with genuine unapplied cash tracked separately", async () => {
+    // Reproduces the VERONICA WANJIRU bug: a two-unit tenant's prior-period rent invoices
+    // are both fully settled by one combined receipt that also carries some genuinely
+    // unapplied cash. Two bugs used to corrupt Balance B/F here: (1) the receipt's
+    // unapplied portion was subtracted straight out of balanceBF instead of being tracked
+    // in unappliedCredits, and (2) the whole receipt's effect landed on only ONE of the
+    // two units' rows (whichever the receipt's own `unit` field pointed to) instead of
+    // each allocation being attributed to the unit its own invoice actually belongs to.
+    const leaseBundle = await createTestLease({ rentAmount: 12000 });
+    const { tenant, unit: unitA, property, landlord, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+
+    const { unit: unitB } = await createTestUnit({ property, company, rent: 8000 });
+    await Tenant.findByIdAndUpdate(tenant._id, { additionalUnits: [unitB._id] });
+
+    const now = new Date();
+    const priorPeriodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const invoiceDate = new Date(priorPeriodStart.getTime() + 60 * 1000);
+    const dueDate = new Date(priorPeriodStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const invoiceBundleA = await createTestInvoice({
+      leaseBundle, category: "RENT_CHARGE", amount: 12000, invoiceDate, dueDate,
+    });
+    const invoiceBundleB = await createTestInvoice({
+      leaseBundle: { ...leaseBundle, unit: unitB },
+      category: "RENT_CHARGE", amount: 8000, invoiceDate, dueDate,
+    });
+
+    // One 25,000 receipt, dated in the prior period, recorded against unit A: 12,000 pays
+    // A's invoice, 8,000 pays B's invoice, 5,000 is genuinely unapplied cash.
+    const paymentDate = new Date(priorPeriodStart.getTime() + 2 * 60 * 1000);
+    const { receipt } = await createTestReceipt({
+      invoiceBundle: invoiceBundleA, amount: 25000, paymentDate, allocate: false,
+    });
+    receipt.allocations = [
+      {
+        invoice: invoiceBundleA.invoice._id, invoiceNumber: invoiceBundleA.invoice.invoiceNumber,
+        category: "RENT_CHARGE", priorityGroup: "rent", appliedAmount: 12000, beforeOutstanding: 12000, afterOutstanding: 0,
+        invoiceDate, dueDate,
+      },
+      {
+        invoice: invoiceBundleB.invoice._id, invoiceNumber: invoiceBundleB.invoice.invoiceNumber,
+        category: "RENT_CHARGE", priorityGroup: "rent", appliedAmount: 8000, beforeOutstanding: 8000, afterOutstanding: 0,
+        invoiceDate, dueDate,
+      },
+    ];
+    receipt.allocationSummary = { rent: 20000, deposit: 0, utility: 0, latePenalty: 0, debitNote: 0, other: 0, unapplied: 5000 };
+    await receipt.save();
+    for (const inv of [invoiceBundleA.invoice, invoiceBundleB.invoice]) {
+      inv.outstanding = 0;
+      inv.status = "paid";
+      await inv.save();
+    }
+
+    const statement = await generateLandlordStatement({
+      propertyId: String(property._id),
+      landlordId: String(landlord._id),
+      statementPeriodStart: periodStart,
+      statementPeriodEnd: new Date(),
+    });
+
+    const row = statement.metadata.rows.find((r) => String(r.tenantId) === String(tenant._id));
+    expect(row.consolidatedUnitCount).toBe(2);
+
+    // Bal B/F is a true raw ledger (gross invoiced minus gross cash received): both
+    // prior-period invoices (20,000) were fully paid off by the 25,000 receipt, leaving
+    // the tenant 5,000 ahead — so Bal B/F is -5000, not the 0 a manager-remittance-safe
+    // statement would show (that split still protects commission/remittance elsewhere;
+    // it just isn't what Bal B/F itself displays any more).
+    expect(row.balanceBF).toBe(-5000);
+    // unappliedCredits still separately tracks the same 5,000 for the recognition/
+    // commission-safe machinery (paidRent, commissionBaseAmount) that this test doesn't
+    // otherwise exercise.
+    expect(row.unappliedCredits).toBe(5000);
+    expect(row.closingBalance).toBe(-5000);
+
+    // The combined total correctly nets the receipt's effect across both units — not
+    // dumped entirely on whichever unit the receipt's own `unit` field happened to name
+    // (the cross-unit misattribution this test also guards against).
+    const unitBreakdown = row.unitBreakdown || [];
+    expect(unitBreakdown).toHaveLength(2);
+    expect(unitBreakdown.reduce((sum, u) => sum + Number(u.balanceBF || 0), 0)).toBe(-5000);
+  }, 60000);
+
   it("a payment allocated to a future-dated rent invoice is held as a prepayment, then recognised exactly once in the invoice's own period (on_invoice_allocation)", async () => {
     const leaseBundle = await createTestLease({ rentAmount: 12000 });
     const { property, landlord, unit, company } = leaseBundle;
@@ -557,16 +643,21 @@ describe("generateLandlordStatement", () => {
     });
     const rowFor = (stmt) => stmt.metadata.rows.find((r) => String(r.unitId) === String(unit._id));
 
-    // Period N: only invoice A's 12,000 is "paid this period"; invoice B's 12,000 is held.
+    // Period N: only invoice A's 12,000 is "paid this period" for commission purposes;
+    // invoice B's 12,000 is held as a prepayment credit there. Bal C/F is the true raw
+    // ledger though (12,000 invoiced, 24,000 actually received this period) — -12,000,
+    // reflecting that the tenant really has paid 12,000 ahead of what's been billed.
     const nStmt = await gen(periodNStart, periodNEnd);
     const nRow = rowFor(nStmt);
     expect(nRow.paidRent).toBe(12000);
-    expect(nRow.closingBalance).toBe(0);
+    expect(nRow.closingBalance).toBe(-12000);
     expect(nRow.unappliedCredits).toBe(12000);
     expect(nStmt.metadata.totals.paidRent).toBe(12000);
     expect(nStmt.metadata.summary.commissionBaseAmount).toBe(12000);
 
-    // Period N+1: invoice B's 12,000 is recognised now — once, not again on top of N.
+    // Period N+1: invoice B's 12,000 is recognised now — once, not again on top of N. Its
+    // raw Bal C/F also correctly returns to 0 (the -12,000 carried in, offset by invoice
+    // B's 12,000 now falling due, with no new cash received this period).
     const n1Stmt = await gen(periodN1Start, new Date());
     const n1Row = rowFor(n1Stmt);
     expect(n1Row.paidRent).toBe(12000);
@@ -658,9 +749,11 @@ describe("generateLandlordStatement", () => {
     });
     const row = statement.metadata.rows.find((r) => String(r.unitId) === String(unit._id));
 
-    // Only the 13,000 covering the bill is recognised; 15,000 held as a prepayment credit.
+    // Only the 13,000 covering the bill is recognised for commission purposes; 15,000
+    // held as a prepayment credit there. Bal C/F is the true raw ledger (13,000 billed,
+    // 28,000 actually received) — -15,000, the same figure a Tenant Statement would show.
     expect(row.paidRent).toBe(13000);
-    expect(row.closingBalance).toBe(0);
+    expect(row.closingBalance).toBe(-15000);
     expect(row.unappliedCredits).toBe(15000);
     expect(statement.metadata.totals.paidRent).toBe(13000);
     // Commission and remittance basis exclude the prepayment.
@@ -695,7 +788,7 @@ describe("generateLandlordStatement", () => {
     await createTestReceipt({
       invoiceBundle: depositInvoiceBundle, amount: 17000,
       paymentDate: new Date(periodStart.getTime() + 3 * 60 * 1000),
-      allocate: false,
+      allocate: false, paymentType: "deposit",
       allocations: [
         {
           invoice: depositInvoiceBundle.invoice._id,
@@ -868,5 +961,157 @@ describe("generateLandlordStatement", () => {
     expect(row.unappliedCredits).toBe(5000);
     expect(row.paidRent).toBe(5000);
     expect(statement.metadata.totals.paidRent).toBe(5000);
+  }, 60000);
+
+  it("for a self-managing landlord (Property Performance Statement), Bal B/F and Bal C/F show the tenant's TRUE running balance, not the remittance-safe split used for a property-manager statement", async () => {
+    // Reproduces VERONICA WANJIRU's exact shape: a two-unit tenant whose prior-period
+    // rent was fully prepaid (including a 2-unit-spanning receipt with some genuinely
+    // unapplied cash), plus a large pure-overpayment receipt landing IN this period. A
+    // property manager needs the remittance-safe split (Bal B/F=0, credit tracked
+    // separately) so they never remit money twice or ahead of it being earned. A
+    // self-managing landlord has no manager standing between them and the cash — there's
+    // nothing to protect — so their statement should show the same real position their
+    // own Tenant Statement / Paid & Balance report already show.
+    const leaseBundle = await createTestLease({ rentAmount: 12000 });
+    const { tenant, unit: unitA, property, landlord, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+    await Company.findByIdAndUpdate(company._id, { companyMode: "self_managing_landlord" });
+
+    const { unit: unitB } = await createTestUnit({ property, company, rent: 8000 });
+    await Tenant.findByIdAndUpdate(tenant._id, { additionalUnits: [unitB._id] });
+
+    const now = new Date();
+    const priorPeriodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const invoiceDate = new Date(priorPeriodStart.getTime() + 60 * 1000);
+    const dueDate = new Date(priorPeriodStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const invoiceBundleA = await createTestInvoice({
+      leaseBundle, category: "RENT_CHARGE", amount: 12000, invoiceDate, dueDate,
+    });
+    const invoiceBundleB = await createTestInvoice({
+      leaseBundle: { ...leaseBundle, unit: unitB },
+      category: "RENT_CHARGE", amount: 8000, invoiceDate, dueDate,
+    });
+
+    // Prior-period receipt: 12,000 pays A, 8,000 pays B, 5,000 left unapplied.
+    const priorPaymentDate = new Date(priorPeriodStart.getTime() + 2 * 60 * 1000);
+    const { receipt: priorReceipt } = await createTestReceipt({
+      invoiceBundle: invoiceBundleA, amount: 25000, paymentDate: priorPaymentDate, allocate: false,
+    });
+    priorReceipt.allocations = [
+      {
+        invoice: invoiceBundleA.invoice._id, invoiceNumber: invoiceBundleA.invoice.invoiceNumber,
+        category: "RENT_CHARGE", priorityGroup: "rent", appliedAmount: 12000, beforeOutstanding: 12000, afterOutstanding: 0,
+        invoiceDate, dueDate,
+      },
+      {
+        invoice: invoiceBundleB.invoice._id, invoiceNumber: invoiceBundleB.invoice.invoiceNumber,
+        category: "RENT_CHARGE", priorityGroup: "rent", appliedAmount: 8000, beforeOutstanding: 8000, afterOutstanding: 0,
+        invoiceDate, dueDate,
+      },
+    ];
+    priorReceipt.allocationSummary = { rent: 20000, deposit: 0, utility: 0, latePenalty: 0, debitNote: 0, other: 0, unapplied: 5000 };
+    await priorReceipt.save();
+    for (const inv of [invoiceBundleA.invoice, invoiceBundleB.invoice]) {
+      inv.outstanding = 0;
+      inv.status = "paid";
+      await inv.save();
+    }
+
+    // This period's own rent invoices (20,000 total) plus a pure-overpayment receipt of
+    // 30,000 — a straight, undirected prepayment with no allocation rows at all.
+    const thisInvoiceDate = new Date(periodStart.getTime() + 60 * 1000);
+    const thisDueDate = new Date(periodStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+    await createTestInvoice({
+      leaseBundle, category: "RENT_CHARGE", amount: 12000, invoiceDate: thisInvoiceDate, dueDate: thisDueDate,
+    });
+    await createTestInvoice({
+      leaseBundle: { ...leaseBundle, unit: unitB },
+      category: "RENT_CHARGE", amount: 8000, invoiceDate: thisInvoiceDate, dueDate: thisDueDate,
+    });
+    await createTestReceipt({
+      invoiceBundle: invoiceBundleA, amount: 30000,
+      paymentDate: new Date(periodStart.getTime() + 2 * 60 * 1000),
+      allocate: false, paymentType: "rent",
+      allocations: [],
+      allocationSummary: { rent: 30000, deposit: 0, utility: 0, latePenalty: 0, debitNote: 0, other: 0, unapplied: 0 },
+    });
+
+    const statement = await generateLandlordStatement({
+      propertyId: String(property._id),
+      landlordId: String(landlord._id),
+      statementPeriodStart: periodStart,
+      statementPeriodEnd: new Date(),
+    });
+
+    const row = statement.metadata.rows.find((r) => String(r.tenantId) === String(tenant._id));
+
+    // True running balance: prior debt (20,000) fully repaid + 5,000 left over =
+    // -5,000 opening credit — not the remittance-safe 0 a manager statement would show.
+    expect(row.balanceBF).toBe(-5000);
+    // This period: 20,000 invoiced, 30,000 raw cash received (not capped at 20,000) →
+    // closing balance -15,000, matching what a Tenant Statement / Paid & Balance would show.
+    expect(row.closingBalance).toBe(-15000);
+    expect(row.invoicedRent).toBe(20000);
+  }, 60000);
+
+  it("does not leak a bundled deposit payment into the raw Bal C/F / Total Paid — a rent+deposit invoice settled by ONE receipt tagged paymentType 'rent'", async () => {
+    // Reproduces the KAILU SQUARE bug: many tenants there pay first month's rent and
+    // their security deposit together in a single receipt, which gets tagged
+    // paymentType: "rent" as a whole (not "deposit") even though part of it settles a
+    // deposit invoice. The raw Bal C/F / Total Paid figures must only count the
+    // rent-ledger-relevant portion (13,000) — not the full receipt amount (28,000),
+    // which would show every such tenant as sitting on a phantom credit exactly equal
+    // to their deposit.
+    const leaseBundle = await createTestLease({ rentAmount: 13000 });
+    const { property, landlord, unit, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const invoiceDate = new Date(periodStart.getTime() + 60 * 1000);
+    const dueDate = new Date(periodStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const rentInvoiceBundle = await createTestInvoice({
+      leaseBundle, category: "RENT_CHARGE", amount: 13000, invoiceDate, dueDate,
+    });
+    const depositInvoiceBundle = await createTestInvoice({
+      leaseBundle, category: "DEPOSIT_CHARGE", amount: 15000, invoiceDate, dueDate,
+    });
+
+    const { receipt } = await createTestReceipt({
+      invoiceBundle: rentInvoiceBundle, amount: 28000,
+      paymentDate: new Date(periodStart.getTime() + 2 * 60 * 1000),
+      allocate: false, paymentType: "rent",
+    });
+    receipt.allocations = [
+      {
+        invoice: rentInvoiceBundle.invoice._id, invoiceNumber: rentInvoiceBundle.invoice.invoiceNumber,
+        category: "RENT_CHARGE", priorityGroup: "rent", appliedAmount: 13000,
+        beforeOutstanding: 13000, afterOutstanding: 0, invoiceDate, dueDate,
+      },
+      {
+        invoice: depositInvoiceBundle.invoice._id, invoiceNumber: depositInvoiceBundle.invoice.invoiceNumber,
+        category: "DEPOSIT_CHARGE", priorityGroup: "deposit", appliedAmount: 15000,
+        beforeOutstanding: 15000, afterOutstanding: 0, invoiceDate, dueDate,
+      },
+    ];
+    receipt.allocationSummary = { rent: 13000, deposit: 15000, utility: 0, latePenalty: 0, debitNote: 0, other: 0, unapplied: 0 };
+    await receipt.save();
+
+    const statement = await generateLandlordStatement({
+      propertyId: String(property._id), landlordId: String(landlord._id),
+      statementPeriodStart: periodStart, statementPeriodEnd: new Date(),
+    });
+    const row = statement.metadata.rows.find((r) => String(r.unitId) === String(unit._id));
+
+    expect(row.invoicedRent).toBe(13000);
+    expect(row.paidRent).toBe(13000);
+    expect(row.totalDepositInvoiced).toBe(15000);
+    expect(row.totalDepositPaid).toBe(15000);
+    // Total Paid / Bal C/F must exclude the deposit portion — settled exactly, not -15000.
+    expect(row.totalPaid).toBe(13000);
+    expect(row.closingBalance).toBe(0);
   }, 60000);
 });
