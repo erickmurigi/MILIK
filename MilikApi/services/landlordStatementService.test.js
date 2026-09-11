@@ -757,4 +757,116 @@ describe("generateLandlordStatement", () => {
 
     expect(statement.metadata.depositColumns).toEqual([]);
   }, 60000);
+
+  it("does not double-count a receipt's 'Rent Prepayment' placeholder allocation row as real rent on top of its unapplied credit", async () => {
+    // The Receipt Allocation Workspace records the leftover/unapplied portion of a
+    // receipt as its own synthetic allocation row (invoice: null, isPrepayment: true) for
+    // audit-trail visibility. That row must never be read as a real invoice payment.
+    const leaseBundle = await createTestLease({ rentAmount: 17000 });
+    const { property, landlord, unit, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+    await Property.findByIdAndUpdate(property._id, { prepaymentRecognition: "on_receipt" });
+
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const invoiceDate = new Date(periodStart.getTime() + 60 * 1000);
+    const dueDate = new Date(periodStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const invoiceBundle = await createTestInvoice({
+      leaseBundle, category: "RENT_CHARGE", amount: 17000, invoiceDate, dueDate,
+    });
+
+    // A single 24,000 receipt: 11,000 pays the real rent invoice, 13,000 is genuinely
+    // unapplied — recorded both in allocationSummary.unapplied AND as its own
+    // isPrepayment:true placeholder allocation row (the real-world shape from the
+    // Receipt Allocation Workspace).
+    const { receipt } = await createTestReceipt({
+      invoiceBundle, amount: 24000, paymentDate: new Date(periodStart.getTime() + 2 * 60 * 1000),
+      allocate: false,
+    });
+    receipt.allocations = [
+      {
+        invoice: invoiceBundle.invoice._id, invoiceNumber: invoiceBundle.invoice.invoiceNumber,
+        category: "RENT_CHARGE", priorityGroup: "rent", appliedAmount: 11000,
+        beforeOutstanding: 11000, afterOutstanding: 0, invoiceDate, dueDate, isPrepayment: false,
+      },
+      {
+        invoice: null, invoiceNumber: "", category: "RENT_CHARGE", priorityGroup: "rent",
+        appliedAmount: 13000, beforeOutstanding: 0, afterOutstanding: 0,
+        invoiceDate: null, dueDate: null, description: "Rent Prepayment",
+        prepaymentLabel: "Rent Prepayment", isPrepayment: true,
+      },
+    ];
+    receipt.allocationSummary = { rent: 11000, deposit: 0, utility: 0, latePenalty: 0, debitNote: 0, other: 0, unapplied: 13000 };
+    await receipt.save();
+    invoiceBundle.invoice.outstanding = 6000;
+    invoiceBundle.invoice.status = "partially_paid";
+    await invoiceBundle.invoice.save();
+
+    const statement = await generateLandlordStatement({
+      propertyId: String(property._id), landlordId: String(landlord._id),
+      statementPeriodStart: periodStart, statementPeriodEnd: new Date(),
+    });
+    const row = statement.metadata.rows.find((r) => String(r.unitId) === String(unit._id));
+
+    // 11,000 real rent + 13,000 unapplied recognised once under on_receipt = 24,000.
+    // The bug counted the isPrepayment row's 13,000 a second time, landing at 37,000.
+    expect(row.paidRent).toBe(24000);
+    expect(row.unappliedCredits).toBe(13000);
+    expect(statement.metadata.totals.paidRent).toBe(24000);
+  }, 60000);
+
+  it("recognises the unapplied/prepayment portion of a deposit-type receipt that also pays a real deposit invoice", async () => {
+    // A receipt with paymentType "deposit" (e.g. security deposit + a bit of rent
+    // prepayment mixed on the same receipt) is fetched via a separate query from
+    // rent/utility receipts and only its deposit + "mixed non-deposit" allocations were
+    // being processed — allocationSummary.unapplied on a deposit-type receipt was
+    // silently dropped from both unappliedCredits and paidRent.
+    const leaseBundle = await createTestLease({ rentAmount: 17000 });
+    const { property, landlord, unit, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+    await Property.findByIdAndUpdate(property._id, { prepaymentRecognition: "on_receipt" });
+
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const invoiceDate = new Date(periodStart.getTime() + 60 * 1000);
+    const dueDate = new Date(periodStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const depositInvoiceBundle = await createTestInvoice({
+      leaseBundle, category: "DEPOSIT_CHARGE", amount: 17000, invoiceDate, dueDate,
+    });
+
+    const { receipt } = await createTestReceipt({
+      invoiceBundle: depositInvoiceBundle, amount: 22000,
+      paymentDate: new Date(periodStart.getTime() + 2 * 60 * 1000),
+      allocate: false, paymentType: "deposit",
+    });
+    receipt.allocations = [
+      {
+        invoice: depositInvoiceBundle.invoice._id, invoiceNumber: depositInvoiceBundle.invoice.invoiceNumber,
+        category: "DEPOSIT_CHARGE", priorityGroup: "deposit", appliedAmount: 17000,
+        beforeOutstanding: 17000, afterOutstanding: 0, invoiceDate, dueDate, isPrepayment: false,
+      },
+      {
+        invoice: null, invoiceNumber: "", category: "RENT_CHARGE", priorityGroup: "rent",
+        appliedAmount: 5000, beforeOutstanding: 0, afterOutstanding: 0,
+        invoiceDate: null, dueDate: null, description: "Rent Prepayment",
+        prepaymentLabel: "Rent Prepayment", isPrepayment: true,
+      },
+    ];
+    receipt.allocationSummary = { rent: 0, deposit: 17000, utility: 0, latePenalty: 0, debitNote: 0, other: 0, unapplied: 5000 };
+    await receipt.save();
+
+    const statement = await generateLandlordStatement({
+      propertyId: String(property._id), landlordId: String(landlord._id),
+      statementPeriodStart: periodStart, statementPeriodEnd: new Date(),
+    });
+    const row = statement.metadata.rows.find((r) => String(r.unitId) === String(unit._id));
+
+    expect(row.totalDepositPaid).toBe(17000);
+    // The 5,000 mixed-in prepayment must be recognised — not silently dropped.
+    expect(row.unappliedCredits).toBe(5000);
+    expect(row.paidRent).toBe(5000);
+    expect(statement.metadata.totals.paidRent).toBe(5000);
+  }, 60000);
 });

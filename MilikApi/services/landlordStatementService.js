@@ -938,6 +938,25 @@ const getReceiptAllocationStatementImpact = ({
     };
   }
 
+  // The Receipt Allocation Workspace records an unapplied/prepayment portion as its own
+  // synthetic allocation row (invoice: null, isPrepayment: true, priorityGroup often
+  // "rent" purely as a display label) purely for audit-trail visibility — it does not
+  // pay any real invoice. That same amount is already counted once via
+  // getReceiptSummaryAmount(receipt, "unapplied") elsewhere in the receipt loop, so this
+  // row must be excluded here or it gets counted a second time as real rent revenue.
+  if (allocationRow?.isPrepayment) {
+    return {
+      rentAmount: 0,
+      utilityAmount: 0,
+      utilities: [],
+      taxAmount: 0,
+      depositAmount: 0,
+      statementRelevantAmount: 0,
+      statementCategory: "",
+      isStatementRelevant: false,
+    };
+  }
+
   const combinedSplit = getCombinedReceiptAllocationSplit({ allocationRow, sourceInvoice, row });
   if (combinedSplit) {
     const rentAmount = round2(Number(combinedSplit.rentAmount || 0));
@@ -2855,6 +2874,25 @@ export const generateLandlordStatement = async ({
   // paidRent / paidUtility on the statement.
   for (const receipt of allDepositReceiptsInPeriod) {
     if (receipt.paymentType !== "deposit") continue; // rent/utility receipts handled above
+
+    // Leftover cash on a deposit-type receipt that isn't allocated to any deposit charge
+    // (tagged either the old way, priorityGroup "unapplied", or the newer way,
+    // isPrepayment:true placeholder rows excluded from getReceiptAllocationStatementImpact
+    // above) is still real cash collected. Nothing else processes allocationSummary.
+    // unapplied for a deposit-type receipt, so it must be recognised here — same rule as
+    // the main receiptsInPeriod loop: always an unapplied credit, and under "on_receipt"
+    // also counted as paidRent immediately.
+    const unappliedRow = ensureRow(receipt.tenant, receipt.unit);
+    const depositReceiptUnapplied = getReceiptSummaryAmount(receipt, "unapplied");
+    if (depositReceiptUnapplied !== 0) {
+      unappliedRow.unappliedCredits += depositReceiptUnapplied;
+      if (prepaymentRecognition === "on_receipt") {
+        unappliedRow.paidRent += depositReceiptUnapplied;
+        if (receipt.paidDirectToLandlord) totalRentReceivedLandlord += depositReceiptUnapplied;
+        else totalRentReceivedManager += depositReceiptUnapplied;
+      }
+    }
+
     const mixedAllocRows = getReceiptAllocationRows(receipt);
     if (mixedAllocRows.length === 0) continue;
 
