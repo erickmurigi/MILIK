@@ -347,7 +347,56 @@ const buildUtilityColumns = (workspace = null, rows = []) => {
   return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
 };
 
-const buildStatementColumns = (workspace = null, utilityColumns = []) => {
+const normalizeRowDeposits = (row = {}) => {
+  const map = {};
+
+  if (row?.deposits && typeof row.deposits === "object") {
+    Object.values(row.deposits).forEach((item) => {
+      const key = toUtilityKey(item?.key || "deposit") || "deposit";
+      map[key] = {
+        key,
+        label: item?.label || "Deposit",
+        invoiced: Number(item?.invoiced || 0),
+        paid: Number(item?.paid || 0),
+      };
+    });
+  }
+
+  return map;
+};
+
+const buildDepositColumns = (workspace = null, rows = []) => {
+  if (Array.isArray(workspace?.depositColumns) && workspace.depositColumns.length > 0) {
+    return workspace.depositColumns
+      .map((item) => ({
+        key: toUtilityKey(item?.key || "deposit") || "deposit",
+        label: item?.label || "Deposit",
+        invoiced: Number(item?.invoiced || 0),
+        paid: Number(item?.paid || 0),
+      }))
+      .filter((item) => item.invoiced !== 0 || item.paid !== 0);
+  }
+
+  const map = new Map();
+
+  rows.forEach((row) => {
+    Object.values(normalizeRowDeposits(row)).forEach((item) => {
+      const key = item.key;
+      if (!map.has(key)) {
+        map.set(key, { key, label: item?.label || "Deposit", invoiced: 0, paid: 0 });
+      }
+      const entry = map.get(key);
+      entry.invoiced += Number(item?.invoiced || 0);
+      entry.paid += Number(item?.paid || 0);
+    });
+  });
+
+  return Array.from(map.values())
+    .filter((item) => item.invoiced !== 0 || item.paid !== 0)
+    .sort((a, b) => a.label.localeCompare(b.label));
+};
+
+const buildStatementColumns = (workspace = null, utilityColumns = [], depositColumns = []) => {
   if (Array.isArray(workspace?.statementColumns) && workspace.statementColumns.length > 0) {
     return workspace.statementColumns.map((item) => ({
       key: String(item?.key || ''),
@@ -360,8 +409,8 @@ const buildStatementColumns = (workspace = null, utilityColumns = []) => {
     }));
   }
 
-  if (utilityColumns.length <= 4) {
-    return utilityColumns.map((item) => ({
+  const utilityPart = utilityColumns.length <= 4
+    ? utilityColumns.map((item) => ({
       key: item.key,
       label: item.label,
       sourceKeys: [item.key],
@@ -369,29 +418,44 @@ const buildStatementColumns = (workspace = null, utilityColumns = []) => {
       paid: Number(item?.paid || 0),
       isGrouped: false,
       categoryType: item?.categoryType || 'utility',
-    }));
-  }
+    }))
+    : (() => {
+      const visible = utilityColumns.slice(0, 3).map((item) => ({
+        key: item.key,
+        label: item.label,
+        sourceKeys: [item.key],
+        invoiced: Number(item?.invoiced || 0),
+        paid: Number(item?.paid || 0),
+        isGrouped: false,
+        categoryType: item?.categoryType || 'utility',
+      }));
+      const overflow = utilityColumns.slice(3);
+      visible.push({
+        key: 'other_charges',
+        label: 'Other Charges',
+        sourceKeys: overflow.map((item) => item.key),
+        invoiced: overflow.reduce((sum, item) => sum + Number(item?.invoiced || 0), 0),
+        paid: overflow.reduce((sum, item) => sum + Number(item?.paid || 0), 0),
+        isGrouped: true,
+        categoryType: 'mixed',
+      });
+      return visible;
+    })();
 
-  const visible = utilityColumns.slice(0, 3).map((item) => ({
+  // Deposit is a memo-only column — never grouped into "Other Charges", so it stays
+  // clearly labeled and never feeds row.totalPaid/Bal C/F (those are computed server-side
+  // from rent+utility+tax only; this column is display-only, sourced from row.__depositMap).
+  const depositPart = depositColumns.map((item) => ({
     key: item.key,
     label: item.label,
     sourceKeys: [item.key],
     invoiced: Number(item?.invoiced || 0),
     paid: Number(item?.paid || 0),
     isGrouped: false,
-    categoryType: item?.categoryType || 'utility',
+    categoryType: 'deposit',
   }));
-  const overflow = utilityColumns.slice(3);
-  visible.push({
-    key: 'other_charges',
-    label: 'Other Charges',
-    sourceKeys: overflow.map((item) => item.key),
-    invoiced: overflow.reduce((sum, item) => sum + Number(item?.invoiced || 0), 0),
-    paid: overflow.reduce((sum, item) => sum + Number(item?.paid || 0), 0),
-    isGrouped: true,
-    categoryType: 'mixed',
-  });
-  return visible;
+
+  return [...utilityPart, ...depositPart];
 };
 
 const getUtilityValue = (row = {}, key = "", phase = "invoiced") =>
@@ -403,15 +467,17 @@ const getPreparedUtilityValue = (row = {}, key = "", phase = "invoiced") =>
 
 const buildPreparedStatementColumnMap = (row = {}, statementColumns = []) => {
   const utilityMap = row?.__utilityMap && typeof row.__utilityMap === 'object' ? row.__utilityMap : normalizeRowUtilities(row);
+  const depositMap = row?.__depositMap && typeof row.__depositMap === 'object' ? row.__depositMap : normalizeRowDeposits(row);
   if (row?.statementColumns && typeof row.statementColumns === 'object') {
     return row.statementColumns;
   }
   return (Array.isArray(statementColumns) ? statementColumns : []).reduce((acc, column) => {
     const sourceKeys = Array.isArray(column?.sourceKeys) && column.sourceKeys.length > 0 ? column.sourceKeys : [column?.key];
+    const sourceMap = column?.categoryType === 'deposit' ? depositMap : utilityMap;
     acc[column.key] = sourceKeys.reduce(
       (totals, sourceKey) => {
-        totals.invoiced += Number(utilityMap?.[sourceKey]?.invoiced || 0);
-        totals.paid += Number(utilityMap?.[sourceKey]?.paid || 0);
+        totals.invoiced += Number(sourceMap?.[sourceKey]?.invoiced || 0);
+        totals.paid += Number(sourceMap?.[sourceKey]?.paid || 0);
         return totals;
       },
       { invoiced: 0, paid: 0 }
@@ -1107,18 +1173,21 @@ const Statements = () => {
     };
   }, [summary, totals, additionRows, expenseRows, directToLandlordRows]);
   const utilityColumns = useMemo(() => buildUtilityColumns(workspace, rows), [workspace, rows]);
+  const depositColumns = useMemo(() => buildDepositColumns(workspace, rows), [workspace, rows]);
   const statementColumns = useMemo(
-    () => buildStatementColumns(workspace, utilityColumns),
-    [workspace, utilityColumns]
+    () => buildStatementColumns(workspace, utilityColumns, depositColumns),
+    [workspace, utilityColumns, depositColumns]
   );
   const preparedRows = useMemo(
     () =>
       rows.map((row) => {
         const utilityMap = normalizeRowUtilities(row);
+        const depositMap = normalizeRowDeposits(row);
         const enriched = {
           ...row,
           __utilityMap: utilityMap,
-          __statementColumnMap: buildPreparedStatementColumnMap({ ...row, __utilityMap: utilityMap }, statementColumns),
+          __depositMap: depositMap,
+          __statementColumnMap: buildPreparedStatementColumnMap({ ...row, __utilityMap: utilityMap, __depositMap: depositMap }, statementColumns),
         };
         return { ...enriched, __paymentStatus: getRowPaymentStatus(enriched) };
       }),
@@ -1175,6 +1244,7 @@ const Statements = () => {
             : [row.unit].filter(Boolean),
           displayUnitLabel: row.unit,
           __utilityMap: { ...(row.__utilityMap || {}) },
+          __depositMap: { ...(row.__depositMap || {}) },
         });
         return;
       }
@@ -1210,6 +1280,22 @@ const Statements = () => {
             invoiced: Number(utilityPhases?.invoiced || 0),
             paid: Number(utilityPhases?.paid || 0),
             label: utilityPhases?.label || utilityKey,
+          };
+        }
+      });
+
+      const depositMap = existing.__depositMap;
+      Object.entries(row.__depositMap || {}).forEach(([depositKey, depositPhases]) => {
+        const curr = depositMap[depositKey];
+        if (curr) {
+          curr.invoiced += Number(depositPhases?.invoiced || 0);
+          curr.paid += Number(depositPhases?.paid || 0);
+          if (!curr.label) curr.label = depositPhases?.label || "Deposit";
+        } else {
+          depositMap[depositKey] = {
+            invoiced: Number(depositPhases?.invoiced || 0),
+            paid: Number(depositPhases?.paid || 0),
+            label: depositPhases?.label || "Deposit",
           };
         }
       });
@@ -2648,41 +2734,41 @@ const Statements = () => {
                     </div>
                   </div>
                   {(directToLandlordAmount > 0 || Number(depositSettlementTotals.additions || 0) > 0) && (
-                    <div className="border-t border-[#0B3B2E]/20 bg-[#EDF5F1] px-3 py-1.5">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex flex-wrap items-center gap-4 text-xs">
-                          {/* Self-managed: there's no manager, so no manager-vs-direct split to
-                              show — Net Operating Income above already covers the full period;
-                              this recap reduces to just the deposits-held figure. */}
-                          {!isSelfManaged && (
+                    <div className="space-y-1.5 border-t border-[#0B3B2E]/20 bg-[#EDF5F1] px-3 py-1.5">
+                      {/* Income recap — only the figures that actually sum to Total Income
+                          This Period. Self-managed: there's no manager, so no manager-vs-direct
+                          split — Net Operating Income above already covers the full period. */}
+                      {!isSelfManaged && (
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex flex-wrap items-center gap-4 text-xs">
                             <span className="text-slate-600">
                               Manager transfers: <strong className="text-slate-900">{currency(Math.max(0, settlement.amount))}</strong>
                             </span>
-                          )}
-                          {!isSelfManaged && directToLandlordAmount > 0 && (
-                            <>
-                              <span className="text-slate-400">+</span>
-                              <span className="text-slate-600">
-                                Receipts to Landlord: <strong className="text-[#0B3B2E]">{currency(directToLandlordAmount)}</strong>
-                              </span>
-                            </>
-                          )}
-                          {Number(depositSettlementTotals.additions || 0) > 0 && (
-                            <>
-                              {!isSelfManaged && <span className="text-slate-400">+</span>}
-                              <span className="text-slate-600">
-                                Deposits You Now Hold: <strong className="text-[#0B3B2E]">{currency(depositSettlementTotals.additions)}</strong>
-                              </span>
-                            </>
-                          )}
-                        </div>
-                        {!isSelfManaged && (
+                            {directToLandlordAmount > 0 && (
+                              <>
+                                <span className="text-slate-400">+</span>
+                                <span className="text-slate-600">
+                                  Receipts to Landlord: <strong className="text-[#0B3B2E]">{currency(directToLandlordAmount)}</strong>
+                                </span>
+                              </>
+                            )}
+                          </div>
                           <div className="text-right">
                             <p className="text-[9px] font-black uppercase tracking-widest text-[#0B3B2E]">Total Income This Period</p>
                             <p className="text-base font-black text-[#0B3B2E]">{currency(Math.max(0, settlement.amount) + directToLandlordAmount)}</p>
                           </div>
-                        )}
-                      </div>
+                        </div>
+                      )}
+                      {/* Deposits are a liability held on the tenant's behalf, not income —
+                          shown on its own line so it never reads as part of the sum above. */}
+                      {Number(depositSettlementTotals.additions || 0) > 0 && (
+                        <div className={`flex flex-wrap items-baseline justify-between gap-2 text-xs ${!isSelfManaged ? "border-t border-[#0B3B2E]/10 pt-1.5" : ""}`}>
+                          <span className="text-slate-500">
+                            Deposits you now hold <span className="text-slate-400">— held for tenants, not income</span>
+                          </span>
+                          <strong className="text-slate-700">{currency(depositSettlementTotals.additions)}</strong>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

@@ -6,6 +6,7 @@ import { createTestLease, createTestChartOfAccounts, createTestUnit } from "../t
 import { createTestInvoice, createTestReceipt } from "../test/factories.landlord.js";
 import PaymentVoucher from "../models/PaymentVoucher.js";
 import Tenant from "../models/Tenant.js";
+import Property from "../models/Property.js";
 
 describe("generateLandlordStatement", () => {
   it("reflects rent invoiced and rent collected for the statement period", async () => {
@@ -512,5 +513,248 @@ describe("generateLandlordStatement", () => {
     expect(statement.metadata.totals.paidRent).toBe(20000);
     // Both units still counted as occupied.
     expect(statement.metadata.summary.occupiedUnits).toBeGreaterThanOrEqual(2);
+  }, 60000);
+
+  it("a payment allocated to a future-dated rent invoice is held as a prepayment, then recognised exactly once in the invoice's own period (on_invoice_allocation)", async () => {
+    const leaseBundle = await createTestLease({ rentAmount: 12000 });
+    const { property, landlord, unit, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+
+    const now = new Date();
+    const periodNStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const periodNEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+    const periodN1Start = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Invoice A — this period's rent. Invoice B — next period's rent, raised early.
+    const invA = await createTestInvoice({
+      leaseBundle, category: "RENT_CHARGE", amount: 12000,
+      invoiceDate: new Date(periodNStart.getTime() + 60 * 1000),
+      dueDate: new Date(periodNStart.getTime() + 7 * 24 * 60 * 60 * 1000),
+    });
+    const invB = await createTestInvoice({
+      leaseBundle, category: "RENT_CHARGE", amount: 12000,
+      invoiceDate: new Date(periodN1Start.getTime() + 60 * 1000),
+      dueDate: new Date(periodN1Start.getTime() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    // One 24,000 payment last period, split across both invoices — 12,000 is ahead of
+    // the billing (invoice B belongs to next period).
+    const payDate = new Date(periodNStart.getTime() + 2 * 60 * 1000);
+    const { receipt } = await createTestReceipt({
+      invoiceBundle: invA, amount: 24000, paymentDate: payDate, allocate: false,
+    });
+    receipt.allocations = [
+      { invoice: invA.invoice._id, invoiceNumber: invA.invoice.invoiceNumber, category: "RENT_CHARGE", priorityGroup: "rent", appliedAmount: 12000, beforeOutstanding: 12000, afterOutstanding: 0, invoiceDate: invA.invoice.invoiceDate, dueDate: invA.invoice.dueDate },
+      { invoice: invB.invoice._id, invoiceNumber: invB.invoice.invoiceNumber, category: "RENT_CHARGE", priorityGroup: "rent", appliedAmount: 12000, beforeOutstanding: 12000, afterOutstanding: 0, invoiceDate: invB.invoice.invoiceDate, dueDate: invB.invoice.dueDate },
+    ];
+    receipt.allocationSummary = { rent: 24000, deposit: 0, utility: 0, latePenalty: 0, debitNote: 0, other: 0, unapplied: 0 };
+    await receipt.save();
+    for (const inv of [invA.invoice, invB.invoice]) { inv.outstanding = 0; inv.status = "paid"; await inv.save(); }
+
+    const gen = (start, end) => generateLandlordStatement({
+      propertyId: String(property._id), landlordId: String(landlord._id),
+      statementPeriodStart: start, statementPeriodEnd: end,
+    });
+    const rowFor = (stmt) => stmt.metadata.rows.find((r) => String(r.unitId) === String(unit._id));
+
+    // Period N: only invoice A's 12,000 is "paid this period"; invoice B's 12,000 is held.
+    const nStmt = await gen(periodNStart, periodNEnd);
+    const nRow = rowFor(nStmt);
+    expect(nRow.paidRent).toBe(12000);
+    expect(nRow.closingBalance).toBe(0);
+    expect(nRow.unappliedCredits).toBe(12000);
+    expect(nStmt.metadata.totals.paidRent).toBe(12000);
+    expect(nStmt.metadata.summary.commissionBaseAmount).toBe(12000);
+
+    // Period N+1: invoice B's 12,000 is recognised now — once, not again on top of N.
+    const n1Stmt = await gen(periodN1Start, new Date());
+    const n1Row = rowFor(n1Stmt);
+    expect(n1Row.paidRent).toBe(12000);
+    expect(n1Row.closingBalance).toBe(0);
+    expect(n1Stmt.metadata.totals.paidRent).toBe(12000);
+    expect(n1Stmt.metadata.summary.commissionBaseAmount).toBe(12000);
+
+    // 24,000 collected, counted 12,000 + 12,000 across the two periods — exactly once each.
+  }, 60000);
+
+  it("on_receipt policy: the full payment is recognised when it lands, and never again when the future invoice's period arrives", async () => {
+    const leaseBundle = await createTestLease({ rentAmount: 12000 });
+    const { property, landlord, unit, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+    await Property.findByIdAndUpdate(property._id, { prepaymentRecognition: "on_receipt" });
+
+    const now = new Date();
+    const periodNStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const periodNEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+    const periodN1Start = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const invA = await createTestInvoice({
+      leaseBundle, category: "RENT_CHARGE", amount: 12000,
+      invoiceDate: new Date(periodNStart.getTime() + 60 * 1000),
+      dueDate: new Date(periodNStart.getTime() + 7 * 24 * 60 * 60 * 1000),
+    });
+    const invB = await createTestInvoice({
+      leaseBundle, category: "RENT_CHARGE", amount: 12000,
+      invoiceDate: new Date(periodN1Start.getTime() + 60 * 1000),
+      dueDate: new Date(periodN1Start.getTime() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    const payDate = new Date(periodNStart.getTime() + 2 * 60 * 1000);
+    const { receipt } = await createTestReceipt({
+      invoiceBundle: invA, amount: 24000, paymentDate: payDate, allocate: false,
+    });
+    receipt.allocations = [
+      { invoice: invA.invoice._id, invoiceNumber: invA.invoice.invoiceNumber, category: "RENT_CHARGE", priorityGroup: "rent", appliedAmount: 12000, beforeOutstanding: 12000, afterOutstanding: 0, invoiceDate: invA.invoice.invoiceDate, dueDate: invA.invoice.dueDate },
+      { invoice: invB.invoice._id, invoiceNumber: invB.invoice.invoiceNumber, category: "RENT_CHARGE", priorityGroup: "rent", appliedAmount: 12000, beforeOutstanding: 12000, afterOutstanding: 0, invoiceDate: invB.invoice.invoiceDate, dueDate: invB.invoice.dueDate },
+    ];
+    receipt.allocationSummary = { rent: 24000, deposit: 0, utility: 0, latePenalty: 0, debitNote: 0, other: 0, unapplied: 0 };
+    await receipt.save();
+    for (const inv of [invA.invoice, invB.invoice]) { inv.outstanding = 0; inv.status = "paid"; await inv.save(); }
+
+    const gen = (start, end) => generateLandlordStatement({
+      propertyId: String(property._id), landlordId: String(landlord._id),
+      statementPeriodStart: start, statementPeriodEnd: end,
+    });
+    const rowFor = (stmt) => stmt.metadata.rows.find((r) => String(r.unitId) === String(unit._id));
+
+    // Period N: the whole 24,000 is recognised on receipt.
+    const nStmt = await gen(periodNStart, periodNEnd);
+    expect(rowFor(nStmt).paidRent).toBe(24000);
+    expect(nStmt.metadata.totals.paidRent).toBe(24000);
+
+    // Period N+1: invoice B is billed, but its payment was already counted — not re-counted.
+    const n1Stmt = await gen(periodN1Start, new Date());
+    expect(rowFor(n1Stmt).paidRent).toBe(0);
+    expect(n1Stmt.metadata.totals.paidRent).toBe(0);
+  }, 60000);
+
+  it("on_invoice_allocation caps rent recognition at what the tenant owes — a lump overpayment beyond the bill is held as a prepayment credit", async () => {
+    const leaseBundle = await createTestLease({ rentAmount: 13000 });
+    const { property, landlord, unit, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const invoiceDate = new Date(periodStart.getTime() + 60 * 1000);
+
+    // Billed 13,000 rent this period; tenant pays 28,000 in one receipt recorded as a
+    // lump "rent" amount (no per-invoice allocation rows) — the KETHI OWINO shape.
+    await createTestInvoice({
+      leaseBundle, category: "RENT_CHARGE", amount: 13000, invoiceDate,
+      dueDate: new Date(periodStart.getTime() + 7 * 24 * 60 * 60 * 1000),
+    });
+    const { receipt } = await createTestReceipt({
+      invoiceBundle: leaseBundle, amount: 28000,
+      paymentDate: new Date(periodStart.getTime() + 2 * 60 * 1000),
+      allocate: false, paymentType: "rent",
+    });
+    receipt.allocations = [];
+    receipt.allocationSummary = { rent: 28000, deposit: 0, utility: 0, latePenalty: 0, debitNote: 0, other: 0, unapplied: 0 };
+    await receipt.save();
+
+    const statement = await generateLandlordStatement({
+      propertyId: String(property._id), landlordId: String(landlord._id),
+      statementPeriodStart: periodStart, statementPeriodEnd: new Date(),
+    });
+    const row = statement.metadata.rows.find((r) => String(r.unitId) === String(unit._id));
+
+    // Only the 13,000 covering the bill is recognised; 15,000 held as a prepayment credit.
+    expect(row.paidRent).toBe(13000);
+    expect(row.closingBalance).toBe(0);
+    expect(row.unappliedCredits).toBe(15000);
+    expect(statement.metadata.totals.paidRent).toBe(13000);
+    // Commission and remittance basis exclude the prepayment.
+    expect(statement.metadata.summary.commissionBaseAmount).toBe(13000);
+    expect(statement.metadata.summary.unappliedPayments).toBe(15000);
+  }, 60000);
+
+  it("shows a generic Deposit column (invoiced + paid) for a tenant billed a security deposit, without affecting the rent-ledger balance", async () => {
+    const leaseBundle = await createTestLease({ rentAmount: 10000 });
+    const { property, landlord, unit, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const invoiceDate = new Date(periodStart.getTime() + 60 * 1000);
+    const dueDate = new Date(periodStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const rentInvoiceBundle = await createTestInvoice({
+      leaseBundle, category: "RENT_CHARGE", amount: 10000, invoiceDate, dueDate,
+    });
+    const depositInvoiceBundle = await createTestInvoice({
+      leaseBundle, category: "DEPOSIT_CHARGE", amount: 17000, invoiceDate, dueDate,
+    });
+
+    // Rent paid in full, deposit paid in full — via two separate, explicitly allocated
+    // receipts (mirroring how a real deposit invoice is settled).
+    await createTestReceipt({
+      invoiceBundle: rentInvoiceBundle, amount: 10000,
+      paymentDate: new Date(periodStart.getTime() + 2 * 60 * 1000),
+      allocate: true,
+    });
+    await createTestReceipt({
+      invoiceBundle: depositInvoiceBundle, amount: 17000,
+      paymentDate: new Date(periodStart.getTime() + 3 * 60 * 1000),
+      allocate: false,
+      allocations: [
+        {
+          invoice: depositInvoiceBundle.invoice._id,
+          invoiceNumber: depositInvoiceBundle.invoice.invoiceNumber,
+          category: "DEPOSIT_CHARGE",
+          priorityGroup: "deposit",
+          appliedAmount: 17000,
+          beforeOutstanding: 17000,
+          afterOutstanding: 0,
+          invoiceDate, dueDate,
+        },
+      ],
+      allocationSummary: { rent: 0, deposit: 17000, utility: 0, latePenalty: 0, debitNote: 0, other: 0, unapplied: 0 },
+    });
+
+    const statement = await generateLandlordStatement({
+      propertyId: String(property._id), landlordId: String(landlord._id),
+      statementPeriodStart: periodStart, statementPeriodEnd: new Date(),
+    });
+
+    const row = statement.metadata.rows.find((r) => String(r.unitId) === String(unit._id));
+
+    // The generic "Deposit" column shows the full billed and paid deposit amount.
+    expect(row.totalDepositInvoiced).toBe(17000);
+    expect(row.totalDepositPaid).toBe(17000);
+    expect(Array.isArray(statement.metadata.depositColumns)).toBe(true);
+    const depositColumn = statement.metadata.depositColumns.find((c) => c.key === "deposit");
+    expect(depositColumn).toBeTruthy();
+    expect(depositColumn.label).toBe("Deposit");
+    expect(depositColumn.invoiced).toBe(17000);
+    expect(depositColumn.paid).toBe(17000);
+
+    // Deposit is a liability, not income — it must NEVER be folded into the rent-ledger
+    // balance. Rent alone is billed 10,000 and paid 10,000, so closingBalance is 0
+    // regardless of the 17,000 of deposit activity on the same row.
+    expect(row.invoicedRent).toBe(10000);
+    expect(row.paidRent).toBe(10000);
+    expect(row.closingBalance).toBe(0);
+  }, 60000);
+
+  it("hides the Deposit column entirely when a property has no deposit activity this period", async () => {
+    const leaseBundle = await createTestLease({ rentAmount: 9000 });
+    const { property, landlord, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const invoiceDate = new Date(periodStart.getTime() + 60 * 1000);
+
+    await createTestInvoice({
+      leaseBundle, category: "RENT_CHARGE", amount: 9000, invoiceDate,
+      dueDate: new Date(periodStart.getTime() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    const statement = await generateLandlordStatement({
+      propertyId: String(property._id), landlordId: String(landlord._id),
+      statementPeriodStart: periodStart, statementPeriodEnd: new Date(),
+    });
+
+    expect(statement.metadata.depositColumns).toEqual([]);
   }, 60000);
 });

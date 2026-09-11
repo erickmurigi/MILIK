@@ -41,6 +41,7 @@ const defaultForm = {
   commissionPercentage: 0,
   commissionFixedAmount: 0,
   commissionRecognitionBasis: 'received',
+  prepaymentRecognition: 'on_invoice_allocation',
   tenantsPaysTo: 'propertyManager',
   depositHeldBy: 'propertyManager',
   commissionCategoryKeys: ['rent'],
@@ -57,6 +58,7 @@ const normalizePropertyForm = (property) => ({
   commissionPercentage: Number(property?.commissionPercentage || 0),
   commissionFixedAmount: Number(property?.commissionFixedAmount || 0),
   commissionRecognitionBasis: property?.commissionRecognitionBasis || 'received',
+  prepaymentRecognition: property?.prepaymentRecognition || 'on_invoice_allocation',
   tenantsPaysTo: property?.tenantsPaysTo || 'propertyManager',
   depositHeldBy: property?.depositHeldBy || 'propertyManager',
   commissionCategoryKeys: Array.isArray(property?.commissionCategoryKeys) && property.commissionCategoryKeys.length > 0
@@ -289,26 +291,33 @@ const PropertyCommissionSettings = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-slate-100 p-6">
-        <div className="mx-auto max-w-5xl space-y-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-slate-900">Commission Settings</h1>
-              <p className="mt-1 text-sm text-slate-600">
-                Configure {termProperty.toLowerCase()}-level management commission rules and VAT/tax treatment for statements.
-              </p>
-            </div>
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
+        {/* Sticky header */}
+        <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-2.5">
+          <div className="flex items-center gap-3">
             <button
+              type="button"
               onClick={() => navigate(-1)}
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+              className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#B7C9C0] transition hover:text-white"
             >
               <FaArrowLeft /> Back
             </button>
+            <div className="h-4 w-px bg-[#2A5C4A]" />
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">{termProperty}</div>
+              <h1 className="text-sm font-black leading-none text-white">Commission Settings</h1>
+            </div>
           </div>
+        </div>
 
-          <div className={`${CARD} p-5`}>
+        {/* Scrollable content */}
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          <div className={`${CARD} mb-4 p-5`}>
             <label className="mb-0.5 block text-xs font-semibold text-slate-700">Select {termProperty}</label>
+            <p className="mb-2 text-xs text-slate-500">
+              Configure {termProperty.toLowerCase()}-level management commission rules and VAT/tax treatment for statements.
+            </p>
             <AppSelect
               value={selectedPropertyId}
               onChange={(v) => setSelectedPropertyId(v ?? "")}
@@ -321,7 +330,7 @@ const PropertyCommissionSettings = () => {
           </div>
 
           {selectedProperty && (
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form id="commission-settings-form" onSubmit={handleSubmit} className="space-y-4">
               <div className={`${GREEN} rounded-2xl p-5 text-white shadow-sm`}>
                 <div className="text-xl font-bold">{selectedProperty.propertyName}</div>
                 <div className="mt-1 text-sm text-emerald-50">{termProperty} Code: {selectedProperty.propertyCode}</div>
@@ -405,6 +414,24 @@ const PropertyCommissionSettings = () => {
                         ]}
                         size="sm"
                       />
+                    </div>
+
+                    <div>
+                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">Prepayment Recognition</label>
+                      <AppSelect
+                        value={formData.prepaymentRecognition || null}
+                        onChange={(v) => setFormData((f) => ({ ...f, prepaymentRecognition: v ?? '' }))}
+                        options={[
+                          { value: 'on_invoice_allocation', label: 'On invoice allocation (hold prepayment until its rent is billed)' },
+                          { value: 'on_receipt', label: 'On receipt (recognise the full payment when it lands)' },
+                        ]}
+                        size="sm"
+                      />
+                      <p className="mt-0.5 text-[11px] text-slate-500">
+                        Controls when a payment received ahead of its {termRent.toLowerCase()} bill counts toward
+                        collections, commission and remittance. &ldquo;On invoice allocation&rdquo; defers it to the
+                        period the {termRent.toLowerCase()} falls due &mdash; no early remittance, counted once.
+                      </p>
                     </div>
 
                     <div>
@@ -551,27 +578,35 @@ const PropertyCommissionSettings = () => {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setFormData(selectedProperty ? normalizePropertyForm(selectedProperty) : defaultForm)}
-                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
-                >
-                  Reset
-                </button>
-                {canWrite && (
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black text-white disabled:opacity-60 ${GREEN} ${GREEN_HOVER}`}
-                >
-                  <FaSave /> {saving ? 'Saving...' : 'Save Commission Settings'}
-                </button>
-                )}
-              </div>
             </form>
           )}
         </div>
+
+        {/* Sticky footer */}
+        {selectedProperty && (
+          <div className="flex-shrink-0 border-t border-slate-200 bg-[#F6FAF8] px-4 py-2.5">
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setFormData(selectedProperty ? normalizePropertyForm(selectedProperty) : defaultForm)}
+                disabled={saving}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Reset
+              </button>
+              {canWrite && (
+                <button
+                  type="submit"
+                  form="commission-settings-form"
+                  disabled={saving}
+                  className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-60 ${GREEN} ${GREEN_HOVER}`}
+                >
+                  <FaSave /> {saving ? 'Saving...' : 'Save Commission Settings'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );

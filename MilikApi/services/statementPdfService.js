@@ -191,7 +191,45 @@ const buildUtilityColumnsFromRows = (rows = []) => {
     .sort((a, b) => String(a.label).localeCompare(String(b.label)));
 };
 
-const buildStatementColumns = (workspace = {}, utilityColumns = []) => {
+const normalizeRowDeposits = (row = {}) => {
+  const map = {};
+
+  if (row?.deposits && typeof row.deposits === "object") {
+    Object.values(row.deposits).forEach((item) => {
+      const key = normalizeUtilityKey(item?.key || "deposit") || "deposit";
+      map[key] = {
+        key,
+        label: item?.label || "Deposit",
+        invoiced: Number(item?.invoiced || 0),
+        paid: Number(item?.paid || 0),
+      };
+    });
+  }
+
+  return map;
+};
+
+const buildDepositColumnsFromRows = (rows = []) => {
+  const map = new Map();
+
+  rows.forEach((row) => {
+    Object.values(normalizeRowDeposits(row)).forEach((item) => {
+      const key = item.key;
+      if (!map.has(key)) {
+        map.set(key, { key, label: item?.label || "Deposit", invoiced: 0, paid: 0 });
+      }
+      const column = map.get(key);
+      column.invoiced += Number(item?.invoiced || 0);
+      column.paid += Number(item?.paid || 0);
+    });
+  });
+
+  return Array.from(map.values())
+    .filter((item) => Number(item.invoiced || 0) !== 0 || Number(item.paid || 0) !== 0)
+    .sort((a, b) => String(a.label).localeCompare(String(b.label)));
+};
+
+const buildStatementColumns = (workspace = {}, utilityColumns = [], depositColumns = []) => {
   if (Array.isArray(workspace?.statementColumns) && workspace.statementColumns.length > 0) {
     return workspace.statementColumns.map((item) => ({
       key: String(item?.key || ""),
@@ -206,35 +244,49 @@ const buildStatementColumns = (workspace = {}, utilityColumns = []) => {
     }));
   }
 
-  if (utilityColumns.length <= 4) {
-    return utilityColumns.map((item) => ({
+  const utilityPart = utilityColumns.length <= 4
+    ? utilityColumns.map((item) => ({
       key: item.key,
       label: item.label,
       sourceKeys: [item.key],
       invoiced: Number(item?.invoiced || 0),
       paid: Number(item?.paid || 0),
       isGrouped: false,
-    }));
-  }
+    }))
+    : (() => {
+      const visible = utilityColumns.slice(0, 3).map((item) => ({
+        key: item.key,
+        label: item.label,
+        sourceKeys: [item.key],
+        invoiced: Number(item?.invoiced || 0),
+        paid: Number(item?.paid || 0),
+        isGrouped: false,
+      }));
+      const overflow = utilityColumns.slice(3);
+      visible.push({
+        key: "other_charges",
+        label: "Other Charges",
+        sourceKeys: overflow.map((item) => item.key),
+        invoiced: overflow.reduce((sum, item) => sum + Number(item?.invoiced || 0), 0),
+        paid: overflow.reduce((sum, item) => sum + Number(item?.paid || 0), 0),
+        isGrouped: true,
+      });
+      return visible;
+    })();
 
-  const visible = utilityColumns.slice(0, 3).map((item) => ({
+  // Deposit is a memo-only column, kept separate from utility grouping/overflow so it
+  // always stays clearly labeled "Deposit" instead of disappearing into "Other Charges".
+  const depositPart = depositColumns.map((item) => ({
     key: item.key,
     label: item.label,
     sourceKeys: [item.key],
     invoiced: Number(item?.invoiced || 0),
     paid: Number(item?.paid || 0),
     isGrouped: false,
+    categoryType: "deposit",
   }));
-  const overflow = utilityColumns.slice(3);
-  visible.push({
-    key: "other_charges",
-    label: "Other Charges",
-    sourceKeys: overflow.map((item) => item.key),
-    invoiced: overflow.reduce((sum, item) => sum + Number(item?.invoiced || 0), 0),
-    paid: overflow.reduce((sum, item) => sum + Number(item?.paid || 0), 0),
-    isGrouped: true,
-  });
-  return visible;
+
+  return [...utilityPart, ...depositPart];
 };
 
 const buildRowStatementColumnMap = (row = {}, statementColumns = []) => {
@@ -243,12 +295,14 @@ const buildRowStatementColumnMap = (row = {}, statementColumns = []) => {
   }
 
   const utilityMap = normalizeRowUtilities(row);
+  const depositMap = normalizeRowDeposits(row);
   return (Array.isArray(statementColumns) ? statementColumns : []).reduce((acc, column) => {
     const sourceKeys = Array.isArray(column?.sourceKeys) && column.sourceKeys.length > 0 ? column.sourceKeys : [column?.key];
+    const sourceMap = column?.categoryType === "deposit" ? depositMap : utilityMap;
     acc[column.key] = sourceKeys.reduce(
       (totals, sourceKey) => {
-        totals.invoiced += Number(utilityMap?.[sourceKey]?.invoiced || 0);
-        totals.paid += Number(utilityMap?.[sourceKey]?.paid || 0);
+        totals.invoiced += Number(sourceMap?.[sourceKey]?.invoiced || 0);
+        totals.paid += Number(sourceMap?.[sourceKey]?.paid || 0);
         return totals;
       },
       { invoiced: 0, paid: 0 }
@@ -594,7 +648,16 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
             paid: Number(item?.paid || 0),
           }))
         : buildUtilityColumnsFromRows(rows);
-    const statementColumns = buildStatementColumns(workspace, utilityColumns);
+    const depositColumns =
+      Array.isArray(workspace.depositColumns) && workspace.depositColumns.length > 0
+        ? workspace.depositColumns.map((item) => ({
+            key: normalizeUtilityKey(item?.key || "deposit") || "deposit",
+            label: item?.label || "Deposit",
+            invoiced: Number(item?.invoiced || 0),
+            paid: Number(item?.paid || 0),
+          }))
+        : buildDepositColumnsFromRows(rows);
+    const statementColumns = buildStatementColumns(workspace, utilityColumns, depositColumns);
     rows.forEach((row) => {
       row.__statementColumns = statementColumns;
       row.__statementColumnMap = buildRowStatementColumnMap(row, statementColumns);
@@ -865,6 +928,25 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
           .summary-total td { font-weight: 900; font-size: 11px; background: #0B3B2E; color: #ffffff; }
           .negative { color: #991b1b; }
           .footnote { margin-top: 8px; font-size: 7.5px; color: #6b7280; border-top: 1px solid #e5e7eb; padding-top: 4px; }
+
+          /* ---- Pagination control ----
+             Without these, tables that outgrow a page break at arbitrary points:
+             column headers vanish on continuation pages, rows split in half, and a
+             section title can be stranded at the foot of a page with its table on the
+             next one. */
+          thead { display: table-header-group; }   /* column headers repeat on every page a table spans */
+          tfoot { display: table-row-group; }       /* a Total row prints once, at the true end — not per page fragment */
+          tr { break-inside: avoid; page-break-inside: avoid; }   /* never split a row across pages */
+          table { break-inside: auto; page-break-inside: auto; }  /* but let the table itself flow across pages */
+          .section-title { break-inside: avoid; page-break-inside: avoid; break-after: avoid; page-break-after: avoid; }
+
+          /* The Additions / Direct-Payments block is a two-cell table row, which cannot
+             break across pages — a long list on either side forces the whole block to
+             jump to the next page, orphaning both headings. Stack the two cells full
+             width instead so each section paginates independently and cleanly. */
+          .two-col, .two-col > tbody, .two-col > tbody > tr { display: block; width: 100%; }
+          .two-col > tbody > tr > td { display: block; width: 100% !important; padding: 0 !important; }
+          .two-col > tbody > tr > td:first-child { margin-bottom: 6px; }
         </style>
       </head>
       <body>
@@ -1118,6 +1200,18 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
                   ${Number(depositSettlementTotals.additions || 0) > 0 ? `
                   <tr class="summary-section"><td colspan="2">Deposits You Now Hold</td></tr>
                   <tr><td class="label">Recognised this period (not income — held for tenants)</td><td class="num">${formatCurrency(depositSettlementTotals.additions || 0)}</td></tr>
+                  ` : ""}
+
+                  <!-- PREPAYMENTS HELD — rent tenants paid ahead of their bill. Only meaningful
+                       under "on invoice allocation": there, this cash is deliberately excluded
+                       from income/remittance above and recognised (and paid to you) in the
+                       period the rent it covers actually falls due — shown here so it's never
+                       silently missing from the document. Under "on receipt" the equivalent
+                       credit balance is already included in income/remittance above, so
+                       labelling it "not yet remitted" here would be wrong — omit it there. -->
+                  ${(summary.prepaymentRecognition === "on_invoice_allocation" && Number(summary.unappliedPayments || 0) > 0) ? `
+                  <tr class="summary-section"><td colspan="2">Prepayments Held</td></tr>
+                  <tr><td class="label">Paid by tenants ahead of their rent bill (not yet due, not yet remitted)</td><td class="num">${formatCurrency(summary.unappliedPayments || 0)}</td></tr>
                   ` : ""}
 
                 </tbody>

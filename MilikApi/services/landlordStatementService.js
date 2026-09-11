@@ -90,6 +90,14 @@ const getEntityId = (value) => {
 
 const safeName = (value = "") => String(value || "").trim().toLowerCase();
 
+// "on_receipt" recognises a rent-tagged payment in full the moment it lands;
+// "on_invoice_allocation" (default) only recognises the part covering rent invoiced
+// on-or-before the period end, deferring anything paid ahead of the billing.
+const normalizePrepaymentRecognition = (value = "") =>
+  String(value || "").trim().toLowerCase() === "on_receipt"
+    ? "on_receipt"
+    : "on_invoice_allocation";
+
 const normalizeCommissionRecognitionBasis = (value = "") => {
   const raw = String(value || "").trim().toLowerCase();
   if (raw === "expected" || raw === "accrual" || raw === "invoiced") {
@@ -702,6 +710,58 @@ const sumUtilityPhase = (row = {}, phase = "invoice") =>
     return sum + amount;
   }, 0);
 
+// Deposit gets its own dynamic column, exactly like a utility — appears only when a
+// property has deposit activity this period, hidden otherwise. Unlike rent/utilities, a
+// deposit is a liability held on the tenant's behalf, not income: it is deliberately NEVER
+// folded into row.balanceCF (the rent-ledger balance) or any commission/remittance total —
+// it exists purely so the schedule shows the tenant's full transaction picture in one row,
+// the same figures reconciling to the separate "Deposits You Now Hold" section.
+const ensureDepositMap = (row = {}) => {
+  if (!row.deposits || typeof row.deposits !== "object" || Array.isArray(row.deposits)) {
+    row.deposits = {};
+  }
+  return row.deposits;
+};
+
+const registerDepositAmount = (row, phase, amount, label = "Deposit") => {
+  const value = round2(Number(amount || 0));
+  if (value === 0) return;
+  const deposits = ensureDepositMap(row);
+  const key = "deposit";
+  if (!deposits[key]) {
+    deposits[key] = { key, label: label || "Deposit", invoiced: 0, paid: 0 };
+  }
+  if (phase === "invoice") {
+    deposits[key].invoiced = round2(Number(deposits[key].invoiced || 0) + value);
+  } else {
+    deposits[key].paid = round2(Number(deposits[key].paid || 0) + value);
+  }
+};
+
+const sumDepositPhase = (row = {}, phase = "invoice") =>
+  Object.values(row?.deposits || {}).reduce((sum, item) => {
+    const amount = phase === "invoice" ? Number(item?.invoiced || 0) : Number(item?.paid || 0);
+    return sum + amount;
+  }, 0);
+
+const buildDepositColumns = (rows = []) => {
+  const map = new Map();
+  rows.forEach((row) => {
+    Object.values(row?.deposits || {}).forEach((item) => {
+      const key = item?.key || "deposit";
+      if (!map.has(key)) {
+        map.set(key, { key, label: item?.label || "Deposit", invoiced: 0, paid: 0 });
+      }
+      const column = map.get(key);
+      column.invoiced = round2(Number(column.invoiced || 0) + Number(item?.invoiced || 0));
+      column.paid = round2(Number(column.paid || 0) + Number(item?.paid || 0));
+    });
+  });
+  return Array.from(map.values())
+    .filter((item) => Number(item.invoiced || 0) !== 0 || Number(item.paid || 0) !== 0)
+    .sort((a, b) => String(a.label).localeCompare(String(b.label)));
+};
+
 const buildUtilityColumns = (rows = []) => {
   const map = new Map();
 
@@ -1283,7 +1343,7 @@ export const generateLandlordStatement = async ({
   const [property, landlordRecord] = await Promise.all([
     Property.findById(propertyObjectId)
       .select(
-        "dateAcquired propertyCode propertyName name address city commissionPercentage commissionRecognitionBasis commissionPaymentMode commissionFixedAmount commissionTaxSettings totalUnits business landlords depositHeldBy letManage"
+        "dateAcquired propertyCode propertyName name address city commissionPercentage commissionRecognitionBasis prepaymentRecognition commissionPaymentMode commissionFixedAmount commissionTaxSettings totalUnits business landlords depositHeldBy letManage"
       )
       .lean(),
     Landlord.findOne({ _id: landlordObjectId })
@@ -1364,6 +1424,13 @@ export const generateLandlordStatement = async ({
 
   const periodStart = effectiveStartAt;
   const periodEnd = effectiveEndAt;
+
+  // Payments allocated to a rent invoice dated AFTER this cutoff are ahead of the billing.
+  // Under the default "on_invoice_allocation" policy they are held as a prepayment credit
+  // (not counted toward paid rent / commission / remittance this period) and recognised in
+  // the period the invoice belongs to — so each collected shilling is counted exactly once.
+  const prepaymentRecognition = normalizePrepaymentRecognition(property?.prepaymentRecognition);
+  const periodEndTime = periodEnd.getTime();
 
   const snapshotDate = lastApproved ? new Date(lastApproved.periodEnd) : null;
 
@@ -1942,15 +2009,6 @@ export const generateLandlordStatement = async ({
     }
   };
 
-  const applyDepositChargeToMemo = (record = {}, amount = 0, phase = "current") => {
-    const value = round2(amount);
-    if (value === 0) return;
-    const bucket = depositMemoBuckets[resolveDepositHolderForRecord(record)] || depositMemoBuckets.manager;
-    if (phase === "opening") bucket.openingBalance = round2(bucket.openingBalance + value);
-    else bucket.billed = round2(bucket.billed + value);
-    bucket.closingBalance = round2(bucket.closingBalance + value);
-  };
-
   const applyDepositReceiptToMemo = (record = {}, amount = 0, phase = "current") => {
     const value = round2(Math.abs(amount));
     if (value === 0) return;
@@ -2004,8 +2062,6 @@ export const generateLandlordStatement = async ({
       row.balanceBF += amount;
     } else if (invoice.category === "UTILITY_CHARGE") {
       row.balanceBF += amount;
-    } else if (invoice.category === "DEPOSIT_CHARGE") {
-      applyDepositChargeToMemo(invoice, amount, "opening");
     }
   }
 
@@ -2019,8 +2075,6 @@ export const generateLandlordStatement = async ({
       row.balanceBF += amount;
     } else if (note.category === "UTILITY_CHARGE") {
       row.balanceBF += amount;
-    } else if (note.category === "DEPOSIT_CHARGE") {
-      applyDepositChargeToMemo(note, amount, "opening");
     }
   }
 
@@ -2113,49 +2167,50 @@ export const generateLandlordStatement = async ({
 
           // Recognise this as an actual collection for THIS period — this is the period
           // the prepayment is first attributed to a real charge, so it belongs in Paid /
-          // collections / net remittance now. It was deliberately excluded from those
-          // totals in the period it was originally received (still just an unapplied
-          // credit then), and a receipt never re-enters receiptsInPeriod once its own
-          // paymentDate has passed, so this is the only place it's ever counted — exactly
-          // once, never twice.
-          const rentRecognized = round2(Number(impact.rentAmount || 0));
-          const utilityRecognized = round2(Number(impact.utilityAmount || 0));
-          const taxRecognized = round2(Number(impact.taxAmount || 0));
+          // collections / net remittance now. Under "on_invoice_allocation" it was held out
+          // of those totals in the period it was received (a prepayment credit then), so
+          // this is its single recognition. Under "on_receipt" the cash was already counted
+          // when it landed, so skip this pass to avoid counting it twice.
+          if (prepaymentRecognition === "on_invoice_allocation") {
+            const rentRecognized = round2(Number(impact.rentAmount || 0));
+            const utilityRecognized = round2(Number(impact.utilityAmount || 0));
+            const taxRecognized = round2(Number(impact.taxAmount || 0));
 
-          if (rentRecognized !== 0) {
-            row.paidRent += rentRecognized;
-            if (receipt.paidDirectToLandlord) totalRentReceivedLandlord += rentRecognized;
-            else totalRentReceivedManager += rentRecognized;
-          }
-
-          if (utilityRecognized !== 0) {
-            const impactUtilities = Array.isArray(impact.utilities) ? impact.utilities : [];
-            if (impactUtilities.length > 0) {
-              impactUtilities.forEach((item) => {
-                applyUtility(
-                  row,
-                  "receipt",
-                  Number(item.amount || 0),
-                  item.label || appliedDocumentReference || "",
-                  {
-                    utilityType: item.label,
-                    meterUtilityType: item.label,
-                    statementUtilityType: item.label,
-                  }
-                );
-              });
-            } else {
-              applyUtility(row, "receipt", utilityRecognized, appliedDocumentReference || "");
+            if (rentRecognized !== 0) {
+              row.paidRent += rentRecognized;
+              if (receipt.paidDirectToLandlord) totalRentReceivedLandlord += rentRecognized;
+              else totalRentReceivedManager += rentRecognized;
             }
 
-            if (receipt.paidDirectToLandlord) totalUtilityReceivedLandlord += utilityRecognized;
-            else totalUtilityReceivedManager += utilityRecognized;
-          }
+            if (utilityRecognized !== 0) {
+              const impactUtilities = Array.isArray(impact.utilities) ? impact.utilities : [];
+              if (impactUtilities.length > 0) {
+                impactUtilities.forEach((item) => {
+                  applyUtility(
+                    row,
+                    "receipt",
+                    Number(item.amount || 0),
+                    item.label || appliedDocumentReference || "",
+                    {
+                      utilityType: item.label,
+                      meterUtilityType: item.label,
+                      statementUtilityType: item.label,
+                    }
+                  );
+                });
+              } else {
+                applyUtility(row, "receipt", utilityRecognized, appliedDocumentReference || "");
+              }
 
-          if (taxRecognized !== 0) {
-            row.paidTax += taxRecognized;
-            if (receipt.paidDirectToLandlord) totalInvoiceTaxReceivedLandlord += taxRecognized;
-            else totalInvoiceTaxReceivedManager += taxRecognized;
+              if (receipt.paidDirectToLandlord) totalUtilityReceivedLandlord += utilityRecognized;
+              else totalUtilityReceivedManager += utilityRecognized;
+            }
+
+            if (taxRecognized !== 0) {
+              row.paidTax += taxRecognized;
+              if (receipt.paidDirectToLandlord) totalInvoiceTaxReceivedLandlord += taxRecognized;
+              else totalInvoiceTaxReceivedManager += taxRecognized;
+            }
           }
         }
       });
@@ -2180,6 +2235,20 @@ export const generateLandlordStatement = async ({
   }
 
   for (const invoice of invoicesInPeriod) {
+    // Deposit charges carry includeInLandlordStatement:false (that flag keeps them out of
+    // the ledger entries / general rent totals below) — but the dedicated Deposit memo
+    // column must still reflect them, so this is handled and short-circuited before the
+    // gate rather than falling into pushEntry with everything else.
+    if (invoice.category === "DEPOSIT_CHARGE") {
+      // Only feed the display-only Deposit column here — never the deposit memo buckets
+      // (those drive the "Deposits You Now Hold" remittance addition, which must reflect
+      // deposits actually COLLECTED via a receipt; a merely-billed, unpaid deposit invoice
+      // must never inflate what the manager owes to remit).
+      const depositRow = ensureRow(invoice.tenant, invoice.unit);
+      registerDepositAmount(depositRow, "invoice", Number(invoice.amount || 0));
+      continue;
+    }
+
     if (!shouldIncludeInvoiceInLandlordStatement(invoice)) continue;
 
     const row = ensureRow(invoice.tenant, invoice.unit);
@@ -2225,8 +2294,6 @@ export const generateLandlordStatement = async ({
         invoice.description || invoice.invoiceNumber || "",
         invoice.metadata || {}
       );
-    } else if (invoice.category === "DEPOSIT_CHARGE") {
-      applyDepositChargeToMemo(invoice, amount, "current");
     }
 
     if (invoice.invoiceNumber) row.referenceNumbers.push(invoice.invoiceNumber);
@@ -2288,6 +2355,17 @@ export const generateLandlordStatement = async ({
   let depositRemittanceAdditionsTotal = 0;
 
   for (const note of notesInPeriod) {
+    // Same reasoning as the invoicesInPeriod loop above: deposit debit/credit notes must
+    // still populate the Deposit memo column even though they carry
+    // includeInLandlordStatement:false and must NOT reach the pushEntry ledger below.
+    if (note.category === "DEPOSIT_CHARGE") {
+      // See the matching comment in the invoicesInPeriod loop above — the deposit memo
+      // buckets stay receipt-driven only; this feeds just the display-only column.
+      const depositRow = ensureRow(note.tenant, note.unit);
+      registerDepositAmount(depositRow, "invoice", getSignedNoteAmount(note));
+      continue;
+    }
+
     if (!shouldIncludeNoteInLandlordStatement(note)) continue;
 
     const row = ensureRow(note.tenant, note.unit);
@@ -2304,8 +2382,6 @@ export const generateLandlordStatement = async ({
         note.description || note.noteNumber || note?.sourceInvoice?.description || "",
         noteMetadata
       );
-    } else if (note.category === "DEPOSIT_CHARGE") {
-      applyDepositChargeToMemo(note, amount, "current");
     } else if (["OTHER_CHARGE", "LATE_PENALTY_CHARGE"].includes(String(note.category || "").toUpperCase())) {
       if (amount > 0) {
         totalAdditions = round2(totalAdditions + amount);
@@ -2381,6 +2457,11 @@ export const generateLandlordStatement = async ({
     let rentAllocated = 0;
     let utilityAllocated = 0;
     let taxAllocated = 0;
+    // Portion of this in-period receipt that pays a rent invoice dated AFTER the cutoff —
+    // held as a prepayment credit rather than counted as paid-this-period (under the
+    // default "on_invoice_allocation" policy). The period that invoice belongs to picks it
+    // up once, via the receiptsBefore "sourceInCurrentPeriod" recognition below.
+    let deferredPrepaymentCredit = 0;
 
     if (allocationRows.length > 0) {
       allocationRows.forEach((allocationRow) => {
@@ -2393,7 +2474,40 @@ export const generateLandlordStatement = async ({
 
         if (!impact.isStatementRelevant) return;
 
-        rentAllocated = round2(rentAllocated + Number(impact.rentAmount || 0));
+        if (prepaymentRecognition === "on_invoice_allocation") {
+          // The invoice this allocation pays. Its own recognition date is authoritative
+          // when the invoice is loaded; otherwise the allocation row carries the invoice
+          // date (the invoice may be future-dated and outside the fetch window, so it
+          // isn't in invoiceStatementMap).
+          const srcDate =
+            (sourceInvoice ? getInvoiceStatementDate(sourceInvoice) : null) ||
+            allocationRow?.invoiceDate ||
+            allocationRow?.bookingDate ||
+            null;
+          const srcTime = srcDate ? new Date(srcDate).getTime() : Number.NaN;
+          if (Number.isFinite(srcTime) && srcTime > periodEndTime) {
+            deferredPrepaymentCredit = round2(
+              deferredPrepaymentCredit + Number(impact.statementRelevantAmount || 0)
+            );
+            return; // ahead of the billing — recognise it in the invoice's own period, not here
+          }
+        }
+
+        let impactRent = Number(impact.rentAmount || 0);
+        // An allocation may be over-applied — more than the invoice's outstanding at the
+        // time (beforeOutstanding). Under "on_invoice_allocation" the portion beyond the
+        // invoice is paid ahead of the billing: hold it as a prepayment credit rather than
+        // count it as rent this period. Only positive over-applications are trimmed, and
+        // only when beforeOutstanding is a usable number.
+        if (prepaymentRecognition === "on_invoice_allocation" && impactRent > 0) {
+          const invoiceOutstanding = Number(allocationRow?.beforeOutstanding);
+          if (Number.isFinite(invoiceOutstanding) && invoiceOutstanding >= 0 && impactRent > invoiceOutstanding) {
+            row.unappliedCredits += round2(impactRent - invoiceOutstanding);
+            impactRent = invoiceOutstanding;
+          }
+        }
+
+        rentAllocated = round2(rentAllocated + impactRent);
         utilityAllocated = round2(utilityAllocated + Number(impact.utilityAmount || 0));
         taxAllocated = round2(taxAllocated + Number(impact.taxAmount || 0));
 
@@ -2414,6 +2528,32 @@ export const generateLandlordStatement = async ({
     } else {
       rentAllocated = getReceiptSummaryAmount(receipt, "rent");
       utilityAllocated = getReceiptSummaryAmount(receipt, "utility");
+    }
+
+    // No per-invoice allocation rows — the receipt only says "rent: X" with no way to
+    // know which bill it covers. Under "on_invoice_allocation", cap that lump at what the
+    // tenant actually owes in rent (this period's rent invoiced + b/f arrears, less what
+    // earlier receipts this period already covered); anything beyond is paid ahead of the
+    // billing and held as a prepayment credit, so it never inflates commission or the
+    // remittance the manager owes this period. Only positive over-payments are trimmed.
+    // When allocation rows ARE present they already say exactly what each portion covers
+    // (and future-dated allocations are deferred above), so no cap is applied there —
+    // that path can legitimately span several of the tenant's units.
+    let cappedPrepayment = false;
+    if (
+      allocationRows.length === 0 &&
+      prepaymentRecognition === "on_invoice_allocation" &&
+      rentAllocated > 0
+    ) {
+      const rentDueForRow = round2(
+        Math.max(0, Number(row.invoicedRent || 0) + Math.max(0, Number(row.balanceBF || 0)) - Number(row.paidRent || 0))
+      );
+      if (rentAllocated > rentDueForRow) {
+        const excess = round2(rentAllocated - rentDueForRow);
+        rentAllocated = rentDueForRow;
+        row.unappliedCredits += excess;
+        cappedPrepayment = true;
+      }
     }
 
     if (rentAllocated !== 0) {
@@ -2461,6 +2601,21 @@ export const generateLandlordStatement = async ({
 
     if (unappliedAllocated !== 0) {
       row.unappliedCredits += unappliedAllocated;
+      // "on_receipt": all cash is recognised as it lands, so an unapplied overpayment
+      // counts toward collections now (and never again when it is later allocated —
+      // the receiptsBefore recognition pass is skipped in this mode). "on_invoice_
+      // allocation" leaves it purely as a credit until its rent is billed.
+      if (prepaymentRecognition === "on_receipt") {
+        row.paidRent += unappliedAllocated;
+        if (receipt.paidDirectToLandlord) totalRentReceivedLandlord += unappliedAllocated;
+        else totalRentReceivedManager += unappliedAllocated;
+      }
+    }
+
+    // Rent paid ahead of its bill sits as a prepayment credit this period — same balance
+    // effect as an unapplied receipt; recognised as collected in the invoice's own period.
+    if (deferredPrepaymentCredit !== 0) {
+      row.unappliedCredits += deferredPrepaymentCredit;
     }
 
     // Legacy fallback for receipts with no allocation breakdown at all (no allocations
@@ -2472,17 +2627,31 @@ export const generateLandlordStatement = async ({
     if (
       allocationRows.length === 0 &&
       rentAllocated === 0 &&
+      !cappedPrepayment &&
       utilityAllocated === 0 &&
       depositAllocated === 0 &&
       unappliedAllocated === 0 &&
       receipt.paymentType === "rent"
     ) {
-      row.paidRent += amount;
-      if (receipt.paidDirectToLandlord) totalRentReceivedLandlord += amount;
-      else totalRentReceivedManager += amount;
+      // No breakdown at all — assume rent, but still hold anything beyond what the tenant
+      // owes in rent as a prepayment credit under "on_invoice_allocation".
+      let fallbackRent = amount;
+      if (prepaymentRecognition === "on_invoice_allocation" && fallbackRent > 0) {
+        const rentDueForRow = round2(
+          Math.max(0, Number(row.invoicedRent || 0) + Math.max(0, Number(row.balanceBF || 0)) - Number(row.paidRent || 0))
+        );
+        if (fallbackRent > rentDueForRow) {
+          row.unappliedCredits += round2(fallbackRent - rentDueForRow);
+          fallbackRent = rentDueForRow;
+        }
+      }
+      row.paidRent += fallbackRent;
+      if (receipt.paidDirectToLandlord) totalRentReceivedLandlord += fallbackRent;
+      else totalRentReceivedManager += fallbackRent;
     } else if (
       allocationRows.length === 0 &&
       rentAllocated === 0 &&
+      !cappedPrepayment &&
       utilityAllocated === 0 &&
       depositAllocated === 0 &&
       unappliedAllocated === 0 &&
@@ -2583,6 +2752,11 @@ export const generateLandlordStatement = async ({
     }
     if (depositBreakdown.landlord > 0) {
       applyDepositReceiptToMemo({ ...receipt, depositHeldBy: "landlord" }, depositBreakdown.landlord, "current");
+    }
+    // Deposit paid this period, on the tenant's row — whichever party ends up holding it.
+    // A memo column only (see registerDepositAmount); never affects the rent-ledger balance.
+    if (depositBreakdown.total > 0) {
+      registerDepositAmount(ensureRow(receipt.tenant, receipt.unit), "receipt", depositBreakdown.total);
     }
 
     const amount = round2(Number(depositBreakdown.landlord || 0));
@@ -3049,6 +3223,22 @@ export const generateLandlordStatement = async ({
       );
       row.totalUtilityInvoiced = round2(sumUtilityPhase(row, "invoice"));
       row.totalUtilityPaid = round2(sumUtilityPhase(row, "receipt"));
+      // Deposit is a memo column only — normalised the same way as utilities, but
+      // deliberately excluded from balanceCF below (it is a liability, not rent-ledger
+      // income, so it must never change what the tenant owes in rent).
+      row.deposits = Object.fromEntries(
+        Object.entries(row.deposits || {}).map(([key, item]) => [
+          key,
+          {
+            key: item?.key || key,
+            label: item?.label || "Deposit",
+            invoiced: round2(Number(item?.invoiced || 0)),
+            paid: round2(Number(item?.paid || 0)),
+          },
+        ])
+      );
+      row.totalDepositInvoiced = round2(sumDepositPhase(row, "invoice"));
+      row.totalDepositPaid = round2(sumDepositPhase(row, "receipt"));
       row.balanceCF = round2(
         row.balanceBF +
           row.invoicedRent +
@@ -3102,7 +3292,7 @@ export const generateLandlordStatement = async ({
     const SUM_FIELDS = [
       "balanceBF", "invoicedRent", "invoicedGarbage", "invoicedWater", "invoicedTax",
       "paidRent", "paidGarbage", "paidWater", "paidTax", "unappliedCredits",
-      "totalUtilityInvoiced", "totalUtilityPaid", "perMonth",
+      "totalUtilityInvoiced", "totalUtilityPaid", "totalDepositInvoiced", "totalDepositPaid", "perMonth",
     ];
     const groups = new Map();
     const passthrough = [];
@@ -3140,6 +3330,19 @@ export const generateLandlordStatement = async ({
         }
       }
       base.utilities = utilities;
+
+      const deposits = {};
+      for (const r of group) {
+        for (const [key, item] of Object.entries(r.deposits || {})) {
+          if (!deposits[key]) {
+            deposits[key] = { key: item?.key || key, label: item?.label || key, invoiced: 0, paid: 0 };
+          }
+          deposits[key].invoiced = round2(deposits[key].invoiced + Number(item?.invoiced || 0));
+          deposits[key].paid = round2(deposits[key].paid + Number(item?.paid || 0));
+        }
+      }
+      base.deposits = deposits;
+
       base.balanceCF = round2(
         base.balanceBF + base.invoicedRent + base.totalUtilityInvoiced + base.invoicedTax
         - base.paidRent - base.totalUtilityPaid - base.paidTax
@@ -3220,6 +3423,8 @@ export const generateLandlordStatement = async ({
     return acc;
   }, {});
 
+  const depositColumns = buildDepositColumns(filteredTenantRows);
+
   const totalRentInvoiced = round2(
     filteredTenantRows.reduce((sum, row) => sum + row.invoicedRent, 0)
   );
@@ -3249,6 +3454,12 @@ export const generateLandlordStatement = async ({
   );
   const totalUtilityCollected = round2(
     utilityColumns.reduce((sum, item) => sum + Number(item.paid || 0), 0)
+  );
+  const totalDepositInvoiced = round2(
+    depositColumns.reduce((sum, item) => sum + Number(item.invoiced || 0), 0)
+  );
+  const totalDepositCollected = round2(
+    depositColumns.reduce((sum, item) => sum + Number(item.paid || 0), 0)
   );
   const totalBalanceBF = round2(
     filteredTenantRows.reduce((sum, row) => sum + row.balanceBF, 0)
@@ -3544,6 +3755,7 @@ export const generateLandlordStatement = async ({
       );
     })(),
     utilityColumns,
+    depositColumns,
     rows: filteredTenantRows.map((row) => ({
       ...row,
       unitNumber: row.unit,
@@ -3568,6 +3780,9 @@ export const generateLandlordStatement = async ({
       utilities: utilityColumns,
       utilityPaid: totalUtilityCollected,
       utilityInvoiced: totalUtilityInvoiced,
+      deposits: depositColumns,
+      depositPaid: totalDepositCollected,
+      depositInvoiced: totalDepositInvoiced,
       expenses: displayNonCommissionDeductions,
       totalPaid: round2(totalRentReceived + totalUtilityCollected + totalInvoiceVatReceived),
       closingBalance: totalBalanceCF,
@@ -3609,6 +3824,8 @@ export const generateLandlordStatement = async ({
       totalRentInvoiced: totalRentInvoiced,
       utilityInvoiced: totalUtilityInvoiced,
       totalUtilityInvoiced: totalUtilityInvoiced,
+      depositColumns,
+      totalDepositInvoiced,
       totalInvoiceVatInvoiced,
       expectedCollections,
       basisCollections,
@@ -3630,6 +3847,7 @@ export const generateLandlordStatement = async ({
       totalInvoiceVatReceivedManager: round2(totalInvoiceTaxReceivedManager),
       totalInvoiceVatReceivedLandlord: round2(totalInvoiceTaxReceivedLandlord),
       totalUtilityCollected,
+      totalDepositCollected,
       unappliedPayments: round2(filteredTenantRows.reduce((sum, row) => sum + Number(row.unappliedCredits || 0), 0)),
       directToLandlordCollections,
       totalDirectToLandlordCollections: directToLandlordCollections,
@@ -3680,6 +3898,7 @@ export const generateLandlordStatement = async ({
       broughtForwardCreditsAppliedTax: round2(broughtForwardCreditApplicationTotals.taxApplied),
       commissionPercentage: commissionPct,
       commissionBasis: recognitionBasis,
+      prepaymentRecognition,
       commissionBaseAmount: round2(commissionBase),
       commissionBaseLabel,
       commissionPaymentMode,

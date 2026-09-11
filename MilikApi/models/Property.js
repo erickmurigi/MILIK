@@ -378,6 +378,19 @@ const PropertySchema = new mongoose.Schema(
       default: "received",
     },
 
+    // How a payment received ahead of its rent bill is recognised on the landlord statement:
+    //  - "on_invoice_allocation" (default, safe for the manager): only the portion covering
+    //    rent invoiced on-or-before the period end (this period + b/f arrears) counts toward
+    //    paid rent / commission / remittance this period. Anything paid ahead of the billing
+    //    is carried forward as a prepayment credit and recognised in the period its rent
+    //    actually falls due — counted exactly once, no early remittance, no clawback risk.
+    //  - "on_receipt": the full rent-tagged amount is recognised the moment cash arrives.
+    prepaymentRecognition: {
+      type: String,
+      enum: ["on_invoice_allocation", "on_receipt"],
+      default: "on_invoice_allocation",
+    },
+
     commissionPaymentMode: {
       type: String,
       enum: ["percentage", "fixed", "both"],
