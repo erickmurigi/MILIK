@@ -650,6 +650,14 @@ const buildStoredReceiptAllocationData = (payment = {}) => {
     invoiceDate: row?.invoiceDate || null,
     dueDate: row?.dueDate || null,
     description: row?.description || "",
+    // A held prepayment's whole identity lives in these three fields — without them
+    // autoApplyPrepayments can never find this credit again. They were being dropped
+    // here on confirm even though the draft row (correctly tagged at creation time,
+    // e.g. via the "Rent/Deposit/<Utility> Prepayment" selector) carried them; only
+    // `description` survived, which is why the row still LOOKED tagged after confirm.
+    billItemKey: row?.billItemKey || null,
+    prepaymentLabel: row?.prepaymentLabel || null,
+    isPrepayment: Boolean(row?.isPrepayment),
   }));
 
   if (rows.length > 0) {
