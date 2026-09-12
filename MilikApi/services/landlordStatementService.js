@@ -10,7 +10,11 @@ import PaymentVoucher from "../models/PaymentVoucher.js";
 import FinancialLedgerEntry from "../models/FinancialLedgerEntry.js";
 import TenantInvoiceNote from "../models/TenantInvoiceNote.js";
 import ProcessedStatement from "../models/ProcessedStatement.js";
-import LandlordStatement from "../models/LandlordStatement.js";
+// Not queried directly in this file, but MUST stay imported: resolveEffectiveStatementWindow
+// below populates ProcessedStatement.sourceStatement (ref: "LandlordStatement"), and Mongoose
+// needs the model registered in-process for that populate to resolve — it won't discover the
+// schema from the ref string alone.
+import LandlordStatement from "../models/LandlordStatement.js"; // eslint-disable-line no-unused-vars
 import LandlordStatementTenantBalance from "../models/LandlordStatementTenantBalance.js";
 import CompanySettings from "../models/CompanySettings.js";
 import Company from "../models/Company.js";
@@ -243,8 +247,14 @@ const resolveEffectiveStatementWindow = async ({
     ],
   })
     .select(
-      "_id cutoffAt closedAt periodStart periodEnd balanceDue isNegativeStatement amountPayableByLandlordToManager amountRecovered recoveryBalance status"
+      "_id cutoffAt closedAt periodStart periodEnd balanceDue isNegativeStatement amountPayableByLandlordToManager amountRecovered recoveryBalance status sourceStatement"
     )
+    // Populated in the SAME round-trip: the per-tenant balance snapshot (Bal B/F carry-
+    // forward) must be sourced from the exact statement this processed cut-off closed —
+    // never independently re-queried by "latest approved LandlordStatement", which can
+    // drift out of sync with the cut-off that actually governs period continuity (a
+    // statement can be Approved without ever being Processed).
+    .populate({ path: "sourceStatement", select: "_id periodEnd approvedAt" })
     .sort({ cutoffAt: -1, closedAt: -1, periodEnd: -1 })
     .limit(10)
     .lean();
@@ -1397,10 +1407,10 @@ export const generateLandlordStatement = async ({
     throw new Error("Landlord is not linked to the supplied property.");
   }
 
-  // Round-trip 2: statement window resolution + last-approved lookup in parallel.
-  // lastApproved uses statementPeriodStart directly (safe — effectiveStartAt can only be
-  // equal to or later than startOfDay(statementPeriodStart), never earlier).
-  const [windowResult, lastApproved, companySettingsDoc, companyDoc] = await Promise.all([
+  // Round-trip 2: statement window resolution (which now also resolves the source
+  // LandlordStatement of the latest PROCESSED cut-off, in the same query) in parallel
+  // with the two lightweight company lookups.
+  const [windowResult, companySettingsDoc, companyDoc] = await Promise.all([
     resolveEffectiveStatementWindow({
       businessId: businessObjectId,
       propertyId: propertyObjectId,
@@ -1410,16 +1420,6 @@ export const generateLandlordStatement = async ({
       cutoffAt,
       propertyDateAcquired: property.dateAcquired || null,
     }),
-    LandlordStatement.findOne({
-      business: businessObjectId,
-      property: propertyObjectId,
-      landlord: landlordObjectId,
-      status: { $in: ["approved", "sent"] },
-      periodEnd: { $lt: startOfDay(statementPeriodStart) },
-    })
-      .sort({ periodEnd: -1 })
-      .select("_id periodEnd approvedAt")
-      .lean(),
     CompanySettings.findOne({ company: businessObjectId }).select("incomeRules").lean(),
     Company.findById(businessObjectId, { companyMode: 1 }).lean(),
   ]);
@@ -1451,7 +1451,20 @@ export const generateLandlordStatement = async ({
   const prepaymentRecognition = normalizePrepaymentRecognition(property?.prepaymentRecognition);
   const periodEndTime = periodEnd.getTime();
 
-  const snapshotDate = lastApproved ? new Date(lastApproved.periodEnd) : null;
+  // The tenant balance carry-forward (Bal B/F) must come from the SAME statement that
+  // actually closed the period — the one referenced by the latest PROCESSED cut-off, not
+  // merely "the latest Approved LandlordStatement". Approving a statement no longer
+  // freezes anything by itself: a statement can sit Approved for days without being
+  // Processed, and until it is, the next statement must still recompute its opening
+  // balance from full history rather than trusting a snapshot nobody has actually closed
+  // out yet. previousCutoffAt already IS that processed statement's own cut-off, so using
+  // it here (instead of a separately-queried periodEnd) keeps Bal B/F's snapshot boundary
+  // and the period-start continuity boundary permanently in lockstep.
+  const lastApproved =
+    latestProcessedStatement?.sourceStatement && typeof latestProcessedStatement.sourceStatement === "object"
+      ? latestProcessedStatement.sourceStatement
+      : null;
+  const snapshotDate = lastApproved && previousCutoffAt ? previousCutoffAt : null;
 
   // Phase 1: all property-scoped queries in parallel — includes tenant balance snapshots
   // and gap take-on invoices that were previously sequential round-trips.
@@ -1611,6 +1624,17 @@ export const generateLandlordStatement = async ({
         { confirmedAt: { $gte: snapshotDate, $lte: periodEnd } },
         { recordDate:  { $gte: snapshotDate, $lte: periodEnd } },
         { createdAt:   { $gte: snapshotDate, $lte: periodEnd } },
+        // A receipt whose own dates all predate this snapshot's cutoff (so the snapshot
+        // already reflects it) can still gain a NEW allocation afterward — e.g.
+        // autoApplyPrepayments matching a held prepayment to an invoice that itself gets
+        // booked/created later, while catching up on backdated data entry. That new
+        // allocation must stay visible to statement generation no matter how far in the
+        // past `periodEnd` is set, or the prepayment recognition silently disappears the
+        // moment the statement stops being extended all the way to "today". Deliberately
+        // uncapped above periodEnd — the pre-snapshot guard in the receiptsBefore loop
+        // below stops this receipt's ALREADY-SNAPSHOTTED balance impact from being
+        // double-counted once it resurfaces here for an unrelated reason.
+        { updatedAt: { $gte: snapshotDate } },
       ]
     : [
         { bookingDate: { $lte: periodEnd } },
@@ -2117,11 +2141,22 @@ export const generateLandlordStatement = async ({
     const allocationRows = getReceiptAllocationRows(receipt);
     const unappliedAllocated = getReceiptSummaryAmount(receipt, "unapplied");
 
+    // A receipt whose own recognition date is already BEFORE this snapshot's cutoff was
+    // already folded into that snapshot's balanceCF — it only shows up here (via the
+    // uncapped `updatedAt` fetch clause above) because it gained a fresh allocation
+    // afterward. Its historical, already-snapshotted impact (unapplied credit, payoff of
+    // a pre-existing debt) must NOT be re-applied to balanceBF a second time; only its
+    // brand-new in-period recognition (handled below via sourceInCurrentPeriod) is real.
+    const receiptRecognitionDate = getReceiptStatementDate(receipt);
+    const receiptRecognitionTime = receiptRecognitionDate ? new Date(receiptRecognitionDate).getTime() : NaN;
+    const alreadyReflectedInSnapshot =
+      snapshotDate && Number.isFinite(receiptRecognitionTime) && receiptRecognitionTime < snapshotDate.getTime();
+
     // Cash this old receipt never applied to any charge is a genuine credit carried
     // forward — it must sit in unappliedCredits, never silently reduce Balance B/F as if
     // it had repaid a real debt (that conflated "prepayment held" with "debt settled" and
     // shifted the opening balance by the unapplied amount every time one existed).
-    if (unappliedAllocated !== 0) {
+    if (unappliedAllocated !== 0 && !alreadyReflectedInSnapshot) {
       defaultRow.unappliedCredits += unappliedAllocated;
     }
 
@@ -2141,7 +2176,18 @@ export const generateLandlordStatement = async ({
           row,
         });
 
-        const sourceInvoiceDate = sourceInvoice ? getInvoiceStatementDate(sourceInvoice) : null;
+        // The target invoice may not be in THIS statement's own fetch window (e.g. it was
+        // excluded by a snapshot's lowerBound cutoff) even though it genuinely exists —
+        // fall back to the allocation row's own stored invoiceDate/bookingDate (set by
+        // autoApplyPrepayments / manual allocation) rather than treating an unresolved
+        // sourceInvoice as "no date info", which would wrongly reduce Bal B/F as if this
+        // were paying off pre-existing debt. Mirrors the same fallback the receiptsInPeriod
+        // loop's deferred-prepayment check already uses below.
+        const sourceInvoiceDate =
+          (sourceInvoice ? getInvoiceStatementDate(sourceInvoice) : null) ||
+          allocationRow?.invoiceDate ||
+          allocationRow?.bookingDate ||
+          null;
         const sourceInvoiceTime = sourceInvoiceDate ? new Date(sourceInvoiceDate).getTime() : Number.NaN;
         const sourceInCurrentPeriod =
           Number.isFinite(sourceInvoiceTime) &&
@@ -2156,7 +2202,7 @@ export const generateLandlordStatement = async ({
         // this period. That case is handled below as a fresh in-period recognition
         // instead, so it must NOT also reduce Balance B/F (that would double-subtract the
         // same dollar: once via the opening credit, again via "Paid" this period).
-        if (!sourceInCurrentPeriod) {
+        if (!sourceInCurrentPeriod && !alreadyReflectedInSnapshot) {
           row.balanceBF = round2(row.balanceBF - Number(impact.statementRelevantAmount || 0));
         }
 
@@ -2253,7 +2299,9 @@ export const generateLandlordStatement = async ({
       continue;
     }
 
-    defaultRow.balanceBF = round2(defaultRow.balanceBF - Number(receipt.amount || 0));
+    if (!alreadyReflectedInSnapshot) {
+      defaultRow.balanceBF = round2(defaultRow.balanceBF - Number(receipt.amount || 0));
+    }
   }
 
   // Receipts whose paymentDate was in a previously approved period but whose booking date
@@ -3309,6 +3357,18 @@ export const generateLandlordStatement = async ({
   };
 
   for (const receipt of receiptsBefore) {
+    // When a balance snapshot exists, rawBalanceBF is seeded straight from the snapshot's
+    // balanceCF (see ensureRow above) — a receipt whose own recognition date is already
+    // before that snapshot's cutoff was fully accounted for when the snapshot was taken,
+    // so deducting its cash again here would double-count it. It only appears in
+    // receiptsBefore at all (via the uncapped `updatedAt` fetch clause) because it gained
+    // a fresh allocation afterward — real receiptsBefore GAP receipts (dated between the
+    // snapshot cutoff and this period's start) still need deducting as before.
+    const recognitionDate = getReceiptStatementDate(receipt);
+    const recognitionTime = recognitionDate ? new Date(recognitionDate).getTime() : NaN;
+    if (snapshotDate && Number.isFinite(recognitionTime) && recognitionTime < snapshotDate.getTime()) {
+      continue;
+    }
     const row = ensureRow(receipt.tenant, receipt.unit);
     row.rawBalanceBF = round2(Number(row.rawBalanceBF || 0) - getReceiptRentLedgerCash(receipt));
   }

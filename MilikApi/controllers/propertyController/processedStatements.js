@@ -13,6 +13,7 @@ import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../serv
 import { resolveConfiguredAccountingDefaultAccount } from "../../services/companyAccountingDefaultsService.js";
 import { getCompanyTaxConfiguration, resolveOutputVatAccount } from "../../services/taxCalculationService.js";
 import { generateLandlordStatement } from "../../services/landlordStatementService.js";
+import { writeStatementTenantBalanceSnapshots } from "../../services/statementSnapshotService.js";
 import { generateManagementFeeInvoicePdf } from "../../services/managementFeeInvoicePdfService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { createError } from "../../utils/error.js";
@@ -1136,6 +1137,31 @@ export const closeStatement = async (req, res, next) => {
           }).catch(() => {}),
         ]);
         throw glError;
+      }
+    }
+
+    // Freeze the per-tenant Bal B/F carry-forward NOW — at Process time, not Approve time
+    // (see writeStatementTenantBalanceSnapshots) — using the FRESH regeneration computed
+    // above (generatedStatementData) rather than whatever was on the statement back when
+    // it was approved, since real receipts/invoices may have landed in the gap between
+    // approval and processing. A failure here must roll back the same way a GL failure
+    // does: a processed statement with no matching balance snapshot leaves every future
+    // statement for this property silently unable to find where the tenant ledger left off.
+    if (approvedStatement?._id) {
+      try {
+        await writeStatementTenantBalanceSnapshots(approvedStatement, {
+          periodEndOverride: actualPeriodEnd,
+          workspaceOverride: generatedStatementData?.metadata || approvedStatement?.metadata?.workspace || null,
+        });
+      } catch (snapshotError) {
+        await Promise.all([
+          ProcessedStatement.deleteOne({ _id: savedStatement._id }).catch(() => {}),
+          FinancialLedgerEntry.deleteMany({
+            sourceTransactionType: "processed_statement",
+            sourceTransactionId: String(savedStatement._id),
+          }).catch(() => {}),
+        ]);
+        throw snapshotError;
       }
     }
 

@@ -2038,7 +2038,36 @@ export const autoApplyPrepayments = async ({ businessId, tenantId, invoice, acto
 
   if (!receipts.length) return;
 
-  let remaining = round2(Math.max(0, Number(invoice.outstanding ?? invoice.amount ?? 0)));
+  // A held prepayment must always clear the tenant's chronologically EARLIEST
+  // outstanding bill of this type — not simply whichever invoice happens to trigger
+  // this call. Invoice creation order does not always match billing-period order (a
+  // later month's invoice can get created before an earlier month's, e.g. during
+  // catch-up billing), so blindly consuming credit against `invoice` risks skipping
+  // right past an older, still-unpaid bill of the same type. Re-target first.
+  let targetInvoice = invoice;
+  const sameTypeCandidates = await TenantInvoice.find({
+    business: invoice.business,
+    tenant: invoice.tenant,
+    category: invoiceCategory,
+    status: { $nin: ["cancelled", "reversed"] },
+    outstanding: { $gt: 0 },
+  })
+    .select("_id invoiceNumber amount outstanding status invoiceDate bookingDate dueDate description metadata")
+    .lean();
+  const matchingCandidates = sameTypeCandidates.filter(
+    (cand) => invoiceCategory !== "UTILITY_CHARGE" || normalizeUtilityMatch(cand?.metadata?.utilityType || "") === utType
+  );
+  if (!matchingCandidates.some((cand) => String(cand._id) === String(invoice._id))) {
+    matchingCandidates.push(invoice);
+  }
+  matchingCandidates.sort((a, b) => {
+    const aTime = new Date(a.invoiceDate || a.bookingDate || a.dueDate || 0).getTime();
+    const bTime = new Date(b.invoiceDate || b.bookingDate || b.dueDate || 0).getTime();
+    return aTime - bTime;
+  });
+  targetInvoice = matchingCandidates[0];
+
+  let remaining = round2(Math.max(0, Number(targetInvoice.outstanding ?? targetInvoice.amount ?? 0)));
   if (remaining <= 0) return;
 
   for (const receipt of receipts) {
@@ -2080,22 +2109,22 @@ export const autoApplyPrepayments = async ({ businessId, tenantId, invoice, acto
       const afterOutstanding = round2(Math.max(0, remaining - applyAmt));
 
       receipt.allocations.push({
-        invoice: invoice._id,
-        invoiceNumber: invoice.invoiceNumber || "",
+        invoice: targetInvoice._id,
+        invoiceNumber: targetInvoice.invoiceNumber || "",
         category: invoiceCategory,
         priorityGroup: invoicePriorityGroup,
         utilityType: utType || "",
         appliedAmount: applyAmt,
         beforeOutstanding,
         afterOutstanding,
-        invoiceDate: invoice.invoiceDate || null,
-        dueDate: invoice.dueDate || null,
-        description: invoice.description || "",
+        invoiceDate: targetInvoice.invoiceDate || null,
+        dueDate: targetInvoice.dueDate || null,
+        description: targetInvoice.description || "",
         metadata: { autoPrepaymentApply: true, billItemKey },
       });
 
       releaseRows.push({
-        invoice: invoice._id, invoiceNumber: invoice.invoiceNumber || "",
+        invoice: targetInvoice._id, invoiceNumber: targetInvoice.invoiceNumber || "",
         category: invoiceCategory,
         priorityGroup: invoicePriorityGroup,
         utilityType: utType || "", appliedAmount: applyAmt,
@@ -2129,7 +2158,7 @@ export const autoApplyPrepayments = async ({ businessId, tenantId, invoice, acto
           payment: receipt,
           releaseRows,
           actorId,
-          reason: `Auto-applied prepayment to invoice ${invoice.invoiceNumber || invoice._id}`,
+          reason: `Auto-applied prepayment to invoice ${targetInvoice.invoiceNumber || targetInvoice._id}`,
         });
       } catch (glErr) {
         console.error("[autoApplyPrepayments] GL release failed:", glErr.message);
@@ -2137,9 +2166,20 @@ export const autoApplyPrepayments = async ({ businessId, tenantId, invoice, acto
     }
   }
 
-  // Update invoice outstanding in-memory — caller's recomputeTenantFinancialState persists it via full replay
-  invoice.outstanding = remaining;
-  invoice.status = remaining <= 0 ? "paid" : remaining < Number(invoice.amount) ? "partially_paid" : "pending";
+  const nextStatus = remaining <= 0 ? "paid" : remaining < Number(targetInvoice.amount) ? "partially_paid" : "pending";
+  if (String(targetInvoice._id) === String(invoice._id)) {
+    // Update invoice outstanding in-memory — caller's recomputeTenantFinancialState
+    // persists it via full replay.
+    invoice.outstanding = remaining;
+    invoice.status = nextStatus;
+  } else {
+    // Retargeted to a DIFFERENT (earlier) invoice than the one that triggered this call —
+    // the caller's recompute only knows about `invoice`, so persist this one directly.
+    await TenantInvoice.updateOne(
+      { _id: targetInvoice._id },
+      { $set: { outstanding: remaining, status: nextStatus } }
+    );
+  }
 };
 
 export const postReceiptUnappliedAllocationReleaseJournal = async ({

@@ -431,7 +431,13 @@ export const approveStatement = async (statementId, userId, approvalNotes = "") 
     throw new Error("Revised statements cannot be approved. Use the superseding statement instead.");
   }
 
-  // Update statement status to approved
+  // Update statement status to approved. Approving no longer freezes the tenant balance
+  // carry-forward by itself — see writeStatementTenantBalanceSnapshots below, now called
+  // only when the statement is actually Processed. A statement can sit Approved for days
+  // without being Processed; freezing Bal B/F at Approve time meant the NEXT statement
+  // could silently seed its opening balance from a period nobody had actually closed out,
+  // while a truly-processed period elsewhere kept using a completely separate cut-off for
+  // period continuity — two trackers that could drift apart.
   statement.status = "approved";
   statement.approvedAt = new Date();
   statement.approvedBy = mongoose.Types.ObjectId.isValid(String(userId || "")) ? userId : null;
@@ -440,10 +446,39 @@ export const approveStatement = async (statementId, userId, approvalNotes = "") 
   }
   await statement.save();
 
-  // Persist per-tenant closing balance snapshots so the NEXT statement for this
-  // property/landlord can skip full-history scans and start from these values.
-  const workspaceRows = statement.metadata?.workspace?.rows;
-  const workspaceSummary = statement.metadata?.workspace?.summary;
+  const lines = await LandlordStatementLine.find({ statement: statementId }).sort({ lineNumber: 1 }).lean();
+
+  return {
+    statement,
+    lines,
+  };
+};
+
+/**
+ * Persists per-tenant closing-balance snapshots for a statement, so the NEXT statement
+ * for this property/landlord can skip a full-history scan and carry forward from these
+ * values instead. Called when a statement is actually PROCESSED (closeStatement) — not
+ * when it is merely Approved — since that's the event that also governs period-boundary
+ * continuity (ProcessedStatement.cutoffAt / previousCutoffAt in landlordStatementService).
+ * Keeping both keyed off the same event is what keeps Bal B/F chaining and period
+ * continuity from ever disagreeing with each other.
+ *
+ * @param {Object} statement - The source LandlordStatement (approved), full document or
+ *   a plain object with business/property/landlord/_id/version/metadata/periodEnd.
+ * @param {Date} [periodEndOverride] - Use instead of statement.periodEnd when the actual
+ *   processed cut-off differs from the statement's own periodEnd (closeStatement may
+ *   regenerate with a different cutoffAt).
+ * @param {Object} [workspaceOverride] - Use instead of statement.metadata.workspace when
+ *   a fresher regeneration (done at process time) is available and should be trusted over
+ *   whatever was computed back when the statement was approved.
+ */
+export const writeStatementTenantBalanceSnapshots = async (statement, { periodEndOverride, workspaceOverride } = {}) => {
+  if (!statement?._id) return;
+
+  const workspace = workspaceOverride || statement.metadata?.workspace || {};
+  const workspaceRows = workspace.rows;
+  const workspaceSummary = workspace.summary;
+  const periodEnd = periodEndOverride || statement.periodEnd;
 
   const tenantSnapshots = Array.isArray(workspaceRows)
     ? workspaceRows
@@ -453,7 +488,7 @@ export const approveStatement = async (statementId, userId, approvalNotes = "") 
           property: statement.property,
           landlord: statement.landlord,
           statement: statement._id,
-          periodEnd: statement.periodEnd,
+          periodEnd,
           tenant:
             row.tenantId && mongoose.Types.ObjectId.isValid(String(row.tenantId))
               ? new mongoose.Types.ObjectId(String(row.tenantId))
@@ -475,7 +510,7 @@ export const approveStatement = async (statementId, userId, approvalNotes = "") 
     property: statement.property,
     landlord: statement.landlord,
     statement: statement._id,
-    periodEnd: statement.periodEnd,
+    periodEnd,
     tenant: null,
     unit: null,
     tenantKey: key,
@@ -488,30 +523,20 @@ export const approveStatement = async (statementId, userId, approvalNotes = "") 
   }));
 
   const allSnapshots = [...tenantSnapshots, ...depositSnapshots];
+  if (allSnapshots.length === 0) return;
 
-  // Run bulkWrite and lines fetch in parallel — they operate on different collections with no interdependency.
-  // bulkWrite with $setOnInsert makes this idempotent: re-running approve (double-click /
-  // race condition) silently skips rows that already exist instead of throwing E11000.
-  const [, lines] = await Promise.all([
-    allSnapshots.length > 0
-      ? LandlordStatementTenantBalance.bulkWrite(
-          allSnapshots.map((snap) => ({
-            updateOne: {
-              filter: { statement: snap.statement, tenantKey: snap.tenantKey },
-              update: { $setOnInsert: snap },
-              upsert: true,
-            },
-          })),
-          { ordered: false }
-        )
-      : Promise.resolve(),
-    LandlordStatementLine.find({ statement: statementId }).sort({ lineNumber: 1 }).lean(),
-  ]);
-
-  return {
-    statement,
-    lines,
-  };
+  // $setOnInsert makes this idempotent: re-running process (double-click / retry) silently
+  // skips rows that already exist instead of throwing E11000.
+  await LandlordStatementTenantBalance.bulkWrite(
+    allSnapshots.map((snap) => ({
+      updateOne: {
+        filter: { statement: snap.statement, tenantKey: snap.tenantKey },
+        update: { $setOnInsert: snap },
+        upsert: true,
+      },
+    })),
+    { ordered: false }
+  );
 };
 
 /**
