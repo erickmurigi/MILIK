@@ -42,14 +42,22 @@ const buildStatementPeriod = (value) => {
   };
 };
 
+// req.user.company is always trusted first — a client-supplied business/company
+// value is only used as a fallback for requests with no authenticated company
+// context (mirrors resolveBusinessId in controllers/propertyController/
+// statementController.js). Previously the client-supplied value was checked
+// FIRST — and the requireCompanyModule route guard in front of these routes
+// resolves its OWN, separately-validated company via getActiveCompanyIdFromRequest,
+// so it never actually protected this query: any authenticated user could
+// read/post/reverse another company's journal entries by passing its id.
 const resolveBusinessId = async (req) => {
   const direct =
+    req?.user?.company?._id ||
+    req?.user?.company ||
     req?.query?.business ||
     req?.query?.company ||
     req?.body?.business ||
     req?.body?.company ||
-    req?.user?.company?._id ||
-    req?.user?.company ||
     null;
 
   if (direct) return direct;
