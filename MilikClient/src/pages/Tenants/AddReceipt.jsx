@@ -672,8 +672,14 @@ const AddReceipt = () => {
     if (!formData.tenantId) return options;
     const allTenantInvoices = getCreatedInvoicesForTenant(formData.tenantId);
     const seenKeys = new Set(["rent"]);
+    let hasDepositInvoice = false;
     for (const inv of allTenantInvoices) {
-      if (String(inv?.category || "").toUpperCase() !== "UTILITY_CHARGE") continue;
+      const category = String(inv?.category || "").toUpperCase();
+      if (category === "DEPOSIT_CHARGE") {
+        hasDepositInvoice = true;
+        continue;
+      }
+      if (category !== "UTILITY_CHARGE") continue;
       const meta = inv?.metadata && typeof inv.metadata === "object" ? inv.metadata : {};
       const utilName = (meta.utilityName || meta.utilityType || meta.takeOnBillItemLabel || "").trim();
       if (!utilName) continue;
@@ -682,6 +688,9 @@ const AddReceipt = () => {
       if (seenKeys.has(key)) continue;
       seenKeys.add(key);
       options.push({ billItemKey: key, label: `${utilName} Prepayment` });
+    }
+    if (hasDepositInvoice) {
+      options.push({ billItemKey: "deposit", label: "Deposit Prepayment" });
     }
     return options;
   }, [formData.tenantId, tenantInvoices]); // eslint-disable-line react-hooks/exhaustive-deps

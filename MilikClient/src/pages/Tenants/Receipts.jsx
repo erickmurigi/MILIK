@@ -549,7 +549,8 @@ const Receipts = ({ viewMode = "tenant" }) => {
 
   const isDirectToLandlord = Boolean(formData.paidDirectToLandlord);
 
-  // Prepayment type options built from tenant's lease utilities + rent (always first)
+  // Prepayment type options built from tenant's lease utilities + rent (always first),
+  // plus Deposit whenever this tenant actually has a deposit invoice on record.
   const prepaymentTypeOptions = useMemo(() => {
     const opts = [{ billItemKey: "rent", label: "Rent" }];
     (selectedTenant?.utilities || []).forEach((u) => {
@@ -558,8 +559,15 @@ const Receipts = ({ viewMode = "tenant" }) => {
       const normalized = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
       opts.push({ billItemKey: `utility:${normalized}`, label });
     });
+    const tenantIdStr = safeId(selectedTenant);
+    const hasDepositInvoice = tenantIdStr && tenantInvoices.some(
+      (invoice) => safeId(invoice?.tenant) === tenantIdStr && String(invoice?.category || "").toUpperCase() === "DEPOSIT_CHARGE"
+    );
+    if (hasDepositInvoice) {
+      opts.push({ billItemKey: "deposit", label: "Deposit" });
+    }
     return opts;
-  }, [selectedTenant]);
+  }, [selectedTenant, tenantInvoices]);
 
   const getCreatedInvoicesForTenant = useCallback(
     (targetTenantId) => {

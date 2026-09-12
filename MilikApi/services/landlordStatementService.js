@@ -3878,11 +3878,14 @@ export const generateLandlordStatement = async ({
       unitNumber: row.unit,
       openingBalance: row.balanceBF,
       closingBalance: row.balanceCF,
-      // Real rent-ledger cash received this period (rent + utility + tax + any leftover
-      // unapplied cash) — not row.paidRent alone, which stays capped for commission
-      // purposes. Deposits are excluded here, same as elsewhere, since they're shown in
-      // their own dedicated Deposit column rather than folded into rent-ledger totals.
-      totalPaid: round2(Number(row.rawReceivedThisPeriod || 0)),
+      // Every shilling actually received this period — rent, utility, tax, deposit, and
+      // any leftover unapplied cash — matching what "Total Paid" means on the Tenant
+      // Statement / Paid & Balance report. Not row.paidRent alone (that stays capped for
+      // commission purposes) and not rawReceivedThisPeriod alone (that deliberately
+      // excludes deposit so it never feeds Bal C/F, a rent-ledger-only figure) — this is
+      // the true grand total, so it visibly reconciles against Total Invoiced (rent +
+      // deposit) the way Bal C/F's own math already does internally.
+      totalPaid: round2(Number(row.rawReceivedThisPeriod || 0) + Number(row.totalDepositPaid || 0)),
       unappliedCredits: round2(row.unappliedCredits || 0),
       balance: row.balanceCF,
     })),
@@ -3905,7 +3908,7 @@ export const generateLandlordStatement = async ({
       depositPaid: totalDepositCollected,
       depositInvoiced: totalDepositInvoiced,
       expenses: displayNonCommissionDeductions,
-      totalPaid: totalRawReceived,
+      totalPaid: round2(totalRawReceived + totalDepositCollected),
       closingBalance: totalBalanceCF,
     },
     expenseRows,

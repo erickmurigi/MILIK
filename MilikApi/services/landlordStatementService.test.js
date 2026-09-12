@@ -1110,8 +1110,11 @@ describe("generateLandlordStatement", () => {
     expect(row.paidRent).toBe(13000);
     expect(row.totalDepositInvoiced).toBe(15000);
     expect(row.totalDepositPaid).toBe(15000);
-    // Total Paid / Bal C/F must exclude the deposit portion — settled exactly, not -15000.
-    expect(row.totalPaid).toBe(13000);
+    // Total Paid is the grand total (rent + deposit) — 28,000, matching what a Tenant
+    // Statement calls "Total Received". Bal C/F itself stays rent-ledger-only (deposit
+    // fully settled here, so it doesn't move) — the bug this test guards against was
+    // Bal C/F itself going to -15000, not Total Paid excluding the deposit.
+    expect(row.totalPaid).toBe(28000);
     expect(row.closingBalance).toBe(0);
   }, 60000);
 });

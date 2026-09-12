@@ -1187,11 +1187,13 @@ const buildReceiptAllocationWorkspace = async (payment, { adminOverride = false 
       .map((s) => String(s.utilityType).trim())
       .filter(Boolean)
   )];
+  const hasDepositInvoice = invoiceSnapshots.some((s) => s.category === "DEPOSIT_CHARGE");
 
   return {
     receiptAmount,
     invoiceOptions,
     utilityTypes,
+    hasDepositInvoice,
     currentRows,
     currentPrepaymentRows,
     lockedAllocatedTotal,
@@ -2013,10 +2015,17 @@ const rollbackPostedAllocationReleaseEntries = async ({ entryIds = [], actorId =
 // Non-fatal: PMS allocation state is primary; GL release failure is logged but not thrown.
 export const autoApplyPrepayments = async ({ businessId, tenantId, invoice, actorId = null }) => {
   const invoiceCategory = String(invoice.category || "").toUpperCase();
-  if (!["RENT_CHARGE", "UTILITY_CHARGE"].includes(invoiceCategory)) return;
+  if (!["RENT_CHARGE", "UTILITY_CHARGE", "DEPOSIT_CHARGE"].includes(invoiceCategory)) return;
 
   const utType = normalizeUtilityMatch(invoice.metadata?.utilityType || "");
-  const billItemKey = invoiceCategory === "RENT_CHARGE" ? "rent" : `utility:${utType}`;
+  const billItemKey =
+    invoiceCategory === "RENT_CHARGE" ? "rent"
+    : invoiceCategory === "DEPOSIT_CHARGE" ? "deposit"
+    : `utility:${utType}`;
+  const invoicePriorityGroup =
+    invoiceCategory === "RENT_CHARGE" ? "rent"
+    : invoiceCategory === "DEPOSIT_CHARGE" ? "deposit"
+    : "utility";
 
   const receipts = await RentPayment.find({
     business: invoice.business,
@@ -2074,7 +2083,7 @@ export const autoApplyPrepayments = async ({ businessId, tenantId, invoice, acto
         invoice: invoice._id,
         invoiceNumber: invoice.invoiceNumber || "",
         category: invoiceCategory,
-        priorityGroup: invoiceCategory === "RENT_CHARGE" ? "rent" : "utility",
+        priorityGroup: invoicePriorityGroup,
         utilityType: utType || "",
         appliedAmount: applyAmt,
         beforeOutstanding,
@@ -2088,7 +2097,7 @@ export const autoApplyPrepayments = async ({ businessId, tenantId, invoice, acto
       releaseRows.push({
         invoice: invoice._id, invoiceNumber: invoice.invoiceNumber || "",
         category: invoiceCategory,
-        priorityGroup: invoiceCategory === "RENT_CHARGE" ? "rent" : "utility",
+        priorityGroup: invoicePriorityGroup,
         utilityType: utType || "", appliedAmount: applyAmt,
         beforeOutstanding, afterOutstanding,
       });
@@ -3177,6 +3186,9 @@ export const getPaymentAllocationOptions = async (req, res, next) => {
       if (seenPrepaymentKeys.has(key)) continue;
       seenPrepaymentKeys.add(key);
       prepaymentTypeOptions.push({ billItemKey: key, label: `${utilName} Prepayment` });
+    }
+    if (workspace.hasDepositInvoice) {
+      prepaymentTypeOptions.push({ billItemKey: "deposit", label: "Deposit Prepayment" });
     }
 
     return res.status(200).json({
