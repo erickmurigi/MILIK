@@ -1767,9 +1767,11 @@ const Statements = () => {
               </label>
               <div className="flex items-center gap-1">
                 {latestProcessedCutoffAt ? (
-                  // Locked — must continue from the day after the last statement closed
-                  <div className="flex h-7 w-32 items-center gap-1.5 rounded-md border border-slate-300 bg-slate-100 px-2 text-[11px] font-semibold text-slate-500">
-                    <span className="truncate">{periodStart || "—"}</span>
+                  // Locked — must continue from the day after the last statement closed.
+                  // Wide enough (w-44) to show the full YYYY-MM-DD date AND the badge —
+                  // the previous w-32 truncated the date to "2026-09-..." to fit both.
+                  <div className="flex h-7 w-44 items-center gap-1.5 rounded-md border border-slate-300 bg-slate-100 px-2 text-[11px] font-semibold text-slate-500">
+                    <span className="whitespace-nowrap">{periodStart || "—"}</span>
                     <span className="ml-auto shrink-0 rounded bg-slate-200 px-1 py-0.5 text-[9px] font-bold uppercase text-slate-500">locked</span>
                   </div>
                 ) : (
