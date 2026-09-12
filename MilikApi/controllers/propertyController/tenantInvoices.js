@@ -4621,12 +4621,16 @@ export const deleteTenantInvoicesBatch = async (req, res, next) => {
     const succeeded = [];
     const failed = [];
 
-    for (const invoiceId of validIds) {
+    // Bounded concurrency (chunks of 10) rather than one-at-a-time — each item still
+    // goes through the full single-invoice delete handler (its own GL reversal + save),
+    // but they no longer wait on each other serially. Matches the pattern
+    // createTenantInvoicesBatch already uses via the same runTasksInChunks helper.
+    await runTasksInChunks(validIds, async (invoiceId) => {
       try {
         const { statusCode, payload } = await invokeDeleteForTenantInvoice({ req, invoiceId });
         if (Number(statusCode || 200) >= 400) {
           failed.push({ id: invoiceId, reason: payload?.message || payload?.error || "Failed to delete invoice." });
-          continue;
+          return;
         }
         succeeded.push({
           id: invoiceId,
@@ -4636,7 +4640,7 @@ export const deleteTenantInvoicesBatch = async (req, res, next) => {
       } catch (error) {
         failed.push({ id: invoiceId, reason: error?.message || "Failed to delete invoice." });
       }
-    }
+    });
 
     return res.status(200).json({
       succeeded,
