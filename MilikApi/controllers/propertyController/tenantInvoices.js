@@ -4656,10 +4656,18 @@ export const bulkImportInvoiceNotes = async (req, res, next) => {
     if (rows.length > 500) return next(createError(400, "Maximum 500 notes per import."));
 
     const scopedBusinessId = resolveAuthorizedBusinessId(req);
+    // resolveAuthorizedBusinessId only returns null for a system-admin caller with no
+    // explicit business and no req.user.company — an empty filter here would silently
+    // query every tenant/invoice across every company in the system. Reject instead.
+    if (!scopedBusinessId) {
+      return next(createError(400, "A business context is required to import invoice notes."));
+    }
 
-    const allTenants = await Tenant.find({
-      ...(scopedBusinessId ? { business: scopedBusinessId } : {}),
-    }).populate({ path: "unit", select: "property unitNumber _id" }).lean();
+    const allTenants = await Tenant.find({ business: scopedBusinessId })
+      .select("_id name tenantCode unit business")
+      .populate({ path: "unit", select: "property unitNumber _id" })
+      .limit(5000)
+      .lean();
 
     const tenantByCode = new Map();
     const tenantByName = new Map();
@@ -4693,8 +4701,11 @@ export const bulkImportInvoiceNotes = async (req, res, next) => {
     if (uniqueSourceNos.length > 0) {
       const fetched = await TenantInvoice.find({
         invoiceNumber: { $in: uniqueSourceNos },
-        ...(scopedBusinessId ? { business: scopedBusinessId } : {}),
-      }).lean();
+        business: scopedBusinessId,
+      })
+        .select("_id invoiceNumber business tenant category amount outstanding status postingStatus")
+        .limit(500)
+        .lean();
       fetched.forEach((inv) => sourceInvoicesByNo.set(String(inv.invoiceNumber).toUpperCase(), inv));
     }
 
