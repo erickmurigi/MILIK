@@ -182,6 +182,15 @@ if (!process.env.MONGO_URL) {
   process.exit(1);
 }
 
+// JWT_SECRET was previously only checked lazily inside getJWTSecret(), which
+// meant a deploy missing it would boot successfully and only fail the first
+// time someone tried to log in or hit an authenticated route — surfacing as a
+// confusing 500 in production instead of a clear boot-time failure.
+if (!process.env.JWT_SECRET) {
+  console.error("Missing JWT_SECRET in environment variables.");
+  process.exit(1);
+}
+
 const PUBLIC_DNS_RESOLVERS = ["1.1.1.1", "8.8.8.8"];
 const DEFAULT_DEV_ALLOWED_ORIGINS = ["http://localhost:5173"];
 
