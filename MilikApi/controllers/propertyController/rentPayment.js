@@ -2172,6 +2172,39 @@ export const autoApplyPrepayments = async ({ businessId, tenantId, invoice, acto
         console.error("[autoApplyPrepayments] GL release failed:", glErr.message);
       }
     }
+
+    // Audit trail: the held prepayment's own allocation row was just spliced out and
+    // replaced above (see the splice/push a few lines up) — that's the correct live
+    // state, but it means the "this was held, now it's recognized" transition leaves no
+    // trace in receipt.allocations itself. Log it so the Statement Allocations page's
+    // History tab can still show it after the fact.
+    try {
+      const totalReleased = round2(releaseRows.reduce((s, r) => s + Number(r.appliedAmount || 0), 0));
+      await logAuditEvent({
+        company: invoice.business,
+        actor: actorId ? { _id: actorId } : null,
+        action: "prepayment_recognized",
+        category: "finance",
+        severity: "info",
+        targetType: "RentPayment",
+        targetId: receipt._id,
+        targetName: receipt.receiptNumber || receipt.referenceNumber || String(receipt._id),
+        message: `Ksh ${totalReleased.toLocaleString()} ${billItemKey} prepayment (held since ${new Date(receipt.bookingDate || receipt.paymentDate).toDateString()}) recognized against ${targetInvoice.invoiceNumber || targetInvoice._id}`,
+        metadata: {
+          receiptId: String(receipt._id),
+          heldSince: receipt.bookingDate || receipt.paymentDate,
+          billItemKey,
+          prepaymentLabel: matchingLines[0]?.prepaymentLabel || null,
+          amount: totalReleased,
+          invoiceId: String(targetInvoice._id),
+          invoiceNumber: targetInvoice.invoiceNumber || "",
+          invoiceDate: targetInvoice.invoiceDate || null,
+          tenant: String(invoice.tenant),
+        },
+      });
+    } catch (auditErr) {
+      console.error("[autoApplyPrepayments] audit log failed:", auditErr.message);
+    }
   }
 
   const nextStatus = remaining <= 0 ? "paid" : remaining < Number(targetInvoice.amount) ? "partially_paid" : "pending";

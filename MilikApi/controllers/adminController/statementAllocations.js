@@ -162,6 +162,38 @@ function shapeMeterReading(m) {
   };
 }
 
+// autoApplyPrepayments (rentPayment.js) removes a held prepayment's placeholder allocation
+// row the moment it recognizes it against a real invoice — the live receipt.allocations
+// array only ever shows the CURRENT state, never the "it used to be a held credit" fact.
+// The prepayment_recognized AuditLog entry it writes is the only surviving record of that
+// held state; reshape it back into the same transaction shape searchTransactions already
+// returns so it renders as its own historical ledger row, purely for visibility — its
+// amount must never be summed into totals since the live recognized row already counts it.
+function shapePrepaymentHistory(log, receipt) {
+  if (!receipt) return null;
+  const m = log.metadata || {};
+  const receiptNum = receipt.receiptNumber || null;
+  const refNum = receipt.referenceNumber || null;
+  return {
+    _id: `hist-${log._id}`,
+    type: "payment",
+    refNumber: receiptNum || refNum,
+    refAlt: (receiptNum && refNum && receiptNum !== refNum) ? refNum : null,
+    tenantName: receipt.tenant?.name || "-", tenantId: receipt.tenant?._id,
+    unitNumber: receipt.unit?.unitNumber || "-", propertyName: receipt.unit?.property?.propertyName || "-",
+    amount: m.amount, transactionDate: m.heldSince,
+    bookingDate: m.heldSince, effectiveDate: m.heldSince,
+    status: "recognized",
+    description: m.prepaymentLabel || "Prepayment",
+    subType: m.billItemKey || "rent",
+    allocationSummary: null, allocations: null,
+    _historical: true,
+    _propertyId: receipt.unit?.property?._id ? String(receipt.unit.property._id) : null,
+    _recognizedInvoiceNumber: m.invoiceNumber || null,
+    _recognizedInvoiceDate: m.invoiceDate || null,
+  };
+}
+
 // ─── SEARCH ────────────────────────────────────────────────────────────────────
 export const searchTransactions = async (req, res, next) => {
   try {
@@ -218,6 +250,27 @@ export const searchTransactions = async (req, res, next) => {
           .populate(POPULATE_TENANT).populate(POPULATE_UNIT)
           .sort({ paymentDate: -1 }).limit(LIM).lean()
           .then((rows) => rows.map(shapePayment))
+      );
+
+      // Held-prepayment history — see shapePrepaymentHistory above for why this can't be
+      // read off RentPayment.allocations directly.
+      const histFilter = { company: bId, action: "prepayment_recognized" };
+      if (hasDate) histFilter["metadata.heldSince"] = dateRange;
+      if (directTenantOid) histFilter["metadata.tenant"] = String(directTenantOid);
+      else if (tenantIds?.length) histFilter["metadata.tenant"] = { $in: tenantIds.map(String) };
+      queries.push(
+        AuditLog.find(histFilter).select("metadata createdAt").sort({ createdAt: -1 }).limit(LIM).lean()
+          .then(async (logs) => {
+            if (!logs.length) return [];
+            const receiptIds = [...new Set(logs.map((l) => l.metadata?.receiptId).filter(Boolean))];
+            const receipts = await RentPayment.find({ _id: { $in: receiptIds } })
+              .select("_id receiptNumber referenceNumber tenant unit")
+              .populate(POPULATE_TENANT).populate(POPULATE_UNIT).lean();
+            const receiptMap = new Map(receipts.map((r) => [String(r._id), r]));
+            return logs
+              .map((log) => shapePrepaymentHistory(log, receiptMap.get(String(log.metadata?.receiptId))))
+              .filter((row) => row && (!propOid || row._propertyId === String(propOid)));
+          })
       );
     }
 
@@ -844,7 +897,7 @@ export const getAdjustmentHistory = async (req, res, next) => {
 
     const filter = {
       company: new mongoose.Types.ObjectId(businessId),
-      action: { $in: ["booking_date_adjusted", "payment_reallocated"] },
+      action: { $in: ["booking_date_adjusted", "payment_reallocated", "prepayment_recognized"] },
     };
     if (dateFrom || dateTo) {
       const range = {};

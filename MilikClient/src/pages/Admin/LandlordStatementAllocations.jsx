@@ -28,6 +28,8 @@ const parseMeterUtilityLabel = (desc) => {
 };
 const round2     = (n) => Math.round(Number(n || 0) * 100) / 100;
 const fmtPeriod  = (d) => { if (!d) return "—"; const dt = new Date(d); return `${dt.toLocaleString("en", { month: "short" })}/${dt.getFullYear()}`; };
+const titleCase  = (s) => String(s || "").replace(/[_-]+/g, " ").trim()
+  .replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
 
 const tName = (t) => t?.name || `${t?.firstName || ""} ${t?.lastName || ""}`.trim() || "Unknown";
 const isTerminatedTenant = (t) => {
@@ -63,6 +65,7 @@ const STATUS_CLS = {
   billed:        "bg-emerald-50 text-emerald-700 border border-emerald-200",
   draft:         "bg-slate-50 text-slate-600 border border-slate-200",
   void:          "bg-red-50 text-red-500 border border-red-100",
+  recognized:    "bg-slate-100 text-slate-500 border border-slate-200",
 };
 
 const CAT_LABEL = {
@@ -162,6 +165,7 @@ export default function LandlordStatementAllocations() {
   const [reallocRows,    setReallocRows]    = useState([]);
   const [reallocReason,  setReallocReason]  = useState("");
   const [reallocSaving,  setReallocSaving]  = useState(false);
+  const [prepayType,     setPrepayType]     = useState("rent");
 
   // Fetch tenants from API whenever business or property filter changes
   useEffect(() => {
@@ -264,6 +268,14 @@ export default function LandlordStatementAllocations() {
               bankingDate: tx.bookingDate || tx.transactionDate,
               bill: 0, paid: round2(Number(a.appliedAmount || 0)),
               status: tx.status, isUnapplied: !a.invoice,
+              isPrepayment: Boolean(a.isPrepayment),
+              prepaymentLabel: a.prepaymentLabel || null,
+              utilityType: a.utilityType || null,
+              // "(Allocation)" only means something for a row that WAS a held prepayment
+              // and just landed against this invoice — autoApplyPrepayments tags exactly
+              // that case with metadata.autoPrepaymentApply. A normal direct payment
+              // against an invoice (the common case) keeps its plain category label.
+              isRecognizedAllocation: Boolean(a.metadata?.autoPrepaymentApply),
             });
           });
         } else {
@@ -278,6 +290,16 @@ export default function LandlordStatementAllocations() {
             bankingDate: tx.bookingDate || tx.transactionDate,
             bill: 0, paid: round2(Number(tx.amount || 0)),
             status: tx.status, isUnapplied: true,
+            // Historical rows come from a prepayment_recognized audit entry (see
+            // shapePrepaymentHistory on the backend) — they reconstruct a held
+            // prepayment's line AFTER it was already spliced out of the live receipt.
+            // Display-only: excluded from every total further down so its cash isn't
+            // counted twice (the real recognized row already counts it).
+            isPrepayment: tx._historical ? true : false,
+            prepaymentLabel: tx._historical ? tx.description : null,
+            _historical: Boolean(tx._historical),
+            _recognizedInvoiceNumber: tx._recognizedInvoiceNumber || null,
+            _recognizedInvoiceDate: tx._recognizedInvoiceDate || null,
           });
         }
       } else {
@@ -329,7 +351,10 @@ export default function LandlordStatementAllocations() {
       })
       .map((group) => {
         const rows = buildGroupLedgerRows(group.txns);
-        const active = rows.filter((r) => r.status !== "reversed");
+        // _historical rows are a reconstructed view of a prepayment's PAST held state —
+        // its cash is already counted by the real recognized row, so it must never also
+        // land in a total or it'd double the tenant's Paid figure.
+        const active = rows.filter((r) => r.status !== "reversed" && !r._historical);
         return {
           ...group,
           rows,
@@ -342,7 +367,7 @@ export default function LandlordStatementAllocations() {
   }, [displayResults, buildGroupLedgerRows]);
 
   const ledgerTotals = useMemo(() => {
-    const allActive = tenantGroups.flatMap((g) => g.rows).filter((r) => r.status !== "reversed");
+    const allActive = tenantGroups.flatMap((g) => g.rows).filter((r) => r.status !== "reversed" && !r._historical);
     return {
       bill: round2(allActive.reduce((s, r) => s + (r.bill || 0), 0)),
       paid: round2(allActive.reduce((s, r) => s + (r.paid || 0), 0)),
@@ -473,6 +498,7 @@ export default function LandlordStatementAllocations() {
     setReallocPanel(tx);
     setReallocReason("");
     setInvFilter("");
+    setPrepayType("rent");
     setReallocRows((tx.allocations || []).map((a) => ({
       invoiceId: a.invoice ? String(a.invoice) : null,
       invoiceNumber: a.invoiceNumber || "",
@@ -481,6 +507,14 @@ export default function LandlordStatementAllocations() {
       outstanding: a.afterOutstanding ?? 0,
       invoiceDate: a.invoiceDate || null,
       amount: a.appliedAmount || 0,
+      // Carry forward any existing prepayment tagging (e.g. a row that was already an
+      // isPrepayment placeholder before this panel opened) so re-saving it unchanged
+      // doesn't silently strip the tag autoApplyPrepayments relies on.
+      billItemKey: a.billItemKey || null,
+      prepaymentLabel: a.prepaymentLabel || null,
+      isPrepayment: Boolean(a.isPrepayment),
+      priorityGroup: a.priorityGroup || "",
+      utilityType: a.utilityType || "",
     })));
     if (tx.tenantId) {
       setInvLoading(true);
@@ -527,18 +561,55 @@ export default function LandlordStatementAllocations() {
 
   const removeRow = useCallback((idx) => setReallocRows((rows) => rows.filter((_, i) => i !== idx)), []);
 
-  // Clears all allocations and parks the full receipt amount as an unapplied prepayment credit
+  // Which prepayment types this tenant can hold a credit against — mirrors the same
+  // derivation used on the New Receipt / Allocation Workspace pages, so an admin
+  // correcting a receipt here has the identical Rent/Deposit/<Utility> choices a PM
+  // would see there. Built from availInvoices (already fetched for the invoice picker)
+  // rather than a fresh query.
+  const prepayTypeOptions = useMemo(() => {
+    const options = [{ billItemKey: "rent", label: "Rent Prepayment" }];
+    const seenKeys = new Set(["rent"]);
+    let hasDeposit = false;
+    for (const inv of availInvoices) {
+      const category = String(inv?.category || "").toUpperCase();
+      if (category === "DEPOSIT_CHARGE") { hasDeposit = true; continue; }
+      if (category !== "UTILITY_CHARGE") continue;
+      const meta = inv?.metadata && typeof inv.metadata === "object" ? inv.metadata : {};
+      const utilName = (meta.utilityName || meta.utilityType || meta.takeOnBillItemLabel || "").trim();
+      if (!utilName) continue;
+      const normalized = utilName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+      const key = `utility:${normalized}`;
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      options.push({ billItemKey: key, label: `${utilName} Prepayment` });
+    }
+    if (hasDeposit) options.push({ billItemKey: "deposit", label: "Deposit Prepayment" });
+    return options;
+  }, [availInvoices]);
+
+  // Clears all allocations and parks the full receipt amount as an unapplied prepayment
+  // credit, tagged with isPrepayment/billItemKey exactly like the New Receipt and
+  // Allocation Workspace pages — without this tag, autoApplyPrepayments can never find
+  // this credit later to auto-clear it against the next invoice raised for this tenant.
   const markAsPrepayment = useCallback(() => {
+    const opt = prepayTypeOptions.find((o) => o.billItemKey === prepayType) || prepayTypeOptions[0];
+    const isUtility = opt.billItemKey.startsWith("utility:");
+    const isDeposit = opt.billItemKey === "deposit";
     setReallocRows([{
       invoiceId: null,
       invoiceNumber: "",
-      category: "RENT_CHARGE",
-      description: "Prepayment — credit held for future invoice",
+      category: isDeposit ? "DEPOSIT_CHARGE" : isUtility ? "UTILITY_CHARGE" : "RENT_CHARGE",
+      priorityGroup: isDeposit ? "deposit" : isUtility ? "utility" : "rent",
+      utilityType: isUtility ? opt.billItemKey.replace("utility:", "") : "",
+      billItemKey: opt.billItemKey,
+      prepaymentLabel: opt.label,
+      isPrepayment: true,
+      description: `${opt.label} — credit held for future invoice`,
       outstanding: null,
       invoiceDate: null,
       amount: reallocAmt,
     }]);
-  }, [reallocAmt]);
+  }, [reallocAmt, prepayType, prepayTypeOptions]);
 
   const addInvoice = useCallback((inv) => {
     setReallocRows((rows) => {
@@ -578,7 +649,19 @@ export default function LandlordStatementAllocations() {
     try {
       const res = await adminRequests.patch("/admin/statement-allocations/reallocate", {
         paymentId: reallocPanel._id, business: bizId, reason: reallocReason.trim(),
-        allocations: reallocRows.map((r) => ({ invoiceId: r.invoiceId || null, category: r.category, amount: Number(r.amount || 0) })),
+        allocations: reallocRows.map((r) => ({
+          invoiceId: r.invoiceId || null,
+          category: r.category,
+          amount: Number(r.amount || 0),
+          // Only meaningful (and only sent by the backend into the stored allocation row)
+          // for unapplied/prepayment rows — carrying them through here is what lets
+          // autoApplyPrepayments find and auto-clear this credit later.
+          priorityGroup: r.priorityGroup || undefined,
+          utilityType: r.utilityType || undefined,
+          billItemKey: r.billItemKey || undefined,
+          prepaymentLabel: r.prepaymentLabel || undefined,
+          isPrepayment: r.isPrepayment || undefined,
+        })),
       });
       toast.success("Payment reallocated successfully");
       // Always warn: landlord statement must be regenerated to reflect the new allocation
@@ -827,12 +910,19 @@ export default function LandlordStatementAllocations() {
                           {h.actor?.firstName ? `${h.actor.firstName} ${h.actor.lastName || ""}`.trim() : h.actor?.username || "-"}
                         </td>
                         <td className="px-2 py-1">
-                          <span className={`inline-block rounded-full px-1.5 py-px text-[9px] font-bold ${h.action === "booking_date_adjusted" ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-blue-50 text-blue-700 border border-blue-200"}`}>
-                            {h.action === "booking_date_adjusted" ? "Date Adjusted" : "Reallocated"}
+                          <span className={`inline-block rounded-full px-1.5 py-px text-[9px] font-bold ${
+                            h.action === "booking_date_adjusted" ? "bg-amber-50 text-amber-700 border border-amber-200"
+                            : h.action === "prepayment_recognized" ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : "bg-blue-50 text-blue-700 border border-blue-200"}`}>
+                            {h.action === "booking_date_adjusted" ? "Date Adjusted" : h.action === "prepayment_recognized" ? "Prepayment Recognized" : "Reallocated"}
                           </span>
                         </td>
                         <td className="px-2 py-1 text-[11px] font-mono text-slate-700">{h.targetName || "-"}</td>
-                        <td className="px-2 py-1 text-[11px] text-slate-500 max-w-xs truncate" title={h.metadata?.reason}>{h.metadata?.reason || "-"}</td>
+                        <td className="px-2 py-1 text-[11px] text-slate-500 max-w-xs truncate" title={h.metadata?.reason || h.message}>
+                          {h.action === "prepayment_recognized"
+                            ? `Ksh ${fmtKES(h.metadata?.amount)} → ${h.metadata?.invoiceNumber || "invoice"} (held since ${fmtDate(h.metadata?.heldSince)})`
+                            : (h.metadata?.reason || "-")}
+                        </td>
                       </>
                     )}
                   />
@@ -916,11 +1006,29 @@ export default function LandlordStatementAllocations() {
                             const isPaid = row._kind === "paid";
                             const isBill = row._kind === "bill";
                             const hasOverride = row.bankingDate && toInput(row.bankingDate) !== toInput(row.txDate);
-                            const catLabel = row._meterLabel || CAT_LABEL[row.category] || row.category || (row.isUnapplied ? "Unapplied" : isPaid ? "Payment" : "—");
+                            // Paid/allocation rows get a more specific label than the raw category —
+                            // "<Type> Prepayment" while still held with no invoice (so it's obviously
+                            // excluded from any invoice type's Paid figures), "<Type> (Allocation)"
+                            // only for a row that just landed a previously-held prepayment against a
+                            // real invoice (isRecognizedAllocation) — a normal direct payment keeps its
+                            // plain label, no suffix. Applies on top of the meter-reading label too (a
+                            // utility invoice's narration often reads as a meter reading), not instead
+                            // of it — otherwise a recognized water prepayment would misleadingly render
+                            // identically to a normal, non-prepayment water payment.
+                            const baseLabel = row._meterLabel
+                              || (row.category === "UTILITY_CHARGE" && row.utilityType ? titleCase(row.utilityType) : null)
+                              || CAT_LABEL[row.category] || row.category || (isPaid ? "Payment" : "—");
+                            const catLabel = isPaid
+                              ? row.isUnapplied
+                                ? (row.isPrepayment && row.prepaymentLabel ? row.prepaymentLabel : "Unapplied")
+                                : `${baseLabel}${row.isRecognizedAllocation ? " (Allocation)" : ""}`
+                              : baseLabel;
                             const badgeCls = (row._meterLabel ? CAT_BADGE.METER_READING : CAT_BADGE[row.category]) || (row.isUnapplied ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600");
                             const isReversed = row.status === "reversed";
                             const rowBg = isReversed
                               ? "bg-slate-50/80 opacity-60"
+                              : row._historical
+                              ? "bg-slate-50/70 italic"
                               : isPaid
                               ? (i % 2 === 0 ? "bg-emerald-50/30 hover:bg-emerald-50/60" : "bg-emerald-50/50 hover:bg-emerald-50/70")
                               : (i % 2 === 0 ? "bg-white hover:bg-slate-50/80" : "bg-slate-50/40 hover:bg-slate-50/80");
@@ -943,6 +1051,12 @@ export default function LandlordStatementAllocations() {
                                   <p className="text-[11px] text-slate-700 truncate" title={row.narration}>{row.narration || "—"}</p>
                                   {isBill && row.taxAmount > 0 && (
                                     <p className="text-[9px] text-blue-500 font-semibold leading-tight">VAT {row.taxRate}% · Ksh {fmtKES(row.taxAmount)}</p>
+                                  )}
+                                  {row._historical && (
+                                    <p className="text-[9px] text-slate-400 font-semibold leading-tight">
+                                      → Recognized against {row._recognizedInvoiceNumber || "invoice"}
+                                      {row._recognizedInvoiceDate && ` on ${fmtDate(row._recognizedInvoiceDate)}`}
+                                    </p>
                                   )}
                                 </td>
 
@@ -994,10 +1108,11 @@ export default function LandlordStatementAllocations() {
                                 {/* ── Paid ── */}
                                 <td className="px-2 py-1 border-r border-slate-100 text-right">
                                   {row.paid > 0 ? (
-                                    <p className={`font-bold text-[12px] ${isReversed ? "line-through text-slate-400" : "text-emerald-600"}`}>{fmtKES(row.paid)}</p>
+                                    <p className={`font-bold text-[12px] ${isReversed || row._historical ? "line-through text-slate-400" : "text-emerald-600"}`}>{fmtKES(row.paid)}</p>
                                   ) : (
                                     <span className="text-slate-200 text-[12px]">—</span>
                                   )}
+                                  {row._historical && <p className="text-[8px] font-semibold text-slate-400 leading-tight">not counted</p>}
                                 </td>
 
                                 {/* ── Status ── */}
@@ -1010,6 +1125,10 @@ export default function LandlordStatementAllocations() {
                                 {/* ── Actions ── */}
                                 <td className="px-2 py-1 text-center">
                                   {(() => {
+                                    // Historical rows are a reconstructed view of a past held state, not a
+                                    // live document — there's no real RentPayment behind row._tx._id to
+                                    // edit or reallocate.
+                                    if (row._historical) return null;
                                     const canEdit = !["cancelled", "reversed", "void"].includes(tx.status);
                                     const canRealloc = isPaid && row._isFirst && !["cancelled", "reversed"].includes(tx.status);
                                     if (!canEdit && !canRealloc) return null;
@@ -1256,6 +1375,14 @@ export default function LandlordStatementAllocations() {
                     className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 underline hover:text-[#0B3B2E]">
                     <FaPlus size={8} /> Add unapplied / custom row
                   </button>
+                  {prepayTypeOptions.length > 1 && (
+                    <select value={prepayType} onChange={(e) => setPrepayType(e.target.value)}
+                      className="h-6 rounded border border-slate-200 bg-white px-1.5 text-[10px] font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]">
+                      {prepayTypeOptions.map((o) => (
+                        <option key={o.billItemKey} value={o.billItemKey}>{o.label}</option>
+                      ))}
+                    </select>
+                  )}
                   <button onClick={markAsPrepayment}
                     title="Clear all rows and park the full amount as an unallocated prepayment credit"
                     className="inline-flex items-center gap-1 rounded border border-[#0B3B2E]/30 bg-[#0B3B2E]/5 px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white transition-colors">
