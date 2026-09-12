@@ -1,10 +1,24 @@
 import Printer from "../models/Printer.js"
 
+// Every handler below is scoped to the AUTHENTICATED user's own company —
+// req.body.business / req.query.businessId are never trusted for tenant scoping.
+// Previously getPrinter/deletePrinter looked printers up by _id alone (any
+// authenticated user of any company could read or delete another company's
+// printer), and getPrinters/createPrinter trusted a client-supplied business id
+// outright. See the security hotfix for the full writeup.
+const resolveOwnBusinessId = (req) =>
+  req.user?.company?._id || req.user?.company || req.user?.business || null;
+
 // Adjusted createPrinter function
 export const createPrinter = async (req, res, next) => {
-  const { printerName, category, business, receiptPrinter, printCaptainOrder } = req.body;
+  const { printerName, category, receiptPrinter, printCaptainOrder } = req.body;
+  const business = resolveOwnBusinessId(req);
 
   try {
+    if (!business) {
+      return res.status(403).json({ message: "No company associated with user" });
+    }
+
     // Find the highest current printer identifier for the specified business
     const highestPrinter = await Printer.findOne({ business }).sort({ printerIdentifier: -1 });
     const highestIdentifier = highestPrinter ? highestPrinter.printerIdentifier : 0;
@@ -30,9 +44,14 @@ export const createPrinter = async (req, res, next) => {
 
 //get a single printer
 export const getPrinter = async (req,res,next) => {
+  const business = resolveOwnBusinessId(req);
 
   try{
-    const printer = await Printer.findById(req.params.id)
+    if (!business) {
+      return res.status(403).json({ message: "No company associated with user" });
+    }
+    const printer = await Printer.findOne({ _id: req.params.id, business })
+    if (!printer) return res.status(404).json({ message: "Printer not found" });
     res.status(200).json(printer)
 
   }catch(err){
@@ -42,9 +61,14 @@ export const getPrinter = async (req,res,next) => {
 
 //delete a single printer
 export const deletePrinter = async (req,res,next) => {
+  const business = resolveOwnBusinessId(req);
 
   try{
-    const printer = await Printer.findByIdAndDelete(req.params.id)
+    if (!business) {
+      return res.status(403).json({ message: "No company associated with user" });
+    }
+    const printer = await Printer.findOneAndDelete({ _id: req.params.id, business })
+    if (!printer) return res.status(404).json({ message: "Printer not found" });
     res.status(200).json(printer)
 
   }catch(err){
@@ -54,13 +78,13 @@ export const deletePrinter = async (req,res,next) => {
 
 //get all printers
 export const getPrinters = async (req,res,next) => {
-  try{
-    const { businessId } = req.query;
+  const business = resolveOwnBusinessId(req);
 
-        if (!businessId) {
-            return res.status(400).json({ message: "Business ID is required." });
-        }
-      const printers = await Printer.find({ business: businessId })
+  try{
+    if (!business) {
+      return res.status(403).json({ message: "No company associated with user" });
+    }
+      const printers = await Printer.find({ business })
       res.status(200).json(printers)
 
   }catch(err){
