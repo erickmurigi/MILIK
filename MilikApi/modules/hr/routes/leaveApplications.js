@@ -1,12 +1,13 @@
 import express from 'express';
 import mongoose from 'mongoose';
-import { verifyUser } from '../../../controllers/verifyToken.js';
+import { verifyUser, requireCompanyModule } from '../../../controllers/verifyToken.js';
 import HRLeaveApplication from '../models/HRLeaveApplication.js';
 import HRLeaveType from '../models/HRLeaveType.js';
 import HREmployee from '../models/HREmployee.js';
 import { resolveCompanyId, currentUserId, escapeRegex, parsePage, parseLimit, requireOid, toOid } from '../services/hrScope.js';
 
 const router = express.Router();
+router.use(verifyUser, requireCompanyModule('hr'));
 
 const POPULATE = [
   { path: 'employee',  select: 'surname otherNames employeeNumber department designation' },

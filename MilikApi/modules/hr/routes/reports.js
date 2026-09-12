@@ -1,6 +1,6 @@
 import express from 'express';
 import mongoose from 'mongoose';
-import { verifyUser } from '../../../controllers/verifyToken.js';
+import { verifyUser, requireCompanyModule } from '../../../controllers/verifyToken.js';
 import HREmployee from '../models/HREmployee.js';
 import HRPayrollPeriod from '../models/HRPayrollPeriod.js';
 import HRPayslip from '../models/HRPayslip.js';
@@ -12,7 +12,7 @@ const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
 
 const router = express.Router();
-router.use(verifyUser);
+router.use(verifyUser, requireCompanyModule('hr'));
 
 // ── Headcount Report ─────────────────────────────────────────────────────────
 router.get('/headcount', async (req, res) => {

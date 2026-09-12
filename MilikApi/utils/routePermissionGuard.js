@@ -39,6 +39,29 @@ const RULES = [
   { prefix: "/api/clients/interactions", resource: "clientInteractions", moduleKey: "clients" },
   { prefix: "/api/clients",             resource: "clients",             moduleKey: "clients" },
   { prefix: "/api/printers", resource: "printers", moduleKey: null },
+  // HR — resource keys mirror the frontend's own route guards exactly
+  // (App.jsx Guard moduleKey="hr" resource="...") so a permission granted/denied
+  // in Company Settings behaves identically on both sides. /api/hr/ess is
+  // deliberately NOT listed here — see the exclusion in enforceRoutePermissions
+  // below, since ESS employee sessions use a completely different auth model.
+  { prefix: "/api/hr/employees",           resource: "hrEmployees",  moduleKey: "hr" },
+  { prefix: "/api/hr/letters",             resource: "hrEmployees",  moduleKey: "hr" },
+  { prefix: "/api/hr/attendance",          resource: "hrEmployees",  moduleKey: "hr" },
+  { prefix: "/api/hr/emails",              resource: "hrEmployees",  moduleKey: "hr" },
+  { prefix: "/api/hr/leave-types",         resource: "hrLeave",      moduleKey: "hr" },
+  { prefix: "/api/hr/leave-applications",  resource: "hrLeave",      moduleKey: "hr" },
+  { prefix: "/api/hr/leave-balances",      resource: "hrLeave",      moduleKey: "hr" },
+  { prefix: "/api/hr/payroll",             resource: "hrPayroll",    moduleKey: "hr" },
+  { prefix: "/api/hr/pay-components",      resource: "hrPayroll",    moduleKey: "hr" },
+  { prefix: "/api/hr/statutory-config",    resource: "hrStatutory",  moduleKey: "hr" },
+  { prefix: "/api/hr/appraisal-cycles",    resource: "hrAppraisals", moduleKey: "hr" },
+  { prefix: "/api/hr/appraisals",          resource: "hrAppraisals", moduleKey: "hr" },
+  { prefix: "/api/hr/kpis",                resource: "hrAppraisals", moduleKey: "hr" },
+  { prefix: "/api/hr/reports",             resource: "hrReports",    moduleKey: "hr" },
+  { prefix: "/api/hr/departments",         resource: "hrSetup",      moduleKey: "hr" },
+  { prefix: "/api/hr/designations",        resource: "hrSetup",      moduleKey: "hr" },
+  { prefix: "/api/hr/signatories",         resource: "hrSetup",      moduleKey: "hr" },
+  { prefix: "/api/hr/letter-templates",    resource: "hrSetup",      moduleKey: "hr" },
 ];
 
 const PUBLIC_PREFIXES = ["/api/auth/login", "/api/auth/super-admin", "/api/trial"];
@@ -86,6 +109,11 @@ export const enforceRoutePermissions = async (req, _res, next) => {
   try {
     if (!req.path?.startsWith("/api/")) return next();
     if (PUBLIC_PREFIXES.some((prefix) => req.path.startsWith(prefix))) return next();
+    // ESS (Employee Self Service) sessions are authenticated via a completely
+    // separate token shape (role: "hrEmployee", no company/isSystemAdmin — see
+    // verifyESS in modules/hr/routes/essPortal.js) — not the staff permission
+    // model this table enforces. Their own routes already gate access.
+    if (req.path.startsWith("/api/hr/ess") || req.user?.role === "hrEmployee") return next();
     if (!req.user) return next();
     if (req.user?.isSystemAdmin || req.user?.superAdminAccess) return next();
 

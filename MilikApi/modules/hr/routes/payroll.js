@@ -1,5 +1,5 @@
 import express from 'express';
-import { verifyUser } from '../../../controllers/verifyToken.js';
+import { verifyUser, requireCompanyModule } from '../../../controllers/verifyToken.js';
 import HRPayrollPeriod from '../models/HRPayrollPeriod.js';
 import HRPayslip from '../models/HRPayslip.js';
 import HREmployee from '../models/HREmployee.js';
@@ -10,6 +10,7 @@ import { postPayrollGLJournals, resolvePayrollAccounts, reversePayrollGLJournals
 import { isSystemAdminUser } from '../../../utils/permissionControl.js';
 
 const router = express.Router();
+router.use(verifyUser, requireCompanyModule('hr'));
 
 // ── Helper ───────────────────────────────────────────────────────────────────
 function buildPayslip(emp, periodId, companyId, userId, cfg) {

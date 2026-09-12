@@ -1,12 +1,12 @@
 import express from 'express';
 import mongoose from 'mongoose';
-import { verifyUser } from '../../../controllers/verifyToken.js';
+import { verifyUser, requireCompanyModule } from '../../../controllers/verifyToken.js';
 import HRLetterTemplate from '../models/HRLetterTemplate.js';
 import { resolveCompanyId, currentUserId } from '../services/hrScope.js';
 import { LETTER_META, getDefaultBodyHtml } from '../utils/letterTemplates.js';
 
 const router = express.Router();
-router.use(verifyUser);
+router.use(verifyUser, requireCompanyModule('hr'));
 
 // GET all templates for company (sparse — only types that have been customised)
 router.get('/', async (req, res) => {

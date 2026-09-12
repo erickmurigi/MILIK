@@ -1,13 +1,13 @@
 import express from 'express';
 import mongoose from 'mongoose';
-import { verifyUser } from '../../../controllers/verifyToken.js';
+import { verifyUser, requireCompanyModule } from '../../../controllers/verifyToken.js';
 import HRAppraisalCycle from '../models/HRAppraisalCycle.js';
 import HRAppraisal from '../models/HRAppraisal.js';
 import HREmployee from '../models/HREmployee.js';
 import { resolveCompanyId, currentUserId } from '../services/hrScope.js';
 
 const router = express.Router();
-router.use(verifyUser);
+router.use(verifyUser, requireCompanyModule('hr'));
 
 // GET /api/hr/appraisal-cycles
 router.get('/', async (req, res) => {

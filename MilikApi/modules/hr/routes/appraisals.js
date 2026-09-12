@@ -1,10 +1,10 @@
 import express from 'express';
-import { verifyUser } from '../../../controllers/verifyToken.js';
+import { verifyUser, requireCompanyModule } from '../../../controllers/verifyToken.js';
 import HRAppraisal from '../models/HRAppraisal.js';
 import { resolveCompanyId, currentUserId, escapeRegex, parsePage, parseLimit, requireOid, toOid } from '../services/hrScope.js';
 
 const router = express.Router();
-router.use(verifyUser);
+router.use(verifyUser, requireCompanyModule('hr'));
 
 // GET /api/hr/appraisals?cycleId=&status=&search=&page=&limit=
 router.get('/', async (req, res) => {
