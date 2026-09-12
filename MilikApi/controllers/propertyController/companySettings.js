@@ -1173,13 +1173,20 @@ export const updateIncomeRules = async (req, res, next) => {
       settings = new CompanySettings({ company: businessId });
     }
 
-    const { latePenaltyBeneficiary } = req.body || {};
+    const { latePenaltyBeneficiary, manualReceiptConfirmation } = req.body || {};
 
     if (latePenaltyBeneficiary !== undefined) {
       if (!["landlord", "manager"].includes(latePenaltyBeneficiary)) {
         return next(createError(400, "latePenaltyBeneficiary must be 'landlord' or 'manager'."));
       }
       settings.set("incomeRules.latePenaltyBeneficiary", latePenaltyBeneficiary);
+    }
+
+    if (manualReceiptConfirmation !== undefined) {
+      if (!["on_save", "on_review"].includes(manualReceiptConfirmation)) {
+        return next(createError(400, "manualReceiptConfirmation must be 'on_save' or 'on_review'."));
+      }
+      settings.set("incomeRules.manualReceiptConfirmation", manualReceiptConfirmation);
     }
 
     settings.markModified("incomeRules");

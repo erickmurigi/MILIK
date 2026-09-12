@@ -10,6 +10,7 @@ import { createTestTenantInvoice } from "../../test/factories.payments.js";
 import { createPayment, autoApplyPrepayments } from "./rentPayment.js";
 import RentPayment from "../../models/RentPayment.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
+import CompanySettings from "../../models/CompanySettings.js";
 
 describe("createPayment — receipt allocation engine", () => {
   // Generous per-test timeout: this test creates 4 invoices + posts a receipt against
@@ -188,5 +189,90 @@ describe("autoApplyPrepayments — targets the chronologically earliest outstand
     // September must be untouched — the credit never should have reached it.
     expect(updatedSep.outstanding).toBe(17000);
     expect(updatedSep.status).toBe("pending");
+  }, 60000);
+});
+
+describe("createPayment — manual receipt confirmation policy", () => {
+  // A caller that explicitly sends isConfirmed is always respected, regardless of the
+  // company's manualReceiptConfirmation setting — only when the New Receipt / Add
+  // Receipt forms omit it (their checkbox was removed) does the policy decide.
+  it("defaults an omitted isConfirmed to false when the company policy is on_review (or unset)", async () => {
+    const { tenant, unit, company } = await createTestLease({});
+    const user = await createTestUser({ company });
+
+    const { statusCode, payload } = await callController(createPayment, {
+      user,
+      body: {
+        tenant: String(tenant._id), unit: String(unit._id), amount: 5000,
+        referenceNumber: `REF-${Date.now()}-policy-review`,
+        cashbook: "Main Cashbook", paymentMethod: "cash",
+        paymentDate: new Date(2026, 2, 5), month: 3, year: 2026,
+      },
+    });
+
+    expect(statusCode).toBe(200);
+    expect(payload.isConfirmed).toBe(false);
+    expect(payload.postingStatus).toBe("unposted");
+  }, 60000);
+
+  it("auto-confirms an omitted isConfirmed when the company policy is on_save", async () => {
+    const { tenant, unit, property, company, landlord } = await createTestLease({});
+    const user = await createTestUser({ company });
+    const accounts = await createTestChartOfAccounts(company._id);
+    const chartAccount = accounts.find((a) => a.code === "1200") || accounts[0];
+    const invoiceAuthor = await createTestUser({ company });
+
+    await CompanySettings.findOneAndUpdate(
+      { company: company._id },
+      { $set: { "incomeRules.manualReceiptConfirmation": "on_save" } },
+      { upsert: true, new: true }
+    );
+
+    const dueDate = new Date(2026, 2, 1);
+    const invoiceDate = new Date(2026, 1, 25);
+    await createTestTenantInvoice({
+      company, property, landlord, tenant, unit, chartAccount, createdBy: invoiceAuthor,
+      category: "RENT_CHARGE", amount: 5000, invoiceDate, dueDate,
+    });
+
+    const { statusCode, payload } = await callController(createPayment, {
+      user,
+      body: {
+        tenant: String(tenant._id), unit: String(unit._id), amount: 5000,
+        referenceNumber: `REF-${Date.now()}-policy-onsave`,
+        cashbook: "Main Cashbook", paymentMethod: "cash",
+        paymentDate: new Date(2026, 2, 5), month: 3, year: 2026,
+      },
+    });
+
+    expect(statusCode).toBe(200);
+    expect(payload.isConfirmed).toBe(true);
+    expect(payload.postingStatus).toBe("posted");
+  }, 60000);
+
+  it("still respects an explicit isConfirmed:false even when company policy is on_save", async () => {
+    const { tenant, unit, company } = await createTestLease({});
+    const user = await createTestUser({ company });
+
+    await CompanySettings.findOneAndUpdate(
+      { company: company._id },
+      { $set: { "incomeRules.manualReceiptConfirmation": "on_save" } },
+      { upsert: true, new: true }
+    );
+
+    const { statusCode, payload } = await callController(createPayment, {
+      user,
+      body: {
+        tenant: String(tenant._id), unit: String(unit._id), amount: 5000,
+        referenceNumber: `REF-${Date.now()}-policy-explicit-false`,
+        cashbook: "Main Cashbook", paymentMethod: "cash",
+        paymentDate: new Date(2026, 2, 5), month: 3, year: 2026,
+        isConfirmed: false,
+      },
+    });
+
+    expect(statusCode).toBe(200);
+    expect(payload.isConfirmed).toBe(false);
+    expect(payload.postingStatus).toBe("unposted");
   }, 60000);
 });

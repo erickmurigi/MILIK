@@ -270,6 +270,17 @@ const incomeRulesSchema = new mongoose.Schema(
       enum: ["landlord", "manager"],
       default: "manager",
     },
+    // Governs manually-entered receipts only (the New Receipt / Add Receipt forms) —
+    // automated feeds (M-Pesa, etc.) are unaffected. "on_save" posts a receipt to the
+    // ledger the moment it's saved, no separate confirm step. "on_review" keeps the
+    // existing draft-then-confirm workflow, for businesses where one person records a
+    // receipt and someone else confirms it once they've verified the money actually
+    // hit the bank account.
+    manualReceiptConfirmation: {
+      type: String,
+      enum: ["on_save", "on_review"],
+      default: "on_review",
+    },
   },
   { _id: false }
 );

@@ -521,6 +521,11 @@ const LATE_PENALTY_BENEFICIARY_OPTIONS = [
   { value: "landlord", label: "Landlord — late penalties flow to the landlord statement" },
 ];
 
+const MANUAL_RECEIPT_CONFIRMATION_OPTIONS = [
+  { value: "on_review", label: "On review — save as draft, someone else confirms once the money is verified" },
+  { value: "on_save", label: "On save — receipt posts to the ledger immediately, no separate confirm step" },
+];
+
 const TAX_MODE_OPTIONS = [
   { value: "exclusive", label: "Exclusive" },
   { value: "inclusive", label: "Inclusive" },
@@ -991,7 +996,7 @@ const CompanySettings = () => {
   });
   const [savingAutoInvoicing, setSavingAutoInvoicing] = useState(false);
   const [triggeringAutoInvoicing, setTriggeringAutoInvoicing] = useState(false);
-  const [incomeRules, setIncomeRules] = useState({ latePenaltyBeneficiary: "manager" });
+  const [incomeRules, setIncomeRules] = useState({ latePenaltyBeneficiary: "manager", manualReceiptConfirmation: "on_review" });
   const [savingIncomeRules, setSavingIncomeRules] = useState(false);
   const [chartAccounts, setChartAccounts] = useState([]);
   // Track which company's chart of accounts is loaded via a ref so the guard
@@ -1063,7 +1068,10 @@ const CompanySettings = () => {
         runHistory: Array.isArray(ai.runHistory) ? ai.runHistory : [],
       });
       const ir = response.data?.incomeRules || {};
-      setIncomeRules({ latePenaltyBeneficiary: ir.latePenaltyBeneficiary || "manager" });
+      setIncomeRules({
+        latePenaltyBeneficiary: ir.latePenaltyBeneficiary || "manager",
+        manualReceiptConfirmation: ir.manualReceiptConfirmation || "on_review",
+      });
     } catch (error) {
       toast.error(extractErrorMessage(error));
     } finally {
@@ -1857,6 +1865,19 @@ const CompanySettings = () => {
               value={incomeRules.latePenaltyBeneficiary}
               onChange={(v) => setIncomeRules((p) => ({ ...p, latePenaltyBeneficiary: v }))}
               options={LATE_PENALTY_BENEFICIARY_OPTIONS}
+              getLabel={(o) => o.label}
+              getValue={(o) => o.value}
+            />
+          </div>
+
+          {/* Configurable: Manual Receipt Confirmation */}
+          <div>
+            <AppSelect
+              label="Manual Receipt Confirmation"
+              hint="Applies to receipts entered by hand (New Receipt / Add Receipt). Automated feeds like M-Pesa are unaffected."
+              value={incomeRules.manualReceiptConfirmation}
+              onChange={(v) => setIncomeRules((p) => ({ ...p, manualReceiptConfirmation: v }))}
+              options={MANUAL_RECEIPT_CONFIRMATION_OPTIONS}
               getLabel={(o) => o.label}
               getValue={(o) => o.value}
             />

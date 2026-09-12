@@ -9,6 +9,7 @@ import {
   selectCurrentCompany,
   selectAllProperties,
 } from "../../redux/selectors";
+import { selectCompanySettings, fetchCompanySettings } from "../../redux/companySettingsRedux";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -152,6 +153,18 @@ const AddReceipt = () => {
   const prefilledCashbookAccountId = searchParams.get("cashbookAccountId") || "";
   const currentCompany = useSelector(selectCurrentCompany);
   const isCompanyLandlordMode = isSelfManagingLandlordCompany(currentCompany);
+  const companySettings = useSelector(selectCompanySettings);
+  // Whether THIS manual receipt posts to the ledger immediately on save, or stays a
+  // draft pending a separate confirm step — company-wide policy (Company Settings ›
+  // Income Rules), not a per-receipt choice. Self-managing landlord mode always
+  // auto-confirms regardless of this setting (no manager in the loop to reconcile).
+  const manualReceiptConfirmation = companySettings?.incomeRules?.manualReceiptConfirmation === "on_save" ? "on_save" : "on_review";
+  const willAutoConfirmReceipt = isCompanyLandlordMode || manualReceiptConfirmation === "on_save";
+  useEffect(() => {
+    // fetchCompanySettings short-circuits if already loaded for this company — cheap
+    // to call defensively rather than assume App.jsx's own load has landed yet.
+    if (currentCompany?._id) dispatch(fetchCompanySettings(currentCompany._id));
+  }, [currentCompany?._id, dispatch]);
   const entityCache = useEntityCache(currentCompany?._id);
   const entityCacheRef = useRef(entityCache);
   entityCacheRef.current = entityCache;
@@ -184,7 +197,6 @@ const AddReceipt = () => {
       referenceNumber: prefilledReference,
       bankingDate: todayInput(),
       description: prefilledDescription,
-      isConfirmed: false,
     },
     priorityInvoiceKeys: [],
     manualSelectionMode: false,
@@ -255,16 +267,6 @@ const AddReceipt = () => {
     check:          "Cheque No.",
     credit_card:    "Card Auth. Ref",
   }[formData.paymentMethod] || "Reference No.";
-
-  // In self-managing landlord mode, receipts are always auto-confirmed.
-  // Cashbook is still required — landlords need to track which account received the payment.
-  useEffect(() => {
-    if (!isCompanyLandlordMode) return;
-    setFormData((prev) => ({
-      ...prev,
-      isConfirmed: true,
-    }));
-  }, [isCompanyLandlordMode]);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -866,7 +868,9 @@ const AddReceipt = () => {
       referenceNumber: String(formData.referenceNumber || "").trim(),
       bankingDate: formData.bankingDate || formData.paymentDate || undefined,
       description: formData.description,
-      isConfirmed: formData.isConfirmed,
+      // Deliberately omitted: whether this receipt confirms immediately or stays a
+      // draft pending review is the company's manualReceiptConfirmation policy, decided
+      // server-side (createPayment) — not a per-receipt frontend choice.
       ledgerType: "receipts",
       month: paymentDateObj.getMonth() + 1,
       year: paymentDateObj.getFullYear(),
@@ -1200,21 +1204,20 @@ const AddReceipt = () => {
                         Direct to Landlord Receipt (do not post to cashbook)
                       </label>
                     )}
-                    {isCompanyLandlordMode ? (
-                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700">
+                    {willAutoConfirmReceipt ? (
+                      <span
+                        title="This receipt posts to the ledger immediately on save (Company Settings › Income Rules)"
+                        className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700"
+                      >
                         Auto-Confirmed
                       </span>
                     ) : (
-                      <label htmlFor="isConfirmed" className="inline-flex cursor-pointer items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">
-                        <input
-                          type="checkbox"
-                          id="isConfirmed"
-                          checked={formData.isConfirmed}
-                          onChange={(e) => setFormData((prev) => ({ ...prev, isConfirmed: e.target.checked }))}
-                          className="h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
-                        />
-                        Mark as Confirmed
-                      </label>
+                      <span
+                        title="This receipt saves as a draft — someone will need to confirm it once the money is verified (Company Settings › Income Rules)"
+                        className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700"
+                      >
+                        Pending Confirmation
+                      </span>
                     )}
                   </div>
                 </div>

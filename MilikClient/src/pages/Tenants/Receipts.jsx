@@ -17,6 +17,7 @@ import {
   selectAllProperties,
   selectAllUnits,
 } from "../../redux/selectors";
+import { selectCompanySettings, fetchCompanySettings } from "../../redux/companySettingsRedux";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   FaArrowLeft,
@@ -313,6 +314,15 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const isCompanyLandlordMode = isSelfManagingLandlordCompany(currentCompany);
+  const companySettings = useSelector(selectCompanySettings);
+  // Whether a newly-added manual receipt posts immediately or stays a draft pending
+  // review — company-wide policy (Company Settings › Income Rules), not a per-receipt
+  // choice. See AddReceipt.jsx for the same derivation.
+  const manualReceiptConfirmation = companySettings?.incomeRules?.manualReceiptConfirmation === "on_save" ? "on_save" : "on_review";
+  const willAutoConfirmReceipt = isCompanyLandlordMode || manualReceiptConfirmation === "on_save";
+  useEffect(() => {
+    if (currentCompany?._id) dispatch(fetchCompanySettings(currentCompany._id));
+  }, [currentCompany?._id, dispatch]);
   const entityCache = useEntityCache(currentCompany?._id);
   const entityCacheRef = useRef(entityCache);
   entityCacheRef.current = entityCache;
@@ -393,7 +403,6 @@ const Receipts = ({ viewMode = "tenant" }) => {
     bankingDate: new Date().toISOString().split("T")[0],
     recordDate: new Date().toISOString().split("T")[0],
     description: "",
-    isConfirmed: false,
   });
 
   const isSystemAdmin = Boolean(currentUser?.isSystemAdmin);
@@ -707,7 +716,6 @@ const Receipts = ({ viewMode = "tenant" }) => {
       bankingDate: new Date().toISOString().split("T")[0],
       recordDate: new Date().toISOString().split("T")[0],
       description: "",
-      isConfirmed: false,
     });
     setActiveReceipt(null);
     setShowForm(false);
@@ -747,7 +755,6 @@ const Receipts = ({ viewMode = "tenant" }) => {
       recordDate:
         (receipt.recordDate || receipt.createdAt || "").split("T")[0] || new Date().toISOString().split("T")[0],
       description: receipt.description || "",
-      isConfirmed: Boolean(receipt.isConfirmed),
     });
     setShowForm(true);
   };
@@ -807,7 +814,10 @@ const Receipts = ({ viewMode = "tenant" }) => {
       bankingDate: formData.bankingDate || undefined,
       recordDate: formData.recordDate || undefined,
       description: formData.description,
-      isConfirmed: formData.isConfirmed,
+      // Deliberately omitted: confirm-on-save vs. draft-then-review is the company's
+      // manualReceiptConfirmation policy (Income Rules), applied server-side on
+      // create — not a per-receipt frontend choice. Editing an existing draft here
+      // never changes its confirmation state; use the Confirm/Unconfirm actions.
       month: paymentDateObj.getMonth() + 1,
       year: paymentDateObj.getFullYear(),
       ledgerType: "receipts",
@@ -2312,17 +2322,25 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 </div>
                 )}
 
-                <div className="md:col-span-2 flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="isConfirmed"
-                    checked={formData.isConfirmed}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, isConfirmed: e.target.checked }))}
-                  />
-                  <label htmlFor="isConfirmed" className="text-xs font-semibold text-slate-700">
-                    Mark as confirmed
-                  </label>
-                </div>
+                {!activeReceipt?._id && (
+                  <div className="md:col-span-2 flex items-center gap-2">
+                    {willAutoConfirmReceipt ? (
+                      <span
+                        title="This receipt posts to the ledger immediately on save (Company Settings › Income Rules)"
+                        className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700"
+                      >
+                        Auto-Confirmed
+                      </span>
+                    ) : (
+                      <span
+                        title="This receipt saves as a draft — someone will need to confirm it once the money is verified (Company Settings › Income Rules)"
+                        className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-700"
+                      >
+                        Pending Confirmation
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 

@@ -5,6 +5,7 @@ import Tenant from "../../models/Tenant.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
 import Unit from "../../models/Unit.js";
 import Property from "../../models/Property.js";
+import CompanySettings from "../../models/CompanySettings.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import MpesaCollection from "../../models/MpesaCollection.js";
@@ -2427,7 +2428,14 @@ export const createPayment = async (req, res, next) => {
     // Derive all req.body values synchronously — before any async work
     const baseMetadata = req.body?.metadata && typeof req.body.metadata === "object" ? req.body.metadata : {};
     const isTakeOnCredit = isTakeOnCreditReceipt({ metadata: baseMetadata });
-    const isConfirmedOnCreate = req.body?.isConfirmed === true;
+    // A caller that explicitly sends isConfirmed (true OR false) is always respected —
+    // this covers take-on credit, the M-Pesa collection link flow, and any other
+    // integration that needs direct control. Only when it's omitted entirely (the New
+    // Receipt / Add Receipt manual-entry forms no longer send it) does the company's
+    // manualReceiptConfirmation policy decide, resolved once tenant/unit are confirmed.
+    const explicitConfirmed = Object.prototype.hasOwnProperty.call(req.body || {}, "isConfirmed")
+      ? req.body.isConfirmed === true
+      : null;
     const isDirectToLandlord = req.body?.paidDirectToLandlord === true;
     const refNumber = String(req.body?.referenceNumber || "").trim();
     const normalizedCashbook = isDirectToLandlord || isTakeOnCredit ? "" : String(req.body?.cashbook || "").trim();
@@ -2444,15 +2452,18 @@ export const createPayment = async (req, res, next) => {
     if (!isDirectToLandlord && !isTakeOnCredit && !normalizedCashbook) {
       return next(createError(400, "Cashbook is required unless this receipt was paid directly to the landlord."));
     }
-    if (isTakeOnCredit && !isConfirmedOnCreate) {
+    if (isTakeOnCredit && explicitConfirmed !== true) {
       return next(createError(400, "Credit take-on balances must be saved as confirmed receipts so the opening balance posting stays auditable."));
     }
 
-    // Phase 1: parallel — tenant lookup, unit lookup, duplicate ref check
-    const [tenant, unit, duplicateRef] = await Promise.all([
+    // Phase 1: parallel — tenant lookup, unit lookup, duplicate ref check, company policy
+    const [tenant, unit, duplicateRef, companySettingsDoc] = await Promise.all([
       Tenant.findOne({ _id: tenantId, business: businessId }).select("_id unit business depositHeldBy").lean(),
       Unit.findOne({ _id: unitId, business: businessId }).select("_id property business").lean(),
       RentPayment.findOne({ business: businessId, referenceNumber: refNumber }).lean(),
+      explicitConfirmed === null
+        ? CompanySettings.findOne({ company: businessId }).select("incomeRules").lean()
+        : Promise.resolve(null),
     ]);
 
     if (!tenant) return next(createError(404, "Tenant not found for the selected company."));
@@ -2463,6 +2474,11 @@ export const createPayment = async (req, res, next) => {
     if (duplicateRef) {
       return next(createError(400, "Reference number already exists in this company."));
     }
+
+    const isConfirmedOnCreate =
+      explicitConfirmed !== null
+        ? explicitConfirmed
+        : companySettingsDoc?.incomeRules?.manualReceiptConfirmation === "on_save";
 
     // resolveActorUserId throws with a user-facing message — keep its own try/catch
     let actorUserId = null;
