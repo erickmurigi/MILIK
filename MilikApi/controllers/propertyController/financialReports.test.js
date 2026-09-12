@@ -63,6 +63,11 @@ describe("financialReports controller", () => {
 
     const result = await callController(getTrialBalanceReport, {
       query: { business: String(company._id), asOfDate: now.toISOString() },
+      // resolveBusinessId (utils/requestContext.js) now requires the caller to actually
+      // be entitled to the requested company — a bare query.business with no
+      // authenticated user is correctly rejected as of the cross-tenant BOLA fix, so the
+      // test must simulate a real logged-in user scoped to this company.
+      user: { company: company._id },
     });
 
     expect(result.statusCode).toBe(200);
@@ -126,6 +131,8 @@ describe("financialReports controller", () => {
 
     const result = await callController(getBalanceSheetReport, {
       query: { business: String(company._id), asOfDate: now.toISOString() },
+      // See the matching comment on the Trial Balance test above.
+      user: { company: company._id },
     });
 
     expect(result.statusCode).toBe(200);
