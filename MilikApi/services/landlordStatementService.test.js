@@ -8,6 +8,8 @@ import PaymentVoucher from "../models/PaymentVoucher.js";
 import Tenant from "../models/Tenant.js";
 import Property from "../models/Property.js";
 import Company from "../models/Company.js";
+import LandlordStatement from "../models/LandlordStatement.js";
+import LandlordStatementTenantBalance from "../models/LandlordStatementTenantBalance.js";
 
 describe("generateLandlordStatement", () => {
   it("reflects rent invoiced and rent collected for the statement period", async () => {
@@ -1116,5 +1118,63 @@ describe("generateLandlordStatement", () => {
     // Bal C/F itself going to -15000, not Total Paid excluding the deposit.
     expect(row.totalPaid).toBe(28000);
     expect(row.closingBalance).toBe(0);
+  }, 60000);
+
+  it("seeds Bal B/F from the prior APPROVED statement's snapshot, not zero (KAHAWA WEST regression)", async () => {
+    // Reproduces the bug: once a statement is approved, the NEXT statement's
+    // invoicesBefore/receiptsBefore only cover the gap since that approval (not full
+    // history) — the raw Bal B/F must be seeded from the approved statement's own
+    // LandlordStatementTenantBalance snapshot, the same way the (now-superseded)
+    // recognition-based balanceBF field always correctly was. Without that seed, every
+    // tenant with a carried balance silently shows Bal B/F = 0 in the next statement.
+    const leaseBundle = await createTestLease({ rentAmount: 12000 });
+    const { tenant, unit, property, landlord, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+
+    const now = new Date();
+    const approvedPeriodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const approvedPeriodEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+    const nextPeriodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // The approved statement itself doesn't need real transactions behind it — only its
+    // snapshot row matters for seeding the next statement's opening balance.
+    const approvedStatement = await LandlordStatement.create({
+      business: company._id,
+      property: property._id,
+      landlord: landlord._id,
+      periodStart: approvedPeriodStart,
+      periodEnd: approvedPeriodEnd,
+      statementNumber: `STMT-TEST-${Date.now()}`,
+      status: "approved",
+      approvedAt: approvedPeriodEnd,
+    });
+    await LandlordStatementTenantBalance.create({
+      business: company._id,
+      property: property._id,
+      landlord: landlord._id,
+      statement: approvedStatement._id,
+      periodEnd: approvedPeriodEnd,
+      tenant: tenant._id,
+      unit: unit._id,
+      tenantKey: `${unit._id}:${tenant._id}`,
+      balanceCF: 13700,
+    });
+
+    // This period's own rent invoice — deliberately left unpaid, so Bal C/F should be
+    // exactly the carried balance plus this period's fresh invoice.
+    await createTestInvoice({
+      leaseBundle, category: "RENT_CHARGE", amount: 12000,
+      invoiceDate: new Date(nextPeriodStart.getTime() + 60 * 1000),
+      dueDate: new Date(nextPeriodStart.getTime() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    const statement = await generateLandlordStatement({
+      propertyId: String(property._id), landlordId: String(landlord._id),
+      statementPeriodStart: nextPeriodStart, statementPeriodEnd: new Date(),
+    });
+    const row = statement.metadata.rows.find((r) => String(r.unitId) === String(unit._id));
+
+    expect(row.balanceBF).toBe(13700);
+    expect(row.closingBalance).toBe(13700 + 12000);
   }, 60000);
 });

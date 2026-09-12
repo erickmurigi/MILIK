@@ -1818,6 +1818,11 @@ export const generateLandlordStatement = async ({
         multiUnitLabels: concurrentUnitLabels,
         perMonth: Number(tenant.rent || unit.rent || fallback.perMonth || 0),
         balanceBF: tenantSnapshot ? round2(tenantSnapshot.balanceCF) : 0,
+        // Seeds the raw-ledger Bal B/F the same way — otherwise, whenever a prior period
+        // was approved (so this period's invoicesBefore/receiptsBefore only cover the gap
+        // since that snapshot, not full history), rawBalanceBF would start from 0 instead
+        // of picking up where the last approved statement's Bal C/F left off.
+        rawBalanceBF: tenantSnapshot ? round2(tenantSnapshot.balanceCF) : 0,
         invoicedRent: 0,
         invoicedGarbage: 0,
         invoicedWater: 0,
