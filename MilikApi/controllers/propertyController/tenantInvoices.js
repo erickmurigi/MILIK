@@ -2170,9 +2170,14 @@ export const getTenantInvoiceNotes = async (req, res, next) => {
 
 export const getCreditableTenantInvoices = async (req, res, next) => {
   try {
-    const { business, tenant } = req.query;
-    if (!business) return next(createError(400, "business query parameter is required"));
-    const businessId = String(business);
+    const { tenant } = req.query;
+    // Was reading req.query.business directly with no ownership check at all — any
+    // authenticated user could pass another company's id and see its tenants' open
+    // invoices. resolveAuthorizedBusinessId (used throughout this file) prefers the
+    // caller's own req.user.company and only honors an explicit override for system
+    // admins.
+    const businessId = resolveAuthorizedBusinessId(req);
+    if (!businessId) return next(createError(400, "business query parameter is required"));
 
     const tenantIds = tenant
       ? [tenant]
