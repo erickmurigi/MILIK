@@ -3339,9 +3339,15 @@ export const generateLandlordStatement = async ({
   // invoiced side already uses so the two never drift apart.
   const getReceiptRentLedgerCash = (receipt) => {
     const allocationRows = getReceiptAllocationRows(receipt);
+    // Every invoice:null row (isPrepayment-tagged or not — a receipt can carry a plain,
+    // untagged unapplied row too) is already summed into allocationSummary.unapplied at
+    // save time. Seeding `cash` from that AND then also walking every such row in the
+    // loop below double-counts it — the loop below must only ever look at rows that
+    // target a real invoice.
     let cash = round2(Number(getReceiptSummaryAmount(receipt, "unapplied") || 0));
     if (allocationRows.length > 0) {
       allocationRows.forEach((allocationRow) => {
+        if (!allocationRow?.invoice) return;
         const sourceInvoice = invoiceStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
         const impact = getReceiptAllocationStatementImpact({ allocationRow, sourceInvoice, row: null });
         cash = round2(cash + Number(impact.statementRelevantAmount || 0));
