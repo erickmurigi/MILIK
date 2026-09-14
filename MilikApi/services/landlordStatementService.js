@@ -929,13 +929,39 @@ const getReceiptSummaryAmount = (receipt = {}, key = "") => {
   return round2(Number(summary[key] || 0) * sign);
 };
 
+const isVoidTargetDoc = (doc) => {
+  if (!doc) return false;
+  const status = String(doc.status || "").toLowerCase();
+  const postingStatus = String(doc.postingStatus || "").toLowerCase();
+  return ["cancelled", "reversed"].includes(status) || ["failed", "reversed"].includes(postingStatus);
+};
+
 const getReceiptAllocationStatementImpact = ({
   allocationRow = {},
   sourceInvoice = null,
+  sourceNote = null,
   row = null,
 }) => {
   const fallbackAmount = round2(Number(allocationRow?.appliedAmount || 0));
   if (fallbackAmount === 0) {
+    return {
+      rentAmount: 0,
+      utilityAmount: 0,
+      utilities: [],
+      taxAmount: 0,
+      depositAmount: 0,
+      statementRelevantAmount: 0,
+      statementCategory: "",
+      isStatementRelevant: false,
+    };
+  }
+
+  // This allocation row targets an invoice or debit note that was reversed/cancelled after
+  // the receipt applied against it. That charge is no longer real debt, so the cash that
+  // once paid it can't be counted as settling anything real either — treating it as one
+  // (the previous behaviour, since neither map even contained the voided doc to check) wrongly
+  // shrank Bal B/F by money that in truth never retired a live charge.
+  if (isVoidTargetDoc(sourceInvoice) || isVoidTargetDoc(sourceNote)) {
     return {
       rentAmount: 0,
       utilityAmount: 0,
@@ -1084,9 +1110,15 @@ const getReceiptAllocationStatementImpact = ({
   }
 
   if (priorityGroup === "debit_note") {
-    // Debit notes carry their real charge category (RENT_CHARGE / UTILITY_CHARGE) on
-    // the allocation row's `category` field (not "DEBIT_NOTE"). Route accordingly.
-    const underlyingCategory = String(allocationRow?.category || "").toUpperCase();
+    // The allocation row's own `category` field on a debit-note row is often just the
+    // literal string "DEBIT_NOTE" — not the underlying charge type the comment below once
+    // assumed. That silently routed every UTILITY_CHARGE debit note into the "not
+    // RENT_CHARGE" branch and dropped it as statementRelevantAmount: 0, quietly shrinking
+    // Bal B/F by the exact size of any unpaid/underpaid utility debit note. The note
+    // document itself (sourceNote, resolved regardless of status precisely so this can be
+    // checked) always carries its real category — prefer that, falling back to the
+    // allocation row's own field only when the note couldn't be resolved at all.
+    const underlyingCategory = String(sourceNote?.category || allocationRow?.category || "").toUpperCase();
     if (underlyingCategory === "UTILITY_CHARGE") {
       const utilityIdentity = resolveUtilityIdentity(
         allocationRow?.utilityType || allocationRow?.description || sourceInvoice?.description || "",
@@ -1685,31 +1717,50 @@ export const generateLandlordStatement = async ({
     [...invoicesBefore, ...invoicesInPeriod].map((invoice) => [String(invoice?._id || ""), invoice])
   );
 
-  // When a balance snapshot exists, invoicesBefore only covers the gap period.  Gap-period
-  // receipts may still allocate against pre-snapshot invoices.  Collect any missing invoice
-  // IDs referenced by gap receipts and fetch them in one bulk query to keep the map complete.
-  if (snapshotDate) {
-    const missingInvoiceIds = new Set();
-    for (const receipt of standardReceiptsForStatementWindow) {
-      const recognitionDate = getReceiptStatementDate(receipt);
-      const recognitionTime = recognitionDate ? new Date(recognitionDate).getTime() : NaN;
-      if (Number.isNaN(recognitionTime) || recognitionTime >= periodStart.getTime()) continue;
-      for (const alloc of Array.isArray(receipt.allocations) ? receipt.allocations : []) {
-        const invoiceId = String(alloc?.invoice || alloc?.invoiceId || "");
-        if (invoiceId && !invoiceStatementMap.has(invoiceId)) {
-          missingInvoiceIds.add(invoiceId);
-        }
+  // invoicesBefore/notesForStatementWindow are fetched with an ACTIVE-only status filter
+  // (cancelled/reversed excluded), so any allocation row that targets a since-reversed
+  // invoice or debit note resolves to nothing in either map — getReceiptAllocationStatementImpact
+  // then has no way to tell "reversed" apart from "just outside the fetch window" and falls
+  // back to trusting the allocation row's own stored amount/category, wrongly counting that
+  // cash as if it settled a real, currently-owed charge (it silently reduces Bal B/F, or
+  // recognises fresh "Paid" this period, for money that in truth paid off a charge that no
+  // longer exists). Resolving every referenced id here — regardless of status, regardless
+  // of whether a balance snapshot exists — lets the impact calculation see the real status
+  // and correctly zero out anything targeting a voided charge instead of guessing.
+  const missingInvoiceIds = new Set();
+  const debitNoteIds = new Set();
+  for (const receipt of standardReceiptsForStatementWindow) {
+    for (const alloc of Array.isArray(receipt.allocations) ? receipt.allocations : []) {
+      const invoiceId = String(alloc?.invoice || alloc?.invoiceId || "");
+      if (!invoiceId) continue;
+      if (String(alloc?.priorityGroup || "").toLowerCase() === "debit_note") {
+        debitNoteIds.add(invoiceId);
+      } else if (!invoiceStatementMap.has(invoiceId)) {
+        missingInvoiceIds.add(invoiceId);
       }
     }
-    if (missingInvoiceIds.size > 0) {
-      const missingInvoices = await TenantInvoice.find({
-        _id: { $in: Array.from(missingInvoiceIds).map((id) => oid(id)) },
-        business: businessObjectId,
-      })
-        .select("_id tenant unit category amount description invoiceDate bookingDate invoiceNumber landlord metadata depositHeldBy taxSnapshot")
-        .lean();
-      missingInvoices.forEach((inv) => invoiceStatementMap.set(String(inv._id), inv));
-    }
+  }
+  if (missingInvoiceIds.size > 0) {
+    const missingInvoices = await TenantInvoice.find({
+      _id: { $in: Array.from(missingInvoiceIds).map((id) => oid(id)) },
+      business: businessObjectId,
+    })
+      .select("_id tenant unit category amount status description invoiceDate bookingDate invoiceNumber landlord metadata depositHeldBy taxSnapshot")
+      .lean();
+    missingInvoices.forEach((inv) => invoiceStatementMap.set(String(inv._id), inv));
+  }
+
+  // Same idea, for debit notes: always resolved by id (regardless of status) so a receipt's
+  // allocation against a reversed debit note can be recognised as void rather than trusted.
+  const noteStatementMap = new Map();
+  if (debitNoteIds.size > 0) {
+    const referencedNotes = await TenantInvoiceNote.find({
+      _id: { $in: Array.from(debitNoteIds).map((id) => oid(id)) },
+      business: businessObjectId,
+    })
+      .select("_id tenant unit category amount status postingStatus noteDate noteNumber")
+      .lean();
+    referencedNotes.forEach((note) => noteStatementMap.set(String(note._id), note));
   }
 
   // Hydrate note.sourceInvoice in-memory from already-fetched invoices (avoids extra DB round-trip)
@@ -2163,6 +2214,7 @@ export const generateLandlordStatement = async ({
     if (allocationRows.length > 0) {
       allocationRows.forEach((allocationRow) => {
         const sourceInvoice = invoiceStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
+        const sourceNote = noteStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
         // A single receipt can span more than one of the tenant's units (e.g. one payment
         // settling both BAR's and S7's rent for a two-unit tenant) — resolve each
         // allocation row against the unit its own source invoice actually belongs to,
@@ -2173,6 +2225,7 @@ export const generateLandlordStatement = async ({
         const impact = getReceiptAllocationStatementImpact({
           allocationRow,
           sourceInvoice,
+          sourceNote,
           row,
         });
 
@@ -2549,9 +2602,11 @@ export const generateLandlordStatement = async ({
     if (allocationRows.length > 0) {
       allocationRows.forEach((allocationRow) => {
         const sourceInvoice = invoiceStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
+        const sourceNote = noteStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
         const impact = getReceiptAllocationStatementImpact({
           allocationRow,
           sourceInvoice,
+          sourceNote,
           row,
         });
 
@@ -2979,7 +3034,8 @@ export const generateLandlordStatement = async ({
       if (!pg || pg === "deposit" || pg === "unapplied") return;
 
       const sourceInvoice = invoiceStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
-      const impact = getReceiptAllocationStatementImpact({ allocationRow, sourceInvoice, row: mixedRow });
+      const sourceNote = noteStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
+      const impact = getReceiptAllocationStatementImpact({ allocationRow, sourceInvoice, sourceNote, row: mixedRow });
       if (!impact.isStatementRelevant) return;
 
       mixedRent    = round2(mixedRent    + Number(impact.rentAmount    || 0));
@@ -3349,7 +3405,8 @@ export const generateLandlordStatement = async ({
       allocationRows.forEach((allocationRow) => {
         if (!allocationRow?.invoice) return;
         const sourceInvoice = invoiceStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
-        const impact = getReceiptAllocationStatementImpact({ allocationRow, sourceInvoice, row: null });
+        const sourceNote = noteStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
+        const impact = getReceiptAllocationStatementImpact({ allocationRow, sourceInvoice, sourceNote, row: null });
         cash = round2(cash + Number(impact.statementRelevantAmount || 0));
       });
     } else {
