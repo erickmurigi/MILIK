@@ -439,9 +439,16 @@ const tryRegisterC2BUrls = async (safaricomBase, version, accessToken, shortCode
   return data;
 };
 
+// Every businessId resolution in this file (here and below) previously put
+// req.query.business / req.body.business ahead of req.userCompany — any
+// authenticated user could read, import, delete, or reassign another
+// company's M-Pesa collections by passing its id. req.userCompany is already
+// safely resolved/validated upstream (attachResolvedCompany in
+// controllers/verifyToken.js); removed the client-controllable prefix
+// everywhere in this file rather than trusting it.
 export const registerPmsPaybillUrls = async (req, res, next) => {
   try {
-    const businessId = String(req.body?.business || req.userCompany || req.user?.company?._id || req.user?.company || "");
+    const businessId = String(req.userCompany || req.user?.company?._id || req.user?.company || "");
     if (!isValidObjectId(businessId)) {
       return next(createError(400, "Valid business id is required"));
     }
@@ -543,7 +550,7 @@ export const registerPmsPaybillUrls = async (req, res, next) => {
 
 export const listMpesaCollections = async (req, res, next) => {
   try {
-    const businessId = String(req.query.business || req.userCompany || req.user?.company?._id || req.user?.company || "");
+    const businessId = String(req.userCompany || req.user?.company?._id || req.user?.company || "");
     if (!isValidObjectId(businessId)) {
       return next(createError(400, "Valid business id is required"));
     }
@@ -712,7 +719,7 @@ export const listMpesaCollections = async (req, res, next) => {
 
 export const importMpesaBatch = async (req, res, next) => {
   try {
-    const businessId = String(req.body.business || req.userCompany || req.user?.company?._id || req.user?.company || "");
+    const businessId = String(req.userCompany || req.user?.company?._id || req.user?.company || "");
     const rawText = String(req.body.rawText || "");
     const shortCode = normalizeText(req.body.shortCode || "");
 
@@ -898,7 +905,7 @@ export const mpesaConfirmationCallback = async (req, res, next) => {
 
 export const deleteMpesaCollection = async (req, res, next) => {
   try {
-    const businessId = String(req.query.business || req.body?.business || req.userCompany || req.user?.company?._id || req.user?.company || "");
+    const businessId = String(req.userCompany || req.user?.company?._id || req.user?.company || "");
     if (!isValidObjectId(businessId)) {
       return next(createError(400, "Valid business id is required"));
     }
@@ -924,7 +931,7 @@ export const deleteMpesaCollection = async (req, res, next) => {
 
 export const assignTenantToCollection = async (req, res, next) => {
   try {
-    const businessId = String(req.query.business || req.body?.business || req.userCompany || req.user?.company?._id || req.user?.company || "");
+    const businessId = String(req.userCompany || req.user?.company?._id || req.user?.company || "");
     if (!isValidObjectId(businessId)) return next(createError(400, "Valid business id is required"));
 
     const row = await MpesaCollection.findOne({ _id: req.params.id, business: businessId }).lean();
@@ -984,7 +991,7 @@ export const assignTenantToCollection = async (req, res, next) => {
 
 export const ignoreCollection = async (req, res, next) => {
   try {
-    const businessId = String(req.query.business || req.body?.business || req.userCompany || req.user?.company?._id || req.user?.company || "");
+    const businessId = String(req.userCompany || req.user?.company?._id || req.user?.company || "");
     if (!isValidObjectId(businessId)) return next(createError(400, "Valid business id is required"));
 
     const row = await MpesaCollection.findOne({ _id: req.params.id, business: businessId }).lean();
@@ -1005,7 +1012,7 @@ export const ignoreCollection = async (req, res, next) => {
 
 export const unignoreCollection = async (req, res, next) => {
   try {
-    const businessId = String(req.query.business || req.body?.business || req.userCompany || req.user?.company?._id || req.user?.company || "");
+    const businessId = String(req.userCompany || req.user?.company?._id || req.user?.company || "");
     if (!isValidObjectId(businessId)) return next(createError(400, "Valid business id is required"));
 
     const row = await MpesaCollection.findOne({ _id: req.params.id, business: businessId }).lean();

@@ -1,9 +1,10 @@
 import express from 'express';
-import { verifyUser } from '../../../controllers/verifyToken.js';
+import { verifyUser, requireCompanyModule } from '../../../controllers/verifyToken.js';
 import HRLeaveType from '../models/HRLeaveType.js';
 import { resolveCompanyId, currentUserId, escapeRegex } from '../services/hrScope.js';
 
 const router = express.Router();
+router.use(verifyUser, requireCompanyModule('hr'));
 
 // GET /api/hr/leave-types
 router.get('/', verifyUser, async (req, res) => {

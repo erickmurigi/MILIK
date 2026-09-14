@@ -1,12 +1,29 @@
 import mongoose from "mongoose";
 import { createError } from "./error.js";
+import { canAccessCompanyId, normalizeCompanyId } from "../controllers/verifyToken.js";
 
 /**
  * Canonical business ID resolver — covers all header/body/query/user shapes
  * used across every module. Returns a plain string or null (never throws).
+ *
+ * SECURITY: an explicit business/company id from the client (header, body, or
+ * query) is only honored when canAccessCompanyId confirms the authenticated
+ * user is actually entitled to act as that company (system admins, or a
+ * genuinely multi-company user) — mirroring getActiveCompanyIdFromRequest in
+ * controllers/verifyToken.js, which already gets this right. Previously any
+ * client-supplied value was trusted outright, ahead of req.user's own company,
+ * letting any authenticated user read/write another company's data by simply
+ * passing its id — this was the shared root cause behind cross-tenant access
+ * on every module that resolves its business scope through this function
+ * (HR, CarWash, Clients, PropertySale, Inventory, and ~25 property
+ * controllers). See the security hotfix that added this check for the full
+ * writeup.
  */
 export const resolveBusinessId = (req) => {
-  const raw =
+  const ownCompanyId =
+    normalizeCompanyId(req.user?.company) || normalizeCompanyId(req.user?.business);
+
+  const explicit =
     req.headers?.["x-active-company-id"] ||
     req.headers?.["x-company-id"] ||
     req.body?.business ||
@@ -17,12 +34,12 @@ export const resolveBusinessId = (req) => {
     req.query?.businessId ||
     req.query?.company ||
     req.query?.companyId ||
-    req.user?.company?._id ||
-    req.user?.company ||
-    req.user?.business ||
     null;
 
-  return raw ? String(raw) : null;
+  const explicitId = normalizeCompanyId(explicit);
+  if (explicitId && canAccessCompanyId(req.user, explicitId)) return explicitId;
+
+  return ownCompanyId;
 };
 
 /**

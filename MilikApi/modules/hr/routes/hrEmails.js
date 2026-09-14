@@ -1,6 +1,6 @@
 import express from 'express';
 import mongoose from 'mongoose';
-import { verifyUser } from '../../../controllers/verifyToken.js';
+import { verifyUser, requireCompanyModule } from '../../../controllers/verifyToken.js';
 import HRPayslip from '../models/HRPayslip.js';
 import HRPayrollPeriod from '../models/HRPayrollPeriod.js';
 import HRLetter from '../models/HRLetter.js';
@@ -11,7 +11,7 @@ import { buildSmtpTransporter, hasSmtpConfig, resolveMailSender } from '../../..
 import { buildPayslipEmail, buildLetterEmail, buildRegisterEmail } from '../utils/hrEmailTemplates.js';
 
 const router = express.Router();
-router.use(verifyUser);
+router.use(verifyUser, requireCompanyModule('hr'));
 
 function noSmtp(res) {
   return res.status(503).json({ message: 'Email service is not configured on this server' });

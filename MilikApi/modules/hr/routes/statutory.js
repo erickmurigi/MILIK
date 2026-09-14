@@ -1,11 +1,11 @@
 import express from 'express';
-import { verifyUser } from '../../../controllers/verifyToken.js';
+import { verifyUser, requireCompanyModule } from '../../../controllers/verifyToken.js';
 import HRStatutoryConfig from '../models/HRStatutoryConfig.js';
 import { DEFAULT_CONFIG } from '../services/hrStatutory.js';
 import { resolveCompanyId, currentUserId } from '../services/hrScope.js';
 
 const router = express.Router();
-router.use(verifyUser);
+router.use(verifyUser, requireCompanyModule('hr'));
 
 // GET /api/hr/statutory-config
 router.get('/', async (req, res) => {

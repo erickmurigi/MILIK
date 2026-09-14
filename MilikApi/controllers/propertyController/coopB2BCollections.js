@@ -223,7 +223,11 @@ export const handleCoopAdvise = async (req, res, next) => {
 
 export const listCoopCollections = async (req, res, next) => {
   try {
-    const businessId = normalizeText(req.query.business || req.userCompany || req.user?.company?._id || req.user?.company || "");
+    // Was trusting req.query.business ahead of the caller's own company — any
+    // authenticated user could list another company's Co-op B2B collections. Every
+    // other function in this file already scopes by req.userCompany/req.user.company
+    // alone (see assignTenantToCoopCollection etc. below); matched that.
+    const businessId = normalizeText(req.userCompany || req.user?.company?._id || req.user?.company || "");
     if (!isValidObjectId(businessId)) {
       return next(createError(400, "Valid business id is required"));
     }

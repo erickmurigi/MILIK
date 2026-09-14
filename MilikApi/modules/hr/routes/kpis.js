@@ -1,11 +1,11 @@
 import express from 'express';
-import { verifyUser } from '../../../controllers/verifyToken.js';
+import { verifyUser, requireCompanyModule } from '../../../controllers/verifyToken.js';
 import HRKpi from '../models/HRKpi.js';
 import HRAppraisalCycle from '../models/HRAppraisalCycle.js';
 import { resolveCompanyId, currentUserId, escapeRegex } from '../services/hrScope.js';
 
 const router = express.Router();
-router.use(verifyUser);
+router.use(verifyUser, requireCompanyModule('hr'));
 
 // GET /api/hr/kpis
 router.get('/', async (req, res) => {

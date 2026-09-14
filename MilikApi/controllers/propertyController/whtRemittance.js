@@ -8,8 +8,22 @@ import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggr
 import { findSystemAccountByCode } from "../../services/chartOfAccountsService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { createError } from "../../utils/error.js";
+import { normalizeCompanyId } from "../verifyToken.js";
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+// req.user.company is always trusted first — a client-supplied business/company
+// value is only used as a fallback for requests with no authenticated company
+// context (mirrors resolveBusinessId in controllers/propertyController/
+// statementController.js). Every function below previously read req.query.business
+// / req.body.business directly, with no check against the caller's own company —
+// any authenticated user could read or remit/void another company's WHT filings.
+const resolveOwnBusinessId = (req, explicit) => {
+  const ownId = normalizeCompanyId(req.user?.company);
+  if (ownId && mongoose.Types.ObjectId.isValid(ownId)) return ownId;
+  const explicitId = normalizeCompanyId(explicit);
+  return explicitId && mongoose.Types.ObjectId.isValid(explicitId) ? explicitId : null;
+};
 
 const getWhtAccount = async (businessId) =>
   findSystemAccountByCode(businessId, "2141").catch(() => null);
@@ -38,7 +52,7 @@ const aggregateWhtForPeriod = async (businessId, accountId, periodStart, periodE
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const getWhtReturnSummary = async (req, res, next) => {
   try {
-    const businessId = req.query.business;
+    const businessId = resolveOwnBusinessId(req, req.query.business);
     const year  = parseInt(req.query.year  || new Date().getFullYear(), 10);
     const month = parseInt(req.query.month || (new Date().getMonth() + 1), 10);
 
@@ -132,7 +146,8 @@ export const getWhtReturnSummary = async (req, res, next) => {
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const getWhtRemittanceHistory = async (req, res, next) => {
   try {
-    const { business: businessId, year } = req.query;
+    const { year } = req.query;
+    const businessId = resolveOwnBusinessId(req, req.query.business);
     if (!businessId || !mongoose.Types.ObjectId.isValid(businessId)) {
       return next(createError(400, "Valid business ID is required."));
     }
@@ -157,7 +172,8 @@ export const getWhtRemittanceHistory = async (req, res, next) => {
 export const remitWht = async (req, res, next) => {
   let remittance = null;
   try {
-    const { business: businessId, year, month, amountRemitted, paymentDate, paymentReference, cashbookAccountId, notes } = req.body;
+    const { year, month, amountRemitted, paymentDate, paymentReference, cashbookAccountId, notes } = req.body;
+    const businessId = resolveOwnBusinessId(req, req.body.business);
 
     if (!businessId || !mongoose.Types.ObjectId.isValid(businessId)) {
       return next(createError(400, "Valid business ID is required."));
@@ -258,7 +274,8 @@ export const remitWht = async (req, res, next) => {
 export const voidWhtRemittance = async (req, res, next) => {
   try {
     const { id }     = req.params;
-    const { business: businessId, reason } = req.body;
+    const { reason } = req.body;
+    const businessId = resolveOwnBusinessId(req, req.body.business);
 
     if (!id || !mongoose.Types.ObjectId.isValid(id)) return next(createError(400, "Valid remittance ID is required."));
     if (!businessId) return next(createError(400, "Business ID is required."));

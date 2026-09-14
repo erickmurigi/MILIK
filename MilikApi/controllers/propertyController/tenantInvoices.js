@@ -2170,9 +2170,14 @@ export const getTenantInvoiceNotes = async (req, res, next) => {
 
 export const getCreditableTenantInvoices = async (req, res, next) => {
   try {
-    const { business, tenant } = req.query;
-    if (!business) return next(createError(400, "business query parameter is required"));
-    const businessId = String(business);
+    const { tenant } = req.query;
+    // Was reading req.query.business directly with no ownership check at all — any
+    // authenticated user could pass another company's id and see its tenants' open
+    // invoices. resolveAuthorizedBusinessId (used throughout this file) prefers the
+    // caller's own req.user.company and only honors an explicit override for system
+    // admins.
+    const businessId = resolveAuthorizedBusinessId(req);
+    if (!businessId) return next(createError(400, "business query parameter is required"));
 
     const tenantIds = tenant
       ? [tenant]
@@ -4621,12 +4626,16 @@ export const deleteTenantInvoicesBatch = async (req, res, next) => {
     const succeeded = [];
     const failed = [];
 
-    for (const invoiceId of validIds) {
+    // Bounded concurrency (chunks of 10) rather than one-at-a-time — each item still
+    // goes through the full single-invoice delete handler (its own GL reversal + save),
+    // but they no longer wait on each other serially. Matches the pattern
+    // createTenantInvoicesBatch already uses via the same runTasksInChunks helper.
+    await runTasksInChunks(validIds, async (invoiceId) => {
       try {
         const { statusCode, payload } = await invokeDeleteForTenantInvoice({ req, invoiceId });
         if (Number(statusCode || 200) >= 400) {
           failed.push({ id: invoiceId, reason: payload?.message || payload?.error || "Failed to delete invoice." });
-          continue;
+          return;
         }
         succeeded.push({
           id: invoiceId,
@@ -4636,7 +4645,7 @@ export const deleteTenantInvoicesBatch = async (req, res, next) => {
       } catch (error) {
         failed.push({ id: invoiceId, reason: error?.message || "Failed to delete invoice." });
       }
-    }
+    });
 
     return res.status(200).json({
       succeeded,
@@ -4656,10 +4665,18 @@ export const bulkImportInvoiceNotes = async (req, res, next) => {
     if (rows.length > 500) return next(createError(400, "Maximum 500 notes per import."));
 
     const scopedBusinessId = resolveAuthorizedBusinessId(req);
+    // resolveAuthorizedBusinessId only returns null for a system-admin caller with no
+    // explicit business and no req.user.company — an empty filter here would silently
+    // query every tenant/invoice across every company in the system. Reject instead.
+    if (!scopedBusinessId) {
+      return next(createError(400, "A business context is required to import invoice notes."));
+    }
 
-    const allTenants = await Tenant.find({
-      ...(scopedBusinessId ? { business: scopedBusinessId } : {}),
-    }).populate({ path: "unit", select: "property unitNumber _id" }).lean();
+    const allTenants = await Tenant.find({ business: scopedBusinessId })
+      .select("_id name tenantCode unit business")
+      .populate({ path: "unit", select: "property unitNumber _id" })
+      .limit(5000)
+      .lean();
 
     const tenantByCode = new Map();
     const tenantByName = new Map();
@@ -4693,8 +4710,11 @@ export const bulkImportInvoiceNotes = async (req, res, next) => {
     if (uniqueSourceNos.length > 0) {
       const fetched = await TenantInvoice.find({
         invoiceNumber: { $in: uniqueSourceNos },
-        ...(scopedBusinessId ? { business: scopedBusinessId } : {}),
-      }).lean();
+        business: scopedBusinessId,
+      })
+        .select("_id invoiceNumber business tenant category amount outstanding status postingStatus")
+        .limit(500)
+        .lean();
       fetched.forEach((inv) => sourceInvoicesByNo.set(String(inv.invoiceNumber).toUpperCase(), inv));
     }
 

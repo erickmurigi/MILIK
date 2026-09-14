@@ -2,6 +2,7 @@ import express from "express";
 import multer from "multer";
 import { confirmCarWashCallback, validateCarWashCallback, listMpesaNotifications, reassignMpesaNotification, listUnpaidJobs, allocateNotification, registerCarWashPaybillUrls, bulkUploadMpesaStatement, markNotificationReversed, devTestHashedSms } from "../controllers/mpesaCallbackController.js";
 import { verifyUser, requireCompanyModule, requireCompanyPermission } from "../../../controllers/verifyToken.js";
+import { safaricomIPWhitelist } from "../../../utils/ipWhiteList.js";
 
 const router = express.Router();
 
@@ -83,8 +84,9 @@ router.post(
 // Dev only — test masked SMS without a real payment (blocked in production)
 router.post("/dev/test-hashed-sms", devTestHashedSms);
 
-// No auth — Safaricom calls these directly
-router.post("/validation/:shortCode", validateCarWashCallback);
-router.post("/confirmation/:shortCode", confirmCarWashCallback);
+// No auth — Safaricom calls these directly. IP-whitelisted the same way
+// routes/propertyRoutes/pmsPublicCallbacks.js already is.
+router.post("/validation/:shortCode", safaricomIPWhitelist, validateCarWashCallback);
+router.post("/confirmation/:shortCode", safaricomIPWhitelist, confirmCarWashCallback);
 
 export default router;

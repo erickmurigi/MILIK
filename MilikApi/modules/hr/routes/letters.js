@@ -1,6 +1,6 @@
 import express from 'express';
 import mongoose from 'mongoose';
-import { verifyUser } from '../../../controllers/verifyToken.js';
+import { verifyUser, requireCompanyModule } from '../../../controllers/verifyToken.js';
 import HRLetter from '../models/HRLetter.js';
 import HREmployee from '../models/HREmployee.js';
 import HRSignatory from '../models/HRSignatory.js';
@@ -11,7 +11,7 @@ import { isSystemAdminUser } from '../../../utils/permissionControl.js';
 import { LETTER_META, renderLetterBody, applyCustomTemplate, renderWithCustomBody } from '../utils/letterTemplates.js';
 
 const router = express.Router();
-router.use(verifyUser);
+router.use(verifyUser, requireCompanyModule('hr'));
 
 // Resolve signatory: type-specific first, then default, in one query
 async function resolveSignatory(companyOid, letterType) {

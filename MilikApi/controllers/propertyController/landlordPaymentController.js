@@ -29,16 +29,22 @@ const normalizePaymentMethod = (value) => {
   return null;
 };
 
+// req.user.company is always trusted first — a client-supplied business/company
+// value is only used as a fallback for requests with no authenticated company
+// context (mirrors resolveBusinessId in controllers/propertyController/
+// statementController.js). Previously the client-supplied value was checked
+// FIRST, so any authenticated user could read/create/approve another company's
+// landlord payments just by passing its id.
 const resolveBusinessId = async (req, statementId = null) => {
   const direct =
+    req?.user?.company?._id ||
+    req?.user?.company ||
     req?.body?.business ||
     req?.body?.businessId ||
     req?.body?.company ||
     req?.query?.business ||
     req?.query?.businessId ||
     req?.query?.company ||
-    req?.user?.company?._id ||
-    req?.user?.company ||
     null;
 
   if (isValidObjectId(direct)) {

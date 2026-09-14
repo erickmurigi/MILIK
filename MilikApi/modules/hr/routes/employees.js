@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import { v2 as cloudinary } from 'cloudinary';
-import { verifyUser } from '../../../controllers/verifyToken.js';
+import { verifyUser, requireCompanyModule } from '../../../controllers/verifyToken.js';
 import HREmployee from '../models/HREmployee.js';
 import HRDepartment from '../models/HRDepartment.js';
 import HRLeaveApplication from '../models/HRLeaveApplication.js';
@@ -39,6 +39,7 @@ const photoUpload = multer({
 }).single('photo');
 
 const router = express.Router();
+router.use(verifyUser, requireCompanyModule('hr'));
 
 const POPULATE_OPTS = [
   { path: 'department', select: 'name code' },

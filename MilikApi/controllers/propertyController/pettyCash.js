@@ -20,7 +20,15 @@ const toId = (v) => {
   return raw && mongoose.Types.ObjectId.isValid(String(raw)) ? String(raw) : null;
 };
 
+// Was resolving purely from client-supplied values (query/body/header), never
+// consulting req.user.company at all — every route in this file only requires
+// verifyUser, so any authenticated user of any company could read, create,
+// void, or approve another company's petty cash accounts, disbursements, and
+// replenishments (real money movements) just by passing its business id.
+// req.user.company is now always trusted first; a client-supplied value is
+// only used as a fallback for requests with no authenticated company context.
 const getBusinessId = (req) =>
+  toId(req.user?.company) ||
   toId(req.query?.business || req.body?.business || req.headers?.["x-business-id"]);
 
 async function nextSequence(business, key) {

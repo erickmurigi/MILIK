@@ -403,7 +403,10 @@ export const checkLedgerBalance = async (req, res, next) => {
 
 export const checkUtilityReceiptLedgerEntries = async (req, res, next) => {
   try {
-    const businessId = req.query?.businessId || req.user?.company;
+    // req.query.businessId was trusted ahead of the caller's own company — any
+    // authenticated user could read another company's GL entries. Every sibling
+    // function in this file already scopes by req.user.company alone; matched that.
+    const businessId = req.user?.company;
     const { propertyId, landlordId, periodStart, periodEnd } = req.query;
     const match = {
       business: businessId,
@@ -431,10 +434,11 @@ export const checkUtilityReceiptLedgerEntries = async (req, res, next) => {
 // usage, negative normal-side balances, and missing critical system accounts.
 export const runIntegrityReport = async (req, res, next) => {
   try {
-    const businessId =
-      req.query?.business || req.query?.company ||
-      req.body?.business || req.body?.company ||
-      req.user?.company;
+    // Was trusting a client-supplied business/company ahead of the caller's own
+    // company — any authenticated user could run (and see the results of) an
+    // integrity report scoped to another company. Matched this file's own
+    // established norm: req.user.company alone, no override.
+    const businessId = req.user?.company;
 
     if (!businessId) return next(createError(400, "Business context required"));
 
@@ -640,7 +644,9 @@ export const runIntegrityReport = async (req, res, next) => {
 // ─── HEALTH HISTORY ──────────────────────────────────────────────────────────
 export const getHealthHistory = async (req, res, next) => {
   try {
-    const businessId = req.query.business || req.query.company || req.user?.company;
+    // Was trusting a client-supplied business/company ahead of the caller's own
+    // company — see the matching comment on runIntegrityReport above.
+    const businessId = req.user?.company;
     if (!businessId) return next(createError(400, "Business context required"));
 
     const runs = await GLHealthRun.find({ business: businessId })
@@ -877,7 +883,11 @@ export const repairClearAbnormalBalance = async (req, res, next) => {
 
 // ─── REPAIR: RECOMPUTE ALL COA BALANCES ─────────────────────────────────────
 export const repairRecomputeBalances = async (req, res, next) => {
-  const businessId = req.body?.business || req.query?.business || req.user?.company;
+  // Was trusting a client-supplied business/company ahead of the caller's own
+  // company — this is a WRITE endpoint (recomputes chart-of-account balances), so
+  // the old behavior let any authenticated user corrupt another company's balances.
+  // Matched this file's own established norm: req.user.company alone, no override.
+  const businessId = req.user?.company;
   if (!businessId) return next(createError(400, "Business context required"));
   const healthRunId = req.body?.healthRunId;
 
