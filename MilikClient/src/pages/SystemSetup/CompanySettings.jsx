@@ -926,8 +926,10 @@ const TerminologyPanel = ({ currentCompany }) => {
 const CompanySettings = () => {
   const confirm = useConfirm();
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentCompany = useSelector(selectCurrentCompany);
+  const reduxCompanySettings = useSelector(selectCompanySettings);
 
   // ── Module flags ──────────────────────────────────────────────────────────
   const hasPM   = hasCompanyModule(currentCompany, "propertyManagement");
@@ -1814,7 +1816,13 @@ const CompanySettings = () => {
     if (!currentCompany?._id) return;
     setSavingIncomeRules(true);
     try {
-      await adminRequests.put(`/company-settings/${currentCompany._id}/income-rules`, incomeRules);
+      const result = await adminRequests.put(`/company-settings/${currentCompany._id}/income-rules`, incomeRules);
+      // Update Redux directly from the response — the fetchCompanySettings guard would return
+      // stale cached data if settings are already in store, so we update the incomeRules field directly.
+      const freshIncomeRules = result?.data?.incomeRules ?? incomeRules;
+      if (reduxCompanySettings) {
+        dispatch(getSettingsSuccess({ ...reduxCompanySettings, incomeRules: freshIncomeRules }));
+      }
       toast.success("Income rules saved.");
     } catch (err) {
       toast.error(extractErrorMessage(err));
