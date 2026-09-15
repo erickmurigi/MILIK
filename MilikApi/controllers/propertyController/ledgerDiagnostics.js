@@ -15,8 +15,8 @@ import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggr
 import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../services/chartOfAccountsService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { createError } from "../../utils/error.js";
+import { round2 } from "../../utils/math.js";
 
-const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const toOid  = (id) => new mongoose.Types.ObjectId(String(id));
 const currentMonthBounds = () => {
   const now = new Date();

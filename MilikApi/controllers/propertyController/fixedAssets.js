@@ -5,8 +5,7 @@ import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggr
 import { toObjectId } from "../../utils/db.js";
 import { resolveBusinessId } from "../../utils/requestContext.js";
 import { createError } from "../../utils/error.js";
-
-const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+import { round2 } from "../../utils/math.js";
 
 // ─── Monthly depreciation for one asset ───────────────────────────────────────
 const calcMonthlyDepreciation = (asset) => {

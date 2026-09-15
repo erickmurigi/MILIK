@@ -8,10 +8,10 @@ import Tenant from "../../models/Tenant.js";
 import { recomputeTenantFinancialState, computeTenantInvoiceSnapshots } from "../propertyController/tenantInvoices.js";
 import { postReceiptUnappliedAllocationReleaseJournal } from "../propertyController/rentPayment.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
+import { round2 } from "../../utils/math.js";
 
 const isAdmin = (u) => Boolean(u?.isSystemAdmin || u?.superAdminAccess);
 const isOid = (id) => mongoose.Types.ObjectId.isValid(id);
-const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
 
 const CATEGORY_TO_SUMMARY_KEY = {
   RENT_CHARGE: "rent",

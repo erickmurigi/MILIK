@@ -4,8 +4,7 @@ import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import { toObjectId } from "../../utils/db.js";
 import { resolveBusinessId } from "../../utils/requestContext.js";
 import { createError } from "../../utils/error.js";
-
-const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+import { round2 } from "../../utils/math.js";
 
 // ─── Compute actuals for a set of accountIds over a period ────────────────────
 const computeActuals = async (businessId, accountIds, periodStart, periodEnd) => {

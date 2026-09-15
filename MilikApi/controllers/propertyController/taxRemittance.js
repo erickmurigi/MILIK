@@ -9,8 +9,7 @@ import { findSystemAccountByCode } from "../../services/chartOfAccountsService.j
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { createError } from "../../utils/error.js";
 import { normalizeCompanyId } from "../verifyToken.js";
-
-const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+import { round2 } from "../../utils/math.js";
 
 // req.user.company is always trusted first — a client-supplied business/company
 // value is only used as a fallback for requests with no authenticated company
