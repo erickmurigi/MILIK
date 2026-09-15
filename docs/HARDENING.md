@@ -156,7 +156,7 @@ to be agreed with the user before any of this is implemented.
 
 **Performance**
 - Backend: sequential per-item `await`+`save()` loops in batch endpoints (`latePenalties.js` reversal batch) — should be `Promise.all`. (`tenantInvoices.js`'s equivalent, `deleteTenantInvoicesBatch`, is already fixed — see Track A/B.)
-- Frontend: **none of `redux/apiCalls.js`'s ~30 list-fetch action creators check existing store state before refetching** (only `fetchCompanySettings` does this correctly). Single biggest realistic network-traffic win identified. Hits the app's most-opened forms directly: `AddProperties`/`EditProperties`/`AddUnit` refetch landlords/properties/units unconditionally on every open; `AddUnit.jsx` also duplicates the company-settings fetch with a raw axios call instead of reusing the cached selector.
+- Frontend: **none of `redux/apiCalls.js`'s list-fetch action creators check existing store state before refetching** (only `fetchCompanySettings` did this correctly). ~~Single biggest realistic network-traffic win identified.~~ **Fixed for the 7 files that actually had this pattern — see Track C progress, item 2.** `AddUnit.jsx` also duplicates the company-settings fetch with a raw axios call instead of reusing the cached selector — not yet addressed, unrelated to the redux refetch-check work.
 
 ### 🟠 Medium priority
 
@@ -206,9 +206,38 @@ Agreed order (established before Track D's unplanned detour):
    rounding-correctness bug on tax/WHT remittances, budgets, fixed-asset
    depreciation, statement reallocation, and GL diagnostics, now fixed
    (`8954706`). Full suite: 28/28 files, 118/118 tests passing throughout.
-2. Redux refetch-check pattern applied once as a shared helper across all
-   ~30 list-fetch thunks (the audit's own "biggest realistic win"). **Not
-   started.**
+2. ✅ **Redux refetch-check pattern — done.** Targeted grep across all 25
+   redux files for the half-built shape (a field tracking last-loaded
+   scope, written on success but never read before the next fetch) found
+   exactly 7 targets, not ~30 — the other ~23 action-creator files have no
+   such infrastructure at all, so there was nothing to wire up there.
+   `propertyRedux`/`tenantsRedux`/`unitRedux` already had unused
+   `loadedFor`/`loadedAt` state; `utilityRedux`/`leasesRedux`/
+   `rentPaymentRedux` had the same via legacy `setXLoadMeta` actions;
+   `landlordRedux` had none and was built fresh to match.
+
+   A naive "skip if same business" cache would have been a real bug: many
+   call sites fire the exact same plain `{business}` shape immediately
+   after a mutation (e.g. `Tenants.jsx`'s `onSaved` handlers, a unit
+   transfer) to show the fresh result. The skip-check only applies to the
+   unfiltered, single-scope shape (filtered/paginated calls always bypass
+   it), and every create/update/delete/confirm/sign/renew `.fulfilled`
+   reducer resets the cache timestamp — so a mutation always forces a live
+   refetch on the next call regardless of the 5s TTL. Also fixed a real
+   pre-existing bug found along the way: `getRentPayments` stamped its
+   cache unconditionally even on filtered fetches (unlike `getLeases`,
+   which already guarded this correctly).
+
+   Three commits, grouped by calling convention: `fac2471` (modern
+   `createAsyncThunk` slices — property/tenants/units), `e3bf28e` (legacy
+   dispatch-first-arg thunks in `apiCalls.js` — utilities/leases/rent
+   payments, reading the `store` singleton directly since they aren't
+   dispatched thunks themselves), `fec77c8` (`getLandlords`, built fresh).
+   Lint clean on every touched line; full frontend build succeeded (no
+   circular-import issue from importing `store` into `apiCalls.js` —
+   verified store.js's reducer imports never touch `apiCalls.js`). No
+   frontend test suite exists in this repo (no test script in
+   `package.json`) — lint + build is the available verification.
 3. God-file decomposition (`landlordStatementService.js`, `redux/apiCalls.js`) —
    after 2 lands, since splitting is safer once the logic inside isn't also
    changing for other reasons. **Not started.**
@@ -223,4 +252,4 @@ actually authorized.
 
 ---
 
-*Last updated: 2026-09-15. Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C as items are actioned.*
+*Last updated: 2026-09-15 (Track C item 2 closed). Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C as items are actioned.*
