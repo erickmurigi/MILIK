@@ -1452,7 +1452,13 @@ const Statements = () => {
           periodStart,
           periodEnd,
           statementType,
-          notes: statementNotes || undefined,
+          // Deliberately NOT sending statementNotes here — this call also fires
+          // automatically (debounced) on every property/period switch, and statementNotes
+          // is never reset on switch. Sending it would silently overwrite a DIFFERENT
+          // statement's already-saved notes with whatever was left over from the one
+          // previously being viewed. Notes have their own dedicated save path
+          // (handleSaveNotes / PATCH /statements/:id/notes) — regenerating the financial
+          // lines should never have a side effect on notes at all.
           refresh: options.refresh !== false,
           _signal: controller.signal,
         })
