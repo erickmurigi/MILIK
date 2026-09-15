@@ -2,6 +2,19 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { adminRequests } from "../utils/requestMethods";
 
+// A list-fetch is "cacheable" only when it's a plain { business } lookup with
+// no filters/pagination — those are the calls components fire redundantly on
+// every mount. Anything with extra params (search, status, page...) always
+// hits the network so filtering/pagination keeps working.
+const isPlainBusinessOnlyQuery = (params) => {
+  const keys = Object.keys(params || {}).filter(
+    (key) => params[key] !== undefined && params[key] !== null && params[key] !== ''
+  );
+  return keys.length === 1 && keys[0] === 'business';
+};
+
+const LIST_CACHE_TTL_MS = 5000;
+
 // Async thunks using createAsyncThunk
 export const getProperties = createAsyncThunk(
   'property/getProperties',
@@ -37,6 +50,16 @@ export const getProperties = createAsyncThunk(
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch properties');
     }
+  },
+  {
+    condition: (params = {}, { getState }) => {
+      if (!isPlainBusinessOnlyQuery(params)) return true;
+      const business = String(params.business || '');
+      if (!business) return true;
+      const slice = getState().property;
+      const isFresh = slice.loadedFor === business && Date.now() - slice.loadedAt < LIST_CACHE_TTL_MS;
+      return !isFresh;
+    },
   }
 );
 
@@ -249,6 +272,8 @@ const propertySlice = createSlice({
           state.properties.unshift(property);
           state.pagination.total += 1;
         }
+        state.loadedFor = null;
+        state.loadedAt = 0;
       })
       .addCase(createProperty.rejected, (state, action) => {
         state.loading = false;
@@ -289,6 +314,8 @@ const propertySlice = createSlice({
             state.currentProperty._id === action.payload.data._id) {
           state.currentProperty = action.payload.data;
         }
+        state.loadedFor = null;
+        state.loadedAt = 0;
       })
       .addCase(updateProperty.rejected, (state, action) => {
         state.loading = false;
@@ -329,6 +356,8 @@ const propertySlice = createSlice({
             };
           }
         }
+        state.loadedFor = null;
+        state.loadedAt = 0;
       })
       .addCase(deleteProperty.rejected, (state, action) => {
         state.loading = false;
@@ -345,6 +374,8 @@ const propertySlice = createSlice({
           p._id === action.payload.id ? { ...p, status: 'archived' } : p
         );
         state.success = true;
+        state.loadedFor = null;
+        state.loadedAt = 0;
       })
       .addCase(archiveProperty.rejected, (state, action) => {
         state.loading = false;
@@ -361,6 +392,8 @@ const propertySlice = createSlice({
           p._id === action.payload.id ? { ...p, status: 'active' } : p
         );
         state.success = true;
+        state.loadedFor = null;
+        state.loadedAt = 0;
       })
       .addCase(restoreProperty.rejected, (state, action) => {
         state.loading = false;

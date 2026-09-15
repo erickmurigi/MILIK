@@ -15,6 +15,15 @@ export const createUnit = createAsyncThunk(
   }
 );
 
+const isPlainBusinessOnlyQuery = (params) => {
+  const keys = Object.keys(params || {}).filter(
+    (key) => params[key] !== undefined && params[key] !== null && params[key] !== ''
+  );
+  return keys.length === 1 && keys[0] === 'business';
+};
+
+const LIST_CACHE_TTL_MS = 5000;
+
 export const getUnits = createAsyncThunk(
   'unit/getAll',
   async (params, { rejectWithValue }) => {
@@ -25,6 +34,16 @@ export const getUnits = createAsyncThunk(
     } catch (error) {
       return rejectWithValue(error.response?.data || { message: error.message });
     }
+  },
+  {
+    condition: (params, { getState }) => {
+      if (!isPlainBusinessOnlyQuery(params)) return true;
+      const business = String(params.business || '');
+      if (!business) return true;
+      const slice = getState().unit;
+      const isFresh = slice.loadedFor === business && Date.now() - slice.loadedAt < LIST_CACHE_TTL_MS;
+      return !isFresh;
+    },
   }
 );
 
@@ -191,6 +210,8 @@ export const unitSlice = createSlice({
       .addCase(createUnit.fulfilled, (state, action) => {
         state.isFetching = false;
         state.units.push(action.payload);
+        state.loadedFor = null;
+        state.loadedAt = 0;
       })
       .addCase(createUnit.rejected, (state) => {
         state.isFetching = false;
@@ -229,6 +250,8 @@ export const unitSlice = createSlice({
         state.isFetching = false;
         const index = state.units.findIndex((item) => item._id === action.payload?._id);
         if (index !== -1) state.units[index] = action.payload;
+        state.loadedFor = null;
+        state.loadedAt = 0;
       })
       .addCase(updateUnit.rejected, (state) => {
         state.isFetching = false;
@@ -242,6 +265,8 @@ export const unitSlice = createSlice({
       .addCase(deleteUnit.fulfilled, (state, action) => {
         state.isFetching = false;
         state.units = state.units.filter((item) => item._id !== action.payload);
+        state.loadedFor = null;
+        state.loadedAt = 0;
       })
       .addCase(deleteUnit.rejected, (state) => {
         state.isFetching = false;

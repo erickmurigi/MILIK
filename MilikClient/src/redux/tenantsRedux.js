@@ -29,6 +29,15 @@ export const createTenant = createAsyncThunk(
   }
 );
 
+const isPlainBusinessOnlyQuery = (params) => {
+  const keys = Object.keys(params || {}).filter(
+    (key) => params[key] !== undefined && params[key] !== null && params[key] !== ''
+  );
+  return keys.length === 1 && keys[0] === 'business';
+};
+
+const LIST_CACHE_TTL_MS = 5000;
+
 export const getTenants = createAsyncThunk(
   'tenant/getAll',
   async (params, { rejectWithValue }) => {
@@ -39,6 +48,16 @@ export const getTenants = createAsyncThunk(
     } catch (error) {
       return rejectWithValue(error.response?.data || { message: error.message });
     }
+  },
+  {
+    condition: (params, { getState }) => {
+      if (!isPlainBusinessOnlyQuery(params)) return true;
+      const business = String(params.business || '');
+      if (!business) return true;
+      const slice = getState().tenant;
+      const isFresh = slice.loadedFor === business && Date.now() - slice.loadedAt < LIST_CACHE_TTL_MS;
+      return !isFresh;
+    },
   }
 );
 
@@ -206,6 +225,8 @@ export const tenantSlice = createSlice({
                 state.isFetching = false;
                 const tenant = normalizeTenantRecord(action.payload);
                 if (tenant) state.tenants.push(tenant);
+                state.loadedFor = null;
+                state.loadedAt = 0;
             })
             .addCase(createTenant.rejected, (state) => {
                 state.isFetching = false;
@@ -226,6 +247,8 @@ export const tenantSlice = createSlice({
                 if (index !== -1) {
                     state.tenants[index] = tenant;
                 }
+                state.loadedFor = null;
+                state.loadedAt = 0;
             })
             .addCase(updateTenant.rejected, (state) => {
                 state.isFetching = false;
@@ -241,6 +264,8 @@ export const tenantSlice = createSlice({
             .addCase(deleteTenant.fulfilled, (state, action) => {
                 state.isFetching = false;
                 state.tenants = state.tenants.filter((item) => item._id !== action.payload);
+                state.loadedFor = null;
+                state.loadedAt = 0;
             })
             .addCase(deleteTenant.rejected, (state) => {
                 state.isFetching = false;
@@ -259,6 +284,8 @@ export const tenantSlice = createSlice({
                     (action.payload?.succeeded || []).map((row) => String(row.id))
                 );
                 state.tenants = state.tenants.filter((item) => !succeededIds.has(String(item._id)));
+                state.loadedFor = null;
+                state.loadedAt = 0;
             })
             .addCase(batchDeleteTenants.rejected, (state) => {
                 state.isFetching = false;
