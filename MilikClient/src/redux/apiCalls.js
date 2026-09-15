@@ -26,6 +26,7 @@ import {
 } from "../redux/authSlice";
 
 import {
+  setLandlordLoadMeta,
   getLandlordsStart,
   getLandlordsSuccess,
   getLandlordsFailure,
@@ -639,6 +640,15 @@ export const toggleUserLock = (id) => async (dispatch) => {
 
 // Get all landlords
 export const getLandlords = (query = {}) => async (dispatch, getState) => {
+  const isUnfiltered = !query.search && !query.status && !query.portal && !query.location && !query.page && !query.limit;
+  const companyIdForCache = resolveCompanyId(query, getState);
+  const businessKey = String(companyIdForCache || '');
+  if (isUnfiltered) {
+    const cache = getState().landlord;
+    if (isListCacheFresh(cache.loadedFor, cache.loadedAt, businessKey)) {
+      return { landlords: getState().landlord.landlords, pagination: null };
+    }
+  }
   dispatch(getLandlordsStart());
   try {
     const params = new URLSearchParams();
@@ -672,6 +682,9 @@ export const getLandlords = (query = {}) => async (dispatch, getState) => {
     }
 
     dispatch(getLandlordsSuccess(pagination ? { landlords, pagination } : landlords));
+    if (isUnfiltered) {
+      dispatch(setLandlordLoadMeta({ loadedFor: businessKey, loadedAt: Date.now() }));
+    }
     return { landlords, pagination };
   } catch (err) {
     dispatch(getLandlordsFailure());
