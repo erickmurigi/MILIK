@@ -802,9 +802,6 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
         summary.totalDirectToLandlordCollections ??
         printableDirectToLandlordTotal
     );
-    const directRentCollections = Number(summary.directRentCollections ?? 0);
-    const directUtilityCollections = Number(summary.directUtilityCollections ?? 0);
-    const directDepositCollections = Number(summary.directDepositCollections ?? 0);
     const additionsAmount = Number(
       summary.additions ?? summary.totalAdditions ?? printableAdditionsTotal
     );
@@ -1094,15 +1091,6 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
                       <td class="num">${formatCurrency(r.amount)}</td>
                     </tr>`).join("")}
                 </tbody>
-                <tfoot>
-                  <tr>
-                    <td colspan="5" class="num" style="font-weight:700;">Total collected directly by landlord</td>
-                    <td class="num" style="font-weight:700;">${formatCurrency(printableDirectToLandlordTotal)}</td>
-                  </tr>
-                  ${directRentCollections > 0 ? `<tr><td colspan="5" class="num" style="color:#64748b;">of which: Rent</td><td class="num" style="color:#64748b;">${formatCurrency(directRentCollections)}</td></tr>` : ""}
-                  ${directUtilityCollections > 0 ? `<tr><td colspan="5" class="num" style="color:#64748b;">of which: Utilities</td><td class="num" style="color:#64748b;">${formatCurrency(directUtilityCollections)}</td></tr>` : ""}
-                  ${directDepositCollections > 0 ? `<tr><td colspan="5" class="num" style="color:#64748b;">of which: Deposit <span style="font-style:italic;">(not income — see Deposits You Now Hold)</span></td><td class="num" style="color:#64748b;">${formatCurrency(directDepositCollections)}</td></tr>` : ""}
-                </tfoot>
               </table>
               <p style="font-size:8.5px;color:#64748b;margin-top:4px;font-style:italic;">
                 These amounts were received directly by you from tenants and are NOT included in the manager's remittance transfer.
