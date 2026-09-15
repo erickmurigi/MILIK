@@ -3828,6 +3828,14 @@ export const generateLandlordStatement = async ({
   );
   const directRentCollections = round2(totalRentReceivedLandlord);
   const directUtilityCollections = round2(totalUtilityReceivedLandlord + totalInvoiceTaxReceivedLandlord);
+  // Informational only — deposit is a liability, not income, so this deliberately never
+  // feeds directToLandlordCollections/totalCollections above. It's purely the "of which"
+  // breakdown for the Payments Collected Directly by Landlord table's own total.
+  const directDepositCollections = round2(
+    depositReceiptsInPeriod
+      .filter((r) => r.paidDirectToLandlord)
+      .reduce((sum, r) => sum + Number(r.amount || 0), 0)
+  );
   const totalCollections = round2(
     managerCollections + directToLandlordCollections
   );
@@ -3959,13 +3967,20 @@ export const generateLandlordStatement = async ({
       : []),
   ];
 
-  const directToLandlordRows = receiptsInPeriod
+  // receiptsInPeriod only ever carries rent/utility receipts (standardReceiptsForStatementWindow
+  // is deliberately restricted to those two types, for the rent-ledger/balanceCF math above,
+  // which must never touch a deposit). "Payments Collected Directly by Landlord" is a
+  // different concept — it needs every direct receipt regardless of type, or a landlord-direct
+  // deposit receipt silently vanishes from this list entirely (its amount still shows up,
+  // unreferenced, in the Deposits You Now Hold section below, but with no way to trace it back
+  // to the receipt that paid it) — so depositReceiptsInPeriod is included here too.
+  const directToLandlordRows = [...receiptsInPeriod, ...depositReceiptsInPeriod]
     .filter((r) => r.paidDirectToLandlord)
     .sort((a, b) => new Date(a.paymentDate) - new Date(b.paymentDate))
     .map((r) => {
       const row = ensureRow(r.tenant, r.unit);
       const paymentType = String(r.paymentType || "rent").toLowerCase();
-      const typeLabel = paymentType === "utility" ? "Utilities" : "Rent";
+      const typeLabel = paymentType === "utility" ? "Utilities" : paymentType === "deposit" ? "Deposit" : "Rent";
       return {
         date: r.paymentDate,
         description: `${row.tenantName} — ${typeLabel} (Direct)`,
@@ -4115,6 +4130,7 @@ export const generateLandlordStatement = async ({
       totalDirectToLandlordCollections: directToLandlordCollections,
       directRentCollections,
       directUtilityCollections,
+      directDepositCollections,
       openingLandlordSettlementBalance: openingSettlementBalance,
       openingSettlementBalance,
       additions: displayAdditionsTotal,

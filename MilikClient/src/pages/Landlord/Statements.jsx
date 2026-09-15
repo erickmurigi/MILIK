@@ -1141,6 +1141,11 @@ const Statements = () => {
   const expenseRows = workspace?.expenseRows || workspace?.deductionRows || [];
   const additionRows = workspace?.additionRows || [];
   const directToLandlordRows = workspace?.directToLandlordRows || [];
+  // Distinct from directToLandlordAmount below (which deliberately excludes deposits — a
+  // deposit isn't income, so it must not inflate "Total Income This Period"). This table's
+  // own footer must instead always match the rows actually listed in it, deposits included,
+  // or the total silently disagrees with what's printed above it.
+  const directToLandlordTableTotal = sumSectionAmounts(directToLandlordRows);
   const advanceRecoveryRows = workspace?.advanceRecoveryRows || [];
   const earlyPayoutRows = workspace?.earlyPayoutRows || [];
   const settlement = useMemo(() => getStatementSettlement(summary), [summary]);
@@ -2623,7 +2628,7 @@ const Statements = () => {
                           <div className="overflow-hidden border border-[#0B3B2E]/20 bg-white">
                             <div className="flex items-center justify-between bg-[#EDF5F1] px-3 py-1.5">
                               <span className="text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">Payments Collected Directly by Landlord</span>
-                              <span className="text-[10px] font-black text-[#0B3B2E]">{currency(directToLandlordAmount)}</span>
+                              <span className="text-[10px] font-black text-[#0B3B2E]">{currency(directToLandlordTableTotal)}</span>
                             </div>
                             <div className="grid grid-cols-[80px_60px_1fr_80px_80px_90px] gap-0 border-b border-slate-200 bg-slate-50 px-3 py-1.5">
                               {["Date", "Unit", "Tenant", "A/C No.", "Reference", "Amount"].map((h) => (
