@@ -3712,6 +3712,11 @@ export const generateLandlordStatement = async ({
   const totalBalanceCF = round2(
     filteredTenantRows.reduce((sum, row) => sum + Math.max(0, row.balanceCF), 0)
   );
+  // Credit balances excluded from the gross figure above — surfaced separately so it's
+  // clear where that money went rather than it just disappearing from the totals.
+  const totalOverpayments = round2(
+    filteredTenantRows.reduce((sum, row) => sum + Math.max(0, -row.balanceCF), 0)
+  );
   const totalRawReceived = round2(
     filteredTenantRows.reduce((sum, row) => sum + Number(row.rawReceivedThisPeriod || 0), 0)
   );
@@ -4041,6 +4046,7 @@ export const generateLandlordStatement = async ({
       expenses: displayNonCommissionDeductions,
       totalPaid: round2(totalRawReceived + totalDepositCollected),
       closingBalance: totalBalanceCF,
+      overpayments: totalOverpayments,
     },
     expenseRows,
     deductionRows: expenseRows,
@@ -4075,6 +4081,7 @@ export const generateLandlordStatement = async ({
     summary: {
       openingBalance: totalBalanceBF,
       closingBalance: totalBalanceCF,
+      overpayments: totalOverpayments,
       rentInvoiced: totalRentInvoiced,
       totalRentInvoiced: totalRentInvoiced,
       utilityInvoiced: totalUtilityInvoiced,

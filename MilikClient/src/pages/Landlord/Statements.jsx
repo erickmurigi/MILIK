@@ -2735,7 +2735,7 @@ const Statements = () => {
                       </p>
                     </div>
                   </div>
-                  {(directToLandlordAmount > 0 || Number(depositSettlementTotals.additions || 0) > 0) && (
+                  {(directToLandlordAmount > 0 || Number(depositSettlementTotals.additions || 0) > 0 || Number(totals.overpayments || 0) > 0) && (
                     <div className="space-y-1.5 border-t border-[#0B3B2E]/20 bg-[#EDF5F1] px-3 py-1.5">
                       {/* Income recap — only the figures that actually sum to Total Income
                           This Period. Self-managed: there's no manager, so no manager-vs-direct
@@ -2769,6 +2769,17 @@ const Statements = () => {
                             Deposits you now hold <span className="text-slate-400">— held for tenants, not income</span>
                           </span>
                           <strong className="text-slate-700">{currency(depositSettlementTotals.additions)}</strong>
+                        </div>
+                      )}
+                      {/* Bal C/F above is gross arrears only — credit balances are excluded
+                          from it, not netted in. Named here so that money isn't unaccounted
+                          for from a PM/landlord's read of the totals. */}
+                      {Number(totals.overpayments || 0) > 0 && (
+                        <div className={`flex flex-wrap items-baseline justify-between gap-2 text-xs ${(!isSelfManaged || Number(depositSettlementTotals.additions || 0) > 0) ? "border-t border-[#0B3B2E]/10 pt-1.5" : ""}`}>
+                          <span className="text-slate-500">
+                            Tenant credit balances <span className="text-slate-400">— excluded from Bal C/F above</span>
+                          </span>
+                          <strong className="text-slate-700">{currency(totals.overpayments)}</strong>
                         </div>
                       )}
                     </div>
