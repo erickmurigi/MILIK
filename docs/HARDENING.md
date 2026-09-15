@@ -1,16 +1,20 @@
 # Hardening & Optimization Status
 
 Living status document for the security hardening and system optimization work
-started 2026-09-12/13. Three tracks: bug fixes already landed on `main`
-(Track A), the security hotfix branch awaiting merge (Track B), and the
-whole-codebase optimization audit awaiting a scoping decision (Track C).
+started 2026-09-12/13. Four tracks: bug fixes landed on `main` (Track A), the
+security hotfix (Track B, **merged and deployed**), an unplanned second wave
+of landlord-statement bug fixes found via live user testing (Track D), and
+the whole-codebase optimization audit still awaiting its scoping decision
+(Track C — **not started**, see below).
 
 ---
 
 ## Track A — Landlord statement / receipt fixes (committed on `main`)
 
-All four committed, tested (backend suites green; frontend syntax-checked and
-linted but not manually verified in a live browser).
+All committed and tested (backend suites green). Frontend changes have since
+been **manually verified in-browser by the user** — all 4 checklist items
+confirmed working (receipt creation/confirmation badge behavior, allocation
+tags surviving confirm, Statement Allocations prepayment lifecycle display).
 
 | Commit | Summary |
 |---|---|
@@ -19,18 +23,20 @@ linted but not manually verified in a live browser).
 | `6f53c68` | Feat: surface a receipt's held-prepayment history on the Statement Allocations admin page (new `prepayment_recognized` audit trail + "Type" badges); also fixed the admin "Mark as Prepayment" tool dropping the same tags |
 | `375f105` | Feat: company-wide manual receipt confirmation policy (`on_save` vs `on_review`), replacing the per-receipt "Mark as Confirmed" checkbox |
 | `99c056b` | Chore: removed 3 confirmed-dead backend files (see Track C, item C-B2) |
-
-**Open item**: frontend changes (AddReceipt.jsx, Receipts.jsx, LandlordStatementAllocations.jsx, SystemSetup/CompanySettings.jsx) have not been manually clicked through in a browser.
+| `aed62e9` | Fix: found during browser verification — saving the confirmation-policy toggle persisted correctly server-side but never updated the Redux-cached settings, so the AUTO-CONFIRMED badge stayed stale until a hard reload |
 
 ---
 
-## Track B — Security hotfix (branch pushed, **not merged**)
+## Track B — Security hotfix (**merged and deployed**)
 
-Branch: `fix/security-hotfix-2026-09-12` (off `main` @ `8ea0e5d`), pushed to
-origin. PR not confirmed created — open one at:
-`https://github.com/erickmurigi/MILIK/pull/new/fix/security-hotfix-2026-09-12`
+Branch `fix/security-hotfix-2026-09-12` → PR #1 → merged into `main` as
+`96dfe3b`, pulled and deployed to milikproperty.com. A production outage
+during deploy (502s, Mongo `bad auth`) turned out to be an unrelated Atlas
+password-rotation gap — production `.env` still had the pre-rotation
+password — fixed by updating it on the server and restarting the process;
+resolved by the user directly.
 
-Full test suite: 28/28 files, 115/115 tests passing as of last full run.
+Full test suite: 28/28 files, 115/115 tests passing as of last full run pre-merge.
 
 | Commit | What |
 |---|---|
@@ -82,6 +88,36 @@ function search, (b) direct `req.query`/`req.body` `.business`/`.businessId`/
 `modules/**/controllers/`, (c) destructuring patterns, (d) header-based
 (`x-business-id`) patterns, (e) URL-param-based (`req.params.businessId`)
 patterns.
+
+---
+
+## Track D — Property Performance Statement bug fixes (unplanned, user-reported)
+
+Not part of the original plan — surfaced through the user actively using the
+statement pages in production and cross-checking numbers against other
+reports. All committed to `main`, tests green throughout.
+
+| Commit | What |
+|---|---|
+| `c355950` | **Root-cause fix**, two separate bugs both overstating Bal B/F/C/F: (1) receipt allocations targeting a since-*reversed* invoice or debit note were still treated as paying real debt (neither map had visibility into void documents to check against); (2) `getReceiptAllocationStatementImpact`'s debit-note branch read `allocationRow.category` expecting the real charge type, but that field is literally the string `"DEBIT_NOTE"` — silently dropping every UTILITY_CHARGE debit note as `statementRelevantAmount: 0`. Verified against live data: all 4 originally-flagged tenants (K1/K2/S3/S5) now match the Paid & Balance report exactly. |
+| `7764d4b` | Bal C/F headline total switched from a net sum (arrears minus overpayments, which let one tenant's credit silently mask another's real debt) to gross arrears only — positive balances summed, credits excluded. |
+| `be0c7ba` | Excluded credit balances surfaced as a plain, muted recap line ("Tenant credit balances — excluded from Bal C/F above") so that money isn't unaccounted-for now that it's no longer netted in. |
+| `8b39985` / `13fd1f9` | A fuller deposit-arrears-visibility feature was added then reverted at the user's request (deemed not worth the added surface — unpaid deposits are rare enough not to need dedicated UI) |
+| `bb8d65b` | Property filter added to the shared Ledger Account Activity page, gated behind `hasCompanyModule(company, "propertyManagement")` — a cashbook account can span multiple properties (verified: one account spanned 3), but the filter must stay invisible to the CarWash/HR/PropertySale/Clients companies that share this same page and have no concept of "property" |
+| `8ee2141` | **Root-cause fix**: "Payments Collected Directly by Landlord" was built from a rent/utility-only receipt array (correctly restricted elsewhere for rent-ledger math) — reusing it here meant every landlord-direct *deposit* receipt vanished from the list entirely, no reference number, no trace. Fixed to include deposit receipts too, with correct type labeling (was silently mislabeled "Rent"). Also decoupled the table's own footer total from the Settlement Summary's income figure — they need different values now (one includes deposits, the other, correctly, never should). Verified: KAILU SQUARE's 55 direct receipts (49 rent + 6 deposit) now all appear, summing to exactly the Receipts Register's stated total. |
+| `6989f35` | Copy cleanup: "Landlord-held deposit recognised from direct landlord receipt" → "Deposit collected directly" / "Deposit remitted by manager" — dropped internal-system-sounding jargon from a landlord-facing document. |
+| `2c4b700` | **Real bug, found while auditing "does this work as expected"**: the Notes to Landlord textarea's state was never reset on property/period switch, and was being sent along with the *auto-regenerate* that fires (debounced) on every switch — not just the explicit Generate click. The backend does an unconditional overwrite whenever notes is non-empty. Net effect: switching properties could silently clobber a *different* statement's already-saved notes with leftover text from whichever one was viewed previously. Fixed by removing notes from the regenerate path entirely — they now only ever get written through the dedicated, correctly-scoped `PATCH /statements/:id/notes` endpoint. Also fixed the PDF template's notes rendering to use the file's own existing `esc()` helper instead of an incomplete ad-hoc `<`/`>`-only escape. |
+
+### Data-integrity finding surfaced along the way (not yet actioned)
+
+`receiptNumber` and note numbers (e.g. `DN00037`) are **not unique** across
+the database — confirmed collisions across unrelated tenants/companies
+sharing the same displayed number, hit three separate times during Track D's
+investigation (a query scoped only by number silently returned the wrong
+document each time). Every fix above was verified by re-scoping queries to
+`_id`/tenant instead. Worth a dedicated look: whether these are meant to be
+unique per-business and a constraint is missing, or the display number was
+never intended to be a lookup key and every caller needs auditing.
 
 ---
 
@@ -141,8 +177,22 @@ to be agreed with the user before any of this is implemented.
 
 ### Next step for Track C
 
-Present this document to the user, agree on scope and sequencing together, then execute in phases. **Do not implement any of the above unilaterally** — this was explicitly gated on a "scan, then deliberate, then implement" agreement.
+Agreed order (established before Track D's unplanned detour, still standing):
+1. `round2` consolidation — mechanical, near-zero risk, closes a real
+   financial-correctness bug. **Not started yet.**
+2. Redux refetch-check pattern applied once as a shared helper across all
+   ~30 list-fetch thunks (the audit's own "biggest realistic win").
+3. God-file decomposition (`landlordStatementService.js`, `redux/apiCalls.js`) —
+   after 1–2 land, since splitting is safer once the logic inside isn't also
+   changing for other reasons.
+4. `*ImportModal.jsx` consolidation + `MilikTable` memoization fix.
+5. Low-priority cleanup batch (`controllers/employee.js` removal, `moment`
+   for `recurringSchedule.js`, unused imports) — no urgency, batch whenever.
+
+**Do not implement any of the above unilaterally** — still gated on the
+user's go-ahead per item, consistent with how every fix in this document was
+actually authorized.
 
 ---
 
-*Last updated: 2026-09-13. Maintained alongside the work it describes — update this file's Track A/B sections as commits land or the PR status changes; update Track C as items are actioned.*
+*Last updated: 2026-09-15. Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C as items are actioned.*
