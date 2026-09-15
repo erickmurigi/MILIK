@@ -2904,8 +2904,8 @@ export const generateLandlordStatement = async ({
     const row = ensureRow(receipt.tenant, receipt.unit);
     const sourceId = String(receipt._id || "");
     const additionDescription = receipt.paidDirectToLandlord
-      ? `Landlord-held deposit recognised from direct landlord receipt - ${row.tenantName}`
-      : `Landlord-held deposit remittance - ${row.tenantName}`;
+      ? `Deposit collected directly - ${row.tenantName}`
+      : `Deposit remitted by manager - ${row.tenantName}`;
 
     totalAdditions = round2(totalAdditions + amount);
     depositRemittanceAdditionsTotal = round2(depositRemittanceAdditionsTotal + amount);
