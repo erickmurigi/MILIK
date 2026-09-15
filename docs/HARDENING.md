@@ -91,11 +91,23 @@ patterns.
 
 ---
 
-## Track D — Property Performance Statement bug fixes (unplanned, user-reported)
+## Track D — Property Performance Statement bug fixes (unplanned, user-reported) — CLOSED
 
 Not part of the original plan — surfaced through the user actively using the
 statement pages in production and cross-checking numbers against other
 reports. All committed to `main`, tests green throughout.
+
+**Verification pass (all 4/4 confirmed clean, closing this track):**
+1. Commission-basis labels — confirmed in real generated-PDF output for both
+   modes: QUAD JOY (received) `Rent Received 132,156.00` / `Utility Received
+   34,855.00`; BEAM WAY APARTMENTS (invoiced) `Rent Invoiced 191,700.00` /
+   `Utility Invoiced 6,280.00`.
+2. Missing-deposit-receipts fix — confirmed in KAILU SQUARE's actual
+   generated PDF: all 6 previously-vanishing reference numbers present.
+3. PDF footer removal — confirmed absent from the same generated PDF.
+4. Notes-to-Landlord leak fix — a live frontend state bug, verified by the
+   user directly in-browser (switched properties, confirmed the second
+   property's notes were its own, not leaked from the first).
 
 | Commit | What |
 |---|---|
