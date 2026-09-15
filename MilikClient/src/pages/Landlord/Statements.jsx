@@ -1719,9 +1719,9 @@ const Statements = () => {
               Statement Period (Locked/Custom badges unchanged), then Generate.
               Every field, value, handler and conditional below is unchanged from
               before — only the grouping/spacing changed. */}
-          <div className="flex flex-wrap items-end gap-3 px-3 py-1.5">
+          <div className="flex flex-wrap items-end gap-3 px-3 py-1">
             <div className="w-32">
-              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Statement Type</label>
+              <label className="mb-0.5 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Statement Type</label>
               <SearchableSelect
                 value={statementType}
                 onChange={setStatementType}
@@ -1734,7 +1734,7 @@ const Statements = () => {
             </div>
 
             <div className="w-56">
-              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Property</label>
+              <label className="mb-0.5 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Property</label>
               <SearchableSelect
                 value={selectedPropertyId}
                 onChange={setSelectedPropertyId}
@@ -1743,10 +1743,10 @@ const Statements = () => {
               />
             </div>
 
-            <div className="h-8 w-px shrink-0 bg-slate-200" />
+            <div className="h-7 w-px shrink-0 bg-slate-200" />
 
             <div>
-              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Quick Period</label>
+              <label className="mb-0.5 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Quick Period</label>
               <div className="flex items-center gap-1">
                 <div className="w-28">
                   <SearchableSelect
@@ -1760,15 +1760,15 @@ const Statements = () => {
                   type="number"
                   value={year}
                   onChange={(e) => setYear(e.target.value)}
-                  className="h-7 w-16 rounded-md border border-orange-400 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+                  className="h-6 w-16 rounded-md border border-orange-400 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               </div>
             </div>
 
-            <FaSyncAlt size={10} className="mb-1.5 shrink-0 rotate-90 text-slate-300 sm:rotate-0" />
+            <FaSyncAlt size={10} className="mb-1 shrink-0 rotate-90 text-slate-300 sm:rotate-0" />
 
             <div>
-              <label className="mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+              <label className="mb-0.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
                 Statement Period
                 {periodEnd && periodEnd !== todayIso && (
                   <span className="rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-700 normal-case tracking-normal">
@@ -1781,7 +1781,7 @@ const Statements = () => {
                   // Locked — must continue from the day after the last statement closed.
                   // Wide enough (w-44) to show the full YYYY-MM-DD date AND the badge —
                   // the previous w-32 truncated the date to "2026-09-..." to fit both.
-                  <div className="flex h-7 w-44 items-center gap-1.5 rounded-md border border-slate-300 bg-slate-100 px-2 text-[11px] font-semibold text-slate-500">
+                  <div className="flex h-6 w-44 items-center gap-1.5 rounded-md border border-slate-300 bg-slate-100 px-2 text-[11px] font-semibold text-slate-500">
                     <span className="whitespace-nowrap">{periodStart || "—"}</span>
                     <span className="ml-auto shrink-0 rounded bg-slate-200 px-1 py-0.5 text-[9px] font-bold uppercase text-slate-500">locked</span>
                   </div>
@@ -1793,7 +1793,7 @@ const Statements = () => {
                     max={todayIso}
                     onChange={(e) => setPeriodStart(e.target.value)}
                     title="First statement — pick a start date"
-                    className="h-7 w-32 rounded-md border border-orange-400 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="h-6 w-32 rounded-md border border-orange-400 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 )}
                 <span className="text-slate-300">–</span>
@@ -1807,7 +1807,7 @@ const Statements = () => {
                     setPeriodEnd(v);
                     setPeriodEndIsCustom(v !== todayIso && v !== "");
                   }}
-                  className="h-7 w-32 rounded-md border border-orange-400 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+                  className="h-6 w-32 rounded-md border border-orange-400 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                   title="Defaults to today — change to close the period earlier"
                 />
               </div>
@@ -2100,7 +2100,7 @@ const Statements = () => {
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 
                 {/* ── Compact workspace info bar ── */}
-                <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-2">
+                <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-1">
                   <div className="flex items-center gap-3">
 
                     {/* Left: property name · landlord · period badge */}
@@ -2121,7 +2121,7 @@ const Statements = () => {
 
                       {/* Mini collection bar + inline stats */}
                       {collectionStats && collectionStats.rate !== null && (
-                        <div className="mt-1 flex items-center gap-2">
+                        <div className="mt-0.5 flex items-center gap-2">
                           <div className="relative h-1.5 w-20 flex-shrink-0 overflow-hidden rounded-full bg-white/15">
                             <div
                               className={`h-full rounded-full transition-all duration-500 ${
@@ -2696,9 +2696,9 @@ const Statements = () => {
                 <div className="flex-shrink-0 border-t border-slate-200 bg-white shadow-[0_-2px_6px_rgba(0,0,0,0.05)]">
                   <div className="grid grid-cols-2 divide-x divide-slate-100 md:grid-cols-5">
                     {/* Total Invoiced */}
-                    <div className="px-3 py-2">
+                    <div className="px-3 py-1.5">
                       <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Total Invoiced</p>
-                      <p className="mt-1 text-sm font-bold text-slate-700">{currency(collectionStats?.totalInvoiced ?? totals.invoicedRent)}</p>
+                      <p className="mt-0.5 text-sm font-bold text-slate-700">{currency(collectionStats?.totalInvoiced ?? totals.invoicedRent)}</p>
                       {collectionStats?.rate !== null && collectionStats?.rate !== undefined && (
                         <p className={`mt-0.5 text-[10px] font-semibold ${
                           collectionStats.rate >= 80 ? "text-emerald-600" :
@@ -2710,9 +2710,9 @@ const Statements = () => {
                       )}
                     </div>
                     {/* Rent Collected */}
-                    <div className="px-3 py-2">
+                    <div className="px-3 py-1.5">
                       <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Rent Collected</p>
-                      <p className={`mt-1 text-sm font-bold ${Number(totals.rentPaid || 0) > 0 ? "text-emerald-700" : "text-slate-400"}`}>
+                      <p className={`mt-0.5 text-sm font-bold ${Number(totals.rentPaid || 0) > 0 ? "text-emerald-700" : "text-slate-400"}`}>
                         {Number(totals.rentPaid || 0) > 0 ? currency(totals.rentPaid) : "—"}
                       </p>
                       {hasInvoiceVatColumn && Number(totalInvoiceVatReceived || 0) > 0 && (
@@ -2720,25 +2720,25 @@ const Statements = () => {
                       )}
                     </div>
                     {/* Utilities Paid */}
-                    <div className="px-3 py-2">
+                    <div className="px-3 py-1.5">
                       <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Utilities Paid</p>
-                      <p className={`mt-1 text-sm font-bold ${Number(totals.utilityPaid || 0) > 0 ? "text-emerald-700" : "text-slate-400"}`}>
+                      <p className={`mt-0.5 text-sm font-bold ${Number(totals.utilityPaid || 0) > 0 ? "text-emerald-700" : "text-slate-400"}`}>
                         {Number(totals.utilityPaid || 0) > 0 ? currency(totals.utilityPaid) : "—"}
                       </p>
                     </div>
                     {/* Expenses */}
-                    <div className="px-3 py-2">
+                    <div className="px-3 py-1.5">
                       <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Expenses</p>
-                      <p className={`mt-1 text-sm font-bold ${Number(totals.expenses || 0) > 0 ? "text-amber-700" : "text-slate-400"}`}>
+                      <p className={`mt-0.5 text-sm font-bold ${Number(totals.expenses || 0) > 0 ? "text-amber-700" : "text-slate-400"}`}>
                         {Number(totals.expenses || 0) > 0 ? currency(totals.expenses) : "—"}
                       </p>
                     </div>
                     {/* Net to Landlord */}
-                    <div className={`px-3 py-2 ${settlement.isNegative ? "bg-red-50" : "bg-[#0B3B2E]"}`}>
+                    <div className={`px-3 py-1.5 ${settlement.isNegative ? "bg-red-50" : "bg-[#0B3B2E]"}`}>
                       <p className={`text-[9px] font-bold uppercase tracking-widest ${settlement.isNegative ? "text-red-500" : "text-green-200/60"}`}>
                         {isSelfManaged ? "Net Operating Income" : "Net to Landlord"}
                       </p>
-                      <p className={`mt-1 text-base font-black ${settlement.isNegative ? "text-red-700" : "text-white"}`}>
+                      <p className={`mt-0.5 text-base font-black ${settlement.isNegative ? "text-red-700" : "text-white"}`}>
                         {currency(settlement.amount)}
                       </p>
                       <p className={`text-[9px] ${settlement.isNegative ? "text-red-400" : "text-green-200/40"}`}>
@@ -2746,55 +2746,11 @@ const Statements = () => {
                       </p>
                     </div>
                   </div>
-                  {(directToLandlordAmount > 0 || Number(depositSettlementTotals.additions || 0) > 0 || Number(totals.overpayments || 0) > 0) && (
-                    <div className="space-y-1.5 border-t border-[#0B3B2E]/20 bg-[#EDF5F1] px-3 py-1.5">
-                      {/* Income recap — only the figures that actually sum to Total Income
-                          This Period. Self-managed: there's no manager, so no manager-vs-direct
-                          split — Net Operating Income above already covers the full period. */}
-                      {!isSelfManaged && (
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div className="flex flex-wrap items-center gap-4 text-xs">
-                            <span className="text-slate-600">
-                              Manager transfers: <strong className="text-slate-900">{currency(Math.max(0, settlement.amount))}</strong>
-                            </span>
-                            {directToLandlordAmount > 0 && (
-                              <>
-                                <span className="text-slate-400">+</span>
-                                <span className="text-slate-600">
-                                  Receipts to Landlord: <strong className="text-[#0B3B2E]">{currency(directToLandlordAmount)}</strong>
-                                </span>
-                              </>
-                            )}
-                          </div>
-                          <div className="text-right">
-                            <p className="text-[9px] font-black uppercase tracking-widest text-[#0B3B2E]">Total Income This Period</p>
-                            <p className="text-base font-black text-[#0B3B2E]">{currency(Math.max(0, settlement.amount) + directToLandlordAmount)}</p>
-                          </div>
-                        </div>
-                      )}
-                      {/* Deposits are a liability held on the tenant's behalf, not income —
-                          shown on its own line so it never reads as part of the sum above. */}
-                      {Number(depositSettlementTotals.additions || 0) > 0 && (
-                        <div className={`flex flex-wrap items-baseline justify-between gap-2 text-xs ${!isSelfManaged ? "border-t border-[#0B3B2E]/10 pt-1.5" : ""}`}>
-                          <span className="text-slate-500">
-                            Deposits you now hold <span className="text-slate-400">— held for tenants, not income</span>
-                          </span>
-                          <strong className="text-slate-700">{currency(depositSettlementTotals.additions)}</strong>
-                        </div>
-                      )}
-                      {/* Bal C/F above is gross arrears only — credit balances are excluded
-                          from it, not netted in. Named here so that money isn't unaccounted
-                          for from a PM/landlord's read of the totals. */}
-                      {Number(totals.overpayments || 0) > 0 && (
-                        <div className={`flex flex-wrap items-baseline justify-between gap-2 text-xs ${(!isSelfManaged || Number(depositSettlementTotals.additions || 0) > 0) ? "border-t border-[#0B3B2E]/10 pt-1.5" : ""}`}>
-                          <span className="text-slate-500">
-                            Tenant credit balances <span className="text-slate-400">— excluded from Bal C/F above</span>
-                          </span>
-                          <strong className="text-slate-700">{currency(totals.overpayments)}</strong>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  {/* The manager-transfers/deposits-held/credit-balances recap that used to
+                      live here is deliberately not duplicated in the live workspace — it's
+                      already shown in full on the printed/PDF statement (Statement Summary +
+                      Deposits You Now Hold sections), and repeating it here just ate vertical
+                      space that should go to the tenant rows above. */}
                 </div>
               </div>
 
