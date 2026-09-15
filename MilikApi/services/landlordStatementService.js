@@ -3706,8 +3706,11 @@ export const generateLandlordStatement = async ({
   const totalBalanceBF = round2(
     filteredTenantRows.reduce((sum, row) => sum + row.balanceBF, 0)
   );
+  // Gross arrears, not net — a tenant's overpayment must never quietly cancel out another
+  // tenant's real debt in this headline total. Only used for this report's display totals
+  // (closingBalance below); nothing in the remittance/commission math reads totalBalanceCF.
   const totalBalanceCF = round2(
-    filteredTenantRows.reduce((sum, row) => sum + row.balanceCF, 0)
+    filteredTenantRows.reduce((sum, row) => sum + Math.max(0, row.balanceCF), 0)
   );
   const totalRawReceived = round2(
     filteredTenantRows.reduce((sum, row) => sum + Number(row.rawReceivedThisPeriod || 0), 0)
