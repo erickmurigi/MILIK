@@ -3709,27 +3709,6 @@ export const generateLandlordStatement = async ({
   const totalBalanceCF = round2(
     filteredTenantRows.reduce((sum, row) => sum + row.balanceCF, 0)
   );
-  // Netting arrears against overpayments into one figure understates real collection risk —
-  // one tenant's large credit can silently cancel out another tenant's real debt in the
-  // headline total. Gross arrears (positive balances only) is the number worth chasing;
-  // overpayments are tracked separately, same split the Paid & Balance report already uses
-  // (totalOutstanding vs totalUnappliedCredit).
-  const totalGrossArrears = round2(
-    filteredTenantRows.reduce((sum, row) => sum + Math.max(0, row.balanceCF), 0)
-  );
-  const totalOverpayments = round2(
-    filteredTenantRows.reduce((sum, row) => sum + Math.max(0, -row.balanceCF), 0)
-  );
-  // Deposit arrears — invoiced-but-unpaid deposit, gross (same reasoning as above). Deposit
-  // deliberately never feeds balanceCF (see totalDepositInvoiced/totalDepositCollected
-  // above), so an unpaid deposit is otherwise invisible in the report's one bottom-line
-  // "what's owed" figure.
-  const totalDepositArrears = round2(
-    filteredTenantRows.reduce(
-      (sum, row) => sum + Math.max(0, Number(row.totalDepositInvoiced || 0) - Number(row.totalDepositPaid || 0)),
-      0
-    )
-  );
   const totalRawReceived = round2(
     filteredTenantRows.reduce((sum, row) => sum + Number(row.rawReceivedThisPeriod || 0), 0)
   );
@@ -4059,9 +4038,6 @@ export const generateLandlordStatement = async ({
       expenses: displayNonCommissionDeductions,
       totalPaid: round2(totalRawReceived + totalDepositCollected),
       closingBalance: totalBalanceCF,
-      grossArrears: totalGrossArrears,
-      overpayments: totalOverpayments,
-      depositArrears: totalDepositArrears,
     },
     expenseRows,
     deductionRows: expenseRows,
@@ -4096,9 +4072,6 @@ export const generateLandlordStatement = async ({
     summary: {
       openingBalance: totalBalanceBF,
       closingBalance: totalBalanceCF,
-      grossArrears: totalGrossArrears,
-      overpayments: totalOverpayments,
-      depositArrears: totalDepositArrears,
       rentInvoiced: totalRentInvoiced,
       totalRentInvoiced: totalRentInvoiced,
       utilityInvoiced: totalUtilityInvoiced,

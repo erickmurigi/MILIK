@@ -2735,7 +2735,7 @@ const Statements = () => {
                       </p>
                     </div>
                   </div>
-                  {(directToLandlordAmount > 0 || Number(depositSettlementTotals.additions || 0) > 0 || Number(totals.depositArrears || 0) > 0 || Number(totals.overpayments || 0) > 0) && (
+                  {(directToLandlordAmount > 0 || Number(depositSettlementTotals.additions || 0) > 0) && (
                     <div className="space-y-1.5 border-t border-[#0B3B2E]/20 bg-[#EDF5F1] px-3 py-1.5">
                       {/* Income recap — only the figures that actually sum to Total Income
                           This Period. Self-managed: there's no manager, so no manager-vs-direct
@@ -2769,38 +2769,6 @@ const Statements = () => {
                             Deposits you now hold <span className="text-slate-400">— held for tenants, not income</span>
                           </span>
                           <strong className="text-slate-700">{currency(depositSettlementTotals.additions)}</strong>
-                        </div>
-                      )}
-                      {/* Deposit invoiced but unpaid — never folded into Bal C/F (deposit isn't
-                          rent income), so without this line it's invisible in every bottom-line
-                          "what's owed" figure. Only shown when it's actually nonzero. */}
-                      {Number(totals.depositArrears || 0) > 0 && (
-                        <div className="flex flex-wrap items-baseline justify-between gap-2 border-t border-[#0B3B2E]/10 pt-1.5 text-xs">
-                          <span className="text-amber-700">
-                            Deposit arrears <span className="text-amber-600/70">— unpaid, not in Bal C/F above</span>
-                          </span>
-                          <strong className="text-amber-700">{currency(totals.depositArrears)}</strong>
-                        </div>
-                      )}
-                      {/* Bal C/F above is a net figure (arrears minus overpayments) — one
-                          tenant's credit can silently cancel out another's real debt in that
-                          single number. Break it back out whenever there's an actual
-                          overpayment to net against, so the real amount still being chased
-                          isn't understated. */}
-                      {Number(totals.overpayments || 0) > 0 && (
-                        <div className="flex flex-wrap items-baseline justify-between gap-2 border-t border-[#0B3B2E]/10 pt-1.5 text-xs">
-                          <span className="text-red-700">
-                            Gross arrears <span className="text-red-600/70">— before netting overpayments</span>
-                          </span>
-                          <strong className="text-red-700">{currency(totals.grossArrears)}</strong>
-                        </div>
-                      )}
-                      {Number(totals.overpayments || 0) > 0 && (
-                        <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs">
-                          <span className="text-emerald-700">
-                            Tenant overpayments <span className="text-emerald-600/70">— credits netted into Bal C/F above</span>
-                          </span>
-                          <strong className="text-emerald-700">{currency(totals.overpayments)}</strong>
                         </div>
                       )}
                     </div>
