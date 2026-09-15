@@ -64,7 +64,7 @@ const normalizeDate = (value, edge = "start") => {
 
 const isTruthy = (value) => ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
 
-const buildLedgerActivityMatch = ({ business, accountId, start, end, direction, sourceTransactionType, includeReversed = false }) => {
+const buildLedgerActivityMatch = ({ business, accountId, start, end, direction, sourceTransactionType, property, includeReversed = false }) => {
   const match = {
     business: toObjectId(business),
     accountId: toObjectId(accountId),
@@ -81,6 +81,12 @@ const buildLedgerActivityMatch = ({ business, accountId, start, end, direction, 
 
   if (sourceTransactionType) {
     match.sourceTransactionType = sourceTransactionType;
+  }
+
+  // Optional — only meaningful for companies with the Property Management module; a shared
+  // cashbook/ledger account (CarWash, HR, PropertySale, etc.) simply never sends this param.
+  if (property && isValidObjectId(property)) {
+    match.property = toObjectId(property);
   }
 
   if (start || end) {
@@ -147,7 +153,7 @@ router.get("/:id/activity", verifyUser, requireCompanyModule(GL_ACCESS_MODULES),
   try {
     const business = resolveBusiness(req);
     const { id } = req.params;
-    const { startDate, endDate, direction, sourceTransactionType, includeReversed } = req.query;
+    const { startDate, endDate, direction, sourceTransactionType, includeReversed, property } = req.query;
 
     if (!business) {
       return res.status(400).json({ error: "business is required" });
@@ -178,6 +184,7 @@ router.get("/:id/activity", verifyUser, requireCompanyModule(GL_ACCESS_MODULES),
       end,
       direction,
       sourceTransactionType,
+      property,
       includeReversed: shouldIncludeReversed,
     });
 
@@ -191,6 +198,7 @@ router.get("/:id/activity", verifyUser, requireCompanyModule(GL_ACCESS_MODULES),
         end: null,
         direction,
         sourceTransactionType,
+        property,
         includeReversed: shouldIncludeReversed,
       });
       openingMatch.transactionDate = { $lt: start };

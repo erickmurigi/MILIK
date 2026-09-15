@@ -2,8 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { useSelector } from "react-redux";
-import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
+import { useSelector, useDispatch } from "react-redux";
+import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
+import { getProperties } from "../../redux/propertyRedux";
+import { hasCompanyModule } from "../../utils/companyModules";
 import {
   FaArrowLeft, FaExchangeAlt, FaRedoAlt,
   FaSyncAlt, FaTrashAlt, FaTimes, FaUndo, FaInfoCircle, FaPrint,
@@ -65,8 +67,14 @@ const LedgerAccountActivity = () => {
     : location.pathname.startsWith("/accounts/") ? "/accounts/chart-of-accounts"
     : "/financial/chart-of-accounts";
 
+  const dispatch        = useDispatch();
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser    = useSelector(selectCurrentUser);
+  // Ledger accounts are shared across every module (CarWash, HR, PropertySale, Clients,
+  // etc.) — the Property filter is only meaningful, and only fetched, for companies that
+  // actually have the Property Management module enabled.
+  const hasPM       = hasCompanyModule(currentCompany, "propertyManagement");
+  const properties  = useSelector(selectAllProperties);
 
   const [account,        setAccount]        = useState(null);
   const [accounts,       setAccounts]       = useState([]);
@@ -86,6 +94,7 @@ const LedgerAccountActivity = () => {
       endDate:         inputDate(now),
       direction:       "all",
       includeReversed: false,
+      property:        "",
     };
   });
   const [moveModal, setMoveModal] = useState({ open: false, entry: null, newAccountId: "", reason: "" });
@@ -95,6 +104,12 @@ const LedgerAccountActivity = () => {
   const canManage   =
     accountCanManage(currentUser) &&
     hasCompanyPermission(currentUser || {}, currentCompany, "journals", "reverse", "accounts");
+
+  // Only fetch the properties list for companies that can actually use the filter.
+  useEffect(() => {
+    if (!businessId || !hasPM) return;
+    dispatch(getProperties({ business: businessId }));
+  }, [businessId, hasPM, dispatch]);
 
   // ── Load activity ──
   const loadActivity = useCallback(async (appliedFilters) => {
@@ -107,6 +122,7 @@ const LedgerAccountActivity = () => {
       if (f.endDate)         params.append("endDate",         f.endDate);
       if (f.direction && f.direction !== "all") params.append("direction", f.direction);
       if (f.includeReversed) params.append("includeReversed", "true");
+      if (f.property) params.append("property", f.property);
 
       const res     = await adminRequests.get(`/chart-of-accounts/${accountId}/activity?${params.toString()}`);
       const payload = res.data?.data || {};
@@ -136,7 +152,7 @@ const LedgerAccountActivity = () => {
   // Auto-fetch when filters change (debounced so date typing doesn't spam requests)
   const autoFetchInitRef = useRef(false);
   const debouncedFiltersStr = useDebounce(
-    JSON.stringify({ s: filters.startDate, e: filters.endDate, d: filters.direction, r: filters.includeReversed }),
+    JSON.stringify({ s: filters.startDate, e: filters.endDate, d: filters.direction, r: filters.includeReversed, p: filters.property }),
     500
   );
   useEffect(() => {
@@ -180,6 +196,7 @@ const LedgerAccountActivity = () => {
       endDate:         inputDate(now),
       direction:       "all",
       includeReversed: false,
+      property:        "",
     };
     setFilters(fresh);
     loadActivity(fresh);
@@ -412,6 +429,17 @@ const LedgerAccountActivity = () => {
             size="sm"
             clearable
           />
+          {hasPM && (
+            <AppSelect
+              value={filters.property}
+              onChange={(v) => setFilters((p) => ({ ...p, property: v ?? "" }))}
+              options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
+              placeholder="All properties"
+              searchable
+              clearable
+              size="sm"
+            />
+          )}
           <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer select-none">
             <input
               type="checkbox"
