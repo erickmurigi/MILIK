@@ -178,19 +178,32 @@ to be agreed with the user before any of this is implemented.
 - No missing-index findings anywhere in the models audited (`TenantInvoice`, `RentPayment`, `FinancialLedgerEntry`, `LandlordStatement*`, `ChartOfAccount`, `Tenant`, `Unit`, `Lease`, `Property`, `JournalEntry`, `PropertyLedgerEntry`, `ProcessedStatement`, `Landlord`) — the prior optimization pass's indexing work held up.
 - No table virtualization anywhere in the frontend (`react-window`/`react-virtualized` absent) — deliberately not flagged as urgent since the largest unpaginated tables are print-oriented financial reports where full-table rendering is likely intentional.
 
-### Next step for Track C
+### Track C progress
 
-Agreed order (established before Track D's unplanned detour, still standing):
-1. `round2` consolidation — mechanical, near-zero risk, closes a real
-   financial-correctness bug. **Not started yet.**
+Agreed order (established before Track D's unplanned detour):
+
+1. ✅ **`round2` consolidation — done.** Found 33 files with an independent
+   local reimplementation (not the 15 originally estimated). 27 matched the
+   canonical `utils/math.js` formula exactly, byte-for-byte — pure dedup,
+   zero behavior change (`00b6fd2`). The other 6
+   (`statementAllocations.js`, `budgets.js`, `fixedAssets.js`,
+   `ledgerDiagnostics.js`, `taxRemittance.js`, `whtRemittance.js`) were
+   missing `Number.EPSILON`, a genuinely different formula that silently
+   under-rounds real financial amounts on floating-point boundary values
+   (e.g. `1.005` → `1.00` instead of `1.01`) — a real, if narrow,
+   rounding-correctness bug on tax/WHT remittances, budgets, fixed-asset
+   depreciation, statement reallocation, and GL diagnostics, now fixed
+   (`8954706`). Full suite: 28/28 files, 118/118 tests passing throughout.
 2. Redux refetch-check pattern applied once as a shared helper across all
-   ~30 list-fetch thunks (the audit's own "biggest realistic win").
+   ~30 list-fetch thunks (the audit's own "biggest realistic win"). **Not
+   started.**
 3. God-file decomposition (`landlordStatementService.js`, `redux/apiCalls.js`) —
-   after 1–2 land, since splitting is safer once the logic inside isn't also
-   changing for other reasons.
-4. `*ImportModal.jsx` consolidation + `MilikTable` memoization fix.
+   after 2 lands, since splitting is safer once the logic inside isn't also
+   changing for other reasons. **Not started.**
+4. `*ImportModal.jsx` consolidation + `MilikTable` memoization fix. **Not started.**
 5. Low-priority cleanup batch (`controllers/employee.js` removal, `moment`
    for `recurringSchedule.js`, unused imports) — no urgency, batch whenever.
+   **Not started.**
 
 **Do not implement any of the above unilaterally** — still gated on the
 user's go-ahead per item, consistent with how every fix in this document was
