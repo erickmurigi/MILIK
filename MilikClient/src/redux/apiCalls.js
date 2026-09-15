@@ -2,6 +2,14 @@
 import {adminRequests} from "../utils/requestMethods"
 import { clearClientSessionStorage } from "../utils/sessionCleanup";
 import { clearAllTabCache } from "../hooks/useTabState";
+import { store } from "./store";
+
+// Legacy (non-createAsyncThunk) list-fetch helpers below take `dispatch` as a
+// plain argument rather than being dispatched themselves, so they read the
+// store singleton directly to check freshness before refetching.
+const LIST_CACHE_TTL_MS = 5000;
+const isListCacheFresh = (loadedFor, loadedAt, businessKey) =>
+  Boolean(businessKey) && loadedFor === businessKey && Date.now() - loadedAt < LIST_CACHE_TTL_MS;
 
 
 
@@ -918,11 +926,16 @@ export const toggleCompanyLock = (id) => async (dispatch) => {
 
 // Get all utilities
 export const getUtilities = async (dispatch, business) => {
+  const businessKey = String(business || '');
+  const cache = store.getState().utility;
+  if (isListCacheFresh(cache.loadedFor, cache.loadedAt, businessKey)) {
+    return;
+  }
   dispatch(getUtilitiesStart());
   try {
     const res = await adminRequests.get(`/utilities?business=${business}`);
     dispatch(getUtilitiesSuccess(res.data));
-    dispatch(setUtilityLoadMeta({ loadedFor: String(business || ''), loadedAt: Date.now() }));
+    dispatch(setUtilityLoadMeta({ loadedFor: businessKey, loadedAt: Date.now() }));
   } catch (err) {
     dispatch(getUtilitiesFailure());
   }
@@ -945,6 +958,7 @@ export const createUtility = async (dispatch, utilityData) => {
   try {
     const res = await adminRequests.post("/utilities", utilityData);
     dispatch(createUtilitySuccess(res.data));
+    dispatch(setUtilityLoadMeta({ loadedFor: null, loadedAt: 0 }));
     return res.data;
   } catch (err) {
     dispatch(createUtilityFailure());
@@ -958,6 +972,7 @@ export const updateUtility = async (dispatch, id, utilityData) => {
   try {
     const res = await adminRequests.put(`/utilities/${id}`, utilityData);
     dispatch(updateUtilitySuccess(res.data));
+    dispatch(setUtilityLoadMeta({ loadedFor: null, loadedAt: 0 }));
     return res.data;
   } catch (err) {
     dispatch(updateUtilityFailure());
@@ -971,6 +986,7 @@ export const deleteUtility = async (dispatch, id) => {
   try {
     await adminRequests.delete(`/utilities/${id}`);
     dispatch(deleteUtilitySuccess(id));
+    dispatch(setUtilityLoadMeta({ loadedFor: null, loadedAt: 0 }));
     return true;
   } catch (err) {
     dispatch(deleteUtilityFailure());
@@ -1172,6 +1188,14 @@ export const getTenantBalance = async (id) => {
 
 // Get all rent payments
 export const getRentPayments = async (dispatch, business, tenant = null, unit = null, month = null, year = null, paymentType = null, status = "active") => {
+  const businessKey = String(business || '');
+  const isUnfiltered = !tenant && !unit && !month && !year && !paymentType;
+  if (isUnfiltered) {
+    const cache = store.getState().rentPayment;
+    if (isListCacheFresh(cache.loadedFor, cache.loadedAt, businessKey)) {
+      return;
+    }
+  }
   dispatch(getRentPaymentsStart());
   try {
     let url = `/rent-payments?business=${business}`;
@@ -1181,10 +1205,14 @@ export const getRentPayments = async (dispatch, business, tenant = null, unit = 
     if (year) url += `&year=${year}`;
     if (paymentType) url += `&paymentType=${paymentType}`;
     if (status) url += `&status=${status}`;
-    
+
     const res = await adminRequests.get(url);
     dispatch(getRentPaymentsSuccess(extractList(res.data)));
-    dispatch(setRentPaymentsLoaded({ business }));
+    // Only stamp the company-wide cache when no per-entity filter is used —
+    // a filtered fetch returns a partial list and must not mark it fresh.
+    if (isUnfiltered) {
+      dispatch(setRentPaymentsLoaded({ business }));
+    }
   } catch (err) {
     dispatch(getRentPaymentsFailure());
   }
@@ -1236,6 +1264,7 @@ export const createRentPayment = async (dispatch, paymentData) => {
   try {
     const res = await adminRequests.post("/rent-payments", paymentData);
     dispatch(createRentPaymentSuccess(res.data));
+    dispatch(setRentPaymentsLoaded({ business: null }));
     return res.data;
   } catch (err) {
     dispatch(createRentPaymentFailure());
@@ -1274,6 +1303,7 @@ export const updateRentPayment = async (dispatch, id, paymentData) => {
   try {
     const res = await adminRequests.put(`/rent-payments/${id}`, paymentData);
     dispatch(updateRentPaymentSuccess(res.data));
+    dispatch(setRentPaymentsLoaded({ business: null }));
     return res.data;
   } catch (err) {
     dispatch(updateRentPaymentFailure());
@@ -1287,6 +1317,7 @@ export const deleteRentPayment = async (dispatch, id) => {
   try {
     await adminRequests.delete(`/rent-payments/${id}`);
     dispatch(deleteRentPaymentSuccess(id));
+    dispatch(setRentPaymentsLoaded({ business: null }));
     return true;
   } catch (err) {
     dispatch(deleteRentPaymentFailure());
@@ -1300,6 +1331,7 @@ export const confirmRentPayment = async (dispatch, id, confirmData) => {
   try {
     const res = await adminRequests.put(`/rent-payments/confirm/${id}`, confirmData);
     dispatch(confirmRentPaymentSuccess(res.data));
+    dispatch(setRentPaymentsLoaded({ business: null }));
     return res.data;
   } catch (err) {
     dispatch(confirmRentPaymentFailure());
@@ -1313,6 +1345,7 @@ export const unconfirmRentPayment = async (dispatch, id) => {
   try {
     const res = await adminRequests.put(`/rent-payments/unconfirm/${id}`, {});
     dispatch(unconfirmRentPaymentSuccess(res.data.data || res.data));
+    dispatch(setRentPaymentsLoaded({ business: null }));
     return res.data;
   } catch (err) {
     dispatch(unconfirmRentPaymentFailure());
@@ -1802,6 +1835,13 @@ export const getMaintenanceStats = async (business) => {
 
 // Get all leases
 export const getLeases = async (dispatch, business, status = null, tenant = null, unit = null) => {
+  const businessKey = String(business || '');
+  if (!tenant && !unit) {
+    const cache = store.getState().lease;
+    if (isListCacheFresh(cache.loadedFor, cache.loadedAt, businessKey)) {
+      return;
+    }
+  }
   dispatch(getLeasesStart());
   try {
     let url = `/leases?business=${business}`;
@@ -1843,6 +1883,7 @@ export const createLease = async (dispatch, leaseData) => {
   try {
     const res = await adminRequests.post("/leases", leaseData);
     dispatch(createLeaseSuccess(res.data));
+    dispatch(setLeaseLoadMeta({ loadedFor: null, loadedAt: 0 }));
     return res.data;
   } catch (err) {
     dispatch(createLeaseFailure());
@@ -1862,6 +1903,7 @@ export const updateLease = async (dispatch, id, leaseData) => {
   try {
     const res = await adminRequests.put(`/leases/${id}`, leaseData);
     dispatch(updateLeaseSuccess(res.data));
+    dispatch(setLeaseLoadMeta({ loadedFor: null, loadedAt: 0 }));
     return res.data;
   } catch (err) {
     dispatch(updateLeaseFailure());
@@ -1875,6 +1917,7 @@ export const deleteLease = async (dispatch, id) => {
   try {
     await adminRequests.delete(`/leases/${id}`);
     dispatch(deleteLeaseSuccess(id));
+    dispatch(setLeaseLoadMeta({ loadedFor: null, loadedAt: 0 }));
     return true;
   } catch (err) {
     dispatch(deleteLeaseFailure());
@@ -1888,6 +1931,7 @@ export const signLease = async (dispatch, id, signData) => {
   try {
     const res = await adminRequests.put(`/leases/sign/${id}`, signData);
     dispatch(signLeaseSuccess(res.data));
+    dispatch(setLeaseLoadMeta({ loadedFor: null, loadedAt: 0 }));
     return res.data;
   } catch (err) {
     dispatch(signLeaseFailure());
@@ -1911,6 +1955,7 @@ export const renewLease = async (dispatch, id, renewData) => {
   try {
     const res = await adminRequests.put(`/leases/renew/${id}`, renewData);
     dispatch(renewLeaseSuccess(res.data));
+    dispatch(setLeaseLoadMeta({ loadedFor: null, loadedAt: 0 }));
     return res.data;
   } catch (err) {
     dispatch(renewLeaseFailure());
