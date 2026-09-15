@@ -3,6 +3,7 @@ import POSSale from "../models/POSSale.js";
 import POSSession from "../models/POSSession.js";
 import InvProduct from "../models/InvProduct.js";
 import { createError } from "../../../utils/error.js";
+import { round2 } from "../../../utils/math.js";
 import {
   resolveActiveBusinessId,
   currentUserId,
@@ -16,7 +17,6 @@ import InvPaymentMethod from "../models/InvPaymentMethod.js";
 
 const BUILT_IN_PAYMENT_CODES = new Set(["cash", "mpesa", "card", "credit"]);
 
-const round2 = (n) => Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
 
 const populateSale = (q) =>
   q

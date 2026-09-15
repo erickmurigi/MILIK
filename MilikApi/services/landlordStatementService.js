@@ -20,9 +20,7 @@ import CompanySettings from "../models/CompanySettings.js";
 import Company from "../models/Company.js";
 import { isSelfManagingLandlordCompany } from "../utils/companyModules.js";
 import { buildCommissionTaxSnapshot, getCompanyTaxConfiguration } from "./taxCalculationService.js";
-
-const round2 = (value) =>
-  Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+import { round2 } from "../utils/math.js";
 
 const toDate = (value, fallback = new Date()) => {
   const date = value ? new Date(value) : new Date(fallback);

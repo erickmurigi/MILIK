@@ -13,6 +13,7 @@ import { postEntry, postReversal } from "../../../services/ledgerPostingService.
 import { aggregateChartOfAccountBalances } from "../../../services/chartAccountAggregationService.js";
 import { resolveAuditActorUserId } from "../../../utils/systemActor.js";
 import { findSystemAccountByCode } from "../../../services/chartOfAccountsService.js";
+import { round2 } from "../../../utils/math.js";
 import mongoose from "mongoose";
 
 // ─── Account templates ────────────────────────────────────────────────────────
@@ -29,7 +30,6 @@ const CW_ACCOUNT_TEMPLATES = {
   "4402": { name: "Car Wash Unclaimed Customer Credits",  type: "income",    group: "income",      subGroup: "Car Wash Income" },
 };
 
-const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
 const dayRange = (value = new Date()) => {
   const date = value ? new Date(value) : new Date();

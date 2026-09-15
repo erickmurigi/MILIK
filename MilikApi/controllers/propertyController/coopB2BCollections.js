@@ -5,12 +5,12 @@ import RentPayment from "../../models/RentPayment.js";
 import Tenant from "../../models/Tenant.js";
 import { createError } from "../../utils/error.js";
 import { parsePagination } from "../../utils/pagination.js";
+import { round2 } from "../../utils/math.js";
 
 const isValidObjectId = (v)  => mongoose.Types.ObjectId.isValid(String(v || ""));
 const normalizeText  = (v)   => String(v  || "").trim();
 const normalizeUpper = (v)   => normalizeText(v).toUpperCase();
 const safeLower      = (v)   => normalizeText(v).toLowerCase();
-const round2         = (v)   => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 const escapeRegExp   = (v)   => String(v || "").replace(/[|\\{}()\[\]^$+*?.]/g, "\\$&");
 
 // Split "1177572#TNT0001" → "TNT0001"; if no "#" return the full value.

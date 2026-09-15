@@ -2,8 +2,7 @@ import mongoose from 'mongoose';
 import CarWashCustomer from '../models/CarWashCustomer.js';
 import CarWashJob from '../models/CarWashJob.js';
 import CarWashPayment from '../models/CarWashPayment.js';
-
-const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
+import { round2 } from '../../../utils/math.js';
 
 /**
  * Recomputes and persists denormalized stats for the customer that owns `plate`.

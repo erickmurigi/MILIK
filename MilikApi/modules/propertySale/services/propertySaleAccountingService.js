@@ -17,6 +17,7 @@ import mongoose from "mongoose";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import FinancialLedgerEntry from "../../../models/FinancialLedgerEntry.js";
 import { postEntry, postReversal } from "../../../services/ledgerPostingService.js";
+import { round2 } from "../../../utils/math.js";
 
 const PS_ACCOUNT_TEMPLATES = {
   "1311": { name: "Property Sale Receipts Control",  type: "asset",     group: "assets",      subGroup: "Current Assets" },
@@ -29,7 +30,6 @@ const PS_ACCOUNT_TEMPLATES = {
   "5321": { name: "Agent Commission Disbursements",   type: "liability", group: "liabilities", subGroup: "Agent Payables" },
 };
 
-const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
 const dayRange = (value = new Date()) => {
   const d = value ? new Date(value) : new Date();

@@ -2,8 +2,7 @@ import mongoose from "mongoose";
 import PaymentVoucher from "../models/PaymentVoucher.js";
 import ProcessedStatement from "../models/ProcessedStatement.js";
 import FinancialLedgerEntry from "../models/FinancialLedgerEntry.js";
-
-const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+import { round2 } from "../utils/math.js";
 
 const normalizeDate = (value, fallback = null) => {
   const parsed = value ? new Date(value) : fallback ? new Date(fallback) : null;

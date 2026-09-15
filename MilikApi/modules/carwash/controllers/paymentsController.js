@@ -1,4 +1,5 @@
 ﻿import { createError } from "../../../utils/error.js";
+import { round2 } from "../../../utils/math.js";
 import mongoose from "mongoose";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import CarWashJob from "../models/CarWashJob.js";
@@ -20,7 +21,6 @@ import { postCarWashPaymentLedger, reverseCarWashPaymentLedger, reverseCarWashTo
 import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
 import { recomputeCustomerStats } from "../services/customerStatsService.js";
 
-const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 const AMOUNT_TOLERANCE = 0.01; // KES 0.01 tolerance for all amount comparisons
 const PAYMENT_METHODS = new Set(["cash", "mpesa", "bank", "card", "other"]);
 const RECONCILIATION_STATUSES = new Set(["pending", "reconciled", "flagged"]);

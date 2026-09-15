@@ -28,8 +28,7 @@ import CarWashStaffSaving from "../models/CarWashStaffSaving.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import { postCarWashSavingsDisbursement } from "./carwashAccountingService.js";
 import { resolveActiveBranchId } from "./businessScope.js";
-
-const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
+import { round2 } from "../../../utils/math.js";
 
 // UTC midnight for the current EAT calendar day.
 // Adding 3 h to UTC timestamp then reading the UTC date yields the EAT date.

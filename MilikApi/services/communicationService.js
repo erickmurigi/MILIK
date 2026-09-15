@@ -34,12 +34,12 @@ import {
   isEmailEnabled,
   resolveCompanyMailSender,
 } from '../utils/smtpMailer.js';
+import { round2 } from '../utils/math.js';
 
 const normalizeText = (value = '') => String(value || '').trim();
 const safeLower = (value = '') => normalizeText(value).toLowerCase();
 const toPlainObject = (value = {}) => (value?.toObject ? value.toObject() : value || {});
 const unique = (values = []) => Array.from(new Set((Array.isArray(values) ? values : [values]).map((item) => String(item || '').trim()).filter(Boolean)));
-const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
 const formatCurrency = (value, currency = 'KES') => {
   const amount = Number(value || 0);

@@ -12,9 +12,9 @@ import { getAccessibleCompanyIds } from "../../utils/permissionControl.js";
 import { postReversal } from "../../services/ledgerPostingService.js";
 import { createError } from "../../utils/error.js";
 import { resolveBusinessId } from "../../utils/requestContext.js";
+import { round2 } from "../../utils/math.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
-const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
 const normalizeDate = (value, fallback = new Date()) => {
   const date = value ? new Date(value) : new Date(fallback);

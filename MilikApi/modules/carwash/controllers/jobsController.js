@@ -1,4 +1,5 @@
 ﻿import { createError } from "../../../utils/error.js";
+import { round2 } from "../../../utils/math.js";
 import mongoose from "mongoose";
 import Company from "../../../models/Company.js";
 import CarWashJob from "../models/CarWashJob.js";
@@ -931,8 +932,3 @@ export const deleteJobPhoto = async (req, res, next) => {
     next(error);
   }
 };
-
-// Missing helper used in this file
-function round2(value) {
-  return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
-}

@@ -1,4 +1,4 @@
-const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+import { round2 } from "./math.js";
 
 const normalizeFrequency = (value) => {
   const normalized = String(value || "monthly").trim().toLowerCase();

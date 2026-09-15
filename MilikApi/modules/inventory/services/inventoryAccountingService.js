@@ -22,6 +22,7 @@ import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import InvSupplier from "../models/InvSupplier.js";
 import FinancialLedgerEntry from "../../../models/FinancialLedgerEntry.js";
 import { postEntry, postReversal } from "../../../services/ledgerPostingService.js";
+import { round2 } from "../../../utils/math.js";
 
 const INV_ACCOUNT_TEMPLATES = {
   "1300": { name: "Inventory / Stock on Hand",       type: "asset",     group: "assets",      subGroup: "Current Assets",      isHeader: false, isPosting: true  },
@@ -33,7 +34,6 @@ const INV_ACCOUNT_TEMPLATES = {
   "5010": { name: "Stock Adjustments & Write-offs",  type: "expense",   group: "expenses",    subGroup: "Inventory Adjustments", isHeader: false, isPosting: true },
 };
 
-const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
 const dayRange = (value = new Date()) => {
   const d = value ? new Date(value) : new Date();

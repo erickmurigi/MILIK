@@ -1,5 +1,6 @@
 ﻿import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
+import { round2 } from "../../../utils/math.js";
 import CarWashCommissionRule from "../models/CarWashCommissionRule.js";
 import CarWashStaffCommission from "../models/CarWashStaffCommission.js";
 import CarWashCommissionPayout from "../models/CarWashCommissionPayout.js";
@@ -13,7 +14,6 @@ import CarWashStaffSaving from "../models/CarWashStaffSaving.js";
 import { holdDamagesForPayout, releaseDamagesForPayout, getStaffDamagesSummary } from "../services/damagesService.js";
 import CarWashStaffDamage from "../models/CarWashStaffDamage.js";
 
-const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 const ruleTypes = new Set(["fixed", "percentage"]);
 const payoutMethods = new Set(["cash", "mpesa", "bank", "card", "other"]);
 const toObjectId = (value) => new mongoose.Types.ObjectId(String(value));

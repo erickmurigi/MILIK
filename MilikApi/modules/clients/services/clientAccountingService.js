@@ -19,8 +19,7 @@ import mongoose from "mongoose";
 import FinancialLedgerEntry from "../../../models/FinancialLedgerEntry.js";
 import { postEntry, postReversal } from "../../../services/ledgerPostingService.js";
 import { findSystemAccountByCode } from "../../../services/chartOfAccountsService.js";
-
-const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
+import { round2 } from "../../../utils/math.js";
 
 const dayRange = (value = new Date()) => {
   const d = value ? new Date(value) : new Date();

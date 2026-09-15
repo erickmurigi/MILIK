@@ -7,13 +7,13 @@ import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashCustomer from "../models/CarWashCustomer.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import { createError } from "../../../utils/error.js";
+import { round2 } from "../../../utils/math.js";
 import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
 import { postCarWashTopupLedger, reverseCarWashTopupLedger, postCarWashPaymentLedger } from "../services/carwashAccountingService.js";
 import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
 import { accrueCommissionForJob, markJobCommissionsPayable } from "../services/commissionService.js";
 
-const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
 // â”€â”€â”€ Number generators â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 

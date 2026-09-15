@@ -1,11 +1,11 @@
 ﻿import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
+import { round2 } from "../../../utils/math.js";
 import CarWashStaffDamage from "../models/CarWashStaffDamage.js";
 import CarWashStaff from "../models/CarWashStaff.js";
 import { currentUserId, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { computeDamageInstallment } from "../services/damagesService.js";
 
-const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
 const ensureStaff = async (business, staffId) => {
   if (!staffId || !mongoose.Types.ObjectId.isValid(String(staffId))) throw createError(400, "Invalid staff member");

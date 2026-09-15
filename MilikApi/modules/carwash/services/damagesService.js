@@ -1,7 +1,6 @@
 import mongoose from "mongoose";
 import CarWashStaffDamage from "../models/CarWashStaffDamage.js";
-
-const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
+import { round2 } from "../../../utils/math.js";
 
 /**
  * Compute the installment for a single damage record (uncapped by commission).

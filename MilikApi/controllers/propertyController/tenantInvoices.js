@@ -27,6 +27,7 @@ import { buildInvoiceTaxSnapshot, getCompanyTaxConfiguration, resolveOutputVatAc
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { COMPANY_OPERATING_MODES, normalizeCompanyOperatingMode } from "../../utils/companyModules.js";
 import LatePenaltyBatch from "../../models/LatePenaltyBatch.js";
+import { round2 } from "../../utils/math.js";
 
 const TENANT_INVOICE_NOTE_SOURCE_TYPE = "invoice_note";
 
@@ -57,7 +58,6 @@ const _setSnapshotCache = (key, value) => {
 };
 export const clearSnapshotBatchCache = () => snapshotBatchCache.clear();
 
-const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 const safeLower = (value = "") => String(value || "").trim().toLowerCase();
 const normalizeUtilityMatch = (value = "") =>
   String(value || "")

@@ -23,10 +23,10 @@ import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
 import { normalizePlate, buildPlateRegex } from "../utils/plateUtils.js";
 import { resolveActiveBusinessId, resolveActiveBranchId, parseDateRange } from "../services/businessScope.js";
 import { createError } from "../../../utils/error.js";
+import { round2 } from "../../../utils/math.js";
 
 const normalizeText = (v = "") => String(v || "").trim();
 const normalizeUpper = (v = "") => normalizeText(v).toUpperCase();
-const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 // Strips hyphens/spaces so "CWAC-20260628-0001" == "CWAC202606280001"
 const normalizeAccountNumber = (s) => String(s || "").replace(/[-\s]/g, "").toUpperCase();
 const netJobPrice = (job) => Math.max(0, Number(job?.price || 0) - Number(job?.discountAmount || 0));

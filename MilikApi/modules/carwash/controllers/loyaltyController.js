@@ -9,6 +9,7 @@ import CarWashCreditAccount from '../models/CarWashCreditAccount.js';
 import CarWashCustomerCredit from '../models/CarWashCustomerCredit.js';
 import { accrueCommissionForJob, markJobCommissionsPayable } from '../services/commissionService.js';
 import { createError } from '../../../utils/error.js';
+import { round2 } from '../../../utils/math.js';
 import { currentUserId, escapeRegex, netJobPrice, resolveActiveBusinessId } from '../services/businessScope.js';
 import { sendAdHocSms, sendAdHocSmsToMasked } from '../../../services/communicationService.js';
 import { resolveCarWashSmsBody } from '../services/carwashSmsService.js';
@@ -16,7 +17,6 @@ import { postCarWashLoyaltyDiscountLedger } from '../services/carwashAccountingS
 import { normalizePlate, buildPlateRegex } from '../utils/plateUtils.js';
 import { recomputeCustomerStats } from '../services/customerStatsService.js';
 
-const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
 const sendLoyaltySms = async (business, phone, body, templateKey, recipientName = '') => {
   if (!phone || !body) return;

@@ -33,6 +33,7 @@ import SequenceCounter from "../../models/SequenceCounter.js";
 import { resolveBusinessId } from "../../utils/requestContext.js";
 import { escapeRegex } from "../../utils/escapeRegex.js";
 import { createError } from "../../utils/error.js";
+import { round2 } from "../../utils/math.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
@@ -314,7 +315,6 @@ const normalizeDate = (value, fallback = new Date()) => {
   return Number.isNaN(date.getTime()) ? new Date(fallback) : date;
 };
 
-const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
 const generateReceiptNumber = async (businessId) => {
   const counter = await SequenceCounter.findOneAndUpdate(

@@ -6,6 +6,7 @@ import ChartOfAccount from '../../../models/ChartOfAccount.js';
 import Company from '../../../models/Company.js';
 import FinancialLedgerEntry from '../../../models/FinancialLedgerEntry.js';
 import { createError } from '../../../utils/error.js';
+import { round2 } from '../../../utils/math.js';
 import { currentUserId, escapeRegex, resolveActiveBusinessId } from '../services/businessScope.js';
 import {
   postCarWashCreditAppliedLedger,
@@ -16,7 +17,6 @@ import {
 } from '../services/carwashAccountingService.js';
 import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig } from '../../../utils/companyModules.js';
 
-const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
 // ─── List active customer credits (with optional dormancy filter) ─────────────
 export const listCredits = async (req, res, next) => {

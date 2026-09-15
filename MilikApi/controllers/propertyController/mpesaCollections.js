@@ -10,11 +10,11 @@ import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig } from "../../u
 import { createAutoReceipt } from "./rentPayment.js";
 import { createError } from "../../utils/error.js";
 import { parsePagination } from "../../utils/pagination.js";
+import { round2 } from "../../utils/math.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 const escapeRegExp = (value = "") => String(value || "").replace(/[|\\{}()\[\]^$+*?.]/g, "\\$&");
 const safeLower = (value = "") => String(value || "").trim().toLowerCase();
-const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 const normalizeText = (value = "") => String(value || "").trim();
 const normalizeUpper = (value = "") => normalizeText(value).toUpperCase();
 const normalizePhoneDigits = (value = "") => String(value || "").replace(/\D+/g, "");

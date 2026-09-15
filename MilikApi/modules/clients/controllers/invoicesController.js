@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
+import { round2 } from "../../../utils/math.js";
 import ClientInvoice from "../models/ClientInvoice.js";
 import ClientInteraction from "../models/ClientInteraction.js";
 import ClientPayment from "../models/ClientPayment.js";
@@ -13,7 +14,6 @@ import { sendInvoiceEmail, sendReceiptEmail } from "../services/clientEmailServi
 import { postClientInvoiceLedger, postClientPaymentLedger } from "../services/clientAccountingService.js";
 import { postReversal } from "../../../services/ledgerPostingService.js";
 
-const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
 // ─── Sanitizers ──────────────────────────────────────────────────────────────
 

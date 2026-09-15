@@ -4,13 +4,13 @@ import CarWashStaffCommission from "../models/CarWashStaffCommission.js";
 import CarWashCommissionPayout from "../models/CarWashCommissionPayout.js";
 import { resolveAuditActorUserId } from "../../../utils/systemActor.js";
 import { createError } from "../../../utils/error.js";
+import { round2 } from "../../../utils/math.js";
 import {
   postCarWashCommissionAccrual,
   reverseCarWashCommissionAccrual,
   cancelCarWashCommissionList,
 } from "./carwashAccountingService.js";
 
-const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
 // 1-minute in-process cache for commission rules per business
 // Rules rarely change mid-day; avoids a DB hit on every single payment
