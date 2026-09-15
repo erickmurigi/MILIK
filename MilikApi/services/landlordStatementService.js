@@ -3843,32 +3843,34 @@ export const generateLandlordStatement = async ({
     totalRentInvoiced + totalUtilityInvoiced + totalInvoiceVatInvoiced
   );
 
+  // Commission basis drives what the landlord-facing summary calls this figure — a landlord
+  // on "invoiced" recognition earns commission (and is settled) on what was billed, not what
+  // actually came in yet, so the label must say so plainly rather than leaving it reading
+  // like a cash-received figure. Rent/Utility/VAT are surfaced as three separate lines in
+  // BOTH modes (previously only the invoiced branch split them out — the received branch
+  // bundled rent+utility+tax into one opaque "Manager-held collections" figure, silently
+  // hiding the utility/VAT components entirely). This is a pure relabelling/redisplay of the
+  // same totals — settlementCollections (the actual figure the remittance math below is
+  // built from) sums back to exactly what managerCollections used to equal.
   const usesExpectedRentSettlement = recognitionBasis === "invoiced";
   const settlementBasisAmount = round2(
-    usesExpectedRentSettlement ? totalRentInvoiced : managerCollections
+    usesExpectedRentSettlement ? totalRentInvoiced : totalRentReceivedManager
   );
-  const settlementBasisLabel = usesExpectedRentSettlement
-    ? "Rent expected (Invoiced/Accrual)"
-    : (selfManaged ? "Total collections" : "Manager-held collections")
-  ;
+  const settlementBasisLabel = usesExpectedRentSettlement ? "Rent Invoiced" : "Rent Received";
   const utilityPassThroughAmount = round2(
-    usesExpectedRentSettlement ? totalUtilityInvoiced : 0
+    usesExpectedRentSettlement ? totalUtilityInvoiced : totalUtilityReceivedManager
   );
-  const utilityPassThroughLabel = usesExpectedRentSettlement
-    ? "Utilities (added as billed)"
-    : "";
+  const utilityPassThroughLabel = usesExpectedRentSettlement ? "Utility Invoiced" : "Utility Received";
   const invoiceVatPassThroughAmount = round2(
-    usesExpectedRentSettlement ? totalInvoiceVatInvoiced : 0
+    usesExpectedRentSettlement ? totalInvoiceVatInvoiced : totalInvoiceTaxReceivedManager
   );
-  const invoiceVatPassThroughLabel = usesExpectedRentSettlement
-    ? "Invoice VAT (pass-through)"
-    : "";
+  const invoiceVatPassThroughLabel = usesExpectedRentSettlement ? "VAT Invoiced" : "VAT Received";
   const settlementCollections = round2(
     settlementBasisAmount + utilityPassThroughAmount + invoiceVatPassThroughAmount
   );
   const settlementCollectionsLabel = usesExpectedRentSettlement
     ? "Expected rent + utilities + VAT"
-    : (selfManaged ? "Total collections" : "Manager-held collections");
+    : "Rent + utilities + VAT received";
   const basisCollections = settlementBasisAmount;
   const basisCollectionsLabel = settlementBasisLabel;
 

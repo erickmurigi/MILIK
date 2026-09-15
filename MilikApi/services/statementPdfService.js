@@ -769,7 +769,7 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
     const printableDeductionsTotal = sumPrintableAmounts(expenseRows);
     const printableDirectToLandlordTotal = sumPrintableAmounts(directToLandlordRows);
     const summaryBasisLabel =
-      summary.settlementBasisLabel || summary.basisCollectionsLabel || "Manager-held collections";
+      summary.settlementBasisLabel || summary.basisCollectionsLabel || "Rent Received";
     const summaryBasisAmount = Number(
       summary.settlementBasisAmount ?? summary.basisCollections ?? summary.managerCollections ?? 0
     );
