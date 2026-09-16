@@ -1513,7 +1513,13 @@ const buildFilteredTenantRows = (tenantRows, tenantMap) => {
     );
 };
 
-export const generateLandlordStatement = async ({
+// Phase 0 of generateLandlordStatement (Track C item 3 part 2, batch 2): validates the
+// inputs, fetches property + landlord, resolves the effective statement window (including
+// the snapshot cursor a prior PROCESSED statement left behind), and derives the handful of
+// per-property flags (latePenaltyToLandlord, selfManaged, prepaymentRecognition) everything
+// downstream reads. Every field on the returned object is read-only from here on — nothing
+// later in generateLandlordStatement writes back into this context.
+const resolveStatementContext = async ({
   propertyId,
   landlordId,
   statementPeriodStart,
@@ -1640,6 +1646,41 @@ export const generateLandlordStatement = async ({
       : null;
   const snapshotDate = lastApproved && previousCutoffAt ? previousCutoffAt : null;
 
+  return {
+    property,
+    landlordRecord,
+    businessId,
+    businessObjectId,
+    propertyObjectId,
+    landlordObjectId,
+    periodStart,
+    periodEnd,
+    periodEndTime,
+    prepaymentRecognition,
+    latePenaltyToLandlord,
+    selfManaged,
+    previousCutoffAt,
+    latestProcessedStatement,
+    openingLandlordSettlementBalance,
+    snapshotDate,
+    lastApproved,
+  };
+};
+
+// Phase 1 of generateLandlordStatement (Track C item 3 part 2, batch 2): every property-
+// scoped read needed to build the statement, fetched in parallel where possible. Everything
+// returned here is read-only from generateLandlordStatement's perspective — the maps/arrays
+// themselves are never reassigned downstream (individual row objects inside get mutated
+// later, by Phase 2, but these containers are not).
+const gatherStatementSourceData = async ({
+  propertyObjectId,
+  businessObjectId,
+  landlordObjectId,
+  periodStart,
+  periodEnd,
+  snapshotDate,
+  lastApproved,
+}) => {
   // Phase 1: all property-scoped queries in parallel — includes tenant balance snapshots
   // and gap take-on invoices that were previously sequential round-trips.
   const [
@@ -1971,6 +2012,94 @@ export const generateLandlordStatement = async ({
     } else if (recognitionTime <= periodEnd.getTime()) {
       depositReceiptsInPeriod.push(receipt);
     }
+  });
+
+  return {
+    units,
+    invoicesBefore,
+    invoicesInPeriod,
+    notesBefore,
+    notesInPeriod,
+    receiptsBefore,
+    receiptsInPeriod,
+    depositReceiptsBefore,
+    depositReceiptsInPeriod,
+    expensesInPeriod,
+    vouchersInPeriod,
+    statementAdjustments,
+    tenants,
+    unitMap,
+    tenantMap,
+    invoiceStatementMap,
+    noteStatementMap,
+    snapshotMap,
+    tenantsByUnit,
+    unitIds,
+  };
+};
+
+export const generateLandlordStatement = async ({
+  propertyId,
+  landlordId,
+  statementPeriodStart,
+  statementPeriodEnd,
+  cutoffAt = null,
+}) => {
+  const {
+    property,
+    landlordRecord,
+    businessId,
+    businessObjectId,
+    propertyObjectId,
+    landlordObjectId,
+    periodStart,
+    periodEnd,
+    periodEndTime,
+    prepaymentRecognition,
+    latePenaltyToLandlord,
+    selfManaged,
+    previousCutoffAt,
+    latestProcessedStatement,
+    openingLandlordSettlementBalance,
+    snapshotDate,
+    lastApproved,
+  } = await resolveStatementContext({
+    propertyId,
+    landlordId,
+    statementPeriodStart,
+    statementPeriodEnd,
+    cutoffAt,
+  });
+
+  const {
+    units,
+    invoicesBefore,
+    invoicesInPeriod,
+    notesBefore,
+    notesInPeriod,
+    receiptsBefore,
+    receiptsInPeriod,
+    depositReceiptsBefore,
+    depositReceiptsInPeriod,
+    expensesInPeriod,
+    vouchersInPeriod,
+    statementAdjustments,
+    tenants,
+    unitMap,
+    tenantMap,
+    invoiceStatementMap,
+    noteStatementMap,
+    snapshotMap,
+    tenantsByUnit,
+    unitIds,
+  } = await gatherStatementSourceData({
+    propertyObjectId,
+    businessObjectId,
+    landlordObjectId,
+    periodStart,
+    periodEnd,
+    snapshotDate,
+    lastApproved,
   });
 
   const rowsMap = new Map();
