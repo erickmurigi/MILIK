@@ -1559,7 +1559,7 @@ const applyUtility = (row, phase, amount, hint, metadata = {}) => {
 // via ensureRow) because Phase 3 (tenantRows materialization) still reads it directly by
 // design — that phase hasn't been converted yet, and exposing it here avoids a premature,
 // unverified change to code outside this step's scope.
-const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap }) => {
+const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap, latePenaltyToLandlord }) => {
   const rowsMap = new Map();
 
   const ensureRow = (tenantId, unitId, fallback = {}) => {
@@ -1678,11 +1678,50 @@ const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap }) => {
     });
   };
 
+  const shouldIncludeInvoiceInLandlordStatement = (invoice = {}) => {
+    const metadata = invoice?.metadata || {};
+    if (typeof metadata.includeInLandlordStatement === "boolean") {
+      return metadata.includeInLandlordStatement;
+    }
+    const billItemKey = String(metadata?.billItemKey || "").toLowerCase();
+    // billItemKey overrides category defaults for ambiguous OTHER_CHARGE types
+    if (billItemKey === "service_charge") return true;
+    if (billItemKey === "lease_fee" || billItemKey === "other_charge") return false;
+    const cat = String(invoice?.category || "").toUpperCase();
+    if (cat === "LATE_PENALTY_CHARGE") return latePenaltyToLandlord;
+    if (cat === "OTHER_CHARGE") return false;
+    return true;
+  };
+
+  const shouldIncludeNoteInLandlordStatement = (note = {}) => {
+    const metadata = mergeNoteUtilityMetadata(note);
+    const bik = String(metadata?.billItemKey || "").toLowerCase();
+    // Hard manager-only keys — never a landlord addition regardless of stored flag
+    if (bik === "lease_fee") return false;
+    if (bik === "other_charge") return false;
+    // Service charge is always landlord income
+    if (bik === "service_charge") return true;
+    // Late payment follows the company income rule (configurable)
+    if (bik === "late_payment") return latePenaltyToLandlord;
+    if (typeof metadata.includeInLandlordStatement === "boolean") {
+      return metadata.includeInLandlordStatement;
+    }
+    if (String(note?.noteType || "").toUpperCase() === "DEBIT_NOTE" && metadata.standaloneDebitNote === true) {
+      return true;
+    }
+    if (String(note?.category || "").toUpperCase() === "LATE_PENALTY_CHARGE") {
+      return latePenaltyToLandlord;
+    }
+    return true;
+  };
+
   return {
     rowsMap,
     ensureRow,
     entries,
     pushEntry,
+    shouldIncludeInvoiceInLandlordStatement,
+    shouldIncludeNoteInLandlordStatement,
   };
 };
 
@@ -2275,7 +2314,7 @@ export const generateLandlordStatement = async ({
     lastApproved,
   });
 
-  const accumulator = createStatementAccumulator({ unitMap, tenantMap, snapshotMap });
+  const accumulator = createStatementAccumulator({ unitMap, tenantMap, snapshotMap, latePenaltyToLandlord });
 
   units.forEach((unit) => {
     const unitTenants = (tenantsByUnit.get(String(unit._id)) || []).sort(
@@ -2292,43 +2331,6 @@ export const generateLandlordStatement = async ({
       accumulator.ensureRow(null, unit._id, { tenantName: "VACANT" });
     }
   });
-
-  const shouldIncludeInvoiceInLandlordStatement = (invoice = {}) => {
-    const metadata = invoice?.metadata || {};
-    if (typeof metadata.includeInLandlordStatement === "boolean") {
-      return metadata.includeInLandlordStatement;
-    }
-    const billItemKey = String(metadata?.billItemKey || "").toLowerCase();
-    // billItemKey overrides category defaults for ambiguous OTHER_CHARGE types
-    if (billItemKey === "service_charge") return true;
-    if (billItemKey === "lease_fee" || billItemKey === "other_charge") return false;
-    const cat = String(invoice?.category || "").toUpperCase();
-    if (cat === "LATE_PENALTY_CHARGE") return latePenaltyToLandlord;
-    if (cat === "OTHER_CHARGE") return false;
-    return true;
-  };
-
-  const shouldIncludeNoteInLandlordStatement = (note = {}) => {
-    const metadata = mergeNoteUtilityMetadata(note);
-    const bik = String(metadata?.billItemKey || "").toLowerCase();
-    // Hard manager-only keys — never a landlord addition regardless of stored flag
-    if (bik === "lease_fee") return false;
-    if (bik === "other_charge") return false;
-    // Service charge is always landlord income
-    if (bik === "service_charge") return true;
-    // Late payment follows the company income rule (configurable)
-    if (bik === "late_payment") return latePenaltyToLandlord;
-    if (typeof metadata.includeInLandlordStatement === "boolean") {
-      return metadata.includeInLandlordStatement;
-    }
-    if (String(note?.noteType || "").toUpperCase() === "DEBIT_NOTE" && metadata.standaloneDebitNote === true) {
-      return true;
-    }
-    if (String(note?.category || "").toUpperCase() === "LATE_PENALTY_CHARGE") {
-      return latePenaltyToLandlord;
-    }
-    return true;
-  };
 
   const resolveDepositHolderForRecord = (record = {}, allocationRow = null) => {
     const tenantId = getEntityId(record?.tenant);
@@ -2450,7 +2452,7 @@ export const generateLandlordStatement = async ({
   let totalInvoiceTaxReceivedLandlord = 0;
 
   for (const invoice of invoicesBefore) {
-    if (!shouldIncludeInvoiceInLandlordStatement(invoice)) continue;
+    if (!accumulator.shouldIncludeInvoiceInLandlordStatement(invoice)) continue;
 
     const row = accumulator.ensureRow(invoice.tenant, invoice.unit);
     const amount = Number(invoice.amount || 0);
@@ -2463,7 +2465,7 @@ export const generateLandlordStatement = async ({
   }
 
   for (const note of notesBefore) {
-    if (!shouldIncludeNoteInLandlordStatement(note)) continue;
+    if (!accumulator.shouldIncludeNoteInLandlordStatement(note)) continue;
 
     const row = accumulator.ensureRow(note.tenant, note.unit);
     const amount = getSignedNoteAmount(note);
@@ -2683,7 +2685,7 @@ export const generateLandlordStatement = async ({
       continue;
     }
 
-    if (!shouldIncludeInvoiceInLandlordStatement(invoice)) continue;
+    if (!accumulator.shouldIncludeInvoiceInLandlordStatement(invoice)) continue;
 
     const row = accumulator.ensureRow(invoice.tenant, invoice.unit);
     const amount = Number(invoice.amount || 0);
@@ -2800,7 +2802,7 @@ export const generateLandlordStatement = async ({
       continue;
     }
 
-    if (!shouldIncludeNoteInLandlordStatement(note)) continue;
+    if (!accumulator.shouldIncludeNoteInLandlordStatement(note)) continue;
 
     const row = accumulator.ensureRow(note.tenant, note.unit);
     const amount = getSignedNoteAmount(note);
@@ -3673,13 +3675,13 @@ export const generateLandlordStatement = async ({
   // the same logic: it shows the real cash received this period, not the capped/recognised
   // paidRent figure.
   for (const invoice of invoicesBefore) {
-    if (!shouldIncludeInvoiceInLandlordStatement(invoice)) continue;
+    if (!accumulator.shouldIncludeInvoiceInLandlordStatement(invoice)) continue;
     if (invoice.category !== "RENT_CHARGE" && invoice.category !== "UTILITY_CHARGE") continue;
     const row = accumulator.ensureRow(invoice.tenant, invoice.unit);
     row.rawBalanceBF = round2(Number(row.rawBalanceBF || 0) + Number(invoice.amount || 0));
   }
   for (const note of notesBefore) {
-    if (!shouldIncludeNoteInLandlordStatement(note)) continue;
+    if (!accumulator.shouldIncludeNoteInLandlordStatement(note)) continue;
     if (note.category !== "RENT_CHARGE" && note.category !== "UTILITY_CHARGE") continue;
     const row = accumulator.ensureRow(note.tenant, note.unit);
     row.rawBalanceBF = round2(Number(row.rawBalanceBF || 0) + Number(getSignedNoteAmount(note) || 0));
@@ -4366,7 +4368,7 @@ export const generateLandlordStatement = async ({
       count: invoicesInPeriod.filter(
         (i) =>
           i.category === "RENT_CHARGE" &&
-          shouldIncludeInvoiceInLandlordStatement(i)
+          accumulator.shouldIncludeInvoiceInLandlordStatement(i)
       ).length,
       totalAmount: totalRentInvoiced,
       totalDebit: 0,
@@ -4376,7 +4378,7 @@ export const generateLandlordStatement = async ({
       count: invoicesInPeriod.filter(
         (i) =>
           i.category === "UTILITY_CHARGE" &&
-          shouldIncludeInvoiceInLandlordStatement(i)
+          accumulator.shouldIncludeInvoiceInLandlordStatement(i)
       ).length,
       totalAmount: round2(totalUtilityInvoiced),
       totalDebit: 0,
