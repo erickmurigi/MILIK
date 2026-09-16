@@ -1548,6 +1548,111 @@ const applyUtility = (row, phase, amount, hint, metadata = {}) => {
   );
 };
 
+// The accumulator that owns Phase 2's shared mutable state (Track C item 3 part 2, steps
+// 1+). Built up one method at a time, in the order reported to and approved by the user —
+// ensureRow first, since every other Phase 2 loop depends on it. Deliberately a plain
+// factory-function-returning-object-literal, matching this file's existing style (no
+// `class` used anywhere else in the codebase this file lives in) — each method still
+// closes over the factory's local state exactly as it did as a bare `generateLandlordStatement`
+// local, but now that state is scoped to one named, growable object instead of being
+// implicit in a 2,900-line function's own scope. `rowsMap` is exposed directly (not just
+// via ensureRow) because Phase 3 (tenantRows materialization) still reads it directly by
+// design — that phase hasn't been converted yet, and exposing it here avoids a premature,
+// unverified change to code outside this step's scope.
+const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap }) => {
+  const rowsMap = new Map();
+
+  const ensureRow = (tenantId, unitId, fallback = {}) => {
+    const resolvedUnitId = getEntityId(unitId || fallback.unitId || fallback.unit);
+    const unit = unitMap.get(resolvedUnitId) || {};
+    let resolvedTenantId = getEntityId(tenantId || fallback.tenantId || fallback.tenant);
+    let tenant = resolvedTenantId
+      ? tenantMap.get(resolvedTenantId) || {}
+      : {};
+
+    // A terminated tenant is fully excluded from the landlord statement, unconditionally —
+    // no date comparison. Clearing resolvedTenantId folds this into the same "vacant"
+    // bucket as the unit's current-occupancy placeholder, so the amount still counts
+    // toward the property's totals without being attributed to their name.
+    if (["terminated", "moved_out"].includes(String(tenant?.status || "").toLowerCase())) {
+      tenant = {};
+      resolvedTenantId = "";
+    }
+
+    const key = `${resolvedUnitId}:${String(tenant._id || resolvedTenantId || "vacant")}`;
+
+    // A real tenant/transaction row supersedes a "vacant" placeholder already seeded for
+    // the same unit — that placeholder only exists because no tenant currently occupies
+    // this unit (e.g. the tenant who was here this period has since been terminated, so
+    // the current-occupancy seeding step above deliberately excluded them). Once we know
+    // there was real activity here, the unit clearly wasn't vacant for that part of the
+    // period, so drop the stale placeholder rather than showing both.
+    if (!key.endsWith(":vacant")) {
+      const vacantKey = `${resolvedUnitId}:vacant`;
+      if (rowsMap.has(vacantKey)) rowsMap.delete(vacantKey);
+    }
+
+    if (!rowsMap.has(key)) {
+      const tenantSnapshot = snapshotMap.get(key);
+      // Genuine concurrent multi-unit occupancy only — tenant.unit + tenant.additionalUnits
+      // is the one place this is actually configured. This is what the "X units" badge and
+      // the Multi toggle's merge in the client are driven by: a tenant with multiple rows
+      // this period purely from transaction history (a mid-period transfer, or a stray
+      // invoice at an old unit) is NOT "multi-unit" — each such row stays its own separate,
+      // unmerged, unbadged line. Only an actual additionalUnits assignment counts.
+      const concurrentUnitIds = tenant._id
+        ? [
+            ...new Set(
+              [getEntityId(tenant.unit), ...(Array.isArray(tenant.additionalUnits) ? tenant.additionalUnits.map((id) => getEntityId(id)) : [])]
+                .filter((id) => id && unitMap.has(id))
+            ),
+          ]
+        : [];
+      const concurrentUnitLabels = concurrentUnitIds
+        .map((id) => unitMap.get(id)?.unitNumber || unitMap.get(id)?.name)
+        .filter(Boolean);
+      rowsMap.set(key, {
+        key,
+        tenantId: String(tenant._id || resolvedTenantId || ""),
+        unitId: resolvedUnitId,
+        unit: unit.unitNumber || unit.name || fallback.unitLabel || "-",
+        accountNo: tenant.tenantCode || fallback.accountNo || "-",
+        tenantName: tenant.name || fallback.tenantName || "VACANT",
+        multiUnitCount: concurrentUnitIds.length,
+        multiUnitLabels: concurrentUnitLabels,
+        perMonth: Number(tenant.rent || unit.rent || fallback.perMonth || 0),
+        balanceBF: tenantSnapshot ? round2(tenantSnapshot.balanceCF) : 0,
+        // Seeds the raw-ledger Bal B/F the same way — otherwise, whenever a prior period
+        // was approved (so this period's invoicesBefore/receiptsBefore only cover the gap
+        // since that snapshot, not full history), rawBalanceBF would start from 0 instead
+        // of picking up where the last approved statement's Bal C/F left off.
+        rawBalanceBF: tenantSnapshot ? round2(tenantSnapshot.balanceCF) : 0,
+        invoicedRent: 0,
+        invoicedGarbage: 0,
+        invoicedWater: 0,
+        paidRent: 0,
+        paidGarbage: 0,
+        paidWater: 0,
+        invoicedTax: 0,
+        paidTax: 0,
+        unappliedCredits: 0,
+        utilities: {},
+        balanceCF: 0,
+        unitUtilities: Array.isArray(unit.utilities) ? unit.utilities : [],
+        tenantUtilities: Array.isArray(tenant.utilities) ? tenant.utilities : [],
+        referenceNumbers: [],
+      });
+    }
+
+    return rowsMap.get(key);
+  };
+
+  return {
+    rowsMap,
+    ensureRow,
+  };
+};
+
 // Phase 0 of generateLandlordStatement (Track C item 3 part 2, batch 2): validates the
 // inputs, fetches property + landlord, resolves the effective statement window (including
 // the snapshot cursor a prior PROCESSED statement left behind), and derives the handful of
@@ -2137,92 +2242,7 @@ export const generateLandlordStatement = async ({
     lastApproved,
   });
 
-  const rowsMap = new Map();
-
-  const ensureRow = (tenantId, unitId, fallback = {}) => {
-    const resolvedUnitId = getEntityId(unitId || fallback.unitId || fallback.unit);
-    const unit = unitMap.get(resolvedUnitId) || {};
-    let resolvedTenantId = getEntityId(tenantId || fallback.tenantId || fallback.tenant);
-    let tenant = resolvedTenantId
-      ? tenantMap.get(resolvedTenantId) || {}
-      : {};
-
-    // A terminated tenant is fully excluded from the landlord statement, unconditionally —
-    // no date comparison. Clearing resolvedTenantId folds this into the same "vacant"
-    // bucket as the unit's current-occupancy placeholder, so the amount still counts
-    // toward the property's totals without being attributed to their name.
-    if (["terminated", "moved_out"].includes(String(tenant?.status || "").toLowerCase())) {
-      tenant = {};
-      resolvedTenantId = "";
-    }
-
-    const key = `${resolvedUnitId}:${String(tenant._id || resolvedTenantId || "vacant")}`;
-
-    // A real tenant/transaction row supersedes a "vacant" placeholder already seeded for
-    // the same unit — that placeholder only exists because no tenant currently occupies
-    // this unit (e.g. the tenant who was here this period has since been terminated, so
-    // the current-occupancy seeding step above deliberately excluded them). Once we know
-    // there was real activity here, the unit clearly wasn't vacant for that part of the
-    // period, so drop the stale placeholder rather than showing both.
-    if (!key.endsWith(":vacant")) {
-      const vacantKey = `${resolvedUnitId}:vacant`;
-      if (rowsMap.has(vacantKey)) rowsMap.delete(vacantKey);
-    }
-
-    if (!rowsMap.has(key)) {
-      const tenantSnapshot = snapshotMap.get(key);
-      // Genuine concurrent multi-unit occupancy only — tenant.unit + tenant.additionalUnits
-      // is the one place this is actually configured. This is what the "X units" badge and
-      // the Multi toggle's merge in the client are driven by: a tenant with multiple rows
-      // this period purely from transaction history (a mid-period transfer, or a stray
-      // invoice at an old unit) is NOT "multi-unit" — each such row stays its own separate,
-      // unmerged, unbadged line. Only an actual additionalUnits assignment counts.
-      const concurrentUnitIds = tenant._id
-        ? [
-            ...new Set(
-              [getEntityId(tenant.unit), ...(Array.isArray(tenant.additionalUnits) ? tenant.additionalUnits.map((id) => getEntityId(id)) : [])]
-                .filter((id) => id && unitMap.has(id))
-            ),
-          ]
-        : [];
-      const concurrentUnitLabels = concurrentUnitIds
-        .map((id) => unitMap.get(id)?.unitNumber || unitMap.get(id)?.name)
-        .filter(Boolean);
-      rowsMap.set(key, {
-        key,
-        tenantId: String(tenant._id || resolvedTenantId || ""),
-        unitId: resolvedUnitId,
-        unit: unit.unitNumber || unit.name || fallback.unitLabel || "-",
-        accountNo: tenant.tenantCode || fallback.accountNo || "-",
-        tenantName: tenant.name || fallback.tenantName || "VACANT",
-        multiUnitCount: concurrentUnitIds.length,
-        multiUnitLabels: concurrentUnitLabels,
-        perMonth: Number(tenant.rent || unit.rent || fallback.perMonth || 0),
-        balanceBF: tenantSnapshot ? round2(tenantSnapshot.balanceCF) : 0,
-        // Seeds the raw-ledger Bal B/F the same way — otherwise, whenever a prior period
-        // was approved (so this period's invoicesBefore/receiptsBefore only cover the gap
-        // since that snapshot, not full history), rawBalanceBF would start from 0 instead
-        // of picking up where the last approved statement's Bal C/F left off.
-        rawBalanceBF: tenantSnapshot ? round2(tenantSnapshot.balanceCF) : 0,
-        invoicedRent: 0,
-        invoicedGarbage: 0,
-        invoicedWater: 0,
-        paidRent: 0,
-        paidGarbage: 0,
-        paidWater: 0,
-        invoicedTax: 0,
-        paidTax: 0,
-        unappliedCredits: 0,
-        utilities: {},
-        balanceCF: 0,
-        unitUtilities: Array.isArray(unit.utilities) ? unit.utilities : [],
-        tenantUtilities: Array.isArray(tenant.utilities) ? tenant.utilities : [],
-        referenceNumbers: [],
-      });
-    }
-
-    return rowsMap.get(key);
-  };
+  const accumulator = createStatementAccumulator({ unitMap, tenantMap, snapshotMap });
 
   units.forEach((unit) => {
     const unitTenants = (tenantsByUnit.get(String(unit._id)) || []).sort(
@@ -2234,9 +2254,9 @@ export const generateLandlordStatement = async ({
     );
 
     if (unitTenants.length > 0) {
-      unitTenants.forEach((tenant) => ensureRow(tenant._id, unit._id));
+      unitTenants.forEach((tenant) => accumulator.ensureRow(tenant._id, unit._id));
     } else {
-      ensureRow(null, unit._id, { tenantName: "VACANT" });
+      accumulator.ensureRow(null, unit._id, { tenantName: "VACANT" });
     }
   });
 
@@ -2430,7 +2450,7 @@ export const generateLandlordStatement = async ({
   for (const invoice of invoicesBefore) {
     if (!shouldIncludeInvoiceInLandlordStatement(invoice)) continue;
 
-    const row = ensureRow(invoice.tenant, invoice.unit);
+    const row = accumulator.ensureRow(invoice.tenant, invoice.unit);
     const amount = Number(invoice.amount || 0);
 
     if (invoice.category === "RENT_CHARGE") {
@@ -2443,7 +2463,7 @@ export const generateLandlordStatement = async ({
   for (const note of notesBefore) {
     if (!shouldIncludeNoteInLandlordStatement(note)) continue;
 
-    const row = ensureRow(note.tenant, note.unit);
+    const row = accumulator.ensureRow(note.tenant, note.unit);
     const amount = getSignedNoteAmount(note);
 
     if (note.category === "RENT_CHARGE") {
@@ -2464,7 +2484,7 @@ export const generateLandlordStatement = async ({
   }
 
   for (const receipt of receiptsBefore) {
-    const defaultRow = ensureRow(receipt.tenant, receipt.unit);
+    const defaultRow = accumulator.ensureRow(receipt.tenant, receipt.unit);
     const allocationRows = getReceiptAllocationRows(receipt);
     const unappliedAllocated = getReceiptSummaryAmount(receipt, "unapplied");
 
@@ -2497,7 +2517,7 @@ export const generateLandlordStatement = async ({
         // not the receipt's own top-level unit field. Falls back to the receipt's unit
         // only when the source can't be resolved (a debit note, or a pure prepayment
         // placeholder row with no linked invoice at all).
-        const row = ensureRow(receipt.tenant, sourceInvoice?.unit || receipt.unit);
+        const row = accumulator.ensureRow(receipt.tenant, sourceInvoice?.unit || receipt.unit);
         const impact = getReceiptAllocationStatementImpact({
           allocationRow,
           sourceInvoice,
@@ -2641,7 +2661,7 @@ export const generateLandlordStatement = async ({
       if (!receipt.bookingDate) continue;
       const payTime = new Date(receipt.paymentDate || 0).getTime();
       if (payTime >= periodStart.getTime()) continue;
-      const row = ensureRow(receipt.tenant, receipt.unit);
+      const row = accumulator.ensureRow(receipt.tenant, receipt.unit);
       row.balanceBF = round2(row.balanceBF + Number(receipt.amount || 0));
     }
   }
@@ -2656,14 +2676,14 @@ export const generateLandlordStatement = async ({
       // (those drive the "Deposits You Now Hold" remittance addition, which must reflect
       // deposits actually COLLECTED via a receipt; a merely-billed, unpaid deposit invoice
       // must never inflate what the manager owes to remit).
-      const depositRow = ensureRow(invoice.tenant, invoice.unit);
+      const depositRow = accumulator.ensureRow(invoice.tenant, invoice.unit);
       registerDepositAmount(depositRow, "invoice", Number(invoice.amount || 0));
       continue;
     }
 
     if (!shouldIncludeInvoiceInLandlordStatement(invoice)) continue;
 
-    const row = ensureRow(invoice.tenant, invoice.unit);
+    const row = accumulator.ensureRow(invoice.tenant, invoice.unit);
     const amount = Number(invoice.amount || 0);
     const taxSplit = getInvoiceTaxSplit({ amount, taxSnapshot: invoice?.taxSnapshot || {} });
     const combinedSplit =
@@ -2773,14 +2793,14 @@ export const generateLandlordStatement = async ({
     if (note.category === "DEPOSIT_CHARGE") {
       // See the matching comment in the invoicesInPeriod loop above — the deposit memo
       // buckets stay receipt-driven only; this feeds just the display-only column.
-      const depositRow = ensureRow(note.tenant, note.unit);
+      const depositRow = accumulator.ensureRow(note.tenant, note.unit);
       registerDepositAmount(depositRow, "invoice", getSignedNoteAmount(note));
       continue;
     }
 
     if (!shouldIncludeNoteInLandlordStatement(note)) continue;
 
-    const row = ensureRow(note.tenant, note.unit);
+    const row = accumulator.ensureRow(note.tenant, note.unit);
     const amount = getSignedNoteAmount(note);
     const noteMetadata = mergeNoteUtilityMetadata(note);
 
@@ -2855,7 +2875,7 @@ export const generateLandlordStatement = async ({
   }
 
   for (const receipt of receiptsInPeriod) {
-    const row = ensureRow(receipt.tenant, receipt.unit);
+    const row = accumulator.ensureRow(receipt.tenant, receipt.unit);
     const amount = Number(receipt.amount || 0);
     const allocationRows = getReceiptAllocationRows(receipt);
     const description = buildGroupedReceiptDescription({
@@ -3170,14 +3190,14 @@ export const generateLandlordStatement = async ({
     // Deposit paid this period, on the tenant's row — whichever party ends up holding it.
     // A memo column only (see registerDepositAmount); never affects the rent-ledger balance.
     if (depositBreakdown.total > 0) {
-      registerDepositAmount(ensureRow(receipt.tenant, receipt.unit), "receipt", depositBreakdown.total);
+      registerDepositAmount(accumulator.ensureRow(receipt.tenant, receipt.unit), "receipt", depositBreakdown.total);
     }
 
     const amount = round2(Number(depositBreakdown.landlord || 0));
     if (amount <= 0) continue;
 
     const depositHolder = "landlord";
-    const row = ensureRow(receipt.tenant, receipt.unit);
+    const row = accumulator.ensureRow(receipt.tenant, receipt.unit);
     const sourceId = String(receipt._id || "");
     const additionDescription = receipt.paidDirectToLandlord
       ? `Deposit collected directly - ${row.tenantName}`
@@ -3277,7 +3297,7 @@ export const generateLandlordStatement = async ({
     // unapplied for a deposit-type receipt, so it must be recognised here — same rule as
     // the main receiptsInPeriod loop: always an unapplied credit, and under "on_receipt"
     // also counted as paidRent immediately.
-    const unappliedRow = ensureRow(receipt.tenant, receipt.unit);
+    const unappliedRow = accumulator.ensureRow(receipt.tenant, receipt.unit);
     const depositReceiptUnapplied = getReceiptSummaryAmount(receipt, "unapplied");
     if (depositReceiptUnapplied !== 0) {
       unappliedRow.unappliedCredits += depositReceiptUnapplied;
@@ -3300,7 +3320,7 @@ export const generateLandlordStatement = async ({
     });
     if (!mixedHasNonDeposit) continue;
 
-    const mixedRow = ensureRow(receipt.tenant, receipt.unit);
+    const mixedRow = accumulator.ensureRow(receipt.tenant, receipt.unit);
     let mixedRent = 0;
     let mixedUtility = 0;
     let mixedTax = 0;
@@ -3653,13 +3673,13 @@ export const generateLandlordStatement = async ({
   for (const invoice of invoicesBefore) {
     if (!shouldIncludeInvoiceInLandlordStatement(invoice)) continue;
     if (invoice.category !== "RENT_CHARGE" && invoice.category !== "UTILITY_CHARGE") continue;
-    const row = ensureRow(invoice.tenant, invoice.unit);
+    const row = accumulator.ensureRow(invoice.tenant, invoice.unit);
     row.rawBalanceBF = round2(Number(row.rawBalanceBF || 0) + Number(invoice.amount || 0));
   }
   for (const note of notesBefore) {
     if (!shouldIncludeNoteInLandlordStatement(note)) continue;
     if (note.category !== "RENT_CHARGE" && note.category !== "UTILITY_CHARGE") continue;
-    const row = ensureRow(note.tenant, note.unit);
+    const row = accumulator.ensureRow(note.tenant, note.unit);
     row.rawBalanceBF = round2(Number(row.rawBalanceBF || 0) + Number(getSignedNoteAmount(note) || 0));
   }
   // A receipt's FULL amount is not automatically rent-ledger cash — it may also cover a
@@ -3708,15 +3728,15 @@ export const generateLandlordStatement = async ({
     if (snapshotDate && Number.isFinite(recognitionTime) && recognitionTime < snapshotDate.getTime()) {
       continue;
     }
-    const row = ensureRow(receipt.tenant, receipt.unit);
+    const row = accumulator.ensureRow(receipt.tenant, receipt.unit);
     row.rawBalanceBF = round2(Number(row.rawBalanceBF || 0) - getReceiptRentLedgerCash(receipt));
   }
   for (const receipt of receiptsInPeriod) {
-    const row = ensureRow(receipt.tenant, receipt.unit);
+    const row = accumulator.ensureRow(receipt.tenant, receipt.unit);
     row.rawReceivedThisPeriod = round2(Number(row.rawReceivedThisPeriod || 0) + getReceiptRentLedgerCash(receipt));
   }
 
-  const tenantRows = Array.from(rowsMap.values())
+  const tenantRows = Array.from(accumulator.rowsMap.values())
     .map((row) => {
       row.balanceBF = round2(Number(row.rawBalanceBF || 0));
       row.invoicedRent = round2(row.invoicedRent);
@@ -4120,7 +4140,7 @@ export const generateLandlordStatement = async ({
     .filter((r) => r.paidDirectToLandlord)
     .sort((a, b) => new Date(a.paymentDate) - new Date(b.paymentDate))
     .map((r) => {
-      const row = ensureRow(r.tenant, r.unit);
+      const row = accumulator.ensureRow(r.tenant, r.unit);
       const paymentType = String(r.paymentType || "rent").toLowerCase();
       const typeLabel = paymentType === "utility" ? "Utilities" : paymentType === "deposit" ? "Deposit" : "Rent";
       return {
