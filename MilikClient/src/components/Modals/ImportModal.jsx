@@ -20,6 +20,10 @@ const ImportModal = ({
   downloadTemplate,
   accept = ".xlsx,.xls",
   maxWidthClass = "max-w-5xl",
+  // Matches the original per-type modal's own z-index. Most types used z-50 (the default);
+  // Products used z-[130] to match components/common/Modal.jsx's own z-index, since
+  // InvProducts.jsx also renders that generic Modal (for Add/Edit) on the same page.
+  zIndexClass = "z-50",
   // (errorItem) => string — label shown next to "Row N" in the pre-submit Validation
   // Errors panel. Defaults to the row's own title/fullName field (the original Sale
   // Buyers/Listings shape); other import types pass their own field, e.g. e.data?.propertyName.
@@ -102,7 +106,7 @@ const ImportModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+    <div className={`fixed inset-0 ${zIndexClass} flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center`}>
       <div className={`flex max-h-[90vh] w-full ${maxWidthClass} flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl`}>
 
         {/* Header */}

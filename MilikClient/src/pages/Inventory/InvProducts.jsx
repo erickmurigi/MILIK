@@ -7,7 +7,8 @@ import {
   FaEdit, FaFileImport, FaFilter, FaPlus, FaRedoAlt, FaSearch, FaTimes,
   FaToggleOff, FaToggleOn, FaTrash,
 } from "react-icons/fa";
-import ProductsImportModal from "../../components/Modals/ProductsImportModal";
+import ImportModal from "../../components/Modals/ImportModal";
+import { parseProductsExcel, downloadProductsTemplate } from "../../utils/excelTemplates";
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
 import { inventoryApi, formatMoney } from "../../services/inventoryApi";
@@ -306,7 +307,16 @@ const InvProducts = () => {
     const result = await inventoryApi.bulkImportProducts(rows);
     queryClient.invalidateQueries({ queryKey: ['inv-products'] });
     queryClient.invalidateQueries({ queryKey: ['inv-products-ref'] });
-    return result;
+    // Products' backend uses its own { created, skipped, errors: [{row,name,reason}] }
+    // contract (not { successful, failed } like every other import type) — normalize it
+    // here, at the one place that already knows this type's shape, rather than teaching
+    // the shared ImportModal to guess between response contracts.
+    const created = result?.created ?? 0;
+    const errors = Array.isArray(result?.errors) ? result.errors : [];
+    return {
+      successful: Array.from({ length: created }),
+      failed: errors.map((e) => ({ row: e.row, name: e.name, error: e.reason })),
+    };
   };
 
   const openAdd = () => { setEditing(null); setForm(emptyForm()); setShowModal(true); };
@@ -714,10 +724,35 @@ const InvProducts = () => {
         <StockCardModal product={stockCardProduct} onClose={() => setStockCardProduct(null)} />
       )}
 
-      <ProductsImportModal
+      <ImportModal
         isOpen={showImport}
         onClose={() => setShowImport(false)}
+        title="Import Products from Excel / CSV"
+        entityName="product"
+        parseFile={parseProductsExcel}
+        downloadTemplate={downloadProductsTemplate}
         onImport={handleImport}
+        accept=".xlsx,.xls,.csv"
+        maxWidthClass="max-w-4xl"
+        zIndexClass="z-[130]"
+        getErrorRowLabel={(e) => e.name}
+        getFailureRowLabel={(f) => f.name}
+        previewCols={[
+          { header: "Name", render: (r) => <span className="font-semibold">{r.name}</span> },
+          { header: "SKU", render: (r) => <span className="font-mono text-slate-500">{r.sku || "—"}</span> },
+          { header: "Category", render: (r) => r.category || "—" },
+          { header: "Selling Price", render: (r) => <span className="tabular-nums">{Number(r.sellingPrice).toLocaleString()}</span> },
+          { header: "Cost", render: (r) => <span className="tabular-nums text-slate-500">{Number(r.costPrice).toLocaleString()}</span> },
+          { header: "VAT", render: (r) => `${r.vatRate}%` },
+          { header: "Track Stock", render: (r) => (
+            <span className={`inline-flex border px-1.5 py-0.5 text-[9px] font-extrabold uppercase ${r.trackStock ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-400"}`}>
+              {r.trackStock ? "Yes" : "No"}
+            </span>
+          ) },
+          { header: "Serialized", render: (r) => r.serialized ? (
+            <span className="inline-flex border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[9px] font-extrabold uppercase text-violet-700">Serial</span>
+          ) : null },
+        ]}
       />
 
       {confirmDelete && (
