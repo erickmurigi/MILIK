@@ -1838,6 +1838,31 @@ const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap, latePenal
     return cash;
   };
 
+  // Prerequisite for steps 9-11 (Track C item 3 part 2): these six running totals and the
+  // broughtForward* state are mutated by all three of the loops those steps extract
+  // (receiptsBefore, receiptsInPeriod, the mixed-deposit-allocation loop), then read in
+  // Phase 5/6/7. Unlike rowsMap/entries/depositSettlementRows etc., these were plain `let`
+  // numbers, not objects — a `let` returned from this factory would be a one-time copy, not
+  // a live reference, so half-converting only the loop(s) already extracted would leave two
+  // independent copies of the same total silently drifting apart across the not-yet-
+  // extracted loops. Wrapped in one mutable object (collectionTotals) so every consumer,
+  // extracted or not, mutates and reads the same underlying state.
+  const broughtForwardCreditApplicationRows = [];
+  const broughtForwardCreditApplicationTotals = {
+    totalApplied: 0,
+    rentApplied: 0,
+    utilityApplied: 0,
+    taxApplied: 0,
+  };
+  const collectionTotals = {
+    rentReceivedManager: 0,
+    rentReceivedLandlord: 0,
+    utilityReceivedManager: 0,
+    utilityReceivedLandlord: 0,
+    invoiceTaxReceivedManager: 0,
+    invoiceTaxReceivedLandlord: 0,
+  };
+
   return {
     rowsMap,
     ensureRow,
@@ -1852,6 +1877,9 @@ const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap, latePenal
     depositMemoBuckets,
     applyDepositReceiptToMemo,
     getReceiptRentLedgerCash,
+    broughtForwardCreditApplicationRows,
+    broughtForwardCreditApplicationTotals,
+    collectionTotals,
   };
 };
 
@@ -2471,26 +2499,6 @@ export const generateLandlordStatement = async ({
     receiptsInPeriod.filter((receipt) => hasAnyDepositReceiptAllocation(receipt, accumulator.resolveDepositHolderForRecord))
   );
 
-  const broughtForwardCreditApplicationRows = [];
-  const broughtForwardCreditApplicationTotals = {
-    totalApplied: 0,
-    rentApplied: 0,
-    utilityApplied: 0,
-    taxApplied: 0,
-  };
-
-  // Declared here (rather than after the current-period invoice loop below) so the
-  // brought-forward credit-application loop can also feed them: a prior-period prepayment
-  // that gets applied to a charge dated in THIS period is real cash recognised for the
-  // first time this period, and must be counted in this period's collections exactly once —
-  // see the "sourceInCurrentPeriod" branch inside the receiptsBefore loop.
-  let totalRentReceivedManager = 0;
-  let totalRentReceivedLandlord = 0;
-  let totalUtilityReceivedManager = 0;
-  let totalUtilityReceivedLandlord = 0;
-  let totalInvoiceTaxReceivedManager = 0;
-  let totalInvoiceTaxReceivedLandlord = 0;
-
   for (const invoice of invoicesBefore) {
     if (!accumulator.shouldIncludeInvoiceInLandlordStatement(invoice)) continue;
 
@@ -2610,7 +2618,7 @@ export const generateLandlordStatement = async ({
           const appliedDocumentReference =
             sourceInvoice?.invoiceNumber || allocationRow?.invoiceNumber || allocationRow?.description || "Charge";
 
-          broughtForwardCreditApplicationRows.push({
+          accumulator.broughtForwardCreditApplicationRows.push({
             date: getReceiptStatementDate(receipt) || receipt.paymentDate,
             receiptDate: receipt.paymentDate,
             chargeDate: sourceInvoiceDate,
@@ -2627,17 +2635,17 @@ export const generateLandlordStatement = async ({
             sourceId: `${String(receipt._id || "")}:${String(sourceInvoice?._id || allocationRow?.invoice || allocationRow?.invoiceId || "")}`,
           });
 
-          broughtForwardCreditApplicationTotals.totalApplied = round2(
-            broughtForwardCreditApplicationTotals.totalApplied + grossAppliedAmount
+          accumulator.broughtForwardCreditApplicationTotals.totalApplied = round2(
+            accumulator.broughtForwardCreditApplicationTotals.totalApplied + grossAppliedAmount
           );
-          broughtForwardCreditApplicationTotals.rentApplied = round2(
-            broughtForwardCreditApplicationTotals.rentApplied + rentApplied
+          accumulator.broughtForwardCreditApplicationTotals.rentApplied = round2(
+            accumulator.broughtForwardCreditApplicationTotals.rentApplied + rentApplied
           );
-          broughtForwardCreditApplicationTotals.utilityApplied = round2(
-            broughtForwardCreditApplicationTotals.utilityApplied + utilityApplied
+          accumulator.broughtForwardCreditApplicationTotals.utilityApplied = round2(
+            accumulator.broughtForwardCreditApplicationTotals.utilityApplied + utilityApplied
           );
-          broughtForwardCreditApplicationTotals.taxApplied = round2(
-            broughtForwardCreditApplicationTotals.taxApplied + taxApplied
+          accumulator.broughtForwardCreditApplicationTotals.taxApplied = round2(
+            accumulator.broughtForwardCreditApplicationTotals.taxApplied + taxApplied
           );
 
           // Recognise this as an actual collection for THIS period — this is the period
@@ -2653,8 +2661,8 @@ export const generateLandlordStatement = async ({
 
             if (rentRecognized !== 0) {
               row.paidRent += rentRecognized;
-              if (receipt.paidDirectToLandlord) totalRentReceivedLandlord += rentRecognized;
-              else totalRentReceivedManager += rentRecognized;
+              if (receipt.paidDirectToLandlord) accumulator.collectionTotals.rentReceivedLandlord += rentRecognized;
+              else accumulator.collectionTotals.rentReceivedManager += rentRecognized;
             }
 
             if (utilityRecognized !== 0) {
@@ -2677,14 +2685,14 @@ export const generateLandlordStatement = async ({
                 applyUtility(row, "receipt", utilityRecognized, appliedDocumentReference || "");
               }
 
-              if (receipt.paidDirectToLandlord) totalUtilityReceivedLandlord += utilityRecognized;
-              else totalUtilityReceivedManager += utilityRecognized;
+              if (receipt.paidDirectToLandlord) accumulator.collectionTotals.utilityReceivedLandlord += utilityRecognized;
+              else accumulator.collectionTotals.utilityReceivedManager += utilityRecognized;
             }
 
             if (taxRecognized !== 0) {
               row.paidTax += taxRecognized;
-              if (receipt.paidDirectToLandlord) totalInvoiceTaxReceivedLandlord += taxRecognized;
-              else totalInvoiceTaxReceivedManager += taxRecognized;
+              if (receipt.paidDirectToLandlord) accumulator.collectionTotals.invoiceTaxReceivedLandlord += taxRecognized;
+              else accumulator.collectionTotals.invoiceTaxReceivedManager += taxRecognized;
             }
           }
         }
@@ -3036,8 +3044,8 @@ export const generateLandlordStatement = async ({
 
     if (rentAllocated !== 0) {
       row.paidRent += rentAllocated;
-      if (receipt.paidDirectToLandlord) totalRentReceivedLandlord += rentAllocated;
-      else totalRentReceivedManager += rentAllocated;
+      if (receipt.paidDirectToLandlord) accumulator.collectionTotals.rentReceivedLandlord += rentAllocated;
+      else accumulator.collectionTotals.rentReceivedManager += rentAllocated;
     }
 
     if (utilityAllocated !== 0) {
@@ -3062,18 +3070,18 @@ export const generateLandlordStatement = async ({
       }
 
       if (receipt.paidDirectToLandlord) {
-        totalUtilityReceivedLandlord += utilityAllocated;
+        accumulator.collectionTotals.utilityReceivedLandlord += utilityAllocated;
       } else {
-        totalUtilityReceivedManager += utilityAllocated;
+        accumulator.collectionTotals.utilityReceivedManager += utilityAllocated;
       }
     }
 
     if (taxAllocated !== 0) {
       row.paidTax += taxAllocated;
       if (receipt.paidDirectToLandlord) {
-        totalInvoiceTaxReceivedLandlord += taxAllocated;
+        accumulator.collectionTotals.invoiceTaxReceivedLandlord += taxAllocated;
       } else {
-        totalInvoiceTaxReceivedManager += taxAllocated;
+        accumulator.collectionTotals.invoiceTaxReceivedManager += taxAllocated;
       }
     }
 
@@ -3085,8 +3093,8 @@ export const generateLandlordStatement = async ({
       // allocation" leaves it purely as a credit until its rent is billed.
       if (prepaymentRecognition === "on_receipt") {
         row.paidRent += unappliedAllocated;
-        if (receipt.paidDirectToLandlord) totalRentReceivedLandlord += unappliedAllocated;
-        else totalRentReceivedManager += unappliedAllocated;
+        if (receipt.paidDirectToLandlord) accumulator.collectionTotals.rentReceivedLandlord += unappliedAllocated;
+        else accumulator.collectionTotals.rentReceivedManager += unappliedAllocated;
       }
     }
 
@@ -3124,8 +3132,8 @@ export const generateLandlordStatement = async ({
         }
       }
       row.paidRent += fallbackRent;
-      if (receipt.paidDirectToLandlord) totalRentReceivedLandlord += fallbackRent;
-      else totalRentReceivedManager += fallbackRent;
+      if (receipt.paidDirectToLandlord) accumulator.collectionTotals.rentReceivedLandlord += fallbackRent;
+      else accumulator.collectionTotals.rentReceivedManager += fallbackRent;
     } else if (
       allocationRows.length === 0 &&
       rentAllocated === 0 &&
@@ -3136,8 +3144,8 @@ export const generateLandlordStatement = async ({
       receipt.paymentType === "utility"
     ) {
       applyUtility(row, "receipt", amount, receipt.description || "");
-      if (receipt.paidDirectToLandlord) totalUtilityReceivedLandlord += amount;
-      else totalUtilityReceivedManager += amount;
+      if (receipt.paidDirectToLandlord) accumulator.collectionTotals.utilityReceivedLandlord += amount;
+      else accumulator.collectionTotals.utilityReceivedManager += amount;
     }
 
     if (receipt.referenceNumber) row.referenceNumbers.push(receipt.referenceNumber);
@@ -3350,8 +3358,8 @@ export const generateLandlordStatement = async ({
       unappliedRow.rawReceivedThisPeriod = round2(Number(unappliedRow.rawReceivedThisPeriod || 0) + depositReceiptUnapplied);
       if (prepaymentRecognition === "on_receipt") {
         unappliedRow.paidRent += depositReceiptUnapplied;
-        if (receipt.paidDirectToLandlord) totalRentReceivedLandlord += depositReceiptUnapplied;
-        else totalRentReceivedManager += depositReceiptUnapplied;
+        if (receipt.paidDirectToLandlord) accumulator.collectionTotals.rentReceivedLandlord += depositReceiptUnapplied;
+        else accumulator.collectionTotals.rentReceivedManager += depositReceiptUnapplied;
       }
     }
 
@@ -3401,17 +3409,17 @@ export const generateLandlordStatement = async ({
 
     if (mixedRent !== 0) {
       mixedRow.paidRent += mixedRent;
-      if (receipt.paidDirectToLandlord) totalRentReceivedLandlord += mixedRent;
-      else totalRentReceivedManager += mixedRent;
+      if (receipt.paidDirectToLandlord) accumulator.collectionTotals.rentReceivedLandlord += mixedRent;
+      else accumulator.collectionTotals.rentReceivedManager += mixedRent;
     }
     if (mixedUtility !== 0) {
-      if (receipt.paidDirectToLandlord) totalUtilityReceivedLandlord += mixedUtility;
-      else totalUtilityReceivedManager += mixedUtility;
+      if (receipt.paidDirectToLandlord) accumulator.collectionTotals.utilityReceivedLandlord += mixedUtility;
+      else accumulator.collectionTotals.utilityReceivedManager += mixedUtility;
     }
     if (mixedTax !== 0) {
       mixedRow.paidTax += mixedTax;
-      if (receipt.paidDirectToLandlord) totalInvoiceTaxReceivedLandlord += mixedTax;
-      else totalInvoiceTaxReceivedManager += mixedTax;
+      if (receipt.paidDirectToLandlord) accumulator.collectionTotals.invoiceTaxReceivedLandlord += mixedTax;
+      else accumulator.collectionTotals.invoiceTaxReceivedManager += mixedTax;
     }
   }
 
@@ -3918,7 +3926,7 @@ export const generateLandlordStatement = async ({
     commissionBaseLabel = "Rent invoiced";
   }
   if (recognitionBasis === "received_manager_only") {
-    commissionBase = totalRentReceivedManager;
+    commissionBase = accumulator.collectionTotals.rentReceivedManager;
     commissionBaseLabel = "Manager-held rent received";
   }
 
@@ -3999,13 +4007,13 @@ export const generateLandlordStatement = async ({
   }
 
   const managerCollections = round2(
-    totalRentReceivedManager + totalUtilityReceivedManager + totalInvoiceTaxReceivedManager
+    accumulator.collectionTotals.rentReceivedManager + accumulator.collectionTotals.utilityReceivedManager + accumulator.collectionTotals.invoiceTaxReceivedManager
   );
   const directToLandlordCollections = round2(
-    totalRentReceivedLandlord + totalUtilityReceivedLandlord + totalInvoiceTaxReceivedLandlord
+    accumulator.collectionTotals.rentReceivedLandlord + accumulator.collectionTotals.utilityReceivedLandlord + accumulator.collectionTotals.invoiceTaxReceivedLandlord
   );
-  const directRentCollections = round2(totalRentReceivedLandlord);
-  const directUtilityCollections = round2(totalUtilityReceivedLandlord + totalInvoiceTaxReceivedLandlord);
+  const directRentCollections = round2(accumulator.collectionTotals.rentReceivedLandlord);
+  const directUtilityCollections = round2(accumulator.collectionTotals.utilityReceivedLandlord + accumulator.collectionTotals.invoiceTaxReceivedLandlord);
   // Informational only — deposit is a liability, not income, so this deliberately never
   // feeds directToLandlordCollections/totalCollections above. It's purely the "of which"
   // breakdown for the Payments Collected Directly by Landlord table's own total.
@@ -4032,15 +4040,15 @@ export const generateLandlordStatement = async ({
   // built from) sums back to exactly what managerCollections used to equal.
   const usesExpectedRentSettlement = recognitionBasis === "invoiced";
   const settlementBasisAmount = round2(
-    usesExpectedRentSettlement ? totalRentInvoiced : totalRentReceivedManager
+    usesExpectedRentSettlement ? totalRentInvoiced : accumulator.collectionTotals.rentReceivedManager
   );
   const settlementBasisLabel = usesExpectedRentSettlement ? "Rent Invoiced" : "Rent Received";
   const utilityPassThroughAmount = round2(
-    usesExpectedRentSettlement ? totalUtilityInvoiced : totalUtilityReceivedManager
+    usesExpectedRentSettlement ? totalUtilityInvoiced : accumulator.collectionTotals.utilityReceivedManager
   );
   const utilityPassThroughLabel = usesExpectedRentSettlement ? "Utility Invoiced" : "Utility Received";
   const invoiceVatPassThroughAmount = round2(
-    usesExpectedRentSettlement ? totalInvoiceVatInvoiced : totalInvoiceTaxReceivedManager
+    usesExpectedRentSettlement ? totalInvoiceVatInvoiced : accumulator.collectionTotals.invoiceTaxReceivedManager
   );
   const invoiceVatPassThroughLabel = usesExpectedRentSettlement ? "VAT Invoiced" : "VAT Received";
   const settlementCollections = round2(
@@ -4262,14 +4270,14 @@ export const generateLandlordStatement = async ({
       },
     },
     broughtForwardCreditApplications: {
-      rows: broughtForwardCreditApplicationRows.sort(
+      rows: accumulator.broughtForwardCreditApplicationRows.sort(
         (a, b) => new Date(a.chargeDate || a.date || 0) - new Date(b.chargeDate || b.date || 0)
       ),
       totals: {
-        totalApplied: round2(broughtForwardCreditApplicationTotals.totalApplied),
-        rentApplied: round2(broughtForwardCreditApplicationTotals.rentApplied),
-        utilityApplied: round2(broughtForwardCreditApplicationTotals.utilityApplied),
-        taxApplied: round2(broughtForwardCreditApplicationTotals.taxApplied),
+        totalApplied: round2(accumulator.broughtForwardCreditApplicationTotals.totalApplied),
+        rentApplied: round2(accumulator.broughtForwardCreditApplicationTotals.rentApplied),
+        utilityApplied: round2(accumulator.broughtForwardCreditApplicationTotals.utilityApplied),
+        taxApplied: round2(accumulator.broughtForwardCreditApplicationTotals.taxApplied),
       },
     },
     rowCount: filteredTenantRows.length,
@@ -4298,11 +4306,11 @@ export const generateLandlordStatement = async ({
       managerCollections,
       totalCollections,
       totalRentReceived: totalRentReceived,
-      totalRentReceivedManager: totalRentReceivedManager,
-      totalRentReceivedLandlord: totalRentReceivedLandlord,
+      totalRentReceivedManager: accumulator.collectionTotals.rentReceivedManager,
+      totalRentReceivedLandlord: accumulator.collectionTotals.rentReceivedLandlord,
       totalInvoiceVatReceived,
-      totalInvoiceVatReceivedManager: round2(totalInvoiceTaxReceivedManager),
-      totalInvoiceVatReceivedLandlord: round2(totalInvoiceTaxReceivedLandlord),
+      totalInvoiceVatReceivedManager: round2(accumulator.collectionTotals.invoiceTaxReceivedManager),
+      totalInvoiceVatReceivedLandlord: round2(accumulator.collectionTotals.invoiceTaxReceivedLandlord),
       totalUtilityCollected,
       totalDepositCollected,
       unappliedPayments: round2(filteredTenantRows.reduce((sum, row) => sum + Number(row.unappliedCredits || 0), 0)),
@@ -4350,10 +4358,10 @@ export const generateLandlordStatement = async ({
       depositSettlementAdditions: round2(accumulator.depositSettlementTotals.additions),
       depositSettlementOffsets: round2(accumulator.depositSettlementTotals.offsets),
       depositSettlementNet,
-      broughtForwardCreditsApplied: round2(broughtForwardCreditApplicationTotals.totalApplied),
-      broughtForwardCreditsAppliedRent: round2(broughtForwardCreditApplicationTotals.rentApplied),
-      broughtForwardCreditsAppliedUtility: round2(broughtForwardCreditApplicationTotals.utilityApplied),
-      broughtForwardCreditsAppliedTax: round2(broughtForwardCreditApplicationTotals.taxApplied),
+      broughtForwardCreditsApplied: round2(accumulator.broughtForwardCreditApplicationTotals.totalApplied),
+      broughtForwardCreditsAppliedRent: round2(accumulator.broughtForwardCreditApplicationTotals.rentApplied),
+      broughtForwardCreditsAppliedUtility: round2(accumulator.broughtForwardCreditApplicationTotals.utilityApplied),
+      broughtForwardCreditsAppliedTax: round2(accumulator.broughtForwardCreditApplicationTotals.taxApplied),
       commissionPercentage: commissionPct,
       commissionBasis: recognitionBasis,
       prepaymentRecognition,
@@ -4402,33 +4410,33 @@ export const generateLandlordStatement = async ({
       count: receiptsInPeriod.filter(
         (r) => r.paymentType === "rent" && !r.paidDirectToLandlord
       ).length,
-      totalAmount: round2(totalRentReceivedManager),
+      totalAmount: round2(accumulator.collectionTotals.rentReceivedManager),
       totalDebit: 0,
-      totalCredit: round2(totalRentReceivedManager),
+      totalCredit: round2(accumulator.collectionTotals.rentReceivedManager),
     },
     RENT_RECEIPT_LANDLORD: {
       count: receiptsInPeriod.filter(
         (r) => r.paymentType === "rent" && r.paidDirectToLandlord
       ).length,
-      totalAmount: round2(totalRentReceivedLandlord),
+      totalAmount: round2(accumulator.collectionTotals.rentReceivedLandlord),
       totalDebit: 0,
-      totalCredit: round2(totalRentReceivedLandlord),
+      totalCredit: round2(accumulator.collectionTotals.rentReceivedLandlord),
     },
     UTILITY_RECEIPT_MANAGER: {
       count: receiptsInPeriod.filter(
         (r) => r.paymentType === "utility" && !r.paidDirectToLandlord
       ).length,
-      totalAmount: round2(totalUtilityReceivedManager),
+      totalAmount: round2(accumulator.collectionTotals.utilityReceivedManager),
       totalDebit: 0,
-      totalCredit: round2(totalUtilityReceivedManager),
+      totalCredit: round2(accumulator.collectionTotals.utilityReceivedManager),
     },
     UTILITY_RECEIPT_LANDLORD: {
       count: receiptsInPeriod.filter(
         (r) => r.paymentType === "utility" && r.paidDirectToLandlord
       ).length,
-      totalAmount: round2(totalUtilityReceivedLandlord),
+      totalAmount: round2(accumulator.collectionTotals.utilityReceivedLandlord),
       totalDebit: 0,
-      totalCredit: round2(totalUtilityReceivedLandlord),
+      totalCredit: round2(accumulator.collectionTotals.utilityReceivedLandlord),
     },
     EXPENSE_DEDUCTION: {
       count: expenseRows.length,
