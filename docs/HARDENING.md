@@ -161,7 +161,7 @@ to be agreed with the user before any of this is implemented.
 ### 🟠 Medium priority
 
 **Backend**
-- `landlordStatementService.js`: 4,149 lines / 1 exported function — biggest single-file maintainability liability in the backend (its N+1/query correctness was independently verified clean, so this is purely a decomposition candidate, e.g. split into `recognitionDates.js`, `receiptAggregation.js`, `depositHandling.js`, `adjustments.js`).
+- ~~`landlordStatementService.js`: 4,149 lines / 1 exported function~~ — **closed**, see Track C item 3 below. Decomposed via an accumulator-object pattern rather than a file split (its N+1/query correctness was independently verified clean before this work; this was purely a decomposition — the file itself stays one file, since its ~2,900-line body was one function with shared local state, not independent exports).
 - `tenantInvoices.js: createTenantInvoiceRecord` — 586-line function mixing validation, account resolution, sequence generation, GL posting, and recompute in one body.
 - `communicationService.js` (1,827 lines) and `statementPdfService.js` (1,281 lines) — large but multi-export, less severe than the above; opportunistic split candidates.
 - A `business` vs `company` field-naming split across models: `Landlord`, `CompanySettings`, `User`, `AuditLog`, `TrialRequest`, `Zone` use `company`; nearly everything else uses `business`. Flagged as a standing copy-paste trap, not urgent — worth documenting per-model rather than mass-renaming.
@@ -238,7 +238,7 @@ Agreed order (established before Track D's unplanned detour):
    verified store.js's reducer imports never touch `apiCalls.js`). No
    frontend test suite exists in this repo (no test script in
    `package.json`) — lint + build is the available verification.
-3. God-file decomposition (`landlordStatementService.js`, `redux/apiCalls.js`).
+3. ✅ **God-file decomposition (`landlordStatementService.js`, `redux/apiCalls.js`) — done.**
    - ✅ **`redux/apiCalls.js` — done.** Mapped domain boundaries before
      moving anything: which action creators cluster together, which
      private helpers are used across ≥2 domains (`extractList`,
@@ -276,9 +276,62 @@ Agreed order (established before Track D's unplanned detour):
      fixed, and every batch after that verified with directly-captured
      exit codes and an explicit post-removal corruption sweep before
      running lint at all.
-   - `landlordStatementService.js` — **not started**, deliberately
-     deferred as its own separate piece of work with its own go-ahead,
-     given how recently Track D finished hardening it.
+   - ✅ **`landlordStatementService.js` — closed.** A different shape of
+     problem than `apiCalls.js`: one 4,298-line exported function
+     (`generateLandlordStatement`), not 281 independent exports, so the
+     risk was in untangling shared local state, not drawing file
+     boundaries. Scanned first, with no code moved until the scan was
+     reported and approved: walked the real control flow (not assumed
+     phase names), listed every variable crossing each candidate
+     boundary, and cross-referenced Track D's `c355950` fix (the K1/K2/
+     S3/S5 Bal B/F/C/F root-cause fix) against the proposed split —
+     it touched 4 separate sub-loops inside what would have been one
+     "phase," direct evidence that splitting the mega-loop by loop would
+     have made that exact fix harder, not easier. That finding ruled out
+     a per-loop split and justified an accumulator-object factory
+     (`createStatementAccumulator`) instead — the ~20 variables/closures
+     shared across the loop (`ensureRow`, `pushEntry`, the inclusion-gate
+     closures, deposit-memo handling, the running collection totals,
+     etc.) became explicit, greppable methods/fields on one object
+     instead of implicit closure captures.
+     14 commits: `1f9285b`, `ea0d645`, `d351ddf`, `a917069`, `cb04e5c`,
+     `5d3421d`, `e5e8298`, `4704198`, `7cb3460`, `b6786da`, `f6111b1`,
+     `ef7047c`, `c363a2d`, `5533891`. Process was stricter than any prior
+     file this session: each accumulator method converted one at a time,
+     the 22-test suite run and its literal pass count quoted after every
+     single extraction (never batched), and for the three call sites
+     directly inside `c355950`'s fix (steps 9-11) an additional
+     line-by-line `diff` of the extracted method against the original
+     inline block before each commit — not just a passing test suite,
+     since a 22-fixture suite can't guarantee a copy-paste didn't drop a
+     condition nothing in those fixtures happens to hit.
+     Two points flagged as fragile in the scan were investigated (not
+     resolved silently) once actually holding the code: (1) `ensureRow`'s
+     reach into output assembly, far past any phase boundary — checked
+     whether it could read from the already-materialized `tenantRows`
+     instead; concluded no, since `ensureRow` encapsulates ID
+     normalization and terminated-tenant handling that a direct lookup
+     would have to unsafely reimplement, and the refactor already turned
+     the reach from implicit closure capture into an explicit
+     `accumulator.` call, which was the actual goal. (2) A planned "Phase
+     6" extraction (derived summary figures) was scanned in full and
+     found to have a 20+-variable dependency surface scattered across the
+     function — exactly the "bad boundary" signal the scan methodology
+     itself warns about — so it was deliberately left inline rather than
+     forced into a function with a 20-parameter signature. The dual raw-
+     ledger pass (`getReceiptRentLedgerCash`) was left untouched per
+     explicit instruction, full stop.
+     Closed out with a structural sanity check (0 bare references to any
+     of the ~19 converted closure names anywhere outside the accumulator
+     object) and a programmatic pre/post comparison — `generateLandlord
+     Statement` run against real production data at this work's start
+     commit (`4e34685`) and at HEAD, for 4 scenarios (multi-unit
+     consolidation, self-managed raw ledger, a reversed invoice inside
+     the period, a reversed debit note inside the period — the last two
+     covering the exact `c355950` condition) — with every output field
+     deep-diffed. 0 substantive differences in any of the 4; the only
+     diffs were freshly-random entry `_id`s and `generatedAt` timestamps,
+     both expected to differ on every call regardless of code changes.
 4. `*ImportModal.jsx` consolidation + `MilikTable` memoization fix. **Not started.**
 5. Low-priority cleanup batch (`controllers/employee.js` removal, `moment`
    for `recurringSchedule.js`, unused imports) — no urgency, batch whenever.
@@ -290,4 +343,4 @@ actually authorized.
 
 ---
 
-*Last updated: 2026-09-16 (Track C item 3's `redux/apiCalls.js` decomposition closed; `landlordStatementService.js` remains). Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C as items are actioned.*
+*Last updated: 2026-09-16 (Track C item 3 fully closed — both `redux/apiCalls.js` and `landlordStatementService.js` decompositions done). Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C as items are actioned.*
