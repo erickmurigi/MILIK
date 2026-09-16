@@ -20,7 +20,6 @@ import {
   FaExpandAlt,
   FaCompressAlt,
   FaFileImport,
-  FaFileDownload,
   FaPrint,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -29,8 +28,8 @@ import { getLandlords } from "../../redux/apiCalls";
 import { selectCurrentCompany, selectCurrentUser, selectAllLandlords, selectAllProperties, selectPropertyPagination, selectPropertyError } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
-import PropertyImportModal from "../../components/Modals/PropertyImportModal";
-import { downloadPropertiesTemplate, exportPropertiesToExcel } from "../../utils/excelTemplates";
+import ImportModal from "../../components/Modals/ImportModal";
+import { downloadPropertiesTemplate, exportPropertiesToExcel, parsePropertiesExcel } from "../../utils/excelTemplates";
 import { adminRequests } from "../../utils/requestMethods";
 import { printTabularList } from "../../utils/printList";
 import { useTerm } from "../../hooks/useTerm";
@@ -403,7 +402,7 @@ const Properties = () => {
   const handleBulkImport = async (properties) => {
     if (!currentCompany?._id) {
       toast.error('No company selected');
-      return { data: { successful: [], failed: [{ error: 'No company selected' }] } };
+      return { successful: [], failed: [{ error: 'No company selected' }] };
     }
 
     try {
@@ -428,7 +427,7 @@ const Properties = () => {
       };
       dispatch(getProperties(params));
 
-      return response.data;
+      return response.data?.data || { successful: [], failed: [] };
     } catch (error) {
       throw error;
     }
@@ -674,9 +673,6 @@ const Properties = () => {
                 </button>
               </Link>
             )}
-            <button onClick={() => downloadPropertiesTemplate()} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-blue-300 bg-blue-50 px-2.5 text-[9px] font-semibold text-blue-700 hover:bg-blue-100">
-              <FaFileDownload size={7} /> Template
-            </button>
             <button onClick={() => setShowImportModal(true)} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-green-300 bg-green-50 px-2.5 text-[9px] font-semibold text-green-700 hover:bg-green-100">
               <FaFileImport size={7} /> Import
             </button>
@@ -987,10 +983,25 @@ const Properties = () => {
         />
 
         {/* Property Import Modal */}
-        <PropertyImportModal
+        <ImportModal
           isOpen={showImportModal}
           onClose={() => setShowImportModal(false)}
+          title={`Import ${termProperties} from Excel`}
+          entityName={termProperty.toLowerCase()}
+          parseFile={parsePropertiesExcel}
+          downloadTemplate={downloadPropertiesTemplate}
           onImport={handleBulkImport}
+          maxWidthClass="max-w-4xl"
+          getErrorRowLabel={(e) => e.data?.propertyName}
+          getFailureRowLabel={(f) => f.propertyName}
+          previewCols={[
+            { header: `${termProperty} Name`, render: (r) => <span className="font-semibold">{r.propertyName}</span> },
+            { header: "Type", render: (r) => r.propertyType },
+            { header: "LR Number", render: (r) => r.lrNumber },
+            { header: "Location", render: (r) => r.townCityState },
+            { header: termLandlord, render: (r) => r.landlordName },
+            { header: termUnits, render: (r) => r.totalUnits },
+          ]}
         />
       </div>
     </DashboardLayout>
