@@ -1559,7 +1559,7 @@ const applyUtility = (row, phase, amount, hint, metadata = {}) => {
 // via ensureRow) because Phase 3 (tenantRows materialization) still reads it directly by
 // design — that phase hasn't been converted yet, and exposing it here avoids a premature,
 // unverified change to code outside this step's scope.
-const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap, latePenaltyToLandlord, property }) => {
+const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap, latePenaltyToLandlord, property, invoiceStatementMap, noteStatementMap }) => {
   const rowsMap = new Map();
 
   const ensureRow = (tenantId, unitId, fallback = {}) => {
@@ -1805,6 +1805,39 @@ const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap, latePenal
     bucket.closingBalance = round2(bucket.closingBalance - value);
   };
 
+  // The raw-ledger track: recomputes a receipt's rent-ledger cash impact independently of
+  // row.paidRent (which stays capped/deferred for commission purposes) — deliberately a
+  // second pass over the same source data, not merged with the main allocation-processing
+  // loops above. Left exactly as-is per explicit instruction: this dual-pass design is not
+  // a merge candidate during the accumulator conversion, full stop, regardless of how
+  // tempting a "just call this from the other loop too" simplification might look once both
+  // are methods on the same object.
+  const getReceiptRentLedgerCash = (receipt) => {
+    const allocationRows = getReceiptAllocationRows(receipt);
+    // Every invoice:null row (isPrepayment-tagged or not — a receipt can carry a plain,
+    // untagged unapplied row too) is already summed into allocationSummary.unapplied at
+    // save time. Seeding `cash` from that AND then also walking every such row in the
+    // loop below double-counts it — the loop below must only ever look at rows that
+    // target a real invoice.
+    let cash = round2(Number(getReceiptSummaryAmount(receipt, "unapplied") || 0));
+    if (allocationRows.length > 0) {
+      allocationRows.forEach((allocationRow) => {
+        if (!allocationRow?.invoice) return;
+        const sourceInvoice = invoiceStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
+        const sourceNote = noteStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
+        const impact = getReceiptAllocationStatementImpact({ allocationRow, sourceInvoice, sourceNote, row: null });
+        cash = round2(cash + Number(impact.statementRelevantAmount || 0));
+      });
+    } else {
+      cash = round2(
+        cash +
+          Number(getReceiptSummaryAmount(receipt, "rent") || 0) +
+          Number(getReceiptSummaryAmount(receipt, "utility") || 0)
+      );
+    }
+    return cash;
+  };
+
   return {
     rowsMap,
     ensureRow,
@@ -1818,6 +1851,7 @@ const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap, latePenal
     pushDepositSettlementRow,
     depositMemoBuckets,
     applyDepositReceiptToMemo,
+    getReceiptRentLedgerCash,
   };
 };
 
@@ -2410,7 +2444,7 @@ export const generateLandlordStatement = async ({
     lastApproved,
   });
 
-  const accumulator = createStatementAccumulator({ unitMap, tenantMap, snapshotMap, latePenaltyToLandlord, property });
+  const accumulator = createStatementAccumulator({ unitMap, tenantMap, snapshotMap, latePenaltyToLandlord, property, invoiceStatementMap, noteStatementMap });
 
   units.forEach((unit) => {
     const unitTenants = (tenantsByUnit.get(String(unit._id)) || []).sort(
@@ -3699,32 +3733,6 @@ export const generateLandlordStatement = async ({
   // actually rent/utility (or genuinely unapplied, still real rent-ledger cash just not
   // yet matched to a bill) belongs here — reusing the same per-row classification the
   // invoiced side already uses so the two never drift apart.
-  const getReceiptRentLedgerCash = (receipt) => {
-    const allocationRows = getReceiptAllocationRows(receipt);
-    // Every invoice:null row (isPrepayment-tagged or not — a receipt can carry a plain,
-    // untagged unapplied row too) is already summed into allocationSummary.unapplied at
-    // save time. Seeding `cash` from that AND then also walking every such row in the
-    // loop below double-counts it — the loop below must only ever look at rows that
-    // target a real invoice.
-    let cash = round2(Number(getReceiptSummaryAmount(receipt, "unapplied") || 0));
-    if (allocationRows.length > 0) {
-      allocationRows.forEach((allocationRow) => {
-        if (!allocationRow?.invoice) return;
-        const sourceInvoice = invoiceStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
-        const sourceNote = noteStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
-        const impact = getReceiptAllocationStatementImpact({ allocationRow, sourceInvoice, sourceNote, row: null });
-        cash = round2(cash + Number(impact.statementRelevantAmount || 0));
-      });
-    } else {
-      cash = round2(
-        cash +
-          Number(getReceiptSummaryAmount(receipt, "rent") || 0) +
-          Number(getReceiptSummaryAmount(receipt, "utility") || 0)
-      );
-    }
-    return cash;
-  };
-
   for (const receipt of receiptsBefore) {
     // When a balance snapshot exists, rawBalanceBF is seeded straight from the snapshot's
     // balanceCF (see ensureRow above) — a receipt whose own recognition date is already
@@ -3739,11 +3747,11 @@ export const generateLandlordStatement = async ({
       continue;
     }
     const row = accumulator.ensureRow(receipt.tenant, receipt.unit);
-    row.rawBalanceBF = round2(Number(row.rawBalanceBF || 0) - getReceiptRentLedgerCash(receipt));
+    row.rawBalanceBF = round2(Number(row.rawBalanceBF || 0) - accumulator.getReceiptRentLedgerCash(receipt));
   }
   for (const receipt of receiptsInPeriod) {
     const row = accumulator.ensureRow(receipt.tenant, receipt.unit);
-    row.rawReceivedThisPeriod = round2(Number(row.rawReceivedThisPeriod || 0) + getReceiptRentLedgerCash(receipt));
+    row.rawReceivedThisPeriod = round2(Number(row.rawReceivedThisPeriod || 0) + accumulator.getReceiptRentLedgerCash(receipt));
   }
 
   const tenantRows = Array.from(accumulator.rowsMap.values())
