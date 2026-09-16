@@ -1559,7 +1559,7 @@ const applyUtility = (row, phase, amount, hint, metadata = {}) => {
 // via ensureRow) because Phase 3 (tenantRows materialization) still reads it directly by
 // design — that phase hasn't been converted yet, and exposing it here avoids a premature,
 // unverified change to code outside this step's scope.
-const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap, latePenaltyToLandlord }) => {
+const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap, latePenaltyToLandlord, property }) => {
   const rowsMap = new Map();
 
   const ensureRow = (tenantId, unitId, fallback = {}) => {
@@ -1715,6 +1715,31 @@ const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap, latePenal
     return true;
   };
 
+  const resolveDepositHolderForRecord = (record = {}, allocationRow = null) => {
+    const tenantId = getEntityId(record?.tenant);
+    const tenant = tenantId ? tenantMap.get(tenantId) || {} : {};
+
+    const allocationRows = Array.isArray(record?.allocations) ? record.allocations : [];
+    const allocationHolder =
+      resolveExplicitDepositHolderFromAllocationRow(allocationRow || {}) ||
+      allocationRows.reduce((resolved, row) => {
+        return resolved || resolveExplicitDepositHolderFromAllocationRow(row);
+      }, "");
+
+    const tenantHolder = normalizeDepositHolderValue(tenant?.depositHeldBy);
+    const recordHolder =
+      normalizeDepositHolderValue(record?.depositHeldBy) ||
+      normalizeDepositHolderValue(record?.metadata?.depositHeldBy);
+    const propertyHolder = normalizeDepositHolderValue(property?.depositHeldBy);
+    const normalizedPaymentType = safeName(record?.paymentType || "");
+    const hasDepositAllocation = allocationRows.some(
+      (row) => safeName(row?.priorityGroup || "") === "deposit"
+    );
+
+    // Most-specific wins: allocation row → receipt/invoice field → tenant default → property default
+    return allocationHolder || recordHolder || tenantHolder || propertyHolder || "manager";
+  };
+
   return {
     rowsMap,
     ensureRow,
@@ -1722,6 +1747,7 @@ const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap, latePenal
     pushEntry,
     shouldIncludeInvoiceInLandlordStatement,
     shouldIncludeNoteInLandlordStatement,
+    resolveDepositHolderForRecord,
   };
 };
 
@@ -2314,7 +2340,7 @@ export const generateLandlordStatement = async ({
     lastApproved,
   });
 
-  const accumulator = createStatementAccumulator({ unitMap, tenantMap, snapshotMap, latePenaltyToLandlord });
+  const accumulator = createStatementAccumulator({ unitMap, tenantMap, snapshotMap, latePenaltyToLandlord, property });
 
   units.forEach((unit) => {
     const unitTenants = (tenantsByUnit.get(String(unit._id)) || []).sort(
@@ -2332,38 +2358,13 @@ export const generateLandlordStatement = async ({
     }
   });
 
-  const resolveDepositHolderForRecord = (record = {}, allocationRow = null) => {
-    const tenantId = getEntityId(record?.tenant);
-    const tenant = tenantId ? tenantMap.get(tenantId) || {} : {};
-
-    const allocationRows = Array.isArray(record?.allocations) ? record.allocations : [];
-    const allocationHolder =
-      resolveExplicitDepositHolderFromAllocationRow(allocationRow || {}) ||
-      allocationRows.reduce((resolved, row) => {
-        return resolved || resolveExplicitDepositHolderFromAllocationRow(row);
-      }, "");
-
-    const tenantHolder = normalizeDepositHolderValue(tenant?.depositHeldBy);
-    const recordHolder =
-      normalizeDepositHolderValue(record?.depositHeldBy) ||
-      normalizeDepositHolderValue(record?.metadata?.depositHeldBy);
-    const propertyHolder = normalizeDepositHolderValue(property?.depositHeldBy);
-    const normalizedPaymentType = safeName(record?.paymentType || "");
-    const hasDepositAllocation = allocationRows.some(
-      (row) => safeName(row?.priorityGroup || "") === "deposit"
-    );
-
-    // Most-specific wins: allocation row → receipt/invoice field → tenant default → property default
-    return allocationHolder || recordHolder || tenantHolder || propertyHolder || "manager";
-  };
-
   const allDepositReceiptsBefore = mergeUniqueReceiptsById(
     depositReceiptsBefore,
-    receiptsBefore.filter((receipt) => hasAnyDepositReceiptAllocation(receipt, resolveDepositHolderForRecord))
+    receiptsBefore.filter((receipt) => hasAnyDepositReceiptAllocation(receipt, accumulator.resolveDepositHolderForRecord))
   );
   const allDepositReceiptsInPeriod = mergeUniqueReceiptsById(
     depositReceiptsInPeriod,
-    receiptsInPeriod.filter((receipt) => hasAnyDepositReceiptAllocation(receipt, resolveDepositHolderForRecord))
+    receiptsInPeriod.filter((receipt) => hasAnyDepositReceiptAllocation(receipt, accumulator.resolveDepositHolderForRecord))
   );
 
   const depositMemoBuckets = {
@@ -2425,7 +2426,7 @@ export const generateLandlordStatement = async ({
   const applyDepositReceiptToMemo = (record = {}, amount = 0, phase = "current") => {
     const value = round2(Math.abs(amount));
     if (value === 0) return;
-    const bucket = depositMemoBuckets[resolveDepositHolderForRecord(record)] || depositMemoBuckets.manager;
+    const bucket = depositMemoBuckets[accumulator.resolveDepositHolderForRecord(record)] || depositMemoBuckets.manager;
     if (phase === "opening") bucket.openingBalance = round2(bucket.openingBalance - value);
     else bucket.received = round2(bucket.received + value);
     bucket.closingBalance = round2(bucket.closingBalance - value);
@@ -2478,7 +2479,7 @@ export const generateLandlordStatement = async ({
   }
 
   for (const receipt of allDepositReceiptsBefore) {
-    const depositBreakdown = getReceiptDepositAllocationBreakdown(receipt, resolveDepositHolderForRecord);
+    const depositBreakdown = getReceiptDepositAllocationBreakdown(receipt, accumulator.resolveDepositHolderForRecord);
     if (depositBreakdown.manager > 0) {
       applyDepositReceiptToMemo({ ...receipt, depositHeldBy: "manager" }, depositBreakdown.manager, "opening");
     }
@@ -3183,7 +3184,7 @@ export const generateLandlordStatement = async ({
   }
 
   for (const receipt of allDepositReceiptsInPeriod) {
-    const depositBreakdown = getReceiptDepositAllocationBreakdown(receipt, resolveDepositHolderForRecord);
+    const depositBreakdown = getReceiptDepositAllocationBreakdown(receipt, accumulator.resolveDepositHolderForRecord);
 
     if (depositBreakdown.manager > 0) {
       applyDepositReceiptToMemo({ ...receipt, depositHeldBy: "manager" }, depositBreakdown.manager, "current");
