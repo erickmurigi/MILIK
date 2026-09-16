@@ -1647,9 +1647,42 @@ const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap }) => {
     return rowsMap.get(key);
   };
 
+  const entries = [];
+
+  const pushEntry = ({
+    tenantId,
+    unitId,
+    transactionDate,
+    category,
+    amount,
+    direction,
+    description,
+    sourceTransactionType,
+    sourceTransactionId,
+    metadata = {},
+  }) => {
+    entries.push({
+      _id: new mongoose.Types.ObjectId(),
+      tenant: tenantId || null,
+      unit: unitId || null,
+      transactionDate,
+      createdAt: transactionDate,
+      category,
+      amount: round2(Math.abs(amount || 0)),
+      direction,
+      notes: description,
+      description,
+      sourceTransactionType: sourceTransactionType || null,
+      sourceTransactionId: sourceTransactionId || null,
+      metadata,
+    });
+  };
+
   return {
     rowsMap,
     ensureRow,
+    entries,
+    pushEntry,
   };
 };
 
@@ -2260,37 +2293,6 @@ export const generateLandlordStatement = async ({
     }
   });
 
-  const entries = [];
-
-  const pushEntry = ({
-    tenantId,
-    unitId,
-    transactionDate,
-    category,
-    amount,
-    direction,
-    description,
-    sourceTransactionType,
-    sourceTransactionId,
-    metadata = {},
-  }) => {
-    entries.push({
-      _id: new mongoose.Types.ObjectId(),
-      tenant: tenantId || null,
-      unit: unitId || null,
-      transactionDate,
-      createdAt: transactionDate,
-      category,
-      amount: round2(Math.abs(amount || 0)),
-      direction,
-      notes: description,
-      description,
-      sourceTransactionType: sourceTransactionType || null,
-      sourceTransactionId: sourceTransactionId || null,
-      metadata,
-    });
-  };
-
   const shouldIncludeInvoiceInLandlordStatement = (invoice = {}) => {
     const metadata = invoice?.metadata || {};
     if (typeof metadata.includeInLandlordStatement === "boolean") {
@@ -2739,7 +2741,7 @@ export const generateLandlordStatement = async ({
           )
         : null;
 
-    pushEntry({
+    accumulator.pushEntry({
       tenantId: invoice.tenant,
       unitId: invoice.unit,
       transactionDate: getInvoiceStatementDate(invoice),
@@ -2848,7 +2850,7 @@ export const generateLandlordStatement = async ({
           )
         : null;
 
-    pushEntry({
+    accumulator.pushEntry({
       tenantId: note.tenant,
       unitId: note.unit,
       transactionDate: getNoteStatementDate(note) || note.noteDate,
@@ -3128,7 +3130,7 @@ export const generateLandlordStatement = async ({
           )
         : null;
 
-    pushEntry({
+    accumulator.pushEntry({
       tenantId: receipt.tenant,
       unitId: receipt.unit,
       transactionDate: getReceiptStatementDate(receipt) || receipt.paymentDate,
@@ -3157,7 +3159,7 @@ export const generateLandlordStatement = async ({
     if (receipt.paidDirectToLandlord) {
       directToLandlordOffset += amount;
 
-      pushEntry({
+      accumulator.pushEntry({
         tenantId: receipt.tenant,
         unitId: receipt.unit,
         transactionDate: getReceiptStatementDate(receipt) || receipt.paymentDate,
@@ -3223,7 +3225,7 @@ export const generateLandlordStatement = async ({
       unit: row.unit,
     });
 
-    pushEntry({
+    accumulator.pushEntry({
       tenantId: receipt.tenant,
       unitId: receipt.unit,
       transactionDate: getReceiptStatementDate(receipt) || receipt.paymentDate,
@@ -3262,7 +3264,7 @@ export const generateLandlordStatement = async ({
         unit: row.unit,
       });
 
-      pushEntry({
+      accumulator.pushEntry({
         tenantId: receipt.tenant,
         unitId: receipt.unit,
         transactionDate: getReceiptStatementDate(receipt) || receipt.paymentDate,
@@ -3475,7 +3477,7 @@ export const generateLandlordStatement = async ({
         sourceId: String(adjustment._id),
       });
 
-      pushEntry({
+      accumulator.pushEntry({
         tenantId: adjustment.tenant || null,
         unitId: adjustment.unit || null,
         transactionDate: adjustment.transactionDate,
@@ -3503,7 +3505,7 @@ export const generateLandlordStatement = async ({
         sourceId: String(adjustment._id),
       });
 
-      pushEntry({
+      accumulator.pushEntry({
         tenantId: adjustment.tenant || null,
         unitId: adjustment.unit || null,
         transactionDate: adjustment.transactionDate,
@@ -3531,7 +3533,7 @@ export const generateLandlordStatement = async ({
         sourceId: String(adjustment._id),
       });
 
-      pushEntry({
+      accumulator.pushEntry({
         tenantId: adjustment.tenant || null,
         unitId: adjustment.unit || null,
         transactionDate: adjustment.transactionDate,
@@ -3555,7 +3557,7 @@ export const generateLandlordStatement = async ({
         sourceId: String(adjustment._id),
       });
 
-      pushEntry({
+      accumulator.pushEntry({
         tenantId: adjustment.tenant || null,
         unitId: adjustment.unit || null,
         transactionDate: adjustment.transactionDate,
@@ -3643,7 +3645,7 @@ export const generateLandlordStatement = async ({
 
     totalExpenses += amount;
 
-    pushEntry({
+    accumulator.pushEntry({
       tenantId: null,
       unitId: expense.unit || null,
       transactionDate: expense.date,
@@ -3801,7 +3803,7 @@ export const generateLandlordStatement = async ({
     rowsByTenantId.get(tenantId).push(row);
   });
 
-  entries.forEach((entry) => {
+  accumulator.entries.forEach((entry) => {
     const tenantId = String(entry?.tenant || "").trim();
     if (!tenantId) return;
 
@@ -3946,7 +3948,7 @@ export const generateLandlordStatement = async ({
   );
 
   if (commissionAmount > 0) {
-    pushEntry({
+    accumulator.pushEntry({
       transactionDate: periodEnd,
       category: "COMMISSION_CHARGE",
       amount: commissionAmount,
@@ -3964,7 +3966,7 @@ export const generateLandlordStatement = async ({
     });
 
     if (commissionTaxAmount > 0) {
-      pushEntry({
+      accumulator.pushEntry({
         transactionDate: periodEnd,
         category: "COMMISSION_CHARGE",
         amount: commissionTaxAmount,
@@ -4445,7 +4447,7 @@ export const generateLandlordStatement = async ({
     periodStart,
     periodEnd,
     openingBalance: totalBalanceBF,
-    entries: entries.sort(
+    entries: accumulator.entries.sort(
       (a, b) => new Date(a.transactionDate) - new Date(b.transactionDate)
     ),
     totalsByCategory,
