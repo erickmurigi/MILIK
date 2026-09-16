@@ -1513,6 +1513,41 @@ const buildFilteredTenantRows = (tenantRows, tenantMap) => {
     );
 };
 
+// Three more pure helpers found while scoping the accumulator-object conversion (Track C
+// item 3 part 2, step 0) — each already took every input as a parameter and captured
+// nothing from generateLandlordStatement's scope, so like batch 1's two hoists they move
+// verbatim with no behavior change and no need to become accumulator methods.
+
+const getSignedNoteAmount = (note = {}) => {
+  const amount = Math.abs(Number(note?.amount || 0));
+  return String(note?.noteType || "").toUpperCase() === "CREDIT_NOTE"
+    ? -amount
+    : amount;
+};
+
+const createDepositMemoBucket = (key, label) => ({
+  key,
+  label,
+  openingBalance: 0,
+  billed: 0,
+  received: 0,
+  closingBalance: 0,
+});
+
+const applyUtility = (row, phase, amount, hint, metadata = {}) => {
+  const value = round2(amount);
+  if (value === 0) return;
+
+  const utilityIdentity = resolveUtilityIdentity(hint, metadata, row);
+  registerUtilityAmount(
+    row,
+    utilityIdentity.key,
+    utilityIdentity.label,
+    phase,
+    value
+  );
+};
+
 // Phase 0 of generateLandlordStatement (Track C item 3 part 2, batch 2): validates the
 // inputs, fetches property + landlord, resolves the effective statement window (including
 // the snapshot cursor a prior PROCESSED statement left behind), and derives the handful of
@@ -2273,13 +2308,6 @@ export const generateLandlordStatement = async ({
     return true;
   };
 
-  const getSignedNoteAmount = (note = {}) => {
-    const amount = Math.abs(Number(note?.amount || 0));
-    return String(note?.noteType || "").toUpperCase() === "CREDIT_NOTE"
-      ? -amount
-      : amount;
-  };
-
   const resolveDepositHolderForRecord = (record = {}, allocationRow = null) => {
     const tenantId = getEntityId(record?.tenant);
     const tenant = tenantId ? tenantMap.get(tenantId) || {} : {};
@@ -2313,15 +2341,6 @@ export const generateLandlordStatement = async ({
     depositReceiptsInPeriod,
     receiptsInPeriod.filter((receipt) => hasAnyDepositReceiptAllocation(receipt, resolveDepositHolderForRecord))
   );
-
-  const createDepositMemoBucket = (key, label) => ({
-    key,
-    label,
-    openingBalance: 0,
-    billed: 0,
-    received: 0,
-    closingBalance: 0,
-  });
 
   const depositMemoBuckets = {
     manager: createDepositMemoBucket("manager", "Deposits held by manager"),
@@ -2386,20 +2405,6 @@ export const generateLandlordStatement = async ({
     if (phase === "opening") bucket.openingBalance = round2(bucket.openingBalance - value);
     else bucket.received = round2(bucket.received + value);
     bucket.closingBalance = round2(bucket.closingBalance - value);
-  };
-
-  const applyUtility = (row, phase, amount, hint, metadata = {}) => {
-    const value = round2(amount);
-    if (value === 0) return;
-
-    const utilityIdentity = resolveUtilityIdentity(hint, metadata, row);
-    registerUtilityAmount(
-      row,
-      utilityIdentity.key,
-      utilityIdentity.label,
-      phase,
-      value
-    );
   };
 
   const broughtForwardCreditApplicationRows = [];
