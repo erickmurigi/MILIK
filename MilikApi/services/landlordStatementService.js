@@ -2362,6 +2362,96 @@ const createStatementAccumulator = ({
     }
   };
 
+  // Step 11 of the accumulator conversion (Track C item 3 part 2) — the third and final
+  // c355950 call site. Extracted verbatim from the "mixed deposit + non-deposit
+  // allocation" loop body (deposit-type receipts that also cover a non-deposit charge,
+  // e.g. a debit note paid on the same receipt as a security deposit). The loop's three
+  // `continue` statements become `return` here, since this now runs once per receipt
+  // rather than as a for-loop body.
+  const applyMixedDepositReceiptToBalance = (receipt) => {
+    if (receipt.paymentType !== "deposit") return; // rent/utility receipts handled above
+
+    // Leftover cash on a deposit-type receipt that isn't allocated to any deposit charge
+    // (tagged either the old way, priorityGroup "unapplied", or the newer way,
+    // isPrepayment:true placeholder rows excluded from getReceiptAllocationStatementImpact
+    // above) is still real cash collected. Nothing else processes allocationSummary.
+    // unapplied for a deposit-type receipt, so it must be recognised here — same rule as
+    // the main receiptsInPeriod loop: always an unapplied credit, and under "on_receipt"
+    // also counted as paidRent immediately.
+    const unappliedRow = ensureRow(receipt.tenant, receipt.unit);
+    const depositReceiptUnapplied = getReceiptSummaryAmount(receipt, "unapplied");
+    if (depositReceiptUnapplied !== 0) {
+      unappliedRow.unappliedCredits += depositReceiptUnapplied;
+      // Real cash, just not deposit — counts toward Total Paid / raw Bal C/F same as any
+      // other in-period cash (see the receiptsInPeriod loop's rawReceivedThisPeriod).
+      unappliedRow.rawReceivedThisPeriod = round2(Number(unappliedRow.rawReceivedThisPeriod || 0) + depositReceiptUnapplied);
+      if (prepaymentRecognition === "on_receipt") {
+        unappliedRow.paidRent += depositReceiptUnapplied;
+        if (receipt.paidDirectToLandlord) collectionTotals.rentReceivedLandlord += depositReceiptUnapplied;
+        else collectionTotals.rentReceivedManager += depositReceiptUnapplied;
+      }
+    }
+
+    const mixedAllocRows = getReceiptAllocationRows(receipt);
+    if (mixedAllocRows.length === 0) return;
+
+    const mixedHasNonDeposit = mixedAllocRows.some((a) => {
+      const pg = String(a?.priorityGroup || "").toLowerCase();
+      return pg && pg !== "deposit" && pg !== "unapplied";
+    });
+    if (!mixedHasNonDeposit) return;
+
+    const mixedRow = ensureRow(receipt.tenant, receipt.unit);
+    let mixedRent = 0;
+    let mixedUtility = 0;
+    let mixedTax = 0;
+
+    mixedAllocRows.forEach((allocationRow) => {
+      const pg = String(allocationRow?.priorityGroup || "").toLowerCase();
+      if (!pg || pg === "deposit" || pg === "unapplied") return;
+
+      const sourceInvoice = invoiceStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
+      const sourceNote = noteStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
+      const impact = getReceiptAllocationStatementImpact({ allocationRow, sourceInvoice, sourceNote, row: mixedRow });
+      if (!impact.isStatementRelevant) return;
+
+      mixedRent    = round2(mixedRent    + Number(impact.rentAmount    || 0));
+      mixedUtility = round2(mixedUtility + Number(impact.utilityAmount || 0));
+      mixedTax     = round2(mixedTax     + Number(impact.taxAmount     || 0));
+
+      (Array.isArray(impact.utilities) ? impact.utilities : []).forEach((item) => {
+        applyUtility(mixedRow, "receipt", Number(item.amount || 0), item.label || allocationRow?.description || "", {
+          utilityType: item.label,
+          meterUtilityType: item.label,
+          statementUtilityType: item.label,
+        });
+      });
+    });
+
+    const mixedNonDepositCash = round2(mixedRent + mixedUtility + mixedTax);
+    if (mixedNonDepositCash !== 0) {
+      // Same reasoning as the unapplied portion above — this is real, non-deposit cash
+      // that was just bundled onto a deposit-type receipt; it belongs in Total Paid /
+      // raw Bal C/F like any other in-period cash.
+      mixedRow.rawReceivedThisPeriod = round2(Number(mixedRow.rawReceivedThisPeriod || 0) + mixedNonDepositCash);
+    }
+
+    if (mixedRent !== 0) {
+      mixedRow.paidRent += mixedRent;
+      if (receipt.paidDirectToLandlord) collectionTotals.rentReceivedLandlord += mixedRent;
+      else collectionTotals.rentReceivedManager += mixedRent;
+    }
+    if (mixedUtility !== 0) {
+      if (receipt.paidDirectToLandlord) collectionTotals.utilityReceivedLandlord += mixedUtility;
+      else collectionTotals.utilityReceivedManager += mixedUtility;
+    }
+    if (mixedTax !== 0) {
+      mixedRow.paidTax += mixedTax;
+      if (receipt.paidDirectToLandlord) collectionTotals.invoiceTaxReceivedLandlord += mixedTax;
+      else collectionTotals.invoiceTaxReceivedManager += mixedTax;
+    }
+  };
+
   return {
     rowsMap,
     ensureRow,
@@ -2381,6 +2471,7 @@ const createStatementAccumulator = ({
     collectionTotals,
     applyReceiptBeforeToBalance,
     applyReceiptInPeriodToBalance,
+    applyMixedDepositReceiptToBalance,
   };
 };
 
@@ -3387,87 +3478,7 @@ export const generateLandlordStatement = async ({
   // the deposit allocations. Process the remaining allocations here so they count toward
   // paidRent / paidUtility on the statement.
   for (const receipt of allDepositReceiptsInPeriod) {
-    if (receipt.paymentType !== "deposit") continue; // rent/utility receipts handled above
-
-    // Leftover cash on a deposit-type receipt that isn't allocated to any deposit charge
-    // (tagged either the old way, priorityGroup "unapplied", or the newer way,
-    // isPrepayment:true placeholder rows excluded from getReceiptAllocationStatementImpact
-    // above) is still real cash collected. Nothing else processes allocationSummary.
-    // unapplied for a deposit-type receipt, so it must be recognised here — same rule as
-    // the main receiptsInPeriod loop: always an unapplied credit, and under "on_receipt"
-    // also counted as paidRent immediately.
-    const unappliedRow = accumulator.ensureRow(receipt.tenant, receipt.unit);
-    const depositReceiptUnapplied = getReceiptSummaryAmount(receipt, "unapplied");
-    if (depositReceiptUnapplied !== 0) {
-      unappliedRow.unappliedCredits += depositReceiptUnapplied;
-      // Real cash, just not deposit — counts toward Total Paid / raw Bal C/F same as any
-      // other in-period cash (see the receiptsInPeriod loop's rawReceivedThisPeriod).
-      unappliedRow.rawReceivedThisPeriod = round2(Number(unappliedRow.rawReceivedThisPeriod || 0) + depositReceiptUnapplied);
-      if (prepaymentRecognition === "on_receipt") {
-        unappliedRow.paidRent += depositReceiptUnapplied;
-        if (receipt.paidDirectToLandlord) accumulator.collectionTotals.rentReceivedLandlord += depositReceiptUnapplied;
-        else accumulator.collectionTotals.rentReceivedManager += depositReceiptUnapplied;
-      }
-    }
-
-    const mixedAllocRows = getReceiptAllocationRows(receipt);
-    if (mixedAllocRows.length === 0) continue;
-
-    const mixedHasNonDeposit = mixedAllocRows.some((a) => {
-      const pg = String(a?.priorityGroup || "").toLowerCase();
-      return pg && pg !== "deposit" && pg !== "unapplied";
-    });
-    if (!mixedHasNonDeposit) continue;
-
-    const mixedRow = accumulator.ensureRow(receipt.tenant, receipt.unit);
-    let mixedRent = 0;
-    let mixedUtility = 0;
-    let mixedTax = 0;
-
-    mixedAllocRows.forEach((allocationRow) => {
-      const pg = String(allocationRow?.priorityGroup || "").toLowerCase();
-      if (!pg || pg === "deposit" || pg === "unapplied") return;
-
-      const sourceInvoice = invoiceStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
-      const sourceNote = noteStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
-      const impact = getReceiptAllocationStatementImpact({ allocationRow, sourceInvoice, sourceNote, row: mixedRow });
-      if (!impact.isStatementRelevant) return;
-
-      mixedRent    = round2(mixedRent    + Number(impact.rentAmount    || 0));
-      mixedUtility = round2(mixedUtility + Number(impact.utilityAmount || 0));
-      mixedTax     = round2(mixedTax     + Number(impact.taxAmount     || 0));
-
-      (Array.isArray(impact.utilities) ? impact.utilities : []).forEach((item) => {
-        applyUtility(mixedRow, "receipt", Number(item.amount || 0), item.label || allocationRow?.description || "", {
-          utilityType: item.label,
-          meterUtilityType: item.label,
-          statementUtilityType: item.label,
-        });
-      });
-    });
-
-    const mixedNonDepositCash = round2(mixedRent + mixedUtility + mixedTax);
-    if (mixedNonDepositCash !== 0) {
-      // Same reasoning as the unapplied portion above — this is real, non-deposit cash
-      // that was just bundled onto a deposit-type receipt; it belongs in Total Paid /
-      // raw Bal C/F like any other in-period cash.
-      mixedRow.rawReceivedThisPeriod = round2(Number(mixedRow.rawReceivedThisPeriod || 0) + mixedNonDepositCash);
-    }
-
-    if (mixedRent !== 0) {
-      mixedRow.paidRent += mixedRent;
-      if (receipt.paidDirectToLandlord) accumulator.collectionTotals.rentReceivedLandlord += mixedRent;
-      else accumulator.collectionTotals.rentReceivedManager += mixedRent;
-    }
-    if (mixedUtility !== 0) {
-      if (receipt.paidDirectToLandlord) accumulator.collectionTotals.utilityReceivedLandlord += mixedUtility;
-      else accumulator.collectionTotals.utilityReceivedManager += mixedUtility;
-    }
-    if (mixedTax !== 0) {
-      mixedRow.paidTax += mixedTax;
-      if (receipt.paidDirectToLandlord) accumulator.collectionTotals.invoiceTaxReceivedLandlord += mixedTax;
-      else accumulator.collectionTotals.invoiceTaxReceivedManager += mixedTax;
-    }
+    accumulator.applyMixedDepositReceiptToBalance(receipt);
   }
 
   // Opening deposit balances that have never been settled in a prior statement.
