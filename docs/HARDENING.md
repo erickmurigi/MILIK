@@ -168,7 +168,7 @@ to be agreed with the user before any of this is implemented.
 - In-process, non-distributed caches with TTL (`chartAccountAggregationService.js`, `propertyAccountingService.js`) — fine for single-instance deployment; latent consistency gap only if horizontally scaled.
 
 **Frontend**
-- `redux/apiCalls.js`: 3,331-line, ~230-action-creator God-file mixing every domain in the app.
+- ~~`redux/apiCalls.js`: 3,331-line, ~230-action-creator God-file mixing every domain in the app.~~ **Fixed — see Track C progress, item 3.** (Turned out to be 3,389 lines / 281 action creators once counted precisely.)
 - `DashboardLayout.jsx`: 2,034 lines, 5 largely-independent components (`DashboardLayout`, `HelpMegaPanel`, `ProfessionalDropdown`, `FinancialDropdown`, `TopToolbar` — the last alone ~1,430 lines) bundled into one file.
 - `TenantStatement.jsx` (3,530 lines): `renderRentReviewsAndEscalations`/`renderBillingSchedule`/`renderStatement` are plain functions invoked as fake components — recompute derived arrays and recreate handler closures on every render of the parent, unlike the rest of the file's otherwise-consistent memoization.
 - `ClientDetail.jsx` (1,899 lines): 55 `useState` calls in one component.
@@ -238,9 +238,47 @@ Agreed order (established before Track D's unplanned detour):
    verified store.js's reducer imports never touch `apiCalls.js`). No
    frontend test suite exists in this repo (no test script in
    `package.json`) — lint + build is the available verification.
-3. God-file decomposition (`landlordStatementService.js`, `redux/apiCalls.js`) —
-   after 2 lands, since splitting is safer once the logic inside isn't also
-   changing for other reasons. **Not started.**
+3. God-file decomposition (`landlordStatementService.js`, `redux/apiCalls.js`).
+   - ✅ **`redux/apiCalls.js` — done.** Mapped domain boundaries before
+     moving anything: which action creators cluster together, which
+     private helpers are used across ≥2 domains (`extractList`,
+     `resolveCompanyId`/`resolveLandlordIdFromProperty`, the `store`
+     singleton, a `buildQuery`/`buildPropertyLedgerQuery` pair that turned
+     out to be byte-identical duplicates), and confirmed every one of the
+     80+ consumer files imports via the extensionless module path with
+     named imports only — no deep-path or default imports anywhere, so a
+     barrel re-export needed zero consumer-side changes. Split 3,389 lines
+     / 281 action creators into 37 domain files (largest ~230 lines) plus
+     `redux/apiCalls/shared.js` for the cross-domain helpers (the `store`
+     import now has one single, auditable entry point instead of being
+     scattered across whichever files happened to need caching), landing
+     in 6 domain-grouped commits plus a final barrel-cutover commit —
+     `a66e00a`, `4e2e836`, `c503696`, `8618a46`, `35a543c`, `854a9c6`,
+     `c84b9c5`. Verified after every batch: function count reconciliation
+     (never just trusted a summary — recounted exports per file and
+     summed), a full grep of each removed reducer's action-creator names
+     across the whole remaining file before deleting its import block, and
+     lint + build with directly-captured exit codes. The final cutover
+     diffed the complete 281-name set against the pre-split file
+     name-by-name (not just by count) — 0 missing, 0 unexpected extras —
+     and confirmed 0 export-name collisions across the 37 files (would
+     otherwise break the `export *` barrel).
+     Found two real pre-existing bugs along the way, both left exactly as
+     found per scope (not this task's job to fix): `addUtilityToUnit`/
+     `removeUtilityFromUnit` dispatch reducer actions that don't exist
+     anywhere in the codebase (dead code, confirmed zero callers including
+     via namespace-import indirection — flagged for item 5, not a live
+     bug); and a self-inflicted one caught before it shipped — a
+     marker-based text-removal script ate the `// ` prefix off a comment
+     once, producing a hard parse error that a piped build command's exit
+     code silently didn't surface (the pipe reported `tail`'s exit code,
+     not the build's) — caught by eslint's independent parser instead,
+     fixed, and every batch after that verified with directly-captured
+     exit codes and an explicit post-removal corruption sweep before
+     running lint at all.
+   - `landlordStatementService.js` — **not started**, deliberately
+     deferred as its own separate piece of work with its own go-ahead,
+     given how recently Track D finished hardening it.
 4. `*ImportModal.jsx` consolidation + `MilikTable` memoization fix. **Not started.**
 5. Low-priority cleanup batch (`controllers/employee.js` removal, `moment`
    for `recurringSchedule.js`, unused imports) — no urgency, batch whenever.
@@ -252,4 +290,4 @@ actually authorized.
 
 ---
 
-*Last updated: 2026-09-15 (Track C item 2 closed). Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C as items are actioned.*
+*Last updated: 2026-09-16 (Track C item 3's `redux/apiCalls.js` decomposition closed; `landlordStatementService.js` remains). Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C as items are actioned.*
