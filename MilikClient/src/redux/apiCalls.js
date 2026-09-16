@@ -1,10 +1,14 @@
-/* eslint-disable no-undef */
-// Track C item 3: this file is mid-decomposition into redux/apiCalls/*.js
-// domain files, re-exported via the barrel at the bottom.
-
-// Domain files already split out of this God-file (Track C item 3). Barrel
-// re-export so none of the 80+ importers of "redux/apiCalls" need to change —
-// they all use the extensionless module path with named imports.
+// Track C item 3: this file used to be a 3,389-line, 281-action-creator
+// God-file mixing every domain in the app. It's now a pure barrel — all
+// logic lives in redux/apiCalls/*.js, split by domain (auth, tenants,
+// landlord payments, financial reports, etc.) plus a shared.js for the
+// handful of helpers (the `store` singleton, cache-freshness checks,
+// resolveCompanyId, buildQuery, ...) used across more than one domain.
+//
+// This re-export keeps every one of the 80+ files that import from
+// "redux/apiCalls" working unchanged — they all use the extensionless
+// module path with named imports, never a deep path into a specific
+// domain file, so nothing else needed to move.
 export * from "./apiCalls/auth";
 export * from "./apiCalls/users";
 export * from "./apiCalls/companies";
