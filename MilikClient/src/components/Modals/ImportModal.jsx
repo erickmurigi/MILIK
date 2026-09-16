@@ -2,7 +2,14 @@ import React, { useMemo, useState } from "react";
 import { FaUpload, FaCheckCircle, FaExclamationTriangle, FaSpinner, FaTimes, FaDownload } from "react-icons/fa";
 import { toast } from "react-toastify";
 
-const SaleImportModal = ({
+const defaultRowLabel = (item) => item?.title || item?.fullName || "";
+
+// Shared bulk-import modal used across every import type (tenants, properties, units,
+// landlords, products, invoice notes, sale buyers/listings). Each caller supplies its own
+// parseFile/onImport/previewCols; onImport must resolve to { successful, failed } — callers
+// whose backend nests results (e.g. response.data.data) are responsible for unwrapping that
+// before returning, so this component never has to guess the backend's response shape.
+const ImportModal = ({
   isOpen,
   onClose,
   title,
@@ -11,6 +18,16 @@ const SaleImportModal = ({
   onImport,
   previewCols,
   downloadTemplate,
+  accept = ".xlsx,.xls",
+  maxWidthClass = "max-w-5xl",
+  // (errorItem) => string — label shown next to "Row N" in the pre-submit Validation
+  // Errors panel. Defaults to the row's own title/fullName field (the original Sale
+  // Buyers/Listings shape); other import types pass their own field, e.g. e.data?.propertyName.
+  getErrorRowLabel = defaultRowLabel,
+  // (failureItem) => string — same, for the post-submit backend Import Failures panel.
+  // Kept separate from getErrorRowLabel because a type's parse-error shape and its backend
+  // failure shape aren't always the same (e.g. Property: error.data.propertyName vs failure.propertyName).
+  getFailureRowLabel = defaultRowLabel,
 }) => {
   const [selectedFile,   setSelectedFile]   = useState(null);
   const [parseResult,    setParseResult]    = useState(null);
@@ -86,7 +103,7 @@ const SaleImportModal = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
-      <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+      <div className={`flex max-h-[90vh] w-full ${maxWidthClass} flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl`}>
 
         {/* Header */}
         <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
@@ -120,7 +137,7 @@ const SaleImportModal = ({
             </label>
             <input
               type="file"
-              accept=".xlsx,.xls"
+              accept={accept}
               onChange={handleFileChange}
               disabled={isParsing || isImporting}
               className="block w-full cursor-pointer text-sm text-slate-500 file:mr-4 file:cursor-pointer file:border-0 file:bg-[#0B3B2E] file:px-4 file:py-2 file:text-xs file:font-black file:uppercase file:tracking-wide file:text-white hover:file:bg-[#0d5442] disabled:opacity-50"
@@ -210,7 +227,7 @@ const SaleImportModal = ({
                       {parseResult.errors.map((e, idx) => (
                         <div key={idx} className="border border-red-200 bg-white p-3">
                           <div className="text-xs font-bold text-red-700">
-                            Row {e.row}{e.title || e.fullName ? ` — ${e.title || e.fullName}` : ""}
+                            Row {e.row}{getErrorRowLabel(e) ? ` — ${getErrorRowLabel(e)}` : ""}
                           </div>
                           <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-red-600">
                             {e.errors.map((m, j) => <li key={j}>{m}</li>)}
@@ -232,7 +249,7 @@ const SaleImportModal = ({
                     {importFailures.map((f, idx) => (
                       <div key={idx} className="border border-amber-200 bg-white p-3">
                         <div className="text-xs font-bold text-amber-800">
-                          Row {f.row}{f.title || f.fullName ? ` — ${f.title || f.fullName}` : ""}
+                          {f.row != null ? `Row ${f.row}` : "Import row"}{getFailureRowLabel(f) ? ` — ${getFailureRowLabel(f)}` : ""}
                         </div>
                         <p className="mt-0.5 text-xs text-amber-700">{f.error || "Import failed"}</p>
                       </div>
@@ -272,4 +289,4 @@ const SaleImportModal = ({
   );
 };
 
-export default SaleImportModal;
+export default ImportModal;

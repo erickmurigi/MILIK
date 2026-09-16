@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { FaBan, FaCheck, FaEdit, FaEnvelope, FaFileAlt, FaFileImport, FaHandshake, FaHistory, FaMoneyBillWave, FaPlus, FaPrint, FaRedoAlt, FaSms, FaTimes, FaTrash } from "react-icons/fa";
-import SaleImportModal from "../../components/Modals/SaleImportModal";
+import ImportModal from "../../components/Modals/ImportModal";
 import { parseSaleBuyersExcel, downloadSaleBuyersTemplate } from "../../utils/excelTemplates";
 import CwSmsModal from "../CarWash/CwSmsModal";
 import SaleEmailModal from "./SaleEmailModal";
@@ -808,7 +808,7 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
         </Modal>
       )}
 
-      <SaleImportModal
+      <ImportModal
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
         title="Import Buyers"

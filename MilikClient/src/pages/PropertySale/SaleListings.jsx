@@ -6,7 +6,7 @@ import {
   FaEdit, FaFileImport, FaPlus, FaPrint, FaRedoAlt,
   FaTimes, FaTrash,
 } from "react-icons/fa";
-import SaleImportModal from "../../components/Modals/SaleImportModal";
+import ImportModal from "../../components/Modals/ImportModal";
 import { parseSaleListingsExcel, downloadSaleListingsTemplate } from "../../utils/excelTemplates";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
@@ -822,7 +822,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
         </Modal>
       )}
 
-      <SaleImportModal
+      <ImportModal
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
         title="Import Sale Listings"
