@@ -28,7 +28,6 @@ import {
   FaChartLine,
   FaMoneyBillWave,
   FaTrash,
-  FaDownload,
   FaPrint,
   FaSms,
   FaExchangeAlt,
@@ -42,11 +41,12 @@ import { getTenants, batchDeleteTenants, updateTenant } from "../../redux/tenant
 import { fetchCompanySettings, selectCompanySettings } from "../../redux/companySettingsRedux";
 import { getUnits } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
-import TenantsImportModal from "../../components/Modals/TenantsImportModal";
+import ImportModal from "../../components/Modals/ImportModal";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import {
   downloadTenantsTemplate,
   exportTenantsToExcel,
+  parseTenantsExcel,
 } from "../../utils/excelTemplates";
 import { adminRequests } from "../../utils/requestMethods";
 import { printTabularList } from "../../utils/printList";
@@ -2006,7 +2006,7 @@ const confirmTransferUnit = useCallback(async () => {
       ]);
       setCurrentPage(1);
 
-      return response.data;
+      return response.data?.data || { successful: [], failed: [] };
     } catch (error) {
       console.error("Bulk import error:", error);
       throw new Error(error.response?.data?.message || "Failed to import tenants");
@@ -2318,9 +2318,6 @@ const confirmTransferUnit = useCallback(async () => {
                   <FaPlus size={7} /> {isTerminatedView ? "Final Billing" : "Add"}
                 </button>
               )}
-              <button onClick={handleDownloadTemplate} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-blue-500 px-1.5 text-[9px] font-semibold text-white hover:bg-blue-600">
-                <FaDownload size={7} /> Template
-              </button>
               {canCreateTenant && !isTerminatedView && (
                 <button onClick={() => setShowImportModal(true)}
                   className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#FF8C00] hover:bg-[#e67e00] px-1.5 text-[9px] font-semibold text-white">
@@ -3342,10 +3339,57 @@ const confirmTransferUnit = useCallback(async () => {
       />
 
       {/* ===== TENANTS IMPORT MODAL ===== */}
-      <TenantsImportModal
+      <ImportModal
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
+        title={`Import ${termTenants} from Excel`}
+        entityName={termTenant.toLowerCase()}
+        parseFile={parseTenantsExcel}
+        downloadTemplate={handleDownloadTemplate}
         onImport={handleBulkImport}
+        maxWidthClass="max-w-6xl"
+        getErrorRowLabel={(e) => e.tenantName}
+        getFailureRowLabel={(f) => f.tenantName}
+        previewCols={[
+          { header: termTenant, render: (r) => (
+            <div>
+              <div className="font-semibold">{r.tenantName}</div>
+              <div className="text-[10px] text-slate-400">{r.phoneNumber || "—"}</div>
+            </div>
+          ) },
+          { header: `${termProperty} / ${termUnit}`, render: (r) => (
+            <div>
+              <div className="font-semibold">{r.propertyCode}</div>
+              <div className="text-[10px] text-slate-400">{r.unitNumber}</div>
+            </div>
+          ) },
+          { header: "Addl. Units", render: (r) => (
+            Array.isArray(r.additionalUnitNumbers) && r.additionalUnitNumbers.length > 0
+              ? r.additionalUnitNumbers.join(", ")
+              : "—"
+          ) },
+          { header: termRent, render: (r) => {
+            const amount = Number(r.rent || 0);
+            return amount ? amount.toLocaleString() : "Auto";
+          } },
+          { header: "Deposit", render: (r) => {
+            const amount = Number(r.depositAmount || 0);
+            return amount ? amount.toLocaleString() : "Auto";
+          } },
+          { header: "Held By", render: (r) => r.depositHeldBy || `${termProperty} Default` },
+          { header: "Utilities", render: (r) => {
+            const utilities = Array.isArray(r.utilities) ? r.utilities : [];
+            if (utilities.length === 0) return "Auto";
+            return utilities
+              .map((item) => {
+                const amount = Number(item?.unitCharge || 0);
+                const inclusion = item?.isIncluded ? "included" : "charged";
+                return `${item?.utilityLabel || item?.utility || "Utility"} (${amount.toLocaleString()} ${inclusion})`;
+              })
+              .join("; ");
+          } },
+          { header: "Status", render: (r) => <span className="capitalize">{r.status || "active"}</span> },
+        ]}
       />
 
       {/* ===== ADD UTILITY MODAL ===== */}
