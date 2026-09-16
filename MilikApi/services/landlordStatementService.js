@@ -1740,6 +1740,44 @@ const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap, latePenal
     return allocationHolder || recordHolder || tenantHolder || propertyHolder || "manager";
   };
 
+  const depositSettlementRows = [];
+  const depositSettlementTotals = {
+    additions: 0,
+    offsets: 0,
+  };
+
+  const pushDepositSettlementRow = ({
+    date,
+    description,
+    amount,
+    effect = "addition",
+    holder = "landlord",
+    paidDirectToLandlord = false,
+    sourceId = "",
+    unit = "",
+  }) => {
+    const value = round2(Math.abs(Number(amount || 0)));
+    if (value === 0) return;
+
+    const normalizedEffect = effect === "offset" ? "offset" : "addition";
+    depositSettlementRows.push({
+      date,
+      description,
+      amount: value,
+      effect: normalizedEffect,
+      holder,
+      paidDirectToLandlord: Boolean(paidDirectToLandlord),
+      sourceId,
+      unit: unit || "",
+    });
+
+    if (normalizedEffect === "offset") {
+      depositSettlementTotals.offsets = round2(depositSettlementTotals.offsets + value);
+    } else {
+      depositSettlementTotals.additions = round2(depositSettlementTotals.additions + value);
+    }
+  };
+
   return {
     rowsMap,
     ensureRow,
@@ -1748,6 +1786,9 @@ const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap, latePenal
     shouldIncludeInvoiceInLandlordStatement,
     shouldIncludeNoteInLandlordStatement,
     resolveDepositHolderForRecord,
+    depositSettlementRows,
+    depositSettlementTotals,
+    pushDepositSettlementRow,
   };
 };
 
@@ -2384,44 +2425,6 @@ export const generateLandlordStatement = async ({
     depositMemoBuckets.landlord.openingBalance = round2(depositLandlordSnapshot.balanceCF);
     depositMemoBuckets.landlord.closingBalance = round2(depositLandlordSnapshot.balanceCF);
   }
-
-  const depositSettlementRows = [];
-  const depositSettlementTotals = {
-    additions: 0,
-    offsets: 0,
-  };
-
-  const pushDepositSettlementRow = ({
-    date,
-    description,
-    amount,
-    effect = "addition",
-    holder = "landlord",
-    paidDirectToLandlord = false,
-    sourceId = "",
-    unit = "",
-  }) => {
-    const value = round2(Math.abs(Number(amount || 0)));
-    if (value === 0) return;
-
-    const normalizedEffect = effect === "offset" ? "offset" : "addition";
-    depositSettlementRows.push({
-      date,
-      description,
-      amount: value,
-      effect: normalizedEffect,
-      holder,
-      paidDirectToLandlord: Boolean(paidDirectToLandlord),
-      sourceId,
-      unit: unit || "",
-    });
-
-    if (normalizedEffect === "offset") {
-      depositSettlementTotals.offsets = round2(depositSettlementTotals.offsets + value);
-    } else {
-      depositSettlementTotals.additions = round2(depositSettlementTotals.additions + value);
-    }
-  };
 
   const applyDepositReceiptToMemo = (record = {}, amount = 0, phase = "current") => {
     const value = round2(Math.abs(amount));
@@ -3217,7 +3220,7 @@ export const generateLandlordStatement = async ({
       category: "deposit_remittance",
       sourceId,
     });
-    pushDepositSettlementRow({
+    accumulator.pushDepositSettlementRow({
       date: getReceiptStatementDate(receipt) || receipt.paymentDate,
       description: additionDescription,
       amount,
@@ -3256,7 +3259,7 @@ export const generateLandlordStatement = async ({
         category: "deposit_direct_offset",
         sourceId: `${sourceId}-offset`,
       });
-      pushDepositSettlementRow({
+      accumulator.pushDepositSettlementRow({
         date: getReceiptStatementDate(receipt) || receipt.paymentDate,
         description: offsetDescription,
         amount,
@@ -3398,7 +3401,7 @@ export const generateLandlordStatement = async ({
       category: "deposit_carryforward",
       sourceId: `deposit-cf-mgr-${String(propertyObjectId)}`,
     });
-    pushDepositSettlementRow({
+    accumulator.pushDepositSettlementRow({
       date: periodStart,
       description: carryDesc,
       amount: managerDepositOpening,
@@ -3427,7 +3430,7 @@ export const generateLandlordStatement = async ({
       category: "deposit_carryforward",
       sourceId: `deposit-cf-lld-${String(propertyObjectId)}`,
     });
-    pushDepositSettlementRow({
+    accumulator.pushDepositSettlementRow({
       date: periodStart,
       description: carryDesc,
       amount: landlordDepositOpening,
@@ -4057,7 +4060,7 @@ export const generateLandlordStatement = async ({
     Math.max(additionsTotal - depositRemittanceAdditionsTotal, 0)
   );
   const displayNonCommissionDeductions = round2(
-    Math.max(nonCommissionDeductions - (depositSettlementTotals.offsets || 0), 0)
+    Math.max(nonCommissionDeductions - (accumulator.depositSettlementTotals.offsets || 0), 0)
   );
   const advanceRecoveriesTotal = round2(totalAdvanceRecoveries || 0);
   const earlyPayoutsTotal = round2(totalEarlyPayouts || 0);
@@ -4095,7 +4098,7 @@ export const generateLandlordStatement = async ({
   );
 
   const depositSettlementNet = round2(
-    depositSettlementTotals.additions - depositSettlementTotals.offsets
+    accumulator.depositSettlementTotals.additions - accumulator.depositSettlementTotals.offsets
   );
 
   const depositsHeldByManager = round2(depositMemoBuckets.manager.closingBalance);
@@ -4241,10 +4244,10 @@ export const generateLandlordStatement = async ({
       totals: depositMemoTotals,
     },
     depositSettlement: {
-      rows: depositSettlementRows,
+      rows: accumulator.depositSettlementRows,
       totals: {
-        additions: round2(depositSettlementTotals.additions),
-        offsets: round2(depositSettlementTotals.offsets),
+        additions: round2(accumulator.depositSettlementTotals.additions),
+        offsets: round2(accumulator.depositSettlementTotals.offsets),
         netImpact: depositSettlementNet,
       },
     },
@@ -4334,8 +4337,8 @@ export const generateLandlordStatement = async ({
       depositCharges: depositMemoTotals.billed,
       depositReceipts: depositMemoTotals.received,
       depositClosingLiability: depositMemoTotals.closingBalance,
-      depositSettlementAdditions: round2(depositSettlementTotals.additions),
-      depositSettlementOffsets: round2(depositSettlementTotals.offsets),
+      depositSettlementAdditions: round2(accumulator.depositSettlementTotals.additions),
+      depositSettlementOffsets: round2(accumulator.depositSettlementTotals.offsets),
       depositSettlementNet,
       broughtForwardCreditsApplied: round2(broughtForwardCreditApplicationTotals.totalApplied),
       broughtForwardCreditsAppliedRent: round2(broughtForwardCreditApplicationTotals.rentApplied),
