@@ -1559,7 +1559,19 @@ const applyUtility = (row, phase, amount, hint, metadata = {}) => {
 // via ensureRow) because Phase 3 (tenantRows materialization) still reads it directly by
 // design — that phase hasn't been converted yet, and exposing it here avoids a premature,
 // unverified change to code outside this step's scope.
-const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap, latePenaltyToLandlord, property, invoiceStatementMap, noteStatementMap }) => {
+const createStatementAccumulator = ({
+  unitMap,
+  tenantMap,
+  snapshotMap,
+  latePenaltyToLandlord,
+  property,
+  invoiceStatementMap,
+  noteStatementMap,
+  periodStart,
+  periodEnd,
+  snapshotDate,
+  prepaymentRecognition,
+}) => {
   const rowsMap = new Map();
 
   const ensureRow = (tenantId, unitId, fallback = {}) => {
@@ -1863,6 +1875,182 @@ const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap, latePenal
     invoiceTaxReceivedLandlord: 0,
   };
 
+  // Step 9 of the accumulator conversion (Track C item 3 part 2) — the first of the three
+  // c355950 call sites, extracted from the receiptsBefore loop's per-receipt body verbatim.
+  // Handles one receipt's impact on Balance B/F: either its allocation rows are walked
+  // (crediting/deferring against whatever they target, including recognising a brought-
+  // forward prepayment the moment its charge lands in this period), or — when it has no
+  // allocation rows at all — its full amount reduces the default row's balanceBF directly.
+  const applyReceiptBeforeToBalance = (receipt) => {
+    const defaultRow = ensureRow(receipt.tenant, receipt.unit);
+    const allocationRows = getReceiptAllocationRows(receipt);
+    const unappliedAllocated = getReceiptSummaryAmount(receipt, "unapplied");
+
+    // A receipt whose own recognition date is already BEFORE this snapshot's cutoff was
+    // already folded into that snapshot's balanceCF — it only shows up here (via the
+    // uncapped `updatedAt` fetch clause above) because it gained a fresh allocation
+    // afterward. Its historical, already-snapshotted impact (unapplied credit, payoff of
+    // a pre-existing debt) must NOT be re-applied to balanceBF a second time; only its
+    // brand-new in-period recognition (handled below via sourceInCurrentPeriod) is real.
+    const receiptRecognitionDate = getReceiptStatementDate(receipt);
+    const receiptRecognitionTime = receiptRecognitionDate ? new Date(receiptRecognitionDate).getTime() : NaN;
+    const alreadyReflectedInSnapshot =
+      snapshotDate && Number.isFinite(receiptRecognitionTime) && receiptRecognitionTime < snapshotDate.getTime();
+
+    // Cash this old receipt never applied to any charge is a genuine credit carried
+    // forward — it must sit in unappliedCredits, never silently reduce Balance B/F as if
+    // it had repaid a real debt (that conflated "prepayment held" with "debt settled" and
+    // shifted the opening balance by the unapplied amount every time one existed).
+    if (unappliedAllocated !== 0 && !alreadyReflectedInSnapshot) {
+      defaultRow.unappliedCredits += unappliedAllocated;
+    }
+
+    if (allocationRows.length > 0) {
+      allocationRows.forEach((allocationRow) => {
+        const sourceInvoice = invoiceStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
+        const sourceNote = noteStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
+        // A single receipt can span more than one of the tenant's units (e.g. one payment
+        // settling both BAR's and S7's rent for a two-unit tenant) — resolve each
+        // allocation row against the unit its own source invoice actually belongs to,
+        // not the receipt's own top-level unit field. Falls back to the receipt's unit
+        // only when the source can't be resolved (a debit note, or a pure prepayment
+        // placeholder row with no linked invoice at all).
+        const row = ensureRow(receipt.tenant, sourceInvoice?.unit || receipt.unit);
+        const impact = getReceiptAllocationStatementImpact({
+          allocationRow,
+          sourceInvoice,
+          sourceNote,
+          row,
+        });
+
+        // The target invoice may not be in THIS statement's own fetch window (e.g. it was
+        // excluded by a snapshot's lowerBound cutoff) even though it genuinely exists —
+        // fall back to the allocation row's own stored invoiceDate/bookingDate (set by
+        // autoApplyPrepayments / manual allocation) rather than treating an unresolved
+        // sourceInvoice as "no date info", which would wrongly reduce Bal B/F as if this
+        // were paying off pre-existing debt. Mirrors the same fallback the receiptsInPeriod
+        // loop's deferred-prepayment check already uses below.
+        const sourceInvoiceDate =
+          (sourceInvoice ? getInvoiceStatementDate(sourceInvoice) : null) ||
+          allocationRow?.invoiceDate ||
+          allocationRow?.bookingDate ||
+          null;
+        const sourceInvoiceTime = sourceInvoiceDate ? new Date(sourceInvoiceDate).getTime() : Number.NaN;
+        const sourceInCurrentPeriod =
+          Number.isFinite(sourceInvoiceTime) &&
+          sourceInvoiceTime >= periodStart.getTime() &&
+          sourceInvoiceTime <= periodEnd.getTime();
+
+        // Only reduce the balance carried INTO this period when the applied-against
+        // charge is itself from before this period — i.e. this old receipt paid off a
+        // debt the tenant already owed as of periodStart. When the charge is dated THIS
+        // period instead, the credit isn't paying off a pre-existing debt at all — it's
+        // being matched, for the first time, against a charge that itself only exists
+        // this period. That case is handled below as a fresh in-period recognition
+        // instead, so it must NOT also reduce Balance B/F (that would double-subtract the
+        // same dollar: once via the opening credit, again via "Paid" this period).
+        if (!sourceInCurrentPeriod && !alreadyReflectedInSnapshot) {
+          row.balanceBF = round2(row.balanceBF - Number(impact.statementRelevantAmount || 0));
+        }
+
+        if (sourceInCurrentPeriod && Math.abs(Number(impact.statementRelevantAmount || 0)) > 0) {
+          const grossAppliedAmount = round2(Math.abs(Number(allocationRow?.appliedAmount || 0)));
+          const rentApplied = round2(Math.abs(Number(impact.rentAmount || 0)));
+          const utilityApplied = round2(Math.abs(Number(impact.utilityAmount || 0)));
+          const taxApplied = round2(Math.abs(Number(impact.taxAmount || 0)));
+
+          const receiptReference =
+            receipt.receiptNumber || receipt.referenceNumber || String(receipt._id || "");
+          const appliedDocumentReference =
+            sourceInvoice?.invoiceNumber || allocationRow?.invoiceNumber || allocationRow?.description || "Charge";
+
+          broughtForwardCreditApplicationRows.push({
+            date: getReceiptStatementDate(receipt) || receipt.paymentDate,
+            receiptDate: receipt.paymentDate,
+            chargeDate: sourceInvoiceDate,
+            description: `B/F prepayment ${receiptReference} applied to ${appliedDocumentReference} - ${row.tenantName}`,
+            amount: grossAppliedAmount,
+            rentApplied,
+            utilityApplied,
+            taxApplied,
+            category: impact.statementCategory || "credit_application",
+            tenantName: row.tenantName,
+            unit: row.unit,
+            receiptReference,
+            chargeReference: appliedDocumentReference,
+            sourceId: `${String(receipt._id || "")}:${String(sourceInvoice?._id || allocationRow?.invoice || allocationRow?.invoiceId || "")}`,
+          });
+
+          broughtForwardCreditApplicationTotals.totalApplied = round2(
+            broughtForwardCreditApplicationTotals.totalApplied + grossAppliedAmount
+          );
+          broughtForwardCreditApplicationTotals.rentApplied = round2(
+            broughtForwardCreditApplicationTotals.rentApplied + rentApplied
+          );
+          broughtForwardCreditApplicationTotals.utilityApplied = round2(
+            broughtForwardCreditApplicationTotals.utilityApplied + utilityApplied
+          );
+          broughtForwardCreditApplicationTotals.taxApplied = round2(
+            broughtForwardCreditApplicationTotals.taxApplied + taxApplied
+          );
+
+          // Recognise this as an actual collection for THIS period — this is the period
+          // the prepayment is first attributed to a real charge, so it belongs in Paid /
+          // collections / net remittance now. Under "on_invoice_allocation" it was held out
+          // of those totals in the period it was received (a prepayment credit then), so
+          // this is its single recognition. Under "on_receipt" the cash was already counted
+          // when it landed, so skip this pass to avoid counting it twice.
+          if (prepaymentRecognition === "on_invoice_allocation") {
+            const rentRecognized = round2(Number(impact.rentAmount || 0));
+            const utilityRecognized = round2(Number(impact.utilityAmount || 0));
+            const taxRecognized = round2(Number(impact.taxAmount || 0));
+
+            if (rentRecognized !== 0) {
+              row.paidRent += rentRecognized;
+              if (receipt.paidDirectToLandlord) collectionTotals.rentReceivedLandlord += rentRecognized;
+              else collectionTotals.rentReceivedManager += rentRecognized;
+            }
+
+            if (utilityRecognized !== 0) {
+              const impactUtilities = Array.isArray(impact.utilities) ? impact.utilities : [];
+              if (impactUtilities.length > 0) {
+                impactUtilities.forEach((item) => {
+                  applyUtility(
+                    row,
+                    "receipt",
+                    Number(item.amount || 0),
+                    item.label || appliedDocumentReference || "",
+                    {
+                      utilityType: item.label,
+                      meterUtilityType: item.label,
+                      statementUtilityType: item.label,
+                    }
+                  );
+                });
+              } else {
+                applyUtility(row, "receipt", utilityRecognized, appliedDocumentReference || "");
+              }
+
+              if (receipt.paidDirectToLandlord) collectionTotals.utilityReceivedLandlord += utilityRecognized;
+              else collectionTotals.utilityReceivedManager += utilityRecognized;
+            }
+
+            if (taxRecognized !== 0) {
+              row.paidTax += taxRecognized;
+              if (receipt.paidDirectToLandlord) collectionTotals.invoiceTaxReceivedLandlord += taxRecognized;
+              else collectionTotals.invoiceTaxReceivedManager += taxRecognized;
+            }
+          }
+        }
+      });
+      return;
+    }
+
+    if (!alreadyReflectedInSnapshot) {
+      defaultRow.balanceBF = round2(defaultRow.balanceBF - Number(receipt.amount || 0));
+    }
+  };
+
   return {
     rowsMap,
     ensureRow,
@@ -1880,6 +2068,7 @@ const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap, latePenal
     broughtForwardCreditApplicationRows,
     broughtForwardCreditApplicationTotals,
     collectionTotals,
+    applyReceiptBeforeToBalance,
   };
 };
 
@@ -2472,7 +2661,19 @@ export const generateLandlordStatement = async ({
     lastApproved,
   });
 
-  const accumulator = createStatementAccumulator({ unitMap, tenantMap, snapshotMap, latePenaltyToLandlord, property, invoiceStatementMap, noteStatementMap });
+  const accumulator = createStatementAccumulator({
+    unitMap,
+    tenantMap,
+    snapshotMap,
+    latePenaltyToLandlord,
+    property,
+    invoiceStatementMap,
+    noteStatementMap,
+    periodStart,
+    periodEnd,
+    snapshotDate,
+    prepaymentRecognition,
+  });
 
   units.forEach((unit) => {
     const unitTenants = (tenantsByUnit.get(String(unit._id)) || []).sort(
@@ -2536,173 +2737,7 @@ export const generateLandlordStatement = async ({
   }
 
   for (const receipt of receiptsBefore) {
-    const defaultRow = accumulator.ensureRow(receipt.tenant, receipt.unit);
-    const allocationRows = getReceiptAllocationRows(receipt);
-    const unappliedAllocated = getReceiptSummaryAmount(receipt, "unapplied");
-
-    // A receipt whose own recognition date is already BEFORE this snapshot's cutoff was
-    // already folded into that snapshot's balanceCF — it only shows up here (via the
-    // uncapped `updatedAt` fetch clause above) because it gained a fresh allocation
-    // afterward. Its historical, already-snapshotted impact (unapplied credit, payoff of
-    // a pre-existing debt) must NOT be re-applied to balanceBF a second time; only its
-    // brand-new in-period recognition (handled below via sourceInCurrentPeriod) is real.
-    const receiptRecognitionDate = getReceiptStatementDate(receipt);
-    const receiptRecognitionTime = receiptRecognitionDate ? new Date(receiptRecognitionDate).getTime() : NaN;
-    const alreadyReflectedInSnapshot =
-      snapshotDate && Number.isFinite(receiptRecognitionTime) && receiptRecognitionTime < snapshotDate.getTime();
-
-    // Cash this old receipt never applied to any charge is a genuine credit carried
-    // forward — it must sit in unappliedCredits, never silently reduce Balance B/F as if
-    // it had repaid a real debt (that conflated "prepayment held" with "debt settled" and
-    // shifted the opening balance by the unapplied amount every time one existed).
-    if (unappliedAllocated !== 0 && !alreadyReflectedInSnapshot) {
-      defaultRow.unappliedCredits += unappliedAllocated;
-    }
-
-    if (allocationRows.length > 0) {
-      allocationRows.forEach((allocationRow) => {
-        const sourceInvoice = invoiceStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
-        const sourceNote = noteStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
-        // A single receipt can span more than one of the tenant's units (e.g. one payment
-        // settling both BAR's and S7's rent for a two-unit tenant) — resolve each
-        // allocation row against the unit its own source invoice actually belongs to,
-        // not the receipt's own top-level unit field. Falls back to the receipt's unit
-        // only when the source can't be resolved (a debit note, or a pure prepayment
-        // placeholder row with no linked invoice at all).
-        const row = accumulator.ensureRow(receipt.tenant, sourceInvoice?.unit || receipt.unit);
-        const impact = getReceiptAllocationStatementImpact({
-          allocationRow,
-          sourceInvoice,
-          sourceNote,
-          row,
-        });
-
-        // The target invoice may not be in THIS statement's own fetch window (e.g. it was
-        // excluded by a snapshot's lowerBound cutoff) even though it genuinely exists —
-        // fall back to the allocation row's own stored invoiceDate/bookingDate (set by
-        // autoApplyPrepayments / manual allocation) rather than treating an unresolved
-        // sourceInvoice as "no date info", which would wrongly reduce Bal B/F as if this
-        // were paying off pre-existing debt. Mirrors the same fallback the receiptsInPeriod
-        // loop's deferred-prepayment check already uses below.
-        const sourceInvoiceDate =
-          (sourceInvoice ? getInvoiceStatementDate(sourceInvoice) : null) ||
-          allocationRow?.invoiceDate ||
-          allocationRow?.bookingDate ||
-          null;
-        const sourceInvoiceTime = sourceInvoiceDate ? new Date(sourceInvoiceDate).getTime() : Number.NaN;
-        const sourceInCurrentPeriod =
-          Number.isFinite(sourceInvoiceTime) &&
-          sourceInvoiceTime >= periodStart.getTime() &&
-          sourceInvoiceTime <= periodEnd.getTime();
-
-        // Only reduce the balance carried INTO this period when the applied-against
-        // charge is itself from before this period — i.e. this old receipt paid off a
-        // debt the tenant already owed as of periodStart. When the charge is dated THIS
-        // period instead, the credit isn't paying off a pre-existing debt at all — it's
-        // being matched, for the first time, against a charge that itself only exists
-        // this period. That case is handled below as a fresh in-period recognition
-        // instead, so it must NOT also reduce Balance B/F (that would double-subtract the
-        // same dollar: once via the opening credit, again via "Paid" this period).
-        if (!sourceInCurrentPeriod && !alreadyReflectedInSnapshot) {
-          row.balanceBF = round2(row.balanceBF - Number(impact.statementRelevantAmount || 0));
-        }
-
-        if (sourceInCurrentPeriod && Math.abs(Number(impact.statementRelevantAmount || 0)) > 0) {
-          const grossAppliedAmount = round2(Math.abs(Number(allocationRow?.appliedAmount || 0)));
-          const rentApplied = round2(Math.abs(Number(impact.rentAmount || 0)));
-          const utilityApplied = round2(Math.abs(Number(impact.utilityAmount || 0)));
-          const taxApplied = round2(Math.abs(Number(impact.taxAmount || 0)));
-
-          const receiptReference =
-            receipt.receiptNumber || receipt.referenceNumber || String(receipt._id || "");
-          const appliedDocumentReference =
-            sourceInvoice?.invoiceNumber || allocationRow?.invoiceNumber || allocationRow?.description || "Charge";
-
-          accumulator.broughtForwardCreditApplicationRows.push({
-            date: getReceiptStatementDate(receipt) || receipt.paymentDate,
-            receiptDate: receipt.paymentDate,
-            chargeDate: sourceInvoiceDate,
-            description: `B/F prepayment ${receiptReference} applied to ${appliedDocumentReference} - ${row.tenantName}`,
-            amount: grossAppliedAmount,
-            rentApplied,
-            utilityApplied,
-            taxApplied,
-            category: impact.statementCategory || "credit_application",
-            tenantName: row.tenantName,
-            unit: row.unit,
-            receiptReference,
-            chargeReference: appliedDocumentReference,
-            sourceId: `${String(receipt._id || "")}:${String(sourceInvoice?._id || allocationRow?.invoice || allocationRow?.invoiceId || "")}`,
-          });
-
-          accumulator.broughtForwardCreditApplicationTotals.totalApplied = round2(
-            accumulator.broughtForwardCreditApplicationTotals.totalApplied + grossAppliedAmount
-          );
-          accumulator.broughtForwardCreditApplicationTotals.rentApplied = round2(
-            accumulator.broughtForwardCreditApplicationTotals.rentApplied + rentApplied
-          );
-          accumulator.broughtForwardCreditApplicationTotals.utilityApplied = round2(
-            accumulator.broughtForwardCreditApplicationTotals.utilityApplied + utilityApplied
-          );
-          accumulator.broughtForwardCreditApplicationTotals.taxApplied = round2(
-            accumulator.broughtForwardCreditApplicationTotals.taxApplied + taxApplied
-          );
-
-          // Recognise this as an actual collection for THIS period — this is the period
-          // the prepayment is first attributed to a real charge, so it belongs in Paid /
-          // collections / net remittance now. Under "on_invoice_allocation" it was held out
-          // of those totals in the period it was received (a prepayment credit then), so
-          // this is its single recognition. Under "on_receipt" the cash was already counted
-          // when it landed, so skip this pass to avoid counting it twice.
-          if (prepaymentRecognition === "on_invoice_allocation") {
-            const rentRecognized = round2(Number(impact.rentAmount || 0));
-            const utilityRecognized = round2(Number(impact.utilityAmount || 0));
-            const taxRecognized = round2(Number(impact.taxAmount || 0));
-
-            if (rentRecognized !== 0) {
-              row.paidRent += rentRecognized;
-              if (receipt.paidDirectToLandlord) accumulator.collectionTotals.rentReceivedLandlord += rentRecognized;
-              else accumulator.collectionTotals.rentReceivedManager += rentRecognized;
-            }
-
-            if (utilityRecognized !== 0) {
-              const impactUtilities = Array.isArray(impact.utilities) ? impact.utilities : [];
-              if (impactUtilities.length > 0) {
-                impactUtilities.forEach((item) => {
-                  applyUtility(
-                    row,
-                    "receipt",
-                    Number(item.amount || 0),
-                    item.label || appliedDocumentReference || "",
-                    {
-                      utilityType: item.label,
-                      meterUtilityType: item.label,
-                      statementUtilityType: item.label,
-                    }
-                  );
-                });
-              } else {
-                applyUtility(row, "receipt", utilityRecognized, appliedDocumentReference || "");
-              }
-
-              if (receipt.paidDirectToLandlord) accumulator.collectionTotals.utilityReceivedLandlord += utilityRecognized;
-              else accumulator.collectionTotals.utilityReceivedManager += utilityRecognized;
-            }
-
-            if (taxRecognized !== 0) {
-              row.paidTax += taxRecognized;
-              if (receipt.paidDirectToLandlord) accumulator.collectionTotals.invoiceTaxReceivedLandlord += taxRecognized;
-              else accumulator.collectionTotals.invoiceTaxReceivedManager += taxRecognized;
-            }
-          }
-        }
-      });
-      continue;
-    }
-
-    if (!alreadyReflectedInSnapshot) {
-      defaultRow.balanceBF = round2(defaultRow.balanceBF - Number(receipt.amount || 0));
-    }
+    accumulator.applyReceiptBeforeToBalance(receipt);
   }
 
   // Receipts whose paymentDate was in a previously approved period but whose booking date
