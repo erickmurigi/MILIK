@@ -1569,6 +1569,7 @@ const createStatementAccumulator = ({
   noteStatementMap,
   periodStart,
   periodEnd,
+  periodEndTime,
   snapshotDate,
   prepaymentRecognition,
 }) => {
@@ -1873,6 +1874,10 @@ const createStatementAccumulator = ({
     utilityReceivedLandlord: 0,
     invoiceTaxReceivedManager: 0,
     invoiceTaxReceivedLandlord: 0,
+    // Added in step 10 — same "must be a mutable object field, not a bare `let`" reasoning
+    // as the six totals above: its one mutation site is about to move into this factory,
+    // but Phase 6 still reads the final value directly from outside afterward.
+    directToLandlordOffset: 0,
   };
 
   // Step 9 of the accumulator conversion (Track C item 3 part 2) — the first of the three
@@ -2051,6 +2056,312 @@ const createStatementAccumulator = ({
     }
   };
 
+  // Step 10 of the accumulator conversion (Track C item 3 part 2) — the second of the
+  // three c355950 call sites. Extracted verbatim from the receiptsInPeriod loop body.
+  const applyReceiptInPeriodToBalance = (receipt) => {
+    const row = ensureRow(receipt.tenant, receipt.unit);
+    const amount = Number(receipt.amount || 0);
+    const allocationRows = getReceiptAllocationRows(receipt);
+    const description = buildGroupedReceiptDescription({
+      receipt,
+      allocationRows,
+      invoiceStatementMap,
+      row,
+    }) || receipt.description || receipt.referenceNumber || receipt.receiptNumber || "Tenant receipt";
+    const depositAllocated = getReceiptSummaryAmount(receipt, "deposit");
+    const unappliedAllocated = getReceiptSummaryAmount(receipt, "unapplied");
+    let rentAllocated = 0;
+    let utilityAllocated = 0;
+    let taxAllocated = 0;
+    // Portion of this in-period receipt that pays a rent invoice dated AFTER the cutoff —
+    // held as a prepayment credit rather than counted as paid-this-period (under the
+    // default "on_invoice_allocation" policy). The period that invoice belongs to picks it
+    // up once, via the receiptsBefore "sourceInCurrentPeriod" recognition below.
+    let deferredPrepaymentCredit = 0;
+
+    if (allocationRows.length > 0) {
+      allocationRows.forEach((allocationRow) => {
+        const sourceInvoice = invoiceStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
+        const sourceNote = noteStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
+        const impact = getReceiptAllocationStatementImpact({
+          allocationRow,
+          sourceInvoice,
+          sourceNote,
+          row,
+        });
+
+        if (!impact.isStatementRelevant) return;
+
+        if (prepaymentRecognition === "on_invoice_allocation") {
+          // The invoice this allocation pays. Its own recognition date is authoritative
+          // when the invoice is loaded; otherwise the allocation row carries the invoice
+          // date (the invoice may be future-dated and outside the fetch window, so it
+          // isn't in invoiceStatementMap).
+          const srcDate =
+            (sourceInvoice ? getInvoiceStatementDate(sourceInvoice) : null) ||
+            allocationRow?.invoiceDate ||
+            allocationRow?.bookingDate ||
+            null;
+          const srcTime = srcDate ? new Date(srcDate).getTime() : Number.NaN;
+          if (Number.isFinite(srcTime) && srcTime > periodEndTime) {
+            deferredPrepaymentCredit = round2(
+              deferredPrepaymentCredit + Number(impact.statementRelevantAmount || 0)
+            );
+            return; // ahead of the billing — recognise it in the invoice's own period, not here
+          }
+        }
+
+        let impactRent = Number(impact.rentAmount || 0);
+        // An allocation may be over-applied — more than the invoice's outstanding at the
+        // time (beforeOutstanding). Under "on_invoice_allocation" the portion beyond the
+        // invoice is paid ahead of the billing: hold it as a prepayment credit rather than
+        // count it as rent this period. Only positive over-applications are trimmed, and
+        // only when beforeOutstanding is a usable number.
+        if (prepaymentRecognition === "on_invoice_allocation" && impactRent > 0) {
+          const invoiceOutstanding = Number(allocationRow?.beforeOutstanding);
+          if (Number.isFinite(invoiceOutstanding) && invoiceOutstanding >= 0 && impactRent > invoiceOutstanding) {
+            row.unappliedCredits += round2(impactRent - invoiceOutstanding);
+            impactRent = invoiceOutstanding;
+          }
+        }
+
+        rentAllocated = round2(rentAllocated + impactRent);
+        utilityAllocated = round2(utilityAllocated + Number(impact.utilityAmount || 0));
+        taxAllocated = round2(taxAllocated + Number(impact.taxAmount || 0));
+
+        (Array.isArray(impact.utilities) ? impact.utilities : []).forEach((item) => {
+          applyUtility(
+            row,
+            "receipt",
+            Number(item.amount || 0),
+            item.label || allocationRow?.description || receipt.description || "",
+            {
+              utilityType: item.label,
+              meterUtilityType: item.label,
+              statementUtilityType: item.label,
+            }
+          );
+        });
+      });
+    } else {
+      rentAllocated = getReceiptSummaryAmount(receipt, "rent");
+      utilityAllocated = getReceiptSummaryAmount(receipt, "utility");
+    }
+
+    // No per-invoice allocation rows — the receipt only says "rent: X" with no way to
+    // know which bill it covers. Under "on_invoice_allocation", cap that lump at what the
+    // tenant actually owes in rent (this period's rent invoiced + b/f arrears, less what
+    // earlier receipts this period already covered); anything beyond is paid ahead of the
+    // billing and held as a prepayment credit, so it never inflates commission or the
+    // remittance the manager owes this period. Only positive over-payments are trimmed.
+    // When allocation rows ARE present they already say exactly what each portion covers
+    // (and future-dated allocations are deferred above), so no cap is applied there —
+    // that path can legitimately span several of the tenant's units.
+    let cappedPrepayment = false;
+    if (
+      allocationRows.length === 0 &&
+      prepaymentRecognition === "on_invoice_allocation" &&
+      rentAllocated > 0
+    ) {
+      const rentDueForRow = round2(
+        Math.max(0, Number(row.invoicedRent || 0) + Math.max(0, Number(row.balanceBF || 0)) - Number(row.paidRent || 0))
+      );
+      if (rentAllocated > rentDueForRow) {
+        const excess = round2(rentAllocated - rentDueForRow);
+        rentAllocated = rentDueForRow;
+        row.unappliedCredits += excess;
+        cappedPrepayment = true;
+      }
+    }
+
+    if (rentAllocated !== 0) {
+      row.paidRent += rentAllocated;
+      if (receipt.paidDirectToLandlord) collectionTotals.rentReceivedLandlord += rentAllocated;
+      else collectionTotals.rentReceivedManager += rentAllocated;
+    }
+
+    if (utilityAllocated !== 0) {
+      if (allocationRows.length === 0) {
+        const utilityBreakdown = Array.isArray(receipt.breakdown?.utilities)
+          ? receipt.breakdown.utilities
+          : [];
+
+        if (utilityBreakdown.length > 0) {
+          const sign = getReceiptSign(receipt);
+          utilityBreakdown.forEach((util) => {
+            applyUtility(
+              row,
+              "receipt",
+              Number(util.amount || 0) * sign,
+              util.name || util.utility || receipt.description || ""
+            );
+          });
+        } else {
+          applyUtility(row, "receipt", utilityAllocated, receipt.description || "");
+        }
+      }
+
+      if (receipt.paidDirectToLandlord) {
+        collectionTotals.utilityReceivedLandlord += utilityAllocated;
+      } else {
+        collectionTotals.utilityReceivedManager += utilityAllocated;
+      }
+    }
+
+    if (taxAllocated !== 0) {
+      row.paidTax += taxAllocated;
+      if (receipt.paidDirectToLandlord) {
+        collectionTotals.invoiceTaxReceivedLandlord += taxAllocated;
+      } else {
+        collectionTotals.invoiceTaxReceivedManager += taxAllocated;
+      }
+    }
+
+    if (unappliedAllocated !== 0) {
+      row.unappliedCredits += unappliedAllocated;
+      // "on_receipt": all cash is recognised as it lands, so an unapplied overpayment
+      // counts toward collections now (and never again when it is later allocated —
+      // the receiptsBefore recognition pass is skipped in this mode). "on_invoice_
+      // allocation" leaves it purely as a credit until its rent is billed.
+      if (prepaymentRecognition === "on_receipt") {
+        row.paidRent += unappliedAllocated;
+        if (receipt.paidDirectToLandlord) collectionTotals.rentReceivedLandlord += unappliedAllocated;
+        else collectionTotals.rentReceivedManager += unappliedAllocated;
+      }
+    }
+
+    // Rent paid ahead of its bill sits as a prepayment credit this period — same balance
+    // effect as an unapplied receipt; recognised as collected in the invoice's own period.
+    if (deferredPrepaymentCredit !== 0) {
+      row.unappliedCredits += deferredPrepaymentCredit;
+    }
+
+    // Legacy fallback for receipts with no allocation breakdown at all (no allocations
+    // array, no allocationSummary) — treat the whole amount as rent/utility collected,
+    // since there's no way to know otherwise. Gated on unappliedAllocated === 0 so a
+    // receipt that DOES carry a summary explicitly marking itself as an unapplied
+    // prepayment (allocationSummary.unapplied > 0, everything else 0) is correctly left
+    // out of Paid/collections instead of being double-booked here.
+    if (
+      allocationRows.length === 0 &&
+      rentAllocated === 0 &&
+      !cappedPrepayment &&
+      utilityAllocated === 0 &&
+      depositAllocated === 0 &&
+      unappliedAllocated === 0 &&
+      receipt.paymentType === "rent"
+    ) {
+      // No breakdown at all — assume rent, but still hold anything beyond what the tenant
+      // owes in rent as a prepayment credit under "on_invoice_allocation".
+      let fallbackRent = amount;
+      if (prepaymentRecognition === "on_invoice_allocation" && fallbackRent > 0) {
+        const rentDueForRow = round2(
+          Math.max(0, Number(row.invoicedRent || 0) + Math.max(0, Number(row.balanceBF || 0)) - Number(row.paidRent || 0))
+        );
+        if (fallbackRent > rentDueForRow) {
+          row.unappliedCredits += round2(fallbackRent - rentDueForRow);
+          fallbackRent = rentDueForRow;
+        }
+      }
+      row.paidRent += fallbackRent;
+      if (receipt.paidDirectToLandlord) collectionTotals.rentReceivedLandlord += fallbackRent;
+      else collectionTotals.rentReceivedManager += fallbackRent;
+    } else if (
+      allocationRows.length === 0 &&
+      rentAllocated === 0 &&
+      !cappedPrepayment &&
+      utilityAllocated === 0 &&
+      depositAllocated === 0 &&
+      unappliedAllocated === 0 &&
+      receipt.paymentType === "utility"
+    ) {
+      applyUtility(row, "receipt", amount, receipt.description || "");
+      if (receipt.paidDirectToLandlord) collectionTotals.utilityReceivedLandlord += amount;
+      else collectionTotals.utilityReceivedManager += amount;
+    }
+
+    if (receipt.referenceNumber) row.referenceNumbers.push(receipt.referenceNumber);
+    if (receipt.receiptNumber) row.referenceNumbers.push(receipt.receiptNumber);
+
+    const receiptEntryCategory = getReceiptCategory(
+      utilityAllocated !== 0 && rentAllocated === 0 ? "utility" : "rent",
+      receipt.paidDirectToLandlord
+    );
+    const receiptUtilitySource =
+      allocationRows.find((item) => String(item?.priorityGroup || "") === "utility") ||
+      (Array.isArray(receipt.breakdown?.utilities) && receipt.breakdown.utilities.length > 0
+        ? receipt.breakdown.utilities[0]
+        : null);
+    const receiptUtilityIdentity =
+      receiptEntryCategory === "UTILITY_RECEIPT_MANAGER" ||
+      receiptEntryCategory === "UTILITY_RECEIPT_LANDLORD"
+        ? resolveUtilityIdentity(
+            receiptUtilitySource?.utilityType ||
+              receiptUtilitySource?.name ||
+              receiptUtilitySource?.utility ||
+              receipt.description ||
+              "",
+            {
+              utilityType:
+                receiptUtilitySource?.utilityType ||
+                receiptUtilitySource?.name ||
+                receiptUtilitySource?.utility ||
+                "",
+            },
+            row
+          )
+        : null;
+
+    pushEntry({
+      tenantId: receipt.tenant,
+      unitId: receipt.unit,
+      transactionDate: getReceiptStatementDate(receipt) || receipt.paymentDate,
+      category: receiptEntryCategory,
+      amount: Math.abs(amount),
+      direction: amount >= 0 ? "credit" : "debit",
+      description,
+      sourceTransactionType: "receipt",
+      sourceTransactionId: String(receipt._id),
+      metadata: {
+        tenantName: row.tenantName,
+        unit: row.unit,
+        tenantCode: row.accountNo,
+        paidDirectToLandlord: !!receipt.paidDirectToLandlord,
+        statementTaxAmount: taxAllocated,
+        ...(receiptUtilityIdentity
+          ? {
+              utilityType: receiptUtilityIdentity.label,
+              statementUtilityType: receiptUtilityIdentity.label,
+              statementUtilityKey: receiptUtilityIdentity.key,
+            }
+          : {}),
+      },
+    });
+
+    if (receipt.paidDirectToLandlord) {
+      collectionTotals.directToLandlordOffset += amount;
+
+      pushEntry({
+        tenantId: receipt.tenant,
+        unitId: receipt.unit,
+        transactionDate: getReceiptStatementDate(receipt) || receipt.paymentDate,
+        category: "ADJUSTMENT",
+        amount: Math.abs(amount),
+        direction: amount >= 0 ? "debit" : "credit",
+        description: `Direct to landlord collection - ${row.tenantName}`,
+        sourceTransactionType: "receipt",
+        sourceTransactionId: String(receipt._id),
+        metadata: {
+          statementBucket: "direct_to_landlord",
+          tenantName: row.tenantName,
+          unit: row.unit,
+          tenantCode: row.accountNo,
+          statementTaxAmount: taxAllocated,
+        },
+      });
+    }
+  };
+
   return {
     rowsMap,
     ensureRow,
@@ -2069,6 +2380,7 @@ const createStatementAccumulator = ({
     broughtForwardCreditApplicationTotals,
     collectionTotals,
     applyReceiptBeforeToBalance,
+    applyReceiptInPeriodToBalance,
   };
 };
 
@@ -2671,6 +2983,7 @@ export const generateLandlordStatement = async ({
     noteStatementMap,
     periodStart,
     periodEnd,
+    periodEndTime,
     snapshotDate,
     prepaymentRecognition,
   });
@@ -2858,7 +3171,6 @@ export const generateLandlordStatement = async ({
     });
   }
 
-  let directToLandlordOffset = 0;
   const additionRows = [];
   const extraDeductionRows = [];
   const advanceRecoveryRows = [];
@@ -2962,307 +3274,7 @@ export const generateLandlordStatement = async ({
   }
 
   for (const receipt of receiptsInPeriod) {
-    const row = accumulator.ensureRow(receipt.tenant, receipt.unit);
-    const amount = Number(receipt.amount || 0);
-    const allocationRows = getReceiptAllocationRows(receipt);
-    const description = buildGroupedReceiptDescription({
-      receipt,
-      allocationRows,
-      invoiceStatementMap,
-      row,
-    }) || receipt.description || receipt.referenceNumber || receipt.receiptNumber || "Tenant receipt";
-    const depositAllocated = getReceiptSummaryAmount(receipt, "deposit");
-    const unappliedAllocated = getReceiptSummaryAmount(receipt, "unapplied");
-    let rentAllocated = 0;
-    let utilityAllocated = 0;
-    let taxAllocated = 0;
-    // Portion of this in-period receipt that pays a rent invoice dated AFTER the cutoff —
-    // held as a prepayment credit rather than counted as paid-this-period (under the
-    // default "on_invoice_allocation" policy). The period that invoice belongs to picks it
-    // up once, via the receiptsBefore "sourceInCurrentPeriod" recognition below.
-    let deferredPrepaymentCredit = 0;
-
-    if (allocationRows.length > 0) {
-      allocationRows.forEach((allocationRow) => {
-        const sourceInvoice = invoiceStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
-        const sourceNote = noteStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
-        const impact = getReceiptAllocationStatementImpact({
-          allocationRow,
-          sourceInvoice,
-          sourceNote,
-          row,
-        });
-
-        if (!impact.isStatementRelevant) return;
-
-        if (prepaymentRecognition === "on_invoice_allocation") {
-          // The invoice this allocation pays. Its own recognition date is authoritative
-          // when the invoice is loaded; otherwise the allocation row carries the invoice
-          // date (the invoice may be future-dated and outside the fetch window, so it
-          // isn't in invoiceStatementMap).
-          const srcDate =
-            (sourceInvoice ? getInvoiceStatementDate(sourceInvoice) : null) ||
-            allocationRow?.invoiceDate ||
-            allocationRow?.bookingDate ||
-            null;
-          const srcTime = srcDate ? new Date(srcDate).getTime() : Number.NaN;
-          if (Number.isFinite(srcTime) && srcTime > periodEndTime) {
-            deferredPrepaymentCredit = round2(
-              deferredPrepaymentCredit + Number(impact.statementRelevantAmount || 0)
-            );
-            return; // ahead of the billing — recognise it in the invoice's own period, not here
-          }
-        }
-
-        let impactRent = Number(impact.rentAmount || 0);
-        // An allocation may be over-applied — more than the invoice's outstanding at the
-        // time (beforeOutstanding). Under "on_invoice_allocation" the portion beyond the
-        // invoice is paid ahead of the billing: hold it as a prepayment credit rather than
-        // count it as rent this period. Only positive over-applications are trimmed, and
-        // only when beforeOutstanding is a usable number.
-        if (prepaymentRecognition === "on_invoice_allocation" && impactRent > 0) {
-          const invoiceOutstanding = Number(allocationRow?.beforeOutstanding);
-          if (Number.isFinite(invoiceOutstanding) && invoiceOutstanding >= 0 && impactRent > invoiceOutstanding) {
-            row.unappliedCredits += round2(impactRent - invoiceOutstanding);
-            impactRent = invoiceOutstanding;
-          }
-        }
-
-        rentAllocated = round2(rentAllocated + impactRent);
-        utilityAllocated = round2(utilityAllocated + Number(impact.utilityAmount || 0));
-        taxAllocated = round2(taxAllocated + Number(impact.taxAmount || 0));
-
-        (Array.isArray(impact.utilities) ? impact.utilities : []).forEach((item) => {
-          applyUtility(
-            row,
-            "receipt",
-            Number(item.amount || 0),
-            item.label || allocationRow?.description || receipt.description || "",
-            {
-              utilityType: item.label,
-              meterUtilityType: item.label,
-              statementUtilityType: item.label,
-            }
-          );
-        });
-      });
-    } else {
-      rentAllocated = getReceiptSummaryAmount(receipt, "rent");
-      utilityAllocated = getReceiptSummaryAmount(receipt, "utility");
-    }
-
-    // No per-invoice allocation rows — the receipt only says "rent: X" with no way to
-    // know which bill it covers. Under "on_invoice_allocation", cap that lump at what the
-    // tenant actually owes in rent (this period's rent invoiced + b/f arrears, less what
-    // earlier receipts this period already covered); anything beyond is paid ahead of the
-    // billing and held as a prepayment credit, so it never inflates commission or the
-    // remittance the manager owes this period. Only positive over-payments are trimmed.
-    // When allocation rows ARE present they already say exactly what each portion covers
-    // (and future-dated allocations are deferred above), so no cap is applied there —
-    // that path can legitimately span several of the tenant's units.
-    let cappedPrepayment = false;
-    if (
-      allocationRows.length === 0 &&
-      prepaymentRecognition === "on_invoice_allocation" &&
-      rentAllocated > 0
-    ) {
-      const rentDueForRow = round2(
-        Math.max(0, Number(row.invoicedRent || 0) + Math.max(0, Number(row.balanceBF || 0)) - Number(row.paidRent || 0))
-      );
-      if (rentAllocated > rentDueForRow) {
-        const excess = round2(rentAllocated - rentDueForRow);
-        rentAllocated = rentDueForRow;
-        row.unappliedCredits += excess;
-        cappedPrepayment = true;
-      }
-    }
-
-    if (rentAllocated !== 0) {
-      row.paidRent += rentAllocated;
-      if (receipt.paidDirectToLandlord) accumulator.collectionTotals.rentReceivedLandlord += rentAllocated;
-      else accumulator.collectionTotals.rentReceivedManager += rentAllocated;
-    }
-
-    if (utilityAllocated !== 0) {
-      if (allocationRows.length === 0) {
-        const utilityBreakdown = Array.isArray(receipt.breakdown?.utilities)
-          ? receipt.breakdown.utilities
-          : [];
-
-        if (utilityBreakdown.length > 0) {
-          const sign = getReceiptSign(receipt);
-          utilityBreakdown.forEach((util) => {
-            applyUtility(
-              row,
-              "receipt",
-              Number(util.amount || 0) * sign,
-              util.name || util.utility || receipt.description || ""
-            );
-          });
-        } else {
-          applyUtility(row, "receipt", utilityAllocated, receipt.description || "");
-        }
-      }
-
-      if (receipt.paidDirectToLandlord) {
-        accumulator.collectionTotals.utilityReceivedLandlord += utilityAllocated;
-      } else {
-        accumulator.collectionTotals.utilityReceivedManager += utilityAllocated;
-      }
-    }
-
-    if (taxAllocated !== 0) {
-      row.paidTax += taxAllocated;
-      if (receipt.paidDirectToLandlord) {
-        accumulator.collectionTotals.invoiceTaxReceivedLandlord += taxAllocated;
-      } else {
-        accumulator.collectionTotals.invoiceTaxReceivedManager += taxAllocated;
-      }
-    }
-
-    if (unappliedAllocated !== 0) {
-      row.unappliedCredits += unappliedAllocated;
-      // "on_receipt": all cash is recognised as it lands, so an unapplied overpayment
-      // counts toward collections now (and never again when it is later allocated —
-      // the receiptsBefore recognition pass is skipped in this mode). "on_invoice_
-      // allocation" leaves it purely as a credit until its rent is billed.
-      if (prepaymentRecognition === "on_receipt") {
-        row.paidRent += unappliedAllocated;
-        if (receipt.paidDirectToLandlord) accumulator.collectionTotals.rentReceivedLandlord += unappliedAllocated;
-        else accumulator.collectionTotals.rentReceivedManager += unappliedAllocated;
-      }
-    }
-
-    // Rent paid ahead of its bill sits as a prepayment credit this period — same balance
-    // effect as an unapplied receipt; recognised as collected in the invoice's own period.
-    if (deferredPrepaymentCredit !== 0) {
-      row.unappliedCredits += deferredPrepaymentCredit;
-    }
-
-    // Legacy fallback for receipts with no allocation breakdown at all (no allocations
-    // array, no allocationSummary) — treat the whole amount as rent/utility collected,
-    // since there's no way to know otherwise. Gated on unappliedAllocated === 0 so a
-    // receipt that DOES carry a summary explicitly marking itself as an unapplied
-    // prepayment (allocationSummary.unapplied > 0, everything else 0) is correctly left
-    // out of Paid/collections instead of being double-booked here.
-    if (
-      allocationRows.length === 0 &&
-      rentAllocated === 0 &&
-      !cappedPrepayment &&
-      utilityAllocated === 0 &&
-      depositAllocated === 0 &&
-      unappliedAllocated === 0 &&
-      receipt.paymentType === "rent"
-    ) {
-      // No breakdown at all — assume rent, but still hold anything beyond what the tenant
-      // owes in rent as a prepayment credit under "on_invoice_allocation".
-      let fallbackRent = amount;
-      if (prepaymentRecognition === "on_invoice_allocation" && fallbackRent > 0) {
-        const rentDueForRow = round2(
-          Math.max(0, Number(row.invoicedRent || 0) + Math.max(0, Number(row.balanceBF || 0)) - Number(row.paidRent || 0))
-        );
-        if (fallbackRent > rentDueForRow) {
-          row.unappliedCredits += round2(fallbackRent - rentDueForRow);
-          fallbackRent = rentDueForRow;
-        }
-      }
-      row.paidRent += fallbackRent;
-      if (receipt.paidDirectToLandlord) accumulator.collectionTotals.rentReceivedLandlord += fallbackRent;
-      else accumulator.collectionTotals.rentReceivedManager += fallbackRent;
-    } else if (
-      allocationRows.length === 0 &&
-      rentAllocated === 0 &&
-      !cappedPrepayment &&
-      utilityAllocated === 0 &&
-      depositAllocated === 0 &&
-      unappliedAllocated === 0 &&
-      receipt.paymentType === "utility"
-    ) {
-      applyUtility(row, "receipt", amount, receipt.description || "");
-      if (receipt.paidDirectToLandlord) accumulator.collectionTotals.utilityReceivedLandlord += amount;
-      else accumulator.collectionTotals.utilityReceivedManager += amount;
-    }
-
-    if (receipt.referenceNumber) row.referenceNumbers.push(receipt.referenceNumber);
-    if (receipt.receiptNumber) row.referenceNumbers.push(receipt.receiptNumber);
-
-    const receiptEntryCategory = getReceiptCategory(
-      utilityAllocated !== 0 && rentAllocated === 0 ? "utility" : "rent",
-      receipt.paidDirectToLandlord
-    );
-    const receiptUtilitySource =
-      allocationRows.find((item) => String(item?.priorityGroup || "") === "utility") ||
-      (Array.isArray(receipt.breakdown?.utilities) && receipt.breakdown.utilities.length > 0
-        ? receipt.breakdown.utilities[0]
-        : null);
-    const receiptUtilityIdentity =
-      receiptEntryCategory === "UTILITY_RECEIPT_MANAGER" ||
-      receiptEntryCategory === "UTILITY_RECEIPT_LANDLORD"
-        ? resolveUtilityIdentity(
-            receiptUtilitySource?.utilityType ||
-              receiptUtilitySource?.name ||
-              receiptUtilitySource?.utility ||
-              receipt.description ||
-              "",
-            {
-              utilityType:
-                receiptUtilitySource?.utilityType ||
-                receiptUtilitySource?.name ||
-                receiptUtilitySource?.utility ||
-                "",
-            },
-            row
-          )
-        : null;
-
-    accumulator.pushEntry({
-      tenantId: receipt.tenant,
-      unitId: receipt.unit,
-      transactionDate: getReceiptStatementDate(receipt) || receipt.paymentDate,
-      category: receiptEntryCategory,
-      amount: Math.abs(amount),
-      direction: amount >= 0 ? "credit" : "debit",
-      description,
-      sourceTransactionType: "receipt",
-      sourceTransactionId: String(receipt._id),
-      metadata: {
-        tenantName: row.tenantName,
-        unit: row.unit,
-        tenantCode: row.accountNo,
-        paidDirectToLandlord: !!receipt.paidDirectToLandlord,
-        statementTaxAmount: taxAllocated,
-        ...(receiptUtilityIdentity
-          ? {
-              utilityType: receiptUtilityIdentity.label,
-              statementUtilityType: receiptUtilityIdentity.label,
-              statementUtilityKey: receiptUtilityIdentity.key,
-            }
-          : {}),
-      },
-    });
-
-    if (receipt.paidDirectToLandlord) {
-      directToLandlordOffset += amount;
-
-      accumulator.pushEntry({
-        tenantId: receipt.tenant,
-        unitId: receipt.unit,
-        transactionDate: getReceiptStatementDate(receipt) || receipt.paymentDate,
-        category: "ADJUSTMENT",
-        amount: Math.abs(amount),
-        direction: amount >= 0 ? "debit" : "credit",
-        description: `Direct to landlord collection - ${row.tenantName}`,
-        sourceTransactionType: "receipt",
-        sourceTransactionId: String(receipt._id),
-        metadata: {
-          statementBucket: "direct_to_landlord",
-          tenantName: row.tenantName,
-          unit: row.unit,
-          tenantCode: row.accountNo,
-          statementTaxAmount: taxAllocated,
-        },
-      });
-    }
+    accumulator.applyReceiptInPeriodToBalance(receipt);
   }
 
   for (const receipt of allDepositReceiptsInPeriod) {
@@ -4097,7 +4109,7 @@ export const generateLandlordStatement = async ({
 
   const nonCommissionDeductions = round2(totalExpenses + totalExtraDeductions);
   const deductions = round2(nonCommissionDeductions + commissionGrossAmount);
-  const landlordOffsets = round2(directToLandlordOffset);
+  const landlordOffsets = round2(accumulator.collectionTotals.directToLandlordOffset);
   const additionsTotal = round2(totalAdditions || 0);
   const extraDeductionsTotal = round2(totalExtraDeductions || 0);
   // Display-only figures for the Additions / Expenses & Deductions breakdowns (and the
