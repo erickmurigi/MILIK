@@ -8,7 +8,6 @@ import {
   FaPlus,
   FaSearch,
   FaFileExport,
-  FaDownload,
   FaPrint,
   FaGripVertical,
   FaTimes,
@@ -30,7 +29,7 @@ import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectUni
 import { hasCompanyPermission } from "../../utils/permissions";
 import { toast } from "react-toastify";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
-import UnitsImportModal from "../../components/Modals/UnitsImportModal";
+import ImportModal from "../../components/Modals/ImportModal";
 import { 
   downloadUnitsTemplate, 
   exportUnitsToExcel, 
@@ -642,8 +641,8 @@ const Units = () => {
 
       // Refresh units list
       await dispatch(getUnits(buildUnitParams(safeCurrentPage)));
-      
-      return response.data;
+
+      return response.data?.data || { successful: [], failed: [] };
     } catch (error) {
       console.error('Bulk import error:', error);
       throw new Error(error.response?.data?.message || 'Failed to import units');
@@ -949,9 +948,6 @@ const Units = () => {
             )}
             <button onClick={handlePrintList} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-slate-700 px-2.5 text-[9px] font-semibold text-white hover:bg-slate-800">
               <FaPrint size={7} /> Print
-            </button>
-            <button onClick={handleDownloadTemplate} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-2.5 text-[9px] font-semibold text-white hover:bg-[#0A3127]">
-              <FaDownload size={7} /> Template
             </button>
             <button onClick={() => setShowImportModal(true)} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-orange-600 px-2.5 text-[9px] font-semibold text-white hover:bg-orange-700">
               <FaFileExport size={7} /> Import
@@ -1506,10 +1502,26 @@ const Units = () => {
           </div>
         )}
 
-        <UnitsImportModal 
+        <ImportModal
           isOpen={showImportModal}
           onClose={() => setShowImportModal(false)}
+          title={`Import ${termUnits} from Excel`}
+          entityName={termUnit.toLowerCase()}
+          parseFile={parseUnitsExcel}
+          downloadTemplate={handleDownloadTemplate}
           onImport={handleBulkImport}
+          maxWidthClass="max-w-4xl"
+          getErrorRowLabel={(e) => e.data?.unitNumber}
+          getFailureRowLabel={(f) => f.unitNumber}
+          previewCols={[
+            { header: `${termUnit} Number`, render: (r) => <span className="font-semibold">{r.unitNumber}</span> },
+            { header: `${termProperty} Code`, render: (r) => r.propertyCode },
+            { header: "Type", render: (r) => r.unitType },
+            { header: `${termRent} (KES)`, render: (r) => <span className="tabular-nums">{Number(r.rent || 0).toLocaleString()}</span> },
+            { header: "Deposit (KES)", render: (r) => <span className="tabular-nums">{Number(r.deposit || 0).toLocaleString()}</span> },
+            { header: "Billing", render: (r) => r.billingFrequency || "monthly" },
+            { header: "Status", render: (r) => <span className="capitalize">{r.status}</span> },
+          ]}
         />
 
         <MilikConfirmDialog
