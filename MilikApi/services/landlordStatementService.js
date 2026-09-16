@@ -1778,6 +1778,33 @@ const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap, latePenal
     }
   };
 
+  const depositMemoBuckets = {
+    manager: createDepositMemoBucket("manager", "Deposits held by manager"),
+    landlord: createDepositMemoBucket("landlord", "Deposits held by landlord"),
+  };
+
+  // Restore deposit liability opening balances from snapshot so the bounded queries
+  // don't produce an incorrect opening balance in the deposit memo section.
+  const depositManagerSnapshot = snapshotMap.get("__deposit:manager__");
+  const depositLandlordSnapshot = snapshotMap.get("__deposit:landlord__");
+  if (depositManagerSnapshot) {
+    depositMemoBuckets.manager.openingBalance = round2(depositManagerSnapshot.balanceCF);
+    depositMemoBuckets.manager.closingBalance = round2(depositManagerSnapshot.balanceCF);
+  }
+  if (depositLandlordSnapshot) {
+    depositMemoBuckets.landlord.openingBalance = round2(depositLandlordSnapshot.balanceCF);
+    depositMemoBuckets.landlord.closingBalance = round2(depositLandlordSnapshot.balanceCF);
+  }
+
+  const applyDepositReceiptToMemo = (record = {}, amount = 0, phase = "current") => {
+    const value = round2(Math.abs(amount));
+    if (value === 0) return;
+    const bucket = depositMemoBuckets[resolveDepositHolderForRecord(record)] || depositMemoBuckets.manager;
+    if (phase === "opening") bucket.openingBalance = round2(bucket.openingBalance - value);
+    else bucket.received = round2(bucket.received + value);
+    bucket.closingBalance = round2(bucket.closingBalance - value);
+  };
+
   return {
     rowsMap,
     ensureRow,
@@ -1789,6 +1816,8 @@ const createStatementAccumulator = ({ unitMap, tenantMap, snapshotMap, latePenal
     depositSettlementRows,
     depositSettlementTotals,
     pushDepositSettlementRow,
+    depositMemoBuckets,
+    applyDepositReceiptToMemo,
   };
 };
 
@@ -2408,33 +2437,6 @@ export const generateLandlordStatement = async ({
     receiptsInPeriod.filter((receipt) => hasAnyDepositReceiptAllocation(receipt, accumulator.resolveDepositHolderForRecord))
   );
 
-  const depositMemoBuckets = {
-    manager: createDepositMemoBucket("manager", "Deposits held by manager"),
-    landlord: createDepositMemoBucket("landlord", "Deposits held by landlord"),
-  };
-
-  // Restore deposit liability opening balances from snapshot so the bounded queries
-  // don't produce an incorrect opening balance in the deposit memo section.
-  const depositManagerSnapshot = snapshotMap.get("__deposit:manager__");
-  const depositLandlordSnapshot = snapshotMap.get("__deposit:landlord__");
-  if (depositManagerSnapshot) {
-    depositMemoBuckets.manager.openingBalance = round2(depositManagerSnapshot.balanceCF);
-    depositMemoBuckets.manager.closingBalance = round2(depositManagerSnapshot.balanceCF);
-  }
-  if (depositLandlordSnapshot) {
-    depositMemoBuckets.landlord.openingBalance = round2(depositLandlordSnapshot.balanceCF);
-    depositMemoBuckets.landlord.closingBalance = round2(depositLandlordSnapshot.balanceCF);
-  }
-
-  const applyDepositReceiptToMemo = (record = {}, amount = 0, phase = "current") => {
-    const value = round2(Math.abs(amount));
-    if (value === 0) return;
-    const bucket = depositMemoBuckets[accumulator.resolveDepositHolderForRecord(record)] || depositMemoBuckets.manager;
-    if (phase === "opening") bucket.openingBalance = round2(bucket.openingBalance - value);
-    else bucket.received = round2(bucket.received + value);
-    bucket.closingBalance = round2(bucket.closingBalance - value);
-  };
-
   const broughtForwardCreditApplicationRows = [];
   const broughtForwardCreditApplicationTotals = {
     totalApplied: 0,
@@ -2484,10 +2486,10 @@ export const generateLandlordStatement = async ({
   for (const receipt of allDepositReceiptsBefore) {
     const depositBreakdown = getReceiptDepositAllocationBreakdown(receipt, accumulator.resolveDepositHolderForRecord);
     if (depositBreakdown.manager > 0) {
-      applyDepositReceiptToMemo({ ...receipt, depositHeldBy: "manager" }, depositBreakdown.manager, "opening");
+      accumulator.applyDepositReceiptToMemo({ ...receipt, depositHeldBy: "manager" }, depositBreakdown.manager, "opening");
     }
     if (depositBreakdown.landlord > 0) {
-      applyDepositReceiptToMemo({ ...receipt, depositHeldBy: "landlord" }, depositBreakdown.landlord, "opening");
+      accumulator.applyDepositReceiptToMemo({ ...receipt, depositHeldBy: "landlord" }, depositBreakdown.landlord, "opening");
     }
   }
 
@@ -3190,10 +3192,10 @@ export const generateLandlordStatement = async ({
     const depositBreakdown = getReceiptDepositAllocationBreakdown(receipt, accumulator.resolveDepositHolderForRecord);
 
     if (depositBreakdown.manager > 0) {
-      applyDepositReceiptToMemo({ ...receipt, depositHeldBy: "manager" }, depositBreakdown.manager, "current");
+      accumulator.applyDepositReceiptToMemo({ ...receipt, depositHeldBy: "manager" }, depositBreakdown.manager, "current");
     }
     if (depositBreakdown.landlord > 0) {
-      applyDepositReceiptToMemo({ ...receipt, depositHeldBy: "landlord" }, depositBreakdown.landlord, "current");
+      accumulator.applyDepositReceiptToMemo({ ...receipt, depositHeldBy: "landlord" }, depositBreakdown.landlord, "current");
     }
     // Deposit paid this period, on the tenant's row — whichever party ends up holding it.
     // A memo column only (see registerDepositAmount); never affects the rent-ledger balance.
@@ -3390,7 +3392,7 @@ export const generateLandlordStatement = async ({
   // and was already settled in that period — do NOT include again (double-count).
   const isFirstStatement = !snapshotDate;
 
-  const managerDepositOpening = round2(depositMemoBuckets.manager.openingBalance || 0);
+  const managerDepositOpening = round2(accumulator.depositMemoBuckets.manager.openingBalance || 0);
   if (managerDepositOpening > 0) {
     const carryDesc = "Manager-held deposit carry-forward remittance";
     totalAdditions = round2(totalAdditions + managerDepositOpening);
@@ -3410,15 +3412,15 @@ export const generateLandlordStatement = async ({
       paidDirectToLandlord: false,
       sourceId: `deposit-cf-mgr-${String(propertyObjectId)}`,
     });
-    depositMemoBuckets.manager.closingBalance = round2(
-      depositMemoBuckets.manager.closingBalance - managerDepositOpening
+    accumulator.depositMemoBuckets.manager.closingBalance = round2(
+      accumulator.depositMemoBuckets.manager.closingBalance - managerDepositOpening
     );
   }
 
   // Landlord-held opening balance on the first statement: deposits collected directly by
   // the landlord before this statement period — never settled via any statement yet.
   const landlordDepositOpening = isFirstStatement
-    ? round2(depositMemoBuckets.landlord.openingBalance || 0)
+    ? round2(accumulator.depositMemoBuckets.landlord.openingBalance || 0)
     : 0;
   if (landlordDepositOpening > 0) {
     const carryDesc = "Landlord-held deposit carry-forward (pre-period)";
@@ -4074,7 +4076,7 @@ export const generateLandlordStatement = async ({
       earlyPayoutsTotal
   );
 
-  const depositMemoRows = Object.values(depositMemoBuckets)
+  const depositMemoRows = Object.values(accumulator.depositMemoBuckets)
     .map((bucket) => ({
       key: bucket.key,
       label: bucket.label,
@@ -4101,8 +4103,8 @@ export const generateLandlordStatement = async ({
     accumulator.depositSettlementTotals.additions - accumulator.depositSettlementTotals.offsets
   );
 
-  const depositsHeldByManager = round2(depositMemoBuckets.manager.closingBalance);
-  const depositsHeldByLandlord = round2(depositMemoBuckets.landlord.closingBalance);
+  const depositsHeldByManager = round2(accumulator.depositMemoBuckets.manager.closingBalance);
+  const depositsHeldByLandlord = round2(accumulator.depositMemoBuckets.landlord.closingBalance);
 
   let occupiedUnits = 0;
   let vacantUnits = 0;
