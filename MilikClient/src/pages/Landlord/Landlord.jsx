@@ -23,16 +23,15 @@ import {
   FaChevronDown,
   FaMoneyBillWave,
   FaFileImport,
-  FaFileDownload,
   FaSms,
   FaPrint,
 } from "react-icons/fa";
 import { getLandlords, deleteLandlord, updateLandlord } from "../../redux/apiCalls";
 import { selectCurrentCompany, selectCurrentUser, selectAllLandlords, selectLandlordPagination, selectLandlordIsFetching } from "../../redux/selectors";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
-import LandlordImportModal from "../../components/Modals/LandlordImportModal";
+import ImportModal from "../../components/Modals/ImportModal";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
-import { downloadLandlordsTemplate, exportLandlordsToExcel } from "../../utils/excelTemplates";
+import { downloadLandlordsTemplate, exportLandlordsToExcel, parseLandlordsExcel } from "../../utils/excelTemplates";
 import { toast } from "react-toastify";
 import { adminRequests } from "../../utils/requestMethods";
 import { printTabularList } from "../../utils/printList";
@@ -517,7 +516,7 @@ const Landlords = () => {
       setCurrentPage(1);
       await dispatch(getLandlords(buildLandlordParams()));
 
-      return response.data;
+      return response.data?.data || { successful: [], failed: [] };
     } catch (error) {
       const errorMessage = error?.response?.data?.message || error?.message || 'Failed to import landlords';
       throw new Error(errorMessage);
@@ -706,9 +705,6 @@ const Landlords = () => {
             </button>
             <button onClick={() => navigate("/landlord-payments")} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2.5 text-xs font-semibold text-white hover:bg-[#e67e00]">
               <FaMoneyBillWave size={9} /> Payments
-            </button>
-            <button onClick={() => downloadLandlordsTemplate()} className="h-7 shrink-0 flex items-center gap-1 rounded border border-blue-300 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
-              <FaFileDownload size={9} /> Template
             </button>
             <button onClick={() => setShowImportModal(true)} className="h-7 shrink-0 flex items-center gap-1 rounded border border-green-300 bg-green-50 px-2.5 text-xs font-semibold text-green-700 hover:bg-green-100">
               <FaFileImport size={9} /> Import
@@ -906,10 +902,24 @@ const Landlords = () => {
         />
 
         {/* Import Modal */}
-        <LandlordImportModal
+        <ImportModal
           isOpen={showImportModal}
           onClose={() => setShowImportModal(false)}
+          title={`Import ${termLandlords} from Excel`}
+          entityName={termLandlord.toLowerCase()}
+          parseFile={parseLandlordsExcel}
+          downloadTemplate={downloadLandlordsTemplate}
           onImport={handleBulkImport}
+          maxWidthClass="max-w-4xl"
+          getErrorRowLabel={(e) => e.data?.landlordName}
+          getFailureRowLabel={(f) => f.landlord}
+          previewCols={[
+            { header: "Name", render: (r) => <span className="font-semibold">{r.landlordName}</span> },
+            { header: "Type", render: (r) => r.landlordType },
+            { header: "Reg / ID", render: (r) => r.regId },
+            { header: "Email", render: (r) => r.email },
+            { header: "Phone", render: (r) => r.phoneNumber },
+          ]}
         />
       </div>
     </DashboardLayout>
