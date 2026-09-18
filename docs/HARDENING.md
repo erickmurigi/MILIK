@@ -190,7 +190,7 @@ to be agreed with the user before any of this is implemented.
 - No missing-index findings anywhere in the models audited (`TenantInvoice`, `RentPayment`, `FinancialLedgerEntry`, `LandlordStatement*`, `ChartOfAccount`, `Tenant`, `Unit`, `Lease`, `Property`, `JournalEntry`, `PropertyLedgerEntry`, `ProcessedStatement`, `Landlord`) — the prior optimization pass's indexing work held up.
 - No table virtualization anywhere in the frontend (`react-window`/`react-virtualized` absent) — deliberately not flagged as urgent since the largest unpaginated tables are print-oriented financial reports where full-table rendering is likely intentional.
 
-### Track C progress
+### Track C progress — ✅ fully closed (all 5 items done, 2026-09-18)
 
 Agreed order (established before Track D's unplanned detour):
 
@@ -409,7 +409,7 @@ Agreed order (established before Track D's unplanned detour):
      (zero `CoopCollection` records exist anywhere in the database —
      confirmed before assuming, not guessed), since its logic is
      structurally identical to the already-proven pattern.
-5. **Low-priority cleanup batch — mostly done, one piece blocked.**
+5. ✅ **Low-priority cleanup batch — done.**
    - ✅ **Unused `LISTING_UI` import — done (`46d51f2`).** Confirmed via
      grep before touching anything: 10 files (not the originally-estimated
      8) import `LISTING_UI` from `utils/listingPageUtils` with exactly one
@@ -423,15 +423,14 @@ Agreed order (established before Track D's unplanned detour):
      estimate still held: zero unused `Fa*` icon imports found. Apparently
      already fixed as a side effect of the `FaFileDownload`/`FaDownload`
      removals during Track C item 4's toolbar-button cleanups.
-   - ⚠️ **`controllers/employee.js` removal — confirmed dead, deletion
-     blocked.** Re-confirmed independently (not just trusting this doc):
-     zero references anywhere in the codebase, and it imports
+   - ✅ **`controllers/employee.js` removal — done (`9d705ad`).**
+     Re-confirmed independently (not just trusting this doc): zero
+     references anywhere in the codebase, and it imports
      `../models/Employee.js`, which doesn't exist — would crash on import
-     if ever wired up. The modern `modules/hr/*` fully superseded it.
-     `git rm controllers/employee.js` was blocked twice by the local
-     permission system as "Irreversible Local Destruction." Needs either
-     the user running the deletion themselves, or an explicit permission
-     grant for this action.
+     if ever wired up. The modern `modules/hr/*` fully superseded it. The
+     local permission system blocked `git rm` twice as "Irreversible
+     Local Destruction" when attempted proactively; completed once the
+     user explicitly instructed the exact command to run.
    - ❌ **`recurringSchedule.js` → `moment`/`moment-timezone` swap —
      investigated, declined.** Read the full file before proposing any
      change, per this session's standing practice. The doc's stated
@@ -455,4 +454,4 @@ actually authorized.
 
 ---
 
-*Last updated: 2026-09-18 (Track C item 5 mostly closed — unused `LISTING_UI` imports removed, unused `Fa*` icon imports confirmed already resolved, `recurringSchedule.js`/`moment` swap investigated and explicitly declined; `controllers/employee.js` removal confirmed safe but blocked on a permission grant). Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C as items are actioned.*
+*Last updated: 2026-09-18 (Track C fully closed — all 5 items done: `round2` consolidation, Redux refetch-check pattern, `landlordStatementService.js`/`redux/apiCalls.js` decomposition, `*ImportModal.jsx` consolidation + `MilikTable` memoization, and the low-priority cleanup batch, including `controllers/employee.js`'s removal once the permission block was explicitly lifted by the user). Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C as items are actioned.*
