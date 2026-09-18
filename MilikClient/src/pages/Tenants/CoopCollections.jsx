@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import {
   FaCheckCircle, FaExclamationTriangle, FaTimesCircle,
@@ -206,7 +206,9 @@ export default function CoopCollections() {
     return () => clearInterval(countdownRef.current);
   }, [fetchData, page]);
 
-  const handleDelete = async (item) => {
+  // useCallback — renderActions (passed to MilikTable) closes over these; leaving them as
+  // plain functions would recreate renderActions every render regardless of memoizing it.
+  const handleDelete = useCallback(async (item) => {
     if (!await confirm({ message: `Delete this Co-op collection (${formatMoney(item.amount)})? This cannot be undone.`, confirmText: "Delete", isDangerous: true })) return;
     setDeletingId(item._id);
     try {
@@ -216,9 +218,9 @@ export default function CoopCollections() {
     } catch (err) {
       toast.error(err?.response?.data?.message || "Delete failed");
     } finally { setDeletingId(null); }
-  };
+  }, [confirm, businessId]);
 
-  const handleUnignore = async (item) => {
+  const handleUnignore = useCallback(async (item) => {
     setUnignoringId(item._id);
     try {
       const res = await adminRequests.post(`/coop-collections/${item._id}/unignore`, { business: businessId });
@@ -228,7 +230,7 @@ export default function CoopCollections() {
     } catch (err) {
       toast.error(err?.response?.data?.message || "Unignore failed");
     } finally { setUnignoringId(null); }
-  };
+  }, [businessId]);
 
   const onAssigned = (updated) => {
     if (!updated?._id) { fetchData(page); return; }
@@ -246,6 +248,65 @@ export default function CoopCollections() {
       <div className="mt-0.5 text-lg font-extrabold text-slate-900">{value}</div>
     </div>
   );
+
+  // ─── MilikTable props, stabilized ──────────────────────────────────────────
+  // Same reasoning as PmsMpesaNotifications.jsx: MilikTable is React.memo'd, this page also
+  // polls every AUTO_RELOAD seconds, and every keystroke in the (undebounced) search input
+  // re-renders the whole component — none of that should re-render the table itself unless
+  // its actual data changed.
+  const tableColumns = useMemo(() => [
+    { label: "Date" },
+    { label: "Transaction Ref" },
+    { label: "Account Ref" },
+    { label: "Tenant Code" },
+    { label: "Amount" },
+    { label: "Payer" },
+    { label: termTenant },
+    { label: "Status" },
+  ], [termTenant]);
+
+  // Pure function of its row argument — no external state captured.
+  const renderCoopRow = useCallback((item) => (
+    <>
+      <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-slate-500">{fmtDate(item.paymentDate || item.transactionDate)}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-[10px] text-slate-700">{item.transactionReferenceCode || "—"}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-[10px] text-slate-600">{item.documentReferenceNumber || "—"}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 font-mono font-bold text-slate-700">{item.tenantCode || "—"}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap font-bold text-slate-900">{formatMoney(item.amount)}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 max-w-[120px] truncate text-slate-600">{item.payerName || "—"}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100">
+        {item.tenant ? (
+          <div>
+            <div className="font-bold text-slate-900">{item.tenant.name}</div>
+            <div className="text-[10px] text-slate-500 font-mono">{item.tenant.tenantCode}</div>
+          </div>
+        ) : <span className="text-slate-400">—</span>}
+      </td>
+      <td className="px-3 py-1.5 border-r border-gray-100"><StatusBadge status={item.matchingStatus} map={STATUS_MAP} /></td>
+    </>
+  ), []);
+
+  // Closes over handleUnignore/handleDelete (both stable via their own useCallback above)
+  // and unignoringId/deletingId.
+  const renderCoopActions = useCallback((item) => (
+    <div className="flex items-center gap-1">
+      {item.matchingStatus === "ignored" ? (
+        <button onClick={() => handleUnignore(item)} disabled={unignoringId === item._id} className="inline-flex h-6 items-center gap-1 border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50" title="Unignore">
+          {unignoringId === item._id ? <Spinner size="sm" /> : <FaUndo size={8} />}
+        </button>
+      ) : item.matchingStatus !== "captured" ? (
+        <>
+          <button onClick={() => setAssignTarget(item)} className="inline-flex h-6 items-center gap-1 border border-blue-200 bg-blue-50 px-2 text-[10px] font-bold text-blue-700 hover:bg-blue-100" title="Assign tenant"><FaLink size={8} /></button>
+          <button onClick={() => setIgnoreTarget(item)} className="inline-flex h-6 items-center gap-1 border border-red-200 bg-red-50 px-2 text-[10px] font-bold text-red-600 hover:bg-red-100" title="Ignore"><FaBan size={8} /></button>
+        </>
+      ) : null}
+      {item.matchingStatus !== "captured" && (
+        <button onClick={() => handleDelete(item)} disabled={deletingId === item._id} className="inline-flex h-6 items-center gap-1 border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50" title="Delete">
+          {deletingId === item._id ? <Spinner size="sm" /> : <FaTrash size={8} />}
+        </button>
+      )}
+    </div>
+  ), [handleUnignore, unignoringId, handleDelete, deletingId]);
 
   return (
     <DashboardLayout>
@@ -316,58 +377,13 @@ export default function CoopCollections() {
         {/* Table */}
         <div className="border border-slate-200 bg-white shadow-sm overflow-hidden">
           <MilikTable
-            columns={[
-              { label: "Date" },
-              { label: "Transaction Ref" },
-              { label: "Account Ref" },
-              { label: "Tenant Code" },
-              { label: "Amount" },
-              { label: "Payer" },
-              { label: termTenant },
-              { label: "Status" },
-            ]}
+            columns={tableColumns}
             rows={items}
             rowKey="_id"
             loading={loading && items.length === 0}
             empty="No Co-op Bank B2B collections yet. Payments will appear here automatically."
-            renderRow={(item) => (
-              <>
-                <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-slate-500">{fmtDate(item.paymentDate || item.transactionDate)}</td>
-                <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-[10px] text-slate-700">{item.transactionReferenceCode || "—"}</td>
-                <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-[10px] text-slate-600">{item.documentReferenceNumber || "—"}</td>
-                <td className="px-3 py-1.5 border-r border-gray-100 font-mono font-bold text-slate-700">{item.tenantCode || "—"}</td>
-                <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap font-bold text-slate-900">{formatMoney(item.amount)}</td>
-                <td className="px-3 py-1.5 border-r border-gray-100 max-w-[120px] truncate text-slate-600">{item.payerName || "—"}</td>
-                <td className="px-3 py-1.5 border-r border-gray-100">
-                  {item.tenant ? (
-                    <div>
-                      <div className="font-bold text-slate-900">{item.tenant.name}</div>
-                      <div className="text-[10px] text-slate-500 font-mono">{item.tenant.tenantCode}</div>
-                    </div>
-                  ) : <span className="text-slate-400">—</span>}
-                </td>
-                <td className="px-3 py-1.5 border-r border-gray-100"><StatusBadge status={item.matchingStatus} map={STATUS_MAP} /></td>
-              </>
-            )}
-            renderActions={(item) => (
-              <div className="flex items-center gap-1">
-                {item.matchingStatus === "ignored" ? (
-                  <button onClick={() => handleUnignore(item)} disabled={unignoringId === item._id} className="inline-flex h-6 items-center gap-1 border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50" title="Unignore">
-                    {unignoringId === item._id ? <Spinner size="sm" /> : <FaUndo size={8} />}
-                  </button>
-                ) : item.matchingStatus !== "captured" ? (
-                  <>
-                    <button onClick={() => setAssignTarget(item)} className="inline-flex h-6 items-center gap-1 border border-blue-200 bg-blue-50 px-2 text-[10px] font-bold text-blue-700 hover:bg-blue-100" title="Assign tenant"><FaLink size={8} /></button>
-                    <button onClick={() => setIgnoreTarget(item)} className="inline-flex h-6 items-center gap-1 border border-red-200 bg-red-50 px-2 text-[10px] font-bold text-red-600 hover:bg-red-100" title="Ignore"><FaBan size={8} /></button>
-                  </>
-                ) : null}
-                {item.matchingStatus !== "captured" && (
-                  <button onClick={() => handleDelete(item)} disabled={deletingId === item._id} className="inline-flex h-6 items-center gap-1 border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50" title="Delete">
-                    {deletingId === item._id ? <Spinner size="sm" /> : <FaTrash size={8} />}
-                  </button>
-                )}
-              </div>
-            )}
+            renderRow={renderCoopRow}
+            renderActions={renderCoopActions}
           />
         </div>
 
