@@ -32,6 +32,10 @@ const ImportModal = ({
   // Kept separate from getErrorRowLabel because a type's parse-error shape and its backend
   // failure shape aren't always the same (e.g. Property: error.data.propertyName vs failure.propertyName).
   getFailureRowLabel = defaultRowLabel,
+  // Original per-type modal's Import-button color. Everyone but InvoiceNotes used the
+  // standard green; InvoiceNotes used orange, deliberately distinguishing debit/credit
+  // notes (a correction to existing records) from the other, purely-additive import types.
+  submitColorClass = "bg-[#0B3B2E] hover:bg-[#0d5442]",
 }) => {
   const [selectedFile,   setSelectedFile]   = useState(null);
   const [parseResult,    setParseResult]    = useState(null);
@@ -279,7 +283,7 @@ const ImportModal = ({
             </button>
             <button onClick={handleImport}
               disabled={isParsing || isImporting || !parseResult?.validCount}
-              className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0d5442] disabled:cursor-not-allowed disabled:opacity-50">
+              className={`flex items-center gap-2 ${submitColorClass} px-4 py-2 text-xs font-black uppercase tracking-wide text-white disabled:cursor-not-allowed disabled:opacity-50`}>
               {isParsing || isImporting ? (
                 <><FaSpinner className="animate-spin" size={10} />{isParsing ? "Validating…" : "Importing…"}</>
               ) : (

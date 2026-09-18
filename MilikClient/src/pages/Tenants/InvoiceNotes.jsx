@@ -25,7 +25,8 @@ import {
 import toast from "react-hot-toast";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
-import InvoiceNotesImportModal from "../../components/Modals/InvoiceNotesImportModal";
+import ImportModal from "../../components/Modals/ImportModal";
+import { parseInvoiceNotesExcel, downloadInvoiceNotesTemplate } from "../../utils/excelTemplates";
 import { getTenants } from "../../redux/tenantsRedux";
 import { getChartOfAccounts, getTenantInvoices } from "../../redux/apiCalls";
 import {
@@ -269,7 +270,7 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const tenants = useSelector(selectAllTenants);
-  const { tenant: termTenant, tenants: termTenants, property: termProperty, unit: termUnit } = useTerms("tenant", "tenants", "property", "unit");
+  const { tenant: termTenant, tenants: termTenants, property: termProperty, unit: termUnit, invoice: termInvoice } = useTerms("tenant", "tenants", "property", "unit", "invoice");
 
   const requestedType = String(searchParams.get("type") || "").trim().toLowerCase();
   const initialNoteType = requestedType === "debit" ? "DEBIT_NOTE" : "CREDIT_NOTE";
@@ -1349,16 +1350,46 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
         </div>
       )}
 
-      <InvoiceNotesImportModal
+      <ImportModal
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
+        title="Import Credit & Debit Notes from Excel"
+        entityName="note"
+        parseFile={parseInvoiceNotesExcel}
+        downloadTemplate={downloadInvoiceNotesTemplate}
+        submitColorClass="bg-[#FF8C00] hover:bg-[#e67e00]"
         onImport={async (notes) => {
-          const result = await bulkImportInvoiceNotes({ notes });
-          if ((result?.data?.successful?.length ?? 0) > 0) {
+          const res = await bulkImportInvoiceNotes({ notes });
+          const successful = Array.isArray(res?.data?.successful) ? res.data.successful : [];
+          const failed = Array.isArray(res?.data?.failed) ? res.data.failed : [];
+          if (successful.length > 0) {
             await loadData();
           }
-          return result;
+          return { successful, failed };
         }}
+        getErrorRowLabel={(e) => e.data?.tenantName || e.data?.tenantCode}
+        getFailureRowLabel={(f) => f.data?.tenantName || f.data?.tenantCode}
+        previewCols={[
+          { header: "Type", render: (r) => (
+            <span className={`rounded px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide ${r.noteType === "CREDIT_NOTE" ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"}`}>
+              {r.noteType === "CREDIT_NOTE" ? "Credit" : "Debit"}
+            </span>
+          ) },
+          { header: termTenant, render: (r) => (
+            <div>
+              <div className="font-semibold">{r.tenantName || r.tenantCode || "—"}</div>
+              {r.tenantCode && r.tenantName && <div className="text-[10px] text-slate-400">{r.tenantCode}</div>}
+            </div>
+          ) },
+          { header: "Category", render: (r) => <span className="capitalize">{String(r.category || "").toLowerCase().replace(/_/g, " ")}</span> },
+          { header: "Amount (KES)", render: (r) => {
+            const n = Number(r.amount || 0);
+            return Number.isFinite(n) ? n.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-";
+          } },
+          { header: "Date", render: (r) => r.noteDate || "—" },
+          { header: `Source ${termInvoice}`, render: (r) => r.sourceInvoiceNo || "—" },
+          { header: "Narration", render: (r) => <span className="block max-w-[160px] truncate">{r.narration || "—"}</span> },
+        ]}
       />
     </DashboardLayout>
   );
