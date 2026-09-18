@@ -409,9 +409,45 @@ Agreed order (established before Track D's unplanned detour):
      (zero `CoopCollection` records exist anywhere in the database —
      confirmed before assuming, not guessed), since its logic is
      structurally identical to the already-proven pattern.
-5. Low-priority cleanup batch (`controllers/employee.js` removal, `moment`
-   for `recurringSchedule.js`, unused imports) — no urgency, batch whenever.
-   **Not started.**
+5. **Low-priority cleanup batch — mostly done, one piece blocked.**
+   - ✅ **Unused `LISTING_UI` import — done (`46d51f2`).** Confirmed via
+     grep before touching anything: 10 files (not the originally-estimated
+     8) import `LISTING_UI` from `utils/listingPageUtils` with exactly one
+     occurrence each (the import line, never referenced again). Where the
+     same import line also pulled in `normalizeUppercaseInput`/
+     `toListingCaps`, verified those are genuinely used (2+ occurrences)
+     before leaving them — only `LISTING_UI` removed.
+   - ✅ **Unused `react-icons/fa` imports — already resolved, nothing to
+     do.** Checked via eslint's own `no-unused-vars` output across the
+     full `src` tree rather than assuming the original "~8-9 files"
+     estimate still held: zero unused `Fa*` icon imports found. Apparently
+     already fixed as a side effect of the `FaFileDownload`/`FaDownload`
+     removals during Track C item 4's toolbar-button cleanups.
+   - ⚠️ **`controllers/employee.js` removal — confirmed dead, deletion
+     blocked.** Re-confirmed independently (not just trusting this doc):
+     zero references anywhere in the codebase, and it imports
+     `../models/Employee.js`, which doesn't exist — would crash on import
+     if ever wired up. The modern `modules/hr/*` fully superseded it.
+     `git rm controllers/employee.js` was blocked twice by the local
+     permission system as "Irreversible Local Destruction." Needs either
+     the user running the deletion themselves, or an explicit permission
+     grant for this action.
+   - ❌ **`recurringSchedule.js` → `moment`/`moment-timezone` swap —
+     investigated, declined.** Read the full file before proposing any
+     change, per this session's standing practice. The doc's stated
+     rationale doesn't hold up under inspection: this is a Kenya-only app
+     (Africa/Nairobi, UTC+3 year-round, no DST transitions ever — the
+     cited DST risk doesn't apply to this business's actual usage);
+     `daysInMonth` uses the standard `new Date(y, m+1, 0).getDate()`
+     idiom, already leap-year-correct; and `addMonths` specifically
+     avoids the classic "Jan 31 + 1 month → Mar 3" overflow bug via
+     `setDate(1)` before `setMonth()` — more careful than `moment`'s own
+     default `.add(1, 'month')` arithmetic, which has its own well-known
+     end-of-month surprises. Swapping would trade already-correct logic
+     for a new dependency with real regression risk, on code that drives
+     recurring billing schedules with no test suite to catch a subtle
+     date-math bug. Declined by explicit user decision rather than
+     silently left alone or silently done.
 
 **Do not implement any of the above unilaterally** — still gated on the
 user's go-ahead per item, consistent with how every fix in this document was
@@ -419,4 +455,4 @@ actually authorized.
 
 ---
 
-*Last updated: 2026-09-18 (Track C item 4 fully closed — `*ImportModal.jsx` consolidation and the two confirmed-hot-path `MilikTable` memoization fixes both done). Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C as items are actioned.*
+*Last updated: 2026-09-18 (Track C item 5 mostly closed — unused `LISTING_UI` imports removed, unused `Fa*` icon imports confirmed already resolved, `recurringSchedule.js`/`moment` swap investigated and explicitly declined; `controllers/employee.js` removal confirmed safe but blocked on a permission grant). Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C as items are actioned.*
