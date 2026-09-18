@@ -152,7 +152,7 @@ to be agreed with the user before any of this is implemented.
 - `resolveBusinessId`/`oid` duplicated across 8+ files — directly caused several Track B findings (one copy got the auth-priority order right, siblings didn't).
 - `escapeRegExp` reimplemented in 3 service files instead of the shared `utils/escapeRegex.js`.
 - Frontend: a prepayment-type-derivation algorithm (deriving Rent/Deposit/Utility prepayment options from invoice metadata) duplicated 4+ times: `AddReceipt.jsx`, `Receipts.jsx` (×3 separate copies), `LandlordStatementAllocations.jsx`.
-- 7 near-identical `*ImportModal.jsx` components (~2,000 combined lines) differing only in parser function and column list.
+- ~~7 near-identical `*ImportModal.jsx` components (~2,000 combined lines) differing only in parser function and column list.~~ **Closed — see Track C progress, item 4 part A.**
 
 **Performance**
 - Backend: sequential per-item `await`+`save()` loops in batch endpoints (`latePenalties.js` reversal batch) — should be `Promise.all`. (`tenantInvoices.js`'s equivalent, `deleteTenantInvoicesBatch`, is already fixed — see Track A/B.)
@@ -174,7 +174,7 @@ to be agreed with the user before any of this is implemented.
 - `ClientDetail.jsx` (1,899 lines): 55 `useState` calls in one component.
 - `companySetup/CompanySetupPage.jsx` (4,357 lines) and `SystemSetup/CompanySettings.jsx` (3,451 lines) — both legitimately separate routes, both strong candidates to split per-settings-section.
 - Several other 2,300+ line page files (`RentalInvoices.jsx`, `Receipts.jsx`, `Tenants.jsx`, `AddTenant.jsx`, `Landlord/Statements.jsx`) are already reasonably memoized internally — the issue there is pure file size, not runtime perf.
-- `MilikTable`'s `React.memo` is effectively neutralized in most of its ~50 page consumers because `renderRow`/`renderActions`/etc. are passed as inline closures re-created every parent render.
+- `MilikTable`'s `React.memo` is effectively neutralized in most of its ~50 page consumers because `renderRow`/`renderActions`/etc. are passed as inline closures re-created every parent render. **Partially addressed — see Track C progress, item 4 part B** (the 2 consumers with a demonstrated cost fixed; the rest deliberately left as logged backlog, not ground through).
 - ~8–9 pages hand-roll `StatusBadge`/`PaginationBar` despite the shared components already being used correctly in 37–90 other places.
 - `Landlord/StatementsTable.jsx` duplicates `StatusBadge` logic locally instead of using the shared component with a custom map.
 
@@ -332,7 +332,83 @@ Agreed order (established before Track D's unplanned detour):
      deep-diffed. 0 substantive differences in any of the 4; the only
      diffs were freshly-random entry `_id`s and `generatedAt` timestamps,
      both expected to differ on every call regardless of code changes.
-4. `*ImportModal.jsx` consolidation + `MilikTable` memoization fix. **Not started.**
+4. ✅ **`*ImportModal.jsx` consolidation + `MilikTable` memoization fix — done.**
+   - ✅ **Part A — `*ImportModal.jsx` consolidation.** Scanned all 7 files
+     side by side before touching anything: mapped what was genuinely
+     identical structure (upload/parse/preview/errors/footer — ~70% of
+     each file) versus incidentally different per type (preview columns,
+     dynamic terminology, template-download placement, accept types). Key
+     finding: `SaleImportModal.jsx` was already the proven config-driven
+     pattern (in production use by both `SaleBuyers.jsx` and
+     `SaleListings.jsx`) — not something to design from scratch, just
+     generalize and migrate the other 6 onto it. Also caught, before
+     writing a shared component, that Products' backend uses a completely
+     different response contract (`{created, skipped, errors}` vs.
+     everyone else's `{successful, failed}`) — a silent-data-loss risk
+     (import failures rendering as 0 for that one type) that a naive
+     shared component would have hidden.
+     7 commits: `5e2c80a` (generalize `SaleImportModal` → `ImportModal`),
+     `d56a89b` (Property), `c8fd100` (Products — the divergent-shape case,
+     deliberately migrated second to validate the design early),
+     `d50ae14` (Landlord), `bab3951` (Units), `00383b9` (Tenants),
+     `a9595e7` (InvoiceNotes, last — lowest risk). 6 bespoke modal files
+     deleted. `ImportModal`'s contract: `onImport` must resolve to
+     `{successful, failed}` — shape normalization for backends that nest
+     or diverge happens in each page's own `onImport` wrapper, never in
+     the shared component, so it never has to guess a backend's shape.
+     Per-type overrides (`accept`, `maxWidthClass`, `zIndexClass`,
+     `submitColorClass`, `getErrorRowLabel`/`getFailureRowLabel`) all
+     default to Sale's original values — deliberate differences (Products'
+     `z-[130]` matching `components/common/Modal.jsx`; InvoiceNotes'
+     orange submit button) preserved as configurable props rather than
+     normalized away, confirmed field-by-field against each type's real
+     backend controller and parse function before writing the migration,
+     never assumed. Template download consolidated into the modal for all
+     7 types (previously scattered across page toolbars for 4 of them).
+     Verification split by risk: since this is a write path with no test
+     suite, the actual "Import" submission was never clicked against the
+     live database for any of the 7 — the read path (upload → parse →
+     preview → validation errors) was verified through the real running
+     app via Playwright with a generated test file per type, and the write
+     path was verified by reading the real backend controller's response
+     shape directly and confirming the page's wrapper normalizes it
+     correctly.
+   - ✅ **Part B — `MilikTable` memoization.** Scanned all ~49 consumers:
+     confirmed nearly all pass `renderRow` (and usually several more of
+     `renderActions`/`renderExpanded`/`groupBy`/`onRowClick`/`isSelected`/
+     `rowClassName`/`onCheckAll`/`isChecked`/`onCheckRow`/`onSort`) as
+     inline arrow functions, defeating `MilikTable`'s `React.memo`. Also
+     found `columns` is commonly an inline array literal at call sites too
+     — fixing only the callback props while leaving `columns` unstable
+     would make a fix a no-op. Explicitly scoped down rather than treating
+     all 49 as in-scope: fixed only the 2 consumers with a *demonstrated*
+     cost — `PmsMpesaNotifications.jsx` (`a61ad0d`) and
+     `CoopCollections.jsx` (`c330527`), both of which poll every 30s,
+     forcing a full table re-render on every tick regardless of user
+     activity, on top of every unrelated re-render (e.g. every filter-
+     input keystroke) before the fix. `CoopCollections.jsx` additionally
+     needed `handleDelete`/`handleUnignore` wrapped in their own
+     `useCallback`s first — they were plain functions recreated every
+     render, so memoizing `renderActions` alone would have been a no-op.
+     Real per-company row counts were then checked for the 3 conditional
+     candidates (`Tenants.jsx`: 174 largest-company / 533 total;
+     `RentalInvoices.jsx`: 612 / 1,584; `Receipts.jsx`: 290 / 613) —
+     all in the hundreds, capped to ~50 rendered DOM rows per page by
+     existing pagination regardless of total, well short of the two
+     genuinely hot (polling-driven) paths already fixed. Decision: none
+     of the three added to scope. The remaining ~44 consumers (plus these
+     3) are **left as logged backlog** — deliberately not ground through,
+     per this initiative's own stated philosophy against speculative
+     optimization with no test suite and no evidence of user-facing lag.
+     Verification: since Part B is pure rendering (no writes), browser-
+     automation click-throughs against the real app were used freely
+     (unlike Part A) — `PmsMpesaNotifications.jsx` verified against 50
+     real, varied rows from a live company (found via a direct read-only
+     DB query after the default test company turned out to have zero
+     matching records); `CoopCollections.jsx` verified structurally only
+     (zero `CoopCollection` records exist anywhere in the database —
+     confirmed before assuming, not guessed), since its logic is
+     structurally identical to the already-proven pattern.
 5. Low-priority cleanup batch (`controllers/employee.js` removal, `moment`
    for `recurringSchedule.js`, unused imports) — no urgency, batch whenever.
    **Not started.**
@@ -343,4 +419,4 @@ actually authorized.
 
 ---
 
-*Last updated: 2026-09-16 (Track C item 3 fully closed — both `redux/apiCalls.js` and `landlordStatementService.js` decompositions done). Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C as items are actioned.*
+*Last updated: 2026-09-18 (Track C item 4 fully closed — `*ImportModal.jsx` consolidation and the two confirmed-hot-path `MilikTable` memoization fixes both done). Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C as items are actioned.*
