@@ -39,7 +39,7 @@ import { adminRequests } from "../../utils/requestMethods";
 import { getCompanyUnitTypes } from "../../redux/apiCalls";
 import { printTabularList } from "../../utils/printList";
 import { useTerms } from "../../hooks/useTerm";
-import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
+import { normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 import AppSelect from "../../components/common/AppSelect";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";

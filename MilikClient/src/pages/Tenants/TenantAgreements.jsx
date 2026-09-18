@@ -11,7 +11,7 @@ import {
   selectAllUnits,
 } from "../../redux/selectors";
 import { useLocation, useNavigate } from "react-router-dom";
-import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
+import { normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 import {
   FaCheck,
   FaChevronDown,

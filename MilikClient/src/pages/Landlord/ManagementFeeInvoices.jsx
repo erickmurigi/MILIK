@@ -1,4 +1,3 @@
-import { LISTING_UI } from "../../utils/listingPageUtils";
 import { fmtDate } from "../../utils/dates";
 import AppSelect from "../../components/common/AppSelect";
 import React, { useCallback, useEffect, useMemo, useState } from "react";

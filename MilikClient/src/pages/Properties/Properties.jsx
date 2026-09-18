@@ -33,7 +33,7 @@ import { downloadPropertiesTemplate, exportPropertiesToExcel, parsePropertiesExc
 import { adminRequests } from "../../utils/requestMethods";
 import { printTabularList } from "../../utils/printList";
 import { useTerm } from "../../hooks/useTerm";
-import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
+import { normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 import { useTabState } from "../../hooks/useTabState";
 import { fmtDate } from "../../utils/dates";
 import PaginationBar from '../../components/PaginationBar';

@@ -1,4 +1,4 @@
-import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
+import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import { buildInvoiceNarration } from "../../utils/invoiceNarrationUtils";
 import PaginationBar from '../../components/PaginationBar';
 import React, { useCallback, useEffect, useMemo, useState } from "react";

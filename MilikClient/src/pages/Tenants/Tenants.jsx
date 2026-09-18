@@ -61,7 +61,7 @@ import {
   getTenantInvoices,
 } from "../../redux/apiCalls";
 import { hasCompanyPermission } from "../../utils/permissions";
-import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
+import { normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import Spinner from "../../components/common/Spinner";

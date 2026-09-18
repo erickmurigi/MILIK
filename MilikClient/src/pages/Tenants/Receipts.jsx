@@ -1,4 +1,4 @@
-﻿import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
+﻿import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import PaginationBar from '../../components/PaginationBar';
 import { useConfirm } from "../../context/ConfirmContext";
 import { formatMoney } from "../../utils/money";

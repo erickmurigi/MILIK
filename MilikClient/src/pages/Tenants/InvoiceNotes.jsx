@@ -8,7 +8,6 @@ import {
 } from "../../redux/selectors";
 import { useSearchParams } from "react-router-dom";
 import { useTabState } from "../../hooks/useTabState";
-import { LISTING_UI } from "../../utils/listingPageUtils";
 import { buildTenantOption } from "../../utils/tenantUtils";
 import {
   FaEnvelope,

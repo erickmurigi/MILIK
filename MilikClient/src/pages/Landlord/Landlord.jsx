@@ -36,7 +36,7 @@ import { toast } from "react-toastify";
 import { adminRequests } from "../../utils/requestMethods";
 import { printTabularList } from "../../utils/printList";
 import { useTerm } from "../../hooks/useTerm";
-import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
+import { normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 import { hasCompanyPermission } from "../../utils/permissions";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from '../../components/PaginationBar';

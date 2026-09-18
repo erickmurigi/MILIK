@@ -41,7 +41,7 @@ import { adminRequests } from "../../utils/requestMethods";
 import { fetchCompanySettings, selectCompanySettings } from "../../redux/companySettingsRedux";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { hasCompanyPermission } from "../../utils/permissions";
-import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
+import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import { useTabState } from "../../hooks/useTabState";
 import { safeId } from "../../utils/idUtils";
 import MilikTable from "../../components/common/MilikTable";
