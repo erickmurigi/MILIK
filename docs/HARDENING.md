@@ -5,9 +5,9 @@ started 2026-09-12/13. Eight tracks: bug fixes landed on `main` (Track A), the
 security hotfix (Track B, **merged and deployed**), an unplanned second wave
 of landlord-statement bug fixes found via live user testing (Track D), the
 whole-codebase optimization audit (Track C — **closed**), and a module-by-
-module correctness-then-performance pass now underway, starting with CarWash
-(Track E correctness **closed**, Track F performance **closed**; next module
-TBD).
+module correctness-then-performance pass now underway: CarWash (Track E
+correctness, Track F performance) and PropertySale (Track G correctness, Track
+H performance) are **closed**; next module TBD.
 
 ---
 
