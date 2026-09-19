@@ -101,6 +101,9 @@ const APPROVAL_LABELS = {
   rejected:       "Rejected",
 };
 
+const getJournalTypePresentation = (journalType) =>
+  JOURNAL_TYPES.find((type) => type.value === journalType) || JOURNAL_TYPES[0];
+
 const isLandlordPayableAccountRecord = (account = {}) => {
   const code = String(account?.code || account?.accountCode || "").trim().toUpperCase();
   const name = String(account?.name || account?.accountName || account?.title || "").trim().toLowerCase();
@@ -291,9 +294,6 @@ const JournalEntries = () => {
     () => accounts.find((account) => String(account?._id || "") === String(form.creditAccount || "")) || null,
     [accounts, form.creditAccount]
   );
-
-  const getJournalTypePresentation = (journalType) =>
-    JOURNAL_TYPES.find((type) => type.value === journalType) || JOURNAL_TYPES[0];
 
   const activeJournalTypePresentation = useMemo(
     () => getJournalTypePresentation(form.journalType),
