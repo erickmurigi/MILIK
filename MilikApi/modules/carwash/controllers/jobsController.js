@@ -13,7 +13,10 @@ import { currentUserId, escapeRegex, netJobPrice, parseDateRange, resolveActiveB
 import { accrueCommissionForJob, cancelJobCommissions, markJobCommissionsPayable } from "../services/commissionService.js";
 import { carpetUpload, fileUrlFromName, deletePhotoFile } from "../middleware/carpetUpload.js";
 import { autoEnrollPlate, awardLoyaltyStamp } from "./loyaltyController.js";
-import { normalizePlate } from "../utils/plateUtils.js";
+import { AMOUNT_TOLERANCE } from "./paymentsController.js";
+import { normalizePlate, buildPlateRegex } from "../utils/plateUtils.js";
+import CarWashCustomer from "../models/CarWashCustomer.js";
+import CarWashLoyaltyCard from "../models/CarWashLoyaltyCard.js";
 import { sendAdHocSms, sendAdHocSmsToMasked } from "../../../services/communicationService.js";
 import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
 import { recomputeCustomerStats, recomputeCustomerStatsForPlates } from "../services/customerStatsService.js";
@@ -35,9 +38,28 @@ const generateJobNumber = async (business) => {
 };
 
 // Validate and resolve multi-service lines from request body
-const resolveServiceLines = async (business, rawLines) => {
+const resolveServiceLines = async (business, rawLines, plateNumber = null) => {
   if (!Array.isArray(rawLines) || !rawLines.length) return null;
   const sliced = rawLines.slice(0, 20);
+
+  // Server-side validation of any reward-redemption lines. A client cannot be trusted to
+  // report whether a reward is genuinely pending or what it is worth, so every claimed
+  // reward line must be checked against the customer's actual CarWashLoyaltyCard before
+  // it is accepted, and its price is always derived server-side (never client-supplied).
+  const rewardLineCount = sliced.filter((r) => r.isRewardLine).length;
+  if (rewardLineCount > 0) {
+    const normalizedPlate = normalizePlate(plateNumber || "");
+    if (!normalizedPlate) throw createError(400, "A vehicle plate is required to redeem a loyalty reward");
+    const customer = await CarWashCustomer.findOne({ business, plates: buildPlateRegex(normalizedPlate) })
+      .select("_id").lean();
+    const card = customer
+      ? await CarWashLoyaltyCard.findOne({ business, customer: customer._id }).select("pendingRewards").lean()
+      : null;
+    const availableRewards = card?.pendingRewards || 0;
+    if (availableRewards < rewardLineCount) {
+      throw createError(400, "This customer does not have a pending loyalty reward to redeem");
+    }
+  }
 
   // Batch-fetch all referenced services in one query
   const serviceIds = sliced
@@ -53,7 +75,8 @@ const resolveServiceLines = async (business, rawLines) => {
     let serviceId = null;
     let serviceName = String(raw.serviceName || "").trim();
     let vehicleType = String(raw.vehicleType || "").trim();
-    let price = Number(raw.price ?? 0);
+    // Reward lines are always free — never trust a client-supplied price for them.
+    let price = raw.isRewardLine ? 0 : Number(raw.price ?? 0);
 
     if (raw.service && mongoose.Types.ObjectId.isValid(String(raw.service))) {
       const svc = svcMap.get(String(raw.service));
@@ -72,7 +95,7 @@ const resolveServiceLines = async (business, rawLines) => {
       : (raw.lineStaff && mongoose.Types.ObjectId.isValid(String(raw.lineStaff)) ? [String(raw.lineStaff)] : []);
     const svc = svcMap.get(String(serviceId || ""));
     const lineTaxRate  = (svc?.isTaxable && Number(svc?.taxRate) > 0) ? Number(svc.taxRate) : 0;
-    const lineTaxAmount = lineTaxRate > 0 ? Math.round((price * lineTaxRate / (100 + lineTaxRate)) * 100) / 100 : 0;
+    const lineTaxAmount = lineTaxRate > 0 ? round2(price * lineTaxRate / (100 + lineTaxRate)) : 0;
     lines.push({ service: serviceId, serviceName, vehicleType, price, lineStaff, isRewardLine: Boolean(raw.isRewardLine), taxRate: lineTaxRate, taxAmount: lineTaxAmount });
   }
   return lines;
@@ -94,7 +117,7 @@ const resolveServiceSnapshot = async (business, body = {}) => {
 
   const resolvedPrice  = Number(body.price ?? service.defaultPrice ?? 0);
   const snapshotTaxRate   = (service.isTaxable && Number(service.taxRate) > 0) ? Number(service.taxRate) : 0;
-  const snapshotTaxAmount = snapshotTaxRate > 0 ? Math.round((resolvedPrice * snapshotTaxRate / (100 + snapshotTaxRate)) * 100) / 100 : 0;
+  const snapshotTaxAmount = snapshotTaxRate > 0 ? round2(resolvedPrice * snapshotTaxRate / (100 + snapshotTaxRate)) : 0;
   return {
     service: service._id,
     serviceName: String(body.serviceName || service.name || "").trim(),
@@ -144,7 +167,7 @@ const getPaidAmount = async (business, jobId) => {
 
 const applyPaymentStatus = (job, paidAmount) => {
   const price = netJobPrice(job);
-  job.paymentStatus = paidAmount <= 0 ? "unpaid" : paidAmount < price ? "partial" : "paid";
+  job.paymentStatus = paidAmount <= 0 ? "unpaid" : paidAmount >= price - AMOUNT_TOLERANCE ? "paid" : "partial";
   // Rollback only: legacy-paid jobs whose payment is reversed revert to done
   if (job.status === "paid" && job.paymentStatus !== "paid") {
     job.status = "done";
@@ -267,7 +290,7 @@ export const createJob = async (req, res, next) => {
     let rootService = null, rootServiceName = "", rootVehicleType = "", totalPrice = 0, totalTaxAmount = 0;
 
     if (Array.isArray(req.body.serviceLines) && req.body.serviceLines.length) {
-      serviceLines = await resolveServiceLines(business, req.body.serviceLines);
+      serviceLines = await resolveServiceLines(business, req.body.serviceLines, plateNumber);
       totalPrice = round2(serviceLines.reduce((s, l) => s + Number(l.price || 0), 0));
       totalTaxAmount = round2(serviceLines.reduce((s, l) => s + Number(l.taxAmount || 0), 0));
       // Keep root fields pointing to first line for backward compat with reports/filters
@@ -356,6 +379,15 @@ export const createJob = async (req, res, next) => {
       }
     }
 
+    // Enforce the same status/paymentStatus invariant updateJob applies: a job can't be
+    // "paid" unless a payment has actually been recorded. paymentStatus is always "unpaid"
+    // at this point (the prepaid auto-deduct below runs after creation), so requesting
+    // status "paid" here would create a job in the same invalid state updateJob rejects.
+    const requestedStatus = JOB_STATUSES.has(String(req.body.status || "").toLowerCase()) ? String(req.body.status).toLowerCase() : "waiting";
+    if (requestedStatus === "paid") {
+      return next(createError(400, "Record payment before marking a Car Wash job as paid"));
+    }
+
     const manualJobNumber = String(req.body.jobNumber || "").trim();
     const jobBase = {
       business,
@@ -376,7 +408,7 @@ export const createJob = async (req, res, next) => {
       taxAmount: totalTaxAmount,
       rewardRedemption: hasRewardLine,
       discountAmount,
-      status: JOB_STATUSES.has(String(req.body.status || "").toLowerCase()) ? String(req.body.status).toLowerCase() : "waiting",
+      status: requestedStatus,
       assignedStaff,
       creditAccount: resolvedCreditAccount,
       isVoucher: resolvedCreditAccountType === "voucher",
@@ -498,7 +530,7 @@ export const updateJob = async (req, res, next) => {
     let serviceLines, rootService, rootServiceName, rootVehicleType, totalPrice;
 
     if (Array.isArray(req.body.serviceLines) && req.body.serviceLines.length) {
-      serviceLines = await resolveServiceLines(business, req.body.serviceLines);
+      serviceLines = await resolveServiceLines(business, req.body.serviceLines, existing.plateNumber);
       totalPrice = round2(serviceLines.reduce((s, l) => s + Number(l.price || 0), 0));
       rootService = serviceLines[0].service;
       rootServiceName = serviceLines.length === 1 ? serviceLines[0].serviceName : `${serviceLines[0].serviceName} +${serviceLines.length - 1} more`;

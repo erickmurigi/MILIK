@@ -21,7 +21,7 @@ import { postCarWashPaymentLedger, reverseCarWashPaymentLedger, reverseCarWashTo
 import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
 import { recomputeCustomerStats } from "../services/customerStatsService.js";
 
-const AMOUNT_TOLERANCE = 0.01; // KES 0.01 tolerance for all amount comparisons
+export const AMOUNT_TOLERANCE = 0.01; // KES 0.01 tolerance for all amount comparisons
 const PAYMENT_METHODS = new Set(["cash", "mpesa", "bank", "card", "other"]);
 const RECONCILIATION_STATUSES = new Set(["pending", "reconciled", "flagged"]);
 
@@ -64,7 +64,7 @@ const refreshJobPaymentStatus = async (business, jobId) => {
   if (!job) throw createError(404, "Car Wash job not found");
   const paidAmount = Number(totals?.[0]?.paid || 0);
   const price = netJobPrice(job);
-  job.paymentStatus = paidAmount <= 0 ? "unpaid" : paidAmount < price ? "partial" : "paid";
+  job.paymentStatus = paidAmount <= 0 ? "unpaid" : paidAmount >= price - AMOUNT_TOLERANCE ? "paid" : "partial";
   // When a ready job becomes fully paid, auto-advance to done so it leaves the washboard/queue display
   if (job.paymentStatus === "paid" && job.status === "ready") {
     job.status = "done";
@@ -359,9 +359,12 @@ export const deletePayment = async (req, res, next) => {
       );
       if (linkedTopup) {
         await reverseCarWashTopupLedger({ businessId: business, topupId: linkedTopup._id, reason: "Source M-Pesa payment deleted", req });
+        // Atomically floor accountCredit at 0 so reversing a topup can never drive the
+        // balance negative (mirrors the $max-clamped pipeline update in jobsController.js).
+        const topupAmount = round2(Number(linkedTopup.amount || 0));
         await CarWashCreditAccount.updateOne(
           { _id: linkedTopup.account, business },
-          { $inc: { accountCredit: -round2(Number(linkedTopup.amount || 0)) } }
+          [{ $set: { accountCredit: { $max: [0, { $subtract: ["$accountCredit", topupAmount] }] } } }]
         );
       }
     }

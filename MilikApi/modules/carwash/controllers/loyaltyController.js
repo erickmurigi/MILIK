@@ -301,16 +301,13 @@ export const listCustomersEnriched = async (req, res, next) => {
         { $match: { business: businessOid, status: 'active' } },
         { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
       ]).allowDiskUse(true),
-      Promise.all([
-        CarWashJob.aggregate([
-          { $match: { business: businessOid, status: { $nin: ['cancelled'] } } },
-          { $group: { _id: null, total: { $sum: { $subtract: ['$price', { $ifNull: ['$discountAmount', 0] }] } } } },
-        ]).allowDiskUse(true),
-        CarWashPayment.aggregate([
-          { $match: { business: businessOid } },
-          { $group: { _id: null, total: { $sum: '$amount' } } },
-        ]).allowDiskUse(true),
-      ]).then(([inv, paid]) => [{ total: Math.max(0, (inv[0]?.total || 0) - (paid[0]?.total || 0)) }]),
+      // Sum each customer's own (already floor-0'd) stats.outstanding instead of netting
+      // one global invoiced total against one global paid total — the latter lets one
+      // customer's credit balance offset another customer's debit, hiding real debt.
+      CarWashCustomer.aggregate([
+        { $match: { business: businessOid } },
+        { $group: { _id: null, total: { $sum: { $max: [0, { $ifNull: ['$stats.outstanding', 0] }] } } } },
+      ]).allowDiskUse(true),
     ]);
 
     const globalStats = {
