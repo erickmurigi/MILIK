@@ -1,7 +1,7 @@
 # Hardening & Optimization Status
 
 Living status document for the security hardening and system optimization work
-started 2026-09-12/13. Six tracks: bug fixes landed on `main` (Track A), the
+started 2026-09-12/13. Seven tracks: bug fixes landed on `main` (Track A), the
 security hotfix (Track B, **merged and deployed**), an unplanned second wave
 of landlord-statement bug fixes found via live user testing (Track D), the
 whole-codebase optimization audit (Track C — **closed**), and a module-by-
@@ -575,4 +575,67 @@ step for this module yet).
 
 ---
 
-*Last updated: 2026-09-19 (Track F closed — CarWash full performance pass: 62 findings fixed across 5 backend + 2 frontend commits, see above). Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C/E/F as items are actioned.*
+## Track G — PropertySale module: correctness pass (2026-09-19) — CLOSED
+
+Second module in the "module at a time" sequence. Correctness only; the
+performance pass for this module is a separate, later step and has NOT been
+done. (POS sales in the Inventory module are unrelated despite the name and
+were excluded.)
+
+**Audit.** 6 read-only agents (3 backend, 3 frontend) over 28 backend and 28
+frontend files. No PropertySale test suite exists, so verification was
+`node --check`/esbuild parse checks, an import of all 12 route modules, a full
+`npm run build`, and reading every diff before merging. Fix agents were told to
+verify each finding against live code and report any that weren't real; the
+agent-scope bug was also spot-checked by hand before fixing.
+
+**Fixes (7 commits, by exclusive file ownership):**
+
+| Commit | Scope |
+|---|---|
+| `3736b17` | Payments/schedule: void and GL-affecting edits blocked on closed/cancelled deals (voiding after close permanently corrupted Revenue and Buyer Deposit Held, because the deposit-transfer/forfeit GL entries have no reversal path); post-insert overpayment re-check for concurrent submits; remaining-balance check on amount edits; schedule renumbering/total fix; business-wide overdue refresh; 3 indexes |
+| `26ca010` | Agent scoping (below), activities cross-tenant refs, reports, upload filters |
+| `91d6600` | Deals/commissions: createDeal no longer mutates an arbitrary offer by raw id (cross-tenant); deal creation compensates on failure instead of leaving orphans; commission stats scoped and ObjectId-cast; closeDeal/updateDeal reconciliation; round2 for WHT/commission |
+| `c5c9052` | Offers/listings/leads/import: accepting an offer is now exclusive (new server-managed `SaleListing.acceptedOffer`) and parks the listing as `reserved`, never `under_contract`; listing status can't be set via generic create/update; getPipeline ObjectId cast (the dashboard showed zeros for every tenant); bulk-import validation, isolated insertMany and duplicate skipping; race-safe lead conversion |
+| `00f0684` | Agent performance pages fetch all pages instead of silently truncating at 200 |
+| `9178e6d` | Commission statement shows Gross/WHT/Net; VOID receipts; stale deal panel; printed monthly commissions total |
+| `c763234` | Offer print stored XSS; funnel "Proposal Sent" row; stale-cache invalidations; cross-company placeholder flash; email placeholders |
+
+**Behavior changes users will notice after deploy**
+- **Agent scoping now actually applies.** The old middleware read `req.user._id`
+  but the login JWT carries `id`, so it never scoped anyone; it also ignored the
+  header-based business id and failed open on errors. Users linked to a
+  SaleAgent now see only their own leads/deals/commissions on list pages.
+  Admins/managers (no agent link) are unchanged.
+- Payments on closed/cancelled deals cannot be voided or have amount/date/
+  cashbook edited; the deal workflow for correcting them does not exist yet.
+- Bulk import skips duplicates and only accepts available/withdrawn listing
+  statuses.
+- Uploads with a rejected file type now fail with a 400 instead of silently
+  saving the rest.
+
+**Known gaps, deliberately not fixed**
+- Agent scoping covers the list endpoints and commission get/status, but
+  `getDeal`, `getLead` and the deal/lead mutations are still unscoped by agent.
+- An agent-scoped user with the process permission can approve/pay their own
+  commissions.
+- `updateDeal` price changes don't recompute the pending commission amount.
+- `updateLead` resets omitted fields on partial updates (sanitizer defaults);
+  `updateListing` can still overwrite `images`.
+- Deal statement/summary pages sum only the first 200 payments.
+- `SaleDeals.jsx` email vars still omit titleTransferDate/stampDuty/
+  propertySize/propertyCounty, so those placeholders go out literally.
+- Bulk import is not safe against two simultaneous uploads (no unique indexes on
+  the natural keys); `setSchedule` is still delete-then-insert.
+- No in-browser or database-level testing of any of this.
+
+**Process notes.** Parallel agent batches hit session rate limits again, so
+agent use is now capped (see project memory). Worktree agents are still rooted
+at a stale base commit, so every diff was applied with `git apply --3way`. One
+audit finding was backwards (which side of the monthly-detail commissions key was
+wrong) and one fix agent found an extra root cause (the JWT `id` field); both
+were confirmed against the code before merging.
+
+---
+
+*Last updated: 2026-09-19 (Track G closed — PropertySale correctness pass, see above; its performance pass is still to do). Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C/E/F/G as items are actioned.*
