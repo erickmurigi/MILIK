@@ -64,21 +64,288 @@ const blankForm = {
 };
 
 
+// Module scope so MilikTable's React.memo isn't defeated by a fresh function identity each parent render.
+const renderListingRow = (row) => (
+  <>
+    <td className="px-3 py-1.5 font-mono font-bold text-[#0B3B2E] border-r border-gray-100">{row.listingNumber}</td>
+    <td className="px-3 py-1.5 border-r border-gray-100">
+      <div className="flex items-center gap-1.5 max-w-[200px]">
+        <span className="truncate font-semibold text-slate-900">{row.title}</span>
+        {row.images?.length > 0 && (
+          <span className="flex-shrink-0 inline-flex items-center gap-0.5 border border-[#B7C9C0] bg-[#F1F6F3] px-1 py-0 text-[9px] font-bold text-[#0B3B2E]">
+            <FaCamera size={7} /> {row.images.length}
+          </span>
+        )}
+      </div>
+    </td>
+    <td className="px-3 py-1.5 border-r border-gray-100">
+      <span className="capitalize text-slate-500">{(row.propertyType || "—").replace(/_/g, " ")}</span>
+    </td>
+    <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600 max-w-[140px] truncate">
+      {[row.town, row.county].filter(Boolean).join(", ") || row.location || "—"}
+    </td>
+    <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold tabular-nums text-slate-900">{fmtKES(row.askingPrice)}</td>
+    <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">
+      {row.assignedAgent?.fullName || <span className="italic text-slate-400">Unassigned</span>}
+    </td>
+    <td className="px-3 py-1.5">
+      <StatusBadge status={row.status} map={LISTING_STATUS_MAP} />
+    </td>
+  </>
+);
+
+// Create/Edit modal — owns the form, staged photos and its own save/upload state (and the post-create "Done" mode),
+// so typing here never re-renders the page or its table.
+function ListingFormModal({ initialEditingId, initialForm, listings, biz, propertyTypeOptions, agentFormOptions, invalidate, onClose }) {
+  const queryClient  = useQueryClient();
+  const modalFileRef = useRef(null);
+  const [editingId,      setEditingId]      = useState(initialEditingId);
+  const [justCreated,    setJustCreated]    = useState(false);
+  const [form,           setForm]           = useState(initialForm);
+  const [saving,         setSaving]         = useState(false);
+  const [modalUploading, setModalUploading] = useState(false);
+  const [stagedFiles,    setStagedFiles]    = useState([]); // Array<{ file: File, preview: string }>
+
+  const modalSavedImgs = useMemo(
+    () => (editingId ? (listings.find((l) => l._id === editingId)?.images ?? []) : []),
+    [editingId, listings],
+  );
+
+  const handleClose = () => {
+    stagedFiles.forEach(({ preview }) => URL.revokeObjectURL(preview));
+    setStagedFiles([]);
+    onClose();
+  };
+
+  const handleSave = async () => {
+    if (!form.title.trim()) return toast.warning("Title is required");
+    if (!form.askingPrice || Number(form.askingPrice) <= 0) return toast.warning("Valid asking price is required");
+    setSaving(true);
+    try {
+      const payload = {
+        ...form, business: biz,
+        askingPrice: Number(form.askingPrice),
+        size: form.size ? Number(form.size) : null,
+        amenities: form.amenities ? form.amenities.split(",").map((s) => s.trim()).filter(Boolean) : [],
+        assignedAgent: form.assignedAgent || undefined,
+      };
+      if (editingId) {
+        await saleApi.updateListing(editingId, payload);
+        await invalidate();
+        onClose();
+        toast.success("Listing updated");
+      } else {
+        const created = await saleApi.createListing(payload);
+        const newId = created?._id || "";
+        // Upload any staged photos immediately
+        if (stagedFiles.length && newId) {
+          const fd = new FormData();
+          stagedFiles.forEach(({ file }) => fd.append("images", file));
+          try { await saleApi.uploadListingImages(newId, fd); } catch { /* non-fatal */ }
+          stagedFiles.forEach(({ preview }) => URL.revokeObjectURL(preview));
+          setStagedFiles([]);
+        }
+        await invalidate();
+        setEditingId(newId);
+        setJustCreated(true);
+        toast.success("Listing saved — add more photos below or click Done");
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to save listing");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Single handler for both Add (stage locally) and Edit (upload immediately)
+  const handleModalFileChange = async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (!files.length) return;
+    const oversized = files.filter((f) => f.size > 10 * 1024 * 1024);
+    if (oversized.length) toast.warning(`${oversized.length} file(s) exceed 10 MB and were skipped`);
+    const valid = files.filter((f) => f.size <= 10 * 1024 * 1024);
+    if (!valid.length) return;
+    if (editingId) {
+      setModalUploading(true);
+      try {
+        const fd = new FormData();
+        valid.forEach((f) => fd.append("images", f));
+        await saleApi.uploadListingImages(editingId, fd);
+        await queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] });
+        toast.success(`${valid.length} photo${valid.length > 1 ? "s" : ""} uploaded`);
+      } catch (err) {
+        toast.error(err?.response?.data?.message || "Upload failed");
+      } finally {
+        setModalUploading(false);
+      }
+    } else {
+      setStagedFiles((prev) => [...prev, ...valid.map((f) => ({ file: f, preview: URL.createObjectURL(f) }))]);
+    }
+  };
+
+  const handleModalDeleteImage = async (url) => {
+    setModalUploading(true);
+    try {
+      await saleApi.deleteListingImage(editingId, url);
+      await queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] });
+      toast.success("Photo removed");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to remove photo");
+    } finally {
+      setModalUploading(false);
+    }
+  };
+
+  const removeStagedFile = (preview) => {
+    URL.revokeObjectURL(preview);
+    setStagedFiles((prev) => prev.filter((f) => f.preview !== preview));
+  };
+
+  return (
+    <Modal
+      title={editingId ? "Edit Sale Listing" : "New Sale Listing"}
+      extraWide
+      onClose={handleClose}
+      footer={
+        <>
+          <button type="button" onClick={handleClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">
+            {justCreated ? "Done" : "Cancel"}
+          </button>
+          {!justCreated && (
+            <button type="button" onClick={handleSave} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+              {saving ? "Saving…" : editingId ? "Update Listing" : "Save Listing"}
+            </button>
+          )}
+        </>
+      }
+    >
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="md:col-span-2 xl:col-span-2">
+          <label className={labelClass}>Title / Property Name</label>
+          <input value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} className={inputClass} />
+        </div>
+        <div>
+          <AppSelect label="Property Type" value={form.propertyType} onChange={(v) => setForm((p) => ({ ...p, propertyType: v ?? "" }))} options={propertyTypeOptions} size="md" />
+        </div>
+        <div>
+          <label className={labelClass}>Asking Price (KES)</label>
+          <AmountInput value={form.askingPrice} onChange={(v) => setForm((p) => ({ ...p, askingPrice: v }))} className={inputClass} placeholder="e.g. 8,500,000" />
+        </div>
+        <div>
+          <label className={labelClass}>Size</label>
+          <div className="flex gap-1.5">
+            <input type="number" value={form.size} onChange={(e) => setForm((p) => ({ ...p, size: e.target.value }))} className="h-8 flex-1 border border-slate-200 bg-white px-3 text-xs focus:border-[#0B3B2E] focus:outline-none" placeholder="e.g. 50" />
+            <AppSelect value={form.sizeUnit} onChange={(v) => setForm((p) => ({ ...p, sizeUnit: v ?? "" }))} options={SIZE_UNIT_OPTIONS} size="md" />
+          </div>
+        </div>
+        <div>
+          <AppSelect label="Assigned Agent" value={form.assignedAgent} onChange={(v) => setForm((p) => ({ ...p, assignedAgent: v ?? "" }))} options={agentFormOptions} placeholder="Unassigned" size="md" searchable clearable />
+        </div>
+        <div>
+          <label className={labelClass}>Location / Address</label>
+          <input value={form.location} onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))} className={inputClass} />
+        </div>
+        <div>
+          <label className={labelClass}>Town / City</label>
+          <input value={form.town} onChange={(e) => setForm((p) => ({ ...p, town: e.target.value }))} className={inputClass} />
+        </div>
+        <div>
+          <label className={labelClass}>County</label>
+          <input value={form.county} onChange={(e) => setForm((p) => ({ ...p, county: e.target.value }))} className={inputClass} />
+        </div>
+        <div>
+          <label className={labelClass}>Listed Date</label>
+          <input type="date" value={form.listedDate} onChange={(e) => setForm((p) => ({ ...p, listedDate: e.target.value }))} className={inputClass} />
+        </div>
+        <div>
+          <label className={labelClass}>Title Deed No.</label>
+          <input value={form.titleDeedNumber} onChange={(e) => setForm((p) => ({ ...p, titleDeedNumber: e.target.value }))} className={inputClass} />
+        </div>
+        <div className="flex items-center gap-4 pt-4">
+          <label className="flex cursor-pointer items-center gap-2">
+            <input type="checkbox" checked={form.negotiable} onChange={(e) => setForm((p) => ({ ...p, negotiable: e.target.checked }))} className="accent-[#0B3B2E]" />
+            <span className="text-xs font-semibold text-slate-700">Negotiable</span>
+          </label>
+          <label className="flex cursor-pointer items-center gap-2">
+            <input type="checkbox" checked={form.titleDeedAvailable} onChange={(e) => setForm((p) => ({ ...p, titleDeedAvailable: e.target.checked }))} className="accent-[#0B3B2E]" />
+            <span className="text-xs font-semibold text-slate-700">Title Deed Available</span>
+          </label>
+        </div>
+        <div className="md:col-span-2 xl:col-span-3">
+          <label className={labelClass}>Amenities (comma-separated)</label>
+          <input value={form.amenities} onChange={(e) => setForm((p) => ({ ...p, amenities: e.target.value }))} className={inputClass} placeholder="Borehole, Power, Road access…" />
+        </div>
+        <div className="md:col-span-2 xl:col-span-3">
+          <label className={labelClass}>Description</label>
+          <textarea rows={3} value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+        </div>
+        <div className="md:col-span-2 xl:col-span-3">
+          <label className={labelClass}>Internal Notes</label>
+          <textarea rows={2} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+        </div>
+        {/* ── Photos section — shown for both Add and Edit ── */}
+        <div className="md:col-span-2 xl:col-span-3">
+          {justCreated && (
+            <div className="mb-2 flex items-center gap-2 border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-700">
+              ✓ Listing saved — add more photos below (optional), then click Done.
+            </div>
+          )}
+          <div className="flex items-center justify-between mb-1.5">
+            <label className={labelClass}>Photos</label>
+            <button
+              type="button"
+              onClick={() => modalFileRef.current?.click()}
+              disabled={modalUploading}
+              className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-50"
+            >
+              <FaCamera size={9} /> {modalUploading ? "Uploading…" : "Add Photos"}
+            </button>
+            <input ref={modalFileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleModalFileChange} />
+          </div>
+          {(modalSavedImgs.length > 0 || stagedFiles.length > 0) ? (
+            <div className="flex flex-wrap gap-2">
+              {modalSavedImgs.map((url) => (
+                <div key={url} className="group relative h-20 w-20 shrink-0">
+                  <img src={imgSrc(url)} alt="" className="h-full w-full object-cover border border-slate-200" />
+                  <button type="button" onClick={() => handleModalDeleteImage(url)} disabled={modalUploading}
+                    className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center bg-black/50 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 disabled:cursor-not-allowed transition-opacity">
+                    <FaTimes size={7} />
+                  </button>
+                </div>
+              ))}
+              {stagedFiles.map(({ file, preview }) => (
+                <div key={preview} className="group relative h-20 w-20 shrink-0">
+                  <img src={preview} alt={file.name} className="h-full w-full object-cover border border-slate-200 opacity-80" />
+                  <div className="absolute inset-0 flex items-end justify-center pb-1">
+                    <span className="bg-black/50 px-1 text-[8px] text-white">pending</span>
+                  </div>
+                  <button type="button" onClick={() => removeStagedFile(preview)}
+                    className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center bg-black/50 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-opacity">
+                    <FaTimes size={7} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[10px] text-slate-400 border border-dashed border-slate-200 px-3 py-2 bg-slate-50">
+              {editingId ? "No photos yet — click Add Photos to upload" : "Optional — select photos now and they will upload when you save"}
+            </p>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 const SaleListings = () => {
   const confirm        = useConfirm();
   const queryClient    = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const fileInputRef   = useRef(null);
-  const modalFileRef   = useRef(null);
 
-  const [saving,         setSaving]         = useState(false);
-  const [showModal,      setShowModal]      = useState(false);
+  const [listingModal,   setListingModal]   = useState(null);   // { editingId, initial } while the create/edit modal is open
   const [showImportModal, setShowImportModal] = useState(false);
-  const [editingId,      setEditingId]      = useState("");
-  const [justCreated,    setJustCreated]    = useState(false);
-  const [form,           setForm]           = useState(blankForm);
-  const [modalUploading, setModalUploading] = useState(false);
-  const [stagedFiles,    setStagedFiles]    = useState([]); // Array<{ file: File, preview: string }>
   const [search,     setSearch]     = useTabState("/sale/listings:search", "");
   const [statusFilt, setStatusFilt] = useTabState("/sale/listings:statusFilt", "");
   const [typeFilt,   setTypeFilt]   = useTabState("/sale/listings:typeFilt", "");
@@ -109,10 +376,10 @@ const SaleListings = () => {
     staleTime: 10 * 60_000,
   });
 
-  const activePropertyTypes = (saleSettings?.propertyTypes ?? []).filter((t) => t.isActive !== false);
-  const PROPERTY_TYPE_OPTIONS = activePropertyTypes.length
+  const activePropertyTypes = useMemo(() => (saleSettings?.propertyTypes ?? []).filter((t) => t.isActive !== false), [saleSettings]);
+  const PROPERTY_TYPE_OPTIONS = useMemo(() => activePropertyTypes.length
     ? activePropertyTypes.map((t) => ({ value: t.name.toLowerCase(), label: t.name }))
-    : FALLBACK_PROPERTY_TYPES.map((t) => ({ value: t, label: t }));
+    : FALLBACK_PROPERTY_TYPES.map((t) => ({ value: t, label: t })), [activePropertyTypes]);
 
   const { data: agentsData } = useQuery({
     queryKey: ["sale-agents-ref", biz],
@@ -123,13 +390,11 @@ const SaleListings = () => {
 
   const listings   = useMemo(() => listingsData?.data ?? [], [listingsData?.data]);
   const total      = listingsData?.total ?? 0;
-  const agents     = agentsData?.data ?? [];
+  const agents     = useMemo(() => agentsData?.data ?? [], [agentsData]);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  const modalSavedImgs = useMemo(
-    () => (editingId ? (listings.find((l) => l._id === editingId)?.images ?? []) : []),
-    [editingId, listings],
-  );
+  const agentFilterOptions = useMemo(() => agents.map((a) => ({ value: a._id, label: a.fullName })), [agents]);
+  const agentFormOptions   = useMemo(() => agents.map((a) => ({ value: a._id, label: `${a.fullName} (${a.agentNumber})` })), [agents]);
 
   // sync panel with fresh data after mutations
   useEffect(() => {
@@ -160,93 +425,48 @@ const SaleListings = () => {
     return () => window.removeEventListener("keydown", handler);
   }, [lightbox.open, selected?.images?.length, closeLightbox]);
 
-  const invalidate = () => Promise.all([
+  const invalidate = useCallback(() => Promise.all([
     queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] }),
     queryClient.invalidateQueries({ queryKey: ["sale-listings-ref", biz] }),
     queryClient.invalidateQueries({ queryKey: ["sale-dashboard"] }),
-  ]);
+  ]), [queryClient, biz]);
 
   const openCreate = () => {
     const firstType = PROPERTY_TYPE_OPTIONS[0]?.value ?? "plot";
-    setEditingId("");
-    setJustCreated(false);
-    setStagedFiles([]);
-    setForm({ ...blankForm, propertyType: firstType });
-    setShowModal(true);
+    setListingModal({ editingId: "", initial: { ...blankForm, propertyType: firstType } });
   };
-  const openEdit = (row) => {
-    setEditingId(row._id);
-    setJustCreated(false);
-    setStagedFiles([]);
-    setForm({
-      title: row.title || "", propertyType: row.propertyType || "plot",
-      description: row.description || "", size: row.size || "",
-      sizeUnit: row.sizeUnit || "sqm", location: row.location || "",
-      town: row.town || "", county: row.county || "", country: row.country || "Kenya",
-      askingPrice: row.askingPrice || "", negotiable: row.negotiable !== false,
-      titleDeedAvailable: row.titleDeedAvailable || false,
-      titleDeedNumber: row.titleDeedNumber || "",
-      assignedAgent: row.assignedAgent?._id || row.assignedAgent || "",
-      listedDate: row.listedDate ? new Date(row.listedDate).toISOString().split("T")[0] : todayISO(),
-      amenities: Array.isArray(row.amenities) ? row.amenities.join(", ") : "",
-      notes: row.notes || "",
+  const openEdit = useCallback((row) => {
+    setListingModal({
+      editingId: row._id,
+      initial: {
+        title: row.title || "", propertyType: row.propertyType || "plot",
+        description: row.description || "", size: row.size || "",
+        sizeUnit: row.sizeUnit || "sqm", location: row.location || "",
+        town: row.town || "", county: row.county || "", country: row.country || "Kenya",
+        askingPrice: row.askingPrice || "", negotiable: row.negotiable !== false,
+        titleDeedAvailable: row.titleDeedAvailable || false,
+        titleDeedNumber: row.titleDeedNumber || "",
+        assignedAgent: row.assignedAgent?._id || row.assignedAgent || "",
+        listedDate: row.listedDate ? new Date(row.listedDate).toISOString().split("T")[0] : todayISO(),
+        amenities: Array.isArray(row.amenities) ? row.amenities.join(", ") : "",
+        notes: row.notes || "",
+      },
     });
-    setShowModal(true);
-  };
+  }, []);
 
-  const handleSave = async () => {
-    if (!form.title.trim()) return toast.warning("Title is required");
-    if (!form.askingPrice || Number(form.askingPrice) <= 0) return toast.warning("Valid asking price is required");
-    setSaving(true);
-    try {
-      const payload = {
-        ...form, business: biz,
-        askingPrice: Number(form.askingPrice),
-        size: form.size ? Number(form.size) : null,
-        amenities: form.amenities ? form.amenities.split(",").map((s) => s.trim()).filter(Boolean) : [],
-        assignedAgent: form.assignedAgent || undefined,
-      };
-      if (editingId) {
-        await saleApi.updateListing(editingId, payload);
-        await invalidate();
-        setShowModal(false);
-        toast.success("Listing updated");
-      } else {
-        const created = await saleApi.createListing(payload);
-        const newId = created?._id || "";
-        // Upload any staged photos immediately
-        if (stagedFiles.length && newId) {
-          const fd = new FormData();
-          stagedFiles.forEach(({ file }) => fd.append("images", file));
-          try { await saleApi.uploadListingImages(newId, fd); } catch { /* non-fatal */ }
-          stagedFiles.forEach(({ preview }) => URL.revokeObjectURL(preview));
-          setStagedFiles([]);
-        }
-        await invalidate();
-        setEditingId(newId);
-        setJustCreated(true);
-        toast.success("Listing saved — add more photos below or click Done");
-      }
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to save listing");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDelete = async (row) => {
+  const handleDelete = useCallback(async (row) => {
     if (!await confirm({ title: "Delete Listing", message: `Delete "${row.title}"?`, confirmText: "Delete", isDangerous: true })) return;
     try {
       await saleApi.deleteListing(row._id);
-      if (selected?._id === row._id) setSelected(null);
+      setSelected((prev) => (prev?._id === row._id ? null : prev));
       await invalidate();
       toast.success("Listing deleted");
     } catch (err) {
       toast.error(err?.response?.data?.message || "Cannot delete this listing");
     }
-  };
+  }, [confirm, invalidate, setSelected]);
 
-  const handleStatusChange = async (row, status) => {
+  const handleStatusChange = useCallback(async (row, status) => {
     if (statusInFlight.current.has(row._id)) return;
     statusInFlight.current.add(row._id);
     setStatusBusy((m) => ({ ...m, [row._id]: true }));
@@ -260,7 +480,7 @@ const SaleListings = () => {
       statusInFlight.current.delete(row._id);
       setStatusBusy((m) => { const { [row._id]: _done, ...rest } = m; return rest; });
     }
-  };
+  }, [invalidate]);
 
   const handleUploadImages = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -296,52 +516,7 @@ const SaleListings = () => {
     }
   };
 
-  // Single handler for both Add (stage locally) and Edit (upload immediately)
-  const handleModalFileChange = useCallback(async (e) => {
-    const files = Array.from(e.target.files || []);
-    e.target.value = "";
-    if (!files.length) return;
-    const oversized = files.filter((f) => f.size > 10 * 1024 * 1024);
-    if (oversized.length) toast.warning(`${oversized.length} file(s) exceed 10 MB and were skipped`);
-    const valid = files.filter((f) => f.size <= 10 * 1024 * 1024);
-    if (!valid.length) return;
-    if (editingId) {
-      setModalUploading(true);
-      try {
-        const fd = new FormData();
-        valid.forEach((f) => fd.append("images", f));
-        await saleApi.uploadListingImages(editingId, fd);
-        await queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] });
-        toast.success(`${valid.length} photo${valid.length > 1 ? "s" : ""} uploaded`);
-      } catch (err) {
-        toast.error(err?.response?.data?.message || "Upload failed");
-      } finally {
-        setModalUploading(false);
-      }
-    } else {
-      setStagedFiles((prev) => [...prev, ...valid.map((f) => ({ file: f, preview: URL.createObjectURL(f) }))]);
-    }
-  }, [editingId, biz, queryClient]);
-
-  const handleModalDeleteImage = useCallback(async (url) => {
-    setModalUploading(true);
-    try {
-      await saleApi.deleteListingImage(editingId, url);
-      await queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] });
-      toast.success("Photo removed");
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to remove photo");
-    } finally {
-      setModalUploading(false);
-    }
-  }, [editingId, biz, queryClient]);
-
-  const removeStagedFile = useCallback((preview) => {
-    URL.revokeObjectURL(preview);
-    setStagedFiles((prev) => prev.filter((f) => f.preview !== preview));
-  }, []);
-
-  const printListing = (row) => {
+  const printListing = useCallback((row) => {
     const co = currentCompany || {};
     const coName = co.companyName || co.name || "MILIK";
     const coInfo = [co.phone || co.phoneNumber, co.email || co.companyEmail, co.address || co.location].filter(Boolean).join(" • ");
@@ -389,7 +564,35 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
 </body></html>`);
     win.document.close();
     setTimeout(() => { win.focus(); win.print(); }, 400);
-  };
+  }, [currentCompany]);
+
+  const handleRowClick = useCallback((row) => setSelected((prev) => (prev?._id === row._id ? null : row)), [setSelected]);
+  const selectedId = selected?._id;
+  const isRowSelected = useCallback((row) => selectedId === row._id, [selectedId]);
+
+  const renderListingActions = useCallback((row) => (
+    <div className="inline-flex items-center gap-1">
+      <button type="button" onClick={() => printListing(row)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+        <FaPrint className="text-[9px]" /> Print
+      </button>
+      <button type="button" onClick={() => openEdit(row)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+        <FaEdit className="text-[9px]" /> Edit
+      </button>
+      {row.status === "available" && (
+        <button type="button" disabled={!!statusBusy[row._id]} onClick={() => handleStatusChange(row, "reserved")} className="border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed">
+          Reserve
+        </button>
+      )}
+      {row.status === "reserved" && (
+        <button type="button" disabled={!!statusBusy[row._id]} onClick={() => handleStatusChange(row, "available")} className="border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed">
+          Release
+        </button>
+      )}
+      <button type="button" onClick={() => handleDelete(row)} className="border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold text-red-600 hover:bg-red-50">
+        <FaTrash className="text-[9px]" />
+      </button>
+    </div>
+  ), [printListing, openEdit, statusBusy, handleStatusChange, handleDelete]);
 
   const resetFilters = () => { setSearch(""); setStatusFilt(""); setTypeFilt(""); setAgentFilt(""); setPage(1); };
 
@@ -433,7 +636,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
         />
         <AppSelect value={statusFilt} onChange={(v) => { setStatusFilt(v ?? ""); setPage(1); }} options={STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
         <AppSelect value={typeFilt} onChange={(v) => { setTypeFilt(v ?? ""); setPage(1); }} options={PROPERTY_TYPE_OPTIONS} placeholder="All Types" clearable size="sm" />
-        <AppSelect value={agentFilt} onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }} options={agents.map((a) => ({ value: a._id, label: a.fullName }))} placeholder="All Agents" clearable size="sm" searchable />
+        <AppSelect value={agentFilt} onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }} options={agentFilterOptions} placeholder="All Agents" clearable size="sm" searchable />
       </SaleFilterBar>
 
       {/* Table + images panel */}
@@ -445,59 +648,10 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
             loading={loading}
             empty="No listings found. Create your first listing."
             minWidth={720}
-            onRowClick={(row) => setSelected(selected?._id === row._id ? null : row)}
-            isSelected={(row) => selected?._id === row._id}
-            renderRow={(row) => (
-              <>
-                <td className="px-3 py-1.5 font-mono font-bold text-[#0B3B2E] border-r border-gray-100">{row.listingNumber}</td>
-                <td className="px-3 py-1.5 border-r border-gray-100">
-                  <div className="flex items-center gap-1.5 max-w-[200px]">
-                    <span className="truncate font-semibold text-slate-900">{row.title}</span>
-                    {row.images?.length > 0 && (
-                      <span className="flex-shrink-0 inline-flex items-center gap-0.5 border border-[#B7C9C0] bg-[#F1F6F3] px-1 py-0 text-[9px] font-bold text-[#0B3B2E]">
-                        <FaCamera size={7} /> {row.images.length}
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-3 py-1.5 border-r border-gray-100">
-                  <span className="capitalize text-slate-500">{(row.propertyType || "—").replace(/_/g, " ")}</span>
-                </td>
-                <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600 max-w-[140px] truncate">
-                  {[row.town, row.county].filter(Boolean).join(", ") || row.location || "—"}
-                </td>
-                <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold tabular-nums text-slate-900">{fmtKES(row.askingPrice)}</td>
-                <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">
-                  {row.assignedAgent?.fullName || <span className="italic text-slate-400">Unassigned</span>}
-                </td>
-                <td className="px-3 py-1.5">
-                  <StatusBadge status={row.status} map={LISTING_STATUS_MAP} />
-                </td>
-              </>
-            )}
-            renderActions={(row) => (
-              <div className="inline-flex items-center gap-1">
-                <button type="button" onClick={() => printListing(row)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                  <FaPrint className="text-[9px]" /> Print
-                </button>
-                <button type="button" onClick={() => openEdit(row)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                  <FaEdit className="text-[9px]" /> Edit
-                </button>
-                {row.status === "available" && (
-                  <button type="button" disabled={!!statusBusy[row._id]} onClick={() => handleStatusChange(row, "reserved")} className="border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed">
-                    Reserve
-                  </button>
-                )}
-                {row.status === "reserved" && (
-                  <button type="button" disabled={!!statusBusy[row._id]} onClick={() => handleStatusChange(row, "available")} className="border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed">
-                    Release
-                  </button>
-                )}
-                <button type="button" onClick={() => handleDelete(row)} className="border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold text-red-600 hover:bg-red-50">
-                  <FaTrash className="text-[9px]" />
-                </button>
-              </div>
-            )}
+            onRowClick={handleRowClick}
+            isSelected={isRowSelected}
+            renderRow={renderListingRow}
+            renderActions={renderListingActions}
           />
 
           <PaginationBar page={page} pages={totalPages} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} />
@@ -692,143 +846,17 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
       )}
 
       {/* Create/Edit Modal */}
-      {showModal && (
-        <Modal
-          title={editingId ? "Edit Sale Listing" : "New Sale Listing"}
-          extraWide
-          onClose={() => {
-            stagedFiles.forEach(({ preview }) => URL.revokeObjectURL(preview));
-            setStagedFiles([]);
-            setShowModal(false);
-          }}
-          footer={
-            <>
-              <button type="button" onClick={() => setShowModal(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">
-                {justCreated ? "Done" : "Cancel"}
-              </button>
-              {!justCreated && (
-                <button type="button" onClick={handleSave} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-                  {saving ? "Saving…" : editingId ? "Update Listing" : "Save Listing"}
-                </button>
-              )}
-            </>
-          }
-        >
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <div className="md:col-span-2 xl:col-span-2">
-              <label className={labelClass}>Title / Property Name</label>
-              <input value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} className={inputClass} />
-            </div>
-            <div>
-              <AppSelect label="Property Type" value={form.propertyType} onChange={(v) => setForm((p) => ({ ...p, propertyType: v ?? "" }))} options={PROPERTY_TYPE_OPTIONS} size="md" />
-            </div>
-            <div>
-              <label className={labelClass}>Asking Price (KES)</label>
-              <AmountInput value={form.askingPrice} onChange={(v) => setForm((p) => ({ ...p, askingPrice: v }))} className={inputClass} placeholder="e.g. 8,500,000" />
-            </div>
-            <div>
-              <label className={labelClass}>Size</label>
-              <div className="flex gap-1.5">
-                <input type="number" value={form.size} onChange={(e) => setForm((p) => ({ ...p, size: e.target.value }))} className="h-8 flex-1 border border-slate-200 bg-white px-3 text-xs focus:border-[#0B3B2E] focus:outline-none" placeholder="e.g. 50" />
-                <AppSelect value={form.sizeUnit} onChange={(v) => setForm((p) => ({ ...p, sizeUnit: v ?? "" }))} options={SIZE_UNIT_OPTIONS} size="md" />
-              </div>
-            </div>
-            <div>
-              <AppSelect label="Assigned Agent" value={form.assignedAgent} onChange={(v) => setForm((p) => ({ ...p, assignedAgent: v ?? "" }))} options={agents.map((a) => ({ value: a._id, label: `${a.fullName} (${a.agentNumber})` }))} placeholder="Unassigned" size="md" searchable clearable />
-            </div>
-            <div>
-              <label className={labelClass}>Location / Address</label>
-              <input value={form.location} onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))} className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Town / City</label>
-              <input value={form.town} onChange={(e) => setForm((p) => ({ ...p, town: e.target.value }))} className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>County</label>
-              <input value={form.county} onChange={(e) => setForm((p) => ({ ...p, county: e.target.value }))} className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Listed Date</label>
-              <input type="date" value={form.listedDate} onChange={(e) => setForm((p) => ({ ...p, listedDate: e.target.value }))} className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Title Deed No.</label>
-              <input value={form.titleDeedNumber} onChange={(e) => setForm((p) => ({ ...p, titleDeedNumber: e.target.value }))} className={inputClass} />
-            </div>
-            <div className="flex items-center gap-4 pt-4">
-              <label className="flex cursor-pointer items-center gap-2">
-                <input type="checkbox" checked={form.negotiable} onChange={(e) => setForm((p) => ({ ...p, negotiable: e.target.checked }))} className="accent-[#0B3B2E]" />
-                <span className="text-xs font-semibold text-slate-700">Negotiable</span>
-              </label>
-              <label className="flex cursor-pointer items-center gap-2">
-                <input type="checkbox" checked={form.titleDeedAvailable} onChange={(e) => setForm((p) => ({ ...p, titleDeedAvailable: e.target.checked }))} className="accent-[#0B3B2E]" />
-                <span className="text-xs font-semibold text-slate-700">Title Deed Available</span>
-              </label>
-            </div>
-            <div className="md:col-span-2 xl:col-span-3">
-              <label className={labelClass}>Amenities (comma-separated)</label>
-              <input value={form.amenities} onChange={(e) => setForm((p) => ({ ...p, amenities: e.target.value }))} className={inputClass} placeholder="Borehole, Power, Road access…" />
-            </div>
-            <div className="md:col-span-2 xl:col-span-3">
-              <label className={labelClass}>Description</label>
-              <textarea rows={3} value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
-            </div>
-            <div className="md:col-span-2 xl:col-span-3">
-              <label className={labelClass}>Internal Notes</label>
-              <textarea rows={2} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
-            </div>
-            {/* ── Photos section — shown for both Add and Edit ── */}
-            <div className="md:col-span-2 xl:col-span-3">
-              {justCreated && (
-                <div className="mb-2 flex items-center gap-2 border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-700">
-                  ✓ Listing saved — add more photos below (optional), then click Done.
-                </div>
-              )}
-              <div className="flex items-center justify-between mb-1.5">
-                <label className={labelClass}>Photos</label>
-                <button
-                  type="button"
-                  onClick={() => modalFileRef.current?.click()}
-                  disabled={modalUploading}
-                  className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-50"
-                >
-                  <FaCamera size={9} /> {modalUploading ? "Uploading…" : "Add Photos"}
-                </button>
-                <input ref={modalFileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleModalFileChange} />
-              </div>
-              {(modalSavedImgs.length > 0 || stagedFiles.length > 0) ? (
-                <div className="flex flex-wrap gap-2">
-                  {modalSavedImgs.map((url) => (
-                    <div key={url} className="group relative h-20 w-20 shrink-0">
-                      <img src={imgSrc(url)} alt="" className="h-full w-full object-cover border border-slate-200" />
-                      <button type="button" onClick={() => handleModalDeleteImage(url)} disabled={modalUploading}
-                        className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center bg-black/50 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 disabled:cursor-not-allowed transition-opacity">
-                        <FaTimes size={7} />
-                      </button>
-                    </div>
-                  ))}
-                  {stagedFiles.map(({ file, preview }) => (
-                    <div key={preview} className="group relative h-20 w-20 shrink-0">
-                      <img src={preview} alt={file.name} className="h-full w-full object-cover border border-slate-200 opacity-80" />
-                      <div className="absolute inset-0 flex items-end justify-center pb-1">
-                        <span className="bg-black/50 px-1 text-[8px] text-white">pending</span>
-                      </div>
-                      <button type="button" onClick={() => removeStagedFile(preview)}
-                        className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center bg-black/50 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-opacity">
-                        <FaTimes size={7} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-[10px] text-slate-400 border border-dashed border-slate-200 px-3 py-2 bg-slate-50">
-                  {editingId ? "No photos yet — click Add Photos to upload" : "Optional — select photos now and they will upload when you save"}
-                </p>
-              )}
-            </div>
-          </div>
-        </Modal>
+      {listingModal && (
+        <ListingFormModal
+          initialEditingId={listingModal.editingId}
+          initialForm={listingModal.initial}
+          listings={listings}
+          biz={biz}
+          propertyTypeOptions={PROPERTY_TYPE_OPTIONS}
+          agentFormOptions={agentFormOptions}
+          invalidate={invalidate}
+          onClose={() => setListingModal(null)}
+        />
       )}
 
       <ImportModal

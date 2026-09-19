@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import {
@@ -70,6 +70,292 @@ const LEAD_TABLE_COLS = [
 const selectCls = "h-7 border border-slate-200 bg-white px-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none";
 const modalInputCls = "w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none";
 
+const rowClassName = (row) => isOld(row.nextFollowUpDate, row.status) ? "border-l-2 border-l-rose-400" : "";
+
+// Modals below own their form state so keystrokes never re-render the page, table or detail panel.
+// Submit handlers stay in the page (they own the in-flight `saving` guards); each modal hands its current form up on submit.
+
+function LeadFormModal({ editingId, initial, saving, sourceOptions, statusOptions, agentOptions, onClose, onSubmit }) {
+  const [form, setForm] = useState(initial);
+  return (
+    <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-lg sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
+        <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
+          <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
+            <FaUserFriends />{editingId ? "Edit Lead" : "Add Lead"}
+          </h3>
+          <button onClick={onClose} className="p-1 text-white/70 hover:bg-white/10 hover:text-white"><FaTimes /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto bg-white px-5 py-4 grid grid-cols-2 gap-3">
+          <div className="col-span-2">
+            <label className={labelClass}>Full Name *</label>
+            <input value={form.fullName} onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))} className={`${modalInputCls} h-8`} />
+          </div>
+          <div>
+            <label className={labelClass}>Phone</label>
+            <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} className={`${modalInputCls} h-8`} />
+          </div>
+          <div>
+            <label className={labelClass}>Email</label>
+            <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className={`${modalInputCls} h-8`} />
+          </div>
+          <div>
+            <label className={labelClass}>Source</label>
+            <AppSelect
+              value={form.source}
+              onChange={(v) => setForm((f) => ({ ...f, source: v ?? "" }))}
+              options={sourceOptions}
+              size="md"
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Status</label>
+            <AppSelect
+              value={form.status}
+              onChange={(v) => setForm((f) => ({ ...f, status: v ?? "" }))}
+              options={statusOptions}
+              size="md"
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Assigned Agent</label>
+            <AppSelect
+              value={form.assignedAgent}
+              onChange={(v) => setForm((f) => ({ ...f, assignedAgent: v ?? "" }))}
+              options={agentOptions}
+              placeholder="— Unassigned —"
+              searchable
+              clearable
+              size="md"
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Next Follow-up</label>
+            <input type="date" value={form.nextFollowUpDate} onChange={(e) => setForm((f) => ({ ...f, nextFollowUpDate: e.target.value }))} className={`${modalInputCls} h-8`} />
+          </div>
+          <div>
+            <label className={labelClass}>Budget Min (KES)</label>
+            <input type="number" value={form.budgetMin} onChange={(e) => setForm((f) => ({ ...f, budgetMin: e.target.value }))} className={`${modalInputCls} h-8`} />
+          </div>
+          <div>
+            <label className={labelClass}>Budget Max (KES)</label>
+            <input type="number" value={form.budgetMax} onChange={(e) => setForm((f) => ({ ...f, budgetMax: e.target.value }))} className={`${modalInputCls} h-8`} />
+          </div>
+          {form.status === "lost" && (
+            <div className="col-span-2">
+              <label className={labelClass}>Lost Reason</label>
+              <input value={form.lostReason} onChange={(e) => setForm((f) => ({ ...f, lostReason: e.target.value }))} className={`${modalInputCls} h-8`} />
+            </div>
+          )}
+          <div className="col-span-2">
+            <label className={labelClass}>Notes</label>
+            <textarea rows={3} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className={`${modalInputCls} resize-none`} />
+          </div>
+        </div>
+        <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <button onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button onClick={() => onSubmit(form)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+            {saving ? "Saving…" : editingId ? "Update Lead" : "Create Lead"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ActivityModal({ leadName, editingAct, initial, saving, onClose, onSubmit }) {
+  const [actForm, setActForm] = useState(initial);
+  return (
+    <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-md sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
+        <div className="flex flex-shrink-0 items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
+          <div>
+            <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
+              <FaCalendarAlt />{editingAct ? "Edit Activity" : "Log Activity"}
+            </h3>
+            <div className="text-[10px] text-white/60 mt-0.5">for {leadName}</div>
+          </div>
+          <button onClick={onClose} className="p-1 text-white/70 hover:bg-white/10 hover:text-white"><FaTimes /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto bg-white px-5 py-4 grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelClass}>Type *</label>
+            <AppSelect
+              value={actForm.type}
+              onChange={(v) => setActForm((f) => ({ ...f, type: v ?? "" }))}
+              options={ACTIVITY_TYPE_OPTIONS}
+              size="md"
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Date & Time</label>
+            <input type="datetime-local" value={actForm.date} onChange={(e) => setActForm((f) => ({ ...f, date: e.target.value }))} className={`${modalInputCls} h-8`} />
+          </div>
+          <div className="col-span-2">
+            <label className={labelClass}>Subject</label>
+            <input value={actForm.subject} onChange={(e) => setActForm((f) => ({ ...f, subject: e.target.value }))} placeholder="e.g. Site visit — Westlands plot" className={`${modalInputCls} h-8`} />
+          </div>
+          <div>
+            <label className={labelClass}>Duration (min)</label>
+            <input type="number" value={actForm.durationMinutes} onChange={(e) => setActForm((f) => ({ ...f, durationMinutes: e.target.value }))} className={`${modalInputCls} h-8`} />
+          </div>
+          <div>
+            <label className={labelClass}>Outcome</label>
+            <AppSelect
+              value={actForm.outcome}
+              onChange={(v) => setActForm((f) => ({ ...f, outcome: v ?? "" }))}
+              options={OUTCOME_OPTIONS}
+              size="md"
+            />
+          </div>
+          <div className="col-span-2">
+            <label className={labelClass}>Notes</label>
+            <textarea rows={3} value={actForm.notes} onChange={(e) => setActForm((f) => ({ ...f, notes: e.target.value }))} className={`${modalInputCls} resize-none`} />
+          </div>
+          <div className="col-span-2">
+            <label className={labelClass}>Next Action</label>
+            <input value={actForm.nextAction} onChange={(e) => setActForm((f) => ({ ...f, nextAction: e.target.value }))} placeholder="e.g. Send site plan brochure" className={`${modalInputCls} h-8`} />
+          </div>
+          <div>
+            <label className={labelClass}>Next Action Date</label>
+            <input type="date" value={actForm.nextActionDate} onChange={(e) => setActForm((f) => ({ ...f, nextActionDate: e.target.value }))} className={`${modalInputCls} h-8`} />
+          </div>
+        </div>
+        <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <button onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button onClick={() => onSubmit(actForm)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+            {saving ? "Saving…" : editingAct ? "Update" : "Log Activity"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConvertBuyerModal({ leadName, converting, onClose, onConfirm }) {
+  const [convertId, setConvertId] = useState("");
+  return (
+    <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-sm sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
+        <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
+          <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
+            <FaExchangeAlt />Convert to Buyer
+          </h3>
+          <button onClick={onClose} className="p-1 text-white/70 hover:bg-white/10 hover:text-white"><FaTimes /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-4">
+          <p className="text-xs text-slate-600">
+            Convert <strong>{leadName}</strong> to a registered buyer. A buyer profile will be created automatically.
+          </p>
+          <div>
+            <label className={labelClass}>ID / Passport Number</label>
+            <input value={convertId} onChange={(e) => setConvertId(e.target.value)} placeholder="National ID or Passport No." className={`${modalInputCls} h-8`} />
+          </div>
+        </div>
+        <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <button onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button onClick={() => onConfirm(convertId)} disabled={converting} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+            {converting ? "Converting…" : "Convert to Buyer"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConvertOfferModal({ leadName, listingOptions, agentOptions, converting, onClose, onSubmit }) {
+  const [offerForm, setOfferForm] = useState(blankOfferForm);
+  return (
+    <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <form onSubmit={(e) => { e.preventDefault(); onSubmit(offerForm); }} className="flex w-full flex-col bg-white shadow-2xl sm:max-w-md sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
+        <div className="flex flex-shrink-0 items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
+          <div>
+            <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
+              <FaExchangeAlt />Convert Lead → Offer
+            </h3>
+            <div className="text-[10px] text-white/60 mt-0.5">{leadName}</div>
+          </div>
+          <button type="button" onClick={onClose} className="p-1 text-white/70 hover:bg-white/10 hover:text-white"><FaTimes /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto bg-white px-5 py-4 grid grid-cols-2 gap-3">
+          <div className="col-span-2">
+            <label className={labelClass}>Listing *</label>
+            <AppSelect
+              value={offerForm.listing}
+              onChange={(v) => setOfferForm((f) => ({ ...f, listing: v ?? "" }))}
+              options={listingOptions}
+              placeholder="Select listing…"
+              searchable
+              size="md"
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Offer Amount (KES) *</label>
+            <input type="number" min="0" step="1" value={offerForm.offerAmount} onChange={(e) => setOfferForm((f) => ({ ...f, offerAmount: e.target.value }))} className={`${modalInputCls} h-8`} />
+          </div>
+          <div>
+            <label className={labelClass}>Valid Until</label>
+            <input type="date" value={offerForm.validityDate} onChange={(e) => setOfferForm((f) => ({ ...f, validityDate: e.target.value }))} className={`${modalInputCls} h-8`} />
+          </div>
+          <div className="col-span-2">
+            <label className={labelClass}>Assigned Agent</label>
+            <AppSelect
+              value={offerForm.agent}
+              onChange={(v) => setOfferForm((f) => ({ ...f, agent: v ?? "" }))}
+              options={agentOptions}
+              placeholder="Select agent…"
+              size="md"
+            />
+          </div>
+          <div className="col-span-2">
+            <label className={labelClass}>Notes</label>
+            <textarea rows={2} value={offerForm.notes} onChange={(e) => setOfferForm((f) => ({ ...f, notes: e.target.value }))} className={`${modalInputCls} resize-none`} />
+          </div>
+        </div>
+        <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button type="submit" disabled={converting} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+            {converting ? "Creating…" : "Create Offer"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function LeadEmailModal({ target, company, sending, onSend, onClose }) {
+  const [emailForm, setEmailForm] = useState(() => ({ to: target.email || "", subject: "", body: "" }));
+  const vars = useMemo(() => ({
+    leadName:     target.fullName    || "",
+    leadNumber:   target.leadNumber  || "",
+    phone:        target.phone       || "",
+    email:        target.email       || "",
+    source:       humanize(target.source),
+    status:       humanize(target.status),
+    budgetMin:    target.budgetMin   ? Number(target.budgetMin).toLocaleString()  : "",
+    budgetMax:    target.budgetMax   ? Number(target.budgetMax).toLocaleString()  : "",
+    assignedAgent: target.assignedAgent?.fullName || "",
+    lastContactDate:  target.lastContactDate  ? fmt(target.lastContactDate)  : "",
+    nextFollowUpDate: target.nextFollowUpDate ? fmt(target.nextFollowUpDate) : "",
+    companyName:  company?.companyName || company?.name || "",
+    companyPhone: company?.phoneNo || company?.phone || company?.telephone || "",
+    companyEmail: company?.email || company?.companyEmail || "",
+  }), [target, company]);
+  return (
+    <SaleEmailModal
+      title={`Email to ${target.fullName}`}
+      subtitle={target.leadNumber}
+      emailForm={emailForm}
+      setEmailForm={setEmailForm}
+      sending={sending}
+      onSend={() => onSend(emailForm)}
+      onClose={onClose}
+      context="lead"
+      vars={vars}
+    />
+  );
+}
+
 export default function SaleLeads() {
   const confirm = useConfirm();
   const qc      = useQueryClient();
@@ -87,29 +373,22 @@ export default function SaleLeads() {
   const [page,         setPage]       = useTabState("/sale/crm/leads:page", 1);
   const [pageSize,     setPageSize]   = useTabState("/sale/crm/leads:pageSize", LIMIT);
 
-  const [showModal,    setShowModal]  = useState(false);
-  const [editingId,    setEditingId]  = useState("");
-  const [form,         setForm]       = useState(blankLead);
+  const [leadModal,    setLeadModal]  = useState(null);   // { editingId, initial } while the lead form is open
   const [saving,       setSaving]     = useState(false);
 
   const [selected,     setSelected]   = useTabState("/sale/crm/leads:selected", null);
-  const [showActModal, setActModal]   = useState(false);
-  const [editingAct,   setEditingAct] = useState(null);
-  const [actForm,      setActForm]    = useState(blankAct);
+  const [actModal,     setActModal]   = useState(null);   // { editing, initial } while the activity form is open
   const [savingAct,    setSavingAct]  = useState(false);
 
   const [showConvert,      setShowConvert]      = useState(false);
-  const [convertId,        setConvertId]        = useState("");
   const [converting,       setConverting]       = useState(false);
 
   const [showConvertOffer, setShowConvertOffer] = useState(false);
-  const [offerForm,        setOfferForm]        = useState(blankOfferForm);
   const [convertingOffer,  setConvertingOffer]  = useState(false);
 
   const [smsTarget,   setSmsTarget]   = useState(null);
   const [emailTarget, setEmailTarget] = useState(null);
   const [smsForm,     setSmsForm]     = useState({ phone: "", body: "" });
-  const [emailForm,   setEmailForm]   = useState({ to: "", subject: "", body: "" });
   const [sendingSms,  setSendingSms]  = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
 
@@ -130,16 +409,16 @@ export default function SaleLeads() {
     staleTime: 10 * 60_000,
   });
 
-  const settingStages  = (saleSettings?.pipelineStages ?? []).filter((s) => s.isActive !== false).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  const settingSources = (saleSettings?.leadSources    ?? []).filter((s) => s.isActive !== false);
+  const settingStages  = useMemo(() => (saleSettings?.pipelineStages ?? []).filter((s) => s.isActive !== false).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)), [saleSettings]);
+  const settingSources = useMemo(() => (saleSettings?.leadSources    ?? []).filter((s) => s.isActive !== false), [saleSettings]);
 
-  const LEAD_STATUS_OPTIONS      = settingStages.length
+  const LEAD_STATUS_OPTIONS = useMemo(() => settingStages.length
     ? settingStages.map((s) => ({ value: nameToValue(s.name), label: s.name }))
-    : ["new","contacted","qualified","site_visited","proposal_sent","negotiating","converted","lost"].map((v) => ({ value: v, label: v.replace(/_/g, " ") }));
-  const LEAD_STATUS_FORM_OPTIONS = LEAD_STATUS_OPTIONS.filter((o) => o.value !== "converted");
-  const LEAD_SOURCE_OPTIONS      = settingSources.length
+    : ["new","contacted","qualified","site_visited","proposal_sent","negotiating","converted","lost"].map((v) => ({ value: v, label: v.replace(/_/g, " ") })), [settingStages]);
+  const LEAD_STATUS_FORM_OPTIONS = useMemo(() => LEAD_STATUS_OPTIONS.filter((o) => o.value !== "converted"), [LEAD_STATUS_OPTIONS]);
+  const LEAD_SOURCE_OPTIONS = useMemo(() => settingSources.length
     ? settingSources.map((s) => ({ value: nameToValue(s.name), label: s.name }))
-    : ["walk_in","referral","online","social_media","agent","cold_call","other"].map((v) => ({ value: v, label: v.replace(/_/g, " ") }));
+    : ["walk_in","referral","online","social_media","agent","cold_call","other"].map((v) => ({ value: v, label: v.replace(/_/g, " ") })), [settingSources]);
 
   const { data: agentsData } = useQuery({
     queryKey: ["sale-agents-ref", biz],
@@ -147,7 +426,8 @@ export default function SaleLeads() {
     enabled:  !!biz,
     staleTime: 5 * 60_000,
   });
-  const agents = agentsData?.data ?? [];
+  const agents = useMemo(() => agentsData?.data ?? [], [agentsData]);
+  const agentOptions = useMemo(() => agents.map((a) => ({ value: a._id, label: a.fullName })), [agents]);
 
   const { data: pipelineData } = useQuery({
     queryKey: ["sale-leads-pipeline", biz],
@@ -177,10 +457,15 @@ export default function SaleLeads() {
     staleTime: 5 * 60_000,
   });
 
-  const allListings       = listingsRef?.data ?? [];
-  const interestedListings = leadDetail?.interestedListings ?? [];
+  const allListings       = useMemo(() => listingsRef?.data ?? [], [listingsRef]);
+  const interestedListings = useMemo(() => leadDetail?.interestedListings ?? [], [leadDetail]);
+  const listingOptions    = useMemo(() => allListings.map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}` })), [allListings]);
+  const linkableListingOptions = useMemo(
+    () => listingOptions.filter((o) => !interestedListings.some((il) => String(il._id) === String(o.value))),
+    [listingOptions, interestedListings],
+  );
 
-  const leads      = leadsData?.data ?? [];
+  const leads      = useMemo(() => leadsData?.data ?? [], [leadsData]);
   const total      = leadsData?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const pipeline   = pipelineData?.pipeline ?? [];
@@ -195,27 +480,27 @@ export default function SaleLeads() {
   }, [qc, biz]);
 
   // ── Lead CRUD ─────────────────────────────────────────────────────────────
+  const editingId = leadModal?.editingId || "";
   const openCreate = () => {
     const firstSource = LEAD_SOURCE_OPTIONS[0]?.value ?? "walk_in";
     const firstStatus = LEAD_STATUS_OPTIONS[0]?.value ?? "new";
-    setEditingId("");
-    setForm({ ...blankLead, source: firstSource, status: firstStatus });
-    setShowModal(true);
+    setLeadModal({ editingId: "", initial: { ...blankLead, source: firstSource, status: firstStatus } });
   };
-  const openEdit   = (lead) => {
-    setEditingId(lead._id);
-    setForm({
-      fullName: lead.fullName || "", phone: lead.phone || "", email: lead.email || "",
-      source: lead.source || "walk_in", status: lead.status || "new",
-      assignedAgent: lead.assignedAgent?._id || lead.assignedAgent || "",
-      budgetMin: lead.budgetMin || "", budgetMax: lead.budgetMax || "",
-      notes: lead.notes || "", lostReason: lead.lostReason || "",
-      nextFollowUpDate: lead.nextFollowUpDate ? new Date(lead.nextFollowUpDate).toISOString().slice(0, 10) : "",
+  const openEdit   = useCallback((lead) => {
+    setLeadModal({
+      editingId: lead._id,
+      initial: {
+        fullName: lead.fullName || "", phone: lead.phone || "", email: lead.email || "",
+        source: lead.source || "walk_in", status: lead.status || "new",
+        assignedAgent: lead.assignedAgent?._id || lead.assignedAgent || "",
+        budgetMin: lead.budgetMin || "", budgetMax: lead.budgetMax || "",
+        notes: lead.notes || "", lostReason: lead.lostReason || "",
+        nextFollowUpDate: lead.nextFollowUpDate ? new Date(lead.nextFollowUpDate).toISOString().slice(0, 10) : "",
+      },
     });
-    setShowModal(true);
-  };
+  }, []);
 
-  const handleSave = async () => {
+  const handleSave = async (form) => {
     if (!form.fullName.trim()) return toast.warning("Full name is required");
     setSaving(true);
     try {
@@ -227,42 +512,42 @@ export default function SaleLeads() {
         await saleApi.createLead(payload);
       }
       invalidate(editingId);
-      setShowModal(false);
+      setLeadModal(null);
       toast.success(`Lead ${editingId ? "updated" : "created"}`);
     } catch (err) { toast.error(err?.response?.data?.message || "Save failed"); }
     finally { setSaving(false); }
   };
 
-  const handleDelete = async (lead) => {
+  const handleDelete = useCallback(async (lead) => {
     if (!await confirm({ title: "Delete Lead", message: `Delete "${lead.fullName}"?`, confirmText: "Delete", isDangerous: true })) return;
     try {
       await saleApi.deleteLead(lead._id);
       invalidate();
-      if (selected?._id === lead._id) setSelected(null);
+      setSelected((prev) => (prev?._id === lead._id ? null : prev));
       toast.success("Lead deleted");
     } catch (err) { toast.error(err?.response?.data?.message || "Delete failed"); }
-  };
+  }, [confirm, invalidate, setSelected]);
 
   // ── Activities ─────────────────────────────────────────────────────────────
-  const openLogAct = (lead) => {
+  const editingAct = actModal?.editing ?? null;
+  const openLogAct = useCallback((lead) => {
     setSelected(lead);
-    setEditingAct(null);
-    setActForm({ ...blankAct, date: new Date().toISOString().slice(0, 16) });
-    setActModal(true);
-  };
+    setActModal({ editing: null, initial: { ...blankAct, date: new Date().toISOString().slice(0, 16) } });
+  }, [setSelected]);
   const openEditAct = (act) => {
-    setEditingAct(act);
-    setActForm({
-      type: act.type, subject: act.subject || "", notes: act.notes || "",
-      date: new Date(act.date).toISOString().slice(0, 16),
-      durationMinutes: act.durationMinutes || "", outcome: act.outcome || "not_applicable",
-      nextAction: act.nextAction || "",
-      nextActionDate: act.nextActionDate ? new Date(act.nextActionDate).toISOString().slice(0, 10) : "",
+    setActModal({
+      editing: act,
+      initial: {
+        type: act.type, subject: act.subject || "", notes: act.notes || "",
+        date: new Date(act.date).toISOString().slice(0, 16),
+        durationMinutes: act.durationMinutes || "", outcome: act.outcome || "not_applicable",
+        nextAction: act.nextAction || "",
+        nextActionDate: act.nextActionDate ? new Date(act.nextActionDate).toISOString().slice(0, 10) : "",
+      },
     });
-    setActModal(true);
   };
 
-  const handleSaveAct = async () => {
+  const handleSaveAct = async (actForm) => {
     if (!actForm.type) return toast.warning("Activity type is required");
     setSavingAct(true);
     try {
@@ -271,7 +556,7 @@ export default function SaleLeads() {
       else await saleApi.createActivity(payload);
       qc.invalidateQueries({ queryKey: ["sale-activities-lead", biz, selected._id] });
       invalidate(selected._id);
-      setActModal(false);
+      setActModal(null);
       toast.success(`Activity ${editingAct ? "updated" : "logged"}`);
     } catch (err) { toast.error(err?.response?.data?.message || "Save failed"); }
     finally { setSavingAct(false); }
@@ -288,14 +573,10 @@ export default function SaleLeads() {
   };
 
   // ── Communication ──────────────────────────────────────────────────────────
-  const openSms = (lead) => {
+  const openSms = useCallback((lead) => {
     setSmsTarget(lead);
     setSmsForm({ phone: lead.phone || "", body: "" });
-  };
-  const openEmail = (lead) => {
-    setEmailTarget(lead);
-    setEmailForm({ to: lead.email || "", subject: "", body: "" });
-  };
+  }, []);
   const handleSendSms = async () => {
     setSendingSms(true);
     try {
@@ -305,7 +586,7 @@ export default function SaleLeads() {
     } catch (err) { toast.error(err?.response?.data?.message || "Failed to send SMS"); }
     finally { setSendingSms(false); }
   };
-  const handleSendEmail = async () => {
+  const handleSendEmail = async (emailForm) => {
     setSendingEmail(true);
     try {
       await saleApi.sendLeadEmail(emailTarget._id, emailForm);
@@ -316,7 +597,7 @@ export default function SaleLeads() {
   };
 
   // ── Conversion ─────────────────────────────────────────────────────────────
-  const handleConvert = async () => {
+  const handleConvert = async (convertId) => {
     setConverting(true);
     const leadId = selected._id;
     try {
@@ -331,8 +612,7 @@ export default function SaleLeads() {
     finally { setConverting(false); }
   };
 
-  const handleConvertToOffer = async (e) => {
-    e.preventDefault();
+  const handleConvertToOffer = async (offerForm) => {
     if (!offerForm.listing)     return toast.warning("Select a listing");
     if (!offerForm.offerAmount) return toast.warning("Offer amount is required");
     setConvertingOffer(true);
@@ -341,7 +621,6 @@ export default function SaleLeads() {
       await saleApi.convertLeadToOffer(leadId, { ...offerForm, business: biz });
       toast.success("Offer created from lead");
       setShowConvertOffer(false);
-      setOfferForm(blankOfferForm);
       invalidate(leadId);
       qc.invalidateQueries({ queryKey: ["sale-offers", biz] });
       // creating the offer reserves the listing and converts the lead server-side
@@ -370,6 +649,68 @@ export default function SaleLeads() {
   };
 
   const panelLead = leadDetail ?? selected;
+
+  const handleRowClick = useCallback((row) => setSelected((prev) => (prev?._id === row._id ? null : row)), [setSelected]);
+  const selectedId = selected?._id;
+  const isRowSelected = useCallback((row) => selectedId === row._id, [selectedId]);
+
+  const renderLeadRow = useCallback((row, i) => {
+    const overdue = isOld(row.nextFollowUpDate, row.status);
+    return (
+      <>
+        <td className="px-3 py-1.5 text-slate-400 text-[10px] border-r border-gray-100">{(page - 1) * pageSize + i + 1}</td>
+        <td className="px-3 py-1.5 font-mono font-bold text-[#0B3B2E] whitespace-nowrap border-r border-gray-100">{row.leadNumber}</td>
+        <td className="px-3 py-1.5 font-semibold text-slate-800 whitespace-nowrap border-r border-gray-100">{row.fullName}</td>
+        <td className="px-3 py-1.5 border-r border-gray-100">
+          {row.phone && <div className="flex items-center gap-1 text-slate-600"><FaPhone size={8} />{row.phone}</div>}
+          {row.email && <div className="flex items-center gap-1 text-slate-400 text-[10px]"><FaEnvelope size={8} />{row.email}</div>}
+        </td>
+        <td className="px-3 py-1.5 text-slate-500 capitalize whitespace-nowrap border-r border-gray-100">{(row.source || "").replace(/_/g, " ")}</td>
+        <td className="px-3 py-1.5 whitespace-nowrap border-r border-gray-100">
+          <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${STATUS_COLORS[row.status] || "border-slate-200 bg-slate-50 text-slate-500"}`}>
+            {(row.status || "").replace(/_/g, " ")}
+          </span>
+        </td>
+        <td className="px-3 py-1.5 text-slate-500 whitespace-nowrap border-r border-gray-100">{row.assignedAgent?.fullName || "—"}</td>
+        <td className="px-3 py-1.5 text-slate-500 whitespace-nowrap border-r border-gray-100">
+          {row.budgetMin || row.budgetMax
+            ? `${row.budgetMin ? fmtKES(row.budgetMin) : "?"} – ${row.budgetMax ? fmtKES(row.budgetMax) : "?"}`
+            : "—"}
+        </td>
+        <td className={`px-3 py-1.5 whitespace-nowrap ${overdue ? "text-rose-600 font-semibold" : "text-slate-500"}`}>
+          {row.nextFollowUpDate
+            ? <span className="flex items-center gap-1"><FaCalendarAlt size={9} />{fmt(row.nextFollowUpDate)}{overdue ? " !" : ""}</span>
+            : "—"}
+        </td>
+      </>
+    );
+  }, [page, pageSize]);
+
+  const renderLeadActions = useCallback((row) => (
+    <div className="inline-flex items-center gap-1">
+      {row.phone && (
+        <button onClick={() => openSms(row)} title="Send SMS" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+          <FaCommentAlt size={9} />
+        </button>
+      )}
+      {row.email && (
+        <button onClick={() => setEmailTarget(row)} title="Send Email" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+          <FaEnvelope size={9} />
+        </button>
+      )}
+      <button onClick={() => openLogAct(row)} title="Log Activity" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+        <FaClipboardList size={9} />
+      </button>
+      <button onClick={() => openEdit(row)} title="Edit" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+        <FaEdit size={9} />
+      </button>
+      {row.status !== "converted" && (
+        <button onClick={() => handleDelete(row)} title="Delete" className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100">
+          <FaTrash size={9} />
+        </button>
+      )}
+    </div>
+  ), [openSms, openLogAct, openEdit, handleDelete]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -423,7 +764,7 @@ export default function SaleLeads() {
             />
             <AppSelect value={statusFilter} onChange={(v) => setStatus(v ?? "")} options={LEAD_STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
             <AppSelect value={sourceFilter} onChange={(v) => setSource(v ?? "")} options={LEAD_SOURCE_OPTIONS} placeholder="All Sources" clearable size="sm" />
-            <AppSelect value={agentFilter} onChange={(v) => setAgent(v ?? "")} options={agents.map((a) => ({ value: a._id, label: a.fullName }))} placeholder="All Agents" searchable clearable size="sm" />
+            <AppSelect value={agentFilter} onChange={(v) => setAgent(v ?? "")} options={agentOptions} placeholder="All Agents" searchable clearable size="sm" />
             <label className="flex shrink-0 items-center gap-1.5 text-[11px] font-semibold text-slate-600 cursor-pointer select-none whitespace-nowrap">
               <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdue(e.target.checked)} className="accent-[#0B3B2E]" />
               Overdue
@@ -443,65 +784,11 @@ export default function SaleLeads() {
               loading={isLoading}
               empty="No leads found."
               minWidth={860}
-              onRowClick={(row) => setSelected(selected?._id === row._id ? null : row)}
-              isSelected={(row) => selected?._id === row._id}
-              rowClassName={(row) => isOld(row.nextFollowUpDate, row.status) ? "border-l-2 border-l-rose-400" : ""}
-              renderRow={(row, i) => {
-                const overdue = isOld(row.nextFollowUpDate, row.status);
-                return (
-                  <>
-                    <td className="px-3 py-1.5 text-slate-400 text-[10px] border-r border-gray-100">{(page - 1) * pageSize + i + 1}</td>
-                    <td className="px-3 py-1.5 font-mono font-bold text-[#0B3B2E] whitespace-nowrap border-r border-gray-100">{row.leadNumber}</td>
-                    <td className="px-3 py-1.5 font-semibold text-slate-800 whitespace-nowrap border-r border-gray-100">{row.fullName}</td>
-                    <td className="px-3 py-1.5 border-r border-gray-100">
-                      {row.phone && <div className="flex items-center gap-1 text-slate-600"><FaPhone size={8} />{row.phone}</div>}
-                      {row.email && <div className="flex items-center gap-1 text-slate-400 text-[10px]"><FaEnvelope size={8} />{row.email}</div>}
-                    </td>
-                    <td className="px-3 py-1.5 text-slate-500 capitalize whitespace-nowrap border-r border-gray-100">{(row.source || "").replace(/_/g, " ")}</td>
-                    <td className="px-3 py-1.5 whitespace-nowrap border-r border-gray-100">
-                      <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${STATUS_COLORS[row.status] || "border-slate-200 bg-slate-50 text-slate-500"}`}>
-                        {(row.status || "").replace(/_/g, " ")}
-                      </span>
-                    </td>
-                    <td className="px-3 py-1.5 text-slate-500 whitespace-nowrap border-r border-gray-100">{row.assignedAgent?.fullName || "—"}</td>
-                    <td className="px-3 py-1.5 text-slate-500 whitespace-nowrap border-r border-gray-100">
-                      {row.budgetMin || row.budgetMax
-                        ? `${row.budgetMin ? fmtKES(row.budgetMin) : "?"} – ${row.budgetMax ? fmtKES(row.budgetMax) : "?"}`
-                        : "—"}
-                    </td>
-                    <td className={`px-3 py-1.5 whitespace-nowrap ${overdue ? "text-rose-600 font-semibold" : "text-slate-500"}`}>
-                      {row.nextFollowUpDate
-                        ? <span className="flex items-center gap-1"><FaCalendarAlt size={9} />{fmt(row.nextFollowUpDate)}{overdue ? " !" : ""}</span>
-                        : "—"}
-                    </td>
-                  </>
-                );
-              }}
-              renderActions={(row) => (
-                <div className="inline-flex items-center gap-1">
-                  {row.phone && (
-                    <button onClick={() => openSms(row)} title="Send SMS" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                      <FaCommentAlt size={9} />
-                    </button>
-                  )}
-                  {row.email && (
-                    <button onClick={() => openEmail(row)} title="Send Email" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                      <FaEnvelope size={9} />
-                    </button>
-                  )}
-                  <button onClick={() => openLogAct(row)} title="Log Activity" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                    <FaClipboardList size={9} />
-                  </button>
-                  <button onClick={() => openEdit(row)} title="Edit" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                    <FaEdit size={9} />
-                  </button>
-                  {row.status !== "converted" && (
-                    <button onClick={() => handleDelete(row)} title="Delete" className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100">
-                      <FaTrash size={9} />
-                    </button>
-                  )}
-                </div>
-              )}
+              onRowClick={handleRowClick}
+              isSelected={isRowSelected}
+              rowClassName={rowClassName}
+              renderRow={renderLeadRow}
+              renderActions={renderLeadActions}
             />
 
             <PaginationBar
@@ -576,9 +863,7 @@ export default function SaleLeads() {
               <AppSelect
                 value=""
                 onChange={(v) => { if (v) handleToggleListing(v, true); }}
-                options={allListings
-                  .filter((l) => !interestedListings.some((il) => String(il._id) === String(l._id)))
-                  .map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}` }))}
+                options={linkableListingOptions}
                 placeholder="+ Link a listing…"
                 searchable
                 size="sm"
@@ -593,10 +878,10 @@ export default function SaleLeads() {
                 </button>
                 {panelLead.status !== "converted" && panelLead.status !== "lost" ? (
                   <>
-                    <button onClick={() => { setConvertId(""); setShowConvert(true); }} className="flex-1 inline-flex items-center justify-center gap-1 border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100">
+                    <button onClick={() => setShowConvert(true)} className="flex-1 inline-flex items-center justify-center gap-1 border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100">
                       <FaExchangeAlt size={9} /> Buyer
                     </button>
-                    <button onClick={() => { setOfferForm(blankOfferForm); setShowConvertOffer(true); }} className="flex-1 inline-flex items-center justify-center gap-1 border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-100">
+                    <button onClick={() => setShowConvertOffer(true)} className="flex-1 inline-flex items-center justify-center gap-1 border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-100">
                       <FaExchangeAlt size={9} /> → Offer
                     </button>
                   </>
@@ -611,7 +896,7 @@ export default function SaleLeads() {
                   </button>
                 )}
                 {panelLead.email && (
-                  <button onClick={() => openEmail(panelLead)} className="flex-1 inline-flex items-center justify-center gap-1 border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                  <button onClick={() => setEmailTarget(panelLead)} className="flex-1 inline-flex items-center justify-center gap-1 border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">
                     <FaEnvelope size={9} /> Email
                   </button>
                 )}
@@ -668,242 +953,31 @@ export default function SaleLeads() {
       </div>
 
       {/* ── Add / Edit Lead Modal ─────────────────────────────────────────────── */}
-      {showModal && (
-        <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-          <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-lg sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
-            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
-              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
-                <FaUserFriends />{editingId ? "Edit Lead" : "Add Lead"}
-              </h3>
-              <button onClick={() => setShowModal(false)} className="p-1 text-white/70 hover:bg-white/10 hover:text-white"><FaTimes /></button>
-            </div>
-            <div className="flex-1 overflow-y-auto bg-white px-5 py-4 grid grid-cols-2 gap-3">
-              <div className="col-span-2">
-                <label className={labelClass}>Full Name *</label>
-                <input value={form.fullName} onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))} className={`${modalInputCls} h-8`} />
-              </div>
-              <div>
-                <label className={labelClass}>Phone</label>
-                <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} className={`${modalInputCls} h-8`} />
-              </div>
-              <div>
-                <label className={labelClass}>Email</label>
-                <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className={`${modalInputCls} h-8`} />
-              </div>
-              <div>
-                <label className={labelClass}>Source</label>
-                <AppSelect
-                  value={form.source}
-                  onChange={(v) => setForm((f) => ({ ...f, source: v ?? "" }))}
-                  options={LEAD_SOURCE_OPTIONS}
-                  size="md"
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Status</label>
-                <AppSelect
-                  value={form.status}
-                  onChange={(v) => setForm((f) => ({ ...f, status: v ?? "" }))}
-                  options={LEAD_STATUS_FORM_OPTIONS}
-                  size="md"
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Assigned Agent</label>
-                <AppSelect
-                  value={form.assignedAgent}
-                  onChange={(v) => setForm((f) => ({ ...f, assignedAgent: v ?? "" }))}
-                  options={agents.map((a) => ({ value: a._id, label: a.fullName }))}
-                  placeholder="— Unassigned —"
-                  searchable
-                  clearable
-                  size="md"
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Next Follow-up</label>
-                <input type="date" value={form.nextFollowUpDate} onChange={(e) => setForm((f) => ({ ...f, nextFollowUpDate: e.target.value }))} className={`${modalInputCls} h-8`} />
-              </div>
-              <div>
-                <label className={labelClass}>Budget Min (KES)</label>
-                <input type="number" value={form.budgetMin} onChange={(e) => setForm((f) => ({ ...f, budgetMin: e.target.value }))} className={`${modalInputCls} h-8`} />
-              </div>
-              <div>
-                <label className={labelClass}>Budget Max (KES)</label>
-                <input type="number" value={form.budgetMax} onChange={(e) => setForm((f) => ({ ...f, budgetMax: e.target.value }))} className={`${modalInputCls} h-8`} />
-              </div>
-              {form.status === "lost" && (
-                <div className="col-span-2">
-                  <label className={labelClass}>Lost Reason</label>
-                  <input value={form.lostReason} onChange={(e) => setForm((f) => ({ ...f, lostReason: e.target.value }))} className={`${modalInputCls} h-8`} />
-                </div>
-              )}
-              <div className="col-span-2">
-                <label className={labelClass}>Notes</label>
-                <textarea rows={3} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className={`${modalInputCls} resize-none`} />
-              </div>
-            </div>
-            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-              <button onClick={() => setShowModal(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-                {saving ? "Saving…" : editingId ? "Update Lead" : "Create Lead"}
-              </button>
-            </div>
-          </div>
-        </div>
+      {leadModal && (
+        <LeadFormModal
+          editingId={leadModal.editingId}
+          initial={leadModal.initial}
+          saving={saving}
+          sourceOptions={LEAD_SOURCE_OPTIONS}
+          statusOptions={LEAD_STATUS_FORM_OPTIONS}
+          agentOptions={agentOptions}
+          onClose={() => setLeadModal(null)}
+          onSubmit={handleSave}
+        />
       )}
 
       {/* ── Log / Edit Activity Modal ─────────────────────────────────────────── */}
-      {showActModal && selected && (
-        <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-          <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-md sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
-            <div className="flex flex-shrink-0 items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
-              <div>
-                <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
-                  <FaCalendarAlt />{editingAct ? "Edit Activity" : "Log Activity"}
-                </h3>
-                <div className="text-[10px] text-white/60 mt-0.5">for {selected.fullName}</div>
-              </div>
-              <button onClick={() => setActModal(false)} className="p-1 text-white/70 hover:bg-white/10 hover:text-white"><FaTimes /></button>
-            </div>
-            <div className="flex-1 overflow-y-auto bg-white px-5 py-4 grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelClass}>Type *</label>
-                <AppSelect
-                  value={actForm.type}
-                  onChange={(v) => setActForm((f) => ({ ...f, type: v ?? "" }))}
-                  options={ACTIVITY_TYPE_OPTIONS}
-                  size="md"
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Date & Time</label>
-                <input type="datetime-local" value={actForm.date} onChange={(e) => setActForm((f) => ({ ...f, date: e.target.value }))} className={`${modalInputCls} h-8`} />
-              </div>
-              <div className="col-span-2">
-                <label className={labelClass}>Subject</label>
-                <input value={actForm.subject} onChange={(e) => setActForm((f) => ({ ...f, subject: e.target.value }))} placeholder="e.g. Site visit — Westlands plot" className={`${modalInputCls} h-8`} />
-              </div>
-              <div>
-                <label className={labelClass}>Duration (min)</label>
-                <input type="number" value={actForm.durationMinutes} onChange={(e) => setActForm((f) => ({ ...f, durationMinutes: e.target.value }))} className={`${modalInputCls} h-8`} />
-              </div>
-              <div>
-                <label className={labelClass}>Outcome</label>
-                <AppSelect
-                  value={actForm.outcome}
-                  onChange={(v) => setActForm((f) => ({ ...f, outcome: v ?? "" }))}
-                  options={OUTCOME_OPTIONS}
-                  size="md"
-                />
-              </div>
-              <div className="col-span-2">
-                <label className={labelClass}>Notes</label>
-                <textarea rows={3} value={actForm.notes} onChange={(e) => setActForm((f) => ({ ...f, notes: e.target.value }))} className={`${modalInputCls} resize-none`} />
-              </div>
-              <div className="col-span-2">
-                <label className={labelClass}>Next Action</label>
-                <input value={actForm.nextAction} onChange={(e) => setActForm((f) => ({ ...f, nextAction: e.target.value }))} placeholder="e.g. Send site plan brochure" className={`${modalInputCls} h-8`} />
-              </div>
-              <div>
-                <label className={labelClass}>Next Action Date</label>
-                <input type="date" value={actForm.nextActionDate} onChange={(e) => setActForm((f) => ({ ...f, nextActionDate: e.target.value }))} className={`${modalInputCls} h-8`} />
-              </div>
-            </div>
-            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-              <button onClick={() => setActModal(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button onClick={handleSaveAct} disabled={savingAct} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-                {savingAct ? "Saving…" : editingAct ? "Update" : "Log Activity"}
-              </button>
-            </div>
-          </div>
-        </div>
+      {actModal && selected && (
+        <ActivityModal leadName={selected.fullName} editingAct={actModal.editing} initial={actModal.initial} saving={savingAct} onClose={() => setActModal(null)} onSubmit={handleSaveAct} />
       )}
 
       {/* ── Convert to Buyer Modal ─────────────────────────────────────────────── */}
       {showConvert && selected && (
-        <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-          <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-sm sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
-            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
-              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
-                <FaExchangeAlt />Convert to Buyer
-              </h3>
-              <button onClick={() => setShowConvert(false)} className="p-1 text-white/70 hover:bg-white/10 hover:text-white"><FaTimes /></button>
-            </div>
-            <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-4">
-              <p className="text-xs text-slate-600">
-                Convert <strong>{selected.fullName}</strong> to a registered buyer. A buyer profile will be created automatically.
-              </p>
-              <div>
-                <label className={labelClass}>ID / Passport Number</label>
-                <input value={convertId} onChange={(e) => setConvertId(e.target.value)} placeholder="National ID or Passport No." className={`${modalInputCls} h-8`} />
-              </div>
-            </div>
-            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-              <button onClick={() => setShowConvert(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button onClick={handleConvert} disabled={converting} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-                {converting ? "Converting…" : "Convert to Buyer"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConvertBuyerModal leadName={selected.fullName} converting={converting} onClose={() => setShowConvert(false)} onConfirm={handleConvert} />
       )}
       {/* ── Convert to Offer Modal ───────────────────────────────────────────── */}
       {showConvertOffer && selected && (
-        <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-          <form onSubmit={handleConvertToOffer} className="flex w-full flex-col bg-white shadow-2xl sm:max-w-md sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
-            <div className="flex flex-shrink-0 items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
-              <div>
-                <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
-                  <FaExchangeAlt />Convert Lead → Offer
-                </h3>
-                <div className="text-[10px] text-white/60 mt-0.5">{selected.fullName}</div>
-              </div>
-              <button type="button" onClick={() => setShowConvertOffer(false)} className="p-1 text-white/70 hover:bg-white/10 hover:text-white"><FaTimes /></button>
-            </div>
-            <div className="flex-1 overflow-y-auto bg-white px-5 py-4 grid grid-cols-2 gap-3">
-              <div className="col-span-2">
-                <label className={labelClass}>Listing *</label>
-                <AppSelect
-                  value={offerForm.listing}
-                  onChange={(v) => setOfferForm((f) => ({ ...f, listing: v ?? "" }))}
-                  options={allListings.map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}` }))}
-                  placeholder="Select listing…"
-                  searchable
-                  size="md"
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Offer Amount (KES) *</label>
-                <input type="number" min="0" step="1" value={offerForm.offerAmount} onChange={(e) => setOfferForm((f) => ({ ...f, offerAmount: e.target.value }))} className={`${modalInputCls} h-8`} />
-              </div>
-              <div>
-                <label className={labelClass}>Valid Until</label>
-                <input type="date" value={offerForm.validityDate} onChange={(e) => setOfferForm((f) => ({ ...f, validityDate: e.target.value }))} className={`${modalInputCls} h-8`} />
-              </div>
-              <div className="col-span-2">
-                <label className={labelClass}>Assigned Agent</label>
-                <AppSelect
-                  value={offerForm.agent}
-                  onChange={(v) => setOfferForm((f) => ({ ...f, agent: v ?? "" }))}
-                  options={agents.map((a) => ({ value: a._id, label: a.fullName }))}
-                  placeholder="Select agent…"
-                  size="md"
-                />
-              </div>
-              <div className="col-span-2">
-                <label className={labelClass}>Notes</label>
-                <textarea rows={2} value={offerForm.notes} onChange={(e) => setOfferForm((f) => ({ ...f, notes: e.target.value }))} className={`${modalInputCls} resize-none`} />
-              </div>
-            </div>
-            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-              <button type="button" onClick={() => setShowConvertOffer(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button type="submit" disabled={convertingOffer} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-                {convertingOffer ? "Creating…" : "Create Offer"}
-              </button>
-            </div>
-          </form>
-        </div>
+        <ConvertOfferModal leadName={selected.fullName} listingOptions={listingOptions} agentOptions={agentOptions} converting={convertingOffer} onClose={() => setShowConvertOffer(false)} onSubmit={handleConvertToOffer} />
       )}
 
       {/* ── SMS Modal ─────────────────────────────────────────────────────────── */}
@@ -923,32 +997,7 @@ export default function SaleLeads() {
 
       {/* ── Email Modal ───────────────────────────────────────────────────────── */}
       {emailTarget && (
-        <SaleEmailModal
-          title={`Email to ${emailTarget.fullName}`}
-          subtitle={emailTarget.leadNumber}
-          emailForm={emailForm}
-          setEmailForm={setEmailForm}
-          sending={sendingEmail}
-          onSend={handleSendEmail}
-          onClose={() => setEmailTarget(null)}
-          context="lead"
-          vars={{
-            leadName:     emailTarget.fullName    || "",
-            leadNumber:   emailTarget.leadNumber  || "",
-            phone:        emailTarget.phone       || "",
-            email:        emailTarget.email       || "",
-            source:       humanize(emailTarget.source),
-            status:       humanize(emailTarget.status),
-            budgetMin:    emailTarget.budgetMin   ? Number(emailTarget.budgetMin).toLocaleString()  : "",
-            budgetMax:    emailTarget.budgetMax   ? Number(emailTarget.budgetMax).toLocaleString()  : "",
-            assignedAgent: emailTarget.assignedAgent?.fullName || "",
-            lastContactDate:  emailTarget.lastContactDate  ? fmt(emailTarget.lastContactDate)  : "",
-            nextFollowUpDate: emailTarget.nextFollowUpDate ? fmt(emailTarget.nextFollowUpDate) : "",
-            companyName:  currentCompany?.companyName || currentCompany?.name || "",
-            companyPhone: currentCompany?.phoneNo || currentCompany?.phone || currentCompany?.telephone || "",
-            companyEmail: currentCompany?.email || currentCompany?.companyEmail || "",
-          }}
-        />
+        <LeadEmailModal target={emailTarget} company={currentCompany} sending={sendingEmail} onSend={handleSendEmail} onClose={() => setEmailTarget(null)} />
       )}
     </PropertySaleShell>
   );

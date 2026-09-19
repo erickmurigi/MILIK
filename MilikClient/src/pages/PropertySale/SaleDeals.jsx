@@ -42,6 +42,7 @@ const fmtLabel        = (s) => (s || "").replace(/_/g, " ").replace(/\b\w/g, (c)
 
 const PAYMENT_TYPE_OPTIONS   = PAYMENT_TYPES.map((t) => ({ value: t, label: fmtLabel(t) }));
 const PAYMENT_METHOD_OPTIONS = PAYMENT_METHODS.map((m) => ({ value: m, label: fmtLabel(m) }));
+const COMMISSION_TYPE_OPTIONS = [{ value: "percentage", label: "Percentage (%)" }, { value: "flat", label: "Flat Amount (KES)" }];
 const DEAL_STATUS_OPTIONS    = [{ value: "active", label: "Active" }, { value: "closed", label: "Closed" }, { value: "cancelled", label: "Cancelled" }];
 const blankPayForm    = { amount: "", paymentType: "installment", paymentMethod: "bank_transfer", cashbook: "", reference: "", paymentDate: todayISO(), notes: "" };
 
@@ -59,6 +60,454 @@ const DEAL_TABLE_COLS = [
 // Server supplies `balance` on every deal payload; fall back to the local computation only if absent.
 const dealBalance = (d) => d?.balance ?? ((d?.agreedPrice || 0) - (d?.totalPaid || 0));
 
+const blankCloseForm = () => ({ actualClosingDate: todayISO(), titleTransferDate: "", handoverNotes: "", stampDutyAmount: "", stampDutyCashbook: "" });
+
+// Module scope so MilikTable's React.memo isn't defeated by a fresh function identity each parent render.
+const renderDealRow = (row) => {
+  const balance = dealBalance(row);
+  const pct = row.agreedPrice > 0 ? Math.min(100, Math.round(((row.totalPaid || 0) / row.agreedPrice) * 100)) : 0;
+  return (
+    <>
+      <td className="px-3 py-1.5 font-mono font-bold text-[#0B3B2E] border-r border-gray-100">{row.dealNumber}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100">
+        <div className="max-w-[140px] truncate font-semibold text-slate-800">{row.listing?.title || "—"}</div>
+        <div className="text-[10px] text-slate-400">{row.listing?.listingNumber}</div>
+      </td>
+      <td className="px-3 py-1.5 border-r border-gray-100">
+        <div className="font-semibold text-slate-800">{row.buyer?.fullName || "—"}</div>
+        <div className="text-[10px] text-slate-400">{row.buyer?.buyerNumber}</div>
+      </td>
+      <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{row.agent?.fullName || <span className="italic text-slate-400">None</span>}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 text-right">
+        <div className="font-bold text-slate-900">{fmtKES(row.agreedPrice)}</div>
+        <div className="mt-0.5 h-1 w-full overflow-hidden bg-slate-100">
+          <div className="h-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+        </div>
+      </td>
+      <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-emerald-700">{fmtKES(row.totalPaid || 0)}</td>
+      <td className={`px-3 py-1.5 border-r border-gray-100 text-right font-black ${balance > 0 ? "text-rose-700" : "text-emerald-700"}`}>{fmtKES(balance)}</td>
+      <td className="px-3 py-1.5">
+        <StatusBadge status={row.status} map={DEAL_STATUS_MAP} />
+      </td>
+    </>
+  );
+};
+
+// ── Modals / inputs below own their form state so keystrokes never re-render the page, table or detail panel. ──
+// Submit handlers stay in the page (they own the in-flight guards); each modal hands its current form up on submit.
+
+function DealFormModal({ editingId, initial, saving, listingFormOptions, buyerOptions, agentFormOptions, agents, onClose, onSubmit }) {
+  const [form, setForm] = useState(initial);
+  return (
+    <Modal
+      title={editingId ? "Edit Deal" : "New Sale Deal"}
+      wide
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button type="button" onClick={() => onSubmit(form)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+            {saving ? "Saving…" : editingId ? "Update Deal" : "Create Deal"}
+          </button>
+        </>
+      }
+    >
+      <div className="grid gap-3 md:grid-cols-2">
+        <div>
+          <AppSelect label="Listing / Property" value={form.listing} onChange={(v) => setForm((p) => ({ ...p, listing: v ?? "" }))} options={listingFormOptions} placeholder="Select listing…" size="md" searchable />
+        </div>
+        <div>
+          <AppSelect label="Buyer" value={form.buyer} onChange={(v) => setForm((p) => ({ ...p, buyer: v ?? "" }))} options={buyerOptions} placeholder="Select buyer…" size="md" searchable />
+        </div>
+        <div>
+          <AppSelect label="Sales Agent (Optional)" value={form.agent} onChange={(v) => setForm((p) => ({ ...p, agent: v ?? "", commOverrideEnabled: false, commissionRateOverride: "", commissionTypeOverride: "", commissionAmountOverride: "" }))} options={agentFormOptions} placeholder="No agent" size="md" searchable clearable />
+        </div>
+        {!editingId && form.agent && (() => {
+          const selAgent = agents.find((a) => a._id === form.agent);
+          return (
+            <div className="md:col-span-2 border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={!!form.commOverrideEnabled} onChange={(e) => setForm((p) => ({ ...p, commOverrideEnabled: e.target.checked }))} className="h-3.5 w-3.5 accent-[#0B3B2E]" />
+                <span className="text-[11px] font-extrabold uppercase tracking-wide text-slate-600">Override Commission</span>
+                {selAgent && !form.commOverrideEnabled && (
+                  <span className="ml-1 text-[11px] text-slate-400">
+                    (Default: {selAgent.commissionType === "percentage" ? `${selAgent.commissionRate}%` : `KES ${Number(selAgent.commissionRate).toLocaleString()}`} — {selAgent.commissionType})
+                  </span>
+                )}
+              </label>
+              {form.commOverrideEnabled && (
+                <div className="mt-2.5 grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <AppSelect label="Commission Type" value={form.commissionTypeOverride || selAgent?.commissionType || "percentage"} onChange={(v) => setForm((p) => ({ ...p, commissionTypeOverride: v ?? "", commissionAmountOverride: "" }))} options={COMMISSION_TYPE_OPTIONS} size="md" />
+                  </div>
+                  <div>
+                    <label className={labelClass}>{(form.commissionTypeOverride || selAgent?.commissionType) === "flat" ? "Commission Amount (KES)" : "Commission Rate (%)"}</label>
+                    <input type="number" min="0" step="0.01" value={form.commissionRateOverride} onChange={(e) => setForm((p) => ({ ...p, commissionRateOverride: e.target.value, commissionAmountOverride: "" }))} className={inputClass} placeholder={selAgent ? String(selAgent.commissionRate) : ""} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Direct Amount Override (KES)</label>
+                    <input type="number" min="0" step="0.01" value={form.commissionAmountOverride} onChange={(e) => setForm((p) => ({ ...p, commissionAmountOverride: e.target.value }))} className={inputClass} placeholder="Skip rate — set exact amount" />
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+        <div>
+          <label className={labelClass}>Agreed Price (KES)</label>
+          <AmountInput value={form.agreedPrice} onChange={(v) => setForm((p) => ({ ...p, agreedPrice: v }))} className={inputClass} placeholder="e.g. 8,500,000" />
+        </div>
+        <div>
+          <label className={labelClass}>Deal Date</label>
+          <input type="date" value={form.dealDate} onChange={(e) => setForm((p) => ({ ...p, dealDate: e.target.value }))} className={inputClass} />
+        </div>
+        <div>
+          <label className={labelClass}>Expected Closing Date</label>
+          <input type="date" value={form.expectedClosingDate} onChange={(e) => setForm((p) => ({ ...p, expectedClosingDate: e.target.value }))} className={inputClass} />
+        </div>
+        <div className="md:col-span-2">
+          <label className={labelClass}>Notes</label>
+          <textarea rows={2} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function CancelDealModal({ deal, actionKey, onClose, onConfirm }) {
+  const [cancelReason,  setCancelReason]  = useState("");
+  const [depositAction, setDepositAction] = useState("void");
+  return (
+    <Modal
+      title={`Cancel Deal — ${deal.dealNumber}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Back</button>
+          <button type="button" onClick={() => onConfirm({ cancelReason, depositAction })} disabled={!!actionKey} className="bg-rose-700 px-4 py-1.5 text-xs font-black text-white hover:bg-rose-800 disabled:opacity-60">
+            {actionKey ? "Cancelling…" : "Cancel Deal"}
+          </button>
+        </>
+      }
+    >
+      <div className="mb-3 border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+        Cancelling will revert the listing to <strong>Available</strong> and cancel any pending commissions.
+      </div>
+      <div className="mb-3 border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs">
+        <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-500">Deposit Payments</div>
+        <label className="mb-1.5 flex cursor-pointer items-center gap-2">
+          <input type="radio" name="depositAction" value="void" checked={depositAction === "void"} onChange={() => setDepositAction("void")} className="accent-[#0B3B2E]" />
+          <span className="font-semibold text-slate-700">Void deposits first</span>
+          <span className="text-slate-400">(go to Payments tab and void each deposit — for refunds)</span>
+        </label>
+        <label className="flex cursor-pointer items-center gap-2">
+          <input type="radio" name="depositAction" value="forfeit" checked={depositAction === "forfeit"} onChange={() => setDepositAction("forfeit")} className="accent-rose-600" />
+          <span className="font-semibold text-rose-700">Forfeit deposits as income</span>
+          <span className="text-slate-400">(non-refundable — posts Dr Buyer Deposit Held / Cr Forfeited Income)</span>
+        </label>
+      </div>
+      <label className={labelClass}>Reason for Cancellation</label>
+      <textarea rows={3} value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder="Optional — e.g. buyer withdrew, financing fell through…" className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-rose-500 focus:outline-none" />
+    </Modal>
+  );
+}
+
+function CloseDealModal({ deal, cashbookOptions, actionKey, onClose, onConfirm }) {
+  const [closeForm, setCloseForm] = useState(blankCloseForm);
+  return (
+    <Modal
+      title={`Close Deal — ${deal.dealNumber}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button type="button" onClick={() => onConfirm(closeForm)} disabled={!!actionKey} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+            <FaCheck className="inline mr-1 text-[9px]" />{actionKey ? "Closing…" : "Confirm Close"}
+          </button>
+        </>
+      }
+    >
+      <div className="grid gap-3 md:grid-cols-2">
+        <div>
+          <label className={labelClass}>Actual Closing Date</label>
+          <input type="date" value={closeForm.actualClosingDate} onChange={(e) => setCloseForm((p) => ({ ...p, actualClosingDate: e.target.value }))} className={inputClass} />
+        </div>
+        <div>
+          <label className={labelClass}>Title Transfer Date</label>
+          <input type="date" value={closeForm.titleTransferDate} onChange={(e) => setCloseForm((p) => ({ ...p, titleTransferDate: e.target.value }))} className={inputClass} />
+        </div>
+        <div className="md:col-span-2">
+          <label className={labelClass}>Handover Notes</label>
+          <textarea rows={2} value={closeForm.handoverNotes} onChange={(e) => setCloseForm((p) => ({ ...p, handoverNotes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+        </div>
+        <div className="md:col-span-2 border-t border-slate-100 pt-3">
+          <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-500">Stamp Duty / Transfer Costs (Optional)</div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <label className={labelClass}>Amount (KES)</label>
+              <AmountInput value={closeForm.stampDutyAmount} onChange={(v) => setCloseForm((p) => ({ ...p, stampDutyAmount: v }))} className={inputClass} placeholder="0.00 — leave blank if none" />
+            </div>
+            <div>
+              <AppSelect
+                label="Paid From (Cashbook)"
+                value={closeForm.stampDutyCashbook}
+                onChange={(v) => setCloseForm((p) => ({ ...p, stampDutyCashbook: v ?? "" }))}
+                options={cashbookOptions}
+                placeholder="— Fallback if blank —"
+                clearable
+                searchable
+                size="md"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function RecordPaymentModal({ deal, saving, cashbookOptions, onClose, onSubmit }) {
+  const [payForm, setPayForm] = useState(blankPayForm);
+  return (
+    <Modal
+      title={`Record Payment — ${deal.dealNumber}`}
+      wide
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button type="button" onClick={() => onSubmit(payForm)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+            {saving ? "Saving…" : "Record & Print Receipt"}
+          </button>
+        </>
+      }
+    >
+      {/* Balance summary */}
+      <div className="mb-3 grid grid-cols-3 border border-slate-200">
+        <div className="border-r border-slate-200 px-3 py-2 text-center text-[10px]">
+          <div className="font-black uppercase tracking-wide text-slate-400">Agreed</div>
+          <div className="mt-0.5 font-black text-slate-800">{fmtKES(deal.agreedPrice)}</div>
+        </div>
+        <div className="border-r border-slate-200 px-3 py-2 text-center text-[10px]">
+          <div className="font-black uppercase tracking-wide text-slate-400">Paid</div>
+          <div className="mt-0.5 font-black text-emerald-700">{fmtKES(deal.totalPaid || 0)}</div>
+        </div>
+        <div className="px-3 py-2 text-center text-[10px]">
+          <div className="font-black uppercase tracking-wide text-slate-400">Balance</div>
+          <div className="mt-0.5 font-black text-rose-700">{fmtKES(dealBalance(deal))}</div>
+        </div>
+      </div>
+      {/* Progress bar */}
+      <div className="mb-3">
+        {(() => {
+          const pct = deal.agreedPrice > 0 ? Math.min(100, Math.round(((deal.totalPaid || 0) / deal.agreedPrice) * 100)) : 0;
+          return (
+            <>
+              <div className="mb-1 flex justify-between text-[9px] text-slate-400"><span>Payment Progress</span><span>{pct}% paid</span></div>
+              <div className="h-1.5 w-full overflow-hidden bg-slate-200"><div className="h-full bg-emerald-500" style={{ width: `${pct}%` }} /></div>
+            </>
+          );
+        })()}
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <div>
+          <AppSelect label="Payment Type" value={payForm.paymentType} onChange={(v) => setPayForm((f) => ({ ...f, paymentType: v ?? "" }))} options={PAYMENT_TYPE_OPTIONS} size="md" />
+        </div>
+        <div>
+          <AppSelect label="Method" value={payForm.paymentMethod} onChange={(v) => setPayForm((f) => ({ ...f, paymentMethod: v ?? "" }))} options={PAYMENT_METHOD_OPTIONS} size="md" />
+        </div>
+        <div>
+          <label className={labelClass}>Amount (KES)</label>
+          <AmountInput value={payForm.amount} onChange={(v) => setPayForm((f) => ({ ...f, amount: v }))} className={inputClass} placeholder="e.g. 500,000" />
+        </div>
+        <div>
+          <label className={labelClass}>Payment Date</label>
+          <input type="date" value={payForm.paymentDate} onChange={(e) => setPayForm((f) => ({ ...f, paymentDate: e.target.value }))} className={inputClass} />
+        </div>
+        <div className="md:col-span-2">
+          <AppSelect
+            label="Bank / Cashbook Account (GL Debit)"
+            value={payForm.cashbook}
+            onChange={(v) => setPayForm((f) => ({ ...f, cashbook: v ?? "" }))}
+            options={cashbookOptions}
+            placeholder="— Fallback receipts account if blank —"
+            clearable
+            searchable
+            size="md"
+          />
+        </div>
+        <div className="md:col-span-2">
+          <label className={labelClass}>
+            {payForm.paymentMethod === "mpesa" ? "M-Pesa Code" : payForm.paymentMethod === "cheque" ? "Cheque No." : payForm.paymentMethod === "bank_transfer" ? "EFT / Ref No." : "Reference (Optional)"}
+          </label>
+          <input
+            type="text"
+            value={payForm.reference}
+            onChange={(e) => setPayForm((f) => ({ ...f, reference: e.target.value }))}
+            className={`${inputClass} font-mono ${["mpesa", "cheque", "bank_transfer"].includes(payForm.paymentMethod) ? "border-amber-300 bg-amber-50 focus:border-amber-500" : ""}`}
+            placeholder={payForm.paymentMethod === "mpesa" ? "e.g. QJ1X23ABC4D" : "Optional…"}
+          />
+          {["mpesa", "cheque", "bank_transfer"].includes(payForm.paymentMethod) && (
+            <div className="mt-1 text-[10px] font-semibold text-amber-600">Reference required for {fmtLabel(payForm.paymentMethod)} — used for reconciliation</div>
+          )}
+        </div>
+        <div className="md:col-span-2">
+          <label className={labelClass}>Notes</label>
+          <textarea rows={2} value={payForm.notes} onChange={(e) => setPayForm((f) => ({ ...f, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function ScheduleBuilderModal({ initialItems, agreedPrice, saving, onClose, onSave }) {
+  const [scheduleItems, setScheduleItems] = useState(initialItems);
+  const scheduleTotal = scheduleItems.reduce((s, i) => s + Number(i.expectedAmount || 0), 0);
+  return (
+    <Modal
+      title="Payment Schedule"
+      wide
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button type="button" onClick={() => onSave(scheduleItems)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+            {saving ? "Saving…" : "Save Schedule"}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-2">
+        {scheduleItems.map((item, idx) => (
+          <div key={idx} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end border border-slate-200 bg-slate-50 px-3 py-2">
+            <div>
+              <label className={labelClass}>Due Date</label>
+              <input type="date" value={item.dueDate} onChange={(e) => setScheduleItems((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: e.target.value } : x))} className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>Amount (KES)</label>
+              <input type="number" min="0" value={item.expectedAmount} onChange={(e) => setScheduleItems((prev) => prev.map((x, i) => i === idx ? { ...x, expectedAmount: e.target.value } : x))} className={inputClass} placeholder="0.00" />
+            </div>
+            <div>
+              <label className={labelClass}>Description</label>
+              <input type="text" value={item.description} onChange={(e) => setScheduleItems((prev) => prev.map((x, i) => i === idx ? { ...x, description: e.target.value } : x))} className={inputClass} placeholder={`Installment ${idx + 1}`} />
+            </div>
+            <div>
+              <button type="button" onClick={() => setScheduleItems((prev) => prev.filter((_, i) => i !== idx))} className="h-8 w-8 border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center">
+                <FaTrash size={9} />
+              </button>
+            </div>
+          </div>
+        ))}
+        <button type="button" onClick={() => setScheduleItems((prev) => [...prev, { dueDate: "", expectedAmount: "", description: `Installment ${prev.length + 1}` }])} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-[#F1F6F3] px-3 py-1.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#B7C9C0]/40">
+          <FaPlus size={8} /> Add Installment
+        </button>
+        {scheduleItems.length > 0 && (
+          <div className="mt-2 text-right text-xs">
+            <span className="text-slate-500">Schedule total: </span>
+            <span className={`font-black ${Math.abs(scheduleTotal - agreedPrice) < 1 ? "text-emerald-700" : "text-rose-600"}`}>
+              {fmtKES(scheduleTotal)}
+            </span>
+            <span className="text-slate-400"> / {fmtKES(agreedPrice)}</span>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+const fmtEmailDate = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "";
+
+function DealEmailModal({ target, company, sending, onSend, onClose }) {
+  const [emailForm, setEmailForm] = useState(() => ({ subject: `Re: Deal ${target.dealNumber}`, body: `Dear ${target.buyer?.fullName || "Client"},\n\n` }));
+  const vars = useMemo(() => ({
+    buyerName:           target.buyer?.fullName       || "",
+    buyerNumber:         target.buyer?.buyerNumber    || "",
+    phone:               target.buyer?.phone          || "",
+    email:               target.buyer?.email          || "",
+    dealNumber:          target.dealNumber            || "",
+    dealStatus:          target.status                || "",
+    salePrice:           target.agreedPrice != null   ? Number(target.agreedPrice).toLocaleString() : "",
+    dealDate:            fmtEmailDate(target.dealDate),
+    expectedClosingDate: fmtEmailDate(target.expectedClosingDate),
+    actualClosingDate:   fmtEmailDate(target.actualClosingDate),
+    listingTitle:        target.listing?.title        || "",
+    listingNumber:       target.listing?.listingNumber|| "",
+    propertyType:        target.listing?.propertyType || "",
+    propertyLocation:    target.listing?.location     || "",
+    propertyTown:        target.listing?.town         || "",
+    askingPrice:         target.listing?.askingPrice != null ? Number(target.listing.askingPrice).toLocaleString() : "",
+    agentName:           target.agent?.fullName       || "",
+    companyName:         company?.companyName || company?.name || "",
+  }), [target, company]);
+  return (
+    <SaleEmailModal
+      title="Email Buyer"
+      subtitle={`To: ${target.buyer?.email} · ${target.dealNumber}`}
+      emailForm={emailForm}
+      setEmailForm={setEmailForm}
+      sending={sending}
+      onSend={() => onSend(emailForm)}
+      onClose={onClose}
+      context="deal"
+      vars={vars}
+    />
+  );
+}
+
+function DealDocUpload({ dealId }) {
+  const queryClient = useQueryClient();
+  const [docLabel,     setDocLabel]     = useState("");
+  const [docFile,      setDocFile]      = useState(null);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const docFileRef = React.useRef(null);
+
+  const handleUploadDoc = async (e) => {
+    e.preventDefault();
+    if (!docFile) return toast.warning("Select a file to upload");
+    setUploadingDoc(true);
+    try {
+      const fd = new FormData();
+      fd.append("document", docFile);
+      if (docLabel) fd.append("label", docLabel);
+      await saleApi.uploadDealDocument(dealId, fd);
+      queryClient.invalidateQueries({ queryKey: ["deal-detail-docs", dealId] });
+      setDocLabel("");
+      setDocFile(null);
+      if (docFileRef.current) docFileRef.current.value = "";
+      toast.success("Document uploaded");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Upload failed");
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleUploadDoc} className="flex flex-col gap-1.5 pt-1 border-t border-slate-100 mt-1">
+      <input
+        type="text"
+        placeholder="Label (e.g. SPA, Title Deed…)"
+        value={docLabel}
+        onChange={(e) => setDocLabel(e.target.value)}
+        className="h-7 w-full border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+      />
+      <div className="flex gap-1.5">
+        <input
+          ref={docFileRef}
+          type="file"
+          accept=".pdf,.jpg,.jpeg,.png,.webp"
+          onChange={(e) => setDocFile(e.target.files[0] || null)}
+          className="flex-1 text-[10px] text-slate-600 file:mr-2 file:border-0 file:bg-[#F1F6F3] file:px-2 file:py-0.5 file:text-[10px] file:font-bold file:text-[#0B3B2E]"
+        />
+        <button type="submit" disabled={uploadingDoc || !docFile} className="flex-shrink-0 inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-50">
+          <FaUpload size={8} />{uploadingDoc ? "…" : "Upload"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 const SaleDeals = () => {
   const confirm        = useConfirm();
   const queryClient    = useQueryClient();
@@ -67,16 +516,9 @@ const SaleDeals = () => {
 
   const [saving,         setSaving]         = useState(false);
   const [actionKey,      setActionKey]      = useState("");
-  const [showModal,      setShowModal]      = useState(false);
-  const [showCloseModal, setShowCloseModal] = useState(false);
-  const [showCancelModal,setShowCancelModal]= useState(false);
-  const [editingId,      setEditingId]      = useState("");
-  const [form,           setForm]           = useState(blankDealForm);
+  const [dealModal,      setDealModal]      = useState(null);   // { editingId, initial } while the deal form is open
   const [closingDeal,    setClosingDeal]    = useState(null);
-  const [closeForm,      setCloseForm]      = useState({ actualClosingDate: todayISO(), titleTransferDate: "", handoverNotes: "", stampDutyAmount: "", stampDutyCashbook: "" });
   const [cancellingDeal, setCancellingDeal] = useState(null);
-  const [cancelReason,   setCancelReason]   = useState("");
-  const [depositAction,  setDepositAction]  = useState("void");
   const [search,         setSearch]         = useTabState("/sale/deals:search", "");
   const [appliedSearch,  setAppliedSearch]  = useTabState("/sale/deals:appliedSearch", "");
   const [statusFilter,   setStatusFilter]   = useTabState("/sale/deals:statusFilter", "");
@@ -88,27 +530,18 @@ const SaleDeals = () => {
   const [page,           setPage]           = useTabState("/sale/deals:page", 1);
   const [pageSize,       setPageSize]       = useTabState("/sale/deals:pageSize", PAGE_SIZE);
 
-  const [showPayModal,   setShowPayModal]   = useState(false);
   const [payingDeal,     setPayingDeal]     = useState(null);
-  const [payForm,        setPayForm]        = useState(blankPayForm);
   const [payingSave,     setPayingSave]     = useState(false);
   const [selected,       setSelected]       = useTabState("/sale/deals:selected", null);
   const [smsTarget,      setSmsTarget]      = useState(null);
   const [smsSending,     setSmsSending]     = useState(false);
   const [emailTarget,    setEmailTarget]    = useState(null);
-  const [emailForm,      setEmailForm]      = useState({ subject: "", body: "" });
   const [emailSending,   setEmailSending]   = useState(false);
 
-  const [showScheduleBuilder, setShowScheduleBuilder] = useState(false);
-  const [scheduleItems,       setScheduleItems]       = useState([]);
+  const [scheduleInitial,     setScheduleInitial]     = useState(null);   // initial installment rows while the builder is open
   const [scheduleSaving,      setScheduleSaving]      = useState(false);
   const [linkingInstallment,  setLinkingInstallment]  = useState(null);
   const [linkingPaymentId,    setLinkingPaymentId]    = useState("");
-
-  const [docLabel,      setDocLabel]      = useState("");
-  const [docFile,       setDocFile]       = useState(null);
-  const [uploadingDoc,  setUploadingDoc]  = useState(false);
-  const docFileRef = React.useRef(null);
 
   const biz = currentCompany?._id;
 
@@ -180,9 +613,9 @@ const SaleDeals = () => {
   const deals      = useMemo(() => dealsData?.data ?? [], [dealsData]);
   const total      = dealsData?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const listings   = listingsData?.data ?? [];
-  const buyers     = buyersData?.data   ?? [];
-  const agents     = agentsData?.data   ?? [];
+  const listings   = useMemo(() => listingsData?.data ?? [], [listingsData]);
+  const buyers     = useMemo(() => buyersData?.data   ?? [], [buyersData]);
+  const agents     = useMemo(() => agentsData?.data   ?? [], [agentsData]);
 
   const cashbookOptions     = useMemo(() => cashbookAccounts.map((a) => ({ value: a._id, label: `${a.code ? `${a.code} — ` : ""}${a.name}` })), [cashbookAccounts]);
   const buyerOptions        = useMemo(() => buyers.map((b)  => ({ value: b._id, label: `${b.fullName} (${b.buyerNumber})` })), [buyers]);
@@ -205,10 +638,10 @@ const SaleDeals = () => {
     return dealDetail?._id === selected._id ? { ...selected, ...dealDetail } : selected;
   }, [deals, dealDetail, selected]);
 
-  const invalidate = () => Promise.all([
+  const invalidate = useCallback(() => Promise.all([
     queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] }),
     queryClient.invalidateQueries({ queryKey: ["sale-dashboard"] }),
-  ]);
+  ]), [queryClient, biz]);
 
   const invalidateDeal = (dealId) => Promise.all([
     queryClient.invalidateQueries({ queryKey: ["deal-detail-docs", dealId] }),
@@ -217,21 +650,20 @@ const SaleDeals = () => {
     queryClient.invalidateQueries({ queryKey: ["deal-detail-schedule", dealId] }),
   ]);
 
-  const openScheduleBuilder = (deal) => {
+  const openScheduleBuilder = () => {
     const existing = dealScheduleData?.data ?? [];
     if (existing.length > 0) {
-      setScheduleItems(existing.map((i) => ({
+      setScheduleInitial(existing.map((i) => ({
         dueDate:        i.dueDate ? new Date(i.dueDate).toISOString().slice(0, 10) : "",
         expectedAmount: String(i.expectedAmount),
         description:    i.description || "",
       })));
     } else {
-      setScheduleItems([{ dueDate: "", expectedAmount: "", description: "Deposit" }]);
+      setScheduleInitial([{ dueDate: "", expectedAmount: "", description: "Deposit" }]);
     }
-    setShowScheduleBuilder(true);
   };
 
-  const handleSaveSchedule = async () => {
+  const handleSaveSchedule = async (scheduleItems) => {
     if (!selected) return;
     const items = scheduleItems.filter((i) => i.dueDate && Number(i.expectedAmount) > 0);
     if (items.length === 0) return toast.warning("Add at least one installment with a date and amount");
@@ -239,33 +671,12 @@ const SaleDeals = () => {
     try {
       await saleApi.setSchedule({ dealId: selected._id, items });
       queryClient.invalidateQueries({ queryKey: ["deal-detail-schedule", selected._id] });
-      setShowScheduleBuilder(false);
+      setScheduleInitial(null);
       toast.success("Payment schedule saved");
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to save schedule");
     } finally {
       setScheduleSaving(false);
-    }
-  };
-
-  const handleUploadDoc = async (e) => {
-    e.preventDefault();
-    if (!docFile) return toast.warning("Select a file to upload");
-    setUploadingDoc(true);
-    try {
-      const fd = new FormData();
-      fd.append("document", docFile);
-      if (docLabel) fd.append("label", docLabel);
-      await saleApi.uploadDealDocument(selected._id, fd);
-      queryClient.invalidateQueries({ queryKey: ["deal-detail-docs", selected._id] });
-      setDocLabel("");
-      setDocFile(null);
-      if (docFileRef.current) docFileRef.current.value = "";
-      toast.success("Document uploaded");
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Upload failed");
-    } finally {
-      setUploadingDoc(false);
     }
   };
 
@@ -296,22 +707,24 @@ const SaleDeals = () => {
     }
   };
 
-  const openCreate = () => { setEditingId(""); setForm(blankDealForm); setShowModal(true); };
-  const openEdit   = (row) => {
-    setEditingId(row._id);
-    setForm({
-      listing: row.listing?._id || row.listing || "",
-      buyer:   row.buyer?._id   || row.buyer   || "",
-      agent:   row.agent?._id   || row.agent   || "",
-      agreedPrice:         row.agreedPrice || "",
-      dealDate:            row.dealDate ? new Date(row.dealDate).toISOString().split("T")[0] : todayISO(),
-      expectedClosingDate: row.expectedClosingDate ? new Date(row.expectedClosingDate).toISOString().split("T")[0] : "",
-      notes:               row.notes || "",
+  const editingId = dealModal?.editingId || "";
+  const openCreate = () => setDealModal({ editingId: "", initial: blankDealForm });
+  const openEdit   = useCallback((row) => {
+    setDealModal({
+      editingId: row._id,
+      initial: {
+        listing: row.listing?._id || row.listing || "",
+        buyer:   row.buyer?._id   || row.buyer   || "",
+        agent:   row.agent?._id   || row.agent   || "",
+        agreedPrice:         row.agreedPrice || "",
+        dealDate:            row.dealDate ? new Date(row.dealDate).toISOString().split("T")[0] : todayISO(),
+        expectedClosingDate: row.expectedClosingDate ? new Date(row.expectedClosingDate).toISOString().split("T")[0] : "",
+        notes:               row.notes || "",
+      },
     });
-    setShowModal(true);
-  };
+  }, []);
 
-  const handleSave = async () => {
+  const handleSave = async (form) => {
     if (!form.listing) return toast.warning("Select a listing");
     if (!form.buyer)   return toast.warning("Select a buyer");
     if (!form.agreedPrice || Number(form.agreedPrice) <= 0) return toast.warning("Valid agreed price required");
@@ -328,7 +741,7 @@ const SaleDeals = () => {
       else await saleApi.createDeal(payload);
       invalidate();
       if (editingId) invalidateDeal(editingId);
-      setShowModal(false);
+      setDealModal(null);
       toast.success(`Deal ${editingId ? "updated" : "created"}`);
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to save deal");
@@ -337,7 +750,7 @@ const SaleDeals = () => {
     }
   };
 
-  const handleClose = async () => {
+  const handleClose = async (closeForm) => {
     if (!closingDeal) return;
     setActionKey(`${closingDeal._id}:close`);
     try {
@@ -349,7 +762,6 @@ const SaleDeals = () => {
       }
       await saleApi.closeDeal(closingDeal._id, payload);
       await Promise.all([invalidate(), invalidateDeal(closingDeal._id)]);
-      setShowCloseModal(false);
       setClosingDeal(null);
       toast.success("Deal closed");
     } catch (err) {
@@ -359,13 +771,12 @@ const SaleDeals = () => {
     }
   };
 
-  const handleCancel = async () => {
+  const handleCancel = async ({ cancelReason, depositAction }) => {
     if (!cancellingDeal) return;
     setActionKey(`${cancellingDeal._id}:cancel`);
     try {
       await saleApi.cancelDeal(cancellingDeal._id, { cancellationReason: cancelReason, depositAction, business: biz });
       await Promise.all([invalidate(), invalidateDeal(cancellingDeal._id)]);
-      setShowCancelModal(false);
       setCancellingDeal(null);
       toast.success("Deal cancelled");
     } catch (err) {
@@ -375,7 +786,7 @@ const SaleDeals = () => {
     }
   };
 
-  const handleDelete = async (row) => {
+  const handleDelete = useCallback(async (row) => {
     if (!await confirm({ title: "Delete Deal", message: `Permanently delete deal ${row.dealNumber}? All associated pending payments and commissions will also be removed.`, confirmText: "Delete", isDangerous: true })) return;
     setActionKey(`${row._id}:delete`);
     try {
@@ -389,9 +800,9 @@ const SaleDeals = () => {
     } finally {
       setActionKey("");
     }
-  };
+  }, [confirm, queryClient, setSelected, invalidate]);
 
-  const handleRecordPayment = async () => {
+  const handleRecordPayment = async (payForm) => {
     if (!payingDeal) return;
     if (!payForm.amount || Number(payForm.amount) <= 0) return toast.warning("Valid amount required");
     setPayingSave(true);
@@ -404,8 +815,7 @@ const SaleDeals = () => {
       invalidate();
       invalidateDeal(payingDeal._id);
       queryClient.invalidateQueries({ queryKey: ["sale-payments", biz] });
-      setShowPayModal(false);
-      setPayForm(blankPayForm);
+      setPayingDeal(null);
       toast.success("Payment recorded");
       window.open(`/sale/payments/${payment._id}/receipt`, "_blank");
     } catch (err) {
@@ -429,7 +839,7 @@ const SaleDeals = () => {
     }
   };
 
-  const handleSendDealEmail = async () => {
+  const handleSendDealEmail = async (emailForm) => {
     if (!emailTarget?.buyer?.email) { toast.warn("Buyer has no email address"); return; }
     if (!emailForm.subject.trim() || !emailForm.body.trim()) { toast.warn("Subject and message are required"); return; }
     setEmailSending(true);
@@ -448,9 +858,44 @@ const SaleDeals = () => {
   const applySearch = (e) => { e.preventDefault(); setAppliedSearch(search); setPage(1); };
   const resetFilters = () => { setSearch(""); setAppliedSearch(""); setStatusFilter(""); setAgentFilt(""); setBuyerFilt(""); setListingFilt(""); setDateFrom(""); setDateTo(""); setPage(1); };
 
-  const handleRowClick       = useCallback((row) => setSelected((prev) => prev?._id === row._id ? null : row), []);
+  const handleRowClick       = useCallback((row) => setSelected((prev) => prev?._id === row._id ? null : row), [setSelected]);
   const handlePrintSummary   = useCallback((e) => window.open(`/sale/deals/${e.currentTarget.dataset.id}/summary`,   "_blank"), []);
   const handlePrintStatement = useCallback((e) => window.open(`/sale/deals/${e.currentTarget.dataset.id}/statement`, "_blank"), []);
+
+  const selectedId = selected?._id;
+  const isRowSelected = useCallback((row) => selectedId === row._id, [selectedId]);
+
+  const renderDealActions = useCallback((row) => (
+    <div className="inline-flex items-center gap-1">
+      <button type="button" data-id={row._id} onClick={handlePrintSummary} title="Print Agreement Cover" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+        <FaPrint className="text-[9px]" />
+      </button>
+      <button type="button" data-id={row._id} onClick={handlePrintStatement} title="Statement of Account" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+        <FaFileAlt className="text-[9px]" />
+      </button>
+      {row.status === "active" && (
+        <>
+          <button type="button" onClick={() => setPayingDeal(row)} className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100">
+            <FaMoneyBillWave className="text-[9px]" /> Pay
+          </button>
+          <button type="button" onClick={() => openEdit(row)} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+            <FaEdit className="text-[9px]" />
+          </button>
+          <button type="button" onClick={() => setClosingDeal(row)} className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100">
+            <FaCheck className="text-[9px]" /> Close
+          </button>
+          <button type="button" onClick={() => setCancellingDeal(row)} className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100">
+            <FaBan className="text-[9px]" />
+          </button>
+        </>
+      )}
+      {row.status === "cancelled" && (
+        <button type="button" onClick={() => handleDelete(row)} disabled={!!actionKey} className="border border-red-200 bg-white px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-50 disabled:opacity-50">
+          <FaTimes className="text-[9px]" />
+        </button>
+      )}
+    </div>
+  ), [handlePrintSummary, handlePrintStatement, openEdit, handleDelete, actionKey]);
 
   return (
     <PropertySaleShell>
@@ -517,67 +962,9 @@ const SaleDeals = () => {
           empty="No deals found."
           minWidth={780}
           onRowClick={handleRowClick}
-          isSelected={(row) => selected?._id === row._id}
-          renderRow={(row) => {
-            const balance = dealBalance(row);
-            const pct = row.agreedPrice > 0 ? Math.min(100, Math.round(((row.totalPaid || 0) / row.agreedPrice) * 100)) : 0;
-            return (
-              <>
-                <td className="px-3 py-1.5 font-mono font-bold text-[#0B3B2E] border-r border-gray-100">{row.dealNumber}</td>
-                <td className="px-3 py-1.5 border-r border-gray-100">
-                  <div className="max-w-[140px] truncate font-semibold text-slate-800">{row.listing?.title || "—"}</div>
-                  <div className="text-[10px] text-slate-400">{row.listing?.listingNumber}</div>
-                </td>
-                <td className="px-3 py-1.5 border-r border-gray-100">
-                  <div className="font-semibold text-slate-800">{row.buyer?.fullName || "—"}</div>
-                  <div className="text-[10px] text-slate-400">{row.buyer?.buyerNumber}</div>
-                </td>
-                <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{row.agent?.fullName || <span className="italic text-slate-400">None</span>}</td>
-                <td className="px-3 py-1.5 border-r border-gray-100 text-right">
-                  <div className="font-bold text-slate-900">{fmtKES(row.agreedPrice)}</div>
-                  <div className="mt-0.5 h-1 w-full overflow-hidden bg-slate-100">
-                    <div className="h-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
-                  </div>
-                </td>
-                <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-emerald-700">{fmtKES(row.totalPaid || 0)}</td>
-                <td className={`px-3 py-1.5 border-r border-gray-100 text-right font-black ${balance > 0 ? "text-rose-700" : "text-emerald-700"}`}>{fmtKES(balance)}</td>
-                <td className="px-3 py-1.5">
-                  <StatusBadge status={row.status} map={DEAL_STATUS_MAP} />
-                </td>
-              </>
-            );
-          }}
-          renderActions={(row) => (
-            <div className="inline-flex items-center gap-1">
-              <button type="button" data-id={row._id} onClick={handlePrintSummary} title="Print Agreement Cover" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                <FaPrint className="text-[9px]" />
-              </button>
-              <button type="button" data-id={row._id} onClick={handlePrintStatement} title="Statement of Account" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                <FaFileAlt className="text-[9px]" />
-              </button>
-              {row.status === "active" && (
-                <>
-                  <button type="button" onClick={() => { setPayingDeal(row); setPayForm(blankPayForm); setShowPayModal(true); }} className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100">
-                    <FaMoneyBillWave className="text-[9px]" /> Pay
-                  </button>
-                  <button type="button" onClick={() => openEdit(row)} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                    <FaEdit className="text-[9px]" />
-                  </button>
-                  <button type="button" onClick={() => { setClosingDeal(row); setCloseForm({ actualClosingDate: todayISO(), titleTransferDate: "", handoverNotes: "", stampDutyAmount: "", stampDutyCashbook: "" }); setShowCloseModal(true); }} className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100">
-                    <FaCheck className="text-[9px]" /> Close
-                  </button>
-                  <button type="button" onClick={() => { setCancellingDeal(row); setCancelReason(""); setDepositAction("void"); setShowCancelModal(true); }} className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100">
-                    <FaBan className="text-[9px]" />
-                  </button>
-                </>
-              )}
-              {row.status === "cancelled" && (
-                <button type="button" onClick={() => handleDelete(row)} disabled={!!actionKey} className="border border-red-200 bg-white px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-50 disabled:opacity-50">
-                  <FaTimes className="text-[9px]" />
-                </button>
-              )}
-            </div>
-          )}
+          isSelected={isRowSelected}
+          renderRow={renderDealRow}
+          renderActions={renderDealActions}
         />
 
         <PaginationBar page={page} pages={totalPages} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} />
@@ -659,7 +1046,7 @@ const SaleDeals = () => {
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Payments</span>
             {liveSelected.status === "active" && (
               <button
-                onClick={() => { setPayingDeal(liveSelected); setPayForm(blankPayForm); setShowPayModal(true); }}
+                onClick={() => setPayingDeal(liveSelected)}
                 className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100"
               >
                 <FaMoneyBillWave size={8} /> Record
@@ -726,7 +1113,7 @@ const SaleDeals = () => {
             <div className="flex-shrink-0 flex items-center justify-between border-t border-slate-200 px-4 py-1.5 mt-1">
               <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Payment Schedule</span>
               {liveSelected.status === "active" && (
-                <button type="button" onClick={() => openScheduleBuilder(liveSelected)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-[#F1F6F3] px-2 py-0.5 text-[9px] font-black uppercase text-[#0B3B2E] hover:bg-[#B7C9C0]/40">
+                <button type="button" onClick={openScheduleBuilder} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-[#F1F6F3] px-2 py-0.5 text-[9px] font-black uppercase text-[#0B3B2E] hover:bg-[#B7C9C0]/40">
                   <FaCalendarAlt size={8} /> {dealSchedule.length > 0 ? "Edit" : "Set"} Schedule
                 </button>
               )}
@@ -802,27 +1189,7 @@ const SaleDeals = () => {
                 </div>
               ))}
               {/* Upload form */}
-              <form onSubmit={handleUploadDoc} className="flex flex-col gap-1.5 pt-1 border-t border-slate-100 mt-1">
-                <input
-                  type="text"
-                  placeholder="Label (e.g. SPA, Title Deed…)"
-                  value={docLabel}
-                  onChange={(e) => setDocLabel(e.target.value)}
-                  className="h-7 w-full border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-                />
-                <div className="flex gap-1.5">
-                  <input
-                    ref={docFileRef}
-                    type="file"
-                    accept=".pdf,.jpg,.jpeg,.png,.webp"
-                    onChange={(e) => setDocFile(e.target.files[0] || null)}
-                    className="flex-1 text-[10px] text-slate-600 file:mr-2 file:border-0 file:bg-[#F1F6F3] file:px-2 file:py-0.5 file:text-[10px] file:font-bold file:text-[#0B3B2E]"
-                  />
-                  <button type="submit" disabled={uploadingDoc || !docFile} className="flex-shrink-0 inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-50">
-                    <FaUpload size={8} />{uploadingDoc ? "…" : "Upload"}
-                  </button>
-                </div>
-              </form>
+              <DealDocUpload dealId={liveSelected._id} />
             </div>
 
           {/* Panel footer actions */}
@@ -839,7 +1206,7 @@ const SaleDeals = () => {
               </button>
             )}
             {liveSelected.buyer?.email && (
-              <button onClick={() => { setEmailTarget(liveSelected); setEmailForm({ subject: `Re: Deal ${liveSelected.dealNumber}`, body: `Dear ${liveSelected.buyer?.fullName || "Client"},\n\n` }); }} className="inline-flex items-center gap-1 border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-100">
+              <button onClick={() => setEmailTarget(liveSelected)} className="inline-flex items-center gap-1 border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-100">
                 <FaEnvelope size={8} /> Email Buyer
               </button>
             )}
@@ -849,7 +1216,7 @@ const SaleDeals = () => {
                   <FaEdit size={8} /> Edit
                 </button>
                 <button
-                  onClick={() => { setClosingDeal(liveSelected); setCloseForm({ actualClosingDate: todayISO(), titleTransferDate: "", handoverNotes: "", stampDutyAmount: "", stampDutyCashbook: "" }); setShowCloseModal(true); }}
+                  onClick={() => setClosingDeal(liveSelected)}
                   className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100"
                 >
                   <FaCheck size={8} /> Close
@@ -863,114 +1230,23 @@ const SaleDeals = () => {
       </div>{/* end relative wrapper */}
 
       {/* New / Edit Deal Modal */}
-      {showModal && (
-        <Modal
-          title={editingId ? "Edit Deal" : "New Sale Deal"}
-          wide
-          onClose={() => setShowModal(false)}
-          footer={
-            <>
-              <button type="button" onClick={() => setShowModal(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button type="button" onClick={handleSave} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-                {saving ? "Saving…" : editingId ? "Update Deal" : "Create Deal"}
-              </button>
-            </>
-          }
-        >
-          <div className="grid gap-3 md:grid-cols-2">
-            <div>
-              <AppSelect label="Listing / Property" value={form.listing} onChange={(v) => setForm((p) => ({ ...p, listing: v ?? "" }))} options={listingFormOptions} placeholder="Select listing…" size="md" searchable />
-            </div>
-            <div>
-              <AppSelect label="Buyer" value={form.buyer} onChange={(v) => setForm((p) => ({ ...p, buyer: v ?? "" }))} options={buyerOptions} placeholder="Select buyer…" size="md" searchable />
-            </div>
-            <div>
-              <AppSelect label="Sales Agent (Optional)" value={form.agent} onChange={(v) => setForm((p) => ({ ...p, agent: v ?? "", commOverrideEnabled: false, commissionRateOverride: "", commissionTypeOverride: "", commissionAmountOverride: "" }))} options={agentFormOptions} placeholder="No agent" size="md" searchable clearable />
-            </div>
-            {!editingId && form.agent && (() => {
-              const selAgent = agents.find((a) => a._id === form.agent);
-              return (
-                <div className="md:col-span-2 border border-slate-200 bg-slate-50 px-3 py-2.5">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={!!form.commOverrideEnabled} onChange={(e) => setForm((p) => ({ ...p, commOverrideEnabled: e.target.checked }))} className="h-3.5 w-3.5 accent-[#0B3B2E]" />
-                    <span className="text-[11px] font-extrabold uppercase tracking-wide text-slate-600">Override Commission</span>
-                    {selAgent && !form.commOverrideEnabled && (
-                      <span className="ml-1 text-[11px] text-slate-400">
-                        (Default: {selAgent.commissionType === "percentage" ? `${selAgent.commissionRate}%` : `KES ${Number(selAgent.commissionRate).toLocaleString()}`} — {selAgent.commissionType})
-                      </span>
-                    )}
-                  </label>
-                  {form.commOverrideEnabled && (
-                    <div className="mt-2.5 grid gap-3 sm:grid-cols-3">
-                      <div>
-                        <AppSelect label="Commission Type" value={form.commissionTypeOverride || selAgent?.commissionType || "percentage"} onChange={(v) => setForm((p) => ({ ...p, commissionTypeOverride: v ?? "", commissionAmountOverride: "" }))} options={[{ value: "percentage", label: "Percentage (%)" }, { value: "flat", label: "Flat Amount (KES)" }]} size="md" />
-                      </div>
-                      <div>
-                        <label className={labelClass}>{(form.commissionTypeOverride || selAgent?.commissionType) === "flat" ? "Commission Amount (KES)" : "Commission Rate (%)"}</label>
-                        <input type="number" min="0" step="0.01" value={form.commissionRateOverride} onChange={(e) => setForm((p) => ({ ...p, commissionRateOverride: e.target.value, commissionAmountOverride: "" }))} className={inputClass} placeholder={selAgent ? String(selAgent.commissionRate) : ""} />
-                      </div>
-                      <div>
-                        <label className={labelClass}>Direct Amount Override (KES)</label>
-                        <input type="number" min="0" step="0.01" value={form.commissionAmountOverride} onChange={(e) => setForm((p) => ({ ...p, commissionAmountOverride: e.target.value }))} className={inputClass} placeholder="Skip rate — set exact amount" />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-            <div>
-              <label className={labelClass}>Agreed Price (KES)</label>
-              <AmountInput value={form.agreedPrice} onChange={(v) => setForm((p) => ({ ...p, agreedPrice: v }))} className={inputClass} placeholder="e.g. 8,500,000" />
-            </div>
-            <div>
-              <label className={labelClass}>Deal Date</label>
-              <input type="date" value={form.dealDate} onChange={(e) => setForm((p) => ({ ...p, dealDate: e.target.value }))} className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Expected Closing Date</label>
-              <input type="date" value={form.expectedClosingDate} onChange={(e) => setForm((p) => ({ ...p, expectedClosingDate: e.target.value }))} className={inputClass} />
-            </div>
-            <div className="md:col-span-2">
-              <label className={labelClass}>Notes</label>
-              <textarea rows={2} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
-            </div>
-          </div>
-        </Modal>
+      {dealModal && (
+        <DealFormModal
+          editingId={dealModal.editingId}
+          initial={dealModal.initial}
+          saving={saving}
+          listingFormOptions={listingFormOptions}
+          buyerOptions={buyerOptions}
+          agentFormOptions={agentFormOptions}
+          agents={agents}
+          onClose={() => setDealModal(null)}
+          onSubmit={handleSave}
+        />
       )}
 
       {/* Cancel Deal Modal */}
-      {showCancelModal && cancellingDeal && (
-        <Modal
-          title={`Cancel Deal — ${cancellingDeal.dealNumber}`}
-          onClose={() => setShowCancelModal(false)}
-          footer={
-            <>
-              <button type="button" onClick={() => setShowCancelModal(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Back</button>
-              <button type="button" onClick={handleCancel} disabled={!!actionKey} className="bg-rose-700 px-4 py-1.5 text-xs font-black text-white hover:bg-rose-800 disabled:opacity-60">
-                {actionKey ? "Cancelling…" : "Cancel Deal"}
-              </button>
-            </>
-          }
-        >
-          <div className="mb-3 border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
-            Cancelling will revert the listing to <strong>Available</strong> and cancel any pending commissions.
-          </div>
-          <div className="mb-3 border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs">
-            <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-500">Deposit Payments</div>
-            <label className="mb-1.5 flex cursor-pointer items-center gap-2">
-              <input type="radio" name="depositAction" value="void" checked={depositAction === "void"} onChange={() => setDepositAction("void")} className="accent-[#0B3B2E]" />
-              <span className="font-semibold text-slate-700">Void deposits first</span>
-              <span className="text-slate-400">(go to Payments tab and void each deposit — for refunds)</span>
-            </label>
-            <label className="flex cursor-pointer items-center gap-2">
-              <input type="radio" name="depositAction" value="forfeit" checked={depositAction === "forfeit"} onChange={() => setDepositAction("forfeit")} className="accent-rose-600" />
-              <span className="font-semibold text-rose-700">Forfeit deposits as income</span>
-              <span className="text-slate-400">(non-refundable — posts Dr Buyer Deposit Held / Cr Forfeited Income)</span>
-            </label>
-          </div>
-          <label className={labelClass}>Reason for Cancellation</label>
-          <textarea rows={3} value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder="Optional — e.g. buyer withdrew, financing fell through…" className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-rose-500 focus:outline-none" />
-        </Modal>
+      {cancellingDeal && (
+        <CancelDealModal deal={cancellingDeal} actionKey={actionKey} onClose={() => setCancellingDeal(null)} onConfirm={handleCancel} />
       )}
 
       {/* SMS Modal */}
@@ -993,232 +1269,22 @@ const SaleDeals = () => {
 
       {/* Email Modal */}
       {emailTarget && (
-        <SaleEmailModal
-          title="Email Buyer"
-          subtitle={`To: ${emailTarget.buyer?.email} · ${emailTarget.dealNumber}`}
-          emailForm={emailForm}
-          setEmailForm={setEmailForm}
-          sending={emailSending}
-          onSend={handleSendDealEmail}
-          onClose={() => setEmailTarget(null)}
-          context="deal"
-          vars={{
-            buyerName:           emailTarget.buyer?.fullName       || "",
-            buyerNumber:         emailTarget.buyer?.buyerNumber    || "",
-            phone:               emailTarget.buyer?.phone          || "",
-            email:               emailTarget.buyer?.email          || "",
-            dealNumber:          emailTarget.dealNumber            || "",
-            dealStatus:          emailTarget.status                || "",
-            salePrice:           emailTarget.agreedPrice != null   ? Number(emailTarget.agreedPrice).toLocaleString() : "",
-            dealDate:            emailTarget.dealDate              ? new Date(emailTarget.dealDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "",
-            expectedClosingDate: emailTarget.expectedClosingDate   ? new Date(emailTarget.expectedClosingDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "",
-            actualClosingDate:   emailTarget.actualClosingDate     ? new Date(emailTarget.actualClosingDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "",
-            listingTitle:        emailTarget.listing?.title        || "",
-            listingNumber:       emailTarget.listing?.listingNumber|| "",
-            propertyType:        emailTarget.listing?.propertyType || "",
-            propertyLocation:    emailTarget.listing?.location     || "",
-            propertyTown:        emailTarget.listing?.town         || "",
-            askingPrice:         emailTarget.listing?.askingPrice != null ? Number(emailTarget.listing.askingPrice).toLocaleString() : "",
-            agentName:           emailTarget.agent?.fullName       || "",
-            companyName:         currentCompany?.companyName || currentCompany?.name || "",
-          }}
-        />
+        <DealEmailModal target={emailTarget} company={currentCompany} sending={emailSending} onSend={handleSendDealEmail} onClose={() => setEmailTarget(null)} />
       )}
 
       {/* Close Deal Modal */}
-      {showCloseModal && closingDeal && (
-        <Modal
-          title={`Close Deal — ${closingDeal.dealNumber}`}
-          onClose={() => setShowCloseModal(false)}
-          footer={
-            <>
-              <button type="button" onClick={() => setShowCloseModal(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button type="button" onClick={handleClose} disabled={!!actionKey} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-                <FaCheck className="inline mr-1 text-[9px]" />{actionKey ? "Closing…" : "Confirm Close"}
-              </button>
-            </>
-          }
-        >
-          <div className="grid gap-3 md:grid-cols-2">
-            <div>
-              <label className={labelClass}>Actual Closing Date</label>
-              <input type="date" value={closeForm.actualClosingDate} onChange={(e) => setCloseForm((p) => ({ ...p, actualClosingDate: e.target.value }))} className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Title Transfer Date</label>
-              <input type="date" value={closeForm.titleTransferDate} onChange={(e) => setCloseForm((p) => ({ ...p, titleTransferDate: e.target.value }))} className={inputClass} />
-            </div>
-            <div className="md:col-span-2">
-              <label className={labelClass}>Handover Notes</label>
-              <textarea rows={2} value={closeForm.handoverNotes} onChange={(e) => setCloseForm((p) => ({ ...p, handoverNotes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
-            </div>
-            <div className="md:col-span-2 border-t border-slate-100 pt-3">
-              <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-500">Stamp Duty / Transfer Costs (Optional)</div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <div>
-                  <label className={labelClass}>Amount (KES)</label>
-                  <AmountInput value={closeForm.stampDutyAmount} onChange={(v) => setCloseForm((p) => ({ ...p, stampDutyAmount: v }))} className={inputClass} placeholder="0.00 — leave blank if none" />
-                </div>
-                <div>
-                  <AppSelect
-                    label="Paid From (Cashbook)"
-                    value={closeForm.stampDutyCashbook}
-                    onChange={(v) => setCloseForm((p) => ({ ...p, stampDutyCashbook: v ?? "" }))}
-                    options={cashbookOptions}
-                    placeholder="— Fallback if blank —"
-                    clearable
-                    searchable
-                    size="md"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </Modal>
+      {closingDeal && (
+        <CloseDealModal deal={closingDeal} cashbookOptions={cashbookOptions} actionKey={actionKey} onClose={() => setClosingDeal(null)} onConfirm={handleClose} />
       )}
+
       {/* Record Payment Modal */}
-      {showPayModal && payingDeal && (
-        <Modal
-          title={`Record Payment — ${payingDeal.dealNumber}`}
-          wide
-          onClose={() => setShowPayModal(false)}
-          footer={
-            <>
-              <button type="button" onClick={() => setShowPayModal(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button type="button" onClick={handleRecordPayment} disabled={payingSave} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-                {payingSave ? "Saving…" : "Record & Print Receipt"}
-              </button>
-            </>
-          }
-        >
-          {/* Balance summary */}
-          <div className="mb-3 grid grid-cols-3 border border-slate-200">
-            <div className="border-r border-slate-200 px-3 py-2 text-center text-[10px]">
-              <div className="font-black uppercase tracking-wide text-slate-400">Agreed</div>
-              <div className="mt-0.5 font-black text-slate-800">{fmtKES(payingDeal.agreedPrice)}</div>
-            </div>
-            <div className="border-r border-slate-200 px-3 py-2 text-center text-[10px]">
-              <div className="font-black uppercase tracking-wide text-slate-400">Paid</div>
-              <div className="mt-0.5 font-black text-emerald-700">{fmtKES(payingDeal.totalPaid || 0)}</div>
-            </div>
-            <div className="px-3 py-2 text-center text-[10px]">
-              <div className="font-black uppercase tracking-wide text-slate-400">Balance</div>
-              <div className="mt-0.5 font-black text-rose-700">{fmtKES(dealBalance(payingDeal))}</div>
-            </div>
-          </div>
-          {/* Progress bar */}
-          <div className="mb-3">
-            {(() => {
-              const pct = payingDeal.agreedPrice > 0 ? Math.min(100, Math.round(((payingDeal.totalPaid || 0) / payingDeal.agreedPrice) * 100)) : 0;
-              return (
-                <>
-                  <div className="mb-1 flex justify-between text-[9px] text-slate-400"><span>Payment Progress</span><span>{pct}% paid</span></div>
-                  <div className="h-1.5 w-full overflow-hidden bg-slate-200"><div className="h-full bg-emerald-500" style={{ width: `${pct}%` }} /></div>
-                </>
-              );
-            })()}
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div>
-              <AppSelect label="Payment Type" value={payForm.paymentType} onChange={(v) => setPayForm((f) => ({ ...f, paymentType: v ?? "" }))} options={PAYMENT_TYPE_OPTIONS} size="md" />
-            </div>
-            <div>
-              <AppSelect label="Method" value={payForm.paymentMethod} onChange={(v) => setPayForm((f) => ({ ...f, paymentMethod: v ?? "" }))} options={PAYMENT_METHOD_OPTIONS} size="md" />
-            </div>
-            <div>
-              <label className={labelClass}>Amount (KES)</label>
-              <AmountInput value={payForm.amount} onChange={(v) => setPayForm((f) => ({ ...f, amount: v }))} className={inputClass} placeholder="e.g. 500,000" />
-            </div>
-            <div>
-              <label className={labelClass}>Payment Date</label>
-              <input type="date" value={payForm.paymentDate} onChange={(e) => setPayForm((f) => ({ ...f, paymentDate: e.target.value }))} className={inputClass} />
-            </div>
-            <div className="md:col-span-2">
-              <AppSelect
-                label="Bank / Cashbook Account (GL Debit)"
-                value={payForm.cashbook}
-                onChange={(v) => setPayForm((f) => ({ ...f, cashbook: v ?? "" }))}
-                options={cashbookOptions}
-                placeholder="— Fallback receipts account if blank —"
-                clearable
-                searchable
-                size="md"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className={labelClass}>
-                {payForm.paymentMethod === "mpesa" ? "M-Pesa Code" : payForm.paymentMethod === "cheque" ? "Cheque No." : payForm.paymentMethod === "bank_transfer" ? "EFT / Ref No." : "Reference (Optional)"}
-              </label>
-              <input
-                type="text"
-                value={payForm.reference}
-                onChange={(e) => setPayForm((f) => ({ ...f, reference: e.target.value }))}
-                className={`${inputClass} font-mono ${["mpesa", "cheque", "bank_transfer"].includes(payForm.paymentMethod) ? "border-amber-300 bg-amber-50 focus:border-amber-500" : ""}`}
-                placeholder={payForm.paymentMethod === "mpesa" ? "e.g. QJ1X23ABC4D" : "Optional…"}
-              />
-              {["mpesa", "cheque", "bank_transfer"].includes(payForm.paymentMethod) && (
-                <div className="mt-1 text-[10px] font-semibold text-amber-600">Reference required for {fmtLabel(payForm.paymentMethod)} — used for reconciliation</div>
-              )}
-            </div>
-            <div className="md:col-span-2">
-              <label className={labelClass}>Notes</label>
-              <textarea rows={2} value={payForm.notes} onChange={(e) => setPayForm((f) => ({ ...f, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
-            </div>
-          </div>
-        </Modal>
+      {payingDeal && (
+        <RecordPaymentModal deal={payingDeal} saving={payingSave} cashbookOptions={cashbookOptions} onClose={() => setPayingDeal(null)} onSubmit={handleRecordPayment} />
       )}
 
       {/* Schedule Builder Modal */}
-      {showScheduleBuilder && liveSelected && (
-        <Modal
-          title="Payment Schedule"
-          wide
-          onClose={() => setShowScheduleBuilder(false)}
-          footer={
-            <>
-              <button type="button" onClick={() => setShowScheduleBuilder(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button type="button" onClick={handleSaveSchedule} disabled={scheduleSaving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-                {scheduleSaving ? "Saving…" : "Save Schedule"}
-              </button>
-            </>
-          }
-        >
-          <div className="space-y-2">
-            {scheduleItems.map((item, idx) => (
-              <div key={idx} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end border border-slate-200 bg-slate-50 px-3 py-2">
-                <div>
-                  <label className={labelClass}>Due Date</label>
-                  <input type="date" value={item.dueDate} onChange={(e) => setScheduleItems((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: e.target.value } : x))} className={inputClass} />
-                </div>
-                <div>
-                  <label className={labelClass}>Amount (KES)</label>
-                  <input type="number" min="0" value={item.expectedAmount} onChange={(e) => setScheduleItems((prev) => prev.map((x, i) => i === idx ? { ...x, expectedAmount: e.target.value } : x))} className={inputClass} placeholder="0.00" />
-                </div>
-                <div>
-                  <label className={labelClass}>Description</label>
-                  <input type="text" value={item.description} onChange={(e) => setScheduleItems((prev) => prev.map((x, i) => i === idx ? { ...x, description: e.target.value } : x))} className={inputClass} placeholder={`Installment ${idx + 1}`} />
-                </div>
-                <div>
-                  <button type="button" onClick={() => setScheduleItems((prev) => prev.filter((_, i) => i !== idx))} className="h-8 w-8 border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center">
-                    <FaTrash size={9} />
-                  </button>
-                </div>
-              </div>
-            ))}
-            <button type="button" onClick={() => setScheduleItems((prev) => [...prev, { dueDate: "", expectedAmount: "", description: `Installment ${prev.length + 1}` }])} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-[#F1F6F3] px-3 py-1.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#B7C9C0]/40">
-              <FaPlus size={8} /> Add Installment
-            </button>
-            {scheduleItems.length > 0 && (
-              <div className="mt-2 text-right text-xs">
-                <span className="text-slate-500">Schedule total: </span>
-                <span className={`font-black ${Math.abs(scheduleItems.reduce((s, i) => s + Number(i.expectedAmount || 0), 0) - liveSelected.agreedPrice) < 1 ? "text-emerald-700" : "text-rose-600"}`}>
-                  {fmtKES(scheduleItems.reduce((s, i) => s + Number(i.expectedAmount || 0), 0))}
-                </span>
-                <span className="text-slate-400"> / {fmtKES(liveSelected.agreedPrice)}</span>
-              </div>
-            )}
-          </div>
-        </Modal>
+      {scheduleInitial && liveSelected && (
+        <ScheduleBuilderModal initialItems={scheduleInitial} agreedPrice={liveSelected.agreedPrice} saving={scheduleSaving} onClose={() => setScheduleInitial(null)} onSave={handleSaveSchedule} />
       )}
 
       {/* Link Payment to Installment Modal */}

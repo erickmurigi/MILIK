@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
@@ -25,7 +25,6 @@ const STATUS_BADGE = {
 
 const EMPTY_FORM = { listing: "", buyer: "", agent: "", offerAmount: "", validityDate: "", notes: "" };
 const EMPTY_STATUS = { status: "", counterOfferAmount: "", negotiationNotes: "" };
-const EMPTY_DEAL = { listing: "", buyer: "", agent: "", agreedPrice: "", dealDate: todayISO(), notes: "" };
 const LIMIT = 50;
 
 const OFFER_STATUS_FILTER_OPTIONS = ["pending", "negotiating", "accepted", "rejected", "expired", "withdrawn"].map((s) => ({
@@ -51,6 +50,276 @@ const OFFER_TABLE_COLS = [
   { label: "Status" },
 ];
 
+// Module scope so MilikTable's React.memo isn't defeated by a fresh function identity each parent render.
+const offerRowClassName = (o) => {
+  const isCounterActive = o.status === "negotiating" && !!o.counterOfferAmount;
+  return isCounterActive ? "!bg-[#F1F6F3]" : "";
+};
+
+const renderOfferRow = (o) => {
+  const hasCounter = !!o.counterOfferAmount;
+  const isCounterActive = o.status === "negotiating" && hasCounter;
+  const isAccepted = o.status === "accepted";
+  const counterDelta = hasCounter ? Math.round(((o.counterOfferAmount - o.offerAmount) / o.offerAmount) * 100) : null;
+  return (
+    <>
+      <td className="px-3 py-1.5 border-r border-gray-100 font-black text-slate-900">{o.offerNumber}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">{o.listing?.title || o.listing?.listingNumber || "—"}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">{o.buyer?.fullName || "—"}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">{o.agent?.fullName || <span className="italic text-slate-300">—</span>}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 text-right">
+        <div className="font-black text-slate-900">{fmtKES(o.offerAmount)}</div>
+        {o.listing?.askingPrice > 0 && (
+          <div className={`text-[10px] font-bold ${o.offerAmount < o.listing.askingPrice ? "text-rose-500" : o.offerAmount > o.listing.askingPrice ? "text-emerald-500" : "text-slate-400"}`}>
+            {o.offerAmount >= o.listing.askingPrice ? "+" : ""}{Math.round(((o.offerAmount - o.listing.askingPrice) / o.listing.askingPrice) * 100)}% vs asking
+          </div>
+        )}
+      </td>
+      <td className="px-3 py-1.5 border-r border-gray-100 text-right">
+        {hasCounter ? (
+          <div>
+            <div className={`font-black ${isAccepted ? "text-emerald-700" : "text-violet-700"}`}>{fmtKES(o.counterOfferAmount)}</div>
+            <div className="mt-0.5 flex items-center justify-end gap-1">
+              {isCounterActive && <span className="inline-flex border border-violet-300 bg-violet-100 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-violet-700">counter</span>}
+              {isAccepted && <span className="inline-flex border border-emerald-300 bg-emerald-100 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-emerald-700">final</span>}
+            </div>
+            {counterDelta !== null && <div className={`text-[10px] font-bold ${counterDelta > 0 ? "text-rose-500" : "text-emerald-500"}`}>{counterDelta > 0 ? "+" : ""}{counterDelta}% vs offer</div>}
+          </div>
+        ) : isAccepted ? (
+          <div>
+            <div className="font-black text-emerald-700">{fmtKES(o.offerAmount)}</div>
+            <span className="inline-flex border border-emerald-300 bg-emerald-100 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-emerald-700">final</span>
+          </div>
+        ) : <span className="text-slate-300">—</span>}
+      </td>
+      <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">{o.validityDate ? new Date(o.validityDate).toLocaleDateString("en-KE") : "—"}</td>
+      <td className="px-3 py-1.5">
+        <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${STATUS_BADGE[o.status] || "border-slate-200 bg-slate-100 text-slate-600"}`}>
+          {isCounterActive ? "Counter Active" : o.status}
+        </span>
+      </td>
+    </>
+  );
+};
+
+// Modals below own their form state so keystrokes never re-render the page or its table.
+// Submit handlers stay in the page (they own the shared `saving`/`converting` in-flight guards).
+
+function CreateOfferModal({ saving, listingFormOptions, buyerFormOptions, activeAgentOptions, onClose, onSubmit }) {
+  const [form, setForm] = useState(EMPTY_FORM);
+  return (
+    <div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <form onSubmit={(e) => { e.preventDefault(); onSubmit(form); }} className="flex w-full max-w-lg flex-col bg-white shadow-2xl sm:border sm:border-slate-200 max-h-[92dvh] rounded-t-2xl sm:rounded-none">
+        <div className="flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
+          <div>
+            <div className="text-sm font-extrabold uppercase tracking-wide">Record New Offer</div>
+            <div className="text-xs font-semibold text-white/70">Formal purchase offer against a listing</div>
+          </div>
+          <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
+        </div>
+        <div className="grid gap-4 overflow-y-auto p-5 md:grid-cols-2">
+          <div className="md:col-span-2">
+            <AppSelect label="Listing *" value={form.listing} onChange={(v) => setForm((f) => ({ ...f, listing: v ?? "" }))} options={listingFormOptions} placeholder="Select listing" size="md" searchable />
+          </div>
+          <div>
+            <AppSelect label="Buyer *" value={form.buyer} onChange={(v) => setForm((f) => ({ ...f, buyer: v ?? "" }))} options={buyerFormOptions} placeholder="Select buyer" size="md" searchable />
+          </div>
+          <div>
+            <AppSelect label="Sales Agent" value={form.agent} onChange={(v) => setForm((f) => ({ ...f, agent: v ?? "" }))} options={activeAgentOptions} placeholder="Unassigned" size="md" searchable clearable />
+          </div>
+          <div>
+            <label className="mb-0.5 block text-xs font-semibold text-slate-700">Offer Amount (KES) *</label>
+            <AmountInput
+              value={form.offerAmount}
+              onChange={(v) => setForm((f) => ({ ...f, offerAmount: v }))}
+              className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none"
+              placeholder="e.g. 5,000,000"
+              required
+            />
+          </div>
+          <div>
+            <label className="mb-0.5 block text-xs font-semibold text-slate-700">Validity Date</label>
+            <input type="date" value={form.validityDate}
+              onChange={(e) => setForm((f) => ({ ...f, validityDate: e.target.value }))}
+              className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" />
+          </div>
+          <div className="md:col-span-2">
+            <label className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</label>
+            <textarea rows={2} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+              className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" />
+          </div>
+        </div>
+        <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button type="submit" disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+            {saving ? "Saving…" : "Record Offer"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function OfferStatusModal({ offer, saving, onClose, onSubmit }) {
+  const [statusForm, setStatusForm] = useState(() => ({ ...EMPTY_STATUS, counterOfferAmount: offer.counterOfferAmount || "" }));
+  return (
+    <div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <form onSubmit={(e) => { e.preventDefault(); onSubmit(statusForm); }} className="flex w-full max-w-md flex-col bg-white shadow-2xl sm:border sm:border-slate-200 max-h-[92dvh] rounded-t-2xl sm:rounded-none">
+        <div className="flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 bg-slate-800 px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
+          <div>
+            <div className="text-sm font-extrabold uppercase tracking-wide">Update Offer Status</div>
+            <div className="text-xs font-semibold text-white/70">{offer.offerNumber} — {offer.listing?.title || ""}</div>
+          </div>
+          <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
+        </div>
+        <div className="grid gap-4 overflow-y-auto p-5">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
+              <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Buyer's Offer</div>
+              <div className="font-black text-slate-900">{fmtKES(offer.offerAmount)}</div>
+            </div>
+            {offer.counterOfferAmount ? (
+              <div className="border border-violet-200 bg-violet-50 px-3 py-2 text-xs">
+                <div className="text-[10px] font-black uppercase tracking-wider text-violet-500">Current Counter</div>
+                <div className="font-black text-violet-800">{fmtKES(offer.counterOfferAmount)}</div>
+              </div>
+            ) : (
+              <div className="border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
+                <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Asking Price</div>
+                <div className="font-black text-slate-900">{fmtKES(offer.listing?.askingPrice)}</div>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <AppSelect label="New Status *" value={statusForm.status} onChange={(v) => setStatusForm((f) => ({ ...f, status: v ?? "" }))} options={OFFER_STATUS_UPDATE_OPTIONS} placeholder="Select status" size="md" />
+          </div>
+
+          {statusForm.status === "negotiating" && (
+            <div>
+              <label className="mb-0.5 block text-xs font-semibold text-slate-700">Counter-Offer Amount (KES) *</label>
+              <AmountInput
+                value={statusForm.counterOfferAmount}
+                onChange={(v) => setStatusForm((f) => ({ ...f, counterOfferAmount: v }))}
+                className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none"
+                placeholder="e.g. 5,500,000"
+              />
+              {statusForm.counterOfferAmount && offer.offerAmount && (
+                <div className={`mt-1 text-[10px] font-bold ${Number(statusForm.counterOfferAmount) > Number(offer.offerAmount) ? "text-rose-500" : "text-emerald-500"}`}>
+                  {Number(statusForm.counterOfferAmount) > Number(offer.offerAmount) ? "+" : ""}
+                  {Math.round(((Number(statusForm.counterOfferAmount) - Number(offer.offerAmount)) / Number(offer.offerAmount)) * 100)}% vs buyer's offer
+                </div>
+              )}
+            </div>
+          )}
+
+          {statusForm.status === "accepted" && (
+            <div className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] text-emerald-800">
+              <span className="font-black">Accepted price: </span>
+              <span className="font-bold">{fmtKES(offer.counterOfferAmount || offer.offerAmount)}</span>
+              {offer.counterOfferAmount && <span className="ml-1 opacity-70">(counter offer)</span>}
+              <div className="mt-1 opacity-80">After accepting, use the <strong>Deal</strong> button to convert this offer into a transaction.</div>
+            </div>
+          )}
+
+          <div>
+            <label className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</label>
+            <textarea rows={2} value={statusForm.negotiationNotes}
+              onChange={(e) => setStatusForm((f) => ({ ...f, negotiationNotes: e.target.value }))}
+              className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" />
+          </div>
+        </div>
+        <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button type="submit" disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+            {saving ? "Saving…" : "Update Status"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ConvertDealModal({ offer, converting, activeAgentOptions, onClose, onSubmit }) {
+  const [dealForm, setDealForm] = useState(() => ({
+    listing: offer.listing?._id || offer.listing || "",
+    buyer: offer.buyer?._id || offer.buyer || "",
+    agent: offer.agent?._id || offer.agent || "",
+    agreedPrice: String(offer.counterOfferAmount || offer.offerAmount || ""),
+    dealDate: todayISO(),
+    notes: `Converted from offer ${offer.offerNumber}`,
+  }));
+  return (
+    <div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <form onSubmit={(e) => { e.preventDefault(); onSubmit(dealForm); }} className="flex w-full max-w-lg flex-col bg-white shadow-2xl sm:border sm:border-slate-200 max-h-[92dvh] rounded-t-2xl sm:rounded-none">
+        <div className="flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
+          <div>
+            <div className="text-sm font-extrabold uppercase tracking-wide">Convert Offer to Deal</div>
+            <div className="text-xs font-semibold text-white/70">{offer.offerNumber} — {offer.buyer?.fullName || ""}</div>
+          </div>
+          <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
+        </div>
+        <div className="grid gap-4 overflow-y-auto p-5 md:grid-cols-2">
+          <div className="md:col-span-2">
+            <div className="grid grid-cols-3 gap-2 border border-emerald-200 bg-emerald-50 p-3">
+              <div className="text-center">
+                <div className="text-[10px] font-black uppercase tracking-wider text-emerald-500">Asking</div>
+                <div className="font-black text-emerald-900">{fmtKES(offer.listing?.askingPrice)}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-[10px] font-black uppercase tracking-wider text-emerald-500">Buyer Offered</div>
+                <div className="font-black text-emerald-900">{fmtKES(offer.offerAmount)}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-[10px] font-black uppercase tracking-wider text-emerald-500">
+                  {offer.counterOfferAmount ? "Countered At" : "Agreed"}
+                </div>
+                <div className="font-black text-emerald-900">
+                  {fmtKES(offer.counterOfferAmount || offer.offerAmount)}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="mb-0.5 block text-xs font-semibold text-slate-700">Final Agreed Price (KES) *</label>
+            <AmountInput
+              value={dealForm.agreedPrice}
+              onChange={(v) => setDealForm((f) => ({ ...f, agreedPrice: v }))}
+              className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none"
+              placeholder="Confirmed sale price"
+              required
+            />
+            <div className="mt-1 text-[10px] text-slate-400">Pre-filled from accepted price. Adjust if a final verbal agreement was reached.</div>
+          </div>
+
+          <div>
+            <label className="mb-0.5 block text-xs font-semibold text-slate-700">Deal Date *</label>
+            <input type="date" value={dealForm.dealDate}
+              onChange={(e) => setDealForm((f) => ({ ...f, dealDate: e.target.value }))}
+              className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" required />
+          </div>
+          <div>
+            <AppSelect label="Assign Agent" value={dealForm.agent} onChange={(v) => setDealForm((f) => ({ ...f, agent: v ?? "" }))} options={activeAgentOptions} placeholder="Unassigned" size="md" searchable clearable />
+          </div>
+          <div className="md:col-span-2">
+            <label className="mb-0.5 block text-xs font-semibold text-slate-700">Deal Notes</label>
+            <textarea rows={2} value={dealForm.notes}
+              onChange={(e) => setDealForm((f) => ({ ...f, notes: e.target.value }))}
+              className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" />
+          </div>
+        </div>
+        <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button type="submit" disabled={converting} className="inline-flex items-center gap-1 bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+            <FaHandshake className="text-[9px]" /> {converting ? "Creating…" : "Create Deal"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 const SaleOffers = () => {
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const biz = currentCompany?._id;
@@ -68,9 +337,6 @@ const SaleOffers = () => {
   const [showCreate, setShowCreate] = useState(false);
   const [showStatus, setShowStatus] = useState(null);
   const [showConvertDeal, setShowConvertDeal] = useState(null);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [statusForm, setStatusForm] = useState(EMPTY_STATUS);
-  const [dealForm, setDealForm] = useState(EMPTY_DEAL);
   const [saving, setSaving] = useState(false);
   const [converting, setConverting] = useState(false);
 
@@ -88,7 +354,7 @@ const SaleOffers = () => {
     placeholderData: (prev, prevQuery) => (prevQuery?.queryKey?.[1] === biz ? prev : undefined),
     staleTime: 30_000,
   });
-  const offers = offersPage?.data ?? [];
+  const offers = useMemo(() => offersPage?.data ?? [], [offersPage]);
   const total = offersPage?.total ?? 0;
 
   const { data: listingsPage } = useQuery({
@@ -97,7 +363,7 @@ const SaleOffers = () => {
     enabled: !!biz,
     staleTime: 60_000,
   });
-  const listings = listingsPage?.data ?? [];
+  const listings = useMemo(() => listingsPage?.data ?? [], [listingsPage]);
 
   const { data: buyersPage } = useQuery({
     queryKey: ["sale-buyers-ref", biz],
@@ -105,7 +371,7 @@ const SaleOffers = () => {
     enabled: !!biz,
     staleTime: 60_000,
   });
-  const buyers = buyersPage?.data ?? [];
+  const buyers = useMemo(() => buyersPage?.data ?? [], [buyersPage]);
 
   const { data: agentsPage } = useQuery({
     queryKey: ["sale-agents-ref", biz],
@@ -113,7 +379,7 @@ const SaleOffers = () => {
     enabled: !!biz,
     staleTime: 60_000,
   });
-  const agents = agentsPage?.data ?? [];
+  const agents = useMemo(() => agentsPage?.data ?? [], [agentsPage]);
 
   const activeAgentOptions  = useMemo(() => agents.filter((a) => a.status === "active").map((a) => ({ value: a._id, label: `${a.agentNumber} — ${a.fullName}` })), [agents]);
   const listingFilterOptions= useMemo(() => listings.map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}` })), [listings]);
@@ -121,19 +387,18 @@ const SaleOffers = () => {
   const buyerFilterOptions  = useMemo(() => buyers.map((b) => ({ value: b._id, label: `${b.fullName}${b.buyerNumber ? ` (${b.buyerNumber})` : ""}` })), [buyers]);
   const buyerFormOptions    = useMemo(() => buyers.map((b) => ({ value: b._id, label: `${b.buyerNumber} — ${b.fullName}` })), [buyers]);
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["sale-offers", biz] });
+  const invalidate = useCallback(() => queryClient.invalidateQueries({ queryKey: ["sale-offers", biz] }), [queryClient, biz]);
   // Offer create/accept/reject/withdraw/delete/convert change the listing status server-side
   // (available <-> reserved <-> under_contract) and move the conversion-funnel counts.
-  const invalidateWithListings = () => {
+  const invalidateWithListings = useCallback(() => {
     invalidate();
     queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] });
     queryClient.invalidateQueries({ queryKey: ["sale-listings-ref", biz] });
     queryClient.invalidateQueries({ queryKey: ["sale-funnel", biz] });
-  };
+  }, [invalidate, queryClient, biz]);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
-  const handleCreate = async (e) => {
-    e.preventDefault();
+  const handleCreate = async (form) => {
     if (!form.listing || !form.buyer || !form.offerAmount) {
       toast.warn("Listing, buyer and offer amount are required");
       return;
@@ -143,7 +408,6 @@ const SaleOffers = () => {
       await saleApi.createOffer({ ...form, business: biz });
       toast.success("Offer recorded");
       setShowCreate(false);
-      setForm(EMPTY_FORM);
       invalidateWithListings();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to record offer");
@@ -152,15 +416,13 @@ const SaleOffers = () => {
     }
   };
 
-  const handleStatusUpdate = async (e) => {
-    e.preventDefault();
+  const handleStatusUpdate = async (statusForm) => {
     if (!statusForm.status) { toast.warn("Select a status"); return; }
     setSaving(true);
     try {
       await saleApi.updateOfferStatus(showStatus._id, { ...statusForm, business: biz });
       toast.success("Offer status updated");
       setShowStatus(null);
-      setStatusForm(EMPTY_STATUS);
       invalidateWithListings();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to update status");
@@ -169,7 +431,7 @@ const SaleOffers = () => {
     }
   };
 
-  const handleAcceptCounter = async (offer) => {
+  const handleAcceptCounter = useCallback(async (offer) => {
     if (!await confirm({
       title: "Accept Counter Offer",
       message: `Accept the counter offer of ${fmtKES(offer.counterOfferAmount)} for ${offer.offerNumber}? The original offer was ${fmtKES(offer.offerAmount)}.`,
@@ -189,9 +451,9 @@ const SaleOffers = () => {
     } finally {
       setSaving(false);
     }
-  };
+  }, [confirm, biz, invalidateWithListings]);
 
-  const handleRejectCounter = async (offer) => {
+  const handleRejectCounter = useCallback(async (offer) => {
     if (!await confirm({
       title: "Reject Counter Offer",
       message: `Reject the counter offer for ${offer.offerNumber}? The offer status will be marked as rejected.`,
@@ -212,23 +474,9 @@ const SaleOffers = () => {
     } finally {
       setSaving(false);
     }
-  };
+  }, [confirm, biz, invalidateWithListings]);
 
-  const handleOpenConvertDeal = (offer) => {
-    const agreedPrice = String(offer.counterOfferAmount || offer.offerAmount || "");
-    setDealForm({
-      listing: offer.listing?._id || offer.listing || "",
-      buyer: offer.buyer?._id || offer.buyer || "",
-      agent: offer.agent?._id || offer.agent || "",
-      agreedPrice,
-      dealDate: todayISO(),
-      notes: `Converted from offer ${offer.offerNumber}`,
-    });
-    setShowConvertDeal(offer);
-  };
-
-  const handleConvertDeal = async (e) => {
-    e.preventDefault();
+  const handleConvertDeal = async (dealForm) => {
     if (!dealForm.agreedPrice) { toast.warn("Agreed price is required"); return; }
     setConverting(true);
     try {
@@ -240,7 +488,6 @@ const SaleOffers = () => {
       });
       toast.success("Deal created! View it in the Deals section.");
       setShowConvertDeal(null);
-      setDealForm(EMPTY_DEAL);
       invalidateWithListings();
       queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] });
     } catch (err) {
@@ -250,7 +497,7 @@ const SaleOffers = () => {
     }
   };
 
-  const handleDelete = async (offer) => {
+  const handleDelete = useCallback(async (offer) => {
     if (!await confirm({
       title: "Delete Offer",
       message: `Permanently delete offer ${offer.offerNumber}? This cannot be undone.`,
@@ -264,9 +511,9 @@ const SaleOffers = () => {
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to delete");
     }
-  };
+  }, [confirm, invalidateWithListings]);
 
-  const printOffer = (offer) => {
+  const printOffer = useCallback((offer) => {
     const co = currentCompany || {};
     // Every dynamic value is HTML-escaped: the popup is same-origin (document.write), so raw
     // interpolation of company/buyer/notes text would be stored XSS.
@@ -365,9 +612,47 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${esc
     w.document.write(html);
     w.document.close();
     w.onload = () => w.print();
-  };
+  }, [currentCompany]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  const renderOfferActions = useCallback((o) => {
+    const hasCounter = !!o.counterOfferAmount;
+    const isCounterActive = o.status === "negotiating" && hasCounter;
+    const isAccepted = o.status === "accepted";
+    return (
+      <div className="inline-flex flex-wrap justify-end gap-1">
+        <button onClick={() => printOffer(o)} title="Print" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+          <FaPrint size={9} />
+        </button>
+        {isCounterActive && (
+          <>
+            <button onClick={() => handleAcceptCounter(o)} disabled={saving} title="Accept Counter Offer" className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40">
+              <FaCheck size={9} /> Accept
+            </button>
+            <button onClick={() => handleRejectCounter(o)} disabled={saving} title="Reject Counter Offer" className="inline-flex items-center gap-1 border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-40">
+              <FaTimes size={9} /> Reject
+            </button>
+          </>
+        )}
+        {isAccepted && (
+          <button onClick={() => setShowConvertDeal(o)} title="Convert to Deal" className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-[#F1F6F3] px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#B7C9C0]/40">
+            <FaHandshake size={9} /> Deal
+          </button>
+        )}
+        {["pending", "negotiating"].includes(o.status) && (
+          <button title={isCounterActive ? "Edit Counter / Change Status" : "Update Status"} onClick={() => setShowStatus(o)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+            <FaEdit />
+          </button>
+        )}
+        {["pending", "rejected", "expired", "withdrawn"].includes(o.status) && (
+          <button onClick={() => handleDelete(o)} title="Delete" className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100">
+            <FaTimes />
+          </button>
+        )}
+      </div>
+    );
+  }, [printOffer, saving, handleAcceptCounter, handleRejectCounter, handleDelete]);
 
   return (
     <PropertySaleShell>
@@ -387,7 +672,7 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${esc
                 <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
               </button>
               <button
-                onClick={() => { setForm(EMPTY_FORM); setShowCreate(true); }}
+                onClick={() => setShowCreate(true)}
                 className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
               >
                 <FaPlus size={9} /> New Offer
@@ -412,92 +697,9 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${esc
             rows={offers}
             loading={isFetching && offers.length === 0}
             empty="No offers found."
-            rowClassName={(o) => {
-              const isCounterActive = o.status === "negotiating" && !!o.counterOfferAmount;
-              return isCounterActive ? "!bg-[#F1F6F3]" : "";
-            }}
-            renderRow={(o) => {
-              const hasCounter = !!o.counterOfferAmount;
-              const isCounterActive = o.status === "negotiating" && hasCounter;
-              const isAccepted = o.status === "accepted";
-              const counterDelta = hasCounter ? Math.round(((o.counterOfferAmount - o.offerAmount) / o.offerAmount) * 100) : null;
-              return (
-                <>
-                  <td className="px-3 py-1.5 border-r border-gray-100 font-black text-slate-900">{o.offerNumber}</td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">{o.listing?.title || o.listing?.listingNumber || "—"}</td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">{o.buyer?.fullName || "—"}</td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">{o.agent?.fullName || <span className="italic text-slate-300">—</span>}</td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 text-right">
-                    <div className="font-black text-slate-900">{fmtKES(o.offerAmount)}</div>
-                    {o.listing?.askingPrice > 0 && (
-                      <div className={`text-[10px] font-bold ${o.offerAmount < o.listing.askingPrice ? "text-rose-500" : o.offerAmount > o.listing.askingPrice ? "text-emerald-500" : "text-slate-400"}`}>
-                        {o.offerAmount >= o.listing.askingPrice ? "+" : ""}{Math.round(((o.offerAmount - o.listing.askingPrice) / o.listing.askingPrice) * 100)}% vs asking
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 text-right">
-                    {hasCounter ? (
-                      <div>
-                        <div className={`font-black ${isAccepted ? "text-emerald-700" : "text-violet-700"}`}>{fmtKES(o.counterOfferAmount)}</div>
-                        <div className="mt-0.5 flex items-center justify-end gap-1">
-                          {isCounterActive && <span className="inline-flex border border-violet-300 bg-violet-100 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-violet-700">counter</span>}
-                          {isAccepted && <span className="inline-flex border border-emerald-300 bg-emerald-100 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-emerald-700">final</span>}
-                        </div>
-                        {counterDelta !== null && <div className={`text-[10px] font-bold ${counterDelta > 0 ? "text-rose-500" : "text-emerald-500"}`}>{counterDelta > 0 ? "+" : ""}{counterDelta}% vs offer</div>}
-                      </div>
-                    ) : isAccepted ? (
-                      <div>
-                        <div className="font-black text-emerald-700">{fmtKES(o.offerAmount)}</div>
-                        <span className="inline-flex border border-emerald-300 bg-emerald-100 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-emerald-700">final</span>
-                      </div>
-                    ) : <span className="text-slate-300">—</span>}
-                  </td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">{o.validityDate ? new Date(o.validityDate).toLocaleDateString("en-KE") : "—"}</td>
-                  <td className="px-3 py-1.5">
-                    <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${STATUS_BADGE[o.status] || "border-slate-200 bg-slate-100 text-slate-600"}`}>
-                      {isCounterActive ? "Counter Active" : o.status}
-                    </span>
-                  </td>
-                </>
-              );
-            }}
-            renderActions={(o) => {
-              const hasCounter = !!o.counterOfferAmount;
-              const isCounterActive = o.status === "negotiating" && hasCounter;
-              const isAccepted = o.status === "accepted";
-              return (
-                <div className="inline-flex flex-wrap justify-end gap-1">
-                  <button onClick={() => printOffer(o)} title="Print" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                    <FaPrint size={9} />
-                  </button>
-                  {isCounterActive && (
-                    <>
-                      <button onClick={() => handleAcceptCounter(o)} disabled={saving} title="Accept Counter Offer" className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40">
-                        <FaCheck size={9} /> Accept
-                      </button>
-                      <button onClick={() => handleRejectCounter(o)} disabled={saving} title="Reject Counter Offer" className="inline-flex items-center gap-1 border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-40">
-                        <FaTimes size={9} /> Reject
-                      </button>
-                    </>
-                  )}
-                  {isAccepted && (
-                    <button onClick={() => handleOpenConvertDeal(o)} title="Convert to Deal" className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-[#F1F6F3] px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#B7C9C0]/40">
-                      <FaHandshake size={9} /> Deal
-                    </button>
-                  )}
-                  {["pending", "negotiating"].includes(o.status) && (
-                    <button title={isCounterActive ? "Edit Counter / Change Status" : "Update Status"} onClick={() => { setShowStatus(o); setStatusForm({ ...EMPTY_STATUS, counterOfferAmount: o.counterOfferAmount || "" }); }} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                      <FaEdit />
-                    </button>
-                  )}
-                  {["pending", "rejected", "expired", "withdrawn"].includes(o.status) && (
-                    <button onClick={() => handleDelete(o)} title="Delete" className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100">
-                      <FaTimes />
-                    </button>
-                  )}
-                </div>
-              );
-            }}
+            rowClassName={offerRowClassName}
+            renderRow={renderOfferRow}
+            renderActions={renderOfferActions}
           />
           <PaginationBar page={page} pages={totalPages} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} />
         </div>
@@ -505,204 +707,17 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${esc
 
       {/* Create Offer Modal */}
       {showCreate && (
-        <div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-          <form onSubmit={handleCreate} className="flex w-full max-w-lg flex-col bg-white shadow-2xl sm:border sm:border-slate-200 max-h-[92dvh] rounded-t-2xl sm:rounded-none">
-            <div className="flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
-              <div>
-                <div className="text-sm font-extrabold uppercase tracking-wide">Record New Offer</div>
-                <div className="text-xs font-semibold text-white/70">Formal purchase offer against a listing</div>
-              </div>
-              <button type="button" onClick={() => setShowCreate(false)} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
-            </div>
-            <div className="grid gap-4 overflow-y-auto p-5 md:grid-cols-2">
-              <div className="md:col-span-2">
-                <AppSelect label="Listing *" value={form.listing} onChange={(v) => setForm((f) => ({ ...f, listing: v ?? "" }))} options={listingFormOptions} placeholder="Select listing" size="md" searchable />
-              </div>
-              <div>
-                <AppSelect label="Buyer *" value={form.buyer} onChange={(v) => setForm((f) => ({ ...f, buyer: v ?? "" }))} options={buyerFormOptions} placeholder="Select buyer" size="md" searchable />
-              </div>
-              <div>
-                <AppSelect label="Sales Agent" value={form.agent} onChange={(v) => setForm((f) => ({ ...f, agent: v ?? "" }))} options={activeAgentOptions} placeholder="Unassigned" size="md" searchable clearable />
-              </div>
-              <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Offer Amount (KES) *</label>
-                <AmountInput
-                  value={form.offerAmount}
-                  onChange={(v) => setForm((f) => ({ ...f, offerAmount: v }))}
-                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none"
-                  placeholder="e.g. 5,000,000"
-                  required
-                />
-              </div>
-              <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Validity Date</label>
-                <input type="date" value={form.validityDate}
-                  onChange={(e) => setForm((f) => ({ ...f, validityDate: e.target.value }))}
-                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" />
-              </div>
-              <div className="md:col-span-2">
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</label>
-                <textarea rows={2} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" />
-              </div>
-            </div>
-            <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-              <button type="button" onClick={() => setShowCreate(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button type="submit" disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-                {saving ? "Saving…" : "Record Offer"}
-              </button>
-            </div>
-          </form>
-        </div>
+        <CreateOfferModal saving={saving} listingFormOptions={listingFormOptions} buyerFormOptions={buyerFormOptions} activeAgentOptions={activeAgentOptions} onClose={() => setShowCreate(false)} onSubmit={handleCreate} />
       )}
 
       {/* Status Update Modal */}
       {showStatus && (
-        <div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-          <form onSubmit={handleStatusUpdate} className="flex w-full max-w-md flex-col bg-white shadow-2xl sm:border sm:border-slate-200 max-h-[92dvh] rounded-t-2xl sm:rounded-none">
-            <div className="flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 bg-slate-800 px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
-              <div>
-                <div className="text-sm font-extrabold uppercase tracking-wide">Update Offer Status</div>
-                <div className="text-xs font-semibold text-white/70">{showStatus.offerNumber} — {showStatus.listing?.title || ""}</div>
-              </div>
-              <button type="button" onClick={() => setShowStatus(null)} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
-            </div>
-            <div className="grid gap-4 overflow-y-auto p-5">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
-                  <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Buyer's Offer</div>
-                  <div className="font-black text-slate-900">{fmtKES(showStatus.offerAmount)}</div>
-                </div>
-                {showStatus.counterOfferAmount ? (
-                  <div className="border border-violet-200 bg-violet-50 px-3 py-2 text-xs">
-                    <div className="text-[10px] font-black uppercase tracking-wider text-violet-500">Current Counter</div>
-                    <div className="font-black text-violet-800">{fmtKES(showStatus.counterOfferAmount)}</div>
-                  </div>
-                ) : (
-                  <div className="border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
-                    <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Asking Price</div>
-                    <div className="font-black text-slate-900">{fmtKES(showStatus.listing?.askingPrice)}</div>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <AppSelect label="New Status *" value={statusForm.status} onChange={(v) => setStatusForm((f) => ({ ...f, status: v ?? "" }))} options={OFFER_STATUS_UPDATE_OPTIONS} placeholder="Select status" size="md" />
-              </div>
-
-              {statusForm.status === "negotiating" && (
-                <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Counter-Offer Amount (KES) *</label>
-                  <AmountInput
-                    value={statusForm.counterOfferAmount}
-                    onChange={(v) => setStatusForm((f) => ({ ...f, counterOfferAmount: v }))}
-                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none"
-                    placeholder="e.g. 5,500,000"
-                  />
-                  {statusForm.counterOfferAmount && showStatus.offerAmount && (
-                    <div className={`mt-1 text-[10px] font-bold ${Number(statusForm.counterOfferAmount) > Number(showStatus.offerAmount) ? "text-rose-500" : "text-emerald-500"}`}>
-                      {Number(statusForm.counterOfferAmount) > Number(showStatus.offerAmount) ? "+" : ""}
-                      {Math.round(((Number(statusForm.counterOfferAmount) - Number(showStatus.offerAmount)) / Number(showStatus.offerAmount)) * 100)}% vs buyer's offer
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {statusForm.status === "accepted" && (
-                <div className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] text-emerald-800">
-                  <span className="font-black">Accepted price: </span>
-                  <span className="font-bold">{fmtKES(showStatus.counterOfferAmount || showStatus.offerAmount)}</span>
-                  {showStatus.counterOfferAmount && <span className="ml-1 opacity-70">(counter offer)</span>}
-                  <div className="mt-1 opacity-80">After accepting, use the <strong>Deal</strong> button to convert this offer into a transaction.</div>
-                </div>
-              )}
-
-              <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</label>
-                <textarea rows={2} value={statusForm.negotiationNotes}
-                  onChange={(e) => setStatusForm((f) => ({ ...f, negotiationNotes: e.target.value }))}
-                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" />
-              </div>
-            </div>
-            <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-              <button type="button" onClick={() => setShowStatus(null)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button type="submit" disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-                {saving ? "Saving…" : "Update Status"}
-              </button>
-            </div>
-          </form>
-        </div>
+        <OfferStatusModal offer={showStatus} saving={saving} onClose={() => setShowStatus(null)} onSubmit={handleStatusUpdate} />
       )}
 
       {/* Convert to Deal Modal */}
       {showConvertDeal && (
-        <div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-          <form onSubmit={handleConvertDeal} className="flex w-full max-w-lg flex-col bg-white shadow-2xl sm:border sm:border-slate-200 max-h-[92dvh] rounded-t-2xl sm:rounded-none">
-            <div className="flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
-              <div>
-                <div className="text-sm font-extrabold uppercase tracking-wide">Convert Offer to Deal</div>
-                <div className="text-xs font-semibold text-white/70">{showConvertDeal.offerNumber} — {showConvertDeal.buyer?.fullName || ""}</div>
-              </div>
-              <button type="button" onClick={() => setShowConvertDeal(null)} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
-            </div>
-            <div className="grid gap-4 overflow-y-auto p-5 md:grid-cols-2">
-              <div className="md:col-span-2">
-                <div className="grid grid-cols-3 gap-2 border border-emerald-200 bg-emerald-50 p-3">
-                  <div className="text-center">
-                    <div className="text-[10px] font-black uppercase tracking-wider text-emerald-500">Asking</div>
-                    <div className="font-black text-emerald-900">{fmtKES(showConvertDeal.listing?.askingPrice)}</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-[10px] font-black uppercase tracking-wider text-emerald-500">Buyer Offered</div>
-                    <div className="font-black text-emerald-900">{fmtKES(showConvertDeal.offerAmount)}</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-[10px] font-black uppercase tracking-wider text-emerald-500">
-                      {showConvertDeal.counterOfferAmount ? "Countered At" : "Agreed"}
-                    </div>
-                    <div className="font-black text-emerald-900">
-                      {fmtKES(showConvertDeal.counterOfferAmount || showConvertDeal.offerAmount)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Final Agreed Price (KES) *</label>
-                <AmountInput
-                  value={dealForm.agreedPrice}
-                  onChange={(v) => setDealForm((f) => ({ ...f, agreedPrice: v }))}
-                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none"
-                  placeholder="Confirmed sale price"
-                  required
-                />
-                <div className="mt-1 text-[10px] text-slate-400">Pre-filled from accepted price. Adjust if a final verbal agreement was reached.</div>
-              </div>
-
-              <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Deal Date *</label>
-                <input type="date" value={dealForm.dealDate}
-                  onChange={(e) => setDealForm((f) => ({ ...f, dealDate: e.target.value }))}
-                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" required />
-              </div>
-              <div>
-                <AppSelect label="Assign Agent" value={dealForm.agent} onChange={(v) => setDealForm((f) => ({ ...f, agent: v ?? "" }))} options={activeAgentOptions} placeholder="Unassigned" size="md" searchable clearable />
-              </div>
-              <div className="md:col-span-2">
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Deal Notes</label>
-                <textarea rows={2} value={dealForm.notes}
-                  onChange={(e) => setDealForm((f) => ({ ...f, notes: e.target.value }))}
-                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" />
-              </div>
-            </div>
-            <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-              <button type="button" onClick={() => setShowConvertDeal(null)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button type="submit" disabled={converting} className="inline-flex items-center gap-1 bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-                <FaHandshake className="text-[9px]" /> {converting ? "Creating…" : "Create Deal"}
-              </button>
-            </div>
-          </form>
-        </div>
+        <ConvertDealModal offer={showConvertDeal} converting={converting} activeAgentOptions={activeAgentOptions} onClose={() => setShowConvertDeal(null)} onSubmit={handleConvertDeal} />
       )}
     </PropertySaleShell>
   );
