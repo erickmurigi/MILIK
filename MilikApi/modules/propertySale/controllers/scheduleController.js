@@ -3,6 +3,7 @@ import { createError } from "../../../utils/error.js";
 import SalePaymentSchedule from "../models/SalePaymentSchedule.js";
 import SaleDeal from "../models/SaleDeal.js";
 import SalePayment from "../models/SalePayment.js";
+import { round2 } from "../../../utils/math.js";
 import { currentUserId, resolveActiveBusinessId } from "../services/businessScope.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
 
@@ -16,6 +17,16 @@ const recomputeStatuses = async (business, dealId) => {
     return { updateOne: { filter: { _id: item._id }, update: { $set: { status: newStatus } } } };
   }).filter(Boolean);
   if (ops.length) await SalePaymentSchedule.bulkWrite(ops);
+};
+
+// Business-wide variant of recomputeStatuses for cross-deal endpoints: two indexed updateMany calls
+// (upcoming past due -> overdue, overdue not yet due -> upcoming). Paid/waived items are never touched.
+const recomputeBusinessStatuses = async (business) => {
+  const now = new Date();
+  await Promise.all([
+    SalePaymentSchedule.updateMany({ business, status: "upcoming", dueDate: { $lt: now } }, { $set: { status: "overdue" } }),
+    SalePaymentSchedule.updateMany({ business, status: "overdue", dueDate: { $gte: now } }, { $set: { status: "upcoming" } }),
+  ]);
 };
 
 export const listSchedule = async (req, res, next) => {
@@ -48,19 +59,28 @@ export const setSchedule = async (req, res, next) => {
     if (!deal) return next(createError(404, "Deal not found"));
     if (deal.status !== "active") return next(createError(400, "Can only set schedule on an active deal"));
 
-    const totalScheduled = items.reduce((s, i) => s + Number(i.expectedAmount || 0), 0);
+    // Paid/waived installments survive the replace, so they count toward the total
+    // and their installment numbers must not be reused by the new items.
+    const retained = await SalePaymentSchedule.find({ business, deal: dealId, status: { $in: ["paid", "waived"] } })
+      .select("installmentNumber expectedAmount").lean();
+    const retainedTotal = retained.reduce((s, r) => s + Number(r.expectedAmount || 0), 0);
+    const maxRetainedNumber = retained.reduce((m, r) => Math.max(m, r.installmentNumber || 0), 0);
+
+    const newTotal = items.reduce((s, i) => s + Number(i.expectedAmount || 0), 0);
+    const totalScheduled = round2(retainedTotal + newTotal);
     if (Math.abs(totalScheduled - deal.agreedPrice) > 1) {
-      return next(createError(400, `Schedule total (${totalScheduled.toLocaleString()}) must equal agreed price (${deal.agreedPrice.toLocaleString()})`));
+      const retainedNote = retained.length ? ` (includes ${retainedTotal.toLocaleString()} from ${retained.length} paid/waived installment${retained.length === 1 ? "" : "s"})` : "";
+      return next(createError(400, `Schedule total (${totalScheduled.toLocaleString()})${retainedNote} must equal agreed price (${deal.agreedPrice.toLocaleString()})`));
     }
 
     const now = new Date();
     const docs = items.map((item, idx) => ({
       business,
       deal:              dealId,
-      installmentNumber: idx + 1,
+      installmentNumber: maxRetainedNumber + idx + 1,
       dueDate:           new Date(item.dueDate),
       expectedAmount:    Number(item.expectedAmount),
-      description:       item.description || `Installment ${idx + 1}`,
+      description:       item.description || `Installment ${maxRetainedNumber + idx + 1}`,
       status:            new Date(item.dueDate) < now ? "overdue" : "upcoming",
       linkedPayment:     null,
       createdBy:         userId,
@@ -144,6 +164,8 @@ export const listAllSchedule = async (req, res, next) => {
       if (dateTo)   filter.dueDate.$lte = new Date(dateTo);
     }
 
+    await recomputeBusinessStatuses(business);
+
     const skip  = (Number(page) - 1) * Number(limit);
     const total = await SalePaymentSchedule.countDocuments(filter);
     const items = await SalePaymentSchedule.find(filter)
@@ -168,6 +190,7 @@ export const listAllSchedule = async (req, res, next) => {
 export const getOverdueSchedule = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    await recomputeBusinessStatuses(business);
     const items = await SalePaymentSchedule.find({ business, status: "overdue" })
       .populate("deal", "dealNumber agreedPrice status")
       .sort({ dueDate: 1 })

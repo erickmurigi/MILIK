@@ -31,5 +31,7 @@ salePaymentSchema.index({ business: 1, deal: 1, status: 1 });
 salePaymentSchema.index({ business: 1, paymentDate: -1 });
 salePaymentSchema.index({ business: 1, buyer: 1 });
 salePaymentSchema.index({ business: 1, deal: 1, paymentType: 1, status: 1 });
+salePaymentSchema.index({ business: 1, paymentType: 1 });
+salePaymentSchema.index({ business: 1, paymentMethod: 1 });
 
 export default mongoose.model("SalePayment", salePaymentSchema);

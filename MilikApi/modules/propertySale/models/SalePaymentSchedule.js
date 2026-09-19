@@ -19,5 +19,6 @@ const scheduleItemSchema = new mongoose.Schema(
 
 scheduleItemSchema.index({ business: 1, deal: 1, installmentNumber: 1 }, { unique: true });
 scheduleItemSchema.index({ business: 1, dueDate: 1, status: 1 });
+scheduleItemSchema.index({ business: 1, status: 1, dueDate: 1 });
 
 export default mongoose.model("SalePaymentSchedule", scheduleItemSchema);

@@ -3,6 +3,7 @@ import { createError } from "../../../utils/error.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import SalePayment from "../models/SalePayment.js";
 import SaleDeal from "../models/SaleDeal.js";
+import { round2 } from "../../../utils/math.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import {
   postPropertySalePaymentLedger,
@@ -37,6 +38,30 @@ const resolveCashbook = async (businessId, cashbookId) => {
     isHeader:  { $ne: true },
   }).lean();
 };
+
+const OVERPAY_TOLERANCE = 0.01;
+const LOCKED_DEAL_STATUSES = ["closed", "cancelled"];
+
+// Sum of a deal's confirmed ("paid") payments, optionally excluding one payment
+const sumPaidForDeal = async (business, dealId, excludePaymentId = null) => {
+  const match = { business: new mongoose.Types.ObjectId(String(business)), deal: dealId, status: "paid" };
+  if (excludePaymentId) match._id = { $ne: excludePaymentId };
+  const [agg] = await SalePayment.aggregate([
+    { $match: match },
+    { $group: { _id: null, total: { $sum: "$amount" } } },
+  ]);
+  return agg?.total || 0;
+};
+
+const overpaymentError = (amount, remaining) =>
+  createError(400, `Payment of ${Number(amount).toLocaleString()} exceeds remaining balance of ${remaining.toLocaleString("en-KE", { minimumFractionDigits: 2 })}`);
+
+// Payments on a closed/cancelled deal cannot be voided or edited: closing/cancelling posts separate
+// deposit-transfer / forfeit GL entries that payment-level reversal does not touch.
+const lockedDealError = (dealStatus, action) =>
+  LOCKED_DEAL_STATUSES.includes(dealStatus)
+    ? createError(409, `Cannot ${action} a payment on a ${dealStatus} deal. Reverse or reopen the deal through the deal workflow first.`)
+    : null;
 
 export const listPayments = async (req, res, next) => {
   try {
@@ -99,17 +124,13 @@ export const createPayment = async (req, res, next) => {
     if (deal.status !== "active") return next(createError(400, "Payments can only be recorded for active deals"));
 
     // Resolve cashbook in parallel with the deal's paid-to-date total — independent lookups
-    const [totalPaidResult, cashbookAcc] = await Promise.all([
-      SalePayment.aggregate([
-        { $match: { business: new mongoose.Types.ObjectId(String(business)), deal: deal._id, status: "paid" } },
-        { $group: { _id: null, total: { $sum: "$amount" } } },
-      ]),
+    const [totalPaid, cashbookAcc] = await Promise.all([
+      sumPaidForDeal(business, deal._id),
       resolveCashbook(business, req.body.cashbook),
     ]);
-    const totalPaid  = totalPaidResult[0]?.total || 0;
-    const remaining  = deal.agreedPrice - totalPaid;
-    if (Number(req.body.amount) > remaining + 0.01) {
-      return next(createError(400, `Payment of ${Number(req.body.amount).toLocaleString()} exceeds remaining balance of ${remaining.toLocaleString("en-KE", { minimumFractionDigits: 2 })}`));
+    const remaining  = round2(deal.agreedPrice - totalPaid);
+    if (Number(req.body.amount) > remaining + OVERPAY_TOLERANCE) {
+      return next(overpaymentError(req.body.amount, remaining));
     }
 
     if (req.body.cashbook && !cashbookAcc) {
@@ -128,6 +149,15 @@ export const createPayment = async (req, res, next) => {
       createdBy: userId,
       updatedBy: userId,
     });
+
+    // The check above is read-then-write, so two concurrent submits can both pass it. Re-check after the
+    // insert (before any GL posting): if the deal is now overpaid, remove this payment and reject.
+    // Worst case under a true race is that both requests are rejected; never that both are kept.
+    const totalAfter = await sumPaidForDeal(business, deal._id);
+    if (round2(totalAfter) > round2(deal.agreedPrice) + OVERPAY_TOLERANCE) {
+      await SalePayment.deleteOne({ _id: payment._id });
+      return next(overpaymentError(payment.amount, round2(deal.agreedPrice - (totalAfter - payment.amount))));
+    }
 
     try {
       await postPropertySalePaymentLedger({
@@ -158,6 +188,8 @@ export const updatePayment = async (req, res, next) => {
     if (!old) return next(createError(404, "Payment not found"));
     if (old.status === "cancelled") return next(createError(400, "Cannot edit a voided payment"));
 
+    const dealForUpdate = await SaleDeal.findOne({ _id: old.deal, business }).select("status agreedPrice").lean();
+
     const {
       business: _b, paymentNumber: _n, createdBy: _c,
       deal: _d, listing: _l, buyer: _by, status: _s,
@@ -175,6 +207,20 @@ export const updatePayment = async (req, res, next) => {
     const dateChanged   = updates.paymentDate !== undefined && new Date(updates.paymentDate).toDateString() !== new Date(old.paymentDate).toDateString();
     const cashbookChanged = String(updates.cashbook || "") !== String(old.cashbook || "");
     const glCorrectionNeeded = amountChanged || dateChanged || cashbookChanged;
+
+    // Only edits that rewrite GL (amount/date/cashbook) are unsafe on a closed/cancelled deal;
+    // descriptive fields (reference, notes) stay editable.
+    const updateLockErr = glCorrectionNeeded && dealForUpdate && lockedDealError(dealForUpdate.status, "edit");
+    if (updateLockErr) return next(updateLockErr);
+
+    // Amount edits must keep the deal's total paid within the agreed price (same rule as createPayment)
+    if (amountChanged && dealForUpdate && old.status === "paid") {
+      const otherPaid = await sumPaidForDeal(business, old.deal, old._id);
+      const remaining = round2(dealForUpdate.agreedPrice - otherPaid);
+      if (Number(updates.amount) > remaining + OVERPAY_TOLERANCE) {
+        return next(overpaymentError(updates.amount, remaining));
+      }
+    }
 
     if (glCorrectionNeeded) {
       // Reverse old GL entries first
@@ -228,6 +274,11 @@ export const voidPayment = async (req, res, next) => {
     const payment = await SalePayment.findOne({ _id: req.params.id, business });
     if (!payment) return next(createError(404, "Payment not found"));
     if (payment.status === "cancelled") return next(createError(400, "Payment is already cancelled/voided"));
+
+    // Closing/cancelling a deal posts separate deposit-transfer/forfeit entries that this void would not reverse
+    const voidDeal = await SaleDeal.findOne({ _id: payment.deal, business }).select("status").lean();
+    const voidLockErr = voidDeal && lockedDealError(voidDeal.status, "void");
+    if (voidLockErr) return next(voidLockErr);
 
     payment.status    = "cancelled";
     payment.updatedBy = userId;
