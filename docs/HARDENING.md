@@ -1,11 +1,12 @@
 # Hardening & Optimization Status
 
 Living status document for the security hardening and system optimization work
-started 2026-09-12/13. Four tracks: bug fixes landed on `main` (Track A), the
+started 2026-09-12/13. Five tracks: bug fixes landed on `main` (Track A), the
 security hotfix (Track B, **merged and deployed**), an unplanned second wave
-of landlord-statement bug fixes found via live user testing (Track D), and
-the whole-codebase optimization audit still awaiting its scoping decision
-(Track C — **not started**, see below).
+of landlord-statement bug fixes found via live user testing (Track D), the
+whole-codebase optimization audit (Track C — **closed**), and a module-by-
+module correctness audit now underway, starting with CarWash (Track E —
+CarWash **closed**, next module TBD).
 
 ---
 
@@ -454,4 +455,52 @@ actually authorized.
 
 ---
 
-*Last updated: 2026-09-18 (Track C fully closed — all 5 items done: `round2` consolidation, Redux refetch-check pattern, `landlordStatementService.js`/`redux/apiCalls.js` decomposition, `*ImportModal.jsx` consolidation + `MilikTable` memoization, and the low-priority cleanup batch, including `controllers/employee.js`'s removal once the permission block was explicitly lifted by the user). Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C as items are actioned.*
+## Track E — CarWash module: correctness audit + fixes (2026-09-19) — CLOSED
+
+Started as the first module of a "module at a time" whole-system
+correctness-then-optimization pass, per explicit user instruction, following
+Track C's full closure. CarWash chosen first as the largest module without a
+dedicated correctness pass (Track B's earlier sweep was security-only).
+
+**Audit.** 3 parallel read-only agents split by domain (money-movement /
+jobs-commissions / loyalty-reports), each instructed to trace and confirm
+every finding against actual code, not guess from function names. 16 findings
+total: 2 CRITICAL, 6 HIGH, 5 MEDIUM, 3 LOW. No CarWash test suite exists
+(confirmed via `find modules/carwash -name "*.test.js"` — empty), so fix
+verification relied on `node --check`, matching established in-file patterns
+exactly, and personal line-by-line diff review before committing — no lint
+config/script exists for the `MilikApi` backend at all (checked and confirmed
+by every fix agent independently).
+
+**Fixes.** 4 parallel fix agents, split by exclusive file ownership (not the
+original 3 audit domains, since 2 files were touched by findings from
+different domains) to avoid worktree-merge conflicts. Agents fixed only their
+assigned findings and did not commit; each diff was independently reviewed
+and traced against the original finding before being applied to `main`.
+
+| Commit | Group | Findings closed |
+|---|---|---|
+| `2845f30` | A — `mpesaCallbackController.js`, `creditAccountsController.js` | 1 (CRITICAL, M-Pesa double-credit race), 2 (HIGH, non-atomic payment balance write), 5 (HIGH, STK overpayment uncapped), 9 (MEDIUM, fire-and-forget overpayment routing), 10 (MEDIUM, STK missing E11000 handling) |
+| `5cb7ea7` | B — `commissionsController.js`, `carwashAccountingService.js` | 3 (HIGH, commission reversal never persisted — silent GL gap), 4 (HIGH, failed payout orphaned savings/damage deductions) |
+| `075e4cf` | C — `jobsController.js`, `paymentsController.js`, `loyaltyController.js`, `commissionService.js` | 7 (HIGH, outstanding-balance tile netted across customers), 11 (MEDIUM, tax rounding bypassed `round2` ×2), 12 (MEDIUM, payment-status comparisons lacked tolerance ×2 files), 13 (MEDIUM, `createJob` status invariant — see caveat below), 14 (LOW, unguarded `$inc` on topup reversal), 15 (HIGH, reward-line price/validity client-trusted) |
+| `fffda50` | D — `reportsController.js` | 6 (CRITICAL, status-bucket missing `drying`/`ready` keys), 8 (HIGH, `staffReport` fanout double-count via `$lookup`+`$unwind`) |
+
+**Caveat on finding 13.** The fix (reject `status: "paid"` at job creation)
+is currently unreachable: the file's local `JOB_STATUSES` allow-list (line
+24) excludes `"paid"` entirely, so a requested status of `"paid"` already
+silently falls back to `"waiting"` before the new check runs — it exactly
+mirrors an identical pre-existing dead check already in `updateJob` (gated
+the same way). The actual bug is a separate divergence between this local
+enum and `CarWashJob.js`'s canonical status enum (which does include
+`"paid"`), flagged as an aside in the original audit but never one of the 16
+assigned findings — not fixed here, left as a known follow-up.
+
+**Not yet done:** no in-browser/manual verification pass on these fixes —
+none is currently planned given the complete absence of a test suite; noting
+this explicitly rather than claiming coverage that doesn't exist.
+
+Next module in the "module at a time" sequence not yet decided with the user.
+
+---
+
+*Last updated: 2026-09-19 (Track E closed — CarWash module correctness audit: 16 findings found and fixed across 4 commits, see above). Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C/E as items are actioned.*
