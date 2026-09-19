@@ -219,52 +219,78 @@ export const createCommissionPayout = async (req, res, next) => {
       }
     }
 
-    // Deduct savings for days elapsed since last deduction
-    const savingsHeld = await deductSavingsForPayout({
-      businessId:         business,
-      staffId:            staff,
-      commissionPayoutId: payout._id,
-      commissionAmount,
-      payoutDate:         payoutBase.payoutDate,
-      branch:             branchId || null,
-    });
+    // Deduct savings/damages and finalize the payout as one unit. If any step
+    // from here on fails, compensate by reversing whichever deductions were
+    // already applied against this payout and discard the incomplete payout
+    // record, so a failure never leaves the staff member short without a
+    // completed payout (no Mongoose session pattern exists in this module to
+    // wrap these calls in a real transaction — see savingsService/damagesService).
+    let savingsHeld = 0;
+    let damagesHeld = 0;
+    let netCash = commissionAmount;
+    try {
+      // Deduct savings for days elapsed since last deduction
+      savingsHeld = await deductSavingsForPayout({
+        businessId:         business,
+        staffId:            staff,
+        commissionPayoutId: payout._id,
+        commissionAmount,
+        payoutDate:         payoutBase.payoutDate,
+        branch:             branchId || null,
+      });
 
-    // Hold pending damage deductions (capped so staff cannot go below zero)
-    const damagesHeld = await holdDamagesForPayout({
-      businessId: business,
-      staffId: staff,
-      commissionPayoutId: payout._id,
-      commissionAmount,
-      alreadyDeducted: savingsHeld,
-    });
+      // Hold pending damage deductions (capped so staff cannot go below zero)
+      damagesHeld = await holdDamagesForPayout({
+        businessId: business,
+        staffId: staff,
+        commissionPayoutId: payout._id,
+        commissionAmount,
+        alreadyDeducted: savingsHeld,
+      });
 
-    const netCash = round2(commissionAmount - savingsHeld - damagesHeld);
+      netCash = round2(commissionAmount - savingsHeld - damagesHeld);
 
-    // Persist breakdown on the payout record
-    if (savingsHeld > 0 || damagesHeld > 0) {
-      payout.savingsHeld  = savingsHeld;
-      payout.damagesHeld  = damagesHeld;
-      payout.netCash      = netCash;
-      await payout.save();
-      await postCarWashCommissionPayoutWithSavings({ req, payout, cashbookAccount, commissionAmount, netCash, savingsHeld, damagesHeld });
-    } else {
-      payout.netCash = commissionAmount;
-      await payout.save();
-      await postCarWashCommissionPayout({ req, payout, cashbookAccount });
-    }
-
-    await CarWashStaffCommission.updateMany(
-      { _id: { $in: commissions.map((item) => item._id) }, business },
-      {
-        $set: {
-          status: "paid",
-          paidAt: payout.payoutDate,
-          payout: payout._id,
-          payoutLedgerEntries: payout.ledgerEntries,
-          updatedBy: currentUserId(req),
-        },
+      // Persist breakdown on the payout record
+      if (savingsHeld > 0 || damagesHeld > 0) {
+        payout.savingsHeld  = savingsHeld;
+        payout.damagesHeld  = damagesHeld;
+        payout.netCash      = netCash;
+        await payout.save();
+        await postCarWashCommissionPayoutWithSavings({ req, payout, cashbookAccount, commissionAmount, netCash, savingsHeld, damagesHeld });
+      } else {
+        payout.netCash = commissionAmount;
+        await payout.save();
+        await postCarWashCommissionPayout({ req, payout, cashbookAccount });
       }
-    );
+
+      await CarWashStaffCommission.updateMany(
+        { _id: { $in: commissions.map((item) => item._id) }, business },
+        {
+          $set: {
+            status: "paid",
+            paidAt: payout.payoutDate,
+            payout: payout._id,
+            payoutLedgerEntries: payout.ledgerEntries,
+            updatedBy: currentUserId(req),
+          },
+        }
+      );
+    } catch (payoutErr) {
+      // Best-effort compensation for whichever deductions were already applied
+      // against this now-abandoned payout, mirroring reverseCommissionPayout's
+      // rollback of the same records.
+      if (savingsHeld > 0) {
+        await CarWashStaffSaving.updateMany(
+          { business, commissionPayout: payout._id, type: "deduction" },
+          { $set: { isReversed: true, reversedAt: new Date(), reversedBy: currentUserId(req) } }
+        ).catch(() => {});
+      }
+      if (damagesHeld > 0) {
+        await releaseDamagesForPayout(business, payout._id).catch(() => {});
+      }
+      await CarWashCommissionPayout.deleteOne({ _id: payout._id }).catch(() => {});
+      throw payoutErr;
+    }
 
     const messageParts = [];
     if (savingsHeld > 0) messageParts.push(`Ksh ${savingsHeld.toLocaleString()} held to savings`);

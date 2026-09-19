@@ -635,8 +635,10 @@ export const postCarWashSavingsDisbursement = async ({ req, savingsRecord, cashb
 
 // ─── Commission accrual reversal ──────────────────────────────────────────────
 /**
- * Reverses existing accrual ledger entries in-place.
- * Modifies `commission` in memory — caller must save afterward.
+ * Reverses existing accrual ledger entries and persists the updated commission.
+ * Modifies `commission` in memory and calls commission.save() before returning,
+ * so the cleared accrualLedgerEntries are durable and postCarWashCommissionAccrual's
+ * idempotency guard sees the correct (reversed) state on a subsequent re-accrual.
  */
 export const reverseCarWashCommissionAccrual = async ({ req, commission }) => {
   if (!Array.isArray(commission.accrualLedgerEntries) || !commission.accrualLedgerEntries.length) return;
@@ -666,6 +668,7 @@ export const reverseCarWashCommissionAccrual = async ({ req, commission }) => {
       ...reversalIds,
     ];
   }
+  await commission.save();
   if (accountIds.size) await aggregateChartOfAccountBalances(commission.business, [...accountIds]);
 };
 
