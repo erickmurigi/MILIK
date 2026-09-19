@@ -92,5 +92,7 @@ carWashJobSchema.index({ business: 1, plateNumber: 1, createdAt: -1 });
 carWashJobSchema.index({ business: 1, status: 1, paymentStatus: 1, createdAt: -1 });
 carWashJobSchema.index({ business: 1, isVoucher: 1, createdAt: -1 });
 carWashJobSchema.index({ business: 1, payLater: 1, status: 1, createdAt: -1 });
+// Supports listJobs' service filter $or branch matching multi-line jobs
+carWashJobSchema.index({ business: 1, "serviceLines.service": 1, createdAt: -1 });
 
 export default mongoose.model("CarWashJob", carWashJobSchema);

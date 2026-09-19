@@ -319,8 +319,30 @@ export const createJob = async (req, res, next) => {
     if (discountAmount > totalPrice) {
       return next(createError(400, "Discount cannot exceed the total job price"));
     }
+
+    // Derive assignedStaff from service lines' per-line staff. Falls back to
+    // req.body.assignedStaff for backward-compatibility with old clients.
+    const derivedStaffIds = [...new Set(
+      serviceLines.flatMap(l => Array.isArray(l.lineStaff) ? l.lineStaff : []).filter(Boolean)
+    )];
+    const staffSource = derivedStaffIds.length ? derivedStaffIds : (req.body.assignedStaff || []);
+
+    const rawAccountId = req.body.creditAccount;
+    const wantsCreditAccountLookup = Boolean(rawAccountId && mongoose.Types.ObjectId.isValid(String(rawAccountId)));
+
+    // Company discount settings, staff validation, and credit-account lookup are all
+    // independent of one another â€” batch them.
+    const [biz, assignedStaff, acc] = await Promise.all([
+      discountAmount > 0 ? Company.findById(business).select("carwashSettings").lean() : Promise.resolve(null),
+      assertStaffArrayBelongsToBusiness(business, staffSource),
+      wantsCreditAccountLookup
+        ? CarWashCreditAccount.findOne({ _id: String(rawAccountId), business, status: "active" })
+            .select("_id accountType contactPerson accountNumber")
+            .lean()
+        : Promise.resolve(null),
+    ]);
+
     if (discountAmount > 0) {
-      const biz = await Company.findById(business).select("carwashSettings").lean();
       const minPrice = Number(biz?.carwashSettings?.discountMinJobPrice ?? 0);
       const maxPct   = Number(biz?.carwashSettings?.discountMaxPercent  ?? 0);
       if (minPrice > 0 && totalPrice <= minPrice) {
@@ -334,14 +356,6 @@ export const createJob = async (req, res, next) => {
       }
     }
 
-    // Derive assignedStaff from service lines' per-line staff. Falls back to
-    // req.body.assignedStaff for backward-compatibility with old clients.
-    const derivedStaffIds = [...new Set(
-      serviceLines.flatMap(l => Array.isArray(l.lineStaff) ? l.lineStaff : []).filter(Boolean)
-    )];
-    const staffSource = derivedStaffIds.length ? derivedStaffIds : (req.body.assignedStaff || []);
-    const assignedStaff = await assertStaffArrayBelongsToBusiness(business, staffSource);
-
     const userId = currentUserId(req);
     const ctxBranch = resolveActiveBranchId(req);
     const bodyBranch = req.body.branch && mongoose.Types.ObjectId.isValid(String(req.body.branch)) ? String(req.body.branch) : null;
@@ -352,11 +366,7 @@ export const createJob = async (req, res, next) => {
     let resolvedCreditAccount = null;
     let resolvedCreditAccountType = null;
     let resolvedCreditAccountCompanyName = "";
-    const rawAccountId = req.body.creditAccount;
-    if (rawAccountId && mongoose.Types.ObjectId.isValid(String(rawAccountId))) {
-      const acc = await CarWashCreditAccount.findOne({ _id: String(rawAccountId), business, status: "active" })
-        .select("_id accountType contactPerson accountNumber")
-        .lean();
+    if (wantsCreditAccountLookup) {
       if (!acc) return next(createError(400, "Credit account not found or not active"));
       resolvedCreditAccount = acc._id;
       resolvedCreditAccountType = acc.accountType;
@@ -558,7 +568,23 @@ export const updateJob = async (req, res, next) => {
     )];
     const rawStaff = derivedStaffIds.length ? derivedStaffIds
       : (req.body.assignedStaff !== undefined ? req.body.assignedStaff : existing.assignedStaff);
-    const assignedStaff = await assertStaffArrayBelongsToBusiness(business, rawStaff);
+
+    const updatedDiscount = round2(Math.max(0, Number(req.body.discountAmount ?? existing.discountAmount ?? 0)));
+
+    const wantsCreditAccountUpdate = existing.jobType === "vehicle" && req.body.creditAccount !== undefined;
+    const rawAccountId = req.body.creditAccount;
+    const wantsCreditAccountLookup = wantsCreditAccountUpdate && Boolean(rawAccountId && mongoose.Types.ObjectId.isValid(String(rawAccountId)));
+
+    // Staff validation, discount-settings lookup, and credit-account lookup are independent â€” batch them.
+    const [assignedStaff, biz, acc] = await Promise.all([
+      assertStaffArrayBelongsToBusiness(business, rawStaff),
+      updatedDiscount > 0 ? Company.findById(business).select("carwashSettings").lean() : Promise.resolve(null),
+      wantsCreditAccountLookup
+        ? CarWashCreditAccount.findOne({ _id: String(rawAccountId), business, status: "active" })
+            .select("_id accountType contactPerson accountNumber")
+            .lean()
+        : Promise.resolve(null),
+    ]);
 
     const status = String(req.body.status || existing.status).toLowerCase();
     if (!JOB_STATUSES.has(status)) return next(createError(400, "Invalid Car Wash job status"));
@@ -585,15 +611,11 @@ export const updateJob = async (req, res, next) => {
       }
     }
 
-    if (existing.jobType === "vehicle" && req.body.creditAccount !== undefined) {
+    if (wantsCreditAccountUpdate) {
       if (existing.paymentStatus === "paid") {
         return next(createError(400, "Credit account cannot be changed on a paid job"));
       }
-      const rawAccountId = req.body.creditAccount;
-      if (rawAccountId && mongoose.Types.ObjectId.isValid(String(rawAccountId))) {
-        const acc = await CarWashCreditAccount.findOne({ _id: String(rawAccountId), business, status: "active" })
-          .select("_id accountType contactPerson accountNumber")
-          .lean();
+      if (wantsCreditAccountLookup) {
         if (!acc) return next(createError(400, "Credit account not found or not active"));
         existing.creditAccount = acc._id;
         existing.isVoucher = acc.accountType === "voucher";
@@ -605,12 +627,10 @@ export const updateJob = async (req, res, next) => {
       }
     }
 
-    const updatedDiscount = round2(Math.max(0, Number(req.body.discountAmount ?? existing.discountAmount ?? 0)));
     if (updatedDiscount > totalPrice) {
       return next(createError(400, "Discount cannot exceed the total job price"));
     }
     if (updatedDiscount > 0) {
-      const biz = await Company.findById(business).select("carwashSettings").lean();
       const minPrice = Number(biz?.carwashSettings?.discountMinJobPrice ?? 0);
       const maxPct   = Number(biz?.carwashSettings?.discountMaxPercent  ?? 0);
       if (minPrice > 0 && totalPrice <= minPrice) {

@@ -26,15 +26,17 @@ const ensureService = async (business, serviceId) => {
   return service._id;
 };
 
+// Selects branch too (not just _id) so callers that also need the staff's branch
+// (e.g. createCommissionPayout) can reuse this doc instead of re-querying it.
 const ensureStaff = async (business, staffId, required = false) => {
   if (!staffId) {
     if (required) throw createError(400, "Select staff");
     return null;
   }
   if (!mongoose.Types.ObjectId.isValid(String(staffId))) throw createError(400, "Invalid staff member");
-  const staff = await CarWashStaff.findOne({ _id: staffId, business }).select("_id").lean();
+  const staff = await CarWashStaff.findOne({ _id: staffId, business }).select("_id branch").lean();
   if (!staff) throw createError(400, "Staff member does not belong to this company");
-  return staff._id;
+  return staff;
 };
 
 export const listCommissionRules = async (req, res, next) => {
@@ -71,7 +73,7 @@ export const upsertCommissionRule = async (req, res, next) => {
     if (!Number.isFinite(rate) || rate < 0) return next(createError(400, "Commission rate must be zero or more"));
     if (commissionType === "percentage" && rate > 100) return next(createError(400, "Percentage rate cannot exceed 100%"));
 
-    const [service, staff] = await Promise.all([
+    const [service, staffDoc] = await Promise.all([
       ensureService(business, req.body.service),
       ensureStaff(business, req.body.staff),
     ]);
@@ -80,7 +82,7 @@ export const upsertCommissionRule = async (req, res, next) => {
       business,
       name,
       service,
-      staff,
+      staff: staffDoc?._id || null,
       commissionType,
       rate,
       active: req.body.active !== false,
@@ -132,7 +134,7 @@ export const listCommissions = async (req, res, next) => {
         .populate("job", "jobNumber plateNumber customerName status paymentStatus price")
         .populate("service", "name category vehicleType")
         .populate("rule", "name commissionType rate")
-        .sort({ earnedAt: -1, createdAt: -1 })
+        .sort({ earnedAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
@@ -158,20 +160,24 @@ export const listCommissions = async (req, res, next) => {
 };
 
 export const createCommissionPayout = async (req, res, next) => {
+  // Declared here (not inside the try) so the catch block's rollback below can see it
+  // even if the try block throws after it was assigned.
+  let commissionIds;
   try {
     const business = resolveActiveBusinessId(req);
-    const staff = await ensureStaff(business, req.body.staff, true);
+    const staffDoc = await ensureStaff(business, req.body.staff, true);
+    const staff = staffDoc._id;
     const ids = Array.isArray(req.body.commissionIds)
       ? req.body.commissionIds.filter((id) => mongoose.Types.ObjectId.isValid(String(id)))
       : [];
     if (!ids.length) return next(createError(400, "Select at least one payable commission"));
 
-    const commissions = await CarWashStaffCommission.find({ _id: { $in: ids }, business, staff, status: "payable" });
+    const commissions = await CarWashStaffCommission.find({ _id: { $in: ids }, business, staff, status: "payable" }).lean();
     if (!commissions.length) return next(createError(400, "No payable commissions were found for this staff member"));
     if (commissions.length !== ids.length) return next(createError(400, "Some selected commissions are not payable for this staff member"));
 
     // Atomically flip status to "in_payout" to prevent concurrent double-payout
-    const commissionIds = commissions.map(c => c._id);
+    commissionIds = commissions.map(c => c._id);
     const flipped = await CarWashStaffCommission.updateMany(
       { _id: { $in: commissionIds }, business, staff, status: "payable" },
       { $set: { status: "in_payout" } }
@@ -189,7 +195,7 @@ export const createCommissionPayout = async (req, res, next) => {
     const cashbookAccount = await resolvePayoutCashbook(business, req.body.cashbookAccount);
     const now = req.body.payoutDate ? new Date(req.body.payoutDate) : new Date();
     const ctxBranch = resolveActiveBranchId(req);
-    const staffDoc = ctxBranch ? null : await CarWashStaff.findOne({ _id: req.body.staff, business }).select("branch").lean();
+    // staffDoc was already fetched (with branch) by ensureStaff above â€” no need to re-query it.
     const branchId = ctxBranch || staffDoc?.branch || null;
 
     const manualPayoutNumber = String(req.body.payoutNumber || "").trim();
@@ -344,7 +350,7 @@ export const listCommissionPayouts = async (req, res, next) => {
         .populate("staff", "name phone role")
         .populate("cashbookAccount", "code name")
         .populate("branch", "name")
-        .sort({ payoutDate: -1, createdAt: -1 })
+        .sort({ payoutDate: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
@@ -592,7 +598,7 @@ export const listSavings = async (req, res, next) => {
     const [records, total] = await Promise.all([
       CarWashStaffSaving.find(filter)
         .populate("staff", "name phone role")
-        .sort({ savingsDate: -1, date: -1, createdAt: -1 })
+        .sort({ savingsDate: -1, date: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .lean(),

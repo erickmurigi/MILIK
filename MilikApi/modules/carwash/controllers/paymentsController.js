@@ -52,10 +52,13 @@ const effectivePaidAggregation = [
   { $group: { _id: "$job", paid: { $sum: { $add: ["$amount", { $ifNull: ["$discountAmount", 0] }] } } } },
 ];
 
-const refreshJobPaymentStatus = async (business, jobId) => {
+// preloadedJob: optional already-hydrated CarWashJob document (for the same business/jobId)
+// so callers that already loaded it don't force a redundant findOne here. The paid-to-date
+// aggregate is always re-run â€” that re-check is what keeps this safe under concurrent payments.
+const refreshJobPaymentStatus = async (business, jobId, preloadedJob = null) => {
   const jobOid = new mongoose.Types.ObjectId(String(jobId));
   const [job, totals] = await Promise.all([
-    CarWashJob.findOne({ _id: jobOid, business }),
+    preloadedJob ? Promise.resolve(preloadedJob) : CarWashJob.findOne({ _id: jobOid, business }),
     CarWashPayment.aggregate([
       { $match: { business: new mongoose.Types.ObjectId(String(business)), job: jobOid } },
       ...effectivePaidAggregation,
@@ -119,7 +122,7 @@ export const listPayments = async (req, res, next) => {
         .populate("cashbookAccount", "code name type subGroup")
         .populate("receivedBy", "name username email")
         .populate("branch", "name")
-        .sort({ paymentDate: -1, createdAt: -1 })
+        .sort({ paymentDate: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
@@ -142,7 +145,8 @@ export const recordPayment = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const jobId = req.body.job || req.params.jobId;
-    const job = await CarWashJob.findOne({ _id: jobId, business }).lean();
+    // Hydrated (not .lean()) so it can be reused by refreshJobPaymentStatus below without a second fetch.
+    const job = await CarWashJob.findOne({ _id: jobId, business });
     if (!job) return next(createError(404, "Car Wash job not found"));
     if (job.status === "cancelled") return next(createError(400, "Cannot record payment for a cancelled Car Wash job"));
 
@@ -163,10 +167,24 @@ export const recordPayment = async (req, res, next) => {
     }
     const effectiveAmount = round2(amount + discountAmount);
 
-    const paidRows = await CarWashPayment.aggregate([
-      { $match: { business: job.business, job: job._id } },
-      ...effectivePaidAggregation,
-    ]).allowDiskUse(true);
+    const method = String(req.body.method || "cash").trim().toLowerCase();
+    if (!PAYMENT_METHODS.has(method)) return next(createError(400, "Invalid Car Wash payment method"));
+
+    // Idempotency: reject duplicate M-Pesa transaction codes
+    const mpesaRef = method === "mpesa" ? String(req.body.reference || "").trim() : "";
+
+    // Paid-to-date aggregate, duplicate M-Pesa reference check, and cashbook account
+    // resolution are independent of one another â€” batch them.
+    const [paidRows, duplicateMpesaPayment, cashbookAccount] = await Promise.all([
+      CarWashPayment.aggregate([
+        { $match: { business: job.business, job: job._id } },
+        ...effectivePaidAggregation,
+      ]).allowDiskUse(true),
+      mpesaRef ? CarWashPayment.findOne({ business, method: "mpesa", reference: mpesaRef }).lean() : Promise.resolve(null),
+      resolveCashbookAccount(business, req.body.cashbookAccount),
+    ]);
+    if (mpesaRef && duplicateMpesaPayment) return next(createError(409, `M-Pesa code ${mpesaRef} has already been recorded`));
+
     const alreadyPaid = Number(paidRows?.[0]?.paid || 0);
     const outstanding = Math.max(netJobPrice(job) - alreadyPaid, 0);
     if (outstanding <= 0) return next(createError(400, "Car Wash job is already fully paid"));
@@ -175,18 +193,6 @@ export const recordPayment = async (req, res, next) => {
     // and CarWashCustomerCredit.customer is required. Carpet-job overpayments are kept as revenue.
     const creditAmount = effectiveAmount > outstanding + AMOUNT_TOLERANCE && job.plateNumber
       ? round2(effectiveAmount - outstanding) : 0;
-
-    const method = String(req.body.method || "cash").trim().toLowerCase();
-    if (!PAYMENT_METHODS.has(method)) return next(createError(400, "Invalid Car Wash payment method"));
-
-    // Idempotency: reject duplicate M-Pesa transaction codes
-    const mpesaRef = method === "mpesa" ? String(req.body.reference || "").trim() : "";
-    if (mpesaRef) {
-      const existing = await CarWashPayment.findOne({ business, method: "mpesa", reference: mpesaRef }).lean();
-      if (existing) return next(createError(409, `M-Pesa code ${mpesaRef} has already been recorded`));
-    }
-
-    const cashbookAccount = await resolveCashbookAccount(business, req.body.cashbookAccount);
 
     // For M-Pesa manual entries the staff can record the payer's number.
     // This is used as the SMS target so confirmation always reaches whoever paid.
@@ -213,10 +219,10 @@ export const recordPayment = async (req, res, next) => {
       createdBy: userId,
       updatedBy: userId,
     });
-    const { job: updatedJob, paidAmount: totalEffectivePaid } = await refreshJobPaymentStatus(business, job._id);
+    const { job: updatedJob, paidAmount: totalEffectivePaid } = await refreshJobPaymentStatus(business, job._id, job);
 
     // Persist M-Pesa payer phone in-memory now (needed by accrual + SMS below).
-    // The DB writes and commission accrual are independent â€” run in parallel.
+    // The DB writes, commission accrual, and ledger posting are independent â€” run in parallel.
     if (receivedFromPhone) updatedJob.phone = receivedFromPhone;
 
     await Promise.all([
@@ -229,6 +235,7 @@ export const recordPayment = async (req, res, next) => {
           ])
         : Promise.resolve(),
       accrueCommissionForJob({ req, job: updatedJob }),
+      postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbookAccount, job: updatedJob, userId, creditAmount, taxAmount: Number(job.taxAmount || 0), jobPrice: Number(job.price || 0) }),
     ]);
 
     if (updatedJob.paymentStatus === "paid") {
@@ -251,7 +258,6 @@ export const recordPayment = async (req, res, next) => {
       const cashMasked = !receivedFromPhone ? (updatedJob.maskedMsisdn || null) : null;
       await sendPaymentConfirmationSms({ business, job: updatedJob, amount, overridePhone: receivedFromPhone || null, maskedMsisdn: cashMasked, loyaltySmsBody });
     })().catch((err) => console.error("[CW Payment] SMS failed job=%s: %s", updatedJob.jobNumber, err?.message || err));
-    await postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbookAccount, job: updatedJob, userId, creditAmount, taxAmount: Number(job.taxAmount || 0), jobPrice: Number(job.price || 0) });
 
     // If customer overpaid, create the credit document synchronously so ledger + document stay in sync.
     // SMS notification is still fire-and-forget (it cannot block the payment response).
@@ -445,17 +451,35 @@ export const initiateStkPush = async (req, res, next) => {
     if (!jobId) return next(createError(400, "jobId is required for STK push"));
 
     const business = resolveActiveBusinessId(req);
-    const job = await CarWashJob.findOne({ _id: jobId, business }).lean();
+    // job (needs jobId) and company (needs only business) are independent â€” batch them.
+    const [job, company] = await Promise.all([
+      CarWashJob.findOne({ _id: jobId, business }).lean(),
+      Company.findById(business).select("paymentIntegration").lean(),
+    ]);
     if (!job) return next(createError(404, "Job not found"));
 
-    const company = await Company.findById(business).select("paymentIntegration").lean();
     const configs = getRawMpesaPaybillConfigs(company?.paymentIntegration);
     const primaryConfig = getPrimaryMpesaPaybillConfig(configs);
     let config = primaryConfig;
 
+    // The branch-paybill lookup, the recent-pending guard, and the paid-to-date aggregate
+    // are all independent of one another once the job is loaded â€” batch them.
+    const [branchDoc, recentPending, paidRows] = await Promise.all([
+      job.branch ? CarWashBranch.findById(job.branch).select("mpesaShortCode").lean() : Promise.resolve(null),
+      CarWashMpesaNotification.findOne({
+        business,
+        matchedJob: job._id,
+        status: "stk_pending",
+        createdAt: { $gte: new Date(Date.now() - 60_000) },
+      }).lean(),
+      CarWashPayment.aggregate([
+        { $match: { business: new mongoose.Types.ObjectId(String(business)), job: job._id } },
+        { $group: { _id: "$job", paid: { $sum: { $add: ["$amount", { $ifNull: ["$discountAmount", 0] }] } } } },
+      ]).allowDiskUse(true),
+    ]);
+
     // Use the branch's own paybill when available â€” fall back to primary if the branch config is incomplete
     if (job.branch) {
-      const branchDoc = await CarWashBranch.findById(job.branch).select("mpesaShortCode").lean();
       const branchCode = String(branchDoc?.mpesaShortCode || "").trim();
       if (branchCode) {
         const branchConfig = configs.find((c) => String(c?.shortCode || "").trim() === branchCode);
@@ -478,21 +502,11 @@ export const initiateStkPush = async (req, res, next) => {
     }
 
     // STK idempotency guard: prevent duplicate prompts for the same job within 60 s
-    const recentPending = await CarWashMpesaNotification.findOne({
-      business,
-      matchedJob: job._id,
-      status: "stk_pending",
-      createdAt: { $gte: new Date(Date.now() - 60_000) },
-    }).lean();
     if (recentPending) {
       return res.status(409).json({ success: false, message: "An M-Pesa prompt was already sent â€” please wait for the customer to respond before retrying." });
     }
 
     // Validate requested amount does not exceed outstanding balance
-    const paidRows = await CarWashPayment.aggregate([
-      { $match: { business: new mongoose.Types.ObjectId(String(business)), job: job._id } },
-      { $group: { _id: "$job", paid: { $sum: { $add: ["$amount", { $ifNull: ["$discountAmount", 0] }] } } } },
-    ]).allowDiskUse(true);
     const alreadyPaid = Number(paidRows?.[0]?.paid || 0);
     const stkAmount = Math.ceil(Number(amount));
     const outstandingForStkCheck = round2(Math.max(0, netJobPrice(job) - alreadyPaid));
