@@ -354,8 +354,8 @@ const CarWashDeposits = () => {
           </tbody>
         </table>
         </div>{/* end scroll */}
-        </div>{/* end desktop table wrapper */}
-        )}
+        </div>
+        )}{/* end desktop table wrapper */}
         <PaginationBar
           page={pagination.page}
           pages={pagination.pages}
