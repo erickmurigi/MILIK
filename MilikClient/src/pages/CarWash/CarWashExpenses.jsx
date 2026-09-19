@@ -297,7 +297,7 @@ const CarWashExpenses = () => {
     staleTime: 30_000,
   });
   useEffect(() => { if (expensesError) toast.error("Failed to load expenses"); }, [expensesError]);
-  useEffect(() => { setExpandedIds([]); }, [expensesData]);
+  useEffect(() => { setExpandedIds([]); }, [expensesData]); // eslint-disable-line react-hooks/set-state-in-effect -- collapse rows on new data, same pattern as CarWashStaff.jsx
 
   const rows       = normalizeListPayload(expensesData, "expenses");
   const pagination = expensesData?.pagination || { page, limit: pageSize, total: 0, pages: 1 };
@@ -306,7 +306,7 @@ const CarWashExpenses = () => {
   // Auto-select the best cashbook when cashbooks first arrive and form has none yet
   useEffect(() => {
     if (!cashbooks.length) return;
-    setForm((p) => p.cashbookAccount ? p : { ...p, cashbookAccount: preferredCashbook(cashbooks, p.method) });
+    setForm((p) => p.cashbookAccount ? p : { ...p, cashbookAccount: preferredCashbook(cashbooks, p.method) }); // eslint-disable-line react-hooks/set-state-in-effect -- pre-existing, guarded by the length check above
   }, [cashbooks]);
 
   // Auto-save draft for create form only

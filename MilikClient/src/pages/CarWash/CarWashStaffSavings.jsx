@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
@@ -111,7 +111,7 @@ const CarWashStaffSavings = () => {
     staleTime: 5 * 60_000,
     select: (data) => Array.isArray(data) ? data : normalizeListPayload(data, "accounts"),
   });
-  const cashbooks = cashbooksRaw ?? [];
+  const cashbooks = useMemo(() => cashbooksRaw ?? [], [cashbooksRaw]);
 
   const { data: settingsRaw } = useQuery({
     queryKey: ["cw-savings-settings", currentCompany?._id],
@@ -195,7 +195,7 @@ const CarWashStaffSavings = () => {
       return b;
     });
     setDetailPage(1);
-  }, []);
+  }, [setDetailPage, setSelectedStaff]);
   const handleDetailDateChange = (field, val) => {
     if (field === "from") setDetailFrom(val); else setDetailTo(val);
     setDetailPage(1);

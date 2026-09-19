@@ -876,7 +876,7 @@ export default function CarWashMpesaNotifications() {
   const [reverseTarget, setReverseTarget]   = useState(null);
 
   const company   = useSelector(selectCurrentCompany);
-  const paybills  = company?.paymentIntegration?.mpesaPaybills || [];
+  const paybills  = useMemo(() => company?.paymentIntegration?.mpesaPaybills || [], [company]);
 
   const [filters, setFilters] = useTabState("/carwash/mpesa-notifications:filters", { status: "", shortCode: "", plate: "", search: "", dateFrom: todayISO(), dateTo: todayISO() });
   const [applied, setApplied] = useTabState("/carwash/mpesa-notifications:applied", { status: "", shortCode: "", plate: "", search: "", dateFrom: todayISO(), dateTo: todayISO() });
