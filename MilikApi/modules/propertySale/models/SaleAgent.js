@@ -24,6 +24,7 @@ const saleAgentSchema = new mongoose.Schema(
 
 saleAgentSchema.index({ business: 1, agentNumber: 1 }, { unique: true });
 saleAgentSchema.index({ business: 1, status: 1 });
+saleAgentSchema.index({ business: 1, createdAt: -1 });
 saleAgentSchema.index({ fullName: "text", agentNumber: "text", phone: "text", email: "text" }, { default_language: "none" });
 
 export default mongoose.model("SaleAgent", saleAgentSchema);

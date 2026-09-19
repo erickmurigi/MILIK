@@ -38,6 +38,10 @@ const saleDealSchema = new mongoose.Schema(
 
 saleDealSchema.index({ business: 1, dealNumber: 1 }, { unique: true });
 saleDealSchema.index({ business: 1, status: 1, createdAt: -1 });
+// Unfiltered list/dashboard sort by newest, and report date-window filters
+saleDealSchema.index({ business: 1, createdAt: -1 });
+saleDealSchema.index({ business: 1, dealDate: -1 });
+saleDealSchema.index({ business: 1, actualClosingDate: 1 });
 saleDealSchema.index({ business: 1, listing: 1 });
 saleDealSchema.index({ business: 1, buyer: 1 });
 saleDealSchema.index({ business: 1, agent: 1 });

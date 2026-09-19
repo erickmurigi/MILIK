@@ -30,6 +30,7 @@ const saleLeadSchema = new mongoose.Schema(
 
 saleLeadSchema.index({ business: 1, leadNumber: 1 }, { unique: true });
 saleLeadSchema.index({ business: 1, status: 1, createdAt: -1 });
+saleLeadSchema.index({ business: 1, createdAt: -1 });
 saleLeadSchema.index({ business: 1, assignedAgent: 1 });
 saleLeadSchema.index({ business: 1, nextFollowUpDate: 1 });
 saleLeadSchema.index(
