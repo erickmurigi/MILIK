@@ -1,12 +1,13 @@
 # Hardening & Optimization Status
 
 Living status document for the security hardening and system optimization work
-started 2026-09-12/13. Five tracks: bug fixes landed on `main` (Track A), the
+started 2026-09-12/13. Six tracks: bug fixes landed on `main` (Track A), the
 security hotfix (Track B, **merged and deployed**), an unplanned second wave
 of landlord-statement bug fixes found via live user testing (Track D), the
 whole-codebase optimization audit (Track C — **closed**), and a module-by-
-module correctness audit now underway, starting with CarWash (Track E —
-CarWash **closed**, next module TBD).
+module correctness-then-performance pass now underway, starting with CarWash
+(Track E correctness **closed**, Track F performance **closed**; next module
+TBD).
 
 ---
 
@@ -503,4 +504,75 @@ Next module in the "module at a time" sequence not yet decided with the user.
 
 ---
 
-*Last updated: 2026-09-19 (Track E closed — CarWash module correctness audit: 16 findings found and fixed across 4 commits, see above). Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C/E as items are actioned.*
+## Track F — CarWash module: full performance pass (2026-09-19) — CLOSED
+
+Ran immediately after Track E, per explicit user instruction to do the
+module's optimization "100% fully" with no backlog left — unlike Track C,
+which deliberately left most of its `MilikTable`/file-size findings as
+logged backlog, every finding from this audit was fixed.
+
+**Audit.** 6 parallel read-only agents (3 backend domains, 3 frontend
+domains) covering all 65 backend files and 31 frontend files in the module.
+62 real findings after discarding 2 stale ones (see below): N+1 queries,
+missing/mismatched indexes, unbatched independent awaits, missing `.lean()`,
+unbounded list endpoints, React-memo-defeating inline props, missing
+memoization, unbounded polling, and a few incidental correctness bugs found
+along the way (a dead rollback-on-failure branch, a crash on an unimported
+hook).
+
+**Infrastructure issue found mid-pass.** All 9 fix-agent worktrees (and, in
+retrospect, the earlier 3 re-run audit agents) were rooted at a stale base
+commit (`ad80dba`) that predated every Track E commit — not something any
+individual agent did wrong, a session-wide worktree-provisioning issue. This
+was caught before any backend commit landed: one agent's diff appeared to
+*revert* Track E's atomic-`$inc` race fix in `recordAccountPayment`, which
+turned out to be a stale-base artifact, not a real revert. Every backend fix
+group was therefore reconciled via `git apply --3way` (not applied as a raw
+patch) against current `main`, and every resulting conflict was resolved by
+hand — verified line by line, not just "no conflict markers." Frontend
+groups didn't need 3-way reconciliation (no file overlap with Track E's
+backend-only changes) but were still diffed against their true base rather
+than assumed clean.
+
+**Fixes — backend (5 commits, by exclusive file ownership):**
+
+| Commit | Scope |
+|---|---|
+| `a0bb01b` | Credit accounts: batched FIFO payment writes (insertMany/bulkWrite), `computeAccountBalance` no longer re-fetches, pagination on 2 unbounded endpoints, `repairCreditLedgers` query-level diff, new index |
+| `47de947` | Commission accounting: hoisted per-commission ledger aggregation out of the accrual loop, cached resolved system accounts, batched per-staff lookups, collapsed savings-balance aggregations, 2 new indexes |
+| `29ab6b3` | Reports/loyalty/admin: missing commission index, cached loyalty-program lookup in the backfill loop, batched cashbook-per-method lookups, `.lean()` additions |
+| `0beb026` | Jobs/payments/commissions: dropped 4 unindexed sort tiebreaks, batched independent lookups, new index, **fixed a dead rollback** (`createCommissionPayout`'s catch block referenced a `try`-scoped variable, so its revert-to-payable logic could never run) |
+| `63d67f9` | M-Pesa callbacks: batched bulk-upload lookups (down from ~8 round trips/row), replaced per-job `refreshJobPaymentStatus` calls with bulkWrite, deferred non-critical SMS to fire-and-forget (payment/ledger/overpayment work stays awaited) |
+
+**Fixes — frontend (1 commit + 1 follow-up fix, 24 files):**
+
+| Commit | Scope |
+|---|---|
+| `69bb55f` | All 4 frontend groups (dashboard/jobs/reports, chart-of-accounts/commissions, accounts/payments, customers/loyalty/shell) landed together in one commit — a scoping mistake in how the changes were staged, not a review shortcut; see note below. Covers: memoized service-option computation in `CarWashAddJob`, isolated the 1s clock tick in `CarWashQueueDisplay`, memoized card components and status grouping in `CarWashWashboard`/`CarWashJobs`, extracted the commission-payout modal into its own component (was re-rendering the full table per keystroke), fixed `CarWashShell`'s uncached `getActiveBranchId()` call (ran on every state change of every CarWash page), media-query-gated the mobile/desktop duplicate-render pattern on 4 pages, converted `CarWashExpenses`/`CarWashMpesaNotifications`/`CarWashCommissionPayouts` to react-query, and **fixed the `CarWashStaff.jsx` crash** (`useCallback` used but not imported — broke wallet-drawer expand) |
+| `368508f` | Fixed a JSX syntax error the media-query gate introduced in `CarWashDeposits.jsx` (a trailing comment landed outside its parent's children) — caught via `esbuild`, not by the build agent itself (see note below) |
+
+**What went wrong with frontend verification, and how it was caught anyway.**
+All 4 frontend fix agents were mid-build-verification when a session-wide
+rate limit killed them before they could report. Their file edits survived
+in their worktrees regardless (agents don't roll back on API failure), so
+the diffs were recovered and reconciled the same way as the backend groups.
+Because the agents never got to report their own `node --check`-equivalent,
+verification was done independently after the fact: `esbuild` parse-checked
+all 24 files (caught the one real syntax bug above), a full `npm run build`
+was run clean end to end, and `eslint` was diffed against a clean pre-change
+baseline (a throwaway worktree at the same commit) file by file to separate
+genuinely new issues from this codebase's large pre-existing lint backlog —
+every new lint entry traced back to either an intentional, correct
+consequence of the requested fix (e.g. React Compiler declining to
+auto-optimize a `useCallback` whose dependency was deliberately narrowed to
+`.mutate` instead of the whole mutation object, per the fix's own
+correctness goal) or convergence onto an already-established codebase
+pattern, not a new defect.
+
+Not yet done: no in-browser click-through of the frontend changes (consistent
+with Track E's precedent — no test suite, no established UI-verification
+step for this module yet).
+
+---
+
+*Last updated: 2026-09-19 (Track F closed — CarWash full performance pass: 62 findings fixed across 5 backend + 2 frontend commits, see above). Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C/E/F as items are actioned.*
