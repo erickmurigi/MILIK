@@ -1,6 +1,10 @@
+import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
 import SaleActivity from "../models/SaleActivity.js";
 import SaleLead     from "../models/SaleLead.js";
+import SaleBuyer    from "../models/SaleBuyer.js";
+import SaleDeal     from "../models/SaleDeal.js";
+import SaleListing  from "../models/SaleListing.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 
 export const listActivities = async (req, res, next) => {
@@ -60,25 +64,63 @@ const nullifyEmptyRefs = (body) => {
   return out;
 };
 
+const RELATED_MODELS = {
+  relatedLead:    { Model: SaleLead,    label: "lead" },
+  relatedBuyer:   { Model: SaleBuyer,   label: "buyer" },
+  relatedDeal:    { Model: SaleDeal,    label: "deal" },
+  relatedListing: { Model: SaleListing, label: "listing" },
+};
+
+// Verifies every non-empty related* id is a valid ObjectId AND belongs to the
+// active business, so an activity can never link to (or later populate data
+// from) another tenant's records. Returns an error or null.
+const validateRelatedRefs = async (body, business) => {
+  const checks = [];
+  for (const [key, { Model, label }] of Object.entries(RELATED_MODELS)) {
+    const value = body[key];
+    if (value === undefined || value === null || value === "") continue;
+    const id = typeof value === "string" ? value : null;
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return createError(400, `Invalid ${label} id`);
+    }
+    checks.push(Model.exists({ _id: id, business }).then((found) => (found ? null : label)));
+  }
+  const missing = (await Promise.all(checks)).find(Boolean);
+  return missing ? createError(404, `Related ${missing} not found`) : null;
+};
+
+// Non-ObjectId (system-admin) sessions can't populate createdBy/updatedBy, so
+// keep a human-readable actor label instead. Empty when an ObjectId is stored.
+const actorLabel = (req, userId) =>
+  userId ? "" : String(req.user?.email || req.user?.id || "").trim();
+
 export const createActivity = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
+    const body     = nullifyEmptyRefs(req.body);
+
+    const refError = await validateRelatedRefs(body, business);
+    if (refError) return next(refError);
+
+    const label = actorLabel(req, userId);
     const activityNumber = await generateSequentialNumber(SaleActivity, business, "ACT");
 
     const activity = await SaleActivity.create({
-      ...nullifyEmptyRefs(req.body),
+      ...body,
       business,
       activityNumber,
       createdBy: userId,
       updatedBy: userId,
+      createdByLabel: label,
+      updatedByLabel: label,
     });
 
     // Sync lastContactDate + nextFollowUpDate to lead
-    if (req.body.relatedLead) {
+    if (activity.relatedLead) {
       const leadUpdate = { lastContactDate: activity.date, updatedBy: userId };
       if (activity.nextActionDate) leadUpdate.nextFollowUpDate = activity.nextActionDate;
-      await SaleLead.findOneAndUpdate({ _id: req.body.relatedLead, business }, leadUpdate);
+      await SaleLead.findOneAndUpdate({ _id: activity.relatedLead, business }, leadUpdate);
     }
 
     const populated = await SaleActivity.findById(activity._id)
@@ -95,11 +137,18 @@ export const updateActivity = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
-    const { business: _b, activityNumber: _n, createdBy: _c, ...updates } = nullifyEmptyRefs(req.body);
+    const {
+      business: _b, activityNumber: _n, createdBy: _c,
+      createdByLabel: _cl, updatedByLabel: _ul, updatedBy: _u,
+      ...updates
+    } = nullifyEmptyRefs(req.body);
+
+    const refError = await validateRelatedRefs(updates, business);
+    if (refError) return next(refError);
 
     const activity = await SaleActivity.findOneAndUpdate(
       { _id: req.params.id, business },
-      { ...updates, updatedBy: userId },
+      { ...updates, updatedBy: userId, updatedByLabel: actorLabel(req, userId) },
       { new: true, runValidators: true }
     )
       .populate("relatedLead",  "leadNumber fullName")

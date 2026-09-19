@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import crypto from "crypto";
+import { createError } from "../../../utils/error.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOAD_DIR = path.resolve(__dirname, "../../../uploads/sale-documents");
@@ -27,7 +28,12 @@ const storage = multer.diskStorage({
 export const dealDocumentUpload = multer({
   storage,
   limits: { fileSize: 20 * 1024 * 1024, files: 1 },
-  fileFilter: (_req, file, cb) => cb(null, ALLOWED_MIME.has(file.mimetype)),
+  // Reject loudly (400 naming the file) instead of silently dropping it, which
+  // previously surfaced as a misleading "No file uploaded".
+  fileFilter: (_req, file, cb) =>
+    ALLOWED_MIME.has(file.mimetype)
+      ? cb(null, true)
+      : cb(createError(400, `Unsupported file type "${file.mimetype}" for "${file.originalname}". Allowed: PDF, JPEG, PNG, WebP.`)),
 }).single("document");
 
 export const DOCUMENT_UPLOAD_DIR = UPLOAD_DIR;

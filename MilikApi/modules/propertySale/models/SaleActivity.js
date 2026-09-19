@@ -21,6 +21,9 @@ const saleActivitySchema = new mongoose.Schema(
     relatedListing:  { type: mongoose.Schema.Types.ObjectId, ref: "SaleListing", default: null },
     createdBy:       { type: mongoose.Schema.Types.ObjectId, ref: "User",        default: null },
     updatedBy:       { type: mongoose.Schema.Types.ObjectId, ref: "User",        default: null },
+    // Actor identifier (email) for non-ObjectId system-admin sessions where createdBy/updatedBy must stay null
+    createdByLabel:  { type: String, trim: true, default: "" },
+    updatedByLabel:  { type: String, trim: true, default: "" },
   },
   { timestamps: true }
 );

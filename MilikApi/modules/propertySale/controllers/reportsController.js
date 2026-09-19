@@ -124,6 +124,11 @@ export const getSalesReport = async (req, res, next) => {
         $or: [
           { dealDate: { $gte: yearStart, $lt: yearEnd } },
           { createdAt: { $gte: yearStart, $lt: yearEnd } },
+          // Deals closed in-window even if created/dated earlier. The second
+          // branch covers legacy closed deals without actualClosingDate, which
+          // are classified by updatedAt below.
+          { actualClosingDate: { $gte: yearStart, $lt: yearEnd } },
+          { status: "closed", actualClosingDate: null, updatedAt: { $gte: yearStart, $lt: yearEnd } },
         ],
       }).select("status agreedPrice dealDate actualClosingDate createdAt updatedAt").lean(),
       SalePayment.find({ business, status: "paid", paymentDate: { $gte: yearStart, $lt: yearEnd } })
@@ -272,6 +277,7 @@ export const getConversionFunnel = async (req, res, next) => {
         contacted:   lm.contacted    || 0,
         qualified:   lm.qualified    || 0,
         siteVisited: lm.site_visited || 0,
+        proposalSent: lm.proposal_sent || 0,
         negotiating: lm.negotiating  || 0,
         converted:   lm.converted    || 0,
         lost:        lm.lost         || 0,
@@ -330,12 +336,16 @@ export const getMonthlyDetail = async (req, res, next) => {
         $or: [
           { dealDate: { $gte: monthStart, $lt: monthEnd } },
           { createdAt: { $gte: monthStart, $lt: monthEnd } },
+          // Deals closed in this month even if created/dated earlier (legacy
+          // closed deals without actualClosingDate fall back to updatedAt)
+          { actualClosingDate: { $gte: monthStart, $lt: monthEnd } },
+          { status: "closed", actualClosingDate: null, updatedAt: { $gte: monthStart, $lt: monthEnd } },
         ],
       })
         .populate("listing", "title listingNumber propertyType")
         .populate("buyer", "fullName buyerNumber phone")
         .populate("agent", "fullName agentNumber")
-        .select("dealNumber agreedPrice status dealDate actualClosingDate notes createdAt")
+        .select("dealNumber agreedPrice status dealDate actualClosingDate notes createdAt updatedAt")
         .sort({ dealDate: -1 })
         .lean(),
 
@@ -376,7 +386,12 @@ export const getMonthlyDetail = async (req, res, next) => {
         listings: listings.length,
         offers: offers.length,
         deals: deals.length,
-        dealsClosed: deals.filter((d) => d.status === "closed").length,
+        // Closed is defined by closing date (same rule as getSalesReport)
+        dealsClosed: deals.filter((d) => {
+          if (d.status !== "closed") return false;
+          const closedAt = new Date(d.actualClosingDate || d.updatedAt);
+          return closedAt >= monthStart && closedAt < monthEnd;
+        }).length,
         payments: payments.length,
         totalRevenue,
         totalCommissions,
