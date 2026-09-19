@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { FaRedoAlt, FaClock, FaExclamationTriangle } from "react-icons/fa";
@@ -45,7 +45,7 @@ const ADVANCE_CLS   = {
   ready:   "border-green-500  bg-green-50  text-green-700  hover:bg-green-100",
 };
 
-const JobCard = ({ job, onAdvance, onPayLater, payingLaterRef }) => {
+const JobCard = React.memo(({ job, onAdvance, onPayLater, payingLaterRef }) => {
   const cfg       = STATUS_CONFIG[job.status] ?? STATUS_CONFIG.waiting;
   const advanceTo = ADVANCE_MAP[job.status] ?? null;
   const elapsedIso = job.status === "waiting" ? job.createdAt : job.updatedAt;
@@ -95,7 +95,7 @@ const JobCard = ({ job, onAdvance, onPayLater, payingLaterRef }) => {
       )}
     </div>
   );
-};
+});
 
 const ColHeader = ({ status, count }) => {
   const cfg = STATUS_CONFIG[status];
@@ -107,7 +107,7 @@ const ColHeader = ({ status, count }) => {
   );
 };
 
-const OutstandingCard = ({ job, onNavigate }) => {
+const OutstandingCard = React.memo(({ job, onNavigate }) => {
   const payStatus = job.paymentStatus || "unpaid";
   const daysAgo = Math.floor((Date.now() - new Date(job.payLaterAt || job.updatedAt).getTime()) / 86_400_000);
   const timeLabel = daysAgo === 0 ? "Today" : daysAgo === 1 ? "Yesterday" : `${daysAgo} days ago`;
@@ -139,7 +139,7 @@ const OutstandingCard = ({ job, onNavigate }) => {
       </div>
     </div>
   );
-};
+});
 
 const CarWashWashboard = () => {
   const navigate = useNavigate();
@@ -180,9 +180,21 @@ const CarWashWashboard = () => {
 
   useEffect(() => {
     load();
-    timerRef.current = setInterval(load, POLL_INTERVAL);
+    timerRef.current = setInterval(() => {
+      // Skip the poll while the tab is backgrounded — no point issuing 2 API
+      // calls every 20s when nobody can see the result.
+      if (document.visibilityState === "visible") load();
+    }, POLL_INTERVAL);
     tickRef.current  = setInterval(() => setTick((t) => t + 1), 60_000);
-    return () => { clearInterval(timerRef.current); clearInterval(tickRef.current); };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearInterval(timerRef.current);
+      clearInterval(tickRef.current);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [load]);
 
   const advance = useCallback(async (job, nextStatus) => {
@@ -219,7 +231,17 @@ const CarWashWashboard = () => {
     }
   }, []);
 
-  const byStatus = (s) => jobs.filter((j) => j.status === s);
+  const jobsByStatus = useMemo(() => {
+    const groups = {};
+    for (const j of jobs) {
+      (groups[j.status] ??= []).push(j);
+    }
+    return groups;
+  }, [jobs]);
+
+  const handleNavigateOutstanding = useCallback((id, plate) => {
+    navigate(`/carwash/jobs?plate=${encodeURIComponent(plate || "")}`);
+  }, [navigate]);
 
   const refreshAction = (
     <div className="flex items-center gap-3">
@@ -245,7 +267,7 @@ const CarWashWashboard = () => {
           {/* ── Active columns ── */}
           <div className="flex flex-1 min-h-0 gap-2 overflow-hidden">
             {COLUMNS.map((col) => {
-              const colJobs = byStatus(col);
+              const colJobs = jobsByStatus[col] || [];
               return (
                 <div key={col} className="flex flex-1 flex-col overflow-hidden rounded border border-slate-200 bg-white p-3 shadow-sm">
                   <ColHeader status={col} count={colJobs.length} />
@@ -292,7 +314,7 @@ const CarWashWashboard = () => {
                     <OutstandingCard
                       key={j._id}
                       job={j}
-                      onNavigate={(id, plate) => navigate(`/carwash/jobs?plate=${encodeURIComponent(plate || "")}`)}
+                      onNavigate={handleNavigateOutstanding}
                     />
                   ))}
                 </div>

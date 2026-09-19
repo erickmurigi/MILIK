@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
+import { useQuery } from "@tanstack/react-query";
 import {
   FaArrowLeft, FaCar, FaCamera, FaCoins, FaExclamationTriangle, FaGift, FaMinus, FaPlus, FaRedoAlt, FaSave,
   FaTimesCircle, FaUser, FaExpand, FaUserCheck, FaTag,
@@ -9,10 +10,13 @@ import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, photoUrl, VEHICLE_TYPES } from "../../services/carWashApi";
 import { useFormDraft } from "../../hooks/useFormDraft";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
+import { selectCurrentCompany } from "../../redux/selectors";
 import CarWashShell from "./CarWashShell";
 import CarpetCameraModal from "../../components/common/CarpetCameraModal";
 import AppSelect from "../../components/common/AppSelect";
 import { inputClass, labelClass } from "../../utils/formStyles";
+
+const EMPTY_ARRAY = [];
 
 // ─── Plate lookup ─────────────────────────────────────────────────────────────
 const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound, onCustomerCleared, onRewardData, readOnly }) => {
@@ -416,6 +420,7 @@ const CarWashAddJob = () => {
   const isEditMode = Boolean(editId);
   const canCreate = useCarWashPermission("carwash-jobs", "create");
   const canUpdate = useCarWashPermission("carwash-jobs", "update");
+  const currentCompany = useSelector(selectCurrentCompany);
 
   const [jobType, setJobType] = useState("vehicle");
   const [plateNumber, setPlateNumber] = useState("");
@@ -436,11 +441,44 @@ const CarWashAddJob = () => {
   // When redirected from new-carpet-job save, open photos immediately
   const openPhotosOnLoad = Boolean(location.state?.openPhotos);
 
-  const [services, setServices]     = useState([]);
+  // Reference data — cached across navigations; avoids refetch on every mount.
+  // Query keys/staleTime match CarWashJobs.jsx exactly so the cache is shared.
+  const { data: servicesRaw } = useQuery({
+    queryKey: ["cw-services-ref"],
+    queryFn: () => carWashApi.listServices({ active: true, limit: 500 }),
+    staleTime: 5 * 60_000,
+    select: (data) => normalizeListPayload(data, "services"),
+  });
+  const services = servicesRaw ?? EMPTY_ARRAY;
   const servicesById = useMemo(() => new Map(services.map((s) => [s._id, s])), [services]);
+
+  const { data: allStaffRaw } = useQuery({
+    queryKey: ["cw-staff-ref"],
+    queryFn: () => carWashApi.listStaff({ active: true }),
+    staleTime: 5 * 60_000,
+    select: (data) => normalizeListPayload(data, "staff"),
+  });
+
+  const { data: jobDefaults } = useQuery({
+    queryKey: ["cw-job-defaults", currentCompany?._id],
+    queryFn: () => Promise.allSettled([
+      carWashApi.getCarWashSettings(),
+      carWashApi.getActiveBranch(),
+    ]).then(([s, b]) => ({ settings: s.value ?? null, branch: b.value ?? null })),
+    enabled: !!currentCompany?._id,
+    staleTime: 5 * 60_000,
+  });
+
+  const { data: branchesRaw } = useQuery({
+    queryKey: ["cw-addjob-branches-ref"],
+    queryFn: () => carWashApi.listBranches({ limit: 100 }),
+    staleTime: 5 * 60_000,
+    select: (data) => normalizeListPayload(data, "branches"),
+  });
+  const branches = branchesRaw ?? EMPTY_ARRAY;
+
   const [staff, setStaff]           = useState([]);
   const allStaffRef                 = React.useRef([]);
-  const [branches, setBranches]     = useState([]);
   const [isAllBranches, setIsAllBranches] = useState(false);
   const [selectedBranchId, setSelectedBranchId] = useState("");
   const [branchType, setBranchType] = useState("both");
@@ -454,7 +492,13 @@ const CarWashAddJob = () => {
   // Voucher job state
   const [isVoucherJob, setIsVoucherJob]     = useState(false);
   const [voucherAccount, setVoucherAccount] = useState(null); // full account object
-  const [voucherCompanies, setVoucherCompanies] = useState([]);
+  const { data: voucherCompaniesRaw } = useQuery({
+    queryKey: ["cw-addjob-voucher-accounts-ref"],
+    queryFn: () => carWashApi.listCreditAccounts({ accountType: "voucher", status: "active", limit: 200 }),
+    staleTime: 5 * 60_000,
+    select: (data) => normalizeListPayload(data, "accounts"),
+  });
+  const voucherCompanies = voucherCompaniesRaw ?? EMPTY_ARRAY;
 
   const { read: readDraft, write: writeDraft, clear: clearDraft } = useFormDraft("cw-new-job");
 
@@ -531,46 +575,35 @@ const CarWashAddJob = () => {
     return 0;
   }, [applyReward, rewardProgram, totalPrice]);
 
-  // Load reference data (services, staff) + active branch type
+  // Apply reference data (staff filtering, branch type, discount settings) once
+  // the cached staff + job-defaults queries have both resolved. Guarded to run
+  // only once per mount — matches the previous one-shot Promise.all effect.
+  const appliedJobDefaultsRef = useRef(false);
   useEffect(() => {
-    const load = async () => {
-      try {
-        const [svcPayload, staffPayload, branchData, settingsData, branchesPayload, voucherPayload] = await Promise.all([
-          carWashApi.listServices({ active: true, limit: 500 }),
-          carWashApi.listStaff({ active: true }),
-          carWashApi.getActiveBranch().catch(() => null),
-          carWashApi.getCarWashSettings().catch(() => null),
-          carWashApi.listBranches({ limit: 100 }).catch(() => null),
-          carWashApi.listCreditAccounts({ accountType: "voucher", status: "active", limit: 200 }).catch(() => null),
-        ]);
-        setServices(normalizeListPayload(svcPayload, "services"));
-        const raw = normalizeListPayload(staffPayload, "staff");
-        allStaffRef.current = raw;
-        setBranches(normalizeListPayload(branchesPayload, "branches"));
-        setVoucherCompanies(normalizeListPayload(voucherPayload, "accounts"));
+    if (!allStaffRaw || !jobDefaults || appliedJobDefaultsRef.current) return;
+    appliedJobDefaultsRef.current = true;
 
-        const activeBranchId = branchData?._id ? String(branchData._id) : null;
-        setIsAllBranches(!activeBranchId);
+    allStaffRef.current = allStaffRaw;
+    const branchData = jobDefaults.branch;
+    const settingsData = jobDefaults.settings;
 
-        // Show staff from this branch + unassigned staff (null branch = migrating)
-        setStaff(activeBranchId
-          ? raw.filter((s) => !s.branch || String(s.branch._id || s.branch) === activeBranchId)
-          : raw);
-        setDiscountSettings({
-          minPrice: Number(settingsData?.discountMinJobPrice ?? 0),
-          maxPct:   Number(settingsData?.discountMaxPercent  ?? 0),
-        });
+    const activeBranchId = branchData?._id ? String(branchData._id) : null;
+    setIsAllBranches(!activeBranchId);
 
-        const bt = branchData?.branchType || "both";
-        setBranchType(bt);
-        // In create mode, auto-set job type to match branch capability
-        if (!isEditMode && bt !== "both") setJobType(bt);
-      } catch {
-        toast.error("Failed to load reference data");
-      }
-    };
-    load();
-  }, []); // eslint-disable-line
+    // Show staff from this branch + unassigned staff (null branch = migrating)
+    setStaff(activeBranchId
+      ? allStaffRaw.filter((s) => !s.branch || String(s.branch._id || s.branch) === activeBranchId)
+      : allStaffRaw);
+    setDiscountSettings({
+      minPrice: Number(settingsData?.discountMinJobPrice ?? 0),
+      maxPct:   Number(settingsData?.discountMaxPercent  ?? 0),
+    });
+
+    const bt = branchData?.branchType || "both";
+    setBranchType(bt);
+    // In create mode, auto-set job type to match branch capability
+    if (!isEditMode && bt !== "both") setJobType(bt);
+  }, [allStaffRaw, jobDefaults]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-filter staff whenever the user picks a branch in "All Branches" mode
   useEffect(() => {
@@ -725,6 +758,28 @@ const CarWashAddJob = () => {
     });
     return [...map.values()];
   }, [serviceLines, staff]);
+
+  // Service dropdown options — derived once per services/jobType change instead of
+  // being recomputed (via a filter/partition IIFE) inside every service-line row,
+  // in both the mobile and desktop layouts, on every render.
+  const { serviceOptionsMobile, serviceOptionsDesktop } = useMemo(() => {
+    const filtered = services.filter((s2) => !s2.jobType || s2.jobType === "both" || s2.jobType === jobType);
+    const regular  = filtered.filter((s2) => !s2.isCombo);
+    const combos   = filtered.filter((s2) => s2.isCombo);
+    const comboOptions = combos.length > 0
+      ? [{ value: "__combo_sep__", label: "── COMBOS ──", disabled: true }, ...combos.map((s2) => ({ value: s2._id, label: `★ ${s2.name}` }))]
+      : [];
+    return {
+      serviceOptionsMobile: [
+        ...regular.map((s2) => ({ value: s2._id, label: s2.name })),
+        ...comboOptions,
+      ],
+      serviceOptionsDesktop: [
+        ...regular.map((s2) => ({ value: s2._id, label: s2.category ? `${s2.category} — ${s2.name}` : s2.name })),
+        ...comboOptions,
+      ],
+    };
+  }, [services, jobType]);
 
   const handleReset = useCallback(() => {
     setPlateNumber("");
@@ -1168,33 +1223,21 @@ const CarWashAddJob = () => {
                       </div>
                       <div>
                         <label className={labelClass}>Service</label>
-                        {(() => {
-                          const filtered = services.filter((s2) => !s2.jobType || s2.jobType === "both" || s2.jobType === jobType);
-                          const regular  = filtered.filter((s2) => !s2.isCombo);
-                          const combos   = filtered.filter((s2) => s2.isCombo);
-                          return (
-                            <>
-                              <AppSelect
-                                disabled={isReward}
-                                value={line.service}
-                                onChange={(v) => handleLineServiceChange(index, v ?? "")}
-                                options={[
-                                  ...regular.map((s2) => ({ value: s2._id, label: s2.name })),
-                                  ...(combos.length > 0 ? [{ value: "__combo_sep__", label: "── COMBOS ──", disabled: true }, ...combos.map((s2) => ({ value: s2._id, label: `★ ${s2.name}` }))] : []),
-                                ]}
-                                placeholder="— Select service —"
-                                size="md"
-                                searchable
-                              />
-                              {svc?.isCombo && svc?.comboDescription && (
-                                <div className="mt-1 border border-purple-200 bg-purple-50 px-2 py-1.5">
-                                  <p className="text-[9px] font-black uppercase tracking-wide text-purple-500">Includes</p>
-                                  <p className="text-[10px] text-purple-800 leading-relaxed">{svc.comboDescription}</p>
-                                </div>
-                              )}
-                            </>
-                          );
-                        })()}
+                        <AppSelect
+                          disabled={isReward}
+                          value={line.service}
+                          onChange={(v) => handleLineServiceChange(index, v ?? "")}
+                          options={serviceOptionsMobile}
+                          placeholder="— Select service —"
+                          size="md"
+                          searchable
+                        />
+                        {svc?.isCombo && svc?.comboDescription && (
+                          <div className="mt-1 border border-purple-200 bg-purple-50 px-2 py-1.5">
+                            <p className="text-[9px] font-black uppercase tracking-wide text-purple-500">Includes</p>
+                            <p className="text-[10px] text-purple-800 leading-relaxed">{svc.comboDescription}</p>
+                          </div>
+                        )}
                       </div>
                       <div>
                         <label className={labelClass}>Name *</label>
@@ -1319,19 +1362,13 @@ const CarWashAddJob = () => {
                               <span className="ml-auto rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-600">FREE</span>
                             </div>
                           ) : (() => {
-                              const filtered = services.filter((s2) => !s2.jobType || s2.jobType === "both" || s2.jobType === jobType);
-                              const regular  = filtered.filter((s2) => !s2.isCombo);
-                              const combos   = filtered.filter((s2) => s2.isCombo);
-                              const selSvc   = servicesById.get(line.service);
+                              const selSvc = servicesById.get(line.service);
                               return (
                                 <>
                                   <AppSelect
                                     value={line.service}
                                     onChange={(v) => handleLineServiceChange(index, v ?? "")}
-                                    options={[
-                                      ...regular.map((s2) => ({ value: s2._id, label: s2.category ? `${s2.category} — ${s2.name}` : s2.name })),
-                                      ...(combos.length > 0 ? [{ value: "__combo_sep__", label: "── COMBOS ──", disabled: true }, ...combos.map((s2) => ({ value: s2._id, label: `★ ${s2.name}` }))] : []),
-                                    ]}
+                                    options={serviceOptionsDesktop}
                                     placeholder="— Select service —"
                                     size="md"
                                     searchable

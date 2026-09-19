@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
@@ -232,20 +232,19 @@ const CarWashExpenses = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const queryClient = useQueryClient();
   const confirm = useConfirm();
-  const isConsolidated = !getActiveBranchId();
+  // Derives from milik_user + milik_active_company_id, which only change on login or
+  // company switch — both navigate away from /carwash/* (see CarWashShell), unmounting
+  // this component. Safe to compute once.
+  const isConsolidated = useMemo(() => !getActiveBranchId(), []);
   const canCreate = useCarWashPermission("carwash-expenses", "create");
   const canUpdate = useCarWashPermission("carwash-expenses", "update");
   const canDelete = useCarWashPermission("carwash-expenses", "delete");
 
-  const [rows,         setRows]         = useState([]);
   const [filters,      setFilters]      = useTabState("/carwash/expenses:filters", defaultFilters);
   const [applied,      setApplied]      = useTabState("/carwash/expenses:applied", defaultFilters);
   const [expandedIds,  setExpandedIds]  = useState([]);
   const [page,         setPage]         = useTabState("/carwash/expenses:page", 1);
   const [pageSize,     setPageSize]     = useTabState("/carwash/expenses:pageSize", 25);
-  const [pagination,   setPagination]   = useState({ page: 1, limit: 25, total: 0, pages: 1 });
-  const [summary,      setSummary]      = useState({ draft: {}, approved: {}, paid: {}, cancelled: {}, totalAmount: 0 });
-  const [loading,      setLoading]      = useState(false);
 
   // Modal state — editingRow=null means "create", otherwise "edit"
   const [showModal,    setShowModal]    = useState(false);
@@ -289,20 +288,20 @@ const CarWashExpenses = () => {
   });
   const branches = normalizeListPayload(branchesRaw, "branches");
 
-  // ── Data loaders ─────────────────────────────────────────────────────────────
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const payload = await carWashApi.listExpenses({ ...applied, limit: pageSize, page });
-      setRows(normalizeListPayload(payload, "expenses"));
-      setPagination(payload?.pagination || { page, limit: pageSize, total: 0, pages: 1 });
-      setSummary(payload?.summary || { draft: {}, approved: {}, paid: {}, cancelled: {}, totalAmount: 0 });
-      setExpandedIds([]);
-    } catch { toast.error("Failed to load expenses"); }
-    finally { setLoading(false); }
-  }, [applied, page, pageSize]);
+  // ── Expenses query ───────────────────────────────────────────────────────────
+  const expensesQueryKey = ["cw-expenses", applied, page, pageSize];
+  const { data: expensesData, isLoading: loading, error: expensesError, refetch } = useQuery({
+    queryKey: expensesQueryKey,
+    queryFn: () => carWashApi.listExpenses({ ...applied, limit: pageSize, page }),
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
+  });
+  useEffect(() => { if (expensesError) toast.error("Failed to load expenses"); }, [expensesError]);
+  useEffect(() => { setExpandedIds([]); }, [expensesData]);
 
-  useEffect(() => { load(); }, [load]);
+  const rows       = normalizeListPayload(expensesData, "expenses");
+  const pagination = expensesData?.pagination || { page, limit: pageSize, total: 0, pages: 1 };
+  const summary    = expensesData?.summary || { draft: {}, approved: {}, paid: {}, cancelled: {}, totalAmount: 0 };
 
   // Auto-select the best cashbook when cashbooks first arrive and form has none yet
   useEffect(() => {
@@ -398,7 +397,7 @@ const CarWashExpenses = () => {
         toast.success("Expense recorded");
       }
       closeModal();
-      await load();
+      await queryClient.invalidateQueries({ queryKey: ["cw-expenses"] });
     } catch (err) {
       toast.error(err?.response?.data?.message || "Unable to save expense");
     }
@@ -419,7 +418,7 @@ const CarWashExpenses = () => {
     if (status === "paid" && !cashbookAccount) { toast.error("Select a cashbook before marking as paid"); return; }
     try {
       await carWashApi.updateExpenseStatus(row._id, { status, notes, cashbookAccount });
-      await load();
+      await queryClient.invalidateQueries({ queryKey: ["cw-expenses"] });
       toast.success("Expense updated");
     } catch (err) { toast.error(err?.response?.data?.message || "Unable to update expense"); }
   };
@@ -429,7 +428,7 @@ const CarWashExpenses = () => {
     try {
       await carWashApi.deleteExpense(row._id);
       toast.success("Expense deleted");
-      await load();
+      await queryClient.invalidateQueries({ queryKey: ["cw-expenses"] });
     } catch (err) { toast.error(err?.response?.data?.message || "Unable to delete expense"); }
   };
 
@@ -441,7 +440,7 @@ const CarWashExpenses = () => {
       title="Expenses Register"
       action={
         <>
-          <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={() => refetch()} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
           </button>
           {canUpdate && (

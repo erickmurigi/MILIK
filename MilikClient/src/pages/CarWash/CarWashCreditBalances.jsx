@@ -259,7 +259,7 @@ const exportCsv = (credits, tab) => {
 };
 
 // ─── Grouped view ──────────────────────────────────────────────────────────────
-const GroupedCredits = ({ credits, canManage, onApply, onWriteOff, onUndo, onRefund, tab }) => {
+const GroupedCredits = React.memo(function GroupedCredits({ credits, canManage, onApply, onWriteOff, onUndo, onRefund, tab }) {
   const [collapsed, setCollapsed] = useState(new Set());
   const groups = useMemo(() => {
     const map = new Map();
@@ -358,7 +358,7 @@ const GroupedCredits = ({ credits, canManage, onApply, onWriteOff, onUndo, onRef
       })}
     </div>
   );
-};
+});
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function CarWashCreditBalances() {
@@ -393,6 +393,9 @@ export default function CarWashCreditBalances() {
     debounceRef.current = setTimeout(() => { setPage(1); setDebouncedSearch(val); }, 300);
   };
 
+  // Clear any pending debounced search on unmount so it can't call setState after unmount
+  useEffect(() => () => clearTimeout(debounceRef.current), []);
+
   const handleSort = useCallback((field) => {
     setSortDir((prev) => sortBy === field ? (prev === "asc" ? "desc" : "asc") : "desc");
     setSortBy(field);
@@ -425,8 +428,8 @@ export default function CarWashCreditBalances() {
   const totalAmt = data?.totalAmount || 0;
   const pages    = data?.pages    || 1;
 
-  const allIds      = credits.map((c) => c._id);
-  const allSelected = allIds.length > 0 && allIds.every((id) => selected.has(id));
+  const allIds      = useMemo(() => credits.map((c) => c._id), [credits]);
+  const allSelected = useMemo(() => allIds.length > 0 && allIds.every((id) => selected.has(id)), [allIds, selected]);
 
   const toggleAll = () => {
     if (allSelected) {
@@ -487,7 +490,7 @@ export default function CarWashCreditBalances() {
     const label = ids.length === 1 ? (name ? `for ${name}` : "") : `(${ids.length} credits)`;
     if (!(await confirm(`Write off KES ${fmt(amount)} credit ${label} to Other Income?\n\nThis can be undone if the customer ever asks.`))) return;
     writeOffMutation.mutate(ids);
-  }, [writeOffMutation, confirm]);
+  }, [writeOffMutation.mutate, confirm]);
 
   const handleBulkWriteOff = () => {
     const ids = [...selected];
@@ -500,7 +503,7 @@ export default function CarWashCreditBalances() {
   const handleRefund = useCallback((credit) => setRefundTarget(credit), []);
   const handleUndo   = useCallback(async (id) => {
     if (await confirm("Reverse write-off? The credit will become active again.")) undoMutation.mutate(id);
-  }, [undoMutation, confirm]);
+  }, [undoMutation.mutate, confirm]);
 
   return (
     <CarWashShell title="Credit Balances">
@@ -552,9 +555,10 @@ export default function CarWashCreditBalances() {
                 <button
                   type="button"
                   onClick={() => exportCsv(credits, tab)}
+                  title="Exports the current page only"
                   className="flex h-7 items-center gap-1 border border-slate-300 bg-white px-2 text-[10px] font-semibold text-slate-600 hover:bg-slate-50"
                 >
-                  <FaDownload size={9} /> CSV
+                  <FaDownload size={9} /> CSV (page)
                 </button>
               )}
 

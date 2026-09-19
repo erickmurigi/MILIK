@@ -17,6 +17,17 @@ import { inputClass, labelClass } from "../../utils/formStyles";
 import PaginationBar from "../../components/PaginationBar";
 import MilikTable from "../../components/common/MilikTable";
 
+const LOYALTY_COLUMNS = [
+  { label: "Customer" },
+  { label: "Plates", width: "10rem" },
+  { label: "Visits", align: "center", width: "5rem" },
+  { label: "Last Visit", width: "7rem" },
+  { label: "Stamps" },
+];
+
+// Pure function of the row — no component-scope dependencies, safe as a stable module ref.
+const loyaltyRowClassName = (c) => (c.loyaltyCard?.pendingRewards ?? 0) > 0 ? "!bg-amber-50/40" : "";
+
 // ─── Stamp dots ───────────────────────────────────────────────────────────────
 const StampDots = React.memo(({ current, required }) => {
   const safe = Math.max(1, required);
@@ -715,6 +726,100 @@ const CarWashLoyalty = () => {
 
   const allPageSelected = customers.length > 0 && customers.every(c => selectedIds.has(c._id));
 
+  // ── MilikTable props (memoized so the memo'd table doesn't re-diff on every keystroke) ──
+  const isChecked = useCallback((c) => selectedIds.has(c._id), [selectedIds]);
+  const isSelected = useCallback((c) => selectedIds.has(c._id), [selectedIds]);
+  const onCheckRow = useCallback((c) => handleSelect(c._id), [handleSelect]);
+
+  const renderExpanded = useCallback((c) => (
+    <CardDetail customerId={c._id} businessId={businessId} stampsRequired={stampsRequired} />
+  ), [businessId, stampsRequired]);
+
+  const renderRow = useCallback((c) => {
+    const card = c.loyaltyCard;
+    const pendingRewards = card?.pendingRewards ?? 0;
+    return (
+      <>
+        <td className="px-3 py-2">
+          <div className="font-extrabold text-slate-900 leading-tight">{c.name}</div>
+          {c.phone
+            ? <div className="mt-0.5 text-[10px] text-slate-500">{c.phone}</div>
+            : c.maskedMsisdn
+            ? <div className="mt-0.5 text-[10px] font-semibold text-emerald-600">M-Pesa · SMS ready</div>
+            : <div className="mt-0.5 text-[10px] italic text-slate-400">No phone</div>
+          }
+        </td>
+        <td className="w-40 px-3 py-2">
+          <div className="flex flex-wrap gap-1">
+            {(c.plates || []).map(p => (
+              <span key={p} className="inline-flex items-center gap-1 border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold font-mono text-slate-700">
+                <FaCar className="text-[8px] text-emerald-600" />{p}
+              </span>
+            ))}
+            {!c.plates?.length && <span className="text-[10px] text-slate-400">—</span>}
+          </div>
+        </td>
+        <td className="w-20 px-3 py-2 text-center tabular-nums text-xs text-slate-600">
+          {c.stats?.totalJobs ?? 0}
+        </td>
+        <td className="w-28 px-3 py-2 text-xs text-slate-500">
+          {c.stats?.lastVisit
+            ? new Date(c.stats.lastVisit).toLocaleDateString("en-KE", { day: "2-digit", month: "short" })
+            : <span className="italic text-slate-300">—</span>}
+        </td>
+        <td className="px-3 py-2">
+          {card ? (
+            <div className="space-y-1">
+              <StampDots current={card.currentStamps} required={stampsRequired} />
+              {pendingRewards > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-700 border border-amber-200">
+                  <FaGift className="text-[7px]" /> {pendingRewards}× ready
+                </span>
+              )}
+            </div>
+          ) : (
+            <span className="text-[10px] italic text-slate-400">No card</span>
+          )}
+        </td>
+      </>
+    );
+  }, [stampsRequired]);
+
+  const renderActions = useCallback((c) => {
+    const hasContact = Boolean(c.phone || c.maskedMsisdn);
+    return (
+      <div className="inline-flex items-center gap-1">
+        {canManage && (
+          <button
+            onClick={() => handleStamp(c)}
+            className="inline-flex items-center gap-1 border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-bold text-violet-700 hover:bg-violet-100"
+            title="Award manual stamp"
+          >
+            <FaStamp className="text-[8px]" /> Stamp
+          </button>
+        )}
+        {hasContact && (
+          <button
+            onClick={() => handleSms(c)}
+            className="p-1 text-slate-400 hover:text-emerald-700"
+            title="Send SMS"
+          >
+            <FaSms />
+          </button>
+        )}
+        {canManage && (
+          <button
+            onClick={() => handleEdit(c)}
+            className="p-1 text-slate-400 hover:text-emerald-700"
+            title="Edit customer"
+          >
+            <FaEdit />
+          </button>
+        )}
+      </div>
+    );
+  }, [canManage, handleStamp, handleSms, handleEdit]);
+
   return (
     <CarWashShell
       title="Customer Loyalty"
@@ -826,13 +931,7 @@ const CarWashLoyalty = () => {
 
               {/* Table */}
               <MilikTable
-                columns={[
-                  { label: "Customer" },
-                  { label: "Plates", width: "10rem" },
-                  { label: "Visits", align: "center", width: "5rem" },
-                  { label: "Last Visit", width: "7rem" },
-                  { label: "Stamps" },
-                ]}
+                columns={LOYALTY_COLUMNS}
                 rows={customers}
                 rowKey="_id"
                 loading={isLoading}
@@ -842,96 +941,13 @@ const CarWashLoyalty = () => {
                 allChecked={allPageSelected}
                 someChecked={selectedIds.size > 0 && !allPageSelected}
                 onCheckAll={handleSelectAll}
-                isChecked={(c) => selectedIds.has(c._id)}
-                isSelected={(c) => selectedIds.has(c._id)}
-                onCheckRow={(c) => handleSelect(c._id)}
-                rowClassName={(c) => (c.loyaltyCard?.pendingRewards ?? 0) > 0 ? "!bg-amber-50/40" : ""}
-                renderExpanded={(c) => (
-                  <CardDetail customerId={c._id} businessId={businessId} stampsRequired={stampsRequired} />
-                )}
-                renderRow={(c) => {
-                  const card = c.loyaltyCard;
-                  const pendingRewards = card?.pendingRewards ?? 0;
-                  return (
-                    <>
-                      <td className="px-3 py-2">
-                        <div className="font-extrabold text-slate-900 leading-tight">{c.name}</div>
-                        {c.phone
-                          ? <div className="mt-0.5 text-[10px] text-slate-500">{c.phone}</div>
-                          : c.maskedMsisdn
-                          ? <div className="mt-0.5 text-[10px] font-semibold text-emerald-600">M-Pesa · SMS ready</div>
-                          : <div className="mt-0.5 text-[10px] italic text-slate-400">No phone</div>
-                        }
-                      </td>
-                      <td className="w-40 px-3 py-2">
-                        <div className="flex flex-wrap gap-1">
-                          {(c.plates || []).map(p => (
-                            <span key={p} className="inline-flex items-center gap-1 border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold font-mono text-slate-700">
-                              <FaCar className="text-[8px] text-emerald-600" />{p}
-                            </span>
-                          ))}
-                          {!c.plates?.length && <span className="text-[10px] text-slate-400">—</span>}
-                        </div>
-                      </td>
-                      <td className="w-20 px-3 py-2 text-center tabular-nums text-xs text-slate-600">
-                        {c.stats?.totalJobs ?? 0}
-                      </td>
-                      <td className="w-28 px-3 py-2 text-xs text-slate-500">
-                        {c.stats?.lastVisit
-                          ? new Date(c.stats.lastVisit).toLocaleDateString("en-KE", { day: "2-digit", month: "short" })
-                          : <span className="italic text-slate-300">—</span>}
-                      </td>
-                      <td className="px-3 py-2">
-                        {card ? (
-                          <div className="space-y-1">
-                            <StampDots current={card.currentStamps} required={stampsRequired} />
-                            {pendingRewards > 0 && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-700 border border-amber-200">
-                                <FaGift className="text-[7px]" /> {pendingRewards}× ready
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-[10px] italic text-slate-400">No card</span>
-                        )}
-                      </td>
-                    </>
-                  );
-                }}
-                renderActions={(c) => {
-                  const hasContact = Boolean(c.phone || c.maskedMsisdn);
-                  return (
-                    <div className="inline-flex items-center gap-1">
-                      {canManage && (
-                        <button
-                          onClick={() => handleStamp(c)}
-                          className="inline-flex items-center gap-1 border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-bold text-violet-700 hover:bg-violet-100"
-                          title="Award manual stamp"
-                        >
-                          <FaStamp className="text-[8px]" /> Stamp
-                        </button>
-                      )}
-                      {hasContact && (
-                        <button
-                          onClick={() => handleSms(c)}
-                          className="p-1 text-slate-400 hover:text-emerald-700"
-                          title="Send SMS"
-                        >
-                          <FaSms />
-                        </button>
-                      )}
-                      {canManage && (
-                        <button
-                          onClick={() => handleEdit(c)}
-                          className="p-1 text-slate-400 hover:text-emerald-700"
-                          title="Edit customer"
-                        >
-                          <FaEdit />
-                        </button>
-                      )}
-                    </div>
-                  );
-                }}
+                isChecked={isChecked}
+                isSelected={isSelected}
+                onCheckRow={onCheckRow}
+                rowClassName={loyaltyRowClassName}
+                renderExpanded={renderExpanded}
+                renderRow={renderRow}
+                renderActions={renderActions}
               />
             </div>
           </div>

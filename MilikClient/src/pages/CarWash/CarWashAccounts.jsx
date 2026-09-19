@@ -40,6 +40,9 @@ const stmtPill = {
 };
 const paymentMethods = ["cash", "mpesa", "bank", "card", "other"];
 const PLATE_RE = /^[A-Z]{2,3}\d{3}[A-Z]$/i;
+// Page size for the expanded statements / top-ups history panels (findings 3 & 11 —
+// frontend is ready for page/limit params once the backend endpoints paginate).
+const DETAIL_PAGE_SIZE = 20;
 
 // ─── Sort header ───────────────────────────────────────────────────────────────
 const SortTh = React.memo(({ label, field, sortBy, sortDir, onSort, className = "" }) => {
@@ -532,17 +535,18 @@ const EditAccountModal = ({ account, onSave, onClose }) => {
 
 // ─── Lazy job list ─────────────────────────────────────────────────────────────
 const AccountJobsList = ({ accId, accountType }) => {
-  const [jobs, setJobs] = useState(null);
-  useEffect(() => {
-    carWashApi.getCreditAccount(accId)
-      .then((d) => {
-        const all = d?.jobs || [];
-        setJobs(accountType === "prepaid" ? all : all.filter((j) => j.paymentStatus !== "paid"));
-      })
-      .catch(() => setJobs([]));
-  }, [accId, accountType]);
+  const { data: accountData, isLoading } = useQuery({
+    queryKey: ["cw-credit-account", accId],
+    queryFn:  () => carWashApi.getCreditAccount(accId),
+    enabled:  !!accId,
+    staleTime: 45_000,
+  });
+  const jobs = useMemo(() => {
+    const all = accountData?.jobs || [];
+    return accountType === "prepaid" ? all : all.filter((j) => j.paymentStatus !== "paid");
+  }, [accountData, accountType]);
 
-  if (!jobs) return <div className="text-[11px] text-slate-400">Loading…</div>;
+  if (isLoading) return <div className="text-[11px] text-slate-400">Loading…</div>;
   if (!jobs.length) return (
     <div className="text-[11px] text-emerald-600 font-semibold">
       {accountType === "prepaid" ? "No jobs yet" : "All jobs paid ✓"}
@@ -593,6 +597,9 @@ const CarWashAccounts = () => {
     debounceRef.current = setTimeout(() => { setPage(1); setDebouncedSearch(val); }, 300);
   };
 
+  // Clear any pending debounced search on unmount so it can't call setState after unmount
+  useEffect(() => () => clearTimeout(debounceRef.current), []);
+
   const handleSort = useCallback((field) => {
     setSortDir((prev) => sortBy === field ? (prev === "asc" ? "desc" : "asc") : "desc");
     setSortBy(field);
@@ -605,6 +612,10 @@ const CarWashAccounts = () => {
   const [expandedTopups, setExpandedTopups]         = useState({});
   const [topupsLoading, setTopupsLoading]           = useState({});
   const [stmtLoading, setStmtLoading]               = useState({});
+  const [stmtHasMore, setStmtHasMore]               = useState({});
+  const [topupsHasMore, setTopupsHasMore]           = useState({});
+  const stmtPageRef                                 = useRef({});
+  const topupsPageRef                               = useRef({});
   const [showCreate, setShowCreate]                 = useState(false);
   const [payTarget, setPayTarget]                   = useState(null);
   const [topupTarget, setTopupTarget]               = useState(null);
@@ -649,20 +660,36 @@ const CarWashAccounts = () => {
 
   const toggleExpand = useCallback((acc) => setExpandedId((prev) => prev === acc._id ? null : acc._id), []);
 
-  const loadStatements = useCallback(async (accId) => {
+  // opts.append: fetch the next page and append instead of replacing (page 1 on first load / manual refresh).
+  // Backend pagination for these two endpoints is landing separately (creditAccountsController.js) — until it
+  // does, listStatements/listAccountTopups keep returning the full array, so `pages` resolves to 1 and no
+  // "Load more" is shown. Once the endpoints accept page/limit and return { data, pages }, this activates.
+  const loadStatements = useCallback(async (accId, opts = {}) => {
+    const append = !!opts.append;
+    const page = append ? (stmtPageRef.current[accId] || 1) + 1 : 1;
     setStmtLoading((p) => ({ ...p, [accId]: true }));
     try {
-      const data = await carWashApi.listStatements(accId);
-      setExpandedStatements((p) => ({ ...p, [accId]: Array.isArray(data) ? data : [] }));
+      const raw   = await carWashApi.listStatements(accId, { page, limit: DETAIL_PAGE_SIZE });
+      const list  = Array.isArray(raw) ? raw : (raw?.data ?? []);
+      const pages = Array.isArray(raw) ? 1   : (raw?.pages ?? 1);
+      stmtPageRef.current = { ...stmtPageRef.current, [accId]: page };
+      setStmtHasMore((p) => ({ ...p, [accId]: page < pages }));
+      setExpandedStatements((p) => ({ ...p, [accId]: append ? [...(p[accId] || []), ...list] : list }));
     } catch { toast.error("Failed to load statements"); }
     finally { setStmtLoading((p) => ({ ...p, [accId]: false })); }
   }, []);
 
-  const loadTopups = useCallback(async (accId) => {
+  const loadTopups = useCallback(async (accId, opts = {}) => {
+    const append = !!opts.append;
+    const page = append ? (topupsPageRef.current[accId] || 1) + 1 : 1;
     setTopupsLoading((p) => ({ ...p, [accId]: true }));
     try {
-      const data = await carWashApi.listAccountTopups(accId);
-      setExpandedTopups((p) => ({ ...p, [accId]: Array.isArray(data) ? data : [] }));
+      const raw   = await carWashApi.listAccountTopups(accId, { page, limit: DETAIL_PAGE_SIZE });
+      const list  = Array.isArray(raw) ? raw : (raw?.data ?? []);
+      const pages = Array.isArray(raw) ? 1   : (raw?.pages ?? 1);
+      topupsPageRef.current = { ...topupsPageRef.current, [accId]: page };
+      setTopupsHasMore((p) => ({ ...p, [accId]: page < pages }));
+      setExpandedTopups((p) => ({ ...p, [accId]: append ? [...(p[accId] || []), ...list] : list }));
     } catch { toast.error("Failed to load top-up history"); }
     finally { setTopupsLoading((p) => ({ ...p, [accId]: false })); }
   }, []);
@@ -1010,6 +1037,12 @@ const CarWashAccounts = () => {
                                     )}
                                   </div>
                                 ))}
+                                {topupsHasMore[acc._id] && (
+                                  <button type="button" onClick={() => loadTopups(acc._id, { append: true })} disabled={topupsLoading[acc._id]}
+                                    className="mt-1 w-full border border-slate-200 bg-white py-1 text-[10px] font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-50">
+                                    {topupsLoading[acc._id] ? "Loading…" : "Load more"}
+                                  </button>
+                                )}
                               </div>
                             </div>
                           ) : (
@@ -1052,6 +1085,12 @@ const CarWashAccounts = () => {
                                     </div>
                                   </div>
                                 ))}
+                                {stmtHasMore[acc._id] && (
+                                  <button type="button" onClick={() => loadStatements(acc._id, { append: true })} disabled={stmtLoading[acc._id]}
+                                    className="mt-1 w-full border border-slate-200 bg-white py-1 text-[10px] font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-50">
+                                    {stmtLoading[acc._id] ? "Loading…" : "Load more"}
+                                  </button>
+                                )}
                               </div>
                             </div>
                           )}

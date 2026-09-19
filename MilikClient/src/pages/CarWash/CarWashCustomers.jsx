@@ -25,6 +25,17 @@ import MilikTable from "../../components/common/MilikTable";
 const GRN = "#0B3B2E";
 const fmt = formatMoney;
 
+const CUSTOMER_COLUMNS = [
+  { label: "Customer", sortKey: "name" },
+  { label: "Plates", className: "hidden md:table-cell" },
+  { label: "Visits", sortKey: "visits", className: "hidden md:table-cell" },
+  { label: "Last Visit", sortKey: "lastVisit", className: "hidden lg:table-cell" },
+  { label: "Lifetime Spend", sortKey: "spend", className: "hidden xl:table-cell" },
+  { label: "Outstanding", sortKey: "outstanding", className: "text-red-300" },
+  { label: "Loyalty", className: "hidden xl:table-cell" },
+  { label: "Account", className: "hidden xl:table-cell" },
+];
+
 const acctTypePill = {
   credit:  "bg-purple-100 text-purple-700 border-purple-200",
   monthly: "bg-blue-100 text-blue-700 border-blue-200",
@@ -613,6 +624,116 @@ export default function CarWashCustomers() {
     finally { setPayJobsLoading(false); }
   }, [cashbooks]);
 
+  // ── MilikTable props (memoized so the memo'd table doesn't re-diff on every keystroke) ──
+  const isChecked = useCallback((c) => selectedIds.has(String(c._id)), [selectedIds]);
+  const isSelected = useCallback((c) => selectedIds.has(String(c._id)), [selectedIds]);
+  const onCheckRow = useCallback((c) => toggleSelect(String(c._id)), [toggleSelect]);
+  const onCheckAll = useCallback(() => toggleSelectAll(displayedIds), [toggleSelectAll, displayedIds]);
+
+  const renderExpanded = useCallback((c) => <CustomerDetail customer={c} program={loyaltyProgram} />, [loyaltyProgram]);
+
+  const renderRow = useCallback((c) => {
+    const hasOutstanding = c.outstanding > 0.01;
+    const hasCreditBal   = (c.creditBalance || 0) > 0.01;
+    const hasPlates      = (c.plates || []).length > 0;
+    const card = c.loyaltyCard;
+    const acc  = c.creditAccount;
+    return (
+      <>
+        {/* Customer */}
+        <td className="px-4 py-2">
+          <div className="flex items-center gap-1.5">
+            {c.lastVisit && <div className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${lastVisitDot(c.lastVisit)}`} title={`Last visit: ${fmtDate(c.lastVisit)}`} />}
+            <div className="font-semibold text-slate-800 truncate max-w-[180px]">
+              {c.name || <span className="italic text-slate-400 font-normal">Unnamed</span>}
+            </div>
+          </div>
+          <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+            {c.phone ? <><FaPhone size={8} className="text-slate-300" /> {c.phone}</> : <span className="italic">No phone</span>}
+          </div>
+        </td>
+
+        {/* Plates */}
+        <td className="hidden md:table-cell px-4 py-2">
+          <div className="flex flex-wrap gap-1">
+            {(c.plates || []).slice(0, 2).map((p) => (
+              <span key={p} className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-mono font-bold text-slate-700">{p}</span>
+            ))}
+            {(c.plates || []).length > 2 && (
+              <span className="rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-500" title={(c.plates || []).slice(2).join(", ")}>+{c.plates.length - 2}</span>
+            )}
+          </div>
+        </td>
+
+        {/* Visits */}
+        <td className="hidden md:table-cell px-4 py-2 text-center">
+          <div className="flex items-center justify-center gap-1">
+            <FaCarSide size={9} className="text-slate-300" />
+            <span className="font-semibold tabular-nums text-slate-700">{c.totalJobs || 0}</span>
+          </div>
+        </td>
+
+        {/* Last visit */}
+        <td className="hidden lg:table-cell px-4 py-2 text-right">
+          <div className={`flex items-center justify-end gap-1 text-[11px] ${lastVisitClass(c.lastVisit)}`}>
+            <FaClock size={8} className="opacity-60 flex-shrink-0" />
+            <span className="tabular-nums">{fmtDate(c.lastVisit)}</span>
+          </div>
+        </td>
+
+        {/* Lifetime spend */}
+        <td className="hidden xl:table-cell px-4 py-2 text-right tabular-nums font-medium text-slate-700 text-[11px]">
+          {c.totalPaid > 0 ? fmt(c.totalPaid) : <span className="text-slate-300">—</span>}
+        </td>
+
+        {/* Outstanding / Credit */}
+        <td className="px-4 py-2 text-right tabular-nums text-[11px]">
+          <div className="flex flex-col items-end gap-0.5">
+            {hasOutstanding
+              ? <span className="font-bold text-red-600">{fmt(c.outstanding)}</span>
+              : <span className="text-slate-200">—</span>}
+            {hasCreditBal && (
+              <button type="button" onClick={(e) => { e.stopPropagation(); navigate("/carwash/customers/credit-balances"); }}
+                className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700 hover:bg-emerald-200">
+                <FaPiggyBank size={7} />{fmt(c.creditBalance)}
+              </button>
+            )}
+          </div>
+        </td>
+
+        {/* Loyalty */}
+        <td className="hidden xl:table-cell px-4 py-2">
+          <StampBar card={card} program={loyaltyProgram} />
+        </td>
+
+        {/* Account */}
+        <td className="hidden xl:table-cell px-4 py-2" onClick={(e) => e.stopPropagation()}>
+          {acc ? (
+            <button type="button" onClick={() => navigate("/carwash/customers/credit-accounts")}
+              className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-semibold ${acctTypePill[acc.accountType] || "bg-slate-100 text-slate-600 border-slate-200"} hover:opacity-80`}>
+              <FaIdCard size={8} />{acc.accountType}
+            </button>
+          ) : <span className="text-slate-200 text-[10px]">—</span>}
+        </td>
+      </>
+    );
+  }, [loyaltyProgram, navigate]);
+
+  const renderActions = useCallback((c) => {
+    const hasPlates      = (c.plates || []).length > 0;
+    const hasOutstanding = c.outstanding > 0.01;
+    return (
+      <div className="flex items-center justify-end gap-1">
+        <ActionBtn icon={FaCar} title="View jobs" color="green" onClick={(e) => viewJobs(e, c)} disabled={!hasPlates} />
+        {canManage && <ActionBtn icon={FaEdit} title="Edit customer" color="amber" onClick={(e) => openEdit(e, c)} />}
+        {c.phone && <ActionBtn icon={FaCommentDots} title="Send SMS" color="blue" onClick={(e) => openSms(e, c)} />}
+        {hasOutstanding && canManage && hasPlates && (
+          <ActionBtn icon={FaMoneyBillWave} title={`Settle ${fmt(c.outstanding)}`} color="red" onClick={(e) => openSettle(e, c)} />
+        )}
+      </div>
+    );
+  }, [viewJobs, canManage, openEdit, openSms, openSettle]);
+
   const submitPayment = async (e) => {
     e.preventDefault();
     if (!payForm.job)           { toast.error("Select a job"); return; }
@@ -916,16 +1037,7 @@ export default function CarWashCustomers() {
           {/* Desktop table */}
           <div className="hidden sm:block min-w-full">
             <MilikTable
-              columns={[
-                { label: "Customer", sortKey: "name" },
-                { label: "Plates", className: "hidden md:table-cell" },
-                { label: "Visits", sortKey: "visits", className: "hidden md:table-cell" },
-                { label: "Last Visit", sortKey: "lastVisit", className: "hidden lg:table-cell" },
-                { label: "Lifetime Spend", sortKey: "spend", className: "hidden xl:table-cell" },
-                { label: "Outstanding", sortKey: "outstanding", className: "text-red-300" },
-                { label: "Loyalty", className: "hidden xl:table-cell" },
-                { label: "Account", className: "hidden xl:table-cell" },
-              ]}
+              columns={CUSTOMER_COLUMNS}
               rows={displayed}
               loading={loading && !customers.length}
               empty={search ? "No customers match your search." : "No customers yet."}
@@ -933,114 +1045,16 @@ export default function CarWashCustomers() {
               checkboxes
               allChecked={displayedIds.length > 0 && displayedIds.every((id) => selectedIds.has(id))}
               someChecked={displayedIds.some((id) => selectedIds.has(id)) && !displayedIds.every((id) => selectedIds.has(id))}
-              onCheckAll={() => toggleSelectAll(displayedIds)}
-              isChecked={(c) => selectedIds.has(String(c._id))}
-              onCheckRow={(c) => toggleSelect(String(c._id))}
-              isSelected={(c) => selectedIds.has(String(c._id))}
+              onCheckAll={onCheckAll}
+              isChecked={isChecked}
+              onCheckRow={onCheckRow}
+              isSelected={isSelected}
               sortKey={sortBy}
               sortDir={sortDir}
               onSort={handleSort}
-              renderExpanded={(c) => <CustomerDetail customer={c} program={loyaltyProgram} />}
-              renderRow={(c) => {
-                const hasOutstanding = c.outstanding > 0.01;
-                const hasCreditBal   = (c.creditBalance || 0) > 0.01;
-                const hasPlates      = (c.plates || []).length > 0;
-                const card = c.loyaltyCard;
-                const acc  = c.creditAccount;
-                return (
-                  <>
-                    {/* Customer */}
-                    <td className="px-4 py-2">
-                      <div className="flex items-center gap-1.5">
-                        {c.lastVisit && <div className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${lastVisitDot(c.lastVisit)}`} title={`Last visit: ${fmtDate(c.lastVisit)}`} />}
-                        <div className="font-semibold text-slate-800 truncate max-w-[180px]">
-                          {c.name || <span className="italic text-slate-400 font-normal">Unnamed</span>}
-                        </div>
-                      </div>
-                      <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
-                        {c.phone ? <><FaPhone size={8} className="text-slate-300" /> {c.phone}</> : <span className="italic">No phone</span>}
-                      </div>
-                    </td>
-
-                    {/* Plates */}
-                    <td className="hidden md:table-cell px-4 py-2">
-                      <div className="flex flex-wrap gap-1">
-                        {(c.plates || []).slice(0, 2).map((p) => (
-                          <span key={p} className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-mono font-bold text-slate-700">{p}</span>
-                        ))}
-                        {(c.plates || []).length > 2 && (
-                          <span className="rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-500" title={(c.plates || []).slice(2).join(", ")}>+{c.plates.length - 2}</span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Visits */}
-                    <td className="hidden md:table-cell px-4 py-2 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <FaCarSide size={9} className="text-slate-300" />
-                        <span className="font-semibold tabular-nums text-slate-700">{c.totalJobs || 0}</span>
-                      </div>
-                    </td>
-
-                    {/* Last visit */}
-                    <td className="hidden lg:table-cell px-4 py-2 text-right">
-                      <div className={`flex items-center justify-end gap-1 text-[11px] ${lastVisitClass(c.lastVisit)}`}>
-                        <FaClock size={8} className="opacity-60 flex-shrink-0" />
-                        <span className="tabular-nums">{fmtDate(c.lastVisit)}</span>
-                      </div>
-                    </td>
-
-                    {/* Lifetime spend */}
-                    <td className="hidden xl:table-cell px-4 py-2 text-right tabular-nums font-medium text-slate-700 text-[11px]">
-                      {c.totalPaid > 0 ? fmt(c.totalPaid) : <span className="text-slate-300">—</span>}
-                    </td>
-
-                    {/* Outstanding / Credit */}
-                    <td className="px-4 py-2 text-right tabular-nums text-[11px]">
-                      <div className="flex flex-col items-end gap-0.5">
-                        {hasOutstanding
-                          ? <span className="font-bold text-red-600">{fmt(c.outstanding)}</span>
-                          : <span className="text-slate-200">—</span>}
-                        {hasCreditBal && (
-                          <button type="button" onClick={(e) => { e.stopPropagation(); navigate("/carwash/customers/credit-balances"); }}
-                            className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700 hover:bg-emerald-200">
-                            <FaPiggyBank size={7} />{fmt(c.creditBalance)}
-                          </button>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Loyalty */}
-                    <td className="hidden xl:table-cell px-4 py-2">
-                      <StampBar card={card} program={loyaltyProgram} />
-                    </td>
-
-                    {/* Account */}
-                    <td className="hidden xl:table-cell px-4 py-2" onClick={(e) => e.stopPropagation()}>
-                      {acc ? (
-                        <button type="button" onClick={() => navigate("/carwash/customers/credit-accounts")}
-                          className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-semibold ${acctTypePill[acc.accountType] || "bg-slate-100 text-slate-600 border-slate-200"} hover:opacity-80`}>
-                          <FaIdCard size={8} />{acc.accountType}
-                        </button>
-                      ) : <span className="text-slate-200 text-[10px]">—</span>}
-                    </td>
-                  </>
-                );
-              }}
-              renderActions={(c) => {
-                const hasPlates      = (c.plates || []).length > 0;
-                const hasOutstanding = c.outstanding > 0.01;
-                return (
-                  <div className="flex items-center justify-end gap-1">
-                    <ActionBtn icon={FaCar} title="View jobs" color="green" onClick={(e) => viewJobs(e, c)} disabled={!hasPlates} />
-                    {canManage && <ActionBtn icon={FaEdit} title="Edit customer" color="amber" onClick={(e) => openEdit(e, c)} />}
-                    {c.phone && <ActionBtn icon={FaCommentDots} title="Send SMS" color="blue" onClick={(e) => openSms(e, c)} />}
-                    {hasOutstanding && canManage && hasPlates && (
-                      <ActionBtn icon={FaMoneyBillWave} title={`Settle ${fmt(c.outstanding)}`} color="red" onClick={(e) => openSettle(e, c)} />
-                    )}
-                  </div>
-                );
-              }}
+              renderExpanded={renderExpanded}
+              renderRow={renderRow}
+              renderActions={renderActions}
             />
           </div>
         </div>

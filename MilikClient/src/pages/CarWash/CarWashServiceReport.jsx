@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { FaPrint, FaRedoAlt, FaSearch } from "react-icons/fa";
@@ -23,13 +24,15 @@ const CarWashServiceReport = () => {
   const [applied, setApplied] = useTabState("/carwash/reports/services:applied", () => ({ from: startOfMonthISO(), to: todayISO(), category: "" }));
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [categories, setCategories] = useState([]);
+  const activeBranchId = useMemo(() => getActiveBranchId(), []);
 
-  useEffect(() => {
-    carWashApi.listServiceCategories()
-      .then((result) => setCategories(Array.isArray(result) ? result : Array.isArray(result?.categories) ? result.categories : []))
-      .catch(() => setCategories([]));
-  }, []);
+  const { data: categoriesRaw } = useQuery({
+    queryKey: ["cw-service-categories-ref"],
+    queryFn: () => carWashApi.listServiceCategories(),
+    staleTime: 5 * 60_000,
+    select: (result) => Array.isArray(result) ? result : Array.isArray(result?.categories) ? result.categories : [],
+  });
+  const categories = categoriesRaw ?? [];
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -48,6 +51,8 @@ const CarWashServiceReport = () => {
   useEffect(() => {
     load();
   }, [load]);
+
+  const categoryOptions = useMemo(() => categories.map((cat) => ({ value: cat, label: cat })), [categories]);
 
   const rows = useMemo(() => {
     const all = data?.rows || [];
@@ -159,7 +164,7 @@ const CarWashServiceReport = () => {
           placeholder="All categories"
           value={category}
           onChange={(v) => setCategory(v ?? "")}
-          options={categories.map((cat) => ({ value: cat, label: cat }))}
+          options={categoryOptions}
         />
         <input
           className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
@@ -183,7 +188,7 @@ const CarWashServiceReport = () => {
 
       <div className="mb-2 flex flex-wrap items-center gap-x-5 gap-y-1 border border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
         <span>Period: <strong className="text-slate-900">{period ? `${period.from} → ${period.to}` : "—"}</strong></span>
-        {!getActiveBranchId() && <span className="border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-bold normal-case text-slate-500 tracking-normal">All Branches</span>}
+        {!activeBranchId && <span className="border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-bold normal-case text-slate-500 tracking-normal">All Branches</span>}
         <span>Services: <strong className="text-[#0B3B2E]">{serviceCount}</strong></span>
         <span>Total Jobs: <strong className="text-[#0B3B2E]">{totalJobs}</strong></span>
         <span>Total Revenue: <strong className="text-[#0B3B2E]">{formatMoney(totalRevenue)}</strong></span>

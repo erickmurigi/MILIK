@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 
 const POLL_INTERVAL = 8_000;
@@ -25,7 +25,7 @@ const StatusPulse = ({ color }) => (
   </span>
 );
 
-const JobCard = ({ job, colCfg, position, hasBg }) => (
+const JobCard = React.memo(({ job, colCfg, position, hasBg }) => (
   <div
     className={`mb-2 border-l-4 ${colCfg.border} px-3 py-2.5 rounded-sm ${
       hasBg
@@ -50,16 +50,12 @@ const JobCard = ({ job, colCfg, position, hasBg }) => (
       {job.plate || "—"}
     </div>
   </div>
-);
+));
 
-const CarWashQueueDisplay = () => {
-  const { businessId } = useParams();
-  const [data,       setData]       = useState(null);
-  const [clock,      setClock]      = useState("");
-  const [lastOk,     setLastOk]     = useState(null);
-  const [fetchError, setFetchError] = useState(false);
-  const timerRef     = useRef(null);
-  const failCountRef = useRef(0);
+// Owns its own 1s tick internally so a clock update only re-renders this small
+// component, not the whole live queue board (extracted from CarWashQueueDisplay).
+const Clock = ({ hasBg }) => {
+  const [clock, setClock] = useState("");
 
   useEffect(() => {
     const tick = () =>
@@ -68,6 +64,27 @@ const CarWashQueueDisplay = () => {
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, []);
+
+  return (
+    <div
+      className="font-mono font-black tabular-nums text-white"
+      style={{
+        fontSize: "clamp(1rem, 2vw, 1.5rem)",
+        textShadow: hasBg ? "0 1px 6px rgba(0,0,0,1)" : "none",
+      }}
+    >
+      {clock}
+    </div>
+  );
+};
+
+const CarWashQueueDisplay = () => {
+  const { businessId } = useParams();
+  const [data,       setData]       = useState(null);
+  const [lastOk,     setLastOk]     = useState(null);
+  const [fetchError, setFetchError] = useState(false);
+  const timerRef     = useRef(null);
+  const failCountRef = useRef(0);
 
   const fetchQueue = async (signal) => {
     try {
@@ -94,8 +111,20 @@ const CarWashQueueDisplay = () => {
   useEffect(() => {
     const controller = new AbortController();
     fetchQueue(controller.signal);
-    timerRef.current = setInterval(() => fetchQueue(controller.signal), POLL_INTERVAL);
-    return () => { controller.abort(); clearInterval(timerRef.current); };
+    timerRef.current = setInterval(() => {
+      // This is an always-on wall display, so gating is mostly a no-op in
+      // practice — but skip the fetch if the tab is ever backgrounded.
+      if (document.visibilityState === "visible") fetchQueue(controller.signal);
+    }, POLL_INTERVAL);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") fetchQueue(controller.signal);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      controller.abort();
+      clearInterval(timerRef.current);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId]);
 
@@ -105,7 +134,13 @@ const CarWashQueueDisplay = () => {
   const bgImage      = queueBgRaw
     ? `/api/carwash/display/${businessId}/bg?v=${encodeURIComponent(queueBgRaw.split("/").pop())}`
     : null;
-  const byStatus     = (s) => jobs.filter((j) => j.status === s);
+  const jobsByStatus = useMemo(() => {
+    const groups = {};
+    for (const j of jobs) {
+      (groups[j.status] ??= []).push(j);
+    }
+    return groups;
+  }, [jobs]);
 
   return (
     <div
@@ -152,22 +187,14 @@ const CarWashQueueDisplay = () => {
             {lastOk && (
               <span className="text-[10px] text-white/30">Updated {elapsed(lastOk.toISOString())}</span>
             )}
-            <div
-              className="font-mono font-black tabular-nums text-white"
-              style={{
-                fontSize: "clamp(1rem, 2vw, 1.5rem)",
-                textShadow: bgImage ? "0 1px 6px rgba(0,0,0,1)" : "none",
-              }}
-            >
-              {clock}
-            </div>
+            <Clock hasBg={!!bgImage} />
           </div>
         </header>
 
         {/* ── 4-column grid with horizontal margins ── */}
         <main className="grid flex-1 grid-cols-4 overflow-hidden px-6 pb-4 pt-3 gap-3 items-start">
           {COLS.map((col) => {
-            const colJobs = byStatus(col.key);
+            const colJobs = jobsByStatus[col.key] || [];
             const hasJobs = colJobs.length > 0;
             return (
               <section

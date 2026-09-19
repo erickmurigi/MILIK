@@ -33,10 +33,27 @@ const statusBadgeClass = {
   cancelled: "border-red-200 bg-red-50 text-red-700",
 };
 
+// ─── Breakpoint hook (mirrors Tailwind's `sm:` breakpoint) ────────────────────
+// Mounts only ONE of the mobile/desktop layouts at a time, instead of mounting
+// both and toggling visibility with CSS.
+const useIsDesktop = () => {
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 640px)").matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 640px)");
+    const handler = (e) => setIsDesktop(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return isDesktop;
+};
+
 const CarWashDeposits = () => {
   const queryClient = useQueryClient();
   const currentCompany = useSelector(selectCurrentCompany);
   const isConsolidated = !getActiveBranchId();
+  const isDesktop = useIsDesktop();
   const [filters, setFilters] = useTabState("/carwash/deposits:filters", defaultFilters);
   const [appliedFilters, setAppliedFilters] = useTabState("/carwash/deposits:appliedFilters", defaultFilters);
   const [form, setForm] = useState(() => readDraft("cw-deposits-form") || emptyForm);
@@ -219,6 +236,7 @@ const CarWashDeposits = () => {
         </div>
 
         {/* Mobile card list */}
+        {!isDesktop && (
         <div className="sm:hidden flex-1 min-h-0 overflow-y-auto divide-y divide-slate-200">
           {rows.length ? rows.map((row) => {
             const expanded = expandedIds.includes(row._id);
@@ -267,8 +285,10 @@ const CarWashDeposits = () => {
             <div className="py-10 text-center text-xs font-semibold text-slate-500">No Car Wash deposits found for the selected filters.</div>
           )}
         </div>
+        )}
 
         {/* Desktop table */}
+        {isDesktop && (
         <div className="hidden sm:flex sm:flex-col sm:flex-1 sm:min-h-0 sm:overflow-hidden">
         <div className="flex-1 overflow-y-auto overflow-x-auto">
         <table className="w-full min-w-[1060px] text-xs">
@@ -305,7 +325,7 @@ const CarWashDeposits = () => {
                           value={row.status || "pending"}
                           onChange={(v) => updateStatus(row, v ?? "pending")}
                           className={statusBadgeClass[row.status || "pending"] || statusBadgeClass.pending}
-                          options={statuses.map((status) => ({ value: status, label: status.toUpperCase() }))}
+                          options={(nextStatuses[row.status || "pending"] || ["pending"]).map((status) => ({ value: status, label: status.toUpperCase() }))}
                         />
                       ) : (
                         <StatusBadge status={row.status || "pending"} map={statusBadgeClass} />
@@ -335,6 +355,7 @@ const CarWashDeposits = () => {
         </table>
         </div>{/* end scroll */}
         </div>{/* end desktop table wrapper */}
+        )}
         <PaginationBar
           page={pagination.page}
           pages={pagination.pages}

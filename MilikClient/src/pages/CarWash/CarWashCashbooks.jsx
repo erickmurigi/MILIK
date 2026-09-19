@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
@@ -13,6 +13,16 @@ import MilikTable from "../../components/common/MilikTable";
 
 const DEFAULT_PAGE_SIZE = 30;
 const defaultFilters = { search: "" };
+
+// Hoisted to module scope so the reference is stable across renders — MilikTable
+// is React.memo'd and an inline array literal here would defeat that memo.
+const CASHBOOK_COLUMNS = [
+  { label: "Code" },
+  { label: "Cashbook" },
+  { label: "Subgroup" },
+  { label: "Posting" },
+  { label: "Balance", align: "right" },
+];
 
 const isCashbookAccount = (account = {}) =>
   String(account?.subGroup || "").toLowerCase().includes("cashbook") ||
@@ -72,6 +82,16 @@ const CarWashCashbooks = () => {
     setPage(1);
   };
 
+  const renderRow = useCallback((account) => (
+    <>
+      <td className="px-2 py-1 font-extrabold text-slate-900">{account.code}</td>
+      <td className="px-2 py-1 font-semibold text-slate-800">{account.name}</td>
+      <td className="px-2 py-1 text-slate-600">{account.subGroup || "-"}</td>
+      <td className="px-2 py-1 font-bold uppercase text-[#0B3B2E]">{account.isPosting === false ? "No" : "Yes"}</td>
+      <td className="px-2 py-1 text-right font-extrabold text-slate-900">{formatMoney(account.balance)}</td>
+    </>
+  ), []);
+
   return (
     <CarWashShell
       title="Cashbooks"
@@ -101,26 +121,12 @@ const CarWashCashbooks = () => {
           <span>Source: <strong className="text-[#0B3B2E]">Company Chart of Accounts</strong></span>
         </div>
         <MilikTable
-          columns={[
-            { label: "Code" },
-            { label: "Cashbook" },
-            { label: "Subgroup" },
-            { label: "Posting" },
-            { label: "Balance", align: "right" },
-          ]}
+          columns={CASHBOOK_COLUMNS}
           rows={pagedAccounts}
           loading={loading}
           empty="No cashbook accounts found."
           minWidth="820px"
-          renderRow={(account) => (
-            <>
-              <td className="px-2 py-1 font-extrabold text-slate-900">{account.code}</td>
-              <td className="px-2 py-1 font-semibold text-slate-800">{account.name}</td>
-              <td className="px-2 py-1 text-slate-600">{account.subGroup || "-"}</td>
-              <td className="px-2 py-1 font-bold uppercase text-[#0B3B2E]">{account.isPosting === false ? "No" : "Yes"}</td>
-              <td className="px-2 py-1 text-right font-extrabold text-slate-900">{formatMoney(account.balance)}</td>
-            </>
-          )}
+          renderRow={renderRow}
         />
         <PaginationBar
           page={page}

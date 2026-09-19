@@ -77,6 +77,24 @@ const getMonthBounds = () => {
 const statuses = ["waiting", "washing", "drying", "ready", "done", "paid", "cancelled"];
 const paymentMethods = ["cash", "mpesa", "bank", "card", "other"];
 const DEFAULT_PAGE_SIZE = 25;
+const EMPTY_ARRAY = [];
+
+// Static filter-bar option literals — hoisted to module scope since they never change.
+const PAYMENT_STATUS_FILTER_OPTIONS = [
+  { value: "unpaid", label: "Unpaid" },
+  { value: "partial", label: "Partial" },
+  { value: "paid", label: "Paid" },
+];
+const JOB_TYPE_FILTER_OPTIONS = [
+  { value: "vehicle", label: "Vehicle" },
+  { value: "carpet", label: "Carpet" },
+];
+const QUICK_PICK_FILTER_OPTIONS = [
+  { value: "today", label: "Today" },
+  { value: "thisWeek", label: "This Week" },
+  { value: "lastWeek", label: "Last Week" },
+  { value: "month", label: "This Month" },
+];
 
 const statusLabels = {
   waiting:  "Waiting",
@@ -595,7 +613,7 @@ const CarWashJobs = () => {
   const location = useLocation();
   const confirm = useConfirm();
   const currentCompany = useSelector(selectCurrentCompany);
-  const isConsolidated = !getActiveBranchId();
+  const isConsolidated = useMemo(() => !getActiveBranchId(), []);
   const [jobs, setJobs] = useState([]);
 
   // Reference data — cached across navigations; avoids refetch on every mount
@@ -605,7 +623,7 @@ const CarWashJobs = () => {
     staleTime: 5 * 60_000,
     select: (data) => normalizeListPayload(data, "services"),
   });
-  const services = servicesRaw ?? [];
+  const services = servicesRaw ?? EMPTY_ARRAY;
 
   const { data: staffRaw } = useQuery({
     queryKey: ["cw-staff-ref"],
@@ -613,7 +631,15 @@ const CarWashJobs = () => {
     staleTime: 5 * 60_000,
     select: (data) => normalizeListPayload(data, "staff"),
   });
-  const staff = staffRaw ?? [];
+  const staff = staffRaw ?? EMPTY_ARRAY;
+
+  // Filter-bar dropdown options — derived once per services/staff change instead
+  // of being rebuilt from up to 500 services / all staff on every keystroke.
+  const serviceOptions = useMemo(
+    () => services.map((s) => ({ value: s._id, label: s.category ? `${s.category} — ${s.name}` : s.name })),
+    [services]
+  );
+  const staffOptions = useMemo(() => staff.map((s) => ({ value: s._id, label: s.name })), [staff]);
 
   const { data: cashbooksRaw } = useQuery({
     queryKey: ["cw-job-cashbooks", currentCompany?._id],
@@ -622,7 +648,7 @@ const CarWashJobs = () => {
     staleTime: 5 * 60_000,
     select: (data) => Array.isArray(data) ? data : [],
   });
-  const cashbooks = cashbooksRaw ?? [];
+  const cashbooks = cashbooksRaw ?? EMPTY_ARRAY;
 
   const { data: settingsAndBranch } = useQuery({
     queryKey: ["cw-job-defaults", currentCompany?._id],
@@ -707,6 +733,13 @@ const CarWashJobs = () => {
     const seen = new Set();
     return [...modalUnpaidJobs, ...jobs].filter((j) => { if (seen.has(j._id)) return false; seen.add(j._id); return true; });
   }, [modalUnpaidJobs, jobs]);
+  const unpaidPaymentJobOptions = useMemo(
+    () => allPaymentJobs.filter((j) => j.paymentStatus !== "paid").map((job) => ({
+      value: job._id,
+      label: `${job.jobNumber} - ${job.jobType === "carpet" ? job.itemDescription : job.plateNumber} - ${formatMoney(job.price)}`,
+    })),
+    [allPaymentJobs]
+  );
   const selectedPaymentJob = useMemo(() => allPaymentJobs.find((job) => job._id === paymentForm.job), [allPaymentJobs, paymentForm.job]);
   const selectedCashbook = useMemo(() => cashbooks.find((item) => item._id === paymentForm.cashbookAccount), [cashbooks, paymentForm.cashbookAccount]);
   const outstandingForModal = useMemo(() => {
@@ -793,11 +826,17 @@ const CarWashJobs = () => {
   useEffect(() => {
     if (!cashbooks.length || paymentForm.cashbookAccount) return;
     setPaymentForm((prev) => ({ ...prev, cashbookAccount: preferredCashbookForMethod(cashbooks, prev.method, cashbookDefaults) }));
-  }, [cashbooks, paymentForm.cashbookAccount]);
+  }, [cashbooks, paymentForm.cashbookAccount, cashbookDefaults]);
 
   useEffect(() => {
-    setSelectedIds((prev) => prev.filter((id) => jobs.some((job) => job._id === id)));
-    setExpandedIds((prev) => prev.filter((id) => jobs.some((job) => job._id === id)));
+    setSelectedIds((prev) => {
+      const next = prev.filter((id) => jobs.some((job) => job._id === id));
+      return next.length === prev.length ? prev : next;
+    });
+    setExpandedIds((prev) => {
+      const next = prev.filter((id) => jobs.some((job) => job._id === id));
+      return next.length === prev.length ? prev : next;
+    });
   }, [jobs]);
 
   const closePaymentModal = () => {
@@ -1214,7 +1253,7 @@ ${taxAmt > 0 ? `<tr class="vat"><td>VAT (incl.)</td><td class="amt">${fmtAmt(tax
         <AppSelect
           value={filters.service}
           onChange={(v) => setFilterValue("service", v ?? "")}
-          options={services.map((s) => ({ value: s._id, label: s.category ? `${s.category} — ${s.name}` : s.name }))}
+          options={serviceOptions}
           placeholder="All Services"
           searchable
           clearable
@@ -1223,7 +1262,7 @@ ${taxAmt > 0 ? `<tr class="vat"><td>VAT (incl.)</td><td class="amt">${fmtAmt(tax
         <AppSelect
           value={filters.staff}
           onChange={(v) => setFilterValue("staff", v ?? "")}
-          options={staff.map((s) => ({ value: s._id, label: s.name }))}
+          options={staffOptions}
           placeholder="All Staff"
           searchable
           clearable
@@ -1240,11 +1279,7 @@ ${taxAmt > 0 ? `<tr class="vat"><td>VAT (incl.)</td><td class="amt">${fmtAmt(tax
         <AppSelect
           value={filters.paymentStatus}
           onChange={(v) => setFilterValue("paymentStatus", v ?? "")}
-          options={[
-            { value: "unpaid", label: "Unpaid" },
-            { value: "partial", label: "Partial" },
-            { value: "paid", label: "Paid" },
-          ]}
+          options={PAYMENT_STATUS_FILTER_OPTIONS}
           placeholder="All Payments"
           clearable
           size="sm"
@@ -1252,10 +1287,7 @@ ${taxAmt > 0 ? `<tr class="vat"><td>VAT (incl.)</td><td class="amt">${fmtAmt(tax
         <AppSelect
           value={filters.jobType}
           onChange={(v) => setFilterValue("jobType", v ?? "")}
-          options={[
-            { value: "vehicle", label: "Vehicle" },
-            { value: "carpet", label: "Carpet" },
-          ]}
+          options={JOB_TYPE_FILTER_OPTIONS}
           placeholder="All Types"
           clearable
           size="sm"
@@ -1270,12 +1302,7 @@ ${taxAmt > 0 ? `<tr class="vat"><td>VAT (incl.)</td><td class="amt">${fmtAmt(tax
             if (v === "lastWeek") setFilters((p) => ({ ...p, dateFrom: lweek.from, dateTo: lweek.to  }));
             if (v === "month")    setFilters((p) => ({ ...p, dateFrom: month.from, dateTo: month.to  }));
           }}
-          options={[
-            { value: "today", label: "Today" },
-            { value: "thisWeek", label: "This Week" },
-            { value: "lastWeek", label: "Last Week" },
-            { value: "month", label: "This Month" },
-          ]}
+          options={QUICK_PICK_FILTER_OPTIONS}
           placeholder="Quick pick…"
           clearable
           size="sm"
@@ -1495,10 +1522,7 @@ ${taxAmt > 0 ? `<tr class="vat"><td>VAT (incl.)</td><td class="amt">${fmtAmt(tax
                     } catch { /* keep 0 */ }
                   }
                 }}
-                options={allPaymentJobs.filter((j) => j.paymentStatus !== "paid").map((job) => ({
-                  value: job._id,
-                  label: `${job.jobNumber} - ${job.jobType === "carpet" ? job.itemDescription : job.plateNumber} - ${formatMoney(job.price)}`,
-                }))}
+                options={unpaidPaymentJobOptions}
                 placeholder="Select job"
                 searchable
                 clearable

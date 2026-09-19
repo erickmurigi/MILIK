@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FaArrowLeft, FaBalanceScale, FaCheckCircle, FaPlus, FaSave, FaTrash, FaUser,
@@ -24,6 +24,53 @@ const makeRow = () => ({
 
 const ic = "h-8 w-full border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 
+// ─── Already-recorded saved list (own component so entry-grid per-row input state
+// doesn't re-render up to 200 saved-job rows on every keystroke) ───────────────
+const SavedBalancesList = React.memo(function SavedBalancesList({ saved, loading, totalOutstanding }) {
+  return (
+    <div className="flex flex-col border border-slate-200 bg-white shadow-sm lg:max-h-[600px]">
+      <div className="flex flex-shrink-0 items-center justify-between border-b border-slate-200 bg-[#EDF5F1] px-4 py-2">
+        <p className="text-xs font-extrabold uppercase tracking-wide text-[#0B3B2E]">Already Recorded</p>
+        <span className="text-[10px] font-semibold text-slate-500">{saved.length} total</span>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-slate-100">
+        {loading ? (
+          <p className="py-8 text-center text-xs text-slate-400">Loading…</p>
+        ) : saved.length === 0 ? (
+          <div className="py-10 text-center px-4">
+            <FaUser className="mx-auto mb-2 text-slate-200" size={22} />
+            <p className="text-xs font-semibold text-slate-400">No opening balances recorded yet</p>
+          </div>
+        ) : saved.map((job) => (
+          <div key={job._id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+            <div className="min-w-0">
+              <p className="text-xs font-extrabold font-mono text-slate-800">{job.plateNumber || "—"}</p>
+              <p className="text-[10px] text-slate-500 truncate">{job.customerName || "No name"}</p>
+              <p className="text-[9px] text-slate-400">{fmtDate(job.createdAt)}</p>
+            </div>
+            <div className="flex-shrink-0 text-right">
+              <p className={`text-xs font-black ${job.paymentStatus === "paid" ? "text-emerald-600" : "text-red-600"}`}>
+                {fmt(job.price)}
+              </p>
+              <span className={`inline-block rounded px-1.5 py-0 text-[9px] font-bold uppercase ${job.paymentStatus === "paid" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                {job.paymentStatus}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {saved.length > 0 && (
+        <div className="flex-shrink-0 flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs">
+          <span className="text-slate-500">Total outstanding</span>
+          <span className="font-black text-red-600">{fmt(totalOutstanding)}</span>
+        </div>
+      )}
+    </div>
+  );
+});
+
 export default function CarWashOpeningBalances() {
   const navigate = useNavigate();
   const [rows, setRows] = useState([makeRow()]);
@@ -42,6 +89,12 @@ export default function CarWashOpeningBalances() {
   }, []);
 
   useEffect(() => { loadSaved(); }, [loadSaved]);
+
+  // Clear any pending plate-lookup debounce timers on unmount so they can't call
+  // setState after unmount
+  useEffect(() => () => {
+    Object.values(debounceRefs.current).forEach(clearTimeout);
+  }, []);
 
   const addRow = () => setRows((p) => [...p, makeRow()]);
 
@@ -73,7 +126,10 @@ export default function CarWashOpeningBalances() {
     }, 600);
   };
 
-  const validRows = rows.filter((r) => r.plate.trim() && Number(r.amount) > 0);
+  const validRows = useMemo(
+    () => rows.filter((r) => r.plate.trim() && Number(r.amount) > 0),
+    [rows]
+  );
 
   const handleSave = async () => {
     if (!validRows.length) { toast.error("Add at least one row with a plate and amount"); return; }
@@ -102,8 +158,14 @@ export default function CarWashOpeningBalances() {
     if (fail) toast.error(`${fail} entr${fail !== 1 ? "ies" : "y"} failed — check amounts and plates`);
   };
 
-  const totalValid = validRows.reduce((s, r) => s + Number(r.amount || 0), 0);
-  const totalOutstanding = saved.filter((j) => j.paymentStatus !== "paid").reduce((s, j) => s + (j.price || 0), 0);
+  const totalValid = useMemo(
+    () => validRows.reduce((s, r) => s + Number(r.amount || 0), 0),
+    [validRows]
+  );
+  const totalOutstanding = useMemo(
+    () => saved.filter((j) => j.paymentStatus !== "paid").reduce((s, j) => s + (j.price || 0), 0),
+    [saved]
+  );
 
   return (
     <CarWashShell
@@ -249,46 +311,7 @@ export default function CarWashOpeningBalances() {
           </div>
 
           {/* ── Right: already recorded ──────────────────────────────────── */}
-          <div className="flex flex-col border border-slate-200 bg-white shadow-sm lg:max-h-[600px]">
-            <div className="flex flex-shrink-0 items-center justify-between border-b border-slate-200 bg-[#EDF5F1] px-4 py-2">
-              <p className="text-xs font-extrabold uppercase tracking-wide text-[#0B3B2E]">Already Recorded</p>
-              <span className="text-[10px] font-semibold text-slate-500">{saved.length} total</span>
-            </div>
-
-            <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-slate-100">
-              {loadingSaved ? (
-                <p className="py-8 text-center text-xs text-slate-400">Loading…</p>
-              ) : saved.length === 0 ? (
-                <div className="py-10 text-center px-4">
-                  <FaUser className="mx-auto mb-2 text-slate-200" size={22} />
-                  <p className="text-xs font-semibold text-slate-400">No opening balances recorded yet</p>
-                </div>
-              ) : saved.map((job) => (
-                <div key={job._id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                  <div className="min-w-0">
-                    <p className="text-xs font-extrabold font-mono text-slate-800">{job.plateNumber || "—"}</p>
-                    <p className="text-[10px] text-slate-500 truncate">{job.customerName || "No name"}</p>
-                    <p className="text-[9px] text-slate-400">{fmtDate(job.createdAt)}</p>
-                  </div>
-                  <div className="flex-shrink-0 text-right">
-                    <p className={`text-xs font-black ${job.paymentStatus === "paid" ? "text-emerald-600" : "text-red-600"}`}>
-                      {fmt(job.price)}
-                    </p>
-                    <span className={`inline-block rounded px-1.5 py-0 text-[9px] font-bold uppercase ${job.paymentStatus === "paid" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
-                      {job.paymentStatus}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {saved.length > 0 && (
-              <div className="flex-shrink-0 flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs">
-                <span className="text-slate-500">Total outstanding</span>
-                <span className="font-black text-red-600">{fmt(totalOutstanding)}</span>
-              </div>
-            )}
-          </div>
+          <SavedBalancesList saved={saved} loading={loadingSaved} totalOutstanding={totalOutstanding} />
         </div>
       </div>
     </CarWashShell>

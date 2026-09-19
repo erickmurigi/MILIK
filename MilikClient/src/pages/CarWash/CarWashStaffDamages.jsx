@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { FaExclamationTriangle, FaPlus, FaRedoAlt, FaTimes, FaTrash, FaUndo } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -203,6 +203,82 @@ export default function CarWashStaffDamages() {
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
+  const renderDamageRow = useCallback((d) => {
+    const recovered   = r2(d.amountRecovered || 0);
+    const remaining   = r2(d.amount - recovered);
+    const pct         = d.amount > 0 ? Math.min(100, Math.round((recovered / d.amount) * 100)) : 0;
+    const installment = computeInstallment(d);
+    const isInstallment = d.deductionMode && d.deductionMode !== "full";
+    return (
+      <>
+        <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{fmtDate(d.damageDate)}</td>
+        <td className="px-3 py-2 font-bold text-slate-800 whitespace-nowrap">{d.staff?.name || "—"}</td>
+        <td className="px-3 py-2 text-slate-700 max-w-[180px] truncate" title={d.description}>{d.description}</td>
+        <td className="px-3 py-2 text-right font-black text-red-600 whitespace-nowrap">{formatMoney(d.amount)}</td>
+        <td className="px-3 py-2 min-w-[150px]">
+          {d.status === "waived" ? (
+            <span className="text-slate-400">Written off</span>
+          ) : d.status === "deducted" ? (
+            <div className="flex items-center gap-1.5">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-emerald-100">
+                <div className="h-full bg-emerald-500" style={{ width: "100%" }} />
+              </div>
+              <span className="text-[10px] font-bold text-emerald-600">100%</span>
+            </div>
+          ) : (
+            <div className="space-y-0.5">
+              {recovered > 0 ? (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full bg-amber-400" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-[10px] text-slate-500">{pct}%</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500">
+                    {formatMoney(recovered)} paid · {formatMoney(remaining)} left
+                  </div>
+                </>
+              ) : null}
+              <div className="text-[10px] font-semibold text-red-600">
+                Next: −{formatMoney(installment)}
+                {isInstallment && (
+                  <span className="ml-1 font-normal text-slate-400">({modeLabel(d.deductionMode)}{d.deductionMode === "percent" ? ` ${d.deductionValue}%` : ""})</span>
+                )}
+              </div>
+            </div>
+          )}
+        </td>
+        <td className="px-3 py-2 text-center">
+          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-black ${statusPill(d.status)}`}>
+            {statusLabel(d.status)}
+          </span>
+        </td>
+      </>
+    );
+  }, []);
+
+  const renderDamageActions = useCallback((d) =>
+    canManage && d.status === "pending" ? (
+      <div className="inline-flex items-center gap-1">
+        <button
+          onClick={() => { setWaiveTarget(d); setWaiveNotes(""); }}
+          title="Waive — write off this damage"
+          className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-100"
+        >
+          <FaUndo className="text-[9px]" /> Waive
+        </button>
+        <button
+          onClick={() => setDeleteTarget(d)}
+          title="Delete record"
+          className="border border-red-200 bg-red-50 px-2 py-0.5 text-red-600 hover:bg-red-100"
+        >
+          <FaTrash className="text-[9px]" />
+        </button>
+      </div>
+    ) : null
+  , [canManage]);
+
   return (
     <CarWashShell
       title="Staff Damages"
@@ -280,80 +356,8 @@ export default function CarWashStaffDamages() {
           loading={loading}
           empty="No damage records found"
           minWidth="820px"
-          renderRow={(d) => {
-            const recovered   = r2(d.amountRecovered || 0);
-            const remaining   = r2(d.amount - recovered);
-            const pct         = d.amount > 0 ? Math.min(100, Math.round((recovered / d.amount) * 100)) : 0;
-            const installment = computeInstallment(d);
-            const isInstallment = d.deductionMode && d.deductionMode !== "full";
-            return (
-              <>
-                <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{fmtDate(d.damageDate)}</td>
-                <td className="px-3 py-2 font-bold text-slate-800 whitespace-nowrap">{d.staff?.name || "—"}</td>
-                <td className="px-3 py-2 text-slate-700 max-w-[180px] truncate" title={d.description}>{d.description}</td>
-                <td className="px-3 py-2 text-right font-black text-red-600 whitespace-nowrap">{formatMoney(d.amount)}</td>
-                <td className="px-3 py-2 min-w-[150px]">
-                  {d.status === "waived" ? (
-                    <span className="text-slate-400">Written off</span>
-                  ) : d.status === "deducted" ? (
-                    <div className="flex items-center gap-1.5">
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-emerald-100">
-                        <div className="h-full bg-emerald-500" style={{ width: "100%" }} />
-                      </div>
-                      <span className="text-[10px] font-bold text-emerald-600">100%</span>
-                    </div>
-                  ) : (
-                    <div className="space-y-0.5">
-                      {recovered > 0 ? (
-                        <>
-                          <div className="flex items-center gap-1.5">
-                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
-                              <div className="h-full bg-amber-400" style={{ width: `${pct}%` }} />
-                            </div>
-                            <span className="text-[10px] text-slate-500">{pct}%</span>
-                          </div>
-                          <div className="text-[10px] text-slate-500">
-                            {formatMoney(recovered)} paid · {formatMoney(remaining)} left
-                          </div>
-                        </>
-                      ) : null}
-                      <div className="text-[10px] font-semibold text-red-600">
-                        Next: −{formatMoney(installment)}
-                        {isInstallment && (
-                          <span className="ml-1 font-normal text-slate-400">({modeLabel(d.deductionMode)}{d.deductionMode === "percent" ? ` ${d.deductionValue}%` : ""})</span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-center">
-                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-black ${statusPill(d.status)}`}>
-                    {statusLabel(d.status)}
-                  </span>
-                </td>
-              </>
-            );
-          }}
-          renderActions={(d) =>
-            canManage && d.status === "pending" ? (
-              <div className="inline-flex items-center gap-1">
-                <button
-                  onClick={() => { setWaiveTarget(d); setWaiveNotes(""); }}
-                  title="Waive — write off this damage"
-                  className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-100"
-                >
-                  <FaUndo className="text-[9px]" /> Waive
-                </button>
-                <button
-                  onClick={() => setDeleteTarget(d)}
-                  title="Delete record"
-                  className="border border-red-200 bg-red-50 px-2 py-0.5 text-red-600 hover:bg-red-100"
-                >
-                  <FaTrash className="text-[9px]" />
-                </button>
-              </div>
-            ) : null
-          }
+          renderRow={renderDamageRow}
+          renderActions={renderDamageActions}
         />
 
         {/* Pagination */}

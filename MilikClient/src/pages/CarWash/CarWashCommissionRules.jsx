@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaEdit, FaPlus, FaRedoAlt, FaSave, FaToggleOff, FaToggleOn } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -12,11 +12,107 @@ import { inputClass, labelClass } from "../../utils/formStyles";
 const fmtSvc = (svc, fallback = "—") => svc ? (svc.category ? `${svc.category} — ${svc.name}` : svc.name) : fallback;
 const emptyRule = { name: "", service: "", staff: "", commissionType: "fixed", rate: "", priority: 0, active: true, notes: "" };
 
+// ─── Rule-edit modal — owns its own form state so keystrokes don't re-render the
+// rules table behind it ─────────────────────────────────────────────────────────
+const RuleModal = ({ editId, initialForm, services, staff, canManage, onSave, onClose }) => {
+  const [form, setForm] = useState(initialForm);
+  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+
+  const save = async (e) => {
+    e.preventDefault();
+    await onSave(form);
+  };
+
+  return (
+    <Modal
+      title={editId ? "Edit Commission Rule" : "New Commission Rule"}
+      subtitle="Rules are matched by specificity: staff + service beats staff-only or service-only."
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" onClick={onClose} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
+          {canManage && <button type="submit" form="cw-rule-form" className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127]"><FaSave /> Save Rule</button>}
+        </>
+      }
+    >
+      <form id="cw-rule-form" onSubmit={save} className="grid gap-3 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <label className={labelClass}>Rule Name *</label>
+          <input className={inputClass} value={form.name} onChange={(e) => set("name", e.target.value)} required />
+        </div>
+        <div>
+          <AppSelect
+            label="Commission Type"
+            value={form.commissionType}
+            onChange={(v) => set("commissionType", v ?? "fixed")}
+            options={[
+              { value: "fixed", label: "Fixed amount (Ksh)" },
+              { value: "percentage", label: "Percentage of job price" },
+            ]}
+            size="md"
+          />
+        </div>
+        <div>
+          <label className={labelClass}>Rate ({form.commissionType === "percentage" ? "%" : "Ksh"}) *</label>
+          <input
+            type="number"
+            min="0"
+            max={form.commissionType === "percentage" ? 100 : undefined}
+            step="0.01"
+            className={inputClass}
+            value={form.rate}
+            onChange={(e) => set("rate", e.target.value)}
+            required
+          />
+          {form.commissionType === "percentage" && Number(form.rate) > 100 && (
+            <p className="mt-0.5 text-[10px] font-bold text-red-500">Percentage cannot exceed 100%</p>
+          )}
+        </div>
+        <div>
+          <AppSelect
+            label="Applies to Service"
+            value={form.service}
+            onChange={(v) => set("service", v ?? "")}
+            options={services.map((s) => ({ value: s._id, label: s.category ? `${s.category} — ${s.name}` : s.name }))}
+            placeholder="All services"
+            size="md"
+            searchable
+          />
+        </div>
+        <div>
+          <AppSelect
+            label="Applies to Staff"
+            value={form.staff}
+            onChange={(v) => set("staff", v ?? "")}
+            options={staff.map((s) => ({ value: s._id, label: s.name }))}
+            placeholder="All staff"
+            size="md"
+            searchable
+          />
+        </div>
+        <div>
+          <label className={labelClass}>Priority</label>
+          <input type="number" className={inputClass} value={form.priority} onChange={(e) => set("priority", e.target.value)} />
+          <p className="mt-0.5 text-[10px] text-slate-400">Higher priority wins when multiple rules match</p>
+        </div>
+        <div className="flex items-center gap-2 pt-6">
+          <input type="checkbox" id="rule-active" checked={form.active} onChange={(e) => set("active", e.target.checked)} className="accent-[#0B3B2E]" />
+          <label htmlFor="rule-active" className="text-sm font-bold text-slate-700">Rule is active</label>
+        </div>
+        <div className="sm:col-span-2">
+          <label className={labelClass}>Notes</label>
+          <textarea className="min-h-16 w-full border border-slate-300 px-2 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none" value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+        </div>
+      </form>
+    </Modal>
+  );
+};
+
 const CarWashCommissionRules = () => {
   const queryClient = useQueryClient();
   const canManage = useCarWashPermission("carwash-commissions", "manage");
 
-  const [form, setForm]         = useState(emptyRule);
+  const [editInitialForm, setEditInitialForm] = useState(emptyRule);
   const [editId, setEditId]     = useState("");
   const [showModal, setShowModal] = useState(false);
 
@@ -44,10 +140,10 @@ const CarWashCommissionRules = () => {
   });
   const staff = staffRaw ?? [];
 
-  const openNew = () => { setEditId(""); setForm(emptyRule); setShowModal(true); };
+  const openNew = () => { setEditId(""); setEditInitialForm(emptyRule); setShowModal(true); };
   const openEdit = (rule) => {
     setEditId(rule._id);
-    setForm({
+    setEditInitialForm({
       name: rule.name || "",
       service: rule.service?._id || rule.service || "",
       staff: rule.staff?._id || rule.staff || "",
@@ -60,8 +156,7 @@ const CarWashCommissionRules = () => {
     setShowModal(true);
   };
 
-  const save = async (e) => {
-    e.preventDefault();
+  const save = async (form) => {
     const payload = { ...form, rate: Number(form.rate || 0), priority: Number(form.priority || 0), service: form.service || null, staff: form.staff || null };
     try {
       if (editId) await carWashApi.updateCommissionRule(editId, payload);
@@ -73,6 +168,12 @@ const CarWashCommissionRules = () => {
       toast.error(err?.response?.data?.message || "Failed to save rule");
     }
   };
+
+  const { activeCount, inactiveCount } = useMemo(() => {
+    let activeCount = 0, inactiveCount = 0;
+    for (const r of rules) { if (r.active === false) inactiveCount++; else activeCount++; }
+    return { activeCount, inactiveCount };
+  }, [rules]);
 
   return (
     <CarWashShell
@@ -93,8 +194,8 @@ const CarWashCommissionRules = () => {
       <div className="min-h-[calc(100vh-14rem)] overflow-x-auto border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center gap-4 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <span>Total Rules: <strong className="text-[#0B3B2E]">{rules.length}</strong></span>
-          <span>Active: <strong className="text-emerald-700">{rules.filter((r) => r.active !== false).length}</strong></span>
-          <span>Inactive: <strong className="text-slate-500">{rules.filter((r) => r.active === false).length}</strong></span>
+          <span>Active: <strong className="text-emerald-700">{activeCount}</strong></span>
+          <span>Inactive: <strong className="text-slate-500">{inactiveCount}</strong></span>
         </div>
         <table className="w-full min-w-[860px] text-xs">
           <thead className="bg-[#0B3B2E] text-white">
@@ -143,87 +244,15 @@ const CarWashCommissionRules = () => {
       </div>
 
       {showModal && (
-        <Modal
-          title={editId ? "Edit Commission Rule" : "New Commission Rule"}
-          subtitle="Rules are matched by specificity: staff + service beats staff-only or service-only."
+        <RuleModal
+          editId={editId}
+          initialForm={editInitialForm}
+          services={services}
+          staff={staff}
+          canManage={canManage}
+          onSave={save}
           onClose={() => setShowModal(false)}
-          footer={
-            <>
-              <button type="button" onClick={() => setShowModal(false)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
-              {canManage && <button type="submit" form="cw-rule-form" className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127]"><FaSave /> Save Rule</button>}
-            </>
-          }
-        >
-          <form id="cw-rule-form" onSubmit={save} className="grid gap-3 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <label className={labelClass}>Rule Name *</label>
-              <input className={inputClass} value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} required />
-            </div>
-            <div>
-              <AppSelect
-                label="Commission Type"
-                value={form.commissionType}
-                onChange={(v) => setForm((p) => ({ ...p, commissionType: v ?? "fixed" }))}
-                options={[
-                  { value: "fixed", label: "Fixed amount (Ksh)" },
-                  { value: "percentage", label: "Percentage of job price" },
-                ]}
-                size="md"
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Rate ({form.commissionType === "percentage" ? "%" : "Ksh"}) *</label>
-              <input
-                type="number"
-                min="0"
-                max={form.commissionType === "percentage" ? 100 : undefined}
-                step="0.01"
-                className={inputClass}
-                value={form.rate}
-                onChange={(e) => setForm((p) => ({ ...p, rate: e.target.value }))}
-                required
-              />
-              {form.commissionType === "percentage" && Number(form.rate) > 100 && (
-                <p className="mt-0.5 text-[10px] font-bold text-red-500">Percentage cannot exceed 100%</p>
-              )}
-            </div>
-            <div>
-              <AppSelect
-                label="Applies to Service"
-                value={form.service}
-                onChange={(v) => setForm((p) => ({ ...p, service: v ?? "" }))}
-                options={services.map((s) => ({ value: s._id, label: s.category ? `${s.category} — ${s.name}` : s.name }))}
-                placeholder="All services"
-                size="md"
-                searchable
-              />
-            </div>
-            <div>
-              <AppSelect
-                label="Applies to Staff"
-                value={form.staff}
-                onChange={(v) => setForm((p) => ({ ...p, staff: v ?? "" }))}
-                options={staff.map((s) => ({ value: s._id, label: s.name }))}
-                placeholder="All staff"
-                size="md"
-                searchable
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Priority</label>
-              <input type="number" className={inputClass} value={form.priority} onChange={(e) => setForm((p) => ({ ...p, priority: e.target.value }))} />
-              <p className="mt-0.5 text-[10px] text-slate-400">Higher priority wins when multiple rules match</p>
-            </div>
-            <div className="flex items-center gap-2 pt-6">
-              <input type="checkbox" id="rule-active" checked={form.active} onChange={(e) => setForm((p) => ({ ...p, active: e.target.checked }))} className="accent-[#0B3B2E]" />
-              <label htmlFor="rule-active" className="text-sm font-bold text-slate-700">Rule is active</label>
-            </div>
-            <div className="sm:col-span-2">
-              <label className={labelClass}>Notes</label>
-              <textarea className="min-h-16 w-full border border-slate-300 px-2 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none" value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} />
-            </div>
-          </form>
-        </Modal>
+        />
       )}
     </CarWashShell>
   );

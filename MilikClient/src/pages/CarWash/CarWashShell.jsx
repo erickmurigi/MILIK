@@ -1,11 +1,14 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { FaCodeBranch, FaTv } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { carWashApi, getActiveBranchId, normalizeListPayload } from "../../services/carWashApi";
 
 const CarWashShell = ({ title, action, children, showToolbar = true }) => {
   const [branchName, setBranchName] = useState("");
-  const assignedBranchId = getActiveBranchId();
+  // The active branch derives from milik_user + milik_active_company_id, which only
+  // change on login or company switch — both of which navigate away from /carwash/*
+  // (see StartMenu's switchCompany flow), unmounting this component. Safe to compute once.
+  const assignedBranchId = useMemo(() => getActiveBranchId(), []);
 
   const openQueueDisplay = () => {
     // Use the same ID that all carwash API calls use — not currentCompany._id,

@@ -64,26 +64,124 @@ const preferredCashbook = (cashbooks = [], method = "cash") => {
   return cashbooks[0]?._id || "";
 };
 
-const CarWashCommissionPayouts = () => {
-  const currentCompany = useSelector(selectCurrentCompany);
-  const [payouts, setPayouts]           = useState([]);
-  const [payableComms, setPayableComms] = useState([]);
-  const [loading, setLoading]           = useState(false);
-  const [page, setPage]                 = useTabState("/carwash/commissions/payouts:page", 1);
-  const [pageSize, setPageSize]         = useTabState("/carwash/commissions/payouts:pageSize", DEFAULT_PAGE_SIZE);
-  const [pagination, setPagination]     = useState({ page: 1, total: 0, pages: 1 });
-  const [filters, setFilters]           = useTabState("/carwash/commissions/payouts:filters", emptyFilters());
-  const [applied, setApplied]           = useTabState("/carwash/commissions/payouts:applied", emptyFilters());
-  const [showModal, setShowModal]       = useState(false);
-  const [refError, setRefError]         = useState(false);
-  const [pendingSavings, setPendingSavings]       = useState(0);
-  const [pendingDamages, setPendingDamages]       = useState(0);
+// Module-scope so MilikTable's React.memo isn't defeated by a fresh
+// function identity on every parent re-render (filter/pagination changes, etc).
+const rowClassName = (row) => row.isReversed ? "bg-rose-50/40" : "";
+
+const renderRow = (row) => {
+  const reversed = Boolean(row.isReversed);
+  return (
+    <>
+      <td className="px-3 py-2">
+        <span className={`font-extrabold font-mono text-[11px] ${reversed ? "text-rose-400 line-through" : "text-[#0B3B2E]"}`}>{row.payoutNumber}</span>
+        {reversed && (
+          <span className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-rose-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-rose-600">
+            <FaBan size={7} /> Reversed
+          </span>
+        )}
+      </td>
+      <td className={`px-3 py-2 font-extrabold ${reversed ? "text-slate-400" : "text-slate-900"}`}>{row.staff?.name || "—"}</td>
+      <td className={`px-3 py-2 uppercase ${reversed ? "text-slate-400" : "text-slate-600"}`}>{row.method}</td>
+      <td className={`px-3 py-2 ${reversed ? "text-slate-400" : "text-slate-500"}`}>{row.cashbookAccount?.code} {row.cashbookAccount?.name}</td>
+      <td className={`px-3 py-2 text-right tabular-nums font-bold ${reversed ? "text-slate-400 line-through" : ""}`}>{formatMoney(row.amount)}</td>
+      <td className="px-3 py-2 text-right tabular-nums">
+        {row.savingsHeld > 0
+          ? <span className={`inline-flex items-center gap-1 ${reversed ? "text-slate-400 line-through" : "text-amber-700"}`}><FaPiggyBank size={9} />{formatMoney(row.savingsHeld)}</span>
+          : <span className="text-slate-300">—</span>}
+      </td>
+      <td className={`px-3 py-2 text-right tabular-nums font-extrabold ${reversed ? "text-slate-400 line-through" : "text-emerald-700"}`}>
+        {formatMoney(row.netCash ?? row.amount)}
+      </td>
+      <td className={`px-3 py-2 ${reversed ? "text-slate-400" : "text-slate-500"}`}>
+        {row.payoutDate ? new Date(row.payoutDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+      </td>
+    </>
+  );
+};
+
+// Reverse-payout confirmation modal — owns its own notes/submitting state so
+// typing in the notes field no longer re-renders the parent page / MilikTable.
+function ReversePayoutModal({ target, onClose, onConfirm }) {
+  const [notes, setNotes] = useState("");
+  const [isReversing, setIsReversing] = useState(false);
+
+  const handleConfirm = async () => {
+    setIsReversing(true);
+    try {
+      await onConfirm(notes);
+    } finally {
+      setIsReversing(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 px-4 backdrop-blur-[2px]">
+      <div className="w-full max-w-md border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-rose-200 bg-rose-700 px-4 py-3 text-white">
+          <div>
+            <h2 className="text-sm font-extrabold uppercase tracking-wide">Reverse Commission Payout</h2>
+            <p className="mt-0.5 text-xs font-semibold text-rose-100">{target.payoutNumber} · {target.staff?.name}</p>
+          </div>
+          <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
+        </div>
+        <div className="p-4 space-y-3">
+          <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs text-rose-700">
+            <p className="font-bold">This action will:</p>
+            <ul className="mt-1 list-disc pl-4 space-y-0.5 font-semibold">
+              <li>Reverse all ledger entries for this payout</li>
+              <li>Restore the included commissions to <em>Payable</em></li>
+              {target.savingsHeld > 0 && <li>Release {formatMoney(target.savingsHeld)} savings hold back to pending</li>}
+            </ul>
+          </div>
+          <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+            <div className="flex justify-between"><span className="text-slate-500">Commission</span><span className="font-bold">{formatMoney(target.amount)}</span></div>
+            <div className="flex justify-between mt-1"><span className="text-slate-500">Date</span><span className="font-bold">{new Date(target.payoutDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })}</span></div>
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Reason / Notes (optional)</label>
+            <input
+              className="h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-rose-400 focus:outline-none"
+              placeholder="Enter reason for reversal…"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <button type="button" onClick={onClose} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700">Cancel</button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={isReversing}
+            className="inline-flex items-center gap-1.5 bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50"
+          >
+            <FaUndo size={9} /> {isReversing ? "Reversing…" : "Confirm Reversal"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Pay-out creation modal — owns form/damages/savings state locally so keystrokes
+// in Reference/Notes no longer re-render the parent page or its MilikTable.
+function PayoutModal({ payableComms, staffList, cashbooks, canPay, onClose, onSaved }) {
+  const [form, setForm] = useState(() => {
+    const firstStaff = payableComms[0]?.staff?._id || "";
+    return {
+      staff: firstStaff,
+      commissionIds: payableComms.filter((c) => String(c.staff?._id || c.staff) === String(firstStaff)).map((c) => c._id),
+      method: "cash",
+      cashbookAccount: preferredCashbook(cashbooks, "cash"),
+      payoutDate: todayISO(),
+      reference: "",
+      notes: "",
+    };
+  });
+  const [refError, setRefError]                     = useState(false);
+  const [pendingSavings, setPendingSavings]         = useState(0);
+  const [pendingDamages, setPendingDamages]         = useState(0);
   const [pendingDamagesList, setPendingDamagesList] = useState([]);
-  const [reverseTarget, setReverseTarget]   = useState(null);
-  const [reversalNotes, setReversalNotes]   = useState("");
-  const [isReversing, setIsReversing]       = useState(false);
-  const [form, setForm] = useState({ staff: "", commissionIds: [], method: "cash", cashbookAccount: "", payoutDate: todayISO(), reference: "", notes: "" });
-  const canPay = useCarWashPermission("carwash-commissions", "pay");
 
   const selectedStaffPayable = useMemo(
     () => payableComms.filter((c) => !form.staff || String(c.staff?._id || c.staff) === String(form.staff)),
@@ -95,78 +193,10 @@ const CarWashCommissionPayouts = () => {
     [commIdSet, selectedStaffPayable]
   );
 
-  const { data: staffRaw } = useQuery({
-    queryKey: ["cw-staff-ref"],
-    queryFn: () => carWashApi.listStaff({ active: true }),
-    staleTime: 5 * 60_000,
-    select: (data) => normalizeListPayload(data, "staff"),
-  });
-  const staff = staffRaw ?? [];
-
-  const { data: cashbooksRaw } = useQuery({
-    queryKey: ["cw-payout-cashbooks", currentCompany?._id],
-    queryFn: () => carWashApi.listChartOfAccounts({ business: currentCompany._id, type: "asset", moduleScope: "carwash", search: "Cashbooks" }),
-    enabled: !!currentCompany?._id,
-    staleTime: 5 * 60_000,
-    select: (data) => Array.isArray(data) ? data : [],
-  });
-  const cashbooks = cashbooksRaw ?? [];
-
-  const loadPayouts = useCallback(async () => {
-    setLoading(true);
-    try {
-      const payload = await carWashApi.listCommissionPayouts({
-        staff:    applied.staff    || undefined,
-        dateFrom: applied.dateFrom || undefined,
-        dateTo:   applied.dateTo   || undefined,
-        page,
-        limit: pageSize,
-      });
-      setPayouts(normalizeListPayload(payload, "payouts"));
-      setPagination(payload?.pagination || { page, total: payload?.payouts?.length || 0, pages: 1 });
-    } catch {
-      toast.error("Failed to load payouts");
-    } finally {
-      setLoading(false);
-    }
-  }, [applied, page, pageSize]);
-
-  useEffect(() => { loadPayouts(); }, [loadPayouts]);
-
   useEffect(() => {
     if (!cashbooks.length || form.cashbookAccount) return;
     setForm((p) => ({ ...p, cashbookAccount: preferredCashbook(cashbooks, p.method) }));
   }, [cashbooks]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const applyFilters = (e) => { e.preventDefault(); setPage(1); setApplied({ ...filters }); };
-  const resetFilters = () => { const d = emptyFilters(); setFilters(d); setPage(1); setApplied(d); };
-
-  const openPayout = async () => {
-    let rows = [];
-    try {
-      const payload = await carWashApi.listCommissions({ status: "payable", limit: 200 });
-      rows = normalizeListPayload(payload, "commissions");
-    } catch {
-      toast.error("Failed to load payable commissions");
-      return;
-    }
-    const firstStaff = rows[0]?.staff?._id || "";
-    setPayableComms(rows);
-    setPendingSavings(0);
-    setPendingDamages(0);
-    setPendingDamagesList([]);
-    setForm({
-      staff: firstStaff,
-      commissionIds: rows.filter((c) => String(c.staff?._id || c.staff) === String(firstStaff)).map((c) => c._id),
-      method: "cash",
-      cashbookAccount: preferredCashbook(cashbooks, "cash"),
-      payoutDate: todayISO(),
-      reference: "",
-      notes: "",
-    });
-    setShowModal(true);
-    if (firstStaff) fetchStaffDeductions(firstStaff);
-  };
 
   const fetchStaffDeductions = async (staffId) => {
     setPendingSavings(0);
@@ -187,6 +217,12 @@ const CarWashCommissionPayouts = () => {
     }
   };
 
+  useEffect(() => {
+    if (form.staff) fetchStaffDeductions(form.staff);
+    // Run once on mount only — the staff select below re-fetches on change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const setPayoutStaff = (staffId) => {
     const rows = payableComms.filter((c) => String(c.staff?._id || c.staff) === String(staffId));
     setForm((p) => ({ ...p, staff: staffId, commissionIds: rows.map((c) => c._id) }));
@@ -206,35 +242,293 @@ const CarWashCommissionPayouts = () => {
     }
     try {
       await carWashApi.createCommissionPayout(form);
-      setShowModal(false);
-      loadPayouts();
       toast.success("Commission payout recorded");
+      onSaved();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to record payout");
-    }
-  };
-
-  const openReverseModal = (row) => { setReverseTarget(row); setReversalNotes(""); };
-  const closeReverseModal = () => { setReverseTarget(null); setReversalNotes(""); };
-
-  const confirmReverse = async () => {
-    if (!reverseTarget) return;
-    setIsReversing(true);
-    try {
-      await carWashApi.reverseCommissionPayout(reverseTarget._id, reversalNotes);
-      toast.success(`Payout ${reverseTarget.payoutNumber} reversed`);
-      closeReverseModal();
-      loadPayouts();
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Reversal failed");
-    } finally {
-      setIsReversing(false);
     }
   };
 
   const savingsDeduction = Math.min(pendingSavings, selectedTotal);
   const damagesDeduction = Math.min(pendingDamages, Math.max(0, selectedTotal - savingsDeduction));
   const netCash          = Math.max(0, selectedTotal - savingsDeduction - damagesDeduction);
+
+  return (
+    <Modal
+      title="Pay Staff Commission"
+      subtitle="Select the staff member and commissions to pay out."
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" onClick={onClose} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700">Cancel</button>
+          {canPay && (
+            <button type="submit" form="cw-payout-form" disabled={!selectedTotal} className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
+              <FaMoneyBillWave /> Pay {formatMoney(netCash || selectedTotal)} to Staff
+            </button>
+          )}
+        </>
+      }
+    >
+      <form id="cw-payout-form" onSubmit={savePayout} className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <AppSelect
+            label="Staff"
+            required
+            value={form.staff}
+            onChange={(v) => setPayoutStaff(v ?? "")}
+            options={staffList.map((s) => ({ value: s._id, label: s.name }))}
+            placeholder="Select staff"
+            size="md"
+            searchable
+          />
+        </div>
+        <div>
+          <AppSelect
+            label="Method"
+            value={form.method}
+            onChange={(v) => { setForm((p) => ({ ...p, method: v ?? "cash", cashbookAccount: preferredCashbook(cashbooks, v ?? "cash") })); setRefError(false); }}
+            options={methods.map((m) => ({ value: m, label: m.toUpperCase() }))}
+            size="md"
+          />
+        </div>
+        <div>
+          <AppSelect
+            label="Cashbook"
+            required
+            value={form.cashbookAccount}
+            onChange={(v) => setForm((p) => ({ ...p, cashbookAccount: v ?? "" }))}
+            options={cashbooks.map((cb) => ({ value: cb._id, label: `${cb.code} ${cb.name}` }))}
+            placeholder="Select cashbook"
+            size="md"
+            searchable
+          />
+        </div>
+        <div>
+          <label className={labelClass}>Payout Date</label>
+          <input type="date" className={inputClass} value={form.payoutDate} onChange={(e) => setForm((p) => ({ ...p, payoutDate: e.target.value }))} />
+        </div>
+        <div>
+          <label className={labelClass}>
+            Reference{form.method === "mpesa" && <span className="ml-0.5 text-red-500">*</span>}
+          </label>
+          <input
+            className={`${inputClass} ${refError && form.method === "mpesa" && !form.reference?.trim() ? "border-red-400 focus:border-red-400" : ""}`}
+            value={form.reference}
+            onChange={(e) => { setForm((p) => ({ ...p, reference: e.target.value })); if (e.target.value.trim()) setRefError(false); }}
+            placeholder={form.method === "mpesa" ? "M-Pesa transaction code (required)" : "Optional"}
+          />
+          {refError && form.method === "mpesa" && !form.reference?.trim() && (
+            <p className="mt-0.5 text-[10px] font-bold text-red-500">M-Pesa transaction code is required</p>
+          )}
+        </div>
+        <div>
+          <label className={labelClass}>Notes</label>
+          <input className={inputClass} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Optional" />
+        </div>
+
+        {/* Payout breakdown */}
+        {selectedTotal > 0 && (
+          <div className="sm:col-span-2 overflow-hidden rounded border border-slate-200 text-xs">
+            <div className="bg-[#EDF5F1] px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#0B3B2E]">
+              Payout Breakdown
+            </div>
+            <div className="divide-y divide-slate-100 bg-white">
+              <div className="flex items-center justify-between px-3 py-2">
+                <span className="text-slate-500">Commission total</span>
+                <span className="font-bold tabular-nums text-slate-800">{formatMoney(selectedTotal)}</span>
+              </div>
+              <div className="flex items-center justify-between px-3 py-2">
+                <span className="flex items-center gap-1.5 text-amber-700">
+                  <FaPiggyBank size={9} />
+                  Savings deduction
+                  {savingsDeduction < pendingSavings && pendingSavings > 0 && (
+                    <span className="rounded border border-amber-200 bg-amber-50 px-1 py-0.5 text-[9px] font-bold">capped</span>
+                  )}
+                </span>
+                <span className={`font-bold tabular-nums ${savingsDeduction > 0 ? "text-amber-700" : "text-slate-300"}`}>
+                  {savingsDeduction > 0 ? `− ${formatMoney(savingsDeduction)}` : "—"}
+                </span>
+              </div>
+              <div className="border-t border-red-100 bg-red-50/40">
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="flex items-center gap-1.5 font-semibold text-red-700">
+                    <FaBan size={9} />
+                    Damages deduction
+                    {damagesDeduction < pendingDamages && pendingDamages > 0 && (
+                      <span className="rounded border border-red-200 bg-red-50 px-1 py-0.5 text-[9px] font-bold">capped</span>
+                    )}
+                  </span>
+                  <span className={`font-bold tabular-nums ${damagesDeduction > 0 ? "text-red-700" : "text-slate-300"}`}>
+                    {damagesDeduction > 0 ? `− ${formatMoney(damagesDeduction)}` : "—"}
+                  </span>
+                </div>
+                {pendingDamagesList.length > 0 && (
+                  <div className="mx-3 mb-2 divide-y divide-red-100 rounded border border-red-200 bg-white text-[11px]">
+                    {pendingDamagesList.map((d) => {
+                      const installment = computeDmgInstallment(d);
+                      const remaining   = r2(d.amount - (d.amountRecovered || 0));
+                      const isInstallment = installment < remaining - 0.005;
+                      return (
+                        <div key={d._id} className="flex items-start justify-between gap-2 px-2.5 py-1.5">
+                          <div className="min-w-0">
+                            <span className="font-bold text-slate-800">{d.description || "—"}</span>
+                            {d.job?.jobNumber && (
+                              <span className="ml-1.5 font-mono text-[10px] text-slate-400">· {d.job.jobNumber}</span>
+                            )}
+                            <div className="text-[10px] text-slate-400">{fmtDate(d.damageDate || d.createdAt)}</div>
+                            {isInstallment && (
+                              <div className="text-[10px] text-slate-400">{formatMoney(remaining)} balance · instalment</div>
+                            )}
+                          </div>
+                          <span className="flex-shrink-0 font-extrabold text-red-600">− {formatMoney(installment)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-between bg-slate-50 px-3 py-2.5">
+                <span className="font-extrabold text-slate-800">Net cash to staff</span>
+                <span className="text-base font-black tabular-nums text-emerald-700">{formatMoney(netCash)}</span>
+              </div>
+            </div>
+            {pendingSavings === 0 && pendingDamages === 0 && (
+              <p className="border-t border-slate-100 bg-slate-50 px-3 py-1.5 text-[10px] italic text-slate-400">
+                No pending savings or damage deductions for this staff member.
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="sm:col-span-2">
+          <label className={labelClass}>Payable Commissions</label>
+          <div className="max-h-56 overflow-auto rounded border border-slate-200">
+            {selectedStaffPayable.length ? selectedStaffPayable.map((c) => (
+              <label key={c._id} className="flex cursor-pointer items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 text-xs hover:bg-slate-50">
+                <span className="flex min-w-0 items-center gap-2">
+                  <input type="checkbox" checked={commIdSet.has(c._id)} onChange={() => toggleComm(c._id)} className="flex-shrink-0 accent-[#0B3B2E]" />
+                  <span className="min-w-0">
+                    <span className="font-mono font-bold text-[#0B3B2E]">{c.job?.jobNumber || c.jobNumber || "—"}</span>
+                    <span className="text-slate-400"> · </span>
+                    <span className="text-slate-700">{fmtSvc(c.service, c.serviceName || "—")}</span>
+                    {(c.job?.plateNumber || c.job?.customerName) && (
+                      <span className="ml-1 text-slate-400">· {c.job?.plateNumber || c.job?.customerName}</span>
+                    )}
+                  </span>
+                </span>
+                <span className="flex-shrink-0 font-extrabold text-slate-900">{formatMoney(c.commissionAmount)}</span>
+              </label>
+            )) : (
+              <p className="px-3 py-8 text-center text-xs font-semibold text-slate-400">No payable commissions for this staff member.</p>
+            )}
+          </div>
+          {selectedTotal > 0 && (
+            <div className="mt-1.5 flex items-center justify-between rounded border border-[#B7C9C0] bg-[#EDF5F1] px-3 py-1.5 text-xs">
+              <span className="font-bold text-slate-600">Selected total</span>
+              <span className="font-black text-[#0B3B2E]">{formatMoney(selectedTotal)}</span>
+            </div>
+          )}
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+const CarWashCommissionPayouts = () => {
+  const currentCompany = useSelector(selectCurrentCompany);
+  const [payableComms, setPayableComms] = useState([]);
+  const [page, setPage]                 = useTabState("/carwash/commissions/payouts:page", 1);
+  const [pageSize, setPageSize]         = useTabState("/carwash/commissions/payouts:pageSize", DEFAULT_PAGE_SIZE);
+  const [filters, setFilters]           = useTabState("/carwash/commissions/payouts:filters", emptyFilters);
+  const [applied, setApplied]           = useTabState("/carwash/commissions/payouts:applied", emptyFilters);
+  const [showModal, setShowModal]       = useState(false);
+  const [reverseTarget, setReverseTarget]   = useState(null);
+  const canPay = useCarWashPermission("carwash-commissions", "pay");
+
+  const { data: payoutsData, isLoading: loading, error: payoutsError, refetch } = useQuery({
+    queryKey: ["cw-commission-payouts", applied, page, pageSize],
+    queryFn: () => carWashApi.listCommissionPayouts({
+      staff:    applied.staff    || undefined,
+      dateFrom: applied.dateFrom || undefined,
+      dateTo:   applied.dateTo   || undefined,
+      page,
+      limit: pageSize,
+    }),
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
+  });
+
+  useEffect(() => { if (payoutsError) toast.error("Failed to load payouts"); }, [payoutsError]);
+
+  const payouts = normalizeListPayload(payoutsData, "payouts");
+  const pagination = payoutsData?.pagination || { page, limit: pageSize, total: payouts.length, pages: 1 };
+
+  const { data: staffRaw } = useQuery({
+    queryKey: ["cw-staff-ref"],
+    queryFn: () => carWashApi.listStaff({ active: true }),
+    staleTime: 5 * 60_000,
+    select: (data) => normalizeListPayload(data, "staff"),
+  });
+  const staff = staffRaw ?? [];
+
+  const { data: cashbooksRaw } = useQuery({
+    queryKey: ["cw-payout-cashbooks", currentCompany?._id],
+    queryFn: () => carWashApi.listChartOfAccounts({ business: currentCompany._id, type: "asset", moduleScope: "carwash", search: "Cashbooks" }),
+    enabled: !!currentCompany?._id,
+    staleTime: 5 * 60_000,
+    select: (data) => Array.isArray(data) ? data : [],
+  });
+  const cashbooks = cashbooksRaw ?? [];
+
+  const applyFilters = (e) => { e.preventDefault(); setPage(1); setApplied({ ...filters }); };
+  const resetFilters = () => { const d = emptyFilters(); setFilters(d); setPage(1); setApplied(d); };
+
+  const openPayout = async () => {
+    let rows = [];
+    try {
+      const payload = await carWashApi.listCommissions({ status: "payable", limit: 200 });
+      rows = normalizeListPayload(payload, "commissions");
+    } catch {
+      toast.error("Failed to load payable commissions");
+      return;
+    }
+    setPayableComms(rows);
+    setShowModal(true);
+  };
+
+  const handlePayoutSaved = () => {
+    setShowModal(false);
+    refetch();
+  };
+
+  const openReverseModal = useCallback((row) => setReverseTarget(row), []);
+  const closeReverseModal = useCallback(() => setReverseTarget(null), []);
+
+  const confirmReverse = async (notes) => {
+    if (!reverseTarget) return;
+    try {
+      await carWashApi.reverseCommissionPayout(reverseTarget._id, notes);
+      toast.success(`Payout ${reverseTarget.payoutNumber} reversed`);
+      closeReverseModal();
+      refetch();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Reversal failed");
+    }
+  };
+
+  const renderActions = useCallback((row) => {
+    const reversed = Boolean(row.isReversed);
+    return !reversed ? (
+      <button
+        type="button"
+        onClick={() => openReverseModal(row)}
+        title="Reverse this payout"
+        className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-100 hover:border-rose-300"
+      >
+        <FaUndo size={8} /> Reverse
+      </button>
+    ) : <span className="text-slate-300">—</span>;
+  }, [openReverseModal]);
 
   const pageTotal = useMemo(() => payouts.reduce((s, p) => s + Number(p.amount || 0), 0), [payouts]);
 
@@ -245,7 +539,7 @@ const CarWashCommissionPayouts = () => {
         <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={loadPayouts}
+            onClick={() => refetch()}
             className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
           >
             <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
@@ -307,50 +601,9 @@ const CarWashCommissionPayouts = () => {
           loading={loading}
           empty="No commission payouts found for the selected filters."
           minWidth="900px"
-          rowClassName={(row) => row.isReversed ? "bg-rose-50/40" : ""}
-          renderRow={(row) => {
-            const reversed = Boolean(row.isReversed);
-            return (
-              <>
-                <td className="px-3 py-2">
-                  <span className={`font-extrabold font-mono text-[11px] ${reversed ? "text-rose-400 line-through" : "text-[#0B3B2E]"}`}>{row.payoutNumber}</span>
-                  {reversed && (
-                    <span className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-rose-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-rose-600">
-                      <FaBan size={7} /> Reversed
-                    </span>
-                  )}
-                </td>
-                <td className={`px-3 py-2 font-extrabold ${reversed ? "text-slate-400" : "text-slate-900"}`}>{row.staff?.name || "—"}</td>
-                <td className={`px-3 py-2 uppercase ${reversed ? "text-slate-400" : "text-slate-600"}`}>{row.method}</td>
-                <td className={`px-3 py-2 ${reversed ? "text-slate-400" : "text-slate-500"}`}>{row.cashbookAccount?.code} {row.cashbookAccount?.name}</td>
-                <td className={`px-3 py-2 text-right tabular-nums font-bold ${reversed ? "text-slate-400 line-through" : ""}`}>{formatMoney(row.amount)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {row.savingsHeld > 0
-                    ? <span className={`inline-flex items-center gap-1 ${reversed ? "text-slate-400 line-through" : "text-amber-700"}`}><FaPiggyBank size={9} />{formatMoney(row.savingsHeld)}</span>
-                    : <span className="text-slate-300">—</span>}
-                </td>
-                <td className={`px-3 py-2 text-right tabular-nums font-extrabold ${reversed ? "text-slate-400 line-through" : "text-emerald-700"}`}>
-                  {formatMoney(row.netCash ?? row.amount)}
-                </td>
-                <td className={`px-3 py-2 ${reversed ? "text-slate-400" : "text-slate-500"}`}>
-                  {row.payoutDate ? new Date(row.payoutDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
-                </td>
-              </>
-            );
-          }}
-          renderActions={canPay ? (row) => {
-            const reversed = Boolean(row.isReversed);
-            return !reversed ? (
-              <button
-                type="button"
-                onClick={() => openReverseModal(row)}
-                title="Reverse this payout"
-                className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-100 hover:border-rose-300"
-              >
-                <FaUndo size={8} /> Reverse
-              </button>
-            ) : <span className="text-slate-300">—</span>;
-          } : undefined}
+          rowClassName={rowClassName}
+          renderRow={renderRow}
+          renderActions={canPay ? renderActions : undefined}
         />
 
         {/* Pagination */}
@@ -367,231 +620,18 @@ const CarWashCommissionPayouts = () => {
       </div>
 
       {reverseTarget && (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 px-4 backdrop-blur-[2px]">
-          <div className="w-full max-w-md border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-start justify-between gap-3 border-b border-rose-200 bg-rose-700 px-4 py-3 text-white">
-              <div>
-                <h2 className="text-sm font-extrabold uppercase tracking-wide">Reverse Commission Payout</h2>
-                <p className="mt-0.5 text-xs font-semibold text-rose-100">{reverseTarget.payoutNumber} · {reverseTarget.staff?.name}</p>
-              </div>
-              <button type="button" onClick={closeReverseModal} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
-            </div>
-            <div className="p-4 space-y-3">
-              <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs text-rose-700">
-                <p className="font-bold">This action will:</p>
-                <ul className="mt-1 list-disc pl-4 space-y-0.5 font-semibold">
-                  <li>Reverse all ledger entries for this payout</li>
-                  <li>Restore the included commissions to <em>Payable</em></li>
-                  {reverseTarget.savingsHeld > 0 && <li>Release {formatMoney(reverseTarget.savingsHeld)} savings hold back to pending</li>}
-                </ul>
-              </div>
-              <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
-                <div className="flex justify-between"><span className="text-slate-500">Commission</span><span className="font-bold">{formatMoney(reverseTarget.amount)}</span></div>
-                <div className="flex justify-between mt-1"><span className="text-slate-500">Date</span><span className="font-bold">{new Date(reverseTarget.payoutDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })}</span></div>
-              </div>
-              <div>
-                <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Reason / Notes (optional)</label>
-                <input
-                  className="h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-rose-400 focus:outline-none"
-                  placeholder="Enter reason for reversal…"
-                  value={reversalNotes}
-                  onChange={(e) => setReversalNotes(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-              <button type="button" onClick={closeReverseModal} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700">Cancel</button>
-              <button
-                type="button"
-                onClick={confirmReverse}
-                disabled={isReversing}
-                className="inline-flex items-center gap-1.5 bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50"
-              >
-                <FaUndo size={9} /> {isReversing ? "Reversing…" : "Confirm Reversal"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ReversePayoutModal target={reverseTarget} onClose={closeReverseModal} onConfirm={confirmReverse} />
       )}
 
       {showModal && (
-        <Modal
-          title="Pay Staff Commission"
-          subtitle="Select the staff member and commissions to pay out."
+        <PayoutModal
+          payableComms={payableComms}
+          staffList={staff}
+          cashbooks={cashbooks}
+          canPay={canPay}
           onClose={() => setShowModal(false)}
-          footer={
-            <>
-              <button type="button" onClick={() => setShowModal(false)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700">Cancel</button>
-              {canPay && (
-                <button type="submit" form="cw-payout-form" disabled={!selectedTotal} className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
-                  <FaMoneyBillWave /> Pay {formatMoney(netCash || selectedTotal)} to Staff
-                </button>
-              )}
-            </>
-          }
-        >
-          <form id="cw-payout-form" onSubmit={savePayout} className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <AppSelect
-                label="Staff"
-                required
-                value={form.staff}
-                onChange={(v) => setPayoutStaff(v ?? "")}
-                options={staff.map((s) => ({ value: s._id, label: s.name }))}
-                placeholder="Select staff"
-                size="md"
-                searchable
-              />
-            </div>
-            <div>
-              <AppSelect
-                label="Method"
-                value={form.method}
-                onChange={(v) => { setForm((p) => ({ ...p, method: v ?? "cash", cashbookAccount: preferredCashbook(cashbooks, v ?? "cash") })); setRefError(false); }}
-                options={methods.map((m) => ({ value: m, label: m.toUpperCase() }))}
-                size="md"
-              />
-            </div>
-            <div>
-              <AppSelect
-                label="Cashbook"
-                required
-                value={form.cashbookAccount}
-                onChange={(v) => setForm((p) => ({ ...p, cashbookAccount: v ?? "" }))}
-                options={cashbooks.map((cb) => ({ value: cb._id, label: `${cb.code} ${cb.name}` }))}
-                placeholder="Select cashbook"
-                size="md"
-                searchable
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Payout Date</label>
-              <input type="date" className={inputClass} value={form.payoutDate} onChange={(e) => setForm((p) => ({ ...p, payoutDate: e.target.value }))} />
-            </div>
-            <div>
-              <label className={labelClass}>
-                Reference{form.method === "mpesa" && <span className="ml-0.5 text-red-500">*</span>}
-              </label>
-              <input
-                className={`${inputClass} ${refError && form.method === "mpesa" && !form.reference?.trim() ? "border-red-400 focus:border-red-400" : ""}`}
-                value={form.reference}
-                onChange={(e) => { setForm((p) => ({ ...p, reference: e.target.value })); if (e.target.value.trim()) setRefError(false); }}
-                placeholder={form.method === "mpesa" ? "M-Pesa transaction code (required)" : "Optional"}
-              />
-              {refError && form.method === "mpesa" && !form.reference?.trim() && (
-                <p className="mt-0.5 text-[10px] font-bold text-red-500">M-Pesa transaction code is required</p>
-              )}
-            </div>
-            <div>
-              <label className={labelClass}>Notes</label>
-              <input className={inputClass} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Optional" />
-            </div>
-
-            {/* Payout breakdown */}
-            {selectedTotal > 0 && (
-              <div className="sm:col-span-2 overflow-hidden rounded border border-slate-200 text-xs">
-                <div className="bg-[#EDF5F1] px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#0B3B2E]">
-                  Payout Breakdown
-                </div>
-                <div className="divide-y divide-slate-100 bg-white">
-                  <div className="flex items-center justify-between px-3 py-2">
-                    <span className="text-slate-500">Commission total</span>
-                    <span className="font-bold tabular-nums text-slate-800">{formatMoney(selectedTotal)}</span>
-                  </div>
-                  <div className="flex items-center justify-between px-3 py-2">
-                    <span className="flex items-center gap-1.5 text-amber-700">
-                      <FaPiggyBank size={9} />
-                      Savings deduction
-                      {savingsDeduction < pendingSavings && pendingSavings > 0 && (
-                        <span className="rounded border border-amber-200 bg-amber-50 px-1 py-0.5 text-[9px] font-bold">capped</span>
-                      )}
-                    </span>
-                    <span className={`font-bold tabular-nums ${savingsDeduction > 0 ? "text-amber-700" : "text-slate-300"}`}>
-                      {savingsDeduction > 0 ? `− ${formatMoney(savingsDeduction)}` : "—"}
-                    </span>
-                  </div>
-                  <div className="border-t border-red-100 bg-red-50/40">
-                    <div className="flex items-center justify-between px-3 py-2">
-                      <span className="flex items-center gap-1.5 font-semibold text-red-700">
-                        <FaBan size={9} />
-                        Damages deduction
-                        {damagesDeduction < pendingDamages && pendingDamages > 0 && (
-                          <span className="rounded border border-red-200 bg-red-50 px-1 py-0.5 text-[9px] font-bold">capped</span>
-                        )}
-                      </span>
-                      <span className={`font-bold tabular-nums ${damagesDeduction > 0 ? "text-red-700" : "text-slate-300"}`}>
-                        {damagesDeduction > 0 ? `− ${formatMoney(damagesDeduction)}` : "—"}
-                      </span>
-                    </div>
-                    {pendingDamagesList.length > 0 && (
-                      <div className="mx-3 mb-2 divide-y divide-red-100 rounded border border-red-200 bg-white text-[11px]">
-                        {pendingDamagesList.map((d) => {
-                          const installment = computeDmgInstallment(d);
-                          const remaining   = r2(d.amount - (d.amountRecovered || 0));
-                          const isInstallment = installment < remaining - 0.005;
-                          return (
-                            <div key={d._id} className="flex items-start justify-between gap-2 px-2.5 py-1.5">
-                              <div className="min-w-0">
-                                <span className="font-bold text-slate-800">{d.description || "—"}</span>
-                                {d.job?.jobNumber && (
-                                  <span className="ml-1.5 font-mono text-[10px] text-slate-400">· {d.job.jobNumber}</span>
-                                )}
-                                <div className="text-[10px] text-slate-400">{fmtDate(d.damageDate || d.createdAt)}</div>
-                                {isInstallment && (
-                                  <div className="text-[10px] text-slate-400">{formatMoney(remaining)} balance · instalment</div>
-                                )}
-                              </div>
-                              <span className="flex-shrink-0 font-extrabold text-red-600">− {formatMoney(installment)}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between bg-slate-50 px-3 py-2.5">
-                    <span className="font-extrabold text-slate-800">Net cash to staff</span>
-                    <span className="text-base font-black tabular-nums text-emerald-700">{formatMoney(netCash)}</span>
-                  </div>
-                </div>
-                {pendingSavings === 0 && pendingDamages === 0 && (
-                  <p className="border-t border-slate-100 bg-slate-50 px-3 py-1.5 text-[10px] italic text-slate-400">
-                    No pending savings or damage deductions for this staff member.
-                  </p>
-                )}
-              </div>
-            )}
-
-            <div className="sm:col-span-2">
-              <label className={labelClass}>Payable Commissions</label>
-              <div className="max-h-56 overflow-auto rounded border border-slate-200">
-                {selectedStaffPayable.length ? selectedStaffPayable.map((c) => (
-                  <label key={c._id} className="flex cursor-pointer items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 text-xs hover:bg-slate-50">
-                    <span className="flex min-w-0 items-center gap-2">
-                      <input type="checkbox" checked={commIdSet.has(c._id)} onChange={() => toggleComm(c._id)} className="flex-shrink-0 accent-[#0B3B2E]" />
-                      <span className="min-w-0">
-                        <span className="font-mono font-bold text-[#0B3B2E]">{c.job?.jobNumber || c.jobNumber || "—"}</span>
-                        <span className="text-slate-400"> · </span>
-                        <span className="text-slate-700">{fmtSvc(c.service, c.serviceName || "—")}</span>
-                        {(c.job?.plateNumber || c.job?.customerName) && (
-                          <span className="ml-1 text-slate-400">· {c.job?.plateNumber || c.job?.customerName}</span>
-                        )}
-                      </span>
-                    </span>
-                    <span className="flex-shrink-0 font-extrabold text-slate-900">{formatMoney(c.commissionAmount)}</span>
-                  </label>
-                )) : (
-                  <p className="px-3 py-8 text-center text-xs font-semibold text-slate-400">No payable commissions for this staff member.</p>
-                )}
-              </div>
-              {selectedTotal > 0 && (
-                <div className="mt-1.5 flex items-center justify-between rounded border border-[#B7C9C0] bg-[#EDF5F1] px-3 py-1.5 text-xs">
-                  <span className="font-bold text-slate-600">Selected total</span>
-                  <span className="font-black text-[#0B3B2E]">{formatMoney(selectedTotal)}</span>
-                </div>
-              )}
-            </div>
-          </form>
-        </Modal>
+          onSaved={handlePayoutSaved}
+        />
       )}
     </CarWashShell>
   );

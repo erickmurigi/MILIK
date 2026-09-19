@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useTabState } from "../../hooks/useTabState";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
@@ -103,7 +104,13 @@ const CarWashReports = () => {
   }));
 
   // data
-  const [branches, setBranches] = useState([]);
+  const { data: branchesRaw } = useQuery({
+    queryKey: ["cw-branches-ref"],
+    queryFn: () => carWashApi.listBranches(),
+    staleTime: 5 * 60_000,
+    select: (data) => data?.branches || data || [],
+  });
+  const branches = branchesRaw || [];
   const [summary, setSummary] = useState(null);
   const [customService, setCustomService] = useState(null);
   const [customStaff, setCustomStaff] = useState(null);
@@ -112,11 +119,6 @@ const CarWashReports = () => {
   const [expenseList, setExpenseList] = useState([]);
   const [expenseSummary, setExpenseSummary] = useState(null);
   const [loading, setLoading] = useState(false);
-
-  // load branches once
-  useEffect(() => {
-    carWashApi.listBranches().then((data) => setBranches(data?.branches || data || [])).catch(() => {});
-  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);

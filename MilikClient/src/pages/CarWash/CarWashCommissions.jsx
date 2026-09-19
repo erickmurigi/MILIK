@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -48,6 +48,123 @@ const emptyFilters = () => {
 
 const inp = "h-7 border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 
+// Module-scope so MilikTable's React.memo isn't defeated by a fresh function
+// identity on every parent re-render (filter/pagination changes, etc).
+const rowClassName = (row) => row.status === "cancelled" ? "opacity-50" : "";
+
+const renderRow = (row) => {
+  const isCancelled = row.status === "cancelled";
+  return (
+    <>
+      <td className={`px-3 py-2 font-extrabold text-slate-900 ${isCancelled ? "line-through" : ""}`}>{row.staff?.name || "—"}</td>
+      <td className="px-3 py-2 font-mono text-[11px] text-[#0B3B2E]">{row.jobNumber || row.job?.jobNumber || "—"}</td>
+      <td className="px-3 py-2 text-slate-700">{fmtSvc(row.service, row.serviceName || "—")}</td>
+      <td className="px-3 py-2 text-right tabular-nums">{formatMoney(row.baseAmount)}</td>
+      <td className="px-3 py-2 text-right tabular-nums text-slate-500">
+        {row.commissionType === "percentage" ? `${row.commissionRate}%` : formatMoney(row.commissionRate)}
+      </td>
+      <td className={`px-3 py-2 text-right font-extrabold tabular-nums text-slate-900 ${isCancelled ? "line-through" : ""}`}>{formatMoney(row.commissionAmount)}</td>
+      <td className="px-3 py-2">
+        <StatusBadge status={row.status} map={STATUS_MAP} />
+      </td>
+      <td className="px-3 py-2 text-slate-500">
+        {row.earnedAt ? new Date(row.earnedAt).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+      </td>
+    </>
+  );
+};
+
+// Reversal confirmation modal — owns its own notes/submitting state so typing
+// in the notes field no longer re-renders the parent page / MilikTable.
+function ReversalModal({ target, onClose, onConfirm }) {
+  const [notes, setNotes] = useState("");
+  const [isReversing, setIsReversing] = useState(false);
+
+  const handleConfirm = async () => {
+    setIsReversing(true);
+    try {
+      await onConfirm(notes);
+    } finally {
+      setIsReversing(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-sm border border-slate-200 bg-white shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-3">
+          <FaUndo size={12} className="text-rose-300" />
+          <span className="text-[12px] font-bold uppercase tracking-wide text-white">Reverse Commission</span>
+        </div>
+
+        <div className="px-4 py-4 space-y-3">
+          {/* Commission details */}
+          <div className="border border-slate-200 bg-slate-50 px-3 py-2 space-y-1">
+            <div className="flex justify-between text-[11px]">
+              <span className="text-slate-500">Staff</span>
+              <span className="font-bold text-slate-800">{target.staff?.name || "—"}</span>
+            </div>
+            <div className="flex justify-between text-[11px]">
+              <span className="text-slate-500">Job</span>
+              <span className="font-mono text-[#0B3B2E]">{target.jobNumber || target.job?.jobNumber || "—"}</span>
+            </div>
+            <div className="flex justify-between text-[11px]">
+              <span className="text-slate-500">Service</span>
+              <span className="text-slate-700">{fmtSvc(target.service, target.serviceName || "—")}</span>
+            </div>
+            <div className="flex justify-between text-[11px]">
+              <span className="text-slate-500">Commission</span>
+              <span className="font-extrabold text-slate-900">{formatMoney(target.commissionAmount)}</span>
+            </div>
+          </div>
+
+          {/* What happens notice */}
+          <div className="border-l-2 border-rose-400 bg-rose-50 px-3 py-2">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-rose-700 mb-1">What happens</p>
+            <ul className="text-[10px] text-rose-700 space-y-0.5 list-disc list-inside">
+              <li>Accrual ledger entries are reversed</li>
+              <li>Commission status set to Cancelled</li>
+              <li>Job deletion becomes possible (once payments also cleared)</li>
+            </ul>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-slate-400">Reversal Notes (optional)</label>
+            <textarea
+              className="w-full border border-slate-300 px-2 py-1.5 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none resize-none"
+              rows={2}
+              placeholder="Reason for reversal…"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2 border-t border-slate-200 px-4 py-3">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isReversing}
+            className="flex-1 h-8 border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={isReversing}
+            className="flex-1 h-8 bg-rose-600 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50"
+          >
+            {isReversing ? "Reversing…" : "Confirm Reversal"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const CarWashCommissions = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -58,10 +175,8 @@ const CarWashCommissions = () => {
   const [page, setPage]               = useTabState("/carwash/commissions:page", 1);
   const [pageSize, setPageSize]       = useTabState("/carwash/commissions:pageSize", DEFAULT_PAGE_SIZE);
 
-  // Reversal modal state
+  // Reversal modal state — notes/submitting state now live in ReversalModal itself
   const [reverseTarget, setReverseTarget] = useState(null);
-  const [reversalNotes, setReversalNotes] = useState("");
-  const [isReversing, setIsReversing]     = useState(false);
 
   const { data: commData, isLoading: loading, error, refetch } = useQuery({
     queryKey: ["cw-commissions", applied, page, pageSize],
@@ -93,27 +208,37 @@ const CarWashCommissions = () => {
   const applyFilters = (e) => { e.preventDefault(); setPage(1); setApplied({ ...filters }); };
   const resetFilters = () => { const d = emptyFilters(); setFilters(d); setPage(1); setApplied(d); };
 
-  const openReverseModal  = (row) => { setReverseTarget(row); setReversalNotes(""); };
-  const closeReverseModal = () => { setReverseTarget(null); setReversalNotes(""); };
+  const openReverseModal  = useCallback((row) => setReverseTarget(row), []);
+  const closeReverseModal = useCallback(() => setReverseTarget(null), []);
 
-  const confirmReverse = async () => {
+  const confirmReverse = async (notes) => {
     if (!reverseTarget) return;
-    setIsReversing(true);
     try {
-      await carWashApi.reverseCommission(reverseTarget._id, reversalNotes);
+      await carWashApi.reverseCommission(reverseTarget._id, notes);
       toast.success("Commission reversed and cancelled");
       closeReverseModal();
       queryClient.invalidateQueries({ queryKey: ["cw-commissions"] });
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to reverse commission");
-    } finally {
-      setIsReversing(false);
     }
   };
 
   const pageTotal = useMemo(() => commissions.reduce((s, r) => s + Number(r.commissionAmount || 0), 0), [commissions]);
 
   const showActionCol = canManage;
+
+  const renderActions = useCallback((row) => (
+    (row.status === "earned" || row.status === "payable") ? (
+      <button
+        type="button"
+        onClick={() => openReverseModal(row)}
+        className="inline-flex h-6 items-center gap-1 border border-rose-300 bg-rose-50 px-2 text-[10px] font-bold text-rose-700 hover:bg-rose-100"
+        title="Reverse this commission"
+      >
+        <FaUndo size={8} /> Reverse
+      </button>
+    ) : null
+  ), [openReverseModal]);
 
   return (
     <CarWashShell
@@ -200,40 +325,9 @@ const CarWashCommissions = () => {
           loading={loading}
           empty="No commissions found for the selected filters."
           minWidth="800px"
-          rowClassName={(row) => row.status === "cancelled" ? "opacity-50" : ""}
-          renderRow={(row) => {
-            const isCancelled = row.status === "cancelled";
-            return (
-              <>
-                <td className={`px-3 py-2 font-extrabold text-slate-900 ${isCancelled ? "line-through" : ""}`}>{row.staff?.name || "—"}</td>
-                <td className="px-3 py-2 font-mono text-[11px] text-[#0B3B2E]">{row.jobNumber || row.job?.jobNumber || "—"}</td>
-                <td className="px-3 py-2 text-slate-700">{fmtSvc(row.service, row.serviceName || "—")}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{formatMoney(row.baseAmount)}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-slate-500">
-                  {row.commissionType === "percentage" ? `${row.commissionRate}%` : formatMoney(row.commissionRate)}
-                </td>
-                <td className={`px-3 py-2 text-right font-extrabold tabular-nums text-slate-900 ${isCancelled ? "line-through" : ""}`}>{formatMoney(row.commissionAmount)}</td>
-                <td className="px-3 py-2">
-                  <StatusBadge status={row.status} map={STATUS_MAP} />
-                </td>
-                <td className="px-3 py-2 text-slate-500">
-                  {row.earnedAt ? new Date(row.earnedAt).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
-                </td>
-              </>
-            );
-          }}
-          renderActions={showActionCol ? (row) => (
-            (row.status === "earned" || row.status === "payable") ? (
-              <button
-                type="button"
-                onClick={() => openReverseModal(row)}
-                className="inline-flex h-6 items-center gap-1 border border-rose-300 bg-rose-50 px-2 text-[10px] font-bold text-rose-700 hover:bg-rose-100"
-                title="Reverse this commission"
-              >
-                <FaUndo size={8} /> Reverse
-              </button>
-            ) : null
-          ) : undefined}
+          rowClassName={rowClassName}
+          renderRow={renderRow}
+          renderActions={showActionCol ? renderActions : undefined}
         />
 
         {/* Pagination */}
@@ -251,78 +345,7 @@ const CarWashCommissions = () => {
 
       {/* Reversal confirmation modal */}
       {reverseTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm border border-slate-200 bg-white shadow-2xl">
-            {/* Header */}
-            <div className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-3">
-              <FaUndo size={12} className="text-rose-300" />
-              <span className="text-[12px] font-bold uppercase tracking-wide text-white">Reverse Commission</span>
-            </div>
-
-            <div className="px-4 py-4 space-y-3">
-              {/* Commission details */}
-              <div className="border border-slate-200 bg-slate-50 px-3 py-2 space-y-1">
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-slate-500">Staff</span>
-                  <span className="font-bold text-slate-800">{reverseTarget.staff?.name || "—"}</span>
-                </div>
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-slate-500">Job</span>
-                  <span className="font-mono text-[#0B3B2E]">{reverseTarget.jobNumber || reverseTarget.job?.jobNumber || "—"}</span>
-                </div>
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-slate-500">Service</span>
-                  <span className="text-slate-700">{fmtSvc(reverseTarget.service, reverseTarget.serviceName || "—")}</span>
-                </div>
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-slate-500">Commission</span>
-                  <span className="font-extrabold text-slate-900">{formatMoney(reverseTarget.commissionAmount)}</span>
-                </div>
-              </div>
-
-              {/* What happens notice */}
-              <div className="border-l-2 border-rose-400 bg-rose-50 px-3 py-2">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-rose-700 mb-1">What happens</p>
-                <ul className="text-[10px] text-rose-700 space-y-0.5 list-disc list-inside">
-                  <li>Accrual ledger entries are reversed</li>
-                  <li>Commission status set to Cancelled</li>
-                  <li>Job deletion becomes possible (once payments also cleared)</li>
-                </ul>
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-slate-400">Reversal Notes (optional)</label>
-                <textarea
-                  className="w-full border border-slate-300 px-2 py-1.5 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none resize-none"
-                  rows={2}
-                  placeholder="Reason for reversal…"
-                  value={reversalNotes}
-                  onChange={(e) => setReversalNotes(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-2 border-t border-slate-200 px-4 py-3">
-              <button
-                type="button"
-                onClick={closeReverseModal}
-                disabled={isReversing}
-                className="flex-1 h-8 border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmReverse}
-                disabled={isReversing}
-                className="flex-1 h-8 bg-rose-600 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50"
-              >
-                {isReversing ? "Reversing…" : "Confirm Reversal"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ReversalModal target={reverseTarget} onClose={closeReverseModal} onConfirm={confirmReverse} />
       )}
     </CarWashShell>
   );

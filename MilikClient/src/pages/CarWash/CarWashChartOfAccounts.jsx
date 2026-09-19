@@ -67,6 +67,14 @@ const groupForType = (type = "") => {
   return "income";
 };
 
+// Ledger activity is a lifetime feed with no server-side pagination — default
+// to a bounded trailing 12-month window instead of fetching every entry ever posted.
+const getLedgerActivityBounds = () => {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+  return { startDate: start.toISOString().slice(0, 10), endDate: now.toISOString().slice(0, 10) };
+};
+
 const CarWashChartOfAccounts = () => {
   const confirm = useConfirm();
   const queryClient = useQueryClient();
@@ -79,6 +87,7 @@ const CarWashChartOfAccounts = () => {
   const [form, setForm] = useState(emptyForm);
   const [activityModal, setActivityModal] = useState({ open: false, account: null, rows: [], openingBalance: 0, closingBalance: 0 });
   const [saving, setSaving] = useState(false);
+  const [groupPages, setGroupPages] = useState({}); // { [group.key]: pageNumber } — keeps accounts past PAGE_SIZE reachable
 
   const canManageSettings = useCarWashPermission("carwash-settings", "manage");
   const canCreate = canManageSettings;
@@ -90,16 +99,14 @@ const CarWashChartOfAccounts = () => {
     queryFn: () => carWashApi.listChartOfAccounts({ business: currentCompany._id, moduleScope: "carwash" }),
     enabled: !!currentCompany?._id,
     select: (rows) => Array.isArray(rows) ? rows : [],
-    staleTime: 0,           // always refetch on mount / window-focus
+    staleTime: 30_000,
+    // Account balances are computed server-side from ledger activity posted by
+    // OTHER pages (jobs, payouts, damages, etc.), so refetch on window focus to
+    // pick those up. (The "carwash-data-changed" event this page used to also
+    // listen for is never dispatched anywhere in the app — it was dead code —
+    // so it's dropped rather than kept as a third, redundant trigger.)
     refetchOnWindowFocus: true,
   });
-
-  // Immediately refetch when any car wash mutation signals data changed
-  useEffect(() => {
-    const onDataChanged = () => refetch();
-    window.addEventListener("carwash-data-changed", onDataChanged);
-    return () => window.removeEventListener("carwash-data-changed", onDataChanged);
-  }, [refetch]);
 
   useEffect(() => { if (error) toast.error(error?.response?.data?.message || "Failed to load Car Wash chart of accounts"); }, [error]);
   useEffect(() => { setSelectedIds([]); }, [rawAccounts]);
@@ -255,7 +262,8 @@ const CarWashChartOfAccounts = () => {
       return;
     }
     try {
-      const payload = await carWashApi.getChartAccountActivity(selectedAccount._id, { business: currentCompany?._id });
+      const { startDate, endDate } = getLedgerActivityBounds();
+      const payload = await carWashApi.getChartAccountActivity(selectedAccount._id, { business: currentCompany?._id, startDate, endDate });
       setActivityModal({
         open: true,
         account: payload?.account || selectedAccount,
@@ -313,7 +321,11 @@ const CarWashChartOfAccounts = () => {
 
       <div className="min-h-[calc(100vh-15rem)] overflow-x-auto">
         <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-          {groupedAccounts.length ? groupedAccounts.map((group) => (
+          {groupedAccounts.length ? groupedAccounts.map((group) => {
+            const totalPages = Math.max(1, Math.ceil(group.accounts.length / PAGE_SIZE));
+            const groupPage = Math.min(groupPages[group.key] || 1, totalPages);
+            const pageAccounts = group.accounts.slice((groupPage - 1) * PAGE_SIZE, groupPage * PAGE_SIZE);
+            return (
             <section key={group.key} className="overflow-hidden border border-slate-200 bg-white shadow-sm" style={{ borderTop: `2px solid ${group.accent}` }}>
               <div className="flex min-h-8 items-center justify-between border-b border-slate-200 bg-[#F6FAF8] px-3 py-1.5">
                 <div className="flex items-center gap-2 text-sm font-extrabold text-slate-900">
@@ -338,7 +350,7 @@ const CarWashChartOfAccounts = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {group.accounts.slice(0, PAGE_SIZE).map((account) => (
+                    {pageAccounts.map((account) => (
                       <tr key={account._id || account.code} className="border-b border-slate-200 hover:bg-slate-50">
                         <td className="px-2 py-1">
                           <button type="button" onClick={() => toggleSelected(account._id)} className="text-[#0B3B2E] hover:text-[#FF8C00]">
@@ -355,8 +367,31 @@ const CarWashChartOfAccounts = () => {
                   </tbody>
                 </table>
               </div>
+
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between border-t border-slate-200 bg-[#F6FAF8] px-3 py-1.5">
+                  <button
+                    type="button"
+                    disabled={groupPage <= 1}
+                    onClick={() => setGroupPages((prev) => ({ ...prev, [group.key]: groupPage - 1 }))}
+                    className="inline-flex h-6 items-center gap-1 border border-[#B7C9C0] bg-white px-2 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Prev
+                  </button>
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Page {groupPage} / {totalPages}</span>
+                  <button
+                    type="button"
+                    disabled={groupPage >= totalPages}
+                    onClick={() => setGroupPages((prev) => ({ ...prev, [group.key]: groupPage + 1 }))}
+                    className="inline-flex h-6 items-center gap-1 border border-[#B7C9C0] bg-white px-2 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
             </section>
-          )) : (
+            );
+          }) : (
             <div className="border border-slate-200 bg-white px-3 py-10 text-center text-xs font-semibold text-slate-500 shadow-sm">
               No Car Wash chart accounts found for the selected filters.
             </div>
