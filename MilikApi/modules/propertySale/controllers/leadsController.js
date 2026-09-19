@@ -9,6 +9,10 @@ import Company from "../../../models/Company.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
 
+// A converted lead carries its source onto the buyer; fall back to "other" if the buyer schema doesn't know it
+const BUYER_SOURCE_VALUES = SaleBuyer.schema.path("source").enumValues;
+const buyerSourceFor = (source) => (BUYER_SOURCE_VALUES.includes(source) ? source : "other");
+
 const fillPlaceholders = (text, vars) =>
   String(text || "").replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => vars[k] ?? `{${k}}`);
 
@@ -188,7 +192,7 @@ export const convertLead = async (req, res, next) => {
         fullName:   lead.fullName,
         phone:      lead.phone,
         email:      lead.email,
-        source:     lead.source,
+        source:     buyerSourceFor(lead.source),
         idNumber,
         notes:      lead.notes,
         kycStatus:  "pending",
@@ -316,7 +320,7 @@ export const convertLeadToOffer = async (req, res, next) => {
         buyer = await SaleBuyer.create({
           business, buyerNumber,
           fullName: lead.fullName, phone: lead.phone, email: lead.email,
-          source: lead.source, idNumber, notes: lead.notes,
+          source: buyerSourceFor(lead.source), idNumber, notes: lead.notes,
           kycStatus: "pending", createdBy: userId, updatedBy: userId,
         });
         createdBuyerId = buyer._id;

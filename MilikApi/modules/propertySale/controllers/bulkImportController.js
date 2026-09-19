@@ -8,7 +8,7 @@ const LISTING_SIZE_UNITS     = ["sqm", "sqft", "acres", "hectares"];
 // under_contract / sold / reserved are driven by the offers + deals workflow and must never be
 // imported directly (they would bypass every deal/offer guard).
 const LISTING_IMPORT_STATUSES = ["available", "withdrawn"];
-const BUYER_SOURCES          = ["walk_in", "referral", "online", "agent", "other"];
+const BUYER_SOURCES          = ["walk_in", "referral", "online", "social_media", "agent", "cold_call", "other"];
 const BUYER_KYC_STATUSES     = ["pending", "verified", "rejected"];
 
 // Case-insensitive matching for the duplicate look-ups

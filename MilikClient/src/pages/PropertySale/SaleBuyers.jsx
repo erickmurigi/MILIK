@@ -18,7 +18,7 @@ import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
 import { inputClass, labelClass } from "../../utils/formStyles";
 
-const SOURCES      = ["walk_in", "referral", "online", "agent", "other"];
+const SOURCES      = ["walk_in", "referral", "online", "social_media", "agent", "cold_call", "other"];
 const KYC_STATUSES = ["pending", "verified", "rejected"];
 // Lazy-load the xlsx-backed helpers only when the Import modal is actually used.
 const parseSaleBuyersExcel = (file) => import("../../utils/excelTemplates").then((m) => m.parseSaleBuyersExcel(file));

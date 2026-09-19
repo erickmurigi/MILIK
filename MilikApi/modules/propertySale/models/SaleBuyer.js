@@ -1,7 +1,8 @@
 import mongoose from "mongoose";
 
 const KYC_STATUSES = ["pending", "verified", "rejected"];
-const BUYER_SOURCES = ["walk_in", "referral", "online", "agent", "other"];
+// Superset of the lead sources, so a converted lead keeps its original source
+const BUYER_SOURCES = ["walk_in", "referral", "online", "social_media", "agent", "cold_call", "other"];
 
 const saleBuyerSchema = new mongoose.Schema(
   {
