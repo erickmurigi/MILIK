@@ -16,7 +16,6 @@ export const buildPlateRegex = (plate = "") => {
     `^${normalized
       .split("")
       .map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-      .join("[^A-Z0-9]*")}$`,
-    "i"
+      .join("[^A-Z0-9]*")}$`
   );
 };

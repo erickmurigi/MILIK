@@ -102,7 +102,41 @@ const resolveCarWashCompanyAndConfig = async (shortCode = "") => {
   return { company, config, branch: branch || null };
 };
 
-const refreshJobPaymentStatus = async (business, jobId) => {
+// `opts.job`: an already-fetched job (Mongoose doc or lean object) â€” skips the findOne.
+// `opts.paidAmount`: an already-known post-payment total â€” skips the aggregate.
+// When either is supplied, the update is applied via a single updateOne (not job.save()),
+// since a caller-supplied job may be a plain lean object or may be stale on unrelated fields.
+// With neither supplied, behaves exactly as before (findOne + aggregate + job.save()).
+const refreshJobPaymentStatus = async (business, jobId, opts = {}) => {
+  const { job: knownJob = null, paidAmount: knownPaidAmount = null } = opts;
+
+  if (knownJob != null || knownPaidAmount != null) {
+    const job = knownJob || await CarWashJob.findOne({ _id: jobId, business });
+    if (!job) return null;
+
+    let paidAmount = knownPaidAmount;
+    if (paidAmount === null || paidAmount === undefined) {
+      const totals = await CarWashPayment.aggregate([
+        { $match: { business: job.business, job: job._id } },
+        { $group: { _id: "$job", amount: { $sum: "$amount" } } },
+      ]).allowDiskUse(true);
+      paidAmount = Number(totals?.[0]?.amount || 0);
+    }
+    const price = netJobPrice(job);
+    let paymentStatus = paidAmount <= 0 ? "unpaid" : paidAmount < price ? "partial" : "paid";
+    let status = job.status;
+    // Fully-paid ready job â†’ auto-advance to done so it leaves the washboard
+    if (paymentStatus === "paid" && status === "ready") {
+      status = "done";
+    }
+    // Rollback only: legacy-paid jobs whose payment is reversed revert to done
+    if (status === "paid" && paymentStatus !== "paid") {
+      status = "done";
+    }
+    await CarWashJob.updateOne({ _id: job._id, business }, { $set: { paymentStatus, status } });
+    return { ...(typeof job.toObject === "function" ? job.toObject() : job), paymentStatus, status };
+  }
+
   const job = await CarWashJob.findOne({ _id: jobId, business });
   if (!job) return null;
 
@@ -390,17 +424,19 @@ export const handleStkCallback = async (req, res) => {
       await CarWashMpesaNotification.updateOne({ _id: notif._id }, { $set: { status: "error", resultDesc: "Cashbook not configured" } });
       return;
     }
-    const cashbook = await ChartOfAccount.findOne({ _id: cashbookId, business: businessId, type: "asset", isPosting: true }).lean();
+    const [cashbook, totals] = await Promise.all([
+      ChartOfAccount.findOne({ _id: cashbookId, business: businessId, type: "asset", isPosting: true }).lean(),
+      CarWashPayment.aggregate([
+        { $match: { business: job.business, job: job._id } },
+        { $group: { _id: null, amount: { $sum: "$amount" } } },
+      ]).allowDiskUse(true),
+    ]);
     if (!cashbook) {
       console.error("[STK] Cashbook id=%s not found or not an active posting account for businessId=%s", cashbookId, businessId);
       await CarWashMpesaNotification.updateOne({ _id: notif._id }, { $set: { status: "error", resultDesc: "Cashbook not found" } });
       return;
     }
 
-    const totals = await CarWashPayment.aggregate([
-      { $match: { business: job.business, job: job._id } },
-      { $group: { _id: null, amount: { $sum: "$amount" } } },
-    ]).allowDiskUse(true);
     const alreadyPaid  = round2(totals?.[0]?.amount || 0);
     const outstanding  = round2(Math.max(round2(netJobPrice(job)) - alreadyPaid, 0));
     if (outstanding <= 0) {
@@ -443,11 +479,13 @@ export const handleStkCallback = async (req, res) => {
 
     if (phone) {
       await CarWashJob.updateOne({ _id: job._id, business: businessId }, { $set: { phone } });
+      job.phone = phone;
     }
     autoEnrollPlate({ business: businessId, plate: job.plateNumber, customerName: job.customerName, phone: phone || null })
       .catch(() => {});
 
-    const updatedJob = await refreshJobPaymentStatus(businessId, job._id);
+    const newPaidAmount = round2(alreadyPaid + payAmount);
+    const updatedJob = await refreshJobPaymentStatus(businessId, job._id, { job, paidAmount: newPaidAmount });
     await postCarWashPaymentLedger({ businessId, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: null, taxAmount: Number((updatedJob || job)?.taxAmount || 0), jobPrice: Number((updatedJob || job)?.price || 0) });
 
     // Route STK overpayment the same way C2B does (confirmCarWashCallback) â€” STK
@@ -627,7 +665,7 @@ export const confirmCarWashCallback = async (req, res) => {
         plates: plate,
         status: "active",
         accountType: "prepaid",
-      }) : null;
+      }).lean() : null;
 
       if (prepaidAcc) {
         // Reserve the "matched" notification slot atomically BEFORE any money-moving
@@ -747,6 +785,10 @@ export const confirmCarWashCallback = async (req, res) => {
             { $group: { _id: "$job", paid: { $sum: "$amount" } } },
           ]).allowDiskUse(true);
           const paidByJob = new Map(vPaidAggs.map(r => [String(r._id), Number(r.paid)]));
+          // Job status updates are computed in-memory below and flushed via one bulkWrite
+          // after the loop, instead of each iteration doing its own findOne+aggregate+save()
+          // (via refreshJobPaymentStatus) before Safaricom's ack is sent.
+          const jobStatusOps = [];
 
           for (const vJob of openVoucherJobs) {
             if (creditRemaining <= 0.009) break;
@@ -767,18 +809,35 @@ export const confirmCarWashCallback = async (req, res) => {
                 paymentDate: transDate,
               });
               await CarWashCreditAccount.updateOne({ _id: voucherAcc._id }, { $inc: { accountCredit: -payAmount } });
-              const allocatedJob = await refreshJobPaymentStatus(businessId, vJob._id);
-              if (allocatedJob) {
-                accrueCommissionForJob({ req: null, job: allocatedJob }).catch(() => {});
-                if (allocatedJob.paymentStatus === "paid") {
-                  markJobCommissionsPayable({ business: businessId, jobId: allocatedJob._id }).catch(() => {});
-                }
+
+              // Inline equivalent of refreshJobPaymentStatus's status computation
+              const newPaidTotal = round2(alreadyPaid + payAmount);
+              const price = netJobPrice(vJob);
+              const newPaymentStatus = newPaidTotal <= 0 ? "unpaid" : newPaidTotal < price ? "partial" : "paid";
+              let newStatus = vJob.status;
+              if (newPaymentStatus === "paid" && newStatus === "ready") newStatus = "done";
+              if (newStatus === "paid" && newPaymentStatus !== "paid") newStatus = "done";
+              jobStatusOps.push({
+                updateOne: {
+                  filter: { _id: vJob._id, business: businessId },
+                  update: { $set: { paymentStatus: newPaymentStatus, status: newStatus } },
+                },
+              });
+
+              const allocatedJob = { ...vJob, paymentStatus: newPaymentStatus, status: newStatus };
+              accrueCommissionForJob({ req: null, job: allocatedJob }).catch(() => {});
+              if (allocatedJob.paymentStatus === "paid") {
+                markJobCommissionsPayable({ business: businessId, jobId: allocatedJob._id }).catch(() => {});
               }
               creditRemaining = round2(creditRemaining - payAmount);
               allocatedJobNumbers.push(vJob.jobNumber || String(vJob._id));
             } catch (_allocErr) {
               // Skip on per-job error â€” credit stays on wallet, staff can allocate manually
             }
+          }
+
+          if (jobStatusOps.length) {
+            await CarWashJob.bulkWrite(jobStatusOps);
           }
         }
 
@@ -826,16 +885,18 @@ export const confirmCarWashCallback = async (req, res) => {
       await saveNotif({ matchedJob: job._id, status: "error", resultCode: 0, resultDesc: "Cashbook not configured" });
       return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted â€“ cashbook not configured" });
     }
-    const cashbook = await ChartOfAccount.findOne({ _id: cashbookId, business: businessId, type: "asset", isPosting: true }).lean();
+    const [cashbook, totals] = await Promise.all([
+      ChartOfAccount.findOne({ _id: cashbookId, business: businessId, type: "asset", isPosting: true }).lean(),
+      CarWashPayment.aggregate([
+        { $match: { business: businessId, job: job._id } },
+        { $group: { _id: "$job", amount: { $sum: "$amount" } } },
+      ]).allowDiskUse(true),
+    ]);
     if (!cashbook) {
       await saveNotif({ matchedJob: job._id, status: "error", resultCode: 0, resultDesc: "Cashbook not found" });
       return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted â€“ cashbook not found" });
     }
 
-    const totals = await CarWashPayment.aggregate([
-      { $match: { business: businessId, job: job._id } },
-      { $group: { _id: "$job", amount: { $sum: "$amount" } } },
-    ]).allowDiskUse(true);
     const alreadyPaid = round2(totals?.[0]?.amount || 0);
     const outstanding = round2(Math.max(round2(netJobPrice(job)) - alreadyPaid, 0));
     if (outstanding <= 0) {
@@ -900,8 +961,12 @@ export const confirmCarWashCallback = async (req, res) => {
       maskedMsisdn: job.isVoucher ? null : (!normalizedMsisdn && msisdn ? msisdn : null),
       payerName: job.isVoucher ? (job.customerName || senderName) : senderName,
     }).catch((err) => console.error('[CW M-Pesa] autoEnroll failed:', err?.message));
+    // Keep the in-memory job doc in sync with what was just written above, so
+    // refreshJobPaymentStatus (called with this doc below) doesn't hand back stale fields.
+    if (Object.keys(jobUpdates).length) Object.assign(job, jobUpdates);
 
-    const updatedJob = await refreshJobPaymentStatus(businessId, job._id);
+    const newPaidAmount = round2(alreadyPaid + appliedAmount);
+    const updatedJob = await refreshJobPaymentStatus(businessId, job._id, { job, paidAmount: newPaidAmount });
     await postCarWashPaymentLedger({ businessId, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: null, taxAmount: Number((updatedJob || job)?.taxAmount || 0), jobPrice: Number((updatedJob || job)?.price || 0) });
 
     // Route M-Pesa overpayment: prepaid/credit account gets wallet top-up;
@@ -923,19 +988,28 @@ export const confirmCarWashCallback = async (req, res) => {
       const smsMasked  = updatedJob.isVoucher ? null : (!normalizedMsisdn && msisdn && !tsqWillFire ? msisdn : null);
       const smsName    = updatedJob.isVoucher ? (updatedJob.customerName || senderName) : senderName;
 
-      let loyaltySmsBody = null;
-      if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
+      // Loyalty stamp + payment-confirmation SMS: fire-and-forget so the Safaricom ack
+      // isn't blocked on an SMS-provider network call (payment/ledger work above stays awaited).
+      (async () => {
         try {
-          const stampResult = await awardLoyaltyStamp({ business: businessId, job: updatedJob, overridePhone: smsPhone, maskedMsisdn: smsMasked, suppressSms: true, payerName: smsName });
-          loyaltySmsBody = stampResult?.smsBody || null;
-        } catch (err) {
-          console.error("[C2B] Stamp failed job=%s: %s", updatedJob.jobNumber, err?.message || err);
+          let loyaltySmsBody = null;
+          if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
+            try {
+              const stampResult = await awardLoyaltyStamp({ business: businessId, job: updatedJob, overridePhone: smsPhone, maskedMsisdn: smsMasked, suppressSms: true, payerName: smsName });
+              loyaltySmsBody = stampResult?.smsBody || null;
+            } catch (err) {
+              console.error("[C2B] Stamp failed job=%s: %s", updatedJob.jobNumber, err?.message || err);
+            }
+          }
+          await sendPaymentConfirmationSms({ business: businessId, job: updatedJob, amount: paidAmount, remaining: remainingBalance, overridePhone: smsPhone, maskedMsisdn: smsMasked, loyaltySmsBody, payerName: smsName });
+          if (tsqWillFire && loyaltySmsBody && savedNotif?._id) {
+            CarWashMpesaNotification.findByIdAndUpdate(savedNotif._id, { $set: { pendingStampSmsBody: loyaltySmsBody } }).catch(() => {});
+          }
+        } catch (_err) {
+          console.error('[C2B] Loyalty/SMS block failed job=%s: %s', updatedJob.jobNumber, _err?.message || _err);
         }
-      }
-      await sendPaymentConfirmationSms({ business: businessId, job: updatedJob, amount: paidAmount, remaining: remainingBalance, overridePhone: smsPhone, maskedMsisdn: smsMasked, loyaltySmsBody, payerName: smsName });
-      if (tsqWillFire && loyaltySmsBody && savedNotif?._id) {
-        CarWashMpesaNotification.findByIdAndUpdate(savedNotif._id, { $set: { pendingStampSmsBody: loyaltySmsBody } }).catch(() => {});
-      }
+      })();
+
       if (updatedJob.paymentStatus === "paid") {
         await markJobCommissionsPayable({ business: businessId, jobId: updatedJob._id });
       }
@@ -1067,14 +1141,16 @@ export const reassignMpesaNotification = async (req, res, next) => {
     if (!cashbookId || !mongoose.Types.ObjectId.isValid(String(cashbookId))) {
       return res.status(422).json({ success: false, message: "Cashbook not configured on M-Pesa paybill settings" });
     }
-    const cashbook = await ChartOfAccount.findOne({ _id: cashbookId, business, type: "asset", isPosting: true }).lean();
+    // Check if fully paid already (cashbook lookup and payment-totals aggregate are independent)
+    const [cashbook, totals] = await Promise.all([
+      ChartOfAccount.findOne({ _id: cashbookId, business, type: "asset", isPosting: true }).lean(),
+      CarWashPayment.aggregate([
+        { $match: { business: job.business, job: job._id } },
+        { $group: { _id: "$job", amount: { $sum: "$amount" } } },
+      ]).allowDiskUse(true),
+    ]);
     if (!cashbook) return res.status(422).json({ success: false, message: "Cashbook account not found" });
 
-    // Check if fully paid already
-    const totals = await CarWashPayment.aggregate([
-      { $match: { business: job.business, job: job._id } },
-      { $group: { _id: "$job", amount: { $sum: "$amount" } } },
-    ]).allowDiskUse(true);
     const alreadyPaid = round2(totals?.[0]?.amount || 0);
     const outstanding = round2(Math.max(round2(netJobPrice(job)) - alreadyPaid, 0));
     if (outstanding <= 0) {
@@ -1118,7 +1194,8 @@ export const reassignMpesaNotification = async (req, res, next) => {
     notif.notes = `Corrected â€” original account reference: ${notif.billRefNumber}`;
     await notif.save();
 
-    const updatedJob = await refreshJobPaymentStatus(business, job._id);
+    const newPaidAmount = round2(alreadyPaid + appliedAmount);
+    const updatedJob = await refreshJobPaymentStatus(business, job._id, { job, paidAmount: newPaidAmount });
     await postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: req.user?._id || null, taxAmount: Number((updatedJob || job)?.taxAmount || 0), jobPrice: Number((updatedJob || job)?.price || 0) });
 
     // Update job + customer with payer's M-Pesa identity (Safaricom-verified)
@@ -1246,7 +1323,8 @@ export const allocateNotification = async (req, res, next) => {
       ]);
       if (!job) continue;
 
-      const jobOutstanding = round2(Math.max(netJobPrice(job) - (pt?.[0]?.paid || 0), 0));
+      const alreadyPaid = round2(pt?.[0]?.paid || 0);
+      const jobOutstanding = round2(Math.max(netJobPrice(job) - alreadyPaid, 0));
       if (jobOutstanding <= 0) continue;
 
       const payAmount = round2(Math.min(amount, jobOutstanding));
@@ -1263,7 +1341,8 @@ export const allocateNotification = async (req, res, next) => {
         notes: `Allocated from M-Pesa notification (ref: ${notif.transactionCode || notif.billRefNumber})`,
       });
 
-      const updatedJob = await refreshJobPaymentStatus(business, job._id);
+      const newPaidAmount = round2(alreadyPaid + payAmount);
+      const updatedJob = await refreshJobPaymentStatus(business, job._id, { job, paidAmount: newPaidAmount });
       postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: req.user?._id || null, taxAmount: Number((updatedJob || job)?.taxAmount || 0), jobPrice: Number((updatedJob || job)?.price || 0) }).catch(() => {});
 
       if (updatedJob) {
@@ -1583,6 +1662,14 @@ export const bulkUploadMpesaStatement = async (req, res, next) => {
     const results = [];
     let matched = 0, duplicate = 0, unmatched = 0, skipped = 0, errorCount = 0, totalMatched = 0;
 
+    // ------------------------------------------------------------------
+    // Pass 1 (synchronous, no DB): resolve every row that can be decided
+    // without a lookup (blank/parse-error/skip/no-code/bad-amount/no-plate),
+    // and collect the rest as "candidates" needing a job/duplicate lookup.
+    // `rowOutcomes` preserves original row order across both passes so the
+    // final `results` array comes out in the same order as before.
+    // ------------------------------------------------------------------
+    const rowOutcomes = [];
     for (let idx = 0; idx < rows.length - 1; idx++) {
       const cells  = rows[idx + 1];
       if (cells.every((c) => !c)) continue;
@@ -1592,14 +1679,12 @@ export const bulkUploadMpesaStatement = async (req, res, next) => {
       try {
         extracted = extractCsvRow(rawHeaders, cells, fmt);
       } catch (e) {
-        results.push({ row: rowNum, status: "error", reason: `Parse error: ${e.message}` });
-        errorCount++;
+        rowOutcomes.push({ counter: "errorCount", entry: { row: rowNum, status: "error", reason: `Parse error: ${e.message}` } });
         continue;
       }
 
       if (extracted.skip) {
-        results.push({ row: rowNum, status: "skipped", reason: extracted.reason });
-        skipped++;
+        rowOutcomes.push({ counter: "skipped", entry: { row: rowNum, status: "skipped", reason: extracted.reason } });
         continue;
       }
 
@@ -1607,144 +1692,206 @@ export const bulkUploadMpesaStatement = async (req, res, next) => {
       const plate = normalizePlate(billRefNumber);
 
       if (!transactionCode) {
-        results.push({ row: rowNum, status: "skipped", reason: "No transaction code", billRefNumber, amount });
-        skipped++;
+        rowOutcomes.push({ counter: "skipped", entry: { row: rowNum, status: "skipped", reason: "No transaction code", billRefNumber, amount } });
         continue;
       }
       if (!amount || amount <= 0) {
-        results.push({ row: rowNum, status: "skipped", reason: "Amount is zero or invalid", transactionCode, billRefNumber });
-        skipped++;
+        rowOutcomes.push({ counter: "skipped", entry: { row: rowNum, status: "skipped", reason: "Amount is zero or invalid", transactionCode, billRefNumber } });
         continue;
       }
       if (!plate) {
-        results.push({ row: rowNum, status: "unmatched", reason: "No valid plate in account reference", transactionCode, billRefNumber: billRefNumber || "â€”", amount });
-        unmatched++;
+        rowOutcomes.push({ counter: "unmatched", entry: { row: rowNum, status: "unmatched", reason: "No valid plate in account reference", transactionCode, billRefNumber: billRefNumber || "â€”", amount } });
         continue;
       }
 
-      // Duplicate guard â€” notification already matched
-      const existingNotif = await CarWashMpesaNotification.findOne({ transactionCode, status: "matched" }).lean();
-      if (existingNotif) {
-        results.push({ row: rowNum, status: "duplicate", reason: "Already processed", transactionCode, plate, amount });
-        duplicate++;
-        continue;
+      rowOutcomes.push({ candidate: { rowNum, transactionCode, amount, billRefNumber, plate, date, msisdn, senderName } });
+    }
+
+    const candidateOutcomes = rowOutcomes.filter((o) => o.candidate);
+
+    if (candidateOutcomes.length) {
+      // ------------------------------------------------------------------
+      // Batch the 3 per-row lookups (dup notif, dup payment, job-by-plate)
+      // into one query each, instead of up to 3 DB round trips per row.
+      // ------------------------------------------------------------------
+      const codes  = [...new Set(candidateOutcomes.map((o) => o.candidate.transactionCode))];
+      const plates = [...new Set(candidateOutcomes.map((o) => o.candidate.plate))];
+
+      const [existingNotifs, existingPayments, candidateJobs] = await Promise.all([
+        CarWashMpesaNotification.find({ transactionCode: { $in: codes }, status: "matched" }).select("transactionCode").lean(),
+        CarWashPayment.find({ business, method: "mpesa", reference: { $in: codes } }).select("reference").lean(),
+        CarWashJob.find({
+          business,
+          plateNumber: { $in: plates.map((p) => buildPlateRegex(p)) },
+          status: { $nin: ["cancelled"] },
+          paymentStatus: { $in: ["unpaid", "partial"] },
+        }).sort({ createdAt: -1 }).lean(),
+      ]);
+
+      const seenMatchedCodes = new Set(existingNotifs.map((n) => n.transactionCode));
+      const seenPaymentRefs  = new Set(existingPayments.map((p) => p.reference));
+
+      // Bucket candidate jobs by normalized plate, most-recent first (query was sorted desc),
+      // mirroring the per-row `.findOne(...).sort({createdAt:-1})` semantics exactly.
+      const jobsByPlate = new Map();
+      for (const j of candidateJobs) {
+        const key = normalizePlate(j.plateNumber);
+        if (!jobsByPlate.has(key)) jobsByPlate.set(key, []);
+        jobsByPlate.get(key).push(j);
       }
 
-      // Duplicate guard â€” payment already recorded with this reference
-      const existingPayment = await CarWashPayment.findOne({ business, method: "mpesa", reference: transactionCode }).lean();
-      if (existingPayment) {
-        results.push({ row: rowNum, status: "duplicate", reason: "Payment already recorded", transactionCode, plate, amount });
-        duplicate++;
-        continue;
-      }
+      const jobIds = candidateJobs.map((j) => j._id);
+      const payTotals = jobIds.length
+        ? await CarWashPayment.aggregate([
+            { $match: { business: new mongoose.Types.ObjectId(String(business)), job: { $in: jobIds } } },
+            { $group: { _id: "$job", amount: { $sum: "$amount" } } },
+          ]).allowDiskUse(true)
+        : [];
+      const paidByJob = new Map(payTotals.map((r) => [String(r._id), Number(r.amount)]));
 
-      // Find most-recent open job for this plate
-      const job = await CarWashJob.findOne({
-        business,
-        plateNumber: buildPlateRegex(plate),
-        status: { $nin: ["cancelled"] },
-        paymentStatus: { $in: ["unpaid", "partial"] },
-      }).sort({ createdAt: -1 }).lean();
+      // ------------------------------------------------------------------
+      // Pass 2: process each candidate synchronously against the pre-fetched
+      // maps/sets (mutated in place so intra-CSV duplicates and jobs that
+      // become fully paid mid-run are still caught, exactly as the old
+      // per-row DB re-queries would have caught them).
+      // ------------------------------------------------------------------
+      for (const outcome of candidateOutcomes) {
+        const { rowNum, transactionCode, amount, billRefNumber, plate, date, msisdn, senderName } = outcome.candidate;
 
-      if (!job) {
+        if (seenMatchedCodes.has(transactionCode)) {
+          outcome.counter = "duplicate";
+          outcome.entry = { row: rowNum, status: "duplicate", reason: "Already processed", transactionCode, plate, amount };
+          continue;
+        }
+        if (seenPaymentRefs.has(transactionCode)) {
+          outcome.counter = "duplicate";
+          outcome.entry = { row: rowNum, status: "duplicate", reason: "Payment already recorded", transactionCode, plate, amount };
+          continue;
+        }
+
+        const plateJobs = jobsByPlate.get(plate) || [];
+        const job = plateJobs.find((j) => j.paymentStatus !== "paid");
+
+        if (!job) {
+          await CarWashMpesaNotification.create({
+            business, branch: branchId || null, shortCode: uploadShortCode,
+            transactionCode, billRefNumber, plate, amount,
+            msisdn: msisdn || "", senderName: senderName || "",
+            transactionDate: date, status: "unmatched",
+            resultDesc: `No open job for plate ${plate}`,
+            notes: "Uploaded via CSV statement",
+            rawPayload: { source: "manual_upload", format: fmt, row: rowNum },
+          }).catch(() => {});
+          outcome.counter = "unmatched";
+          outcome.entry = { row: rowNum, status: "unmatched", reason: `No open job for plate ${plate}`, transactionCode, plate, amount };
+          continue;
+        }
+
+        const jobIdStr = String(job._id);
+        const alreadyPaid = paidByJob.get(jobIdStr) || 0;
+        const outstanding = round2(Math.max(netJobPrice(job) - alreadyPaid, 0));
+        if (outstanding <= 0) {
+          outcome.counter = "duplicate";
+          outcome.entry = { row: rowNum, status: "duplicate", reason: "Job already fully paid", transactionCode, plate, amount, jobNumber: job.jobNumber };
+          continue;
+        }
+        const appliedAmount = round2(Math.min(amount, outstanding));
+
+        let payment;
+        try {
+          payment = await CarWashPayment.create({
+            business, branch: branchId || null,
+            job: job._id, amount: appliedAmount,
+            method: "mpesa", cashbookAccount: cashbook._id,
+            reference: transactionCode,
+            receivedFromPhone: msisdn || null,
+            paymentDate: date,
+            notes: "Recorded via CSV statement upload",
+          });
+        } catch (payErr) {
+          if (payErr.code === 11000) {
+            seenPaymentRefs.add(transactionCode);
+            seenMatchedCodes.add(transactionCode);
+            outcome.counter = "duplicate";
+            outcome.entry = { row: rowNum, status: "duplicate", reason: "Duplicate receipt", transactionCode, plate, amount };
+            continue;
+          }
+          throw payErr;
+        }
+
+        // Save matched notification
         await CarWashMpesaNotification.create({
           business, branch: branchId || null, shortCode: uploadShortCode,
-          transactionCode, billRefNumber, plate, amount,
+          transactionCode, billRefNumber, plate, amount: appliedAmount,
           msisdn: msisdn || "", senderName: senderName || "",
-          transactionDate: date, status: "unmatched",
-          resultDesc: `No open job for plate ${plate}`,
+          transactionDate: date, status: "matched",
+          matchedJob: job._id, matchedPayment: payment._id,
+          allocatedAmount: appliedAmount,
+          resultCode: 0, resultDesc: "Matched via CSV upload",
           notes: "Uploaded via CSV statement",
           rawPayload: { source: "manual_upload", format: fmt, row: rowNum },
         }).catch(() => {});
-        results.push({ row: rowNum, status: "unmatched", reason: `No open job for plate ${plate}`, transactionCode, plate, amount });
-        unmatched++;
-        continue;
-      }
 
-      // Cap payment at outstanding
-      const totals = await CarWashPayment.aggregate([
-        { $match: { business: job.business, job: job._id } },
-        { $group: { _id: null, amount: { $sum: "$amount" } } },
-      ]).allowDiskUse(true);
-      const alreadyPaid   = round2(totals?.[0]?.amount || 0);
-      const outstanding   = round2(Math.max(netJobPrice(job) - alreadyPaid, 0));
-      if (outstanding <= 0) {
-        results.push({ row: rowNum, status: "duplicate", reason: "Job already fully paid", transactionCode, plate, amount, jobNumber: job.jobNumber });
-        duplicate++;
-        continue;
-      }
-      const appliedAmount = round2(Math.min(amount, outstanding));
+        // Mark as used so later rows in this batch see it as taken (mirrors the DB-level dup checks)
+        seenMatchedCodes.add(transactionCode);
+        seenPaymentRefs.add(transactionCode);
 
-      let payment;
-      try {
-        payment = await CarWashPayment.create({
-          business, branch: branchId || null,
-          job: job._id, amount: appliedAmount,
-          method: "mpesa", cashbookAccount: cashbook._id,
-          reference: transactionCode,
-          receivedFromPhone: msisdn || null,
-          paymentDate: date,
-          notes: "Recorded via CSV statement upload",
-        });
-      } catch (payErr) {
-        if (payErr.code === 11000) {
-          results.push({ row: rowNum, status: "duplicate", reason: "Duplicate receipt", transactionCode, plate, amount });
-          duplicate++;
-          continue;
+        // Update job contact info if we have it
+        const jobUpdates = {};
+        if (msisdn) jobUpdates.phone = msisdn;
+        if (senderName) jobUpdates.customerName = senderName;
+        if (Object.keys(jobUpdates).length) {
+          CarWashJob.updateOne({ _id: job._id, business }, { $set: jobUpdates }).catch(() => {});
         }
-        throw payErr;
-      }
+        if (msisdn || senderName) {
+          autoEnrollPlate({ business, plate, customerName: job.customerName, phone: msisdn || null, payerName: senderName || null }).catch(() => {});
+        }
 
-      // Save matched notification
-      await CarWashMpesaNotification.create({
-        business, branch: branchId || null, shortCode: uploadShortCode,
-        transactionCode, billRefNumber, plate, amount: appliedAmount,
-        msisdn: msisdn || "", senderName: senderName || "",
-        transactionDate: date, status: "matched",
-        matchedJob: job._id, matchedPayment: payment._id,
-        allocatedAmount: appliedAmount,
-        resultCode: 0, resultDesc: "Matched via CSV upload",
-        notes: "Uploaded via CSV statement",
-        rawPayload: { source: "manual_upload", format: fmt, row: rowNum },
-      }).catch(() => {});
+        const newPaidAmount = round2(alreadyPaid + appliedAmount);
+        paidByJob.set(jobIdStr, newPaidAmount);
+        const updatedJob = await refreshJobPaymentStatus(business, job._id, { job, paidAmount: newPaidAmount });
+        // Keep the in-memory candidate pool in sync so later rows for the same plate see this
+        // job's updated paymentStatus (e.g. now "paid") exactly as a fresh per-row query would.
+        if (updatedJob) job.paymentStatus = updatedJob.paymentStatus;
+        postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: req.user?._id || null, taxAmount: Number((updatedJob || job)?.taxAmount || 0), jobPrice: Number((updatedJob || job)?.price || 0) }).catch(() => {});
 
-      // Update job contact info if we have it
-      const jobUpdates = {};
-      if (msisdn) jobUpdates.phone = msisdn;
-      if (senderName) jobUpdates.customerName = senderName;
-      if (Object.keys(jobUpdates).length) {
-        CarWashJob.updateOne({ _id: job._id, business }, { $set: jobUpdates }).catch(() => {});
-      }
-      if (msisdn || senderName) {
-        autoEnrollPlate({ business, plate, customerName: job.customerName, phone: msisdn || null, payerName: senderName || null }).catch(() => {});
-      }
-
-      const updatedJob = await refreshJobPaymentStatus(business, job._id);
-      postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: req.user?._id || null, taxAmount: Number((updatedJob || job)?.taxAmount || 0), jobPrice: Number((updatedJob || job)?.price || 0) }).catch(() => {});
-
-      if (updatedJob) {
-        accrueCommissionForJob({ req, job: updatedJob }).catch(() => {});
-        if (sendSms) {
-          const remaining = round2(Math.max(0, outstanding - appliedAmount));
-          let loyaltySmsBody = null;
-          if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
-            try {
-              const stampResult = await awardLoyaltyStamp({ business, job: updatedJob, overridePhone: msisdn || null, suppressSms: true });
-              loyaltySmsBody = stampResult?.smsBody || null;
-            } catch (err) {
-              console.error("[CSV Upload] Stamp failed job=%s: %s", updatedJob.jobNumber, err?.message || err);
+        if (updatedJob) {
+          accrueCommissionForJob({ req, job: updatedJob }).catch(() => {});
+          if (sendSms) {
+            const remaining = round2(Math.max(0, outstanding - appliedAmount));
+            let loyaltySmsBody = null;
+            if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
+              try {
+                const stampResult = await awardLoyaltyStamp({ business, job: updatedJob, overridePhone: msisdn || null, suppressSms: true });
+                loyaltySmsBody = stampResult?.smsBody || null;
+              } catch (err) {
+                console.error("[CSV Upload] Stamp failed job=%s: %s", updatedJob.jobNumber, err?.message || err);
+              }
             }
+            sendPaymentConfirmationSms({ business, job: updatedJob, amount: appliedAmount, remaining, overridePhone: msisdn || null, loyaltySmsBody }).catch(() => {});
           }
-          sendPaymentConfirmationSms({ business, job: updatedJob, amount: appliedAmount, remaining, overridePhone: msisdn || null, loyaltySmsBody }).catch(() => {});
+          if (updatedJob.paymentStatus === "paid") {
+            markJobCommissionsPayable({ business, jobId: updatedJob._id }).catch(() => {});
+          }
         }
-        if (updatedJob.paymentStatus === "paid") {
-          markJobCommissionsPayable({ business, jobId: updatedJob._id }).catch(() => {});
-        }
-      }
 
-      matched++;
-      totalMatched = round2(totalMatched + appliedAmount);
-      results.push({ row: rowNum, status: "matched", transactionCode, plate, amount: appliedAmount, jobNumber: job.jobNumber, customerName: job.customerName || "" });
+        outcome.counter = "matched";
+        outcome.appliedAmount = appliedAmount;
+        outcome.entry = { row: rowNum, status: "matched", transactionCode, plate, amount: appliedAmount, jobNumber: job.jobNumber, customerName: job.customerName || "" };
+      }
+    }
+
+    // Pass 3: flush in original row order.
+    for (const outcome of rowOutcomes) {
+      results.push(outcome.entry);
+      switch (outcome.counter) {
+        case "matched":   matched++;   totalMatched = round2(totalMatched + outcome.appliedAmount); break;
+        case "duplicate": duplicate++; break;
+        case "unmatched": unmatched++; break;
+        case "skipped":   skipped++;   break;
+        case "errorCount": errorCount++; break;
+        default: break;
+      }
     }
 
     res.json({
