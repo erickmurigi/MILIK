@@ -122,7 +122,7 @@ const CarWashCommissionRules = () => {
     staleTime: 30_000,
     select: (data) => normalizeListPayload(data, "rules"),
   });
-  const rules = rulesRaw ?? [];
+  const rules = useMemo(() => rulesRaw ?? [], [rulesRaw]);
 
   const { data: servicesRaw } = useQuery({
     queryKey: ["cw-services-ref"],

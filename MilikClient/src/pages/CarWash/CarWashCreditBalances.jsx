@@ -463,6 +463,12 @@ export default function CarWashCreditBalances() {
     },
     onError: (err) => toast.error(err?.response?.data?.message || "Undo failed"),
   });
+  // Destructure the stable `.mutate` references so handleWriteOff/handleUndo below can
+  // depend on them directly instead of the whole mutation object (which changes identity
+  // across idle/pending/success/error) — keeps their memoization (and GroupedCredits' props)
+  // stable across mutation state transitions.
+  const { mutate: writeOffCredits } = writeOffMutation;
+  const { mutate: undoCreditWriteOff } = undoMutation;
 
   const applyMutation = useMutation({
     mutationFn: ({ creditId, jobId }) => carWashApi.applyCredit(creditId, jobId),
@@ -489,8 +495,8 @@ export default function CarWashCreditBalances() {
   const handleWriteOff = useCallback(async (ids, amount, name) => {
     const label = ids.length === 1 ? (name ? `for ${name}` : "") : `(${ids.length} credits)`;
     if (!(await confirm(`Write off KES ${fmt(amount)} credit ${label} to Other Income?\n\nThis can be undone if the customer ever asks.`))) return;
-    writeOffMutation.mutate(ids);
-  }, [writeOffMutation.mutate, confirm]);
+    writeOffCredits(ids);
+  }, [writeOffCredits, confirm]);
 
   const handleBulkWriteOff = () => {
     const ids = [...selected];
@@ -502,8 +508,8 @@ export default function CarWashCreditBalances() {
   const handleApply = useCallback((credit) => setApplyTarget(credit), []);
   const handleRefund = useCallback((credit) => setRefundTarget(credit), []);
   const handleUndo   = useCallback(async (id) => {
-    if (await confirm("Reverse write-off? The credit will become active again.")) undoMutation.mutate(id);
-  }, [undoMutation.mutate, confirm]);
+    if (await confirm("Reverse write-off? The credit will become active again.")) undoCreditWriteOff(id);
+  }, [undoCreditWriteOff, confirm]);
 
   return (
     <CarWashShell title="Credit Balances">
