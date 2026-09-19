@@ -42,6 +42,8 @@ const parseDateRangePair = (fromRaw, toRaw) => {
 const emptyStatusCounts = () => ({
   waiting: 0,
   washing: 0,
+  drying: 0,
+  ready: 0,
   done: 0,
   paid: 0,
   cancelled: 0,
@@ -438,7 +440,7 @@ export const staffReport = async (req, res, next) => {
     const paymentMatch = { business: businessId, paymentDate: { $gte: start, $lt: end }, ...branchFilter };
     const commissionMatch = { business: businessId, earnedAt: { $gte: start, $lt: end }, status: { $ne: "cancelled" }, ...branchFilter };
 
-    const [staffJobRows, paymentByStaffRows, commissionByStaffRows] = await Promise.all([
+    const [staffJobRows, paymentByStaffRows, commissionByStaffRows, totalJobsRows, totalRevenueRows] = await Promise.all([
       CarWashJob.aggregate([
         { $match: jobMatch },
         { $lookup: { from: "carwashstaffs", localField: "assignedStaff", foreignField: "_id", as: "staffDoc" } },
@@ -487,12 +489,22 @@ export const staffReport = async (req, res, next) => {
           },
         },
       ]).allowDiskUse(true),
+      // Whole-job totals computed before any assignedStaff unwind, so multi-staff
+      // jobs are not fanned out and counted more than once.
+      CarWashJob.aggregate([
+        { $match: jobMatch },
+        { $group: { _id: null, totalJobs: { $sum: 1 } } },
+      ]).allowDiskUse(true),
+      CarWashPayment.aggregate([
+        { $match: paymentMatch },
+        { $group: { _id: null, totalRevenue: { $sum: "$amount" } } },
+      ]).allowDiskUse(true),
     ]);
 
-    const totalJobs = staffJobRows.reduce((s, r) => s + r.jobs, 0);
     const paymentMap = new Map(paymentByStaffRows.map((r) => [String(r._id.staffId), r]));
     const commissionMap = new Map(commissionByStaffRows.map((r) => [String(r._id.staffId), r]));
-    const totalRevenue = paymentByStaffRows.reduce((s, r) => s + r.revenue, 0);
+    const totalJobs = totalJobsRows[0]?.totalJobs || 0;
+    const totalRevenue = totalRevenueRows[0]?.totalRevenue || 0;
     const totalCommission = commissionByStaffRows.reduce((s, r) => s + r.totalCommission, 0);
 
     const rows = staffJobRows
