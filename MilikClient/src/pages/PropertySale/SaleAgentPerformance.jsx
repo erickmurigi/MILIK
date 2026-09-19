@@ -31,15 +31,34 @@ const PRINT_STYLES = `
   }
 `;
 
+// Server caps `limit` at 200 and paginates newest-first, so a single request
+// silently under-reports once an agent has >200 records. Fetch every page.
+const PAGE_LIMIT = 200;
+const MAX_PAGES  = 50;
+const fetchAllPages = async (listFn, params = {}) => {
+  const first = await listFn({ ...params, page: 1, limit: PAGE_LIMIT });
+  const pages = Math.max(Number(first?.pages) || 1, 1);
+  const last  = Math.min(pages, MAX_PAGES);
+  if (pages > MAX_PAGES) console.warn(`fetchAllPages: ${pages} pages exceeds safety cap of ${MAX_PAGES}; results truncated`);
+  const rest = last > 1
+    ? await Promise.all(Array.from({ length: last - 1 }, (_, i) => listFn({ ...params, page: i + 2, limit: PAGE_LIMIT })))
+    : [];
+  const byId = new Map();
+  [first, ...rest].forEach((p) => (p?.data ?? []).forEach((r) => byId.set(r._id, r)));
+  const data  = [...byId.values()];
+  const total = Number(first?.total) || data.length;
+  return { data, total, truncated: data.length < total };
+};
+
 const SaleAgentPerformance = () => {
   const { id }   = useParams();
   const navigate = useNavigate();
   const company  = useSelector((s) => s.company?.currentCompany);
-  const biz      = company?._id;
 
   const [agent,       setAgent]       = useState(null);
   const [deals,       setDeals]       = useState([]);
   const [commissions, setCommissions] = useState([]);
+  const [truncated,   setTruncated]   = useState(false);
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState(null);
   const styleRef = useRef(null);
@@ -57,12 +76,13 @@ const SaleAgentPerformance = () => {
     try {
       const [a, dealsData, commsData] = await Promise.all([
         saleApi.getAgent(id),
-        saleApi.listDeals({ agentId: id, limit: 200 }),
-        saleApi.listCommissions({ agentId: id, limit: 200 }),
+        fetchAllPages(saleApi.listDeals, { agentId: id }),
+        fetchAllPages(saleApi.listCommissions, { agentId: id }),
       ]);
       setAgent(a);
-      setDeals(dealsData?.data ?? []);
-      setCommissions(commsData?.data ?? []);
+      setDeals(dealsData.data);
+      setCommissions(commsData.data);
+      setTruncated(!!(dealsData.truncated || commsData.truncated));
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || "Failed to load agent");
     } finally {
@@ -135,6 +155,12 @@ const SaleAgentPerformance = () => {
               {agent.notes && <div className="mt-2 text-[11px] text-slate-500 leading-relaxed">{agent.notes}</div>}
             </div>
           </div>
+
+          {truncated && (
+            <div className="mb-4 border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">
+              Data truncated: too many records to load in full. Figures in this report may be under-reported.
+            </div>
+          )}
 
           {/* Performance KPIs */}
           <div className="mb-6 grid grid-cols-4 gap-0 border border-slate-200">

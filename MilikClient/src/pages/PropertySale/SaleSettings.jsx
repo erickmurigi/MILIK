@@ -167,9 +167,19 @@ export default function SaleSettings() {
   };
 
   const saveCommDefaults = async () => {
+    const rate    = Number(commDefaults.rate);
+    const whtRate = Number(commDefaults.whtRate);
+    // For a flat commission the "rate" is a currency amount, so only the percentage type is capped at 100.
+    const rateMax = commDefaults.commissionType === "flat" ? Infinity : 100;
+    if (String(commDefaults.rate).trim() === "" || !Number.isFinite(rate) || rate < 0 || rate > rateMax) {
+      toast.error(rateMax === 100 ? "Default commission rate must be a number between 0 and 100" : "Default commission amount must be a number of 0 or more"); return;
+    }
+    if (String(commDefaults.whtRate).trim() === "" || !Number.isFinite(whtRate) || whtRate < 0 || whtRate > 100) {
+      toast.error("Default WHT rate must be a number between 0 and 100"); return;
+    }
     setSavingComm(true);
     try {
-      await adminRequests.put("/sale/settings/commission-defaults", commDefaults);
+      await adminRequests.put("/sale/settings/commission-defaults", { ...commDefaults, rate, whtRate });
       toast.success("Commission defaults saved");
       await loadSettings();
     } catch (err) {
@@ -279,7 +289,7 @@ export default function SaleSettings() {
         <div>
           <label className={labelClass}>Default Commission Rate (%)</label>
           <input
-            type="number" min="0" step="0.01"
+            type="number" min="0" max={commDefaults.commissionType === "flat" ? undefined : "100"} step="0.01"
             className={inputClass}
             value={commDefaults.rate}
             onChange={(e) => setCommDefaults((p) => ({ ...p, rate: e.target.value }))}

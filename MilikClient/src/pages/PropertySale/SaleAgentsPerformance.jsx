@@ -17,6 +17,26 @@ const STATUS_OPTS = [
   { value: "inactive", label: "Inactive" },
 ];
 
+// Server caps `limit` at 200 and paginates newest-first, so a single request
+// silently under-reports once a business has >200 records. Fetch every page.
+const EMPTY      = [];
+const PAGE_LIMIT = 200;
+const MAX_PAGES  = 50;
+const fetchAllPages = async (listFn, params = {}) => {
+  const first = await listFn({ ...params, page: 1, limit: PAGE_LIMIT });
+  const pages = Math.max(Number(first?.pages) || 1, 1);
+  const last  = Math.min(pages, MAX_PAGES);
+  if (pages > MAX_PAGES) console.warn(`fetchAllPages: ${pages} pages exceeds safety cap of ${MAX_PAGES}; results truncated`);
+  const rest = last > 1
+    ? await Promise.all(Array.from({ length: last - 1 }, (_, i) => listFn({ ...params, page: i + 2, limit: PAGE_LIMIT })))
+    : [];
+  const byId = new Map();
+  [first, ...rest].forEach((p) => (p?.data ?? []).forEach((r) => byId.set(r._id, r)));
+  const data  = [...byId.values()];
+  const total = Number(first?.total) || data.length;
+  return { data, total, truncated: data.length < total };
+};
+
 const SaleAgentsPerformance = () => {
   const navigate       = useNavigate();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
@@ -35,14 +55,14 @@ const SaleAgentsPerformance = () => {
 
   const { data: dealsData, isLoading: loadingDeals } = useQuery({
     queryKey: ["sale-agents-perf-deals", biz],
-    queryFn:  () => saleApi.listDeals({ limit: 200 }),
+    queryFn:  () => fetchAllPages(saleApi.listDeals),
     enabled:  !!biz,
     staleTime: 60_000,
   });
 
   const { data: commsData, isLoading: loadingComms } = useQuery({
     queryKey: ["sale-agents-perf-comms", biz],
-    queryFn:  () => saleApi.listCommissions({ limit: 200 }),
+    queryFn:  () => fetchAllPages(saleApi.listCommissions),
     enabled:  !!biz,
     staleTime: 60_000,
   });
@@ -51,10 +71,11 @@ const SaleAgentsPerformance = () => {
     if (agentsError) toast.error("Failed to load agents");
   }, [agentsError]);
 
-  const agents      = agentsData?.data ?? [];
-  const allDeals    = dealsData?.data  ?? [];
-  const allComms    = commsData?.data  ?? [];
+  const agents      = agentsData?.data ?? EMPTY;
+  const allDeals    = dealsData?.data  ?? EMPTY;
+  const allComms    = commsData?.data  ?? EMPTY;
   const isLoading   = loadingAgents || loadingDeals || loadingComms;
+  const truncated   = !!(dealsData?.truncated || commsData?.truncated);
 
   const rows = useMemo(() => {
     return agents.map((agent) => {
@@ -123,6 +144,12 @@ const SaleAgentsPerformance = () => {
           size="sm"
         />
       </SaleFilterBar>
+
+      {truncated && (
+        <div className="border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-bold text-amber-800">
+          Data truncated: too many deals/commissions to load in full. Figures below may be under-reported.
+        </div>
+      )}
 
       {/* Table */}
       <div className="border border-slate-200 bg-white shadow-sm overflow-hidden">
