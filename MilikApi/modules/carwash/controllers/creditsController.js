@@ -257,23 +257,29 @@ export const repairCreditLedgers = async (req, res, next) => {
     const cashbook = await ChartOfAccount.findOne({ _id: cashbookId, business, type: 'asset', isPosting: true }).lean();
     if (!cashbook) return next(createError(422, 'Cashbook account not found'));
 
-    // Find credit docs that have no posted ledger entry yet
-    const credits = await CarWashCustomerCredit.find({ business }).lean();
-    const postedIds = new Set(
-      (await FinancialLedgerEntry.distinct('sourceTransactionId', {
-        business: new mongoose.Types.ObjectId(String(business)),
-        sourceTransactionType: 'carwash_customer_credit_created',
-      })).map(String)
-    );
+    // Find credit docs that have no posted ledger entry yet. Diff against the ledger's
+    // posted-marker set at the query level (instead of fetching every credit doc for the
+    // business and filtering in memory) so already-reconciled credits are never read.
+    const postedIds = await FinancialLedgerEntry.distinct('sourceTransactionId', {
+      business: new mongoose.Types.ObjectId(String(business)),
+      sourceTransactionType: 'carwash_customer_credit_created',
+    });
+    const postedObjectIds = postedIds
+      .filter((id) => mongoose.Types.ObjectId.isValid(String(id)))
+      .map((id) => new mongoose.Types.ObjectId(String(id)));
 
-    const pending = credits.filter((c) => !postedIds.has(String(c._id)));
+    const [pending, totalCredits] = await Promise.all([
+      CarWashCustomerCredit.find({ business, _id: { $nin: postedObjectIds } }).lean(),
+      CarWashCustomerCredit.countDocuments({ business }),
+    ]);
+
     await Promise.all(
       pending.map((creditDoc) =>
         postCarWashCustomerCreditCreationLedger({ businessId: business, creditDoc, cashbookAccountId: cashbook._id, userId })
       )
     );
 
-    res.json({ success: true, message: `Repaired ${pending.length} credit ledger entries (${credits.length - pending.length} already posted).` });
+    res.json({ success: true, message: `Repaired ${pending.length} credit ledger entries (${totalCredits - pending.length} already posted).` });
   } catch (err) {
     next(err);
   }

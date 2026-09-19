@@ -43,6 +43,7 @@ const carWashCustomerCreditSchema = new Schema(
 
 carWashCustomerCreditSchema.index({ business: 1, customer: 1, status: 1 });
 carWashCustomerCreditSchema.index({ business: 1, status: 1, createdAt: 1 });
+carWashCustomerCreditSchema.index({ business: 1, status: 1, amount: 1 });
 carWashCustomerCreditSchema.index({ business: 1, sourcePayment: 1 }, { sparse: true });
 
 export default mongoose.model('CarWashCustomerCredit', carWashCustomerCreditSchema);

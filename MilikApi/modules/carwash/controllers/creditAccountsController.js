@@ -44,12 +44,13 @@ const generateStatementNumber = async (business, periodStart) => {
 // â”€â”€â”€ Balance computation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // Single-account variant â€” used when refreshing one account after a topup/payment.
-const computeAccountBalance = async (business, accountId) => {
-  const account = await CarWashCreditAccount.findById(accountId).select("plates").lean();
-  const plates = Array.isArray(account?.plates) ? account.plates.filter(Boolean) : [];
+// `plates` must be supplied by the caller (already-loaded account doc) to avoid a
+// redundant findById re-fetch â€” every caller in this file already has the account loaded.
+const computeAccountBalance = async (business, accountId, plates = []) => {
+  const platesList = Array.isArray(plates) ? plates.filter(Boolean) : [];
 
   const orConditions = [{ creditAccount: new mongoose.Types.ObjectId(String(accountId)) }];
-  if (plates.length) orConditions.push({ plateNumber: { $in: plates } });
+  if (platesList.length) orConditions.push({ plateNumber: { $in: platesList } });
 
   const jobs = await CarWashJob.find({
     business,
@@ -245,7 +246,7 @@ export const getAccount = async (req, res, next) => {
 
     // Attach live balance and recent jobs
     const [balance, recentJobs] = await Promise.all([
-      computeAccountBalance(business, account._id),
+      computeAccountBalance(business, account._id, account.plates),
       CarWashJob.find({ business, creditAccount: account._id, status: { $nin: ["cancelled"] } })
         .sort({ createdAt: -1 })
         .limit(50)
@@ -316,7 +317,7 @@ export const lookupAccountByPlate = async (req, res, next) => {
 
     if (!account) return res.json({ success: true, data: null });
 
-    const balance = await computeAccountBalance(business, account._id);
+    const balance = await computeAccountBalance(business, account._id, account.plates);
     const atLimit = account.creditLimit > 0 && balance >= account.creditLimit;
     const overLimit = account.creditLimit > 0 && balance > account.creditLimit;
 
@@ -400,6 +401,13 @@ export const recordAccountPayment = async (req, res, next) => {
 
     let remaining = amount;
     const allocations = [];
+    // Build payment docs + job-status updates in memory across the loop, then flush
+    // each as a single insertMany / bulkWrite after the loop (was up to ~400 sequential
+    // awaited calls for a large FIFO settlement). Ledger posting and commission accrual
+    // stay fire-and-forget, fired after the writes they reference are durable.
+    const paymentDocs = [];
+    const jobUpdateOps = [];
+    const postLoopTasks = [];
 
     for (const job of unpaidJobs) {
       if (remaining <= 0.009) break;
@@ -410,7 +418,8 @@ export const recordAccountPayment = async (req, res, next) => {
       const apply = round2(Math.min(outstanding, remaining));
       remaining = round2(remaining - apply);
 
-      const payment = await CarWashPayment.create({
+      const payment = {
+        _id: new mongoose.Types.ObjectId(),
         business,
         branch: job.branch || account.branch || null,
         job: job._id,
@@ -423,20 +432,39 @@ export const recordAccountPayment = async (req, res, next) => {
         receivedBy: userId,
         createdBy: userId,
         updatedBy: userId,
-      });
-
-      // Post Dr Cashbook / Cr 4400 for each job settled â€” same entry as a direct payment.
-      // Fire-and-forget so a ledger error never blocks the payment response.
-      if (cashbookAccount) {
-        postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbookAccount, job: { ...job }, userId, taxAmount: Number(job.taxAmount || 0), jobPrice: Number(job.price || 0) })
-          .catch((e) => console.error("[CW Account] Ledger posting failed job=%s: %s", job.jobNumber, e?.message));
-      }
+      };
+      paymentDocs.push(payment);
 
       const newPaid = round2(alreadyPaid + apply);
       const jobNetPrice = round2(job.price - (job.discountAmount || 0));
       const newPaymentStatus = newPaid >= jobNetPrice - 0.009 ? "paid" : "partial";
       const newJobStatus = newPaymentStatus === "paid" && job.status !== "cancelled" ? "paid" : job.status;
-      await CarWashJob.updateOne({ _id: job._id }, { paymentStatus: newPaymentStatus, status: newJobStatus, updatedBy: userId });
+      jobUpdateOps.push({
+        updateOne: {
+          filter: { _id: job._id },
+          update: { paymentStatus: newPaymentStatus, status: newJobStatus, updatedBy: userId },
+        },
+      });
+
+      postLoopTasks.push({ job, payment, newJobStatus });
+      allocations.push({ jobId: job._id, jobNumber: job.jobNumber, plateNumber: job.plateNumber, applied: apply });
+    }
+
+    if (paymentDocs.length) {
+      await CarWashPayment.insertMany(paymentDocs, { ordered: false });
+    }
+    if (jobUpdateOps.length) {
+      await CarWashJob.bulkWrite(jobUpdateOps, { ordered: false });
+    }
+
+    // Post Dr Cashbook / Cr 4400 for each job settled â€” same entry as a direct payment,
+    // and accrue commission for jobs that just became fully paid.
+    // Fire-and-forget so a ledger/commission error never blocks the payment response.
+    for (const { job, payment, newJobStatus } of postLoopTasks) {
+      if (cashbookAccount) {
+        postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbookAccount, job: { ...job }, userId, taxAmount: Number(job.taxAmount || 0), jobPrice: Number(job.price || 0) })
+          .catch((e) => console.error("[CW Account] Ledger posting failed job=%s: %s", job.jobNumber, e?.message));
+      }
 
       if (newJobStatus === "paid") {
         const jobForCommission = { ...job, status: "paid", paymentStatus: "paid" };
@@ -444,12 +472,10 @@ export const recordAccountPayment = async (req, res, next) => {
           .then(() => markJobCommissionsPayable({ business, jobId: job._id }))
           .catch((e) => console.error("[CW Account] Commission accrual failed job=%s: %s", job.jobNumber, e?.message));
       }
-
-      allocations.push({ jobId: job._id, jobNumber: job.jobNumber, plateNumber: job.plateNumber, applied: apply });
     }
 
     const excessCredit = round2(remaining);
-    const newBalance = await computeAccountBalance(business, account._id);
+    const newBalance = await computeAccountBalance(business, account._id, account.plates);
 
     // Credit the account balance atomically ($inc) instead of load-mutate-save,
     // to prevent a lost-update race against concurrent topups/voids/other payments
@@ -622,12 +648,21 @@ export const listStatements = async (req, res, next) => {
     if (req.params.id) filter.account = req.params.id;
     if (req.query.status) filter.status = req.query.status;
 
-    const statements = await CarWashAccountStatement.find(filter)
-      .populate("account", "accountNumber customer")
-      .sort({ periodStart: -1 })
-      .lean();
+    const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
+    const page  = Math.max(Number(req.query.page || 1), 1);
 
-    res.json({ success: true, data: statements });
+    const [statements, total] = await Promise.all([
+      CarWashAccountStatement.find(filter)
+        .populate("account", "accountNumber customer")
+        .sort({ periodStart: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      CarWashAccountStatement.countDocuments(filter),
+    ]);
+    const pages = Math.max(Math.ceil(total / limit), 1);
+
+    res.json({ success: true, data: statements, total, page, limit, pages });
   } catch (err) {
     next(err);
   }
@@ -929,11 +964,21 @@ export const listAccountTopups = async (req, res, next) => {
     const account  = await CarWashCreditAccount.findOne({ _id: req.params.id, business }).lean();
     if (!account) return next(createError(404, "Credit account not found"));
 
-    const topups = await CarWashAccountTopup.find({ business, account: account._id })
-      .sort({ paymentDate: -1 })
-      .lean();
+    const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
+    const page  = Math.max(Number(req.query.page || 1), 1);
+    const filter = { business, account: account._id };
 
-    res.json({ success: true, data: topups });
+    const [topups, total] = await Promise.all([
+      CarWashAccountTopup.find(filter)
+        .sort({ paymentDate: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      CarWashAccountTopup.countDocuments(filter),
+    ]);
+    const pages = Math.max(Math.ceil(total / limit), 1);
+
+    res.json({ success: true, data: topups, total, page, limit, pages });
   } catch (err) {
     next(err);
   }
