@@ -147,7 +147,8 @@ export const listDeals = async (req, res, next) => {
       filter.$or = [{ dealNumber: rx }];
     }
     const [deals, total] = await Promise.all([
-      populateDeal(SaleDeal.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit)).lean(),
+      // documents are loaded per deal via getDeal (detail panel) — omitted from list rows
+      populateDeal(SaleDeal.find(filter).select("-documents").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit)).lean(),
       SaleDeal.countDocuments(filter),
     ]);
     const dealIds = deals.map((d) => d._id);
@@ -473,6 +474,7 @@ export const deleteDeal = async (req, res, next) => {
     await Promise.all([
       SalePayment.deleteMany({ business, deal: deal._id }),
       SaleCommission.deleteMany({ business, deal: deal._id }),
+      SalePaymentSchedule.deleteMany({ business, deal: deal._id }),
       SaleDeal.findByIdAndDelete(deal._id),
     ]);
     // Remove the deal's uploaded files from disk so they aren't orphaned
@@ -565,19 +567,24 @@ export const createDealFromOffer = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
 
-    const offer = await SaleOffer.findOne({ _id: req.params.offerId, business })
-      .populate("listing buyer agent").lean();
+    // The duplicate-deal lookup is independent of the offer fetch — run both together; the checks
+    // below still evaluate in the original order so error precedence is unchanged.
+    const [offer, existingDeal] = await Promise.all([
+      SaleOffer.findOne({ _id: req.params.offerId, business }).populate("listing buyer agent").lean(),
+      SaleDeal.findOne({ business, offer: req.params.offerId }).select("_id").lean(),
+    ]);
     if (!offer) return next(createError(404, "Offer not found"));
     if (TERMINAL_OFFER_STATUSES.includes(offer.status)) {
       return next(createError(400, `Cannot convert a ${offer.status} offer to a deal`));
     }
     if (!offer.listing || !offer.buyer) return next(createError(400, "Offer has a missing listing or buyer"));
-    const listing = await SaleListing.findOne({ _id: offer.listing._id, business }).lean();
+    // offer.listing is already a full lean listing doc from the populate above — reuse it, keeping the
+    // tenant check the old re-fetch enforced (persistNewDeal's atomic claim remains the concurrency gate).
+    const listing = String(offer.listing.business) === String(business) ? offer.listing : null;
     if (!listing) return next(createError(400, "Listing not found"));
     if (listing.status === "sold")           return next(createError(400, "Listing is already sold"));
     if (listing.status === "under_contract") return next(createError(400, "Listing already has an active deal"));
 
-    const existingDeal = await SaleDeal.findOne({ business, offer: offer._id }).select("_id").lean();
     if (existingDeal) return next(createError(400, "A deal already exists for this offer"));
 
     const agreedPrice = Number(req.body.agreedPrice ?? offer.counterOfferAmount ?? offer.offerAmount);

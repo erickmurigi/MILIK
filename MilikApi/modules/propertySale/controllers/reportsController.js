@@ -41,6 +41,7 @@ export const getDashboardStats = async (req, res, next) => {
         nextFollowUpDate: { $lt: now },
       }),
       SaleDeal.find({ business })
+        .select("-documents") // uploaded-document metadata is only needed by the deal detail (getDeal)
         .sort({ createdAt: -1 })
         .limit(5)
         .populate("listing", "title listingNumber propertyType")
@@ -116,62 +117,86 @@ export const getSalesReport = async (req, res, next) => {
     const yearStart = new Date(year, 0, 1);
     const yearEnd = new Date(year + 1, 0, 1);
 
-    const [listings, offers, deals, payments, commissions] = await Promise.all([
-      SaleListing.find({ business, createdAt: { $gte: yearStart, $lt: yearEnd } }).select("createdAt").lean(),
-      SaleOffer.find({ business, createdAt: { $gte: yearStart, $lt: yearEnd } }).select("createdAt").lean(),
-      SaleDeal.find({
-        business,
-        $or: [
-          { dealDate: { $gte: yearStart, $lt: yearEnd } },
-          { createdAt: { $gte: yearStart, $lt: yearEnd } },
-          // Deals closed in-window even if created/dated earlier. The second
-          // branch covers legacy closed deals without actualClosingDate, which
-          // are classified by updatedAt below.
-          { actualClosingDate: { $gte: yearStart, $lt: yearEnd } },
-          { status: "closed", actualClosingDate: null, updatedAt: { $gte: yearStart, $lt: yearEnd } },
-        ],
-      }).select("status agreedPrice dealDate actualClosingDate createdAt updatedAt").lean(),
-      SalePayment.find({ business, status: "paid", paymentDate: { $gte: yearStart, $lt: yearEnd } })
-        .select("amount paymentDate").lean(),
-      SaleCommission.find({ business, status: { $in: ["approved", "paid"] }, updatedAt: { $gte: yearStart, $lt: yearEnd } })
-        .select("commissionAmount updatedAt").lean(),
+    // 13 local-time month boundaries (same as the previous in-memory passes): month i = [start_i, start_i+1)
+    const boundaries = Array.from({ length: 13 }, (_, i) => new Date(year, i, 1));
+
+    // Buckets a date expression into the 12 months server-side; values outside the window fall into "out" (ignored).
+    const bucketByMonth = (Model, match, dateExpr, sumField) =>
+      Model.aggregate([
+        { $match: match },
+        {
+          $bucket: {
+            groupBy: dateExpr,
+            boundaries,
+            default: "out",
+            output: { count: { $sum: 1 }, ...(sumField && { amount: { $sum: `$${sumField}` } }) },
+          },
+        },
+      ]);
+
+    // Deals: same pre-filter as before (a superset of both metrics' windows), then per-status month buckets.
+    // Active -> dealDate || createdAt; closed -> actualClosingDate || updatedAt (legacy closed deals).
+    const dealMonthly = (status, dateExpr) => [
+      { $match: { status } },
+      { $bucket: { groupBy: dateExpr, boundaries, default: "out", output: { count: { $sum: 1 } } } },
+    ];
+
+    const [listingRows, offerRows, dealRows, paymentRows, commissionRows] = await Promise.all([
+      bucketByMonth(SaleListing, { business: bId, createdAt: { $gte: yearStart, $lt: yearEnd } }, "$createdAt"),
+      bucketByMonth(SaleOffer, { business: bId, createdAt: { $gte: yearStart, $lt: yearEnd } }, "$createdAt"),
+      SaleDeal.aggregate([
+        {
+          $match: {
+            business: bId,
+            $or: [
+              { dealDate: { $gte: yearStart, $lt: yearEnd } },
+              { createdAt: { $gte: yearStart, $lt: yearEnd } },
+              // Deals closed in-window even if created/dated earlier. The second
+              // branch covers legacy closed deals without actualClosingDate, which
+              // are classified by updatedAt below.
+              { actualClosingDate: { $gte: yearStart, $lt: yearEnd } },
+              { status: "closed", actualClosingDate: null, updatedAt: { $gte: yearStart, $lt: yearEnd } },
+            ],
+          },
+        },
+        {
+          $facet: {
+            active: dealMonthly("active", { $ifNull: ["$dealDate", "$createdAt"] }),
+            closed: dealMonthly("closed", { $ifNull: ["$actualClosingDate", "$updatedAt"] }),
+          },
+        },
+      ]),
+      bucketByMonth(SalePayment, { business: bId, status: "paid", paymentDate: { $gte: yearStart, $lt: yearEnd } }, "$paymentDate", "amount"),
+      bucketByMonth(SaleCommission, { business: bId, status: { $in: ["approved", "paid"] }, updatedAt: { $gte: yearStart, $lt: yearEnd } }, "$updatedAt", "commissionAmount"),
     ]);
 
-    const inMonth = (date, monthStart, monthEnd) => {
-      const d = new Date(date);
-      return d >= monthStart && d < monthEnd;
+    // Bucket rows are keyed by their lower boundary date -> month index 0-11
+    const boundaryTimes = boundaries.map((d) => d.getTime());
+    const toMonthMap = (rows) => {
+      const out = new Array(12).fill(null);
+      for (const r of rows) {
+        const idx = r._id instanceof Date ? boundaryTimes.indexOf(r._id.getTime()) : -1;
+        if (idx >= 0 && idx < 12) out[idx] = r;
+      }
+      return out;
     };
+    const listingsByMonth    = toMonthMap(listingRows);
+    const offersByMonth      = toMonthMap(offerRows);
+    const dealsActiveByMonth = toMonthMap(dealRows[0]?.active ?? []);
+    const dealsClosedByMonth = toMonthMap(dealRows[0]?.closed ?? []);
+    const paymentsByMonth    = toMonthMap(paymentRows);
+    const commissionsByMonth = toMonthMap(commissionRows);
 
-    const months = Array.from({ length: 12 }, (_, i) => {
-      const monthStart = new Date(year, i, 1);
-      const monthEnd = new Date(year, i + 1, 1);
-
-      const mListings = listings.filter((l) => inMonth(l.createdAt, monthStart, monthEnd)).length;
-      const mOffers = offers.filter((o) => inMonth(o.createdAt, monthStart, monthEnd)).length;
-      const mDealsActive = deals.filter(
-        (d) => d.status === "active" && inMonth(d.dealDate || d.createdAt, monthStart, monthEnd)
-      ).length;
-      const mDealsClosed = deals.filter(
-        (d) => d.status === "closed" && inMonth(d.actualClosingDate || d.updatedAt, monthStart, monthEnd)
-      ).length;
-      const mRevenue = payments
-        .filter((p) => inMonth(p.paymentDate, monthStart, monthEnd))
-        .reduce((sum, p) => sum + (p.amount || 0), 0);
-      const mCommissions = commissions
-        .filter((c) => inMonth(c.updatedAt, monthStart, monthEnd))
-        .reduce((sum, c) => sum + (c.commissionAmount || 0), 0);
-
-      return {
-        month: i + 1,
-        monthName: MONTH_NAMES[i],
-        listings: mListings,
-        offers: mOffers,
-        dealsActive: mDealsActive,
-        dealsClosed: mDealsClosed,
-        revenue: mRevenue,
-        commissionsApproved: mCommissions,
-      };
-    });
+    const months = Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      monthName: MONTH_NAMES[i],
+      listings: listingsByMonth[i]?.count || 0,
+      offers: offersByMonth[i]?.count || 0,
+      dealsActive: dealsActiveByMonth[i]?.count || 0,
+      dealsClosed: dealsClosedByMonth[i]?.count || 0,
+      revenue: paymentsByMonth[i]?.amount || 0,
+      commissionsApproved: commissionsByMonth[i]?.amount || 0,
+    }));
 
     const totals = months.reduce(
       (acc, m) => ({
@@ -191,6 +216,9 @@ export const getSalesReport = async (req, res, next) => {
   }
 };
 
+// Max installments returned per cash-flow bucket (bucket count/amount always cover the full set)
+const CASH_FLOW_ITEM_CAP = 200;
+
 export const getCashFlowForecast = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -201,46 +229,70 @@ export const getCashFlowForecast = async (req, res, next) => {
     const d60  = new Date(now); d60.setDate(d60.getDate() + 60);
     const d90  = new Date(now); d90.setDate(d90.getDate() + 90);
 
-    const allItems = await SalePaymentSchedule.find({
-      business: bId,
-      status: { $in: ["upcoming", "overdue"] },
-    })
-      .populate({
-        path: "deal",
-        select: "dealNumber agreedPrice totalPaid",
-        populate: [
-          { path: "listing", select: "title listingNumber" },
-          { path: "buyer",   select: "fullName phone" },
-        ],
-      })
-      .sort({ dueDate: 1 })
-      .lean();
+    const openStatuses = { $in: ["upcoming", "overdue"] };
 
-    const bucket = (item) => {
-      const due = new Date(item.dueDate);
-      if (due < now)   return "overdue";
-      if (due <= d30)  return "next30";
-      if (due <= d60)  return "next60";
-      if (due <= d90)  return "next90";
-      return "beyond90";
+    // Bucket ranges on dueDate - identical boundaries to the previous JS bucketing:
+    // overdue: due < now; next30: now <= due <= d30; next60: d30 < due <= d60; next90: d60 < due <= d90; beyond90: > d90
+    const RANGES = {
+      overdue:  { $lt: now },
+      next30:   { $gte: now, $lte: d30 },
+      next60:   { $gt: d30, $lte: d60 },
+      next90:   { $gt: d60, $lte: d90 },
+      beyond90: { $gt: d90 },
     };
+    const keys = Object.keys(RANGES);
 
-    const buckets = { overdue: [], next30: [], next60: [], next90: [], beyond90: [] };
-    for (const item of allItems) buckets[bucket(item)].push(item);
+    // Count/amount for EVERY open installment come from one aggregate; only the listed items are capped.
+    const [totalsRows, ...itemLists] = await Promise.all([
+      SalePaymentSchedule.aggregate([
+        { $match: { business: bId, status: openStatuses } },
+        {
+          $group: {
+            _id: {
+              $switch: {
+                branches: [
+                  { case: { $lt: ["$dueDate", now] },  then: "overdue" },
+                  { case: { $lte: ["$dueDate", d30] }, then: "next30" },
+                  { case: { $lte: ["$dueDate", d60] }, then: "next60" },
+                  { case: { $lte: ["$dueDate", d90] }, then: "next90" },
+                ],
+                default: "beyond90",
+              },
+            },
+            count: { $sum: 1 },
+            amount: { $sum: "$expectedAmount" },
+          },
+        },
+      ]),
+      ...keys.map((k) =>
+        SalePaymentSchedule.find({ business: bId, status: openStatuses, dueDate: RANGES[k] })
+          .select("deal installmentNumber dueDate expectedAmount description status")
+          .populate({
+            path: "deal",
+            select: "dealNumber",
+            populate: [
+              { path: "listing", select: "title" },
+              { path: "buyer",   select: "fullName" },
+            ],
+          })
+          .sort({ dueDate: 1 })
+          .limit(CASH_FLOW_ITEM_CAP)
+          .lean()
+      ),
+    ]);
 
-    const summarise = (items) => ({
-      count:  items.length,
-      amount: items.reduce((s, i) => s + Number(i.expectedAmount || 0), 0),
-      items,
+    const totalsMap = Object.fromEntries(totalsRows.map((r) => [r._id, r]));
+    const out = {};
+    keys.forEach((k, idx) => {
+      const items = itemLists[idx];
+      const count = totalsMap[k]?.count || 0;
+      // count/amount cover every open installment in the bucket; items is capped (hasMore flags truncation)
+      out[k] = { count, amount: totalsMap[k]?.amount || 0, items, hasMore: count > items.length };
     });
 
     res.status(200).json({
-      overdue:   summarise(buckets.overdue),
-      next30:    summarise(buckets.next30),
-      next60:    summarise(buckets.next60),
-      next90:    summarise(buckets.next90),
-      beyond90:  summarise(buckets.beyond90),
-      totalPipeline: allItems.reduce((s, i) => s + Number(i.expectedAmount || 0), 0),
+      ...out,
+      totalPipeline: keys.reduce((sum, k) => sum + out[k].amount, 0),
     });
   } catch (err) {
     next(err);
@@ -397,6 +449,69 @@ export const getMonthlyDetail = async (req, res, next) => {
         totalCommissions,
       },
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Per-agent performance figures for the all-agents page, computed server-side (two aggregates)
+// instead of the client paging through every deal and commission. Semantics match the page:
+//   totalDeals = all deals with an agent (any status); closed/active by status;
+//   totalRevenue = sum(agreedPrice) of closed deals; commPaid = paid commissions;
+//   commPending = pending + approved commissions; closeRate = round(closed / total * 100).
+// Agent-scoped users see only their own row (same rule as listDeals/listCommissions).
+export const getAgentsPerformance = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const bId = new mongoose.Types.ObjectId(String(business));
+    const agentMatch = req.saleAgentId ? new mongoose.Types.ObjectId(String(req.saleAgentId)) : { $ne: null };
+
+    const [dealRows, commRows] = await Promise.all([
+      SaleDeal.aggregate([
+        { $match: { business: bId, agent: agentMatch } },
+        {
+          $group: {
+            _id: "$agent",
+            totalDeals:   { $sum: 1 },
+            closedDeals:  { $sum: { $cond: [{ $eq: ["$status", "closed"] }, 1, 0] } },
+            activeDeals:  { $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] } },
+            totalRevenue: { $sum: { $cond: [{ $eq: ["$status", "closed"] }, "$agreedPrice", 0] } },
+          },
+        },
+      ]),
+      SaleCommission.aggregate([
+        { $match: { business: bId, agent: agentMatch } },
+        {
+          $group: {
+            _id: "$agent",
+            commPaid:    { $sum: { $cond: [{ $eq: ["$status", "paid"] }, "$commissionAmount", 0] } },
+            commPending: { $sum: { $cond: [{ $in: ["$status", ["pending", "approved"]] }, "$commissionAmount", 0] } },
+          },
+        },
+      ]),
+    ]);
+
+    const byAgent = new Map();
+    const row = (id) => {
+      const key = String(id);
+      if (!byAgent.has(key)) {
+        byAgent.set(key, { agentId: key, totalDeals: 0, closedDeals: 0, activeDeals: 0, totalRevenue: 0, commPaid: 0, commPending: 0, closeRate: 0 });
+      }
+      return byAgent.get(key);
+    };
+    for (const d of dealRows) {
+      Object.assign(row(d._id), {
+        totalDeals: d.totalDeals, closedDeals: d.closedDeals, activeDeals: d.activeDeals, totalRevenue: d.totalRevenue,
+      });
+    }
+    for (const c of commRows) Object.assign(row(c._id), { commPaid: c.commPaid, commPending: c.commPending });
+
+    const agents = [...byAgent.values()].map((a) => ({
+      ...a,
+      closeRate: a.totalDeals > 0 ? Math.round((a.closedDeals / a.totalDeals) * 100) : 0,
+    }));
+
+    res.status(200).json({ agents });
   } catch (err) {
     next(err);
   }

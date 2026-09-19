@@ -4,7 +4,7 @@ import SalePaymentSchedule from "../models/SalePaymentSchedule.js";
 import SaleDeal from "../models/SaleDeal.js";
 import SalePayment from "../models/SalePayment.js";
 import { round2 } from "../../../utils/math.js";
-import { currentUserId, resolveActiveBusinessId } from "../services/businessScope.js";
+import { currentUserId, parseLimit, parsePagination, resolveActiveBusinessId } from "../services/businessScope.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
 
 const recomputeStatuses = async (business, dealId) => {
@@ -153,7 +153,8 @@ export const deleteScheduleItem = async (req, res, next) => {
 export const listAllSchedule = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const { status, dealId, dateFrom, dateTo, page = 1, limit = 100 } = req.query;
+    const { status, dealId, dateFrom, dateTo } = req.query;
+    const { page, limit, skip } = parsePagination(req, { defaultLimit: 100, maxLimit: 200 });
 
     const filter = { business };
     if (status)  filter.status = status;
@@ -166,37 +167,85 @@ export const listAllSchedule = async (req, res, next) => {
 
     await recomputeBusinessStatuses(business);
 
-    const skip  = (Number(page) - 1) * Number(limit);
-    const total = await SalePaymentSchedule.countDocuments(filter);
-    const items = await SalePaymentSchedule.find(filter)
-      .populate({
-        path: "deal",
-        select: "dealNumber agreedPrice status",
-        populate: [
-          { path: "listing", select: "title listingNumber" },
-          { path: "buyer",   select: "fullName phone" },
-        ],
-      })
-      .populate("linkedPayment", "paymentNumber amount paymentDate")
-      .sort({ dueDate: 1 })
-      .skip(skip)
-      .limit(Number(limit))
-      .lean();
+    const [total, items] = await Promise.all([
+      SalePaymentSchedule.countDocuments(filter),
+      SalePaymentSchedule.find(filter)
+        .populate({
+          path: "deal",
+          select: "dealNumber agreedPrice status",
+          populate: [
+            { path: "listing", select: "title listingNumber" },
+            { path: "buyer",   select: "fullName phone" },
+          ],
+        })
+        .populate("linkedPayment", "paymentNumber amount paymentDate")
+        .sort({ dueDate: 1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+    ]);
 
-    res.status(200).json({ data: items, total, page: Number(page), limit: Number(limit) });
+    res.status(200).json({ data: items, total, page, limit });
+  } catch (err) { next(err); }
+};
+
+// Header totals for the schedule page: one aggregate instead of two 500-row list fetches.
+// Statuses are recomputed first so overdue/upcoming are correct. due30 = upcoming items due within
+// the next 30 days (after the recompute every upcoming item has dueDate >= now).
+export const getScheduleSummary = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    await recomputeBusinessStatuses(business);
+
+    const now = new Date();
+    const cutoff = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const rows = await SalePaymentSchedule.aggregate([
+      { $match: { business: new mongoose.Types.ObjectId(String(business)), status: { $in: ["overdue", "upcoming"] } } },
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+          amount: { $sum: "$expectedAmount" },
+          due30Count: { $sum: { $cond: [{ $lte: ["$dueDate", cutoff] }, 1, 0] } },
+          due30Amount: { $sum: { $cond: [{ $lte: ["$dueDate", cutoff] }, "$expectedAmount", 0] } },
+        },
+      },
+    ]);
+
+    const by = Object.fromEntries(rows.map((r) => [r._id, r]));
+    const overdue  = by.overdue  || {};
+    const upcoming = by.upcoming || {};
+    const pick = (r) => ({ count: r.count || 0, amount: r.amount || 0 });
+
+    res.status(200).json({
+      overdue:  pick(overdue),
+      upcoming: pick(upcoming),
+      due30:    { count: upcoming.due30Count || 0, amount: upcoming.due30Amount || 0 },
+      // Flat aliases matching the names the page uses
+      overdueAmt:  overdue.amount  || 0,
+      due30Amt:    upcoming.due30Amount || 0,
+      upcomingAmt: upcoming.amount || 0,
+    });
   } catch (err) { next(err); }
 };
 
 export const getOverdueSchedule = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    // Optional ?limit=N (clamped 1..200); omitted keeps the historical 200-item behaviour.
+    const limit = parseLimit(req.query.limit, 200, 200);
     await recomputeBusinessStatuses(business);
-    const items = await SalePaymentSchedule.find({ business, status: "overdue" })
-      .populate("deal", "dealNumber agreedPrice status")
-      .sort({ dueDate: 1 })
-      .limit(200)
-      .lean();
-    res.status(200).json({ data: items, total: items.length });
+    const filter = { business, status: "overdue" };
+    const [items, total] = await Promise.all([
+      SalePaymentSchedule.find(filter)
+        .select("deal installmentNumber dueDate expectedAmount description status")
+        .populate("deal", "dealNumber agreedPrice status")
+        .sort({ dueDate: 1 })
+        .limit(limit)
+        .lean(),
+      SalePaymentSchedule.countDocuments(filter),
+    ]);
+    res.status(200).json({ data: items, total });
   } catch (err) { next(err); }
 };
 

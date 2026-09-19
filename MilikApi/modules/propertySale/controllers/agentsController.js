@@ -26,18 +26,21 @@ export const listAgents = async (req, res, next) => {
     if (search.trim()) {
       filter.$text = { $search: search.trim() };
     }
-    const [agents, total, statsRaw, dealCountsRaw] = await Promise.all([
+    const [agents, total, statsRaw] = await Promise.all([
       SaleAgent.find(filter).sort({ createdAt: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum).lean(),
       SaleAgent.countDocuments(filter),
       SaleAgent.aggregate([
         { $match: { business: bId } },
         { $group: { _id: "$status", count: { $sum: 1 }, avgRate: { $avg: "$commissionRate" } } },
       ]),
-      SaleDeal.aggregate([
-        { $match: { business: bId, agent: { $exists: true, $ne: null } } },
-        { $group: { _id: "$agent", dealCount: { $sum: 1 } } },
-      ]),
     ]);
+    // Deal counts only for this page's agents (not the tenant's whole deal collection)
+    const dealCountsRaw = agents.length
+      ? await SaleDeal.aggregate([
+          { $match: { business: bId, agent: { $in: agents.map((a) => a._id) } } },
+          { $group: { _id: "$agent", dealCount: { $sum: 1 } } },
+        ])
+      : [];
     const statsMap     = Object.fromEntries(statsRaw.map((s) => [s._id, { count: s.count, avgRate: s.avgRate }]));
     const dealCountMap = Object.fromEntries(dealCountsRaw.map((d) => [String(d._id), d.dealCount]));
     const stats = {

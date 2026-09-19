@@ -21,7 +21,9 @@ export const attachAgentScope = async (req, _res, next) => {
     if (!userId || !businessId || !mongoose.Types.ObjectId.isValid(businessId)) return next();
 
     const agent = await SaleAgent.findOne({ business: businessId, userId }).select("_id").lean();
-    if (agent) req.saleAgentId = String(agent._id);
+    // null = lookup ran and found no linked agent (lets downstream skip a second lookup);
+    // undefined = lookup did not run. Readers must treat both as "unscoped".
+    req.saleAgentId = agent ? String(agent._id) : null;
     return next();
   } catch (err) {
     return next(err);

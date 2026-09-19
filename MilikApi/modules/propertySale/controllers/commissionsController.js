@@ -43,6 +43,7 @@ const ALLOWED_TRANSITIONS = {
 // Returns the caller's SaleAgent id as a string, or null for non-agent users.
 const resolveAgentScope = async (req, business) => {
   if (req.saleAgentId) return String(req.saleAgentId);
+  if (req.saleAgentId === null) return null; // attachAgentScope already ran and found no linked agent
   const userId = currentUserId(req);
   if (!userId) return null;
   const agent = await SaleAgent.findOne({ business, userId }).select("_id").lean();
