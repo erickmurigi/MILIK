@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation, useParams } from "react-router-dom";
 import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
@@ -55,20 +56,18 @@ const SaleMonthlyDetail = () => {
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const biz = currentCompany?._id;
 
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useTabState(`${location.pathname}:activeTab`, "payments");
 
   const monthName = SALE_MONTHS[Number(month) - 1] || "—";
 
-  useEffect(() => {
-    if (!biz || !year || !month) return;
-    setLoading(true);
-    saleApi.getMonthlyDetail({ business: biz, year, month })
-      .then(setData)
-      .catch(() => toast.error("Failed to load monthly detail"))
-      .finally(() => setLoading(false));
-  }, [biz, year, month]);
+  const { data, isPending: loading, error } = useQuery({
+    queryKey: ["sale-report-monthly", biz, year, month],
+    queryFn:  () => saleApi.getMonthlyDetail({ business: biz, year, month }),
+    enabled:  !!biz && !!year && !!month,
+    staleTime: 60_000,
+  });
+
+  useEffect(() => { if (error) toast.error("Failed to load monthly detail"); }, [error]);
 
   const payments = data?.payments || [];
   const deals = data?.deals || [];
@@ -87,12 +86,15 @@ const SaleMonthlyDetail = () => {
 
   const printReport = useCallback(() => {
     const co = currentCompany || {};
+    // Every dynamic value is HTML-escaped (incl. quotes): the popup is same-origin (document.write),
+    // so raw interpolation of company/deal/buyer text, the URL year param or a crafted logo URL would be stored XSS.
+    const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     const name = co.companyName || co.name || co.businessName || 'Milik';
-    const logo = co.logo || '';
+    const logo = typeof co.logo === 'string' && /^(https?:\/\/|data:image\/)/i.test(co.logo.trim()) ? co.logo.trim() : '';
     const win = window.open('', '_blank', 'width=1120,height=800');
-    if (!win) return;
+    if (!win) { toast.error('Pop-up blocked — allow pop-ups for this site'); return; }
     const fmt = (v) => `KES ${Number(v || 0).toLocaleString()}`;
-    win.document.write(`<!DOCTYPE html><html><head><title>${monthName} ${year} Report</title><style>
+    win.document.write(`<!DOCTYPE html><html><head><title>${esc(monthName)} ${esc(year)} Report</title><style>
       @page{size:A4 landscape;margin:12mm 14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
       .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
       .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
@@ -109,7 +111,7 @@ const SaleMonthlyDetail = () => {
       tbody td.r{text-align:right}tbody tr:nth-child(even){background:#f8fafc}
       *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
     </style></head><body>
-    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">${monthName} ${year} — Monthly Detail</div><div class="sub">Property Sales Report</div></div>
+    <div class="hdr"><div>${logo ? `<img src="${esc(logo)}" class="logo" alt="">` : ''}<div class="co">${esc(name)}</div><div class="ttl">${esc(monthName)} ${esc(year)} — Monthly Detail</div><div class="sub">Property Sales Report</div></div>
     <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div></div></div>
     <div class="cards">
       <div class="card"><div class="cl">Payments</div><div class="cv">${payments.length}</div></div>
@@ -117,9 +119,9 @@ const SaleMonthlyDetail = () => {
       <div class="card"><div class="cl">Deals</div><div class="cv">${deals.length}</div></div>
       <div class="card"><div class="cl">Commissions</div><div class="cv" style="color:#FF8C00">${fmt(summary.totalCommissions)}</div></div>
     </div>
-    ${payments.length > 0 ? `<h3>Payments (${payments.length})</h3><table><thead><tr><th>Payment #</th><th>Deal</th><th>Type</th><th>Method</th><th class="r">Amount</th><th>Date</th><th>Status</th></tr></thead><tbody>${payments.map((p) => `<tr><td>${p.paymentNumber || '—'}</td><td>${p.deal?.dealNumber || p.deal || '—'}</td><td>${fmtLabel(p.paymentType || p.type)}</td><td>${fmtLabel(p.method || p.paymentMethod)}</td><td class="r"><strong>${fmt(p.amount)}</strong></td><td>${fmtDate(p.paymentDate || p.date)}</td><td>${fmtLabel(p.status)}</td></tr>`).join('')}</tbody></table>` : ''}
-    ${deals.length > 0 ? `<h3>Deals (${deals.length})</h3><table><thead><tr><th>Deal #</th><th>Property</th><th>Buyer</th><th>Agent</th><th class="r">Value</th><th>Date</th><th>Status</th></tr></thead><tbody>${deals.map((d) => `<tr><td>${d.dealNumber || '—'}</td><td>${d.listing?.title || d.listing?.property?.propertyName || '—'}</td><td>${d.buyer?.fullName || '—'}</td><td>${d.agent?.fullName || '—'}</td><td class="r">${fmt(d.agreedPrice || d.dealValue)}</td><td>${fmtDate(d.closedAt || d.createdAt)}</td><td>${fmtLabel(d.status)}</td></tr>`).join('')}</tbody></table>` : ''}
-    ${commissions.length > 0 ? `<h3>Commissions (${commissions.length})</h3><table><thead><tr><th>Deal</th><th>Agent</th><th class="r">Commission</th><th>Date</th><th>Status</th></tr></thead><tbody>${commissions.map((c) => `<tr><td>${c.deal?.dealNumber || '—'}</td><td>${c.agent?.fullName || '—'}</td><td class="r">${fmt(c.amount || c.commissionAmount)}</td><td>${fmtDate(c.createdAt)}</td><td>${fmtLabel(c.status)}</td></tr>`).join('')}</tbody></table>` : ''}
+    ${payments.length > 0 ? `<h3>Payments (${payments.length})</h3><table><thead><tr><th>Payment #</th><th>Deal</th><th>Type</th><th>Method</th><th class="r">Amount</th><th>Date</th><th>Status</th></tr></thead><tbody>${payments.map((p) => `<tr><td>${esc(p.paymentNumber || '—')}</td><td>${esc(p.deal?.dealNumber || (typeof p.deal === 'string' ? p.deal : '') || '—')}</td><td>${esc(fmtLabel(p.paymentType || p.type))}</td><td>${esc(fmtLabel(p.method || p.paymentMethod))}</td><td class="r"><strong>${fmt(p.amount)}</strong></td><td>${esc(fmtDate(p.paymentDate || p.date))}</td><td>${esc(fmtLabel(p.status))}</td></tr>`).join('')}</tbody></table>` : ''}
+    ${deals.length > 0 ? `<h3>Deals (${deals.length})</h3><table><thead><tr><th>Deal #</th><th>Property</th><th>Buyer</th><th>Agent</th><th class="r">Value</th><th>Date</th><th>Status</th></tr></thead><tbody>${deals.map((d) => `<tr><td>${esc(d.dealNumber || '—')}</td><td>${esc(d.listing?.title || d.listing?.property?.propertyName || '—')}</td><td>${esc(d.buyer?.fullName || '—')}</td><td>${esc(d.agent?.fullName || '—')}</td><td class="r">${fmt(d.agreedPrice || d.dealValue)}</td><td>${esc(fmtDate(d.closedAt || d.createdAt))}</td><td>${esc(fmtLabel(d.status))}</td></tr>`).join('')}</tbody></table>` : ''}
+    ${commissions.length > 0 ? `<h3>Commissions (${commissions.length})</h3><table><thead><tr><th>Deal</th><th>Agent</th><th class="r">Commission</th><th>Date</th><th>Status</th></tr></thead><tbody>${commissions.map((c) => `<tr><td>${esc(c.deal?.dealNumber || '—')}</td><td>${esc(c.agent?.fullName || '—')}</td><td class="r">${fmt(c.amount || c.commissionAmount)}</td><td>${esc(fmtDate(c.createdAt))}</td><td>${esc(fmtLabel(c.status))}</td></tr>`).join('')}</tbody></table>` : ''}
     </body></html>`);
     win.document.close();
     win.onload = () => { win.focus(); win.print(); };

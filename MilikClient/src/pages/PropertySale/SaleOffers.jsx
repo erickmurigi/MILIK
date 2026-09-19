@@ -374,7 +374,7 @@ const SaleOffers = () => {
   const buyers = useMemo(() => buyersPage?.data ?? [], [buyersPage]);
 
   const { data: agentsPage } = useQuery({
-    queryKey: ["sale-agents-ref", biz],
+    queryKey: ["sale-agents-ref", biz, "all"],
     queryFn: () => saleApi.listAgents({ business: biz, limit: 200 }),
     enabled: !!biz,
     staleTime: 60_000,

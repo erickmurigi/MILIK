@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { FaCalendarAlt, FaEdit, FaPlus, FaTimes, FaTrash } from "react-icons/fa";
@@ -65,28 +65,27 @@ export default function SaleActivities() {
   const [form,      setForm]          = useState(blankForm);
   const [saving,    setSaving]        = useState(false);
 
-  useEffect(() => setPage(1), [debSearch, typeFilter, outcomeFilter, leadFilter, buyerFilter, from, to]);
-
   const { data: activitiesData, isLoading, isFetching } = useQuery({
     queryKey: ["sale-activities-all", biz, debSearch, typeFilter, outcomeFilter, leadFilter, buyerFilter, from, to, page, pageSize],
     queryFn:  () => saleApi.listActivities({ business: biz, search: debSearch, type: typeFilter, outcome: outcomeFilter, relatedLead: leadFilter, relatedBuyer: buyerFilter, from, to, page, limit: pageSize }),
     enabled:  !!biz,
-    placeholderData: (p) => p,
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey?.[1] === biz ? prev : undefined),
     staleTime: 30_000,
   });
 
-  const { data: leadsData }  = useQuery({ queryKey: ["sale-leads-ref",  biz], queryFn: () => saleApi.listLeads({ business: biz, limit: 500 }),  enabled: !!biz, staleTime: 5 * 60_000 });
-  const { data: buyersData } = useQuery({ queryKey: ["sale-buyers-ref", biz], queryFn: () => saleApi.listBuyers({ business: biz, limit: 500 }), enabled: !!biz, staleTime: 5 * 60_000 });
-  const { data: dealsData }  = useQuery({ queryKey: ["sale-deals-ref",  biz], queryFn: () => saleApi.listDeals({ business: biz, limit: 500 }),  enabled: !!biz, staleTime: 5 * 60_000 });
+  // Leads/buyers feed the always-visible filter dropdowns; deals are only needed by the log/edit modal.
+  const { data: leadsData }  = useQuery({ queryKey: ["sale-leads-ref",  biz], queryFn: () => saleApi.listLeads({ business: biz, limit: 200 }),  enabled: !!biz, staleTime: 5 * 60_000 });
+  const { data: buyersData } = useQuery({ queryKey: ["sale-buyers-ref", biz], queryFn: () => saleApi.listBuyers({ business: biz, limit: 200 }), enabled: !!biz, staleTime: 5 * 60_000 });
+  const { data: dealsData }  = useQuery({ queryKey: ["sale-deals-ref",  biz], queryFn: () => saleApi.listDeals({ business: biz, limit: 200 }),  enabled: !!biz && showModal, staleTime: 5 * 60_000 });
 
-  const activities = activitiesData?.data ?? [];
+  const activities = useMemo(() => activitiesData?.data ?? [], [activitiesData]);
   const total      = activitiesData?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const grouped    = groupByDay(activities);
+  const grouped    = useMemo(() => groupByDay(activities), [activities]);
 
-  const leads  = leadsData?.data  ?? [];
-  const buyers = buyersData?.data ?? [];
-  const deals  = dealsData?.data  ?? [];
+  const leadOptions  = useMemo(() => (leadsData?.data  ?? []).map((l) => ({ value: l._id, label: `${l.fullName} (${l.leadNumber})` })), [leadsData]);
+  const buyerOptions = useMemo(() => (buyersData?.data ?? []).map((b) => ({ value: b._id, label: `${b.fullName} (${b.buyerNumber})` })), [buyersData]);
+  const dealOptions  = useMemo(() => (dealsData?.data  ?? []).map((d) => ({ value: d._id, label: `${d.dealNumber}${d.buyer?.fullName ? ` — ${d.buyer.fullName}` : ""}` })), [dealsData]);
 
   const invalidate = useCallback(() => {
     qc.invalidateQueries({ queryKey: ["sale-activities-all", biz] });
@@ -156,7 +155,7 @@ export default function SaleActivities() {
         {/* Filter bar */}
         <SaleFilterBar
           leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} activit{total === 1 ? "y" : "ies"}</span>}
-          onReset={() => { setSearch(""); setType(""); setOutcome(""); setLead(""); setBuyer(""); setFrom(""); setTo(""); }}
+          onReset={() => { setSearch(""); setType(""); setOutcome(""); setLead(""); setBuyer(""); setFrom(""); setTo(""); setPage(1); }}
           activeCount={[search, typeFilter, outcomeFilter, leadFilter, buyerFilter, from, to].filter(Boolean).length}
           trailing={
             <button
@@ -167,15 +166,15 @@ export default function SaleActivities() {
             </button>
           }
         >
-          <FilterSearch value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search activities…" />
-          <AppSelect value={typeFilter} onChange={(v) => setType(v ?? "")} options={ACTIVITY_TYPE_OPTIONS} placeholder="All Types" size="sm" clearable />
-          <AppSelect value={outcomeFilter} onChange={(v) => setOutcome(v ?? "")} options={OUTCOME_OPTIONS} placeholder="All Outcomes" size="sm" clearable />
-          <AppSelect value={leadFilter} onChange={(v) => setLead(v ?? "")} options={leads.map((l) => ({ value: l._id, label: `${l.fullName} (${l.leadNumber})` }))} placeholder="All Leads" size="sm" searchable clearable />
-          <AppSelect value={buyerFilter} onChange={(v) => setBuyer(v ?? "")} options={buyers.map((b) => ({ value: b._id, label: `${b.fullName} (${b.buyerNumber})` }))} placeholder="All Buyers" size="sm" searchable clearable />
+          <FilterSearch value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search activities…" />
+          <AppSelect value={typeFilter} onChange={(v) => { setType(v ?? ""); setPage(1); }} options={ACTIVITY_TYPE_OPTIONS} placeholder="All Types" size="sm" clearable />
+          <AppSelect value={outcomeFilter} onChange={(v) => { setOutcome(v ?? ""); setPage(1); }} options={OUTCOME_OPTIONS} placeholder="All Outcomes" size="sm" clearable />
+          <AppSelect value={leadFilter} onChange={(v) => { setLead(v ?? ""); setPage(1); }} options={leadOptions} placeholder="All Leads" size="sm" searchable clearable />
+          <AppSelect value={buyerFilter} onChange={(v) => { setBuyer(v ?? ""); setPage(1); }} options={buyerOptions} placeholder="All Buyers" size="sm" searchable clearable />
           <FilterDateRange
             from={from} to={to}
-            onFromChange={(e) => setFrom(e.target.value)}
-            onToChange={(e) => setTo(e.target.value)}
+            onFromChange={(e) => { setFrom(e.target.value); setPage(1); }}
+            onToChange={(e) => { setTo(e.target.value); setPage(1); }}
           />
         </SaleFilterBar>
 
@@ -280,13 +279,13 @@ export default function SaleActivities() {
               </div>
 
               <div>
-                <AppSelect label="Link to Lead" value={form.relatedLead} onChange={(v) => setForm((f) => ({ ...f, relatedLead: v ?? "", relatedBuyer: "", relatedDeal: "" }))} options={leads.map((l) => ({ value: l._id, label: `${l.fullName} (${l.leadNumber})` }))} placeholder="— None —" size="md" searchable clearable />
+                <AppSelect label="Link to Lead" value={form.relatedLead} onChange={(v) => setForm((f) => ({ ...f, relatedLead: v ?? "", relatedBuyer: "", relatedDeal: "" }))} options={leadOptions} placeholder="— None —" size="md" searchable clearable />
               </div>
               <div>
-                <AppSelect label="Link to Buyer" value={form.relatedBuyer} onChange={(v) => setForm((f) => ({ ...f, relatedBuyer: v ?? "", relatedLead: "", relatedDeal: "" }))} options={buyers.map((b) => ({ value: b._id, label: `${b.fullName} (${b.buyerNumber})` }))} placeholder="— None —" size="md" searchable clearable disabled={!!form.relatedLead} />
+                <AppSelect label="Link to Buyer" value={form.relatedBuyer} onChange={(v) => setForm((f) => ({ ...f, relatedBuyer: v ?? "", relatedLead: "", relatedDeal: "" }))} options={buyerOptions} placeholder="— None —" size="md" searchable clearable disabled={!!form.relatedLead} />
               </div>
               <div className="col-span-2">
-                <AppSelect label="Link to Deal" value={form.relatedDeal} onChange={(v) => setForm((f) => ({ ...f, relatedDeal: v ?? "", relatedLead: "", relatedBuyer: "" }))} options={deals.map((d) => ({ value: d._id, label: `${d.dealNumber}${d.buyer?.fullName ? ` — ${d.buyer.fullName}` : ""}` }))} placeholder="— None —" size="md" searchable clearable disabled={!!(form.relatedLead || form.relatedBuyer)} />
+                <AppSelect label="Link to Deal" value={form.relatedDeal} onChange={(v) => setForm((f) => ({ ...f, relatedDeal: v ?? "", relatedLead: "", relatedBuyer: "" }))} options={dealOptions} placeholder="— None —" size="md" searchable clearable disabled={!!(form.relatedLead || form.relatedBuyer)} />
               </div>
 
               <div className="col-span-2">

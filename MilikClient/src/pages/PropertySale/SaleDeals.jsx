@@ -549,25 +549,25 @@ const SaleDeals = () => {
     queryKey: ["sale-deals", biz, appliedSearch, statusFilter, agentFilt, buyerFilt, listingFilt, dateFrom, dateTo, page, pageSize],
     queryFn:  () => saleApi.listDeals({ business: biz, search: appliedSearch, status: statusFilter, agentId: agentFilt, buyerId: buyerFilt, listingId: listingFilt, dateFrom, dateTo, page, limit: pageSize }),
     enabled:  !!biz,
-    placeholderData: (prev) => prev,
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey?.[1] === biz ? prev : undefined),
     staleTime: 30_000,
   });
 
   const { data: listingsData } = useQuery({
     queryKey: ["sale-listings-ref", biz],
-    queryFn:  () => saleApi.listListings({ business: biz, limit: 500 }),
+    queryFn:  () => saleApi.listListings({ business: biz, limit: 200 }),
     enabled:  !!biz,
     staleTime: 5 * 60_000,
   });
   const { data: buyersData } = useQuery({
     queryKey: ["sale-buyers-ref", biz],
-    queryFn:  () => saleApi.listBuyers({ business: biz, limit: 500 }),
+    queryFn:  () => saleApi.listBuyers({ business: biz, limit: 200 }),
     enabled:  !!biz,
     staleTime: 5 * 60_000,
   });
   const { data: agentsData } = useQuery({
-    queryKey: ["sale-agents-ref", biz],
-    queryFn:  () => saleApi.listAgents({ business: biz, status: "active", limit: 500 }),
+    queryKey: ["sale-agents-ref", biz, "active"],
+    queryFn:  () => saleApi.listAgents({ business: biz, status: "active", limit: 200 }),
     enabled:  !!biz,
     staleTime: 5 * 60_000,
   });
@@ -640,6 +640,13 @@ const SaleDeals = () => {
 
   const invalidate = useCallback(() => Promise.all([
     queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] }),
+    queryClient.invalidateQueries({ queryKey: ["sale-deals-ref", biz] }),
+    queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] }),
+    queryClient.invalidateQueries({ queryKey: ["sale-listings-ref", biz] }),
+    queryClient.invalidateQueries({ queryKey: ["sale-commissions", biz] }),
+    queryClient.invalidateQueries({ queryKey: ["sale-funnel", biz] }),
+    queryClient.invalidateQueries({ queryKey: ["sale-all-schedule", biz] }),
+    queryClient.invalidateQueries({ queryKey: ["sale-schedule-summary", biz] }),
     queryClient.invalidateQueries({ queryKey: ["sale-dashboard"] }),
   ]), [queryClient, biz]);
 

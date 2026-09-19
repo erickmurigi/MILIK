@@ -315,13 +315,13 @@ const SalePayments = () => {
       ...(dateTo       && { dateTo }),
     }),
     enabled:  !!biz,
-    placeholderData: (prev) => prev,
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey?.[1] === biz ? prev : undefined),
     staleTime: 30_000,
   });
 
   const { data: dealsRef } = useQuery({
     queryKey: ["sale-deals-ref", biz],
-    queryFn:  () => saleApi.listDeals({ business: biz, limit: 500 }),
+    queryFn:  () => saleApi.listDeals({ business: biz, limit: 200 }),
     enabled:  !!biz,
     staleTime: 5 * 60_000,
   });

@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { FaBan, FaCheck, FaEdit, FaEnvelope, FaFileAlt, FaFileImport, FaHandshake, FaHistory, FaMoneyBillWave, FaPlus, FaPrint, FaRedoAlt, FaSms, FaTimes, FaTrash } from "react-icons/fa";
 import ImportModal from "../../components/Modals/ImportModal";
-import { parseSaleBuyersExcel, downloadSaleBuyersTemplate } from "../../utils/excelTemplates";
 import CwSmsModal from "../CarWash/CwSmsModal";
 import SaleEmailModal from "./SaleEmailModal";
 import { toast } from "react-toastify";
@@ -21,6 +20,10 @@ import { inputClass, labelClass } from "../../utils/formStyles";
 
 const SOURCES      = ["walk_in", "referral", "online", "agent", "other"];
 const KYC_STATUSES = ["pending", "verified", "rejected"];
+// Lazy-load the xlsx-backed helpers only when the Import modal is actually used.
+const parseSaleBuyersExcel = (file) => import("../../utils/excelTemplates").then((m) => m.parseSaleBuyersExcel(file));
+const downloadSaleBuyersTemplate = () => import("../../utils/excelTemplates").then((m) => m.downloadSaleBuyersTemplate());
+
 const PAGE_SIZE    = 50;
 
 const kycBadge = (s) => ({
@@ -254,8 +257,6 @@ const SaleBuyers = () => {
 
   const biz = currentCompany?._id;
 
-  useEffect(() => setPage(1), [debouncedSearch, kycFilter, sourceFilter]);
-
   const { data: buyersData, isLoading: loading, isFetching, error } = useQuery({
     queryKey: ["sale-buyers", biz, debouncedSearch, kycFilter, sourceFilter, page, pageSize],
     queryFn:  () => saleApi.listBuyers({ business: biz, search: debouncedSearch, kycStatus: kycFilter, source: sourceFilter, page, limit: pageSize }),
@@ -291,7 +292,10 @@ const SaleBuyers = () => {
 
   useEffect(() => { setPanelTab("profile"); }, [selectedId]);
 
-  const invalidate = useCallback(() => queryClient.invalidateQueries({ queryKey: ["sale-buyers", biz] }), [queryClient, biz]);
+  const invalidate = useCallback(() => Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["sale-buyers", biz] }),
+    queryClient.invalidateQueries({ queryKey: ["sale-buyers-ref", biz] }),
+  ]), [queryClient, biz]);
 
   const editingId = buyerModal?.editingId || "";
   const openCreate = () => setBuyerModal({ editingId: "", initial: blankForm });
@@ -499,9 +503,9 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
           </>
         }
       >
-        <FilterSearch value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, phone, ID…" />
-        <AppSelect value={kycFilter} onChange={(v) => setKycFilter(v ?? "")} options={KYC_FILTER_OPTIONS} placeholder="All KYC" clearable size="sm" />
-        <AppSelect value={sourceFilter} onChange={(v) => setSourceFilter(v ?? "")} options={SOURCE_FILTER_OPTIONS} placeholder="All Sources" clearable size="sm" />
+        <FilterSearch value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Name, phone, ID…" />
+        <AppSelect value={kycFilter} onChange={(v) => { setKycFilter(v ?? ""); setPage(1); }} options={KYC_FILTER_OPTIONS} placeholder="All KYC" clearable size="sm" />
+        <AppSelect value={sourceFilter} onChange={(v) => { setSourceFilter(v ?? ""); setPage(1); }} options={SOURCE_FILTER_OPTIONS} placeholder="All Sources" clearable size="sm" />
       </SaleFilterBar>
 
       {/* Table + KYC detail panel */}
@@ -865,7 +869,10 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
         downloadTemplate={downloadSaleBuyersTemplate}
         onImport={async (rows) => {
           const res = await saleApi.bulkImportBuyers(rows);
-          await queryClient.invalidateQueries({ queryKey: ["sale-buyers", biz] });
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ["sale-buyers", biz] }),
+            queryClient.invalidateQueries({ queryKey: ["sale-buyers-ref", biz] }),
+          ]);
           return res;
         }}
         previewCols={[

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
@@ -52,8 +52,6 @@ const SaleSchedule = () => {
   const [page,     setPage]     = useTabState("/sale/schedule:page", 1);
   const [pageSize, setPageSize] = useTabState("/sale/schedule:pageSize", DEFAULT_PAGE_SIZE);
 
-  useEffect(() => setPage(1), [statusFilter, dateFrom, dateTo]);
-
   const { data, isLoading, isFetching, error } = useQuery({
     queryKey: ["sale-all-schedule", biz, statusFilter, dateFrom, dateTo, page, pageSize],
     queryFn:  () => saleApi.listAllSchedule({
@@ -64,19 +62,13 @@ const SaleSchedule = () => {
       limit: pageSize,
     }),
     enabled:  !!biz,
-    placeholderData: (prev) => prev,
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey?.[1] === biz ? prev : undefined),
     staleTime: 30_000,
   });
 
-  const { data: overdueData } = useQuery({
-    queryKey: ["sale-schedule-overdue-sum", biz],
-    queryFn:  () => saleApi.listAllSchedule({ status: "overdue", limit: 500 }),
-    enabled:  !!biz,
-    staleTime: 60_000,
-  });
-  const { data: upcomingData } = useQuery({
-    queryKey: ["sale-schedule-upcoming-sum", biz],
-    queryFn:  () => saleApi.listAllSchedule({ status: "upcoming", limit: 500 }),
+  const { data: summary } = useQuery({
+    queryKey: ["sale-schedule-summary", biz],
+    queryFn:  () => saleApi.getScheduleSummary(),
     enabled:  !!biz,
     staleTime: 60_000,
   });
@@ -87,17 +79,9 @@ const SaleSchedule = () => {
   const total      = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  const overdueItems  = overdueData?.data  ?? [];
-  const upcomingItems = upcomingData?.data ?? [];
-
-  const { overdueAmt, due30Amt, upcomingAmt } = useMemo(() => {
-    const cutoff     = Date.now() + 30 * 24 * 60 * 60 * 1000;
-    return {
-      overdueAmt:  overdueItems.reduce((s, i) => s + Number(i.expectedAmount || 0), 0),
-      due30Amt:    upcomingItems.filter((i) => new Date(i.dueDate).getTime() <= cutoff).reduce((s, i) => s + Number(i.expectedAmount || 0), 0),
-      upcomingAmt: upcomingItems.reduce((s, i) => s + Number(i.expectedAmount || 0), 0),
-    };
-  }, [overdueItems, upcomingItems]);
+  const overdueAmt  = Number(summary?.overdueAmt  || 0);
+  const due30Amt    = Number(summary?.due30Amt    || 0);
+  const upcomingAmt = Number(summary?.upcomingAmt || 0);
 
   const activeFilterCount = [statusFilter, dateFrom, dateTo].filter(Boolean).length;
 

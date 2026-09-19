@@ -17,25 +17,8 @@ const STATUS_OPTS = [
   { value: "inactive", label: "Inactive" },
 ];
 
-// Server caps `limit` at 200 and paginates newest-first, so a single request
-// silently under-reports once a business has >200 records. Fetch every page.
-const EMPTY      = [];
-const PAGE_LIMIT = 200;
-const MAX_PAGES  = 50;
-const fetchAllPages = async (listFn, params = {}) => {
-  const first = await listFn({ ...params, page: 1, limit: PAGE_LIMIT });
-  const pages = Math.max(Number(first?.pages) || 1, 1);
-  const last  = Math.min(pages, MAX_PAGES);
-  if (pages > MAX_PAGES) console.warn(`fetchAllPages: ${pages} pages exceeds safety cap of ${MAX_PAGES}; results truncated`);
-  const rest = last > 1
-    ? await Promise.all(Array.from({ length: last - 1 }, (_, i) => listFn({ ...params, page: i + 2, limit: PAGE_LIMIT })))
-    : [];
-  const byId = new Map();
-  [first, ...rest].forEach((p) => (p?.data ?? []).forEach((r) => byId.set(r._id, r)));
-  const data  = [...byId.values()];
-  const total = Number(first?.total) || data.length;
-  return { data, total, truncated: data.length < total };
-};
+const EMPTY = [];
+const ZERO  = { totalDeals: 0, closedDeals: 0, activeDeals: 0, totalRevenue: 0, commPaid: 0, commPending: 0, closeRate: 0 };
 
 const SaleAgentsPerformance = () => {
   const navigate       = useNavigate();
@@ -48,21 +31,14 @@ const SaleAgentsPerformance = () => {
 
   const { data: agentsData, isLoading: loadingAgents, error: agentsError } = useQuery({
     queryKey: ["sale-agents-perf-list", biz, statusFilter],
-    queryFn:  () => saleApi.listAgents({ business: biz, status: statusFilter || undefined, limit: 500 }),
+    queryFn:  () => saleApi.listAgents({ business: biz, status: statusFilter || undefined, limit: 200 }),
     enabled:  !!biz,
     staleTime: 60_000,
   });
 
-  const { data: dealsData, isLoading: loadingDeals } = useQuery({
-    queryKey: ["sale-agents-perf-deals", biz],
-    queryFn:  () => fetchAllPages(saleApi.listDeals),
-    enabled:  !!biz,
-    staleTime: 60_000,
-  });
-
-  const { data: commsData, isLoading: loadingComms } = useQuery({
-    queryKey: ["sale-agents-perf-comms", biz],
-    queryFn:  () => fetchAllPages(saleApi.listCommissions),
+  const { data: perfData, isLoading: loadingPerf } = useQuery({
+    queryKey: ["sale-agents-perf", biz],
+    queryFn:  () => saleApi.getAgentsPerformance(),
     enabled:  !!biz,
     staleTime: 60_000,
   });
@@ -71,28 +47,26 @@ const SaleAgentsPerformance = () => {
     if (agentsError) toast.error("Failed to load agents");
   }, [agentsError]);
 
-  const agents      = agentsData?.data ?? EMPTY;
-  const allDeals    = dealsData?.data  ?? EMPTY;
-  const allComms    = commsData?.data  ?? EMPTY;
-  const isLoading   = loadingAgents || loadingDeals || loadingComms;
-  const truncated   = !!(dealsData?.truncated || commsData?.truncated);
+  const agents    = agentsData?.data ?? EMPTY;
+  const perfList  = perfData?.agents ?? EMPTY;
+  const isLoading = loadingAgents || loadingPerf;
 
   const rows = useMemo(() => {
+    const byAgent = new Map(perfList.map((p) => [String(p.agentId), p]));
     return agents.map((agent) => {
-      const agentDeals = allDeals.filter((d) => d.agent && (d.agent._id || d.agent) === agent._id);
-      const agentComms = allComms.filter((c) => c.agent && (c.agent._id || c.agent) === agent._id);
-
-      const totalDeals   = agentDeals.length;
-      const closedDeals  = agentDeals.filter((d) => d.status === "closed").length;
-      const activeDeals  = agentDeals.filter((d) => d.status === "active").length;
-      const totalRevenue = agentDeals.filter((d) => d.status === "closed").reduce((s, d) => s + Number(d.agreedPrice || 0), 0);
-      const commPaid     = agentComms.filter((c) => c.status === "paid").reduce((s, c) => s + Number(c.commissionAmount || 0), 0);
-      const commPending  = agentComms.filter((c) => ["pending", "approved"].includes(c.status)).reduce((s, c) => s + Number(c.commissionAmount || 0), 0);
-      const closeRate    = totalDeals > 0 ? Math.round((closedDeals / totalDeals) * 100) : 0;
-
-      return { agent, totalDeals, closedDeals, activeDeals, totalRevenue, commPaid, commPending, closeRate };
+      const p = byAgent.get(String(agent._id)) || ZERO;
+      return {
+        agent,
+        totalDeals:   Number(p.totalDeals   || 0),
+        closedDeals:  Number(p.closedDeals  || 0),
+        activeDeals:  Number(p.activeDeals  || 0),
+        totalRevenue: Number(p.totalRevenue || 0),
+        commPaid:     Number(p.commPaid     || 0),
+        commPending:  Number(p.commPending  || 0),
+        closeRate:    Number(p.closeRate    || 0),
+      };
     });
-  }, [agents, allDeals, allComms]);
+  }, [agents, perfList]);
 
   const sorted = useMemo(() => {
     return [...rows].sort((a, b) => {
@@ -144,12 +118,6 @@ const SaleAgentsPerformance = () => {
           size="sm"
         />
       </SaleFilterBar>
-
-      {truncated && (
-        <div className="border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-bold text-amber-800">
-          Data truncated: too many deals/commissions to load in full. Figures below may be under-reported.
-        </div>
-      )}
 
       {/* Table */}
       <div className="border border-slate-200 bg-white shadow-sm overflow-hidden">

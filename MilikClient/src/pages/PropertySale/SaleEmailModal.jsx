@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { FaEnvelope, FaTimes } from "react-icons/fa";
 import { saleApi } from "../../services/propertySaleApi";
@@ -47,8 +48,20 @@ const renderVars = (text, vars) =>
   String(text || "").replace(/\{([a-zA-Z0-9_]+)\}/g, (m, k) => (Object.prototype.hasOwnProperty.call(vars, k) ? String(vars[k] ?? "") : m));
 
 export default function SaleEmailModal({ title, subtitle, emailForm, setEmailForm, sending, onSend, onClose, context = "buyer", vars = {} }) {
-  const [apiTemplates, setApiTemplates] = useState([]);
   const company = useSelector((s) => s.company?.currentCompany);
+  const biz     = company?._id;
+
+  // Same key/params as the host pages' settings query, so the cache is shared (no refetch per open).
+  const { data: saleSettings } = useQuery({
+    queryKey: ["sale-settings", biz],
+    queryFn:  () => saleApi.getSettings(),
+    enabled:  !!biz,
+    staleTime: 10 * 60_000,
+  });
+  const apiTemplates = useMemo(
+    () => (saleSettings?.commTemplates ?? []).filter((t) => t.channel === "email" && t.context === context && t.isActive !== false),
+    [saleSettings, context],
+  );
 
   // Company placeholders are advertised for every context; supply them here so any caller gets them,
   // with caller-provided values taking precedence.
@@ -58,14 +71,6 @@ export default function SaleEmailModal({ title, subtitle, emailForm, setEmailFor
     companyEmail: company?.email || company?.companyEmail || "",
     ...vars,
   }), [company, vars]);
-
-  useEffect(() => {
-    saleApi.getSettings().then((s) => {
-      if (s?.commTemplates) {
-        setApiTemplates(s.commTemplates.filter((t) => t.channel === "email" && t.context === context && t.isActive !== false));
-      }
-    }).catch(() => {});
-  }, [context]);
 
   const applyTemplate = (t) =>
     setEmailForm({ subject: renderVars(t.subject, allVars), body: renderVars(t.body, allVars) });

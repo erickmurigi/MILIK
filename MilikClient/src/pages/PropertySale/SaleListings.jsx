@@ -7,7 +7,6 @@ import {
   FaTimes, FaTrash,
 } from "react-icons/fa";
 import ImportModal from "../../components/Modals/ImportModal";
-import { parseSaleListingsExcel, downloadSaleListingsTemplate } from "../../utils/excelTemplates";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterSearch } from "./SaleFilterBar";
@@ -25,6 +24,10 @@ import MilikTable from "../../components/common/MilikTable";
 
 // Normalise image URLs — strips absolute origin from legacy URLs so relative
 // path proxy (/uploads/...) works in both dev and production.
+// Lazy-load the xlsx-backed helpers only when the Import modal is actually used.
+const parseSaleListingsExcel = (file) => import("../../utils/excelTemplates").then((m) => m.parseSaleListingsExcel(file));
+const downloadSaleListingsTemplate = () => import("../../utils/excelTemplates").then((m) => m.downloadSaleListingsTemplate());
+
 const imgSrc = (url) => {
   if (!url || url.startsWith("/")) return url;
   try { return new URL(url).pathname; } catch { return url; }
@@ -382,8 +385,8 @@ const SaleListings = () => {
     : FALLBACK_PROPERTY_TYPES.map((t) => ({ value: t, label: t })), [activePropertyTypes]);
 
   const { data: agentsData } = useQuery({
-    queryKey: ["sale-agents-ref", biz],
-    queryFn:  () => saleApi.listAgents({ business: biz, status: "active", limit: 500 }),
+    queryKey: ["sale-agents-ref", biz, "active"],
+    queryFn:  () => saleApi.listAgents({ business: biz, status: "active", limit: 200 }),
     enabled:  !!biz,
     staleTime: 5 * 60_000,
   });
@@ -520,7 +523,7 @@ const SaleListings = () => {
     const co = currentCompany || {};
     const coName = co.companyName || co.name || "MILIK";
     const coInfo = [co.phone || co.phoneNumber, co.email || co.companyEmail, co.address || co.location].filter(Boolean).join(" • ");
-    const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
     const fmtD = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" }) : "—";
     const statusLabel = String(row.status || "").replace(/_/g, " ").toUpperCase();
     const statusC  = { available: "#166534", reserved: "#92400e", under_contract: "#1e40af", sold: "#0f172a", withdrawn: "#9f1239" }[row.status] || "#334155";
@@ -868,7 +871,10 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
         downloadTemplate={downloadSaleListingsTemplate}
         onImport={async (rows) => {
           const res = await saleApi.bulkImportListings(rows);
-          await queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] });
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] }),
+            queryClient.invalidateQueries({ queryKey: ["sale-listings-ref", biz] }),
+          ]);
           return res;
         }}
         previewCols={[

@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
@@ -15,17 +16,16 @@ const SaleReports = () => {
   const biz            = currentCompany?._id;
 
   const [year,    setYear]    = useTabState("/sale/reports:year", String(currentYear));
-  const [report,  setReport]  = useState(null);
-  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (!biz) return;
-    setLoading(true);
-    saleApi.getSalesReport({ business: biz, year })
-      .then(setReport)
-      .catch(() => toast.error("Failed to load sales report"))
-      .finally(() => setLoading(false));
-  }, [biz, year]);
+  const { data: report, isFetching: loading, error } = useQuery({
+    queryKey: ["sale-report-sales", biz, year],
+    queryFn:  () => saleApi.getSalesReport({ business: biz, year }),
+    enabled:  !!biz,
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey?.[1] === biz ? prev : undefined),
+    staleTime: 60_000,
+  });
+
+  useEffect(() => { if (error) toast.error("Failed to load sales report"); }, [error]);
 
   const months = Array.isArray(report?.months) ? report.months : [];
   const totals  = report?.totals || {};
@@ -42,6 +42,10 @@ const SaleReports = () => {
   const printReport = () => {
     const co   = currentCompany || {};
     const coName = co.companyName || co.name || "MILIK";
+    // Every dynamic value is HTML-escaped (incl. quotes): the popup is same-origin (document.write),
+    // so raw interpolation of company text or a crafted logo URL would be stored XSS.
+    const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    const logoSrc = typeof co.logo === "string" && /^(https?:\/\/|data:image\/)/i.test(co.logo.trim()) ? co.logo.trim() : "";
 
     const rows = MONTHS.map((mName, idx) => {
       const m = monthData[idx];
@@ -59,7 +63,7 @@ const SaleReports = () => {
 
     const html = `<!DOCTYPE html><html lang="en"><head>
 <meta charset="UTF-8"/>
-<title>Property Sales Report — ${year}</title>
+<title>Property Sales Report — ${esc(year)}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:"Helvetica Neue",Arial,sans-serif;font-size:10.5px;color:#111;background:#fff}
@@ -98,18 +102,18 @@ tfoot td:first-child{text-align:left}
 </style></head>
 <body><div class="page">
 <div class="hdr">
-  <div>${co.logo
-    ? `<img src="${co.logo}" alt=""/>`
-    : `<div class="brand-name">${coName}</div><div class="brand-sub">Property Sales</div>`
+  <div>${logoSrc
+    ? `<img src="${esc(logoSrc)}" alt=""/>`
+    : `<div class="brand-name">${esc(coName)}</div><div class="brand-sub">Property Sales</div>`
   }</div>
   <div class="co-meta">
-    <strong>${coName}</strong><br/>
-    ${[co.physicalAddress||co.postalAddress, [co.telephone,co.email].filter(Boolean).join(" | "), co.pinNumber?"PIN: "+co.pinNumber:""].filter(Boolean).join("<br/>")}
+    <strong>${esc(coName)}</strong><br/>
+    ${[co.physicalAddress||co.postalAddress, [co.telephone,co.email].filter(Boolean).join(" | "), co.pinNumber?"PIN: "+co.pinNumber:""].filter(Boolean).map(esc).join("<br/>")}
   </div>
 </div>
 <div class="report-id">
   <h1>Annual Sales Performance Report</h1>
-  <p>Financial Year: ${year} &nbsp;·&nbsp; Generated: ${new Date().toLocaleString("en-KE")}</p>
+  <p>Financial Year: ${esc(year)} &nbsp;·&nbsp; Generated: ${new Date().toLocaleString("en-KE")}</p>
 </div>
 <div class="summary-row">
   <div class="summary-cell"><div class="lbl">Listings Created</div><div class="val">${totals.listings??0}</div></div>
@@ -130,7 +134,7 @@ tfoot td:first-child{text-align:left}
   <tbody>${rows}</tbody>
   <tfoot>
     <tr>
-      <td>TOTALS — ${year}</td>
+      <td>TOTALS — ${esc(year)}</td>
       <td>${totals.listings??0}</td><td>${totals.offers??0}</td>
       <td>${totals.dealsActive??0}</td><td>${totals.dealsClosed??0}</td>
       <td>${fmtKES(totals.revenue??0)}</td><td>${fmtKES(totals.commissionsApproved??0)}</td>

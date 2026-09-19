@@ -1,4 +1,6 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSelector } from "react-redux";
 import { FaEnvelope, FaPlus, FaSave, FaSms, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
@@ -93,28 +95,36 @@ const PLACEHOLDERS = {
 const blankForm = { name: "", channel: "email", context: "buyer", subject: "", body: "", isActive: true };
 
 export default function SaleTemplates() {
-  const [settings,     setSettings]     = useState(null);
-  const [loading,      setLoading]      = useState(true);
+  const queryClient = useQueryClient();
+  const biz     = useSelector((s) => s.company?.currentCompany?._id);
   const [showInactive, setShowInactive] = useState(false);
   const [showModal,    setShowModal]    = useState(false);
   const [editingId,    setEditingId]    = useState(null);
   const [form,         setForm]         = useState(blankForm);
   const [saving,       setSaving]       = useState(false);
 
-  const loadSettings = useCallback(async () => {
-    try {
-      const s = await saleApi.getSettings();
-      setSettings(s);
-    } catch {
-      toast.error("Failed to load settings");
-    } finally {
-      setLoading(false);
+  // Shared key with the host pages (Leads/Listings/Agents/email modal).
+  const { data: settings, isPending: loading, error: settingsError } = useQuery({
+    queryKey: ["sale-settings", biz],
+    queryFn:  () => saleApi.getSettings(),
+    enabled:  !!biz,
+    staleTime: 10 * 60_000,
+  });
+  useEffect(() => { if (settingsError) toast.error("Failed to load settings"); }, [settingsError]);
+
+  // Every mutation returns the updated settings: write them straight into the shared cache (instant UI) and
+  // flag the query stale so other pages holding it don't serve a stale copy for the rest of its 10-minute window.
+  const applySettings = (updated) => {
+    const key = ["sale-settings", biz];
+    if (updated) {
+      queryClient.setQueryData(key, updated);
+      queryClient.invalidateQueries({ queryKey: key, refetchType: "none" });
+    } else {
+      queryClient.invalidateQueries({ queryKey: key });
     }
-  }, []);
+  };
 
-  useEffect(() => { loadSettings(); }, [loadSettings]);
-
-  const allTemplates  = settings?.commTemplates ?? [];
+  const allTemplates  = useMemo(() => settings?.commTemplates ?? [], [settings]);
   const active   = allTemplates.filter((t) => t.isActive !== false).length;
   const archived = allTemplates.length - active;
   const visible  = showInactive ? allTemplates : allTemplates.filter((t) => t.isActive !== false);
@@ -136,7 +146,7 @@ export default function SaleTemplates() {
       const updated = editingId
         ? await saleApi.updateCommTemplate(editingId, form)
         : await saleApi.addCommTemplate(form);
-      setSettings(updated);
+      applySettings(updated);
       toast.success(editingId ? "Updated" : "Added");
       closeModal();
     } catch (err) {
@@ -149,14 +159,14 @@ export default function SaleTemplates() {
   const toggleStatus = async (t) => {
     try {
       const updated = await saleApi.updateCommTemplate(t._id, { isActive: !t.isActive });
-      setSettings(updated);
+      applySettings(updated);
     } catch { toast.error("Failed to update"); }
   };
 
   const deleteTemplate = async (t) => {
     try {
       const updated = await saleApi.deleteCommTemplate(t._id);
-      setSettings(updated);
+      applySettings(updated);
       toast.success("Template deleted");
     } catch { toast.error("Failed to delete"); }
   };

@@ -87,6 +87,7 @@ export const saleApi = {
   getMonthlyDetail:     async (params = {}) => unwrap(await adminRequests.get("/sale/reports/monthly-detail",  { params })),
   getCashFlowForecast:  async (params = {}) => unwrap(await adminRequests.get("/sale/reports/cash-flow",       { params })),
   getConversionFunnel:  async (params = {}) => unwrap(await adminRequests.get("/sale/reports/funnel",          { params })),
+  getAgentsPerformance: async (params = {}) => unwrap(await adminRequests.get("/sale/reports/agents-performance", { params })),
 
   // CRM — Leads
   listLeads:           async (params = {}) => unwrapPage(await adminRequests.get("/sale/leads",                   { params })),
@@ -104,6 +105,7 @@ export const saleApi = {
   listAllSchedule:      async (params = {}) => unwrapPage(await adminRequests.get("/sale/schedule/all", { params })),
   listSchedule:         async (params = {}) => unwrapPage(await adminRequests.get("/sale/schedule", { params })),
   getOverdueSchedule:   async (params = {}) => unwrapPage(await adminRequests.get("/sale/schedule/overdue", { params })),
+  getScheduleSummary:   async (params = {}) => unwrap(await adminRequests.get("/sale/schedule/summary", { params })),
   setSchedule:          async (payload)     => unwrap(await adminRequests.post("/sale/schedule", payload)),
   updateScheduleItem:   async (id, payload) => unwrap(await adminRequests.patch(`/sale/schedule/${id}`, payload)),
   linkPaymentToSchedule:async (id, payload) => unwrap(await adminRequests.patch(`/sale/schedule/${id}/link`, payload)),

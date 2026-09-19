@@ -127,13 +127,11 @@ const SaleAgents = () => {
 
   const biz = currentCompany?._id;
 
-  useEffect(() => setPage(1), [debouncedSearch, statusFilter, commTypeFilt]);
-
   const { data: agentsData, isLoading: loading, isFetching, error } = useQuery({
     queryKey: ["sale-agents", biz, debouncedSearch, statusFilter, commTypeFilt, page, pageSize],
     queryFn:  () => saleApi.listAgents({ business: biz, search: debouncedSearch, status: statusFilter || undefined, commissionType: commTypeFilt, page, limit: pageSize }),
     enabled:  !!biz,
-    placeholderData: (prev) => prev,
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey?.[1] === biz ? prev : undefined),
     staleTime: 30_000,
   });
 
@@ -150,7 +148,11 @@ const SaleAgents = () => {
   const total      = agentsData?.total  ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  const invalidate = useCallback(() => queryClient.invalidateQueries({ queryKey: ["sale-agents", biz] }), [queryClient, biz]);
+  const invalidate = useCallback(() => Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["sale-agents", biz] }),
+    queryClient.invalidateQueries({ queryKey: ["sale-agents-ref", biz] }),
+    queryClient.invalidateQueries({ queryKey: ["sale-agents-perf-list", biz] }),
+  ]), [queryClient, biz]);
 
   const editingId = agentModal?.editingId || "";
   const openCreate = () => {
@@ -200,17 +202,20 @@ const SaleAgents = () => {
   const printAgent = useCallback((row) => {
     const co        = currentCompany || {};
     const coName    = co.companyName || co.name || "MILIK";
-    const esc       = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const logoHtml  = co.logo
-      ? `<img src="${co.logo}" alt="logo" style="width:72px;height:72px;object-fit:contain;border:1px solid #cbd5e1;" />`
-      : `<div style="width:72px;height:72px;background:#0B3B2E;color:#fff;font-size:26px;font-weight:900;display:flex;align-items:center;justify-content:center;">${coName.slice(0, 1)}</div>`;
+    // Every dynamic value is HTML-escaped (incl. quotes): the popup is same-origin (document.write),
+    // so raw interpolation of company/agent text or a crafted logo URL would be stored XSS.
+    const esc       = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    const logoSrc   = typeof co.logo === "string" && /^(https?:\/\/|data:image\/)/i.test(co.logo.trim()) ? co.logo.trim() : "";
+    const logoHtml  = logoSrc
+      ? `<img src="${esc(logoSrc)}" alt="logo" style="width:72px;height:72px;object-fit:contain;border:1px solid #cbd5e1;" />`
+      : `<div style="width:72px;height:72px;background:#0B3B2E;color:#fff;font-size:26px;font-weight:900;display:flex;align-items:center;justify-content:center;">${esc(coName.slice(0, 1))}</div>`;
     const coInfo    = [co.phone || co.phoneNumber, co.email || co.companyEmail].filter(Boolean).join(" • ");
     const statusBg  = row.status === "active" ? "#dcfce7" : "#f1f5f9";
     const statusC   = row.status === "active" ? "#166534" : "#64748b";
     const commDisplay = row.commissionType === "percentage" ? `${row.commissionRate}%` : `${fmtKES(row.commissionRate)} flat`;
     const printedOn = new Date().toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" });
     const win = window.open("", "_blank", "width=900,height=680");
-    if (!win) return;
+    if (!win) { toast.warn("Allow pop-ups to print the agent profile"); return; }
     win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
 <title>Agent Profile — ${esc(row.agentNumber)}</title>
 <style>
@@ -276,9 +281,9 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
           </>
         }
       >
-        <FilterSearch value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search agents…" />
-        <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? "")} options={STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
-        <AppSelect value={commTypeFilt} onChange={(v) => setCommTypeFilt(v ?? "")} options={COMM_TYPE_FILTER_OPTIONS} placeholder="All Comm. Types" clearable size="sm" />
+        <FilterSearch value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search agents…" />
+        <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
+        <AppSelect value={commTypeFilt} onChange={(v) => { setCommTypeFilt(v ?? ""); setPage(1); }} options={COMM_TYPE_FILTER_OPTIONS} placeholder="All Comm. Types" clearable size="sm" />
       </SaleFilterBar>
 
       {/* Table */}

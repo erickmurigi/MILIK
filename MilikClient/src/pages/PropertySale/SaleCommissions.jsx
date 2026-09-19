@@ -162,7 +162,7 @@ const SaleCommissions = () => {
   const [actionKey,    setActionKey]    = useState("");
 
   const { data: agentsData } = useQuery({
-    queryKey: ["sale-agents-ref", biz],
+    queryKey: ["sale-agents-ref", biz, "all"],
     queryFn:  () => saleApi.listAgents({ business: biz, limit: 200 }),
     enabled:  !!biz,
     staleTime: 5 * 60_000,
@@ -196,7 +196,7 @@ const SaleCommissions = () => {
       ...(dateTo       && { dateTo }),
     }),
     enabled:  !!biz,
-    placeholderData: (prev) => prev,
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey?.[1] === biz ? prev : undefined),
     staleTime: 30_000,
   });
 

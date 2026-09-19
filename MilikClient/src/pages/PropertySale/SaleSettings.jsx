@@ -1,11 +1,14 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSelector } from "react-redux";
 import {
   FaCog, FaFilter, FaHandshake, FaHome, FaMoneyBillWave,
   FaPlus, FaSave, FaTimes,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { adminRequests } from "../../utils/requestMethods";
+import { saleApi } from "../../services/propertySaleApi";
 import PropertySaleShell from "./PropertySaleShell";
 import Modal from "../../components/common/Modal";
 import Spinner from "../../components/common/Spinner";
@@ -56,8 +59,8 @@ export default function SaleSettings() {
   const activeTab = searchParams.get("tab") || "pipelineStages";
   const setTab = (key) => setSearchParams({ tab: key });
 
-  const [settings, setSettings]       = useState(null);
-  const [loading, setLoading]         = useState(true);
+  const queryClient = useQueryClient();
+  const biz     = useSelector((s) => s.company?.currentCompany?._id);
   const [showInactive, setShowInactive] = useState(false);
 
   const [showModal, setShowModal]   = useState(false);
@@ -70,26 +73,30 @@ export default function SaleSettings() {
   const [commDefaults, setCommDefaults] = useState({ rate: 3, commissionType: "percentage", whtRate: 5 });
   const [savingComm, setSavingComm] = useState(false);
 
-  const loadSettings = useCallback(async () => {
-    try {
-      const res = await adminRequests.get("/sale/settings");
-      const s = res?.data?.settings;
-      setSettings(s);
-      if (s?.commissionDefaults) {
-        setCommDefaults({
-          rate:           s.commissionDefaults.rate           ?? 3,
-          commissionType: s.commissionDefaults.commissionType ?? "percentage",
-          whtRate:        s.commissionDefaults.whtRate        ?? 5,
-        });
-      }
-    } catch {
-      toast.error("Failed to load settings");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // Shared key with the host pages (Leads/Listings/Agents/email modal) so they see edits immediately:
+  // every mutation below re-loads via invalidation of this exact query.
+  const { data: settings, isPending: loading, error: settingsError } = useQuery({
+    queryKey: ["sale-settings", biz],
+    queryFn:  () => saleApi.getSettings(),
+    enabled:  !!biz,
+    staleTime: 10 * 60_000,
+  });
+  useEffect(() => { if (settingsError) toast.error("Failed to load settings"); }, [settingsError]);
 
-  useEffect(() => { loadSettings(); }, [loadSettings]);
+  // Seed the commission-defaults form whenever fresh settings arrive (render-time sync, no effect).
+  const [seededFrom, setSeededFrom] = useState(null);
+  if (settings && settings !== seededFrom) {
+    setSeededFrom(settings);
+    if (settings.commissionDefaults) {
+      setCommDefaults({
+        rate:           settings.commissionDefaults.rate           ?? 3,
+        commissionType: settings.commissionDefaults.commissionType ?? "percentage",
+        whtRate:        settings.commissionDefaults.whtRate        ?? 5,
+      });
+    }
+  }
+
+  const loadSettings = () => queryClient.invalidateQueries({ queryKey: ["sale-settings", biz] });
 
   const collectionData = (key) => settings?.[key] || [];
   const visibleItems = (key) => {

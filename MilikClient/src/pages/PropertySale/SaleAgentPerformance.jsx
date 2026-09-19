@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { saleApi, fmtKES } from "../../services/propertySaleApi";
 import { fmtDate } from "../../utils/dates";
@@ -50,17 +51,14 @@ const fetchAllPages = async (listFn, params = {}) => {
   return { data, total, truncated: data.length < total };
 };
 
+const EMPTY = [];
+
 const SaleAgentPerformance = () => {
   const { id }   = useParams();
   const navigate = useNavigate();
   const company  = useSelector((s) => s.company?.currentCompany);
 
-  const [agent,       setAgent]       = useState(null);
-  const [deals,       setDeals]       = useState([]);
-  const [commissions, setCommissions] = useState([]);
-  const [truncated,   setTruncated]   = useState(false);
-  const [loading,     setLoading]     = useState(true);
-  const [error,       setError]       = useState(null);
+  const biz      = company?._id;
   const styleRef = useRef(null);
 
   useEffect(() => {
@@ -71,26 +69,30 @@ const SaleAgentPerformance = () => {
     return () => el.remove();
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true); setError(null);
-    try {
+  const { data: perf, isPending: loading, error: loadError } = useQuery({
+    queryKey: ["sale-agent-performance", biz, id],
+    queryFn: async () => {
       const [a, dealsData, commsData] = await Promise.all([
         saleApi.getAgent(id),
         fetchAllPages(saleApi.listDeals, { agentId: id }),
         fetchAllPages(saleApi.listCommissions, { agentId: id }),
       ]);
-      setAgent(a);
-      setDeals(dealsData.data);
-      setCommissions(commsData.data);
-      setTruncated(!!(dealsData.truncated || commsData.truncated));
-    } catch (err) {
-      setError(err?.response?.data?.message || err?.message || "Failed to load agent");
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
+      return {
+        agent:       a,
+        deals:       dealsData.data,
+        commissions: commsData.data,
+        truncated:   !!(dealsData.truncated || commsData.truncated),
+      };
+    },
+    enabled:  !!biz && !!id,
+    staleTime: 60_000,
+  });
 
-  useEffect(() => { load(); }, [load]);
+  const agent       = perf?.agent ?? null;
+  const deals       = perf?.deals ?? EMPTY;
+  const commissions = perf?.commissions ?? EMPTY;
+  const truncated   = !!perf?.truncated;
+  const error       = loadError ? (loadError?.response?.data?.message || loadError?.message || "Failed to load agent") : null;
 
   if (loading) return <div className="flex h-screen items-center justify-center text-sm text-slate-500">Loading performance data…</div>;
   if (error)   return <div className="flex h-screen items-center justify-center text-sm text-rose-600">{error}</div>;

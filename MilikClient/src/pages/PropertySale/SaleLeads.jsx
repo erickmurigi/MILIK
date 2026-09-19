@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import {
@@ -388,11 +388,8 @@ export default function SaleLeads() {
 
   const [smsTarget,   setSmsTarget]   = useState(null);
   const [emailTarget, setEmailTarget] = useState(null);
-  const [smsForm,     setSmsForm]     = useState({ phone: "", body: "" });
   const [sendingSms,  setSendingSms]  = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
-
-  useEffect(() => setPage(1), [debSearch, statusFilter, sourceFilter, agentFilter, overdueOnly, createdFrom, createdTo]);
 
   const { data: leadsData, isLoading, isFetching } = useQuery({
     queryKey: ["sale-leads", biz, debSearch, statusFilter, sourceFilter, agentFilter, overdueOnly, createdFrom, createdTo, page, pageSize],
@@ -421,8 +418,8 @@ export default function SaleLeads() {
     : ["walk_in","referral","online","social_media","agent","cold_call","other"].map((v) => ({ value: v, label: v.replace(/_/g, " ") })), [settingSources]);
 
   const { data: agentsData } = useQuery({
-    queryKey: ["sale-agents-ref", biz],
-    queryFn:  () => saleApi.listAgents({ business: biz, limit: 500 }),
+    queryKey: ["sale-agents-ref", biz, "all"],
+    queryFn:  () => saleApi.listAgents({ business: biz, limit: 200 }),
     enabled:  !!biz,
     staleTime: 5 * 60_000,
   });
@@ -453,7 +450,7 @@ export default function SaleLeads() {
   const { data: listingsRef } = useQuery({
     queryKey: ["sale-listings-ref", biz],
     queryFn:  () => saleApi.listListings({ business: biz, limit: 200 }),
-    enabled:  !!biz,
+    enabled:  !!biz && !!selected,   // only the detail panel / convert-to-offer modal use it
     staleTime: 5 * 60_000,
   });
 
@@ -474,6 +471,7 @@ export default function SaleLeads() {
   // Any lead mutation can move funnel counts; pass the lead id to also refresh the open panel's detail query.
   const invalidate = useCallback((leadId) => {
     qc.invalidateQueries({ queryKey: ["sale-leads", biz] });
+    qc.invalidateQueries({ queryKey: ["sale-leads-ref", biz] });
     qc.invalidateQueries({ queryKey: ["sale-leads-pipeline", biz] });
     qc.invalidateQueries({ queryKey: ["sale-funnel", biz] });
     if (leadId) qc.invalidateQueries({ queryKey: ["sale-lead-detail", biz, leadId] });
@@ -573,14 +571,12 @@ export default function SaleLeads() {
   };
 
   // ── Communication ──────────────────────────────────────────────────────────
-  const openSms = useCallback((lead) => {
-    setSmsTarget(lead);
-    setSmsForm({ phone: lead.phone || "", body: "" });
-  }, []);
-  const handleSendSms = async () => {
+  const openSms = useCallback((lead) => setSmsTarget(lead), []);
+  const handleSendSms = async (phone, body) => {
+    if (!smsTarget) return;
     setSendingSms(true);
     try {
-      await saleApi.sendLeadSms(smsTarget._id, smsForm);
+      await saleApi.sendLeadSms(smsTarget._id, { phone, body });
       toast.success("SMS sent");
       setSmsTarget(null);
     } catch (err) { toast.error(err?.response?.data?.message || "Failed to send SMS"); }
@@ -728,7 +724,7 @@ export default function SaleLeads() {
                 return (
                   <button
                     key={s}
-                    onClick={() => setStatus(statusFilter === s ? "" : s)}
+                    onClick={() => { setStatus(statusFilter === s ? "" : s); setPage(1); }}
                     className={`flex-shrink-0 text-center border px-3 py-1 text-xs transition-colors ${
                       statusFilter === s
                         ? `${STATUS_COLORS[s] ?? "border-[#0B3B2E] bg-[#0B3B2E] text-white"} font-black`
@@ -759,20 +755,20 @@ export default function SaleLeads() {
           >
             <FilterSearch
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               placeholder="Search leads…"
             />
-            <AppSelect value={statusFilter} onChange={(v) => setStatus(v ?? "")} options={LEAD_STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
-            <AppSelect value={sourceFilter} onChange={(v) => setSource(v ?? "")} options={LEAD_SOURCE_OPTIONS} placeholder="All Sources" clearable size="sm" />
-            <AppSelect value={agentFilter} onChange={(v) => setAgent(v ?? "")} options={agentOptions} placeholder="All Agents" searchable clearable size="sm" />
+            <AppSelect value={statusFilter} onChange={(v) => { setStatus(v ?? ""); setPage(1); }} options={LEAD_STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
+            <AppSelect value={sourceFilter} onChange={(v) => { setSource(v ?? ""); setPage(1); }} options={LEAD_SOURCE_OPTIONS} placeholder="All Sources" clearable size="sm" />
+            <AppSelect value={agentFilter} onChange={(v) => { setAgent(v ?? ""); setPage(1); }} options={agentOptions} placeholder="All Agents" searchable clearable size="sm" />
             <label className="flex shrink-0 items-center gap-1.5 text-[11px] font-semibold text-slate-600 cursor-pointer select-none whitespace-nowrap">
-              <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdue(e.target.checked)} className="accent-[#0B3B2E]" />
+              <input type="checkbox" checked={overdueOnly} onChange={(e) => { setOverdue(e.target.checked); setPage(1); }} className="accent-[#0B3B2E]" />
               Overdue
             </label>
             <FilterDateRange
               from={createdFrom} to={createdTo}
-              onFromChange={(e) => setCreatedFrom(e.target.value)}
-              onToChange={(e) => setCreatedTo(e.target.value)}
+              onFromChange={(e) => { setCreatedFrom(e.target.value); setPage(1); }}
+              onToChange={(e) => { setCreatedTo(e.target.value); setPage(1); }}
             />
           </SaleFilterBar>
 
@@ -983,15 +979,12 @@ export default function SaleLeads() {
       {/* ── SMS Modal ─────────────────────────────────────────────────────────── */}
       {smsTarget && (
         <CwSmsModal
-          title={`SMS to ${smsTarget.fullName}`}
-          subtitle={smsTarget.leadNumber}
-          phoneValue={smsForm.phone}
-          bodyValue={smsForm.body}
-          onPhoneChange={(v) => setSmsForm((f) => ({ ...f, phone: v }))}
-          onBodyChange={(v) => setSmsForm((f) => ({ ...f, body: v }))}
-          sending={sendingSms}
+          target={{ name: smsTarget.fullName, phone: smsTarget.phone }}
+          context={smsTarget.leadNumber}
+          defaultBody={`Dear ${smsTarget.fullName}, `}
           onSend={handleSendSms}
           onClose={() => setSmsTarget(null)}
+          sending={sendingSms}
         />
       )}
 

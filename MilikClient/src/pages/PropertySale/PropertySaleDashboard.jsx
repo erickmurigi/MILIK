@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FaBuilding, FaChartLine, FaCheck, FaClipboard, FaClock,
@@ -45,21 +46,23 @@ const QUICK_LINKS = [
 const PropertySaleDashboard = () => {
   const navigate    = useNavigate();
   const queryClient = useQueryClient();
+  const biz         = useSelector((s) => s.company?.currentCompany?._id);
 
   const { data, isFetching: loading } = useQuery({
-    queryKey: ["sale-dashboard"],
+    queryKey: ["sale-dashboard", biz],
     queryFn:  () => saleApi.getDashboardStats(),
     placeholderData: (prev) => prev,
     staleTime: 60_000,
   });
 
   const { data: overdueScheduleData } = useQuery({
-    queryKey: ["sale-overdue-schedule"],
-    queryFn:  () => saleApi.getOverdueSchedule(),
+    queryKey: ["sale-overdue-schedule", biz],
+    queryFn:  () => saleApi.getOverdueSchedule({ limit: 5 }),
     staleTime: 5 * 60_000,
   });
 
   const overdueInstallments = overdueScheduleData?.data ?? [];
+  const overdueTotal        = overdueScheduleData?.total ?? overdueInstallments.length;
 
   const s    = data || {};
   const leads = s.leads || {};
@@ -114,12 +117,12 @@ const PropertySaleDashboard = () => {
       <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5">
 
         {/* ── Overdue Schedule Alert ─────────────────────────────────────── */}
-        {overdueInstallments.length > 0 && (
+        {overdueTotal > 0 && (
           <div className="flex items-start gap-3 border border-rose-200 bg-rose-50 px-4 py-3">
             <FaExclamationTriangle className="mt-0.5 flex-shrink-0 text-rose-600" size={14} />
             <div className="flex-1 min-w-0">
               <div className="text-xs font-black text-rose-800">
-                {overdueInstallments.length} overdue installment{overdueInstallments.length !== 1 ? "s" : ""}
+                {overdueTotal} overdue installment{overdueTotal !== 1 ? "s" : ""}
               </div>
               <div className="mt-1 space-y-0.5">
                 {overdueInstallments.slice(0, 5).map((item) => (
@@ -131,8 +134,8 @@ const PropertySaleDashboard = () => {
                     <span>Due: {item.dueDate ? new Date(item.dueDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</span>
                   </div>
                 ))}
-                {overdueInstallments.length > 5 && (
-                  <div className="text-[10px] text-rose-500">…and {overdueInstallments.length - 5} more</div>
+                {overdueTotal > 5 && (
+                  <div className="text-[10px] text-rose-500">…and {overdueTotal - 5} more</div>
                 )}
               </div>
             </div>
