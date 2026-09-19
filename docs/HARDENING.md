@@ -1,7 +1,7 @@
 # Hardening & Optimization Status
 
 Living status document for the security hardening and system optimization work
-started 2026-09-12/13. Seven tracks: bug fixes landed on `main` (Track A), the
+started 2026-09-12/13. Eight tracks: bug fixes landed on `main` (Track A), the
 security hotfix (Track B, **merged and deployed**), an unplanned second wave
 of landlord-statement bug fixes found via live user testing (Track D), the
 whole-codebase optimization audit (Track C — **closed**), and a module-by-
@@ -638,4 +638,52 @@ were confirmed against the code before merging.
 
 ---
 
-*Last updated: 2026-09-19 (Track G closed — PropertySale correctness pass, see above; its performance pass is still to do). Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C/E/F/G as items are actioned.*
+## Track H — PropertySale module: performance pass (2026-09-20) — CLOSED
+
+Run with at most 2 agents at a time and no worktrees (agents edited the main
+checkout; I reviewed and committed each batch myself). Audits found no per-row
+awaits in the backend and no polling in the frontend; the cost was elsewhere.
+
+**Backend (`2c46b85`, `72ff51a`)**
+- Indexes: `{business,createdAt}` on deals/listings/commissions/leads/agents
+  (the existing `{business,status,createdAt}` can't serve an unfiltered
+  newest-first sort, so the dashboard's recent deals and every default list
+  sorted the tenant's whole collection in memory), plus deal date windows,
+  commission `{business,status,updatedAt}` and payment `{business,status,paymentDate}`.
+- `getSalesReport` now buckets by month on the server (`$bucket`, same local-time
+  month boundaries) instead of fetching a year of rows and filtering 72 times.
+- `getCashFlowForecast` computes bucket totals with one aggregate and caps
+  listed items per bucket (`hasMore` added).
+- New `GET /sale/reports/agents-performance` and `GET /sale/schedule/summary`
+  (one aggregate each); `/sale/schedule/overdue` accepts `limit` and returns a
+  real total; `/sale/schedule/all` clamps limit to 200.
+- Smaller: no duplicate SaleAgent lookup for non-agents, agent deal counts only
+  for the page's agents, deal lists skip `documents`, `createDealFromOffer`
+  drops a re-fetch, `deleteDeal` also deletes its schedule rows.
+
+**Frontend (`8a1590c`, `f7b9298`)**
+- The 8 big table pages (Deals, Leads, Listings, Offers, Payments, Commissions,
+  Buyers, Agents) kept every modal's form state in the page root, so each
+  keystroke re-rendered the whole table. Modals are now their own components,
+  renderers are hoisted/memoized, hand-rolled tables got memoized rows.
+- Agent performance, schedule header totals and the dashboard overdue banner use
+  the new endpoints instead of fetching hundreds of populated rows.
+- Cache fixes: page-reset effects moved into handlers (restored tab pages no
+  longer fetch twice), business-scoped placeholders, ref-list key collisions
+  split, `limit: 500` (server caps at 200) set to 200, raw-effect report/settings
+  pages moved to react-query, more complete invalidations after deal/buyer/lead
+  changes, xlsx loaded on click.
+- Also fixed on the way: print windows in the reports/monthly/agent pages now
+  escape output like the offer print, and SMS from a lead works again (it was
+  calling the SMS modal with an old prop API and sending an empty body).
+
+**Not done / caveats:** per-tab lazy loading of the Buyers/Deals detail requests;
+`$text` indexes still aren't business-prefixed (replacing them risks an index
+build error); no browser or database testing, and the new aggregates were only
+checked against mocked results, so compare the sales report and agent
+performance figures on a real tenant after deploy. Doc-upload draft text in
+Deals/Buyers now clears when the panel closes.
+
+---
+
+*Last updated: 2026-09-20 (Track H closed — PropertySale performance pass, see above). Track G note: PropertySale correctness pass, see above. Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C/E/F/G as items are actioned.*
