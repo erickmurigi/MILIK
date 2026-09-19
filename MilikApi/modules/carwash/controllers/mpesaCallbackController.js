@@ -280,6 +280,56 @@ export const handleTransactionStatusResult = async (req, res) => {
   }
 };
 
+// â”€â”€â”€ Overpayment routing (shared by C2B and STK handlers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Routes the amount paid beyond a job's outstanding balance: tops up an
+// existing prepaid/credit account's wallet if the plate has one, otherwise
+// stores it as a CarWashCustomerCredit against the customer. Posts the
+// matching GL entry either way. Callers `await` this (instead of firing it
+// as a detached promise) so a DB/ledger failure here can never be silently
+// dropped after the response has already gone out.
+const routeMpesaOverpayment = async ({ businessId, plate, overpayment, transactionCode, cashbook, senderName, transDate, job, payment, logPrefix = "CW M-Pesa" }) => {
+  if (!(overpayment > 0.009) || !plate) return;
+  try {
+    const overpayAcc = await CarWashCreditAccount.findOneAndUpdate(
+      { business: businessId, plates: plate, status: "active" },
+      { $inc: { accountCredit: overpayment } },
+      { new: true }
+    );
+    if (overpayAcc) {
+      // Has a credit/prepaid account â€” top up wallet and post Dr Cashbook / Cr 4400
+      const topupDoc = await CarWashAccountTopup.create({
+        business: businessId,
+        account: overpayAcc._id,
+        amount: overpayment,
+        method: "mpesa",
+        reference: transactionCode || "",
+        cashbookAccount: cashbook._id,
+        paymentDate: transDate,
+        notes: `Overpayment credited from M-Pesa ${logPrefix} (${senderName || "Unknown"})`,
+      });
+      postCarWashTopupLedger({ businessId, topup: topupDoc, cashbookAccountId: cashbook._id, userId: null }).catch(() => {});
+    } else {
+      // No credit account â€” save as customer credit and post Dr Cashbook / Cr 2162
+      const customer = await CarWashCustomer.findOne({ business: businessId, plates: buildPlateRegex(plate) }).lean();
+      if (!customer) return;
+      const creditDoc = await CarWashCustomerCredit.create({
+        business: businessId,
+        customer: customer._id,
+        plates: [plate],
+        amount: overpayment,
+        status: "active",
+        sourceJob: job._id,
+        sourcePayment: payment._id,
+        notes: `M-Pesa overpayment from ${logPrefix} â€“ ${transactionCode || "N/A"} (${senderName || "Unknown"})`,
+      });
+      postCarWashCustomerCreditCreationLedger({ businessId, creditDoc, cashbookAccountId: cashbook._id, userId: null })
+        .catch((e) => console.error(`[${logPrefix}] Credit GL posting failed plate=%s: %s`, plate, e?.message));
+    }
+  } catch (e) {
+    console.error(`[${logPrefix}] Overpayment handling failed plate=%s amount=%s: %s`, plate, overpayment, e?.message);
+  }
+};
+
 // â”€â”€â”€ STK Push callback â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const handleStkCallback = async (req, res) => {
   res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
@@ -358,17 +408,33 @@ export const handleStkCallback = async (req, res) => {
       return;
     }
 
-    const payAmount = round2(paidAmount);
-    const payment = await CarWashPayment.create({
-      business: businessId,
-      job: job._id,
-      amount: payAmount,
-      method: "mpesa",
-      cashbookAccount: cashbook._id,
-      reference: receiptNumber,
-      receivedFromPhone: phone,
-      paymentDate: transDate,
-    });
+    // Cap the recorded payment at the outstanding amount â€” excess is routed via
+    // routeMpesaOverpayment below, same as the C2B handler (confirmCarWashCallback).
+    const appliedAmount = round2(Math.min(paidAmount, outstanding));
+    let payment;
+    try {
+      payment = await CarWashPayment.create({
+        business: businessId,
+        job: job._id,
+        amount: appliedAmount,
+        method: "mpesa",
+        cashbookAccount: cashbook._id,
+        reference: receiptNumber,
+        receivedFromPhone: phone,
+        paymentDate: transDate,
+      });
+    } catch (payErr) {
+      // E11000 = unique-index violation: same M-Pesa receipt already created a payment
+      // (mirrors the guard in confirmCarWashCallback / reassignMpesaNotification / bulkUploadMpesaStatement)
+      if (payErr.code === 11000) {
+        await CarWashMpesaNotification.updateOne(
+          { _id: notif._id },
+          { $set: { status: "duplicate", transactionCode: receiptNumber, resultDesc: "Duplicate receipt â€” payment already recorded" } }
+        );
+        return;
+      }
+      throw payErr;
+    }
 
     await CarWashMpesaNotification.updateOne(
       { _id: notif._id },
@@ -383,9 +449,15 @@ export const handleStkCallback = async (req, res) => {
 
     const updatedJob = await refreshJobPaymentStatus(businessId, job._id);
     await postCarWashPaymentLedger({ businessId, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: null, taxAmount: Number((updatedJob || job)?.taxAmount || 0), jobPrice: Number((updatedJob || job)?.price || 0) });
+
+    // Route STK overpayment the same way C2B does (confirmCarWashCallback) â€” STK
+    // metadata carries no sender name, so it falls back to "Unknown".
+    const overpayment = round2(paidAmount - outstanding);
+    await routeMpesaOverpayment({ businessId, plate: normalizePlate(job.plateNumber), overpayment, transactionCode: receiptNumber, cashbook, senderName: null, transDate, job, payment, logPrefix: "STK" });
+
     if (updatedJob) {
       await accrueCommissionForJob({ req: null, job: updatedJob });
-      const remaining = round2(Math.max(0, outstanding - payAmount));
+      const remaining = round2(Math.max(0, outstanding - appliedAmount));
       let loyaltySmsBody = null;
       if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
         try {
@@ -395,12 +467,12 @@ export const handleStkCallback = async (req, res) => {
           console.error("[STK] Stamp failed job=%s: %s", updatedJob.jobNumber, err?.message || err);
         }
       }
-      await sendPaymentConfirmationSms({ business: businessId, job: updatedJob, amount: payAmount, remaining, overridePhone: phone, loyaltySmsBody });
+      await sendPaymentConfirmationSms({ business: businessId, job: updatedJob, amount: paidAmount, remaining, overridePhone: phone, loyaltySmsBody });
       if (updatedJob.paymentStatus === "paid") {
         await markJobCommissionsPayable({ business: businessId, jobId: updatedJob._id });
       }
     }
-    console.log(`[STK] Recorded receipt=${receiptNumber} job=${job.jobNumber} amount=${payAmount}`);
+    console.log(`[STK] Recorded receipt=${receiptNumber} job=${job.jobNumber} amount=${appliedAmount}`);
   } catch (err) {
     console.error("[STK] Callback error:", err?.message || err);
   }
@@ -475,6 +547,24 @@ export const confirmCarWashCallback = async (req, res) => {
       console.error("[CW M-Pesa] Notification save failed:", e?.message)
     );
 
+  // Atomically reserve the "matched" slot for this transactionCode BEFORE any
+  // wallet/payment-moving write. This is what the job-matched happy path below
+  // gets for free from CarWashPayment's unique {business,reference} index (see
+  // the E11000 catch around the CarWashPayment.create call further down) â€” the
+  // prepaid-topup and voucher-FIFO branches have no CarWashPayment write early
+  // enough to guard them, so they reserve here instead, using the
+  // CarWashMpesaNotification unique partial index on {transactionCode} (matched
+  // only). Returns null (no writes performed yet) if another delivery already
+  // won the race for this transactionCode.
+  const reserveMatchedNotif = async (fields) => {
+    try {
+      return await CarWashMpesaNotification.create({ ...notifBase, ...fields, status: "matched" });
+    } catch (e) {
+      if (e?.code === 11000) return null;
+      throw e;
+    }
+  };
+
   try {
     const shortCode = notifBase.shortCode;
     const resolved = await resolveCarWashCompanyAndConfig(shortCode);
@@ -540,6 +630,14 @@ export const confirmCarWashCallback = async (req, res) => {
       }) : null;
 
       if (prepaidAcc) {
+        // Reserve the "matched" notification slot atomically BEFORE any money-moving
+        // write â€” a retried/duplicate Safaricom callback for the same transactionCode
+        // fails this create() with E11000 and bails out here with no wallet write at all.
+        const reservedNotif = await reserveMatchedNotif({ resultCode: 0, resultDesc: `Auto top-up to prepaid account ${prepaidAcc.accountNumber}` });
+        if (!reservedNotif) {
+          return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted â€“ duplicate" });
+        }
+
         await CarWashCreditAccount.updateOne(
           { _id: prepaidAcc._id },
           { $inc: { accountCredit: amount } }
@@ -564,8 +662,6 @@ export const confirmCarWashCallback = async (req, res) => {
         if (cashbook) {
           postCarWashTopupLedger({ businessId, topup, cashbookAccountId: cashbook._id, userId: null }).catch(() => {});
         }
-
-        await saveNotif({ status: "matched", resultCode: 0, resultDesc: `Auto top-up to prepaid account ${prepaidAcc.accountNumber}` });
 
         // Send top-up confirmation SMS
         (async () => {
@@ -602,6 +698,14 @@ export const confirmCarWashCallback = async (req, res) => {
       const voucherAcc = allVoucherAccs.find(a => normalizeAccountNumber(a.accountNumber) === normalizedBillRef) || null;
 
       if (voucherAcc) {
+        // Reserve the "matched" notification slot atomically BEFORE any money-moving
+        // write. The final resultDesc (which job(s) got allocated) isn't known until
+        // the FIFO loop below runs, so we reserve with a placeholder and update it after.
+        const reservedNotif = await reserveMatchedNotif({ resultCode: 0, resultDesc: "Voucher FIFO â€“ processing" });
+        if (!reservedNotif) {
+          return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted â€“ duplicate" });
+        }
+
         const vCashbookId = config?.defaultCashbookAccountId;
         const vCashbook = vCashbookId && mongoose.Types.ObjectId.isValid(String(vCashbookId))
           ? await ChartOfAccount.findOne({ _id: vCashbookId, business: businessId, type: "asset", isPosting: true }).lean()
@@ -681,7 +785,10 @@ export const confirmCarWashCallback = async (req, res) => {
         const allocNote = allocatedJobNumbers.length > 0
           ? `Allocated to ${allocatedJobNumbers.join(", ")}${creditRemaining > 0.009 ? `; KES ${round2(creditRemaining)} as credit` : ""}`
           : `No open jobs â€” KES ${amount} stored as credit`;
-        await saveNotif({ status: "matched", resultCode: 0, resultDesc: `Voucher FIFO â€“ ${allocNote}` });
+        await CarWashMpesaNotification.updateOne(
+          { _id: reservedNotif._id },
+          { $set: { resultDesc: `Voucher FIFO â€“ ${allocNote}` } }
+        ).catch((e) => console.error("[CW M-Pesa] Notification update failed:", e?.message));
 
         // SMS confirmation fire-and-forget
         (async () => {
@@ -799,51 +906,12 @@ export const confirmCarWashCallback = async (req, res) => {
 
     // Route M-Pesa overpayment: prepaid/credit account gets wallet top-up;
     // cash customers (no account) get a CarWashCustomerCredit so the balance
-    // shows on their next visit and is tracked in the GL.
+    // shows on their next visit and is tracked in the GL. Awaited (not fired
+    // as a detached promise) so it can never keep running/failing silently
+    // after the response has already gone out â€” this function already awaits
+    // ledger posting and SMS sending below, so awaiting this too is consistent.
     const overpayment = round2(paidAmount - outstanding);
-    if (overpayment > 0.009 && plate) {
-      (async () => {
-        try {
-          const overpayAcc = await CarWashCreditAccount.findOneAndUpdate(
-            { business: businessId, plates: plate, status: "active" },
-            { $inc: { accountCredit: overpayment } },
-            { new: true }
-          );
-          if (overpayAcc) {
-            // Has a credit/prepaid account â€” top up wallet and post Dr Cashbook / Cr 4400
-            const topupDoc = await CarWashAccountTopup.create({
-              business: businessId,
-              account: overpayAcc._id,
-              amount: overpayment,
-              method: "mpesa",
-              reference: transactionCode || "",
-              cashbookAccount: cashbook._id,
-              paymentDate: transDate,
-              notes: `Overpayment credited from M-Pesa C2B (${senderName || "Unknown"})`,
-            });
-            postCarWashTopupLedger({ businessId, topup: topupDoc, cashbookAccountId: cashbook._id, userId: null }).catch(() => {});
-          } else {
-            // No credit account â€” save as customer credit and post Dr Cashbook / Cr 2162
-            const customer = await CarWashCustomer.findOne({ business: businessId, plates: buildPlateRegex(plate) }).lean();
-            if (!customer) return;
-            const creditDoc = await CarWashCustomerCredit.create({
-              business: businessId,
-              customer: customer._id,
-              plates: [plate],
-              amount: overpayment,
-              status: "active",
-              sourceJob: job._id,
-              sourcePayment: payment._id,
-              notes: `M-Pesa overpayment from C2B â€“ ${transactionCode || "N/A"} (${senderName || "Unknown"})`,
-            });
-            postCarWashCustomerCreditCreationLedger({ businessId, creditDoc, cashbookAccountId: cashbook._id, userId: null })
-              .catch((e) => console.error("[C2B] Credit GL posting failed plate=%s: %s", plate, e?.message));
-          }
-        } catch (e) {
-          console.error("[C2B] Overpayment handling failed plate=%s amount=%s: %s", plate, overpayment, e?.message);
-        }
-      })();
-    }
+    await routeMpesaOverpayment({ businessId, plate, overpayment, transactionCode, cashbook, senderName, transDate, job, payment, logPrefix: "C2B" });
 
     if (updatedJob) {
       await accrueCommissionForJob({ req: null, job: updatedJob });

@@ -450,16 +450,18 @@ export const recordAccountPayment = async (req, res, next) => {
 
     const excessCredit = round2(remaining);
     const newBalance = await computeAccountBalance(business, account._id);
-    account.currentBalance = newBalance;
-    account.updatedBy = userId;
-    if (isWalletAccount) {
+
+    // Credit the account balance atomically ($inc) instead of load-mutate-save,
+    // to prevent a lost-update race against concurrent topups/voids/other payments
+    // â€” same pattern as recordAccountTopup / voidTopup / voidTopupDirect below.
+    const accountCreditDelta = isWalletAccount
       // Deduct only what was actually allocated â€” unallocated remainder stays in the wallet
-      const allocated = round2(amount - remaining);
-      account.accountCredit = round2((account.accountCredit || 0) - allocated);
-    } else {
-      account.accountCredit = round2((account.accountCredit || 0) + excessCredit);
-    }
-    await account.save();
+      ? -round2(amount - remaining)
+      : excessCredit;
+    await CarWashCreditAccount.findByIdAndUpdate(account._id, {
+      $set: { currentBalance: newBalance, updatedBy: userId },
+      $inc: { accountCredit: accountCreditDelta },
+    });
 
     // Update statement status if any statement covers these jobs
     await refreshStatementStatuses(business, account._id);
