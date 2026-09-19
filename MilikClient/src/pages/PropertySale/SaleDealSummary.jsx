@@ -65,7 +65,7 @@ const SaleDealSummary = () => {
   const agent   = deal.agent   || null;
 
   const totalPaid = payments.reduce((s, p) => s + Number(p.amount || 0), 0);
-  const balance   = Number(deal.agreedPrice || 0) - totalPaid;
+  const balance   = deal.balance ?? (Number(deal.agreedPrice || 0) - totalPaid);
 
   return (
     <div className="min-h-screen bg-slate-100 p-6 print:bg-white print:p-0">

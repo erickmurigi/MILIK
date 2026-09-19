@@ -66,7 +66,7 @@ const SaleDealStatement = () => {
 
   const paidPayments  = payments.filter((p) => p.status === "paid");
   const totalPaid     = paidPayments.reduce((s, p) => s + Number(p.amount || 0), 0);
-  const balance       = Number(deal.agreedPrice || 0) - totalPaid;
+  const balance       = deal.balance ?? (Number(deal.agreedPrice || 0) - totalPaid);
 
   let running = 0;
 

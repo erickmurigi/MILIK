@@ -56,6 +56,9 @@ const DEAL_TABLE_COLS = [
   { label: "Status" },
 ];
 
+// Server supplies `balance` on every deal payload; fall back to the local computation only if absent.
+const dealBalance = (d) => d?.balance ?? ((d?.agreedPrice || 0) - (d?.totalPaid || 0));
+
 const SaleDeals = () => {
   const confirm        = useConfirm();
   const queryClient    = useQueryClient();
@@ -100,6 +103,7 @@ const SaleDeals = () => {
   const [scheduleItems,       setScheduleItems]       = useState([]);
   const [scheduleSaving,      setScheduleSaving]      = useState(false);
   const [linkingInstallment,  setLinkingInstallment]  = useState(null);
+  const [linkingPaymentId,    setLinkingPaymentId]    = useState("");
 
   const [docLabel,      setDocLabel]      = useState("");
   const [docFile,       setDocFile]       = useState(null);
@@ -173,7 +177,7 @@ const SaleDeals = () => {
     staleTime: 30_000,
   });
 
-  const deals      = dealsData?.data ?? [];
+  const deals      = useMemo(() => dealsData?.data ?? [], [dealsData]);
   const total      = dealsData?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const listings   = listingsData?.data ?? [];
@@ -192,10 +196,26 @@ const SaleDeals = () => {
   const dealSchedule= dealScheduleData?.data ?? [];
   const dealDocs    = dealDetail?.documents ?? [];
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] });
-    queryClient.invalidateQueries({ queryKey: ["sale-dashboard"] });
-  };
+  // `selected` is only a click-time snapshot. Derive what the panel shows from the refetched list
+  // (or the per-deal detail query when the deal drops out of the current filtered page) so paid/balance/status stay live.
+  const liveSelected = useMemo(() => {
+    if (!selected) return null;
+    const row = deals.find((d) => d._id === selected._id);
+    if (row) return row;
+    return dealDetail?._id === selected._id ? { ...selected, ...dealDetail } : selected;
+  }, [deals, dealDetail, selected]);
+
+  const invalidate = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] }),
+    queryClient.invalidateQueries({ queryKey: ["sale-dashboard"] }),
+  ]);
+
+  const invalidateDeal = (dealId) => Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["deal-detail-docs", dealId] }),
+    queryClient.invalidateQueries({ queryKey: ["deal-detail-payments", dealId] }),
+    queryClient.invalidateQueries({ queryKey: ["deal-detail-commission", dealId] }),
+    queryClient.invalidateQueries({ queryKey: ["deal-detail-schedule", dealId] }),
+  ]);
 
   const openScheduleBuilder = (deal) => {
     const existing = dealScheduleData?.data ?? [];
@@ -261,13 +281,18 @@ const SaleDeals = () => {
   };
 
   const handleLinkPayment = async (scheduleItemId, paymentId) => {
+    if (linkingPaymentId) return;
+    const dealId = selected?._id;
+    setLinkingPaymentId(paymentId);
     try {
       await saleApi.linkPaymentToSchedule(scheduleItemId, { paymentId });
-      queryClient.invalidateQueries({ queryKey: ["deal-detail-schedule", selected._id] });
+      queryClient.invalidateQueries({ queryKey: ["deal-detail-schedule", dealId] });
       setLinkingInstallment(null);
       toast.success("Payment linked to installment");
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to link payment");
+    } finally {
+      setLinkingPaymentId("");
     }
   };
 
@@ -302,6 +327,7 @@ const SaleDeals = () => {
       if (editingId) await saleApi.updateDeal(editingId, payload);
       else await saleApi.createDeal(payload);
       invalidate();
+      if (editingId) invalidateDeal(editingId);
       setShowModal(false);
       toast.success(`Deal ${editingId ? "updated" : "created"}`);
     } catch (err) {
@@ -322,7 +348,7 @@ const SaleDeals = () => {
         if (stampDutyCashbook) payload.stampDutyCashbook = stampDutyCashbook;
       }
       await saleApi.closeDeal(closingDeal._id, payload);
-      invalidate();
+      await Promise.all([invalidate(), invalidateDeal(closingDeal._id)]);
       setShowCloseModal(false);
       setClosingDeal(null);
       toast.success("Deal closed");
@@ -338,7 +364,7 @@ const SaleDeals = () => {
     setActionKey(`${cancellingDeal._id}:cancel`);
     try {
       await saleApi.cancelDeal(cancellingDeal._id, { cancellationReason: cancelReason, depositAction, business: biz });
-      invalidate();
+      await Promise.all([invalidate(), invalidateDeal(cancellingDeal._id)]);
       setShowCancelModal(false);
       setCancellingDeal(null);
       toast.success("Deal cancelled");
@@ -354,6 +380,8 @@ const SaleDeals = () => {
     setActionKey(`${row._id}:delete`);
     try {
       await saleApi.deleteDeal(row._id);
+      setSelected((prev) => (prev?._id === row._id ? null : prev));
+      queryClient.removeQueries({ queryKey: ["deal-detail-docs", row._id] });
       invalidate();
       toast.success("Deal deleted");
     } catch (err) {
@@ -374,8 +402,8 @@ const SaleDeals = () => {
         ...(cashbook && { cashbook }),
       });
       invalidate();
+      invalidateDeal(payingDeal._id);
       queryClient.invalidateQueries({ queryKey: ["sale-payments", biz] });
-      queryClient.invalidateQueries({ queryKey: ["deal-detail-payments", payingDeal._id] });
       setShowPayModal(false);
       setPayForm(blankPayForm);
       toast.success("Payment recorded");
@@ -491,7 +519,7 @@ const SaleDeals = () => {
           onRowClick={handleRowClick}
           isSelected={(row) => selected?._id === row._id}
           renderRow={(row) => {
-            const balance = row.agreedPrice - (row.totalPaid || 0);
+            const balance = dealBalance(row);
             const pct = row.agreedPrice > 0 ? Math.min(100, Math.round(((row.totalPaid || 0) / row.agreedPrice) * 100)) : 0;
             return (
               <>
@@ -560,15 +588,15 @@ const SaleDeals = () => {
       )}
 
       {/* ── Deal Detail Panel ─────────────────────────────────────────────── */}
-      {selected && (
+      {liveSelected && (
         <div className="absolute right-0 top-0 bottom-0 w-full sm:w-[360px] flex flex-col bg-white border-l border-slate-200 shadow-xl overflow-hidden z-10">
           {/* Header */}
           <div className="flex-shrink-0 flex items-start justify-between gap-2 bg-[#0B3B2E] px-4 py-3 text-white">
             <div className="min-w-0">
-              <div className="font-black text-sm leading-tight font-mono">{selected.dealNumber}</div>
+              <div className="font-black text-sm leading-tight font-mono">{liveSelected.dealNumber}</div>
               <div className="flex items-center gap-2 mt-1">
-                <StatusBadge status={selected.status} map={DEAL_STATUS_MAP} />
-                <span className="text-[10px] text-white/60">{fmtDate(selected.dealDate)}</span>
+                <StatusBadge status={liveSelected.status} map={DEAL_STATUS_MAP} />
+                <span className="text-[10px] text-white/60">{fmtDate(liveSelected.dealDate)}</span>
               </div>
             </div>
             <button onClick={() => setSelected(null)} className="flex-shrink-0 p-1 text-white/70 hover:bg-white/10 hover:text-white"><FaTimes size={13} /></button>
@@ -578,25 +606,25 @@ const SaleDeals = () => {
           <div className="flex-shrink-0 border-b border-slate-100 px-4 py-3 space-y-1.5 text-xs">
             <div className="flex items-center gap-2 text-slate-700">
               <FaUser size={9} className="text-slate-400 flex-shrink-0" />
-              <span className="font-semibold">{selected.buyer?.fullName || "—"}</span>
-              {selected.buyer?.buyerNumber && <span className="text-slate-400 font-mono text-[10px]">{selected.buyer.buyerNumber}</span>}
+              <span className="font-semibold">{liveSelected.buyer?.fullName || "—"}</span>
+              {liveSelected.buyer?.buyerNumber && <span className="text-slate-400 font-mono text-[10px]">{liveSelected.buyer.buyerNumber}</span>}
             </div>
-            {selected.buyer?.phone && <div className="pl-4 text-[10px] text-slate-500">{selected.buyer.phone}</div>}
+            {liveSelected.buyer?.phone && <div className="pl-4 text-[10px] text-slate-500">{liveSelected.buyer.phone}</div>}
             <div className="flex items-center gap-2 text-slate-700 mt-1">
               <FaBuilding size={9} className="text-slate-400 flex-shrink-0" />
-              <span className="font-semibold truncate">{selected.listing?.title || "—"}</span>
+              <span className="font-semibold truncate">{liveSelected.listing?.title || "—"}</span>
             </div>
-            {selected.listing?.listingNumber && <div className="pl-4 text-[10px] font-mono text-slate-400">{selected.listing.listingNumber}</div>}
-            {selected.agent && <div className="text-[10px] text-slate-500 pt-0.5">Agent: <span className="font-semibold text-slate-700">{selected.agent.fullName}</span></div>}
+            {liveSelected.listing?.listingNumber && <div className="pl-4 text-[10px] font-mono text-slate-400">{liveSelected.listing.listingNumber}</div>}
+            {liveSelected.agent && <div className="text-[10px] text-slate-500 pt-0.5">Agent: <span className="font-semibold text-slate-700">{liveSelected.agent.fullName}</span></div>}
           </div>
 
           {/* Financial summary */}
           <div className="flex-shrink-0 border-b border-slate-100">
             <div className="grid grid-cols-3 border-b border-slate-100">
               {[
-                { label: "Agreed", value: fmtKES(selected.agreedPrice), cls: "text-slate-800" },
-                { label: "Paid", value: fmtKES(selected.totalPaid || 0), cls: "text-emerald-700" },
-                { label: "Balance", value: fmtKES((selected.agreedPrice || 0) - (selected.totalPaid || 0)), cls: (selected.agreedPrice - (selected.totalPaid || 0)) > 0 ? "text-rose-700" : "text-emerald-700" },
+                { label: "Agreed", value: fmtKES(liveSelected.agreedPrice), cls: "text-slate-800" },
+                { label: "Paid", value: fmtKES(liveSelected.totalPaid || 0), cls: "text-emerald-700" },
+                { label: "Balance", value: fmtKES(dealBalance(liveSelected)), cls: dealBalance(liveSelected) > 0 ? "text-rose-700" : "text-emerald-700" },
               ].map(({ label, value, cls }) => (
                 <div key={label} className="px-3 py-2 text-center text-[10px] border-r border-slate-100 last:border-r-0">
                   <div className="font-black uppercase tracking-wide text-slate-400">{label}</div>
@@ -606,7 +634,7 @@ const SaleDeals = () => {
             </div>
             <div className="px-4 py-2">
               {(() => {
-                const pct = selected.agreedPrice > 0 ? Math.min(100, Math.round(((selected.totalPaid || 0) / selected.agreedPrice) * 100)) : 0;
+                const pct = liveSelected.agreedPrice > 0 ? Math.min(100, Math.round(((liveSelected.totalPaid || 0) / liveSelected.agreedPrice) * 100)) : 0;
                 return (
                   <div>
                     <div className="mb-1 flex justify-between text-[9px] text-slate-400"><span>Collected</span><span>{pct}%</span></div>
@@ -618,20 +646,20 @@ const SaleDeals = () => {
           </div>
 
           {/* Dates */}
-          {(selected.expectedClosingDate || selected.actualClosingDate || selected.titleTransferDate) && (
+          {(liveSelected.expectedClosingDate || liveSelected.actualClosingDate || liveSelected.titleTransferDate) && (
             <div className="flex-shrink-0 border-b border-slate-100 px-4 py-2 grid grid-cols-2 gap-1 text-[10px]">
-              {selected.expectedClosingDate && <div><span className="text-slate-400">Expected Close: </span><span className="font-semibold text-slate-700">{fmtDate(selected.expectedClosingDate)}</span></div>}
-              {selected.actualClosingDate && <div><span className="text-slate-400">Closed: </span><span className="font-semibold text-emerald-700">{fmtDate(selected.actualClosingDate)}</span></div>}
-              {selected.titleTransferDate && <div><span className="text-slate-400">Title Transfer: </span><span className="font-semibold text-slate-700">{fmtDate(selected.titleTransferDate)}</span></div>}
+              {liveSelected.expectedClosingDate && <div><span className="text-slate-400">Expected Close: </span><span className="font-semibold text-slate-700">{fmtDate(liveSelected.expectedClosingDate)}</span></div>}
+              {liveSelected.actualClosingDate && <div><span className="text-slate-400">Closed: </span><span className="font-semibold text-emerald-700">{fmtDate(liveSelected.actualClosingDate)}</span></div>}
+              {liveSelected.titleTransferDate && <div><span className="text-slate-400">Title Transfer: </span><span className="font-semibold text-slate-700">{fmtDate(liveSelected.titleTransferDate)}</span></div>}
             </div>
           )}
 
           {/* Payments */}
           <div className="flex-shrink-0 flex items-center justify-between border-b border-slate-100 px-4 py-1.5">
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Payments</span>
-            {selected.status === "active" && (
+            {liveSelected.status === "active" && (
               <button
-                onClick={() => { setPayingDeal(selected); setPayForm(blankPayForm); setShowPayModal(true); }}
+                onClick={() => { setPayingDeal(liveSelected); setPayForm(blankPayForm); setShowPayModal(true); }}
                 className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100"
               >
                 <FaMoneyBillWave size={8} /> Record
@@ -697,8 +725,8 @@ const SaleDeals = () => {
             {/* Payment Schedule */}
             <div className="flex-shrink-0 flex items-center justify-between border-t border-slate-200 px-4 py-1.5 mt-1">
               <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Payment Schedule</span>
-              {selected.status === "active" && (
-                <button type="button" onClick={() => openScheduleBuilder(selected)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-[#F1F6F3] px-2 py-0.5 text-[9px] font-black uppercase text-[#0B3B2E] hover:bg-[#B7C9C0]/40">
+              {liveSelected.status === "active" && (
+                <button type="button" onClick={() => openScheduleBuilder(liveSelected)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-[#F1F6F3] px-2 py-0.5 text-[9px] font-black uppercase text-[#0B3B2E] hover:bg-[#B7C9C0]/40">
                   <FaCalendarAlt size={8} /> {dealSchedule.length > 0 ? "Edit" : "Set"} Schedule
                 </button>
               )}
@@ -799,29 +827,29 @@ const SaleDeals = () => {
 
           {/* Panel footer actions */}
           <div className="flex-shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-2 flex items-center gap-1.5">
-            <button onClick={() => window.open(`/sale/deals/${selected._id}/summary`, "_blank")} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+            <button onClick={() => window.open(`/sale/deals/${liveSelected._id}/summary`, "_blank")} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
               <FaPrint size={8} /> Agreement
             </button>
-            <button onClick={() => window.open(`/sale/deals/${selected._id}/statement`, "_blank")} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+            <button onClick={() => window.open(`/sale/deals/${liveSelected._id}/statement`, "_blank")} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
               <FaFileAlt size={8} /> Statement
             </button>
-            {selected.buyer?.phone && (
-              <button onClick={() => setSmsTarget(selected)} className="inline-flex items-center gap-1 border border-teal-200 bg-teal-50 px-2.5 py-1 text-[10px] font-bold text-teal-700 hover:bg-teal-100">
+            {liveSelected.buyer?.phone && (
+              <button onClick={() => setSmsTarget(liveSelected)} className="inline-flex items-center gap-1 border border-teal-200 bg-teal-50 px-2.5 py-1 text-[10px] font-bold text-teal-700 hover:bg-teal-100">
                 <FaSms size={8} /> SMS Buyer
               </button>
             )}
-            {selected.buyer?.email && (
-              <button onClick={() => { setEmailTarget(selected); setEmailForm({ subject: `Re: Deal ${selected.dealNumber}`, body: `Dear ${selected.buyer?.fullName || "Client"},\n\n` }); }} className="inline-flex items-center gap-1 border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-100">
+            {liveSelected.buyer?.email && (
+              <button onClick={() => { setEmailTarget(liveSelected); setEmailForm({ subject: `Re: Deal ${liveSelected.dealNumber}`, body: `Dear ${liveSelected.buyer?.fullName || "Client"},\n\n` }); }} className="inline-flex items-center gap-1 border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-100">
                 <FaEnvelope size={8} /> Email Buyer
               </button>
             )}
-            {selected.status === "active" && (
+            {liveSelected.status === "active" && (
               <>
-                <button onClick={() => openEdit(selected)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                <button onClick={() => openEdit(liveSelected)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
                   <FaEdit size={8} /> Edit
                 </button>
                 <button
-                  onClick={() => { setClosingDeal(selected); setCloseForm({ actualClosingDate: todayISO(), titleTransferDate: "", handoverNotes: "", stampDutyAmount: "", stampDutyCashbook: "" }); setShowCloseModal(true); }}
+                  onClick={() => { setClosingDeal(liveSelected); setCloseForm({ actualClosingDate: todayISO(), titleTransferDate: "", handoverNotes: "", stampDutyAmount: "", stampDutyCashbook: "" }); setShowCloseModal(true); }}
                   className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100"
                 >
                   <FaCheck size={8} /> Close
@@ -1075,7 +1103,7 @@ const SaleDeals = () => {
             </div>
             <div className="px-3 py-2 text-center text-[10px]">
               <div className="font-black uppercase tracking-wide text-slate-400">Balance</div>
-              <div className="mt-0.5 font-black text-rose-700">{fmtKES((payingDeal.agreedPrice || 0) - (payingDeal.totalPaid || 0))}</div>
+              <div className="mt-0.5 font-black text-rose-700">{fmtKES(dealBalance(payingDeal))}</div>
             </div>
           </div>
           {/* Progress bar */}
@@ -1141,7 +1169,7 @@ const SaleDeals = () => {
       )}
 
       {/* Schedule Builder Modal */}
-      {showScheduleBuilder && selected && (
+      {showScheduleBuilder && liveSelected && (
         <Modal
           title="Payment Schedule"
           wide
@@ -1183,10 +1211,10 @@ const SaleDeals = () => {
             {scheduleItems.length > 0 && (
               <div className="mt-2 text-right text-xs">
                 <span className="text-slate-500">Schedule total: </span>
-                <span className={`font-black ${Math.abs(scheduleItems.reduce((s, i) => s + Number(i.expectedAmount || 0), 0) - selected.agreedPrice) < 1 ? "text-emerald-700" : "text-rose-600"}`}>
+                <span className={`font-black ${Math.abs(scheduleItems.reduce((s, i) => s + Number(i.expectedAmount || 0), 0) - liveSelected.agreedPrice) < 1 ? "text-emerald-700" : "text-rose-600"}`}>
                   {fmtKES(scheduleItems.reduce((s, i) => s + Number(i.expectedAmount || 0), 0))}
                 </span>
-                <span className="text-slate-400"> / {fmtKES(selected.agreedPrice)}</span>
+                <span className="text-slate-400"> / {fmtKES(liveSelected.agreedPrice)}</span>
               </div>
             )}
           </div>
@@ -1209,7 +1237,8 @@ const SaleDeals = () => {
                   key={p._id}
                   type="button"
                   onClick={() => handleLinkPayment(linkingInstallment._id, p._id)}
-                  className="w-full border border-slate-200 px-3 py-2.5 text-left hover:bg-[#F1F6F3] text-xs"
+                  disabled={!!linkingPaymentId}
+                  className="w-full border border-slate-200 px-3 py-2.5 text-left hover:bg-[#F1F6F3] text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-mono font-black text-[#0B3B2E]">{p.paymentNumber}</span>

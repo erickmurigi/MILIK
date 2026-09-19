@@ -62,6 +62,11 @@ const SaleCommissionStatement = () => {
   const deal    = comm.deal    || {};
   const listing = comm.listing || {};
   const buyer   = comm.buyer   || {};
+  const grossAmt = Number(comm.commissionAmount) || 0;
+  const whtAmt   = Number(comm.whtAmount) || 0;
+  const whtRate  = Number(comm.whtRate) || 0;
+  const netAmt   = comm.netAmount != null ? Number(comm.netAmount) || 0 : grossAmt - whtAmt;
+  const payLabel = comm.status === "paid" ? "Paid" : "Due";
 
   return (
     <div className="min-h-screen bg-slate-100 p-6 print:bg-white print:p-0">
@@ -120,11 +125,13 @@ const SaleCommissionStatement = () => {
                 ["Sale Amount",       fmtKES(comm.saleAmount)],
                 ["Commission Type",   fmtLabel(comm.commissionType)],
                 ["Rate / Basis",      comm.commissionType === "percentage" ? `${comm.commissionRate}%` : fmtKES(comm.commissionRate)],
-                ["Commission Amount", fmtKES(comm.commissionAmount)],
+                ["Gross Commission",  fmtKES(grossAmt)],
+                [`Less: WHT${whtRate > 0 ? ` (${whtRate}%)` : ""}`, whtAmt > 0 ? `- ${fmtKES(whtAmt)}` : fmtKES(0)],
+                [`Net Commission ${payLabel}`, fmtKES(netAmt)],
               ].map(([label, val], i) => (
                 <div key={label} className={`px-5 py-4 ${i < 2 ? "" : "border-t border-slate-200"}`}>
                   <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</div>
-                  <div className={`mt-1 font-mono font-black tabular-nums ${label === "Commission Amount" ? "text-lg text-[#0B3B2E]" : "text-sm text-slate-800"}`}>{val}</div>
+                  <div className={`mt-1 font-mono font-black tabular-nums ${label.startsWith("Net Commission") ? "text-lg text-[#0B3B2E]" : "text-sm text-slate-800"}`}>{val}</div>
                 </div>
               ))}
             </div>
@@ -163,8 +170,9 @@ const SaleCommissionStatement = () => {
 
           {/* Summary box */}
           <div className="mb-6 border-2 border-[#0B3B2E] p-5 text-center">
-            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Commission {comm.status === "paid" ? "Paid" : "Due"}</div>
-            <div className="mt-2 font-mono text-3xl font-black text-[#0B3B2E] tabular-nums">{fmtKES(comm.commissionAmount)}</div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Net Commission {payLabel} (after WHT)</div>
+            <div className="mt-2 font-mono text-3xl font-black text-[#0B3B2E] tabular-nums">{fmtKES(netAmt)}</div>
+            <div className="mt-1 font-mono text-[11px] text-slate-500 tabular-nums">Gross {fmtKES(grossAmt)} − WHT {fmtKES(whtAmt)} = Net {fmtKES(netAmt)}</div>
             <div className="mt-1 text-[11px] text-slate-500">for deal {deal.dealNumber || "—"} · {agent.fullName || "—"}</div>
           </div>
 

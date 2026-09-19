@@ -74,6 +74,7 @@ const SalePayments = () => {
   const [selectedDeal, setSelectedDeal] = useTabState("/sale/payments:selectedDeal", null);
   const [saving,       setSaving]       = useState(false);
   const [voiding,      setVoiding]      = useState(null);
+  const [deletingId,   setDeletingId]   = useState(null);
   const [editTarget,   setEditTarget]   = useState(null);
   const [editForm,     setEditForm]     = useState({});
   const [editSaving,   setEditSaving]   = useState(false);
@@ -211,12 +212,15 @@ const SalePayments = () => {
 
   const handleDelete = async (payment) => {
     if (!await confirm({ title: "Delete Payment", message: `Permanently delete ${payment.paymentNumber}?`, confirmText: "Delete", isDangerous: true })) return;
+    setDeletingId(payment._id);
     try {
       await saleApi.deletePayment(payment._id);
       toast.success("Payment deleted");
       invalidate();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to delete payment");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -321,7 +325,7 @@ const SalePayments = () => {
                 </button>
               )}
               {p.status === "cancelled" && (
-                <button type="button" onClick={() => handleDelete(p)} className="border border-red-200 bg-white px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-50">
+                <button type="button" onClick={() => handleDelete(p)} disabled={deletingId === p._id} className="border border-red-200 bg-white px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-50 disabled:opacity-40">
                   <FaTimes className="text-[9px]" />
                 </button>
               )}

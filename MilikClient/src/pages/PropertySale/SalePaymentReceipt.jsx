@@ -53,6 +53,11 @@ const SalePaymentReceipt = () => {
   const deal    = payment.deal || {};
   const buyer   = deal.buyer  || {};
   const listing = deal.listing || {};
+  // Payment statuses: "pending" | "paid" | "cancelled" (voided). Only "paid" is a valid receipt.
+  const isVoid    = payment.status === "cancelled";
+  const isPending = payment.status === "pending";
+  const invalidMark = isVoid ? "VOID" : isPending ? "NOT PAID" : "";
+  const strike = isVoid ? "line-through decoration-2" : "";
 
   return (
     <div className="min-h-screen bg-slate-100 p-6 print:bg-white print:p-0">
@@ -63,8 +68,23 @@ const SalePaymentReceipt = () => {
       </div>
 
       {/* A4 Document */}
-      <div id="sale-print-root" className="mx-auto max-w-[780px] bg-white shadow-lg print:shadow-none">
+      <div id="sale-print-root" className="relative mx-auto max-w-[780px] bg-white shadow-lg print:shadow-none">
+        {invalidMark && (
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden">
+            <div
+              className="border-[8px] border-double border-rose-700 px-8 py-2 text-[96px] font-black uppercase leading-none tracking-widest text-rose-700/25"
+              style={{ transform: "rotate(-30deg)" }}
+            >
+              {invalidMark}
+            </div>
+          </div>
+        )}
         <div className="p-10">
+          {invalidMark && (
+            <div className="mb-5 border-4 border-double border-rose-700 bg-rose-50 px-4 py-2 text-center text-sm font-black uppercase tracking-widest text-rose-700">
+              {isVoid ? "*** VOID — THIS PAYMENT HAS BEEN CANCELLED. THIS RECEIPT IS NOT VALID ***" : "*** PENDING — PAYMENT NOT YET CONFIRMED. THIS IS NOT A VALID RECEIPT ***"}
+            </div>
+          )}
           {/* Header */}
           <div className="flex items-start justify-between gap-6 border-b-[3px] border-[#0B3B2E] pb-5 mb-6">
             <div className="flex items-center gap-4">
@@ -128,13 +148,13 @@ const SalePaymentReceipt = () => {
                   {fmtLabel(payment.paymentMethod)}
                   {payment.reference && <div className="text-[10px] text-slate-400 mt-0.5">Ref: {payment.reference}</div>}
                 </td>
-                <td className="px-4 py-3 text-right font-black text-slate-900 font-mono tabular-nums">{fmtKES(payment.amount)}</td>
+                <td className={`px-4 py-3 text-right font-black text-slate-900 font-mono tabular-nums ${strike}`}>{fmtKES(payment.amount)}</td>
               </tr>
             </tbody>
             <tfoot>
               <tr className="bg-slate-50">
-                <td colSpan={3} className="px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest text-slate-500">Total Received</td>
-                <td className="px-4 py-3 text-right font-mono text-base font-black text-[#0B3B2E] tabular-nums">{fmtKES(payment.amount)}</td>
+                <td colSpan={3} className="px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest text-slate-500">{isVoid ? "Total Received — VOIDED (Nil)" : isPending ? "Total — Not Yet Received" : "Total Received"}</td>
+                <td className={`px-4 py-3 text-right font-mono text-base font-black text-[#0B3B2E] tabular-nums ${strike}`}>{fmtKES(payment.amount)}</td>
               </tr>
             </tfoot>
           </table>
@@ -148,8 +168,8 @@ const SalePaymentReceipt = () => {
               </div>
               <div className="h-8 w-px bg-[#B7C9C0]" />
               <div className="flex-1">
-                <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">This Payment</div>
-                <div className="font-mono text-sm font-black text-emerald-700 tabular-nums">{fmtKES(payment.amount)}</div>
+                <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">This Payment{isVoid ? " (Voided)" : isPending ? " (Pending)" : ""}</div>
+                <div className={`font-mono text-sm font-black text-emerald-700 tabular-nums ${strike}`}>{fmtKES(payment.amount)}</div>
               </div>
             </div>
           )}
