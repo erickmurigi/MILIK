@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 const LISTING_STATUSES = ["available", "reserved", "under_contract", "sold", "withdrawn"];
-const PROPERTY_TYPES = ["plot", "house", "apartment", "commercial", "land", "other"];
+// propertyType is free-form: admins add their own types in Sale Settings
 const SIZE_UNITS = ["sqm", "sqft", "acres", "hectares"];
 
 const saleListingSchema = new mongoose.Schema(
@@ -9,7 +9,7 @@ const saleListingSchema = new mongoose.Schema(
     business: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true },
     listingNumber: { type: String, required: true, trim: true },
     title: { type: String, required: true, trim: true },
-    propertyType: { type: String, enum: PROPERTY_TYPES, default: "plot" },
+    propertyType: { type: String, trim: true, default: "plot" },
     description: { type: String, trim: true, default: "" },
     size: { type: Number, min: 0, default: null },
     sizeUnit: { type: String, enum: SIZE_UNITS, default: "sqm" },

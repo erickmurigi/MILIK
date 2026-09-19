@@ -1,7 +1,6 @@
 import mongoose from "mongoose";
 
 const LEAD_STATUSES = ["new", "contacted", "qualified", "site_visited", "proposal_sent", "negotiating", "converted", "lost"];
-const LEAD_SOURCES  = ["walk_in", "referral", "online", "social_media", "agent", "cold_call", "other"];
 
 const saleLeadSchema = new mongoose.Schema(
   {
@@ -10,7 +9,7 @@ const saleLeadSchema = new mongoose.Schema(
     fullName:           { type: String,  required: true, trim: true },
     phone:              { type: String,  trim: true, default: "" },
     email:              { type: String,  trim: true, lowercase: true, default: "" },
-    source:             { type: String,  enum: LEAD_SOURCES,  default: "walk_in" },
+    source:             { type: String,  trim: true,          default: "walk_in" }, // admin-configurable in Sale Settings
     status:             { type: String,  enum: LEAD_STATUSES, default: "new" },
     assignedAgent:      { type: mongoose.Schema.Types.ObjectId, ref: "SaleAgent",  default: null },
     interestedListings: [{ type: mongoose.Schema.Types.ObjectId, ref: "SaleListing" }],

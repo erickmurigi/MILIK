@@ -1,8 +1,6 @@
 import mongoose from "mongoose";
 
 const KYC_STATUSES = ["pending", "verified", "rejected"];
-// Superset of the lead sources, so a converted lead keeps its original source
-const BUYER_SOURCES = ["walk_in", "referral", "online", "social_media", "agent", "cold_call", "other"];
 
 const saleBuyerSchema = new mongoose.Schema(
   {
@@ -14,7 +12,8 @@ const saleBuyerSchema = new mongoose.Schema(
     email: { type: String, trim: true, lowercase: true, default: "" },
     address: { type: String, trim: true, default: "" },
     nationality: { type: String, trim: true, default: "Kenyan" },
-    source: { type: String, enum: BUYER_SOURCES, default: "walk_in" },
+    // Free-form: lead sources are admin-configurable in Sale Settings and carry over on conversion
+    source: { type: String, trim: true, default: "walk_in" },
     kycStatus: { type: String, enum: KYC_STATUSES, default: "pending" },
     kycDocuments: [{ type: String, trim: true }],
     notes: { type: String, trim: true, default: "" },

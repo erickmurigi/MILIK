@@ -9,9 +9,8 @@ import Company from "../../../models/Company.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
 
-// A converted lead carries its source onto the buyer; fall back to "other" if the buyer schema doesn't know it
-const BUYER_SOURCE_VALUES = SaleBuyer.schema.path("source").enumValues;
-const buyerSourceFor = (source) => (BUYER_SOURCE_VALUES.includes(source) ? source : "other");
+// A converted lead carries its source onto the buyer as-is (sources are admin-configurable)
+const buyerSourceFor = (source) => String(source || "").trim() || "other";
 
 const fillPlaceholders = (text, vars) =>
   String(text || "").replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => vars[k] ?? `{${k}}`);
