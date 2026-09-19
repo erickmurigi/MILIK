@@ -142,34 +142,27 @@ export const deductSavingsForPayout = async ({
 export const getStaffSavingsBalance = async (businessId, staffId) => {
   const dailyRate = await getSavingsDeductionAmount(businessId);
 
-  const [deductionAgg, disbursementAgg] = await Promise.all([
-    CarWashStaffSaving.aggregate([
-      {
-        $match: {
-          business: new mongoose.Types.ObjectId(String(businessId)),
-          staff:    new mongoose.Types.ObjectId(String(staffId)),
-          type:     "deduction",
-          isReversed: { $ne: true },
-        },
+  const [agg] = await CarWashStaffSaving.aggregate([
+    {
+      $match: {
+        business: new mongoose.Types.ObjectId(String(businessId)),
+        staff:    new mongoose.Types.ObjectId(String(staffId)),
+        isReversed: { $ne: true },
       },
-      { $group: { _id: null, totalDeducted: { $sum: "$amount" }, lastCoveredTo: { $max: "$coveredTo" } } },
-    ]),
-    CarWashStaffSaving.aggregate([
-      {
-        $match: {
-          business: new mongoose.Types.ObjectId(String(businessId)),
-          staff:    new mongoose.Types.ObjectId(String(staffId)),
-          type:     "disbursement",
-          isReversed: { $ne: true },
-        },
+    },
+    {
+      $group: {
+        _id: null,
+        totalDeducted:  { $sum: { $cond: [{ $eq: ["$type", "deduction"] }, "$amount", 0] } },
+        totalDisbursed: { $sum: { $cond: [{ $eq: ["$type", "disbursement"] }, "$amount", 0] } },
+        lastCoveredTo:  { $max: { $cond: [{ $eq: ["$type", "deduction"] }, "$coveredTo", null] } },
       },
-      { $group: { _id: null, totalDisbursed: { $sum: "$amount" } } },
-    ]),
+    },
   ]);
 
-  const totalDeducted  = round2(deductionAgg[0]?.totalDeducted  || 0);
-  const totalDisbursed = round2(disbursementAgg[0]?.totalDisbursed || 0);
-  const lastCoveredTo  = deductionAgg[0]?.lastCoveredTo || null;
+  const totalDeducted  = round2(agg?.totalDeducted  || 0);
+  const totalDisbursed = round2(agg?.totalDisbursed || 0);
+  const lastCoveredTo  = agg?.lastCoveredTo || null;
 
   let pending = 0;
   if (dailyRate > 0 && lastCoveredTo) {

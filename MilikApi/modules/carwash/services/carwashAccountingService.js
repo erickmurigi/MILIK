@@ -42,6 +42,12 @@ const dayRange = (value = new Date()) => {
 };
 
 // ─── Account resolution ───────────────────────────────────────────────────────
+// Process-level cache for resolved system accounts — these ~10 fixed accounts
+// per business are created once and never change, so re-running the upsert on
+// every call (2-3x per commission/payment) is pure defensive overhead.
+// Mirrors the _rulesCache pattern in commissionService.js.
+const _accountCache = new Map(); // `${business}:${code}` → account doc
+
 /**
  * Find or create a car wash system account for the given business.
  * Uses upsert so it is fully idempotent and never returns null for known codes.
@@ -50,7 +56,11 @@ export const resolveCarWashAccount = async (businessId, code) => {
   const tpl = CW_ACCOUNT_TEMPLATES[code];
   if (!tpl) throw new Error(`resolveCarWashAccount: unknown code "${code}"`);
 
-  return ChartOfAccount.findOneAndUpdate(
+  const cacheKey = `${businessId}:${code}`;
+  const cached = _accountCache.get(cacheKey);
+  if (cached) return cached;
+
+  const account = await ChartOfAccount.findOneAndUpdate(
     { business: businessId, code },
     {
       $setOnInsert: {
@@ -70,6 +80,8 @@ export const resolveCarWashAccount = async (businessId, code) => {
     },
     { upsert: true, new: true }
   );
+  _accountCache.set(cacheKey, account);
+  return account;
 };
 
 // ─── Prepaid top-up ledger: Dr Cashbook / Cr Revenue (4400) ─────────────────
@@ -143,10 +155,10 @@ export const reverseCarWashTopupLedger = async ({ businessId, topupId, reason, r
     if (!entries.length) return;
     const actorId = await resolveAuditActorUserId({ req, businessId });
     const touchedIds = new Set();
-    for (const entry of entries) {
+    await Promise.all(entries.map(async (entry) => {
       await reverseCwEntry(entry, actorId, reason || "Prepaid top-up voided");
       touchedIds.add(String(entry.accountId));
-    }
+    }));
     if (touchedIds.size) await aggregateChartOfAccountBalances(businessId, [...touchedIds]);
   } catch (err) {
     console.error("[CW Accounting] Top-up ledger reversal error topup=%s: %s", topupId, err?.message || err);
@@ -313,7 +325,10 @@ export const postCarWashLoyaltyDiscountLedger = async ({ businessId, job, discou
  * Posts the commission accrual double-entry and updates the commission document.
  * Returns the array of ledger entry IDs on success, or [] on failure.
  */
-export const postCarWashCommissionAccrual = async ({ req, commission }) => {
+// skipAggregation — when true, the caller is responsible for calling
+// aggregateChartOfAccountBalances itself afterward (e.g. once after a loop
+// that posts many commissions, instead of once per commission here).
+export const postCarWashCommissionAccrual = async ({ req, commission, skipAggregation = false }) => {
   if (!commission || round2(Number(commission.commissionAmount || 0)) <= 0) return [];
   if (Array.isArray(commission.accrualLedgerEntries) && commission.accrualLedgerEntries.length) {
     return commission.accrualLedgerEntries;
@@ -373,7 +388,9 @@ export const postCarWashCommissionAccrual = async ({ req, commission }) => {
     },
   });
 
-  await aggregateChartOfAccountBalances(businessId, [String(expenseAccount._id), String(payableAccount._id)]);
+  if (!skipAggregation) {
+    await aggregateChartOfAccountBalances(businessId, [String(expenseAccount._id), String(payableAccount._id)]);
+  }
   commission.accrualLedgerEntries = [debitLeg._id, creditLeg._id];
   await commission.save();
   return commission.accrualLedgerEntries;
@@ -646,7 +663,7 @@ export const reverseCarWashCommissionAccrual = async ({ req, commission }) => {
   const accountIds = new Set();
   const reversalIds = [];
 
-  for (const entryId of commission.accrualLedgerEntries) {
+  await Promise.all(commission.accrualLedgerEntries.map(async (entryId) => {
     try {
       const { originalEntry, reversalEntry } = await postReversal({
         entryId,
@@ -659,7 +676,7 @@ export const reverseCarWashCommissionAccrual = async ({ req, commission }) => {
     } catch (err) {
       if (!/already reversed/i.test(String(err?.message || ""))) throw err;
     }
-  }
+  }));
 
   commission.accrualLedgerEntries = [];
   if (reversalIds.length) {
@@ -715,7 +732,7 @@ export const cancelCarWashCommissionList = async ({ req, businessId, commissions
 
   for (const commission of commissions) {
     const reversalEntryIds = [];
-    for (const entryId of commission.accrualLedgerEntries || []) {
+    await Promise.all((commission.accrualLedgerEntries || []).map(async (entryId) => {
       try {
         const { originalEntry, reversalEntry } = await postReversal({
           entryId,
@@ -728,7 +745,7 @@ export const cancelCarWashCommissionList = async ({ req, businessId, commissions
       } catch (err) {
         if (!/already reversed/i.test(String(err?.message || ""))) throw err;
       }
-    }
+    }));
 
     bulkOps.push({
       updateOne: {
@@ -765,7 +782,6 @@ export const resolvePayoutCashbook = async (businessId, accountId) => {
 // mark the original as reversed via document.save() (document middleware, not
 // blocked by the query-level immutability hooks).
 const reverseCwEntry = async (entry, actorId, reason) => {
-  const { default: FinancialLedgerEntry } = await import("../../../models/FinancialLedgerEntry.js");
   const flipDir = entry.direction === "debit" ? "credit" : "debit";
 
   const reversalEntry = await postEntry({
@@ -795,8 +811,10 @@ const reverseCwEntry = async (entry, actorId, reason) => {
   });
 
   // Mark original as reversed — uses document.save() which is NOT blocked
-  // by the query-level pre("updateOne") immutability hook.
-  const original = await FinancialLedgerEntry.findById(entry._id);
+  // by the query-level pre("updateOne") immutability hook. The caller always
+  // passes a lean object it already fetched, so hydrate() avoids a redundant
+  // findById round trip.
+  const original = FinancialLedgerEntry.hydrate(entry);
   if (original && original.status !== "reversed") {
     original.status = "reversed";
     original.reversedByEntry = reversalEntry._id;
@@ -827,7 +845,7 @@ export const reverseCarWashPaymentLedger = async ({ businessId, paymentId, req =
     if (!entries.length) return;
 
     const accountIds = new Set();
-    for (const entry of entries) {
+    await Promise.all(entries.map(async (entry) => {
       try {
         const { originalEntry, reversalEntry } = await reverseCwEntry(
           entry, actorId, `Car Wash payment deleted: ${paymentId}`
@@ -837,7 +855,7 @@ export const reverseCarWashPaymentLedger = async ({ businessId, paymentId, req =
       } catch (err) {
         if (!/already reversed/i.test(String(err?.message || ""))) throw err;
       }
-    }
+    }));
 
     if (accountIds.size) await aggregateChartOfAccountBalances(businessId, [...accountIds]);
   } catch (err) {
@@ -862,10 +880,10 @@ export const reverseCarWashExpenseLedger = async ({ businessId, expense, req = n
     const actorId = await resolveAuditActorUserId({ req, businessId });
     const touchedIds = new Set();
     const reason = `CW expense cancelled – ${expense.payee || expense.category || expense.expenseNumber || ""}`;
-    for (const entry of entries) {
+    await Promise.all(entries.map(async (entry) => {
       await reverseCwEntry(entry, actorId, reason);
       touchedIds.add(String(entry.accountId));
-    }
+    }));
     if (touchedIds.size) await aggregateChartOfAccountBalances(businessId, [...touchedIds]);
   } catch (err) {
     console.error("[CW Accounting] Expense reversal error expense=%s: %s", expense._id, err?.message || err);
@@ -899,10 +917,10 @@ export const reverseCarWashCustomerCreditCreationLedger = async ({ businessId, c
     if (!entries.length) return;
     const actorId = await resolveAuditActorUserId({ req, businessId });
     const touchedIds = new Set();
-    for (const entry of entries) {
+    await Promise.all(entries.map(async (entry) => {
       await reverseCwEntry(entry, actorId, "Customer credit reversed — source payment deleted");
       touchedIds.add(String(entry.accountId));
-    }
+    }));
     if (touchedIds.size) await aggregateChartOfAccountBalances(businessId, [...touchedIds]);
   } catch (err) {
     console.error("[CW Accounting] Customer credit GL reversal error creditDoc=%s: %s", creditDocId, err?.message || err);

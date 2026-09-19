@@ -45,5 +45,6 @@ const carWashStaffDamageSchema = new Schema(
 carWashStaffDamageSchema.index({ business: 1, staff: 1, damageDate: -1 });
 carWashStaffDamageSchema.index({ business: 1, staff: 1, status: 1 });
 carWashStaffDamageSchema.index({ business: 1, staff: 1, commissionPayout: 1 });
+carWashStaffDamageSchema.index({ business: 1, "recoveryLog.commissionPayout": 1 });
 
 export default mongoose.model("CarWashStaffDamage", carWashStaffDamageSchema);

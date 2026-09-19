@@ -9,7 +9,9 @@ import {
   postCarWashCommissionAccrual,
   reverseCarWashCommissionAccrual,
   cancelCarWashCommissionList,
+  resolveCarWashAccount,
 } from "./carwashAccountingService.js";
+import { aggregateChartOfAccountBalances } from "../../../services/chartAccountAggregationService.js";
 
 
 // 1-minute in-process cache for commission rules per business
@@ -160,7 +162,7 @@ export const accrueCommissionForJob = async ({ req = null, job, paidLineSet = nu
     business: job.business,
     job: job._id,
     status: { $in: ["earned", "payable"] },
-  });
+  }).lean();
   const removedStaffComms = activeComms.filter((c) => !allRelevantIds.has(String(c.staff)));
   if (removedStaffComms.length) {
     await cancelCarWashCommissionList({
@@ -173,6 +175,20 @@ export const accrueCommissionForJob = async ({ req = null, job, paidLineSet = nu
 
   if (!staffMap.size) return null;
   const results = [];
+
+  // Batch-fetch existing commissions for this job in one query instead of
+  // one findOne per staff member inside the loop below.
+  const existingComms = await CarWashStaffCommission.find({
+    business: job.business,
+    job: job._id,
+    staff: { $in: [...staffMap.keys()] },
+  });
+  const existingByStaff = new Map(existingComms.map((c) => [String(c.staff), c]));
+
+  // Accrual postings inside the loop skip their own aggregateChartOfAccountBalances
+  // call (skipAggregation) — we aggregate the fixed 5311/2160 accounts exactly
+  // once after the loop instead of once per commission.
+  let accrualTouched = false;
 
   for (const [staffId, { lineBreakdown, totalAmount }] of staffMap) {
     if (!lineBreakdown.length || totalAmount <= 0) continue;
@@ -191,11 +207,7 @@ export const accrueCommissionForJob = async ({ req = null, job, paidLineSet = nu
       updatedBy: actorUserId,
     };
 
-    const existing = await CarWashStaffCommission.findOne({
-      business: job.business,
-      job: job._id,
-      staff: staffId,
-    });
+    const existing = existingByStaff.get(String(staffId));
 
     if (existing) {
       if (existing.status === "paid") {
@@ -225,9 +237,13 @@ export const accrueCommissionForJob = async ({ req = null, job, paidLineSet = nu
 
       await existing.save();
       if (existing.status !== "cancelled") {
-        await postCarWashCommissionAccrual({ req, commission: existing }).catch((err) =>
+        const hadAccrual = Array.isArray(existing.accrualLedgerEntries) && existing.accrualLedgerEntries.length > 0;
+        await postCarWashCommissionAccrual({ req, commission: existing, skipAggregation: true }).catch((err) =>
           console.error("[CW Commission] Accrual post failed commission=%s: %s", existing._id, err?.message || err)
         );
+        if (!hadAccrual && Array.isArray(existing.accrualLedgerEntries) && existing.accrualLedgerEntries.length) {
+          accrualTouched = true;
+        }
       }
       results.push(existing);
     } else {
@@ -253,11 +269,24 @@ export const accrueCommissionForJob = async ({ req = null, job, paidLineSet = nu
         }
         throw err;
       }
-      await postCarWashCommissionAccrual({ req, commission }).catch((err) =>
+      await postCarWashCommissionAccrual({ req, commission, skipAggregation: true }).catch((err) =>
         console.error("[CW Commission] Accrual post failed commission=%s: %s", commission._id, err?.message || err)
       );
+      if (Array.isArray(commission.accrualLedgerEntries) && commission.accrualLedgerEntries.length) {
+        accrualTouched = true;
+      }
       results.push(commission);
     }
+  }
+
+  if (accrualTouched) {
+    const [expenseAccount, payableAccount] = await Promise.all([
+      resolveCarWashAccount(job.business, "5311"),
+      resolveCarWashAccount(job.business, "2160"),
+    ]);
+    await aggregateChartOfAccountBalances(job.business, [String(expenseAccount._id), String(payableAccount._id)]).catch((err) =>
+      console.error("[CW Commission] Post-loop aggregation failed business=%s: %s", job.business, err?.message || err)
+    );
   }
 
   return results.length ? results : null;
@@ -307,7 +336,7 @@ export const cancelJobCommissions = async ({
     status: { $in: ["earned", "payable"] },
   };
   if (excludeStaff) filter.staff = { $ne: excludeStaff };
-  const commissions = await CarWashStaffCommission.find(filter);
+  const commissions = await CarWashStaffCommission.find(filter).lean();
   await cancelCarWashCommissionList({ req, businessId: business, commissions, reason });
 };
 

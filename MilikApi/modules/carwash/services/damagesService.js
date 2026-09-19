@@ -31,26 +31,36 @@ export const computeDamageInstallment = (damage) => {
  * totalWaived        — sum written off
  */
 export const getStaffDamagesSummary = async (businessId, staffId) => {
-  const damages = await CarWashStaffDamage.find({
-    business: businessId,
-    staff:    staffId,
-  }).lean();
+  const [statusTotals, pendingDamages] = await Promise.all([
+    CarWashStaffDamage.aggregate([
+      {
+        $match: {
+          business: new mongoose.Types.ObjectId(String(businessId)),
+          staff:    new mongoose.Types.ObjectId(String(staffId)),
+        },
+      },
+      { $group: { _id: "$status", total: { $sum: "$amount" } } },
+    ]),
+    // Only "pending" damages need the raw docs — the installment math below
+    // (percent/fixed/full deduction modes) can't be expressed as a simple sum.
+    CarWashStaffDamage.find({
+      business: businessId,
+      staff:    staffId,
+      status:   "pending",
+    }).lean(),
+  ]);
+
+  const totalsByStatus = new Map(statusTotals.map((r) => [r._id, r.total]));
+  const totalWaived   = round2(totalsByStatus.get("waived")   || 0);
+  const totalDeducted = round2(totalsByStatus.get("deducted") || 0);
 
   let pendingAmount = 0;
   let pendingInstallment = 0;
-  let totalDeducted = 0;
-  let totalWaived = 0;
 
-  for (const d of damages) {
-    if (d.status === "waived") {
-      totalWaived = round2(totalWaived + d.amount);
-    } else if (d.status === "deducted") {
-      totalDeducted = round2(totalDeducted + d.amount);
-    } else {
-      const remaining = round2(d.amount - (d.amountRecovered || 0));
-      pendingAmount = round2(pendingAmount + remaining);
-      pendingInstallment = round2(pendingInstallment + computeDamageInstallment(d));
-    }
+  for (const d of pendingDamages) {
+    const remaining = round2(d.amount - (d.amountRecovered || 0));
+    pendingAmount = round2(pendingAmount + remaining);
+    pendingInstallment = round2(pendingInstallment + computeDamageInstallment(d));
   }
 
   return { pendingAmount, pendingInstallment, totalDeducted, totalWaived };
