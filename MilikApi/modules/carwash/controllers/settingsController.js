@@ -81,19 +81,29 @@ export const updateCarWashSettings = async (req, res, next) => {
 
     const update = {};
 
+    const cashbookVals = {};
+    const candidateIds = [];
     for (const method of METHODS) {
       const val = toOidOrNull(defaultCashbooks[method]);
-      if (val) {
-        const account = await ChartOfAccount.findOne({
-          _id: val,
+      cashbookVals[method] = val;
+      if (val) candidateIds.push(val);
+    }
+
+    const cashbookAccounts = candidateIds.length
+      ? await ChartOfAccount.find({
+          _id: { $in: candidateIds },
           business,
           type: "asset",
           isPosting: true,
           subGroup: { $regex: "cashbook", $options: "i" },
-        }).lean();
-        if (!account) {
-          return next({ status: 400, message: `Invalid cashbook for method "${method}" — must be a posting Cashbooks account` });
-        }
+        }).lean()
+      : [];
+    const cashbookAccountsById = new Map(cashbookAccounts.map((a) => [String(a._id), a]));
+
+    for (const method of METHODS) {
+      const val = cashbookVals[method];
+      if (val && !cashbookAccountsById.has(String(val))) {
+        return next({ status: 400, message: `Invalid cashbook for method "${method}" — must be a posting Cashbooks account` });
       }
       update[`carwashSettings.defaultCashbooks.${method}`] = val;
     }

@@ -99,7 +99,7 @@ export const updateService = async (req, res, next) => {
       { _id: req.params.id, business },
       { ...payload, pricingTiers, updatedBy: currentUserId(req) },
       { new: true, runValidators: true }
-    );
+    ).lean();
     if (!service) return next(createError(404, "Car Wash service not found"));
     res.status(200).json({ success: true, data: service, service, message: "Car Wash service updated" });
   } catch (error) {
@@ -121,7 +121,7 @@ export const listCategories = async (req, res, next) => {
 export const deleteService = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const service = await CarWashService.findOne({ _id: req.params.id, business });
+    const service = await CarWashService.findOne({ _id: req.params.id, business }).lean();
     if (!service) return next(createError(404, "Car Wash service not found"));
     const jobsUsingService = await CarWashJob.countDocuments({ business, service: service._id });
     if (jobsUsingService > 0) {

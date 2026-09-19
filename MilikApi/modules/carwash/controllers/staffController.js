@@ -84,7 +84,7 @@ export const updateStaff = async (req, res, next) => {
 export const deleteStaff = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const staff = await CarWashStaff.findOne({ _id: req.params.id, business });
+    const staff = await CarWashStaff.findOne({ _id: req.params.id, business }).lean();
     if (!staff) return next(createError(404, "Car Wash staff member not found"));
     const assignedJobs = await CarWashJob.countDocuments({ business, assignedStaff: staff._id });
     if (assignedJobs > 0) {

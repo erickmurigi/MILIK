@@ -334,6 +334,14 @@ export const serviceReport = async (req, res, next) => {
     const jobMatch = { business: businessId, createdAt: { $gte: start, $lt: end }, ...branchFilter, ...jobTypeFilter };
     const paymentMatch = { business: businessId, paymentDate: { $gte: start, $lt: end }, ...branchFilter };
 
+    // When a jobType filter is supplied, pre-resolve matching job ids and filter payments by
+    // them BEFORE the $lookup below, instead of joining every payment then discarding after.
+    if (jobTypeFilter.jobType) {
+      const matchingJobIds = await CarWashJob.find({ business: businessId, jobType: jobTypeFilter.jobType })
+        .select("_id").lean();
+      paymentMatch.job = { $in: matchingJobIds.map((j) => j._id) };
+    }
+
     const [serviceJobRows, paymentByServiceRows] = await Promise.all([
       CarWashJob.aggregate([
         { $match: jobMatch },
@@ -355,7 +363,6 @@ export const serviceReport = async (req, res, next) => {
         { $match: paymentMatch },
         { $lookup: { from: "carwashjobs", localField: "job", foreignField: "_id", as: "jobDoc" } },
         { $unwind: { path: "$jobDoc", preserveNullAndEmptyArrays: true } },
-        ...(jobTypeFilter.jobType ? [{ $match: { "jobDoc.jobType": jobTypeFilter.jobType } }] : []),
         {
           $group: {
             _id: { $ifNull: ["$jobDoc.serviceName", "Unspecified"] },

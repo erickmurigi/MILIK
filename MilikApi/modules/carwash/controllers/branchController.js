@@ -43,23 +43,35 @@ const validateBranchShortCode = async (business, shortCode, excludeBranchId = nu
 
 const resolveBranchCashbooks = async (business, raw = {}, next) => {
   const result = {};
+  const candidates = {};
+  const candidateIds = [];
   for (const method of METHODS) {
     const val = toOidOrNull(raw[method]);
+    result[method] = val;
     if (val) {
-      const account = await ChartOfAccount.findOne({
-        _id: val,
+      candidates[method] = val;
+      candidateIds.push(val);
+    }
+  }
+
+  const accounts = candidateIds.length
+    ? await ChartOfAccount.find({
+        _id: { $in: candidateIds },
         business,
         type: "asset",
         isPosting: true,
         subGroup: { $regex: "cashbook", $options: "i" },
-      }).lean();
-      if (!account) {
-        next({ status: 400, message: `Invalid cashbook for method "${method}" — must be a posting Cashbooks account` });
-        return null;
-      }
+      }).lean()
+    : [];
+  const accountsById = new Map(accounts.map((a) => [String(a._id), a]));
+
+  for (const method of Object.keys(candidates)) {
+    if (!accountsById.has(String(candidates[method]))) {
+      next({ status: 400, message: `Invalid cashbook for method "${method}" — must be a posting Cashbooks account` });
+      return null;
     }
-    result[method] = val;
   }
+
   return result;
 };
 
@@ -175,7 +187,7 @@ export const updateBranch = async (req, res, next) => {
 export const deleteBranch = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const branch = await CarWashBranch.findOne({ _id: req.params.id, business });
+    const branch = await CarWashBranch.findOne({ _id: req.params.id, business }).lean();
     if (!branch) return next(createError(404, "Car Wash branch not found"));
     if (branch.isDefault) return next(createError(400, "Cannot delete the default branch"));
     await CarWashBranch.deleteOne({ _id: branch._id, business });

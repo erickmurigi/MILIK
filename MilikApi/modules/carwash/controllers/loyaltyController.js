@@ -226,41 +226,50 @@ export const listCustomersEnriched = async (req, res, next) => {
     let mandatoryIds = null; // null = no $in restriction
     let excludeIds   = [];   // IDs to $nin (no_stamps case)
 
-    if (wantsCredit) {
-      const docs = await CarWashCustomerCredit.find(
-        { business: businessOid, status: 'active' }, { customer: 1 }
-      ).lean();
-      mandatoryIds = docs.map((d) => d.customer);
-    }
+    // The credit pre-query and the loyalty-filter pre-query are independent of each
+    // other's results (only the post-processing below needs both) — fire them concurrently.
+    const stampsRequired = loyaltyProgram?.stampsRequired || 10;
 
-    if (loyaltyFilter) {
-      const stampsRequired = loyaltyProgram?.stampsRequired || 10;
-      let cards;
+    const creditIdsPromise = wantsCredit
+      ? CarWashCustomerCredit.find(
+          { business: businessOid, status: 'active' }, { customer: 1 }
+        ).lean()
+      : Promise.resolve(null);
+
+    const loyaltyFilterCardsPromise = (() => {
       switch (loyaltyFilter) {
         case 'member':
-          cards = await CarWashLoyaltyCard.find({ business }, { customer: 1 }).lean();
-          mandatoryIds = mandatoryIds !== null ? intersect(mandatoryIds, cards.map((c) => c.customer)) : cards.map((c) => c.customer);
-          break;
+          return CarWashLoyaltyCard.find({ business }, { customer: 1 }).lean();
         case 'has_reward':
-          cards = await CarWashLoyaltyCard.find({ business, pendingRewards: { $gt: 0 } }, { customer: 1 }).lean();
-          mandatoryIds = mandatoryIds !== null ? intersect(mandatoryIds, cards.map((c) => c.customer)) : cards.map((c) => c.customer);
-          break;
+          return CarWashLoyaltyCard.find({ business, pendingRewards: { $gt: 0 } }, { customer: 1 }).lean();
         case 'near_reward':
-          cards = await CarWashLoyaltyCard.find(
+          return CarWashLoyaltyCard.find(
             { business, currentStamps: { $gte: Math.max(1, stampsRequired - 2) }, pendingRewards: 0 },
             { customer: 1 }
           ).lean();
-          mandatoryIds = mandatoryIds !== null ? intersect(mandatoryIds, cards.map((c) => c.customer)) : cards.map((c) => c.customer);
-          break;
         case 'no_stamps':
-          cards = await CarWashLoyaltyCard.find({ business, totalStampsEarned: { $gt: 0 } }, { customer: 1 }).lean();
-          if (mandatoryIds !== null) {
-            const excSet = new Set(cards.map((c) => String(c.customer)));
-            mandatoryIds = mandatoryIds.filter((id) => !excSet.has(String(id)));
-          } else {
-            excludeIds = cards.map((c) => c.customer);
-          }
-          break;
+          return CarWashLoyaltyCard.find({ business, totalStampsEarned: { $gt: 0 } }, { customer: 1 }).lean();
+        default:
+          return Promise.resolve(null);
+      }
+    })();
+
+    const [creditDocs, loyaltyFilterCards] = await Promise.all([creditIdsPromise, loyaltyFilterCardsPromise]);
+
+    if (creditDocs !== null) {
+      mandatoryIds = creditDocs.map((d) => d.customer);
+    }
+
+    if (loyaltyFilter && loyaltyFilterCards !== null) {
+      if (loyaltyFilter === 'no_stamps') {
+        if (mandatoryIds !== null) {
+          const excSet = new Set(loyaltyFilterCards.map((c) => String(c.customer)));
+          mandatoryIds = mandatoryIds.filter((id) => !excSet.has(String(id)));
+        } else {
+          excludeIds = loyaltyFilterCards.map((c) => c.customer);
+        }
+      } else {
+        mandatoryIds = mandatoryIds !== null ? intersect(mandatoryIds, loyaltyFilterCards.map((c) => c.customer)) : loyaltyFilterCards.map((c) => c.customer);
       }
     }
 
@@ -404,7 +413,7 @@ export const registerCustomer = async (req, res, next) => {
       ? plates.map(p => String(p).trim().toUpperCase()).filter(Boolean)
       : [];
 
-    const existing = await CarWashCustomer.findOne({ business, phone: String(phone).trim() });
+    const existing = await CarWashCustomer.findOne({ business, phone: String(phone).trim() }).lean();
     if (existing) return next(createError(409, 'A customer with this phone number is already registered'));
 
     const customer = await CarWashCustomer.create({
@@ -521,7 +530,7 @@ export const lookupPlate = async (req, res, next) => {
 
 // â”€â”€â”€ Stamp awarding (called internally from payments flow) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, maskedMsisdn = null, suppressSms = false, payerName = null }) => {
+export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, maskedMsisdn = null, suppressSms = false, payerName = null, program: programArg = undefined }) => {
   if (!job?.plateNumber) return null;
 
   const plate = normalizePlate(job.plateNumber);
@@ -538,7 +547,9 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, m
   if (!customer) return null;
 
   // 2. Check for active loyalty program â€” no program = customer created but no stamp
-  const program = await CarWashLoyaltyProgram.findOne({ business, isActive: true }).lean();
+  // Callers that already hold the active program (e.g. batch backfills) can pass it in
+  // via `program` to skip this repeated lookup.
+  const program = programArg !== undefined ? programArg : await CarWashLoyaltyProgram.findOne({ business, isActive: true }).lean();
   if (!program) return customer;
 
   // 3. Always upsert the loyalty card first â€” card must exist even if this job is not eligible.
@@ -923,6 +934,9 @@ export const backfillCustomersAndStamps = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
 
+    // Fetch the active loyalty program once up front instead of once per job inside the loop
+    const program = await CarWashLoyaltyProgram.findOne({ business, isActive: true }).lean();
+
     const BATCH_SIZE = 500;
     let offset = 0;
     let totalJobs = 0;
@@ -960,7 +974,7 @@ export const backfillCustomersAndStamps = async (req, res, next) => {
           if (isNew) { customersCreated++; knownPlates.add(plate); }
 
           if (['done', 'paid'].includes(job.status)) {
-            const result = await awardLoyaltyStamp({ business, job });
+            const result = await awardLoyaltyStamp({ business, job, program });
             if (result?.card) stampsAwarded++;
           }
         } catch (err) {
