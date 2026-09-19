@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { round2 } from "../../../utils/math.js";
 
 const COMMISSION_STATUSES = ["pending", "approved", "paid", "cancelled", "reversed"];
 const PAYOUT_METHODS = ["cash", "mpesa", "bank_transfer", "cheque", "other"];
@@ -34,6 +35,14 @@ const saleCommissionSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Money fields are stored at 2dp so they always match what the accounting service posts (round2)
+saleCommissionSchema.pre("validate", function (next) {
+  for (const f of ["commissionAmount", "whtAmount", "netAmount"]) {
+    if (typeof this[f] === "number" && this.isModified(f)) this[f] = round2(this[f]);
+  }
+  next();
+});
 
 saleCommissionSchema.index({ business: 1, commissionNumber: 1 }, { unique: true });
 saleCommissionSchema.index({ business: 1, agent: 1, status: 1 });

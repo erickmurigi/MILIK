@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import SaleCommission from "../models/SaleCommission.js";
+import SaleAgent from "../models/SaleAgent.js";
 import { currentUserId, resolveActiveBusinessId } from "../services/businessScope.js";
 import {
   postPropertySaleCommissionAccrual,
@@ -36,6 +37,20 @@ const ALLOWED_TRANSITIONS = {
   reversed:  ["cancelled"],
 };
 
+// Agent scope for the caller: req.saleAgentId when attachAgentScope already ran, otherwise
+// looked up here (attachAgentScope is only mounted on the list route and only reads
+// query/body.business, so single-commission routes and header-scoped calls would miss it).
+// Returns the caller's SaleAgent id as a string, or null for non-agent users.
+const resolveAgentScope = async (req, business) => {
+  if (req.saleAgentId) return String(req.saleAgentId);
+  const userId = currentUserId(req);
+  if (!userId) return null;
+  const agent = await SaleAgent.findOne({ business, userId }).select("_id").lean();
+  return agent ? String(agent._id) : null;
+};
+
+const toObjectId = (v) => new mongoose.Types.ObjectId(String(v));
+
 export const listCommissions = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -43,8 +58,9 @@ export const listCommissions = async (req, res, next) => {
     const page = Math.max(Number(req.query.page || 1), 1);
     const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
     const filter = { business };
-    if (req.saleAgentId) filter.agent = req.saleAgentId;
-    else if (agentId)    filter.agent = agentId;
+    const scopedAgentId = await resolveAgentScope(req, business);
+    if (scopedAgentId) filter.agent = scopedAgentId;
+    else if (agentId)  filter.agent = agentId;
     if (status)  filter.status = status;
     if (dealId)  filter.deal = dealId;
     if (search.trim()) filter.commissionNumber = { $regex: search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
@@ -58,7 +74,9 @@ export const listCommissions = async (req, res, next) => {
       populateCommission(SaleCommission.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit)).lean(),
       SaleCommission.countDocuments(filter),
       SaleCommission.aggregate([
-        { $match: { business: filter.business, ...(agentId && { agent: filter.agent }), ...(dealId && { deal: filter.deal }) } },
+        // aggregate() does not cast — ids must be real ObjectIds. Gate on the EFFECTIVE filter.agent
+        // (set for agent-scoped users even with no agentId query param), not the raw query string.
+        { $match: { business: toObjectId(business), ...(filter.agent && { agent: toObjectId(filter.agent) }), ...(filter.deal && { deal: toObjectId(filter.deal) }) } },
         { $group: { _id: "$status", count: { $sum: 1 }, totalAmount: { $sum: "$commissionAmount" } } },
       ]),
     ]);
@@ -80,7 +98,10 @@ export const listCommissions = async (req, res, next) => {
 export const getCommission = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const commission = await populateCommission(SaleCommission.findOne({ _id: req.params.id, business })).lean();
+    const scopedAgentId = await resolveAgentScope(req, business);
+    const commission = await populateCommission(
+      SaleCommission.findOne({ _id: req.params.id, business, ...(scopedAgentId && { agent: scopedAgentId }) })
+    ).lean();
     if (!commission) return next(createError(404, "Commission not found"));
     res.status(200).json(commission);
   } catch (err) {
@@ -94,7 +115,9 @@ export const updateCommissionStatus = async (req, res, next) => {
     const userId = currentUserId(req);
     const { status, payoutDate, payoutMethod, payoutReference, cashbook, notes } = req.body;
 
-    const oldCommission = await SaleCommission.findOne({ _id: req.params.id, business }).lean();
+    // Agent-scoped users may only act on their own commissions (404, not 403, to avoid leaking existence)
+    const scopedAgentId = await resolveAgentScope(req, business);
+    const oldCommission = await SaleCommission.findOne({ _id: req.params.id, business, ...(scopedAgentId && { agent: scopedAgentId }) }).lean();
     if (!oldCommission) return next(createError(404, "Commission not found"));
 
     const allowed = ALLOWED_TRANSITIONS[oldCommission.status] ?? [];

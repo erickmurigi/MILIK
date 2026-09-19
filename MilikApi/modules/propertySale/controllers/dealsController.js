@@ -6,6 +6,7 @@ import SaleBuyer from "../models/SaleBuyer.js";
 import SaleAgent from "../models/SaleAgent.js";
 import SaleOffer from "../models/SaleOffer.js";
 import SalePayment from "../models/SalePayment.js";
+import SalePaymentSchedule from "../models/SalePaymentSchedule.js";
 import SaleCommission from "../models/SaleCommission.js";
 import { currentUserId, escapeRegex, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import {
@@ -19,27 +20,31 @@ import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import Company from "../../../models/Company.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
 import { deleteDocumentFile } from "../middleware/dealDocumentUpload.js";
+import { round2 } from "../../../utils/math.js";
 
 const fillPlaceholders = (text, vars) =>
   String(text || "").replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => vars[k] ?? `{${k}}`);
 
 const calcWHT = (commissionAmount, whtRate = 5) => {
   const rate = Math.min(Math.max(Number(whtRate) || 5, 0), 100);
-  const whtAmount = Math.round((commissionAmount * rate) / 100 * 100) / 100;
-  return { whtRate: rate, whtAmount, netAmount: commissionAmount - whtAmount };
+  const gross = round2(commissionAmount);
+  const whtAmount = round2((gross * rate) / 100);
+  return { whtRate: rate, whtAmount, netAmount: round2(gross - whtAmount) };
 };
 
 const createCommissionForDeal = async ({ business, dealId, agent, listingId, buyerId, agreedPrice, overrides, userId }) => {
   const saleAmount     = Number(agreedPrice);
-  const whtRate        = overrides.whtRate != null ? Number(overrides.whtRate) : 5;
   const commissionRate = overrides.commissionRateOverride != null ? Number(overrides.commissionRateOverride) : agent.commissionRate;
   const commissionType = overrides.commissionTypeOverride ?? agent.commissionType;
-  const commissionAmount = overrides.commissionAmountOverride != null
-    ? Number(overrides.commissionAmountOverride)
-    : commissionType === "percentage"
-      ? (saleAmount * commissionRate) / 100
-      : commissionRate;
-  const { whtAmount, netAmount } = calcWHT(commissionAmount, whtRate);
+  const commissionAmount = round2(
+    overrides.commissionAmountOverride != null
+      ? Number(overrides.commissionAmountOverride)
+      : commissionType === "percentage"
+        ? (saleAmount * commissionRate) / 100
+        : commissionRate
+  );
+  // Store the rate calcWHT actually applied so whtRate always agrees with whtAmount
+  const { whtRate, whtAmount, netAmount } = calcWHT(commissionAmount, overrides.whtRate != null ? Number(overrides.whtRate) : 5);
   const commissionNumber = await generateSequentialNumber(SaleCommission, business, "COM");
   return SaleCommission.create({
     business, commissionNumber, deal: dealId, agent: agent._id,
@@ -75,6 +80,48 @@ const computeTotals = async (business, dealId) => {
     { $group: { _id: "$deal", totalPaid: { $sum: "$amount" } } },
   ]);
   return result[0]?.totalPaid || 0;
+};
+
+const TERMINAL_OFFER_STATUSES = ["rejected", "expired", "withdrawn"];
+// Body ids must be plain ObjectId strings — rejects objects such as { $ne: null } reaching a query
+const isIdString = (v) => typeof v === "string" && mongoose.isValidObjectId(v);
+
+/**
+ * Persists a new deal and its side effects with compensation (no multi-doc transaction:
+ * this module's writes are spread across several helpers and models). Steps:
+ *   1. validate the deal doc up front (no writes yet)
+ *   2. atomically claim the listing (conditional findOneAndUpdate) — the concurrency gate
+ *   3. save deal -> create commission -> mark offer accepted
+ * If step 3 fails, everything already written is undone (deal + commissions deleted,
+ * listing/offer status restored) and the original error is rethrown.
+ */
+const persistNewDeal = async ({ business, userId, dealDoc, listing, agent, offer, commissionArgs }) => {
+  await dealDoc.validate();
+
+  const prevListing = await SaleListing.findOneAndUpdate(
+    { _id: listing._id, business, status: { $nin: ["sold", "under_contract"] } },
+    { status: "under_contract" }
+  ).select("status").lean();
+  if (!prevListing) throw createError(400, "This listing is already sold or has an active deal");
+
+  let offerFlipped = false;
+  try {
+    await dealDoc.save();
+    if (agent) await createCommissionForDeal({ ...commissionArgs, business, dealId: dealDoc._id, agent, userId });
+    if (offer && offer.status !== "accepted") {
+      await SaleOffer.updateOne({ _id: offer._id, business }, { status: "accepted", updatedBy: userId });
+      offerFlipped = true;
+    }
+  } catch (err) {
+    const undo = await Promise.allSettled([
+      SaleCommission.deleteMany({ business, deal: dealDoc._id }),
+      SaleDeal.deleteOne({ _id: dealDoc._id, business }),
+      SaleListing.updateOne({ _id: listing._id, business, status: "under_contract" }, { status: prevListing.status }),
+      offerFlipped ? SaleOffer.updateOne({ _id: offer._id, business, status: "accepted" }, { status: offer.status }) : null,
+    ]);
+    undo.forEach((r) => { if (r.status === "rejected") console.error("[propertySale] deal-create compensation failed:", r.reason); });
+    throw err;
+  }
 };
 
 export const listDeals = async (req, res, next) => {
@@ -138,51 +185,62 @@ export const createDeal = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
 
-    const [listing, buyer, agent] = await Promise.all([
-      SaleListing.findOne({ _id: req.body.listing, business }).lean(),
-      SaleBuyer.findOne({ _id: req.body.buyer, business }).lean(),
-      req.body.agent ? SaleAgent.findOne({ _id: req.body.agent, business }).lean() : Promise.resolve(null),
+    const { listing: listingId, buyer: buyerId, agent: agentId, offer: offerId } = req.body;
+
+    if (!isIdString(listingId)) return next(createError(400, "Listing not found"));
+    if (!isIdString(buyerId))   return next(createError(400, "Buyer not found"));
+    if (agentId && !isIdString(agentId)) return next(createError(400, "Agent not found"));
+    if (offerId && !isIdString(offerId)) return next(createError(400, "Offer not found"));
+
+    const [listing, buyer, agent, offer] = await Promise.all([
+      SaleListing.findOne({ _id: listingId, business }).lean(),
+      SaleBuyer.findOne({ _id: buyerId, business }).lean(),
+      agentId ? SaleAgent.findOne({ _id: agentId, business }).lean() : Promise.resolve(null),
+      offerId ? SaleOffer.findOne({ _id: offerId, business }).select("_id listing status").lean() : Promise.resolve(null),
     ]);
     if (!listing) return next(createError(400, "Listing not found"));
     if (listing.status === "sold") return next(createError(400, "This listing is already sold"));
     if (listing.status === "under_contract") return next(createError(400, "This listing already has an active deal"));
     if (!buyer) return next(createError(400, "Buyer not found"));
-    if (req.body.agent && !agent) return next(createError(400, "Agent not found"));
-
-    if (req.body.offer) {
-      await SaleOffer.findByIdAndUpdate(req.body.offer, { status: "accepted" });
+    if (agentId && !agent) return next(createError(400, "Agent not found"));
+    if (offerId) {
+      if (!offer) return next(createError(400, "Offer not found"));
+      if (TERMINAL_OFFER_STATUSES.includes(offer.status)) return next(createError(400, `Cannot create a deal from a ${offer.status} offer`));
+      if (String(offer.listing) !== String(listing._id)) return next(createError(400, "Offer does not belong to the selected listing"));
     }
 
-    // Strip commission override fields from deal body — they belong on the commission record
-    const { commissionRateOverride, commissionTypeOverride, commissionAmountOverride, ...rawDealBody } = req.body;
+    // Strip commission override fields (they belong on the commission record) and server-controlled fields
+    const {
+      commissionRateOverride, commissionTypeOverride, commissionAmountOverride, whtRate,
+      status: _s, documents: _d, actualClosingDate: _a, _id: _i,
+      ...rawDealBody
+    } = req.body;
     const dealBody = sanitizeDealBody(rawDealBody);
 
     const dealNumber = await generateSequentialNumber(SaleDeal, business, "DL");
-    const deal = await SaleDeal.create({
+    // Only the business-verified ids are persisted — never the raw body values
+    const dealDoc = new SaleDeal({
       ...dealBody,
       business,
       dealNumber,
+      listing: listing._id,
+      buyer: buyer._id,
+      agent: agent?._id ?? null,
+      offer: offer?._id ?? null,
       createdBy: userId,
       updatedBy: userId,
     });
 
-    const postDealOps = [SaleListing.findByIdAndUpdate(listing._id, { status: "under_contract" })];
+    await persistNewDeal({
+      business, userId, dealDoc, listing, agent, offer,
+      commissionArgs: {
+        listingId: listing._id, buyerId: buyer._id,
+        agreedPrice: dealDoc.agreedPrice,
+        overrides: { commissionRateOverride, commissionTypeOverride, commissionAmountOverride, whtRate },
+      },
+    });
 
-    if (agent) {
-      postDealOps.push(
-        createCommissionForDeal({
-          business, dealId: deal._id, agent,
-          listingId: req.body.listing, buyerId: req.body.buyer,
-          agreedPrice: req.body.agreedPrice,
-          overrides: { commissionRateOverride, commissionTypeOverride, commissionAmountOverride, whtRate: req.body.whtRate },
-          userId,
-        })
-      );
-    }
-
-    await Promise.all(postDealOps);
-
-    const populated = await populateDeal(SaleDeal.findById(deal._id)).lean();
+    const populated = await populateDeal(SaleDeal.findById(dealDoc._id)).lean();
     res.status(201).json({ ...populated, totalPaid: 0, balance: populated.agreedPrice });
   } catch (err) {
     next(err);
@@ -194,8 +252,39 @@ export const updateDeal = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
     // status must go through closeDeal / cancelDeal — strip it here to prevent bypassing validation
-    const { business: _b, dealNumber: _n, createdBy: _c, listing: _l, buyer: _by, offer: _o, status: _s, ...rawUpdates } = req.body;
+    const { business: _b, dealNumber: _n, createdBy: _c, listing: _l, buyer: _by, offer: _o, status: _s, documents: _d, _id: _i, ...rawUpdates } = req.body;
     const updates = sanitizeDealBody(rawUpdates);
+
+    // Agent id comes from the body — must belong to this business
+    if (updates.agent && (!isIdString(updates.agent) || !(await SaleAgent.exists({ _id: updates.agent, business })))) {
+      return next(createError(400, "Agent not found"));
+    }
+
+    // agreedPrice changes must be reconciled with payments already taken and any payment schedule
+    if ("agreedPrice" in updates) {
+      const existing = await SaleDeal.findOne({ _id: req.params.id, business }).select("agreedPrice status").lean();
+      if (!existing) return next(createError(404, "Deal not found"));
+      const newPrice = round2(updates.agreedPrice);
+      if (newPrice !== round2(existing.agreedPrice)) {
+        if (existing.status !== "active") return next(createError(400, `Agreed price cannot be changed on a ${existing.status} deal`));
+        const [totalPaid, scheduleAgg] = await Promise.all([
+          computeTotals(business, existing._id),
+          SalePaymentSchedule.aggregate([
+            { $match: { business: new mongoose.Types.ObjectId(String(business)), deal: existing._id } },
+            { $group: { _id: null, total: { $sum: "$expectedAmount" }, count: { $sum: 1 } } },
+          ]),
+        ]);
+        if (newPrice < round2(totalPaid) - 0.01) {
+          return next(createError(400, `Agreed price (KES ${newPrice.toLocaleString()}) cannot be less than the KES ${round2(totalPaid).toLocaleString()} already paid on this deal`));
+        }
+        const sched = scheduleAgg[0];
+        // same tolerance as setSchedule (KES 1)
+        if (sched?.count && Math.abs(sched.total - newPrice) > 1) {
+          return next(createError(400, `This deal has a payment schedule totalling KES ${round2(sched.total).toLocaleString()}. Reissue the payment schedule for the new agreed price before changing it`));
+        }
+      }
+    }
+
     const deal = await populateDeal(
       SaleDeal.findOneAndUpdate(
         { _id: req.params.id, business },
@@ -220,11 +309,30 @@ export const closeDeal = async (req, res, next) => {
     if (deal.status !== "active") return next(createError(400, `Deal is already ${deal.status}`));
 
     const totalPaid = await computeTotals(business, deal._id);
-    if (totalPaid < deal.agreedPrice) {
-      return next(createError(400, `Outstanding balance of KES ${(deal.agreedPrice - totalPaid).toLocaleString()} must be cleared before closing`));
+    if (round2(totalPaid) < round2(deal.agreedPrice) - 0.01) {
+      return next(createError(400, `Outstanding balance of KES ${round2(deal.agreedPrice - totalPaid).toLocaleString()} must be cleared before closing`));
     }
 
     const stampDutyAmount = Number(req.body.stampDutyAmount || 0);
+
+    // Resolve stamp duty cashbook BEFORE mutating the deal so a bad account can't leave a half-closed deal
+    let stampDutyCashbookId = null;
+    if (stampDutyAmount > 0 && req.body.stampDutyCashbook) {
+      const cbAcc = await ChartOfAccount.findOne({
+        _id: req.body.stampDutyCashbook, business,
+        isPosting: { $ne: false }, isHeader: { $ne: true },
+      }).lean();
+      if (!cbAcc) return next(createError(400, "Stamp duty cashbook account not found"));
+      stampDutyCashbookId = cbAcc._id;
+    }
+
+    // Snapshot fields close mutates so a GL failure can restore them exactly
+    const prior = {
+      stampDutyAmount:   deal.stampDutyAmount,
+      actualClosingDate: deal.actualClosingDate,
+      titleTransferDate: deal.titleTransferDate,
+      handoverNotes:     deal.handoverNotes,
+    };
     deal.status = "closed";
     deal.actualClosingDate = req.body.actualClosingDate || new Date();
     deal.titleTransferDate = req.body.titleTransferDate || null;
@@ -238,17 +346,6 @@ export const closeDeal = async (req, res, next) => {
       SaleCommission.find({ business, deal: deal._id, status: "pending" }).lean(),
       SalePayment.find({ business, deal: deal._id, paymentType: "deposit", status: "paid" }).lean(),
     ]);
-
-    // Resolve stamp duty cashbook if provided
-    let stampDutyCashbookId = null;
-    if (stampDutyAmount > 0 && req.body.stampDutyCashbook) {
-      const cbAcc = await ChartOfAccount.findOne({
-        _id: req.body.stampDutyCashbook, business,
-        isPosting: { $ne: false }, isHeader: { $ne: true },
-      }).lean();
-      if (!cbAcc) return next(createError(400, "Stamp duty cashbook account not found"));
-      stampDutyCashbookId = cbAcc._id;
-    }
 
     // Post all GL: commissions + deposit transfers + stamp duty — roll back if any fail
     try {
@@ -272,7 +369,10 @@ export const closeDeal = async (req, res, next) => {
       }
     } catch (glErr) {
       deal.status = "active";
-      deal.stampDutyAmount = 0;
+      deal.stampDutyAmount   = prior.stampDutyAmount;
+      deal.actualClosingDate = prior.actualClosingDate;
+      deal.titleTransferDate = prior.titleTransferDate;
+      deal.handoverNotes     = prior.handoverNotes;
       deal.updatedBy = userId;
       await deal.save();
       await SaleListing.findByIdAndUpdate(deal.listing, { status: "under_contract" });
@@ -375,6 +475,8 @@ export const deleteDeal = async (req, res, next) => {
       SaleCommission.deleteMany({ business, deal: deal._id }),
       SaleDeal.findByIdAndDelete(deal._id),
     ]);
+    // Remove the deal's uploaded files from disk so they aren't orphaned
+    (deal.documents || []).forEach((d) => d?.filename && deleteDocumentFile(d.filename));
 
     res.status(200).json({ message: "Deal deleted" });
   } catch (err) {
@@ -466,9 +568,10 @@ export const createDealFromOffer = async (req, res, next) => {
     const offer = await SaleOffer.findOne({ _id: req.params.offerId, business })
       .populate("listing buyer agent").lean();
     if (!offer) return next(createError(404, "Offer not found"));
-    if (["rejected", "expired", "withdrawn"].includes(offer.status)) {
+    if (TERMINAL_OFFER_STATUSES.includes(offer.status)) {
       return next(createError(400, `Cannot convert a ${offer.status} offer to a deal`));
     }
+    if (!offer.listing || !offer.buyer) return next(createError(400, "Offer has a missing listing or buyer"));
     const listing = await SaleListing.findOne({ _id: offer.listing._id, business }).lean();
     if (!listing) return next(createError(400, "Listing not found"));
     if (listing.status === "sold")           return next(createError(400, "Listing is already sold"));
@@ -481,7 +584,7 @@ export const createDealFromOffer = async (req, res, next) => {
     const { commissionRateOverride, commissionTypeOverride, commissionAmountOverride, whtRate, ...rest } = req.body;
 
     const dealNumber = await generateSequentialNumber(SaleDeal, business, "DL");
-    const deal = await SaleDeal.create({
+    const dealDoc = new SaleDeal({
       business, dealNumber,
       offer:    offer._id,
       listing:  offer.listing._id,
@@ -495,24 +598,18 @@ export const createDealFromOffer = async (req, res, next) => {
       updatedBy: userId,
     });
 
-    const ops = [
-      SaleOffer.findByIdAndUpdate(offer._id, { status: "accepted", updatedBy: userId }),
-      SaleListing.findByIdAndUpdate(offer.listing._id, { status: "under_contract" }),
-    ];
-
-    if (offer.agent) {
-      ops.push(createCommissionForDeal({
-        business, dealId: deal._id, agent: offer.agent,
+    await persistNewDeal({
+      business, userId, dealDoc, listing,
+      agent: offer.agent || null,
+      offer: { _id: offer._id, status: offer.status },
+      commissionArgs: {
         listingId: offer.listing._id, buyerId: offer.buyer._id,
         agreedPrice,
         overrides: { commissionRateOverride, commissionTypeOverride, commissionAmountOverride, whtRate },
-        userId,
-      }));
-    }
+      },
+    });
 
-    await Promise.all(ops);
-
-    const populated = await populateDeal(SaleDeal.findById(deal._id)).lean();
+    const populated = await populateDeal(SaleDeal.findById(dealDoc._id)).lean();
     res.status(201).json({ ...populated, totalPaid: 0, balance: populated.agreedPrice });
   } catch (err) {
     next(err);
@@ -521,11 +618,13 @@ export const createDealFromOffer = async (req, res, next) => {
 
 // ── Deal documents ───────────────────────────────────────────────────────────
 export const uploadDealDocument = async (req, res, next) => {
+  // multer has already written the file to disk — remove it on every failure path
+  const discardUpload = () => { if (req.file?.filename) deleteDocumentFile(req.file.filename); };
   try {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
     const deal = await SaleDeal.findOne({ _id: req.params.id, business });
-    if (!deal) return next(createError(404, "Deal not found"));
+    if (!deal) { discardUpload(); return next(createError(404, "Deal not found")); }
     if (!req.file)  return next(createError(400, "No file uploaded"));
 
     deal.documents.push({
@@ -540,6 +639,7 @@ export const uploadDealDocument = async (req, res, next) => {
     await deal.save();
     res.status(201).json(deal.documents[deal.documents.length - 1]);
   } catch (err) {
+    discardUpload();
     next(err);
   }
 };
