@@ -26,6 +26,9 @@ const saleListingSchema = new mongoose.Schema(
     amenities: [{ type: String, trim: true }],
     images: [{ type: String, trim: true }],
     assignedAgent: { type: mongoose.Schema.Types.ObjectId, ref: "SaleAgent", default: null },
+    // Offer that currently holds the exclusive "accepted" claim on this listing. Written only by
+    // offersController.updateOfferStatus (atomic compare-and-set); never client-writable.
+    acceptedOffer: { type: mongoose.Schema.Types.ObjectId, ref: "SaleOffer", default: null },
     listedDate: { type: Date, default: Date.now },
     notes: { type: String, trim: true, default: "" },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },

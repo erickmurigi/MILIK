@@ -2,8 +2,11 @@ import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
 import SaleListing from "../models/SaleListing.js";
 import SaleAgent from "../models/SaleAgent.js";
+import SaleDeal from "../models/SaleDeal.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { deleteImageFile } from "../middleware/listingImageUpload.js";
+
+const CREATE_STATUSES = ["available", "withdrawn"];
 
 const sanitizeListingBody = (body) => {
   const out = { ...body };
@@ -73,7 +76,13 @@ export const createListing = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
 
-    const body = sanitizeListingBody(req.body);
+    // acceptedOffer is server-managed. A new listing may only start as available/withdrawn —
+    // reserved / under_contract / sold are driven by the offers + deals workflow.
+    const { acceptedOffer: _ao, ...rawBody } = req.body;
+    if (rawBody.status && !CREATE_STATUSES.includes(rawBody.status)) {
+      return next(createError(400, `A new listing can only be created as ${CREATE_STATUSES.join(" or ")}`));
+    }
+    const body = sanitizeListingBody(rawBody);
     if (body.assignedAgent) {
       const agent = await SaleAgent.findOne({ _id: body.assignedAgent, business, status: "active" }).lean();
       if (!agent) return next(createError(400, "Assigned agent not found or inactive"));
@@ -98,7 +107,9 @@ export const updateListing = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
-    const { business: _b, listingNumber: _n, createdBy: _c, ...rawUpdates } = req.body;
+    // status is stripped: every status change must go through updateListingStatus (deal/offer guards).
+    // acceptedOffer is server-managed by the offer workflow.
+    const { business: _b, listingNumber: _n, createdBy: _c, status: _s, acceptedOffer: _ao, ...rawUpdates } = req.body;
     const updates = sanitizeListingBody(rawUpdates);
 
     if (updates.assignedAgent) {
@@ -134,18 +145,27 @@ export const deleteListing = async (req, res, next) => {
 };
 
 export const uploadListingImages = async (req, res, next) => {
+  // The upload middleware has already written the processed images to disk — remove them again
+  // whenever they don't end up attached to a listing (404, save failure, etc.).
+  let attached = false;
+  const discardUploads = () => req.files?.forEach((f) => deleteImageFile(f.filename));
   try {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
     if (!req.files?.length) return next(createError(400, "No valid images uploaded"));
     const listing = await SaleListing.findOne({ _id: req.params.id, business });
-    if (!listing) return next(createError(404, "Listing not found"));
+    if (!listing) {
+      discardUploads();
+      return next(createError(404, "Listing not found"));
+    }
     const newUrls = req.files.map((f) => `/uploads/sale-listings/${f.filename}`);
     listing.images.push(...newUrls);
     listing.updatedBy = userId;
     await listing.save();
+    attached = true;
     res.status(200).json({ images: listing.images });
   } catch (err) {
+    if (!attached) discardUploads();
     next(err);
   }
 };
@@ -180,6 +200,27 @@ export const updateListingStatus = async (req, res, next) => {
     if (!existing) return next(createError(404, "Listing not found"));
     if (existing.status === "sold") {
       return next(createError(400, "A sold listing cannot be manually re-listed — cancel the deal instead"));
+    }
+    if (existing.status === status) return res.status(200).json(existing);
+
+    // under_contract / sold are only reachable through the deals workflow; and a listing that has a
+    // live (active/closed) deal must not be moved back to a pre-contract status by hand.
+    const deals = await SaleDeal.find({
+      business,
+      listing: existing._id,
+      status: { $in: ["active", "closed"] },
+    }).select("status").lean();
+    const hasActiveDeal = deals.some((d) => d.status === "active");
+    const hasClosedDeal = deals.some((d) => d.status === "closed");
+
+    if (status === "under_contract" && !hasActiveDeal) {
+      return next(createError(400, "A listing can only be set to under contract through an active deal — create the deal in the Deals workflow"));
+    }
+    if (status === "sold" && !hasClosedDeal) {
+      return next(createError(400, "A listing can only be marked sold by closing its deal in the Deals workflow"));
+    }
+    if (["available", "reserved"].includes(status) && (hasActiveDeal || hasClosedDeal)) {
+      return next(createError(400, "This listing has an active or closed deal — cancel the deal instead of changing the listing status manually"));
     }
 
     const listing = await SaleListing.findOneAndUpdate(

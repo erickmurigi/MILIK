@@ -1,6 +1,7 @@
 import { createError } from "../../../utils/error.js";
 import SaleOffer from "../models/SaleOffer.js";
 import SaleListing from "../models/SaleListing.js";
+import SaleDeal from "../models/SaleDeal.js";
 import SaleBuyer from "../models/SaleBuyer.js";
 import SaleAgent from "../models/SaleAgent.js";
 import { currentUserId, escapeRegex, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
@@ -124,13 +125,62 @@ const OFFER_TRANSITIONS = {
   withdrawn:   [],
 };
 
+// A listing can carry only one live "accepted" claim at a time. The claim is an atomic
+// compare-and-set on SaleListing.acceptedOffer (status available|reserved + acceptedOffer null), so two
+// concurrent accepts can never both win. Accepting parks the listing as "reserved" (NOT under_contract):
+// createDealFromOffer / createDeal reject under_contract listings and are the ones that move it there.
+const isAcceptedClaimLive = async (business, offerId) => {
+  const accepted = await SaleOffer.exists({ _id: offerId, business, status: "accepted" });
+  if (!accepted) return false;
+  const deals = await SaleDeal.find({ business, offer: offerId }).select("status").lean();
+  // accepted with no deal yet, or with a non-cancelled deal => still live
+  return deals.length === 0 || deals.some((d) => d.status !== "cancelled");
+};
+
+const claimListingForOffer = async (business, listingId, offerId) => {
+  const claim = () =>
+    SaleListing.findOneAndUpdate(
+      { _id: listingId, business, status: { $in: ["available", "reserved"] }, acceptedOffer: null },
+      { $set: { status: "reserved", acceptedOffer: offerId } },
+      { new: false }
+    ).select("status").lean();
+
+  let previous = await claim();
+  if (previous) return { previousStatus: previous.status };
+
+  const current = await SaleListing.findOne({ _id: listingId, business }).select("status acceptedOffer").lean();
+  if (!current) return { error: createError(400, "Listing not found") };
+  if (!["available", "reserved"].includes(current.status)) {
+    return { error: createError(409, `Cannot accept this offer — the listing is already ${current.status.replace("_", " ")}`) };
+  }
+  if (current.acceptedOffer) {
+    if (await isAcceptedClaimLive(business, current.acceptedOffer)) {
+      return { error: createError(409, "Another offer has already been accepted for this listing") };
+    }
+    // Stale pointer (offer withdrawn/rejected or its deal was cancelled) — clear it and retry once
+    await SaleListing.updateOne({ _id: listingId, business, acceptedOffer: current.acceptedOffer }, { $set: { acceptedOffer: null } });
+    previous = await claim();
+    if (previous) return { previousStatus: previous.status };
+  }
+  return { error: createError(409, "The listing was changed by another request — please refresh and try again") };
+};
+
+const releaseListingClaim = (business, listingId, offerId, previousStatus) =>
+  SaleListing.updateOne(
+    { _id: listingId, business, acceptedOffer: offerId, status: "reserved" },
+    { $set: { acceptedOffer: null, status: previousStatus } }
+  );
+
 export const updateOfferStatus = async (req, res, next) => {
+  let claim = null;
+  let existingOffer = null;
+  let business = null;
   try {
-    const business = resolveActiveBusinessId(req);
+    business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
     const { status, counterOfferAmount, negotiationNotes } = req.body;
 
-    const existingOffer = await SaleOffer.findOne({ _id: req.params.id, business }).lean();
+    existingOffer = await SaleOffer.findOne({ _id: req.params.id, business }).lean();
     if (!existingOffer) return next(createError(404, "Offer not found"));
 
     const allowed = OFFER_TRANSITIONS[existingOffer.status] ?? [];
@@ -139,31 +189,91 @@ export const updateOfferStatus = async (req, res, next) => {
     }
 
     const update = { status, updatedBy: userId };
-    if (counterOfferAmount !== undefined && counterOfferAmount !== "") update.counterOfferAmount = Number(counterOfferAmount) || 0;
+    if (counterOfferAmount !== undefined && counterOfferAmount !== "") {
+      if (counterOfferAmount === null) {
+        update.counterOfferAmount = null;
+      } else {
+        const amount = typeof counterOfferAmount === "number" || typeof counterOfferAmount === "string" ? Number(counterOfferAmount) : NaN;
+        if (!Number.isFinite(amount) || amount < 0) {
+          return next(createError(400, "Counter offer amount must be a valid non-negative number"));
+        }
+        update.counterOfferAmount = amount;
+      }
+    }
     if (negotiationNotes !== undefined) update.negotiationNotes = negotiationNotes;
 
+    // Backing out of an accepted offer is blocked once a live deal exists — the deal must be cancelled first.
+    if (existingOffer.status === "accepted" && status === "withdrawn") {
+      const liveDeal = await SaleDeal.exists({ business, offer: existingOffer._id, status: { $ne: "cancelled" } });
+      if (liveDeal) {
+        return next(createError(400, "This offer has a deal linked to it — cancel the deal first before withdrawing the offer"));
+      }
+    }
+
+    // Accepting: atomically claim the listing so only one offer per listing can be accepted.
+    if (status === "accepted") {
+      const result = await claimListingForOffer(business, existingOffer.listing, existingOffer._id);
+      if (result.error) return next(result.error);
+      claim = result;
+    }
+
+    // Compare-and-set on the current status so a concurrent transition can't be silently overwritten
     const offer = await SaleOffer.findOneAndUpdate(
-      { _id: req.params.id, business },
+      { _id: req.params.id, business, status: existingOffer.status },
       update,
       { new: true }
     ).populate("listing buyer agent").lean();
 
-    if (!offer) return next(createError(404, "Offer not found")); // should not happen — already fetched above
+    if (!offer) {
+      if (claim) await releaseListingClaim(business, existingOffer.listing, existingOffer._id, claim.previousStatus);
+      claim = null;
+      return next(createError(409, "Offer was changed by another request — please refresh and try again"));
+    }
+
+    if (claim) {
+      try {
+        // The accepted offer wins: every other open offer on this listing is rejected.
+        await SaleOffer.updateMany(
+          { business, listing: existingOffer.listing, _id: { $ne: offer._id }, status: { $in: ["pending", "negotiating"] } },
+          { $set: { status: "rejected", updatedBy: userId } }
+        );
+      } catch (err) {
+        await SaleOffer.updateOne({ _id: offer._id, business }, { $set: { status: existingOffer.status } });
+        await releaseListingClaim(business, existingOffer.listing, existingOffer._id, claim.previousStatus);
+        claim = null;
+        throw err;
+      }
+    }
 
     if (["rejected", "expired", "withdrawn"].includes(status)) {
-      const otherActive = await SaleOffer.findOne({
+      // Release this offer's claim on the listing if it held one
+      if (existingOffer.status === "accepted") {
+        await SaleListing.updateOne(
+          { _id: existingOffer.listing, business, acceptedOffer: existingOffer._id },
+          { $set: { acceptedOffer: null } }
+        );
+      }
+      const otherActive = await SaleOffer.exists({
         business,
-        listing: offer.listing,
+        listing: existingOffer.listing,
         _id: { $ne: offer._id },
         status: { $in: ["pending", "negotiating", "accepted"] },
       });
       if (!otherActive) {
-        await SaleListing.findByIdAndUpdate(offer.listing, { status: "available" });
+        // Only reopen a listing that is merely reserved — never one that is under contract / sold
+        await SaleListing.findOneAndUpdate(
+          { _id: existingOffer.listing, business, status: "reserved" },
+          { status: "available" }
+        );
       }
     }
 
     res.status(200).json(offer);
   } catch (err) {
+    if (claim) {
+      // Unexpected failure after the listing was claimed — hand the claim back
+      try { await releaseListingClaim(business, existingOffer.listing, existingOffer._id, claim.previousStatus); } catch { /* best effort */ }
+    }
     next(err);
   }
 };

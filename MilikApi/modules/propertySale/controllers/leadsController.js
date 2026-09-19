@@ -1,5 +1,6 @@
+import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
-import SaleLead    from "../models/SaleLead.js";
+import SaleLead   from "../models/SaleLead.js";
 import SaleBuyer   from "../models/SaleBuyer.js";
 import SaleOffer   from "../models/SaleOffer.js";
 import SaleListing from "../models/SaleListing.js";
@@ -64,8 +65,9 @@ export const listLeads = async (req, res, next) => {
 export const getPipeline = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    // aggregate() does not auto-cast — business must be an ObjectId to match stored documents
     const pipeline = await SaleLead.aggregate([
-      { $match: { business } },
+      { $match: { business: new mongoose.Types.ObjectId(String(business)) } },
       { $group: { _id: "$status", count: { $sum: 1 } } },
       { $sort: { _id: 1 } },
     ]);
@@ -104,6 +106,18 @@ export const updateLead = async (req, res, next) => {
     const updates = sanitizeLeadBody(rawUpdates);
     // "converted" status must go through /convert (which creates the buyer record)
     if (updates.status === "converted") delete updates.status;
+    // A lead that already has a buyer keeps its "converted" status — unlinking happens only via
+    // buyersController.deleteBuyer, which resets the lead itself.
+    if (updates.status !== undefined) {
+      const current = await SaleLead.findOne({ _id: req.params.id, business }).select("status convertedBuyer").lean();
+      if (!current) return next(createError(404, "Lead not found"));
+      if (current.convertedBuyer) {
+        if (updates.status !== current.status) {
+          return next(createError(400, "This lead has already been converted to a buyer — its status can no longer be changed"));
+        }
+        delete updates.status;
+      }
+    }
     const lead = await SaleLead.findOneAndUpdate(
       { _id: req.params.id, business },
       { ...updates, updatedBy: userId },
@@ -128,36 +142,67 @@ export const deleteLead = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// Atomically claims a lead for conversion (compare-and-set on `extraFilter`). Returns the lead's previous
+// state (for rollback) or null when another request got there first. Only one concurrent caller can win,
+// so only one buyer is ever created per lead.
+const claimLeadForConversion = (business, leadId, userId, extraFilter) =>
+  SaleLead.findOneAndUpdate(
+    { _id: leadId, business, ...extraFilter },
+    { $set: { status: "converted", convertedAt: new Date(), convertedBuyer: null, updatedBy: userId } },
+    { new: false }
+  ).select("status convertedAt convertedBuyer updatedBy").lean();
+
+const revertLeadClaim = (business, previous) =>
+  SaleLead.updateOne(
+    { _id: previous._id, business },
+    {
+      $set: {
+        status: previous.status,
+        convertedAt: previous.convertedAt ?? null,
+        convertedBuyer: previous.convertedBuyer ?? null,
+        updatedBy: previous.updatedBy ?? null,
+      },
+    }
+  );
+
 export const convertLead = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
-    const lead = await SaleLead.findOne({ _id: req.params.id, business });
-    if (!lead) return next(createError(404, "Lead not found"));
-    if (lead.status === "converted") return next(createError(400, "Lead is already converted"));
 
-    const { idNumber = "" } = req.body;
-    const buyerNumber = await generateSequentialNumber(SaleBuyer, business, "BYR");
-    const buyer = await SaleBuyer.create({
-      business,
-      buyerNumber,
-      fullName:   lead.fullName,
-      phone:      lead.phone,
-      email:      lead.email,
-      source:     lead.source,
-      idNumber,
-      notes:      lead.notes,
-      kycStatus:  "pending",
-      createdBy:  userId,
-      updatedBy:  userId,
-    });
+    // Claim first: only the request that flips the lead to "converted" may create the buyer.
+    const previous = await claimLeadForConversion(business, req.params.id, userId, { status: { $ne: "converted" } });
+    if (!previous) {
+      const exists = await SaleLead.exists({ _id: req.params.id, business });
+      return next(exists ? createError(400, "Lead is already converted") : createError(404, "Lead not found"));
+    }
 
-    await SaleLead.findByIdAndUpdate(lead._id, {
-      status:         "converted",
-      convertedBuyer: buyer._id,
-      convertedAt:    new Date(),
-      updatedBy:      userId,
-    });
+    let buyer = null;
+    try {
+      const lead = await SaleLead.findOne({ _id: req.params.id, business }).lean();
+      const { idNumber = "" } = req.body;
+      const buyerNumber = await generateSequentialNumber(SaleBuyer, business, "BYR");
+      buyer = await SaleBuyer.create({
+        business,
+        buyerNumber,
+        fullName:   lead.fullName,
+        phone:      lead.phone,
+        email:      lead.email,
+        source:     lead.source,
+        idNumber,
+        notes:      lead.notes,
+        kycStatus:  "pending",
+        createdBy:  userId,
+        updatedBy:  userId,
+      });
+
+      await SaleLead.updateOne({ _id: lead._id, business }, { $set: { convertedBuyer: buyer._id } });
+    } catch (err) {
+      // Roll the claim back so the lead can be converted again
+      if (buyer) await SaleBuyer.deleteOne({ _id: buyer._id, business }).catch(() => {});
+      await revertLeadClaim(business, previous).catch(() => {});
+      throw err;
+    }
 
     res.status(200).json({ message: "Lead converted to buyer", buyer });
   } catch (err) { next(err); }
@@ -229,6 +274,8 @@ export const convertLeadToOffer = async (req, res, next) => {
     const { listing: listingId, offerAmount, validityDate, agent, notes, idNumber = "" } = req.body;
     if (!listingId)  return next(createError(400, "Listing is required"));
     if (!offerAmount) return next(createError(400, "Offer amount is required"));
+    const amount = Number(offerAmount);
+    if (!Number.isFinite(amount) || amount < 0) return next(createError(400, "Offer amount must be a valid non-negative number"));
 
     const [lead, listing] = await Promise.all([
       SaleLead.findOne({ _id: req.params.id, business }).lean(),
@@ -241,45 +288,68 @@ export const convertLeadToOffer = async (req, res, next) => {
     }
 
     // Reuse existing buyer if lead was already converted, otherwise create one
-    let buyer;
-    if (lead.convertedBuyer) {
-      buyer = await SaleBuyer.findById(lead.convertedBuyer).lean();
-    }
+    let buyer = lead.convertedBuyer
+      ? await SaleBuyer.findOne({ _id: lead.convertedBuyer, business }).lean()
+      : null;
+
+    // Race-safe buyer creation: claim the lead atomically first. If the lead already points at a
+    // (now missing) buyer, the claim is a compare-and-set on that stale pointer.
+    let previous = null;
     if (!buyer) {
-      const buyerNumber = await generateSequentialNumber(SaleBuyer, business, "BYR");
-      buyer = await SaleBuyer.create({
-        business, buyerNumber,
-        fullName: lead.fullName, phone: lead.phone, email: lead.email,
-        source: lead.source, idNumber, notes: lead.notes,
-        kycStatus: "pending", createdBy: userId, updatedBy: userId,
+      previous = await claimLeadForConversion(
+        business, lead._id, userId,
+        lead.convertedBuyer ? { convertedBuyer: lead.convertedBuyer } : { status: { $ne: "converted" }, convertedBuyer: null }
+      );
+      if (!previous) {
+        // Lost the race — another request is (or has finished) converting this lead; reuse its buyer if it's ready
+        const fresh = await SaleLead.findOne({ _id: lead._id, business }).select("convertedBuyer").lean();
+        buyer = fresh?.convertedBuyer ? await SaleBuyer.findOne({ _id: fresh.convertedBuyer, business }).lean() : null;
+        if (!buyer) return next(createError(409, "This lead is being converted by another request — please try again"));
+      }
+    }
+
+    let createdBuyerId = null;
+    let offer = null;
+    try {
+      if (previous) {
+        const buyerNumber = await generateSequentialNumber(SaleBuyer, business, "BYR");
+        buyer = await SaleBuyer.create({
+          business, buyerNumber,
+          fullName: lead.fullName, phone: lead.phone, email: lead.email,
+          source: lead.source, idNumber, notes: lead.notes,
+          kycStatus: "pending", createdBy: userId, updatedBy: userId,
+        });
+        createdBuyerId = buyer._id;
+        await SaleLead.updateOne({ _id: lead._id, business }, { $set: { convertedBuyer: buyer._id } });
+      } else {
+        // Existing buyer reused — make sure the lead still reads as converted
+        await SaleLead.updateOne({ _id: lead._id, business, status: { $ne: "converted" } }, { $set: { status: "converted", updatedBy: userId } });
+      }
+
+      const offerNumber = await generateSequentialNumber(SaleOffer, business, "OFR");
+      offer = await SaleOffer.create({
+        business, offerNumber,
+        listing: listingId,
+        buyer:   buyer._id,
+        agent:   agent || null,
+        offerAmount: amount,
+        validityDate: validityDate || null,
+        notes: notes || "",
+        status: "pending",
+        createdBy: userId, updatedBy: userId,
       });
+
+      // Mark listing reserved if still available (conditional so a concurrent status change isn't clobbered)
+      if (listing.status === "available") {
+        await SaleListing.updateOne({ _id: listingId, business, status: "available" }, { $set: { status: "reserved" } });
+      }
+    } catch (err) {
+      // Undo everything this request created so the lead can be converted again
+      if (offer) await SaleOffer.deleteOne({ _id: offer._id, business }).catch(() => {});
+      if (createdBuyerId) await SaleBuyer.deleteOne({ _id: createdBuyerId, business }).catch(() => {});
+      if (previous) await revertLeadClaim(business, previous).catch(() => {});
+      throw err;
     }
-
-    const offerNumber = await generateSequentialNumber(SaleOffer, business, "OFR");
-    const offer = await SaleOffer.create({
-      business, offerNumber,
-      listing: listingId,
-      buyer:   buyer._id,
-      agent:   agent || null,
-      offerAmount: Number(offerAmount),
-      validityDate: validityDate || null,
-      notes: notes || "",
-      status: "pending",
-      createdBy: userId, updatedBy: userId,
-    });
-
-    // Mark listing reserved if available
-    if (listing.status === "available") {
-      await SaleListing.findByIdAndUpdate(listingId, { status: "reserved" });
-    }
-
-    // Mark lead as converted
-    await SaleLead.findByIdAndUpdate(lead._id, {
-      status: "converted",
-      convertedBuyer: buyer._id,
-      convertedAt: new Date(),
-      updatedBy: userId,
-    });
 
     const populated = await SaleOffer.findById(offer._id)
       .populate("listing", "title listingNumber propertyType askingPrice")
