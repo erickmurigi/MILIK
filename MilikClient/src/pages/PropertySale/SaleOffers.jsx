@@ -85,7 +85,7 @@ const SaleOffers = () => {
       ...(buyerFilt        && { buyerId:   buyerFilt }),
     }),
     enabled: !!biz,
-    placeholderData: (prev) => prev,
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey?.[1] === biz ? prev : undefined),
     staleTime: 30_000,
   });
   const offers = offersPage?.data ?? [];
@@ -122,6 +122,14 @@ const SaleOffers = () => {
   const buyerFormOptions    = useMemo(() => buyers.map((b) => ({ value: b._id, label: `${b.buyerNumber} — ${b.fullName}` })), [buyers]);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["sale-offers", biz] });
+  // Offer create/accept/reject/withdraw/delete/convert change the listing status server-side
+  // (available <-> reserved <-> under_contract) and move the conversion-funnel counts.
+  const invalidateWithListings = () => {
+    invalidate();
+    queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] });
+    queryClient.invalidateQueries({ queryKey: ["sale-listings-ref", biz] });
+    queryClient.invalidateQueries({ queryKey: ["sale-funnel", biz] });
+  };
 
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleCreate = async (e) => {
@@ -136,7 +144,7 @@ const SaleOffers = () => {
       toast.success("Offer recorded");
       setShowCreate(false);
       setForm(EMPTY_FORM);
-      invalidate();
+      invalidateWithListings();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to record offer");
     } finally {
@@ -153,7 +161,7 @@ const SaleOffers = () => {
       toast.success("Offer status updated");
       setShowStatus(null);
       setStatusForm(EMPTY_STATUS);
-      invalidate();
+      invalidateWithListings();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to update status");
     } finally {
@@ -175,7 +183,7 @@ const SaleOffers = () => {
         business: biz,
       });
       toast.success("Counter offer accepted — offer is now Accepted");
-      invalidate();
+      invalidateWithListings();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to accept counter offer");
     } finally {
@@ -198,7 +206,7 @@ const SaleOffers = () => {
         business: biz,
       });
       toast.success("Offer rejected");
-      invalidate();
+      invalidateWithListings();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to reject offer");
     } finally {
@@ -233,7 +241,7 @@ const SaleOffers = () => {
       toast.success("Deal created! View it in the Deals section.");
       setShowConvertDeal(null);
       setDealForm(EMPTY_DEAL);
-      invalidate();
+      invalidateWithListings();
       queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] });
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to create deal");
@@ -252,7 +260,7 @@ const SaleOffers = () => {
     try {
       await saleApi.deleteOffer(offer._id);
       toast.success("Offer deleted");
-      invalidate();
+      invalidateWithListings();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to delete");
     }
@@ -260,7 +268,13 @@ const SaleOffers = () => {
 
   const printOffer = (offer) => {
     const co = currentCompany || {};
-    const html = `<!DOCTYPE html><html><head><title>Offer — ${offer.offerNumber}</title>
+    // Every dynamic value is HTML-escaped: the popup is same-origin (document.write), so raw
+    // interpolation of company/buyer/notes text would be stored XSS.
+    const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    const logoSrc = typeof co.logo === "string" && /^(https?:\/\/|data:image\/)/i.test(co.logo.trim()) ? co.logo.trim() : "";
+    const fmtD = (d) => (d ? new Date(d).toLocaleDateString("en-KE") : "");
+    const askingPrice = esc(fmtKES(offer.listing?.askingPrice));
+    const html = `<!DOCTYPE html><html><head><title>Offer — ${esc(offer.offerNumber)}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;background:#fff}
@@ -291,62 +305,63 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;background:#fff}
 @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body><div class="page">
 <div class="hdr">
-  <div class="brand">${co.logo ? `<img src="${co.logo}" alt="logo"/>` : (co.companyName || "MILIK")}</div>
-  <div class="co-info"><strong>${co.companyName || ""}</strong><br/>${co.physicalAddress || co.postalAddress || ""}<br/>${[co.telephone, co.email].filter(Boolean).join(" | ")}<br/>${co.pinNumber ? "PIN: " + co.pinNumber : ""}</div>
+  <div class="brand">${logoSrc ? `<img src="${esc(logoSrc)}" alt="logo"/>` : esc(co.companyName || "MILIK")}</div>
+  <div class="co-info"><strong>${esc(co.companyName)}</strong><br/>${esc(co.physicalAddress || co.postalAddress)}<br/>${esc([co.telephone, co.email].filter(Boolean).join(" | "))}<br/>${co.pinNumber ? "PIN: " + esc(co.pinNumber) : ""}</div>
 </div>
 <div class="doc-title"><h1>Purchase Offer Document</h1><p>Formal Expression of Interest / Offer to Purchase</p></div>
 <div class="ref-bar">
-  <div>Offer Ref: <span>${offer.offerNumber}</span></div>
-  <div>Status: <span>${(offer.status || "pending").toUpperCase()}</span></div>
-  <div>Dated: <span>${offer.createdAt ? new Date(offer.createdAt).toLocaleDateString("en-KE") : new Date().toLocaleDateString("en-KE")}</span></div>
+  <div>Offer Ref: <span>${esc(offer.offerNumber)}</span></div>
+  <div>Status: <span>${esc((offer.status || "pending").toUpperCase())}</span></div>
+  <div>Dated: <span>${esc(fmtD(offer.createdAt || Date.now()))}</span></div>
 </div>
 <div class="price-box">
-  <div><div class="lbl">Buyer's Offer Price</div><div class="amt">${fmtKES(offer.offerAmount)}</div></div>
-  <div style="text-align:right;font-size:10px;opacity:.8">Asking: ${fmtKES(offer.listing?.askingPrice)}</div>
+  <div><div class="lbl">Buyer's Offer Price</div><div class="amt">${esc(fmtKES(offer.offerAmount))}</div></div>
+  <div style="text-align:right;font-size:10px;opacity:.8">Asking: ${askingPrice}</div>
 </div>
 ${offer.counterOfferAmount ? `<div class="counter-box">
-  <div><div class="lbl">Counter Offer (Seller)</div><div class="amt">${fmtKES(offer.counterOfferAmount)}</div></div>
-  <div style="text-align:right;font-size:10px;opacity:.8">Delta vs offer: ${offer.counterOfferAmount > offer.offerAmount ? "+" : ""}${Math.round(((offer.counterOfferAmount - offer.offerAmount) / offer.offerAmount) * 100)}%</div>
+  <div><div class="lbl">Counter Offer (Seller)</div><div class="amt">${esc(fmtKES(offer.counterOfferAmount))}</div></div>
+  <div style="text-align:right;font-size:10px;opacity:.8">Delta vs offer: ${esc(`${offer.counterOfferAmount > offer.offerAmount ? "+" : ""}${Math.round(((offer.counterOfferAmount - offer.offerAmount) / offer.offerAmount) * 100)}`)}%</div>
 </div>` : ""}
 <div class="sec">Property Details</div>
 <div class="g3">
-  <div class="f"><label>Listing No.</label><span>${offer.listing?.listingNumber || "-"}</span></div>
-  <div class="f"><label>Property Title</label><span>${offer.listing?.title || "-"}</span></div>
-  <div class="f"><label>Asking Price</label><span>${fmtKES(offer.listing?.askingPrice)}</span></div>
-  <div class="f"><label>Type</label><span style="text-transform:capitalize">${offer.listing?.propertyType || "-"}</span></div>
-  <div class="f"><label>Location</label><span>${[offer.listing?.location?.area, offer.listing?.location?.city].filter(Boolean).join(", ") || "-"}</span></div>
+  <div class="f"><label>Listing No.</label><span>${esc(offer.listing?.listingNumber || "-")}</span></div>
+  <div class="f"><label>Property Title</label><span>${esc(offer.listing?.title || "-")}</span></div>
+  <div class="f"><label>Asking Price</label><span>${askingPrice}</span></div>
+  <div class="f"><label>Type</label><span style="text-transform:capitalize">${esc(offer.listing?.propertyType || "-")}</span></div>
+  <div class="f"><label>Location</label><span>${esc([offer.listing?.location?.area, offer.listing?.location?.city].filter(Boolean).join(", ") || "-")}</span></div>
 </div>
 <div class="sec">Buyer Information</div>
 <div class="g3">
-  <div class="f"><label>Buyer No.</label><span>${offer.buyer?.buyerNumber || "-"}</span></div>
-  <div class="f"><label>Full Name</label><span>${offer.buyer?.fullName || "-"}</span></div>
-  <div class="f"><label>Phone</label><span>${offer.buyer?.phone || "-"}</span></div>
-  <div class="f"><label>Email</label><span>${offer.buyer?.email || "-"}</span></div>
-  <div class="f"><label>ID / Passport</label><span>${offer.buyer?.idNumber || "-"}</span></div>
+  <div class="f"><label>Buyer No.</label><span>${esc(offer.buyer?.buyerNumber || "-")}</span></div>
+  <div class="f"><label>Full Name</label><span>${esc(offer.buyer?.fullName || "-")}</span></div>
+  <div class="f"><label>Phone</label><span>${esc(offer.buyer?.phone || "-")}</span></div>
+  <div class="f"><label>Email</label><span>${esc(offer.buyer?.email || "-")}</span></div>
+  <div class="f"><label>ID / Passport</label><span>${esc(offer.buyer?.idNumber || "-")}</span></div>
 </div>
 ${offer.agent ? `<div class="sec">Sales Agent</div><div class="g3">
-  <div class="f"><label>Agent No.</label><span>${offer.agent?.agentNumber || "-"}</span></div>
-  <div class="f"><label>Name</label><span>${offer.agent?.fullName || "-"}</span></div>
-  <div class="f"><label>Commission</label><span>${offer.agent?.commissionRate || 0}${offer.agent?.commissionType === "percentage" ? "%" : " KES (Flat)"}</span></div>
+  <div class="f"><label>Agent No.</label><span>${esc(offer.agent?.agentNumber || "-")}</span></div>
+  <div class="f"><label>Name</label><span>${esc(offer.agent?.fullName || "-")}</span></div>
+  <div class="f"><label>Commission</label><span>${esc(offer.agent?.commissionRate || 0)}${offer.agent?.commissionType === "percentage" ? "%" : " KES (Flat)"}</span></div>
 </div>` : ""}
 <div class="sec">Terms</div>
 <div class="g2">
-  <div class="f"><label>Validity Date</label><span>${offer.validityDate ? new Date(offer.validityDate).toLocaleDateString("en-KE") : "-"}</span></div>
-  <div class="f"><label>Current Status</label><span style="text-transform:capitalize">${offer.status || "pending"}</span></div>
+  <div class="f"><label>Validity Date</label><span>${esc(fmtD(offer.validityDate) || "-")}</span></div>
+  <div class="f"><label>Current Status</label><span style="text-transform:capitalize">${esc(offer.status || "pending")}</span></div>
 </div>
-${offer.negotiationNotes ? `<div class="sec">Negotiation Notes</div><div class="notes">${offer.negotiationNotes}</div>` : ""}
-${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${offer.notes}</div>` : ""}
+${offer.negotiationNotes ? `<div class="sec">Negotiation Notes</div><div class="notes">${esc(offer.negotiationNotes)}</div>` : ""}
+${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${esc(offer.notes)}</div>` : ""}
 <div class="sigs">
-  <div class="sig"><br/><p>Buyer Signature</p><p style="color:#111">${offer.buyer?.fullName || ""}</p></div>
-  <div class="sig"><br/><p>Sales Agent</p><p style="color:#111">${offer.agent?.fullName || "Unassigned"}</p></div>
-  <div class="sig"><br/><p>Authorized Officer</p><p style="color:#111">${co.companyName || ""}</p></div>
+  <div class="sig"><br/><p>Buyer Signature</p><p style="color:#111">${esc(offer.buyer?.fullName)}</p></div>
+  <div class="sig"><br/><p>Sales Agent</p><p style="color:#111">${esc(offer.agent?.fullName || "Unassigned")}</p></div>
+  <div class="sig"><br/><p>Authorized Officer</p><p style="color:#111">${esc(co.companyName)}</p></div>
 </div>
 <div class="footer">
   This document is a formal expression of interest and does not constitute a binding sale agreement until countersigned by all parties and a formal Sale Agreement is executed.
-  &nbsp;|&nbsp; Generated: ${new Date().toLocaleString("en-KE")} &nbsp;|&nbsp; MILIK Property Sales System
+  &nbsp;|&nbsp; Generated: ${esc(new Date().toLocaleString("en-KE"))} &nbsp;|&nbsp; MILIK Property Sales System
 </div>
 </div></body></html>`;
     const w = window.open("", "_blank", "width=900,height=700");
+    if (!w) { toast.warn("Allow pop-ups to print the offer"); return; }
     w.document.write(html);
     w.document.close();
     w.onload = () => w.print();

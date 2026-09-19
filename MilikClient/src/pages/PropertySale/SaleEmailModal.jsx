@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSelector } from "react-redux";
 import { FaEnvelope, FaTimes } from "react-icons/fa";
 import { saleApi } from "../../services/propertySaleApi";
 
@@ -39,11 +40,24 @@ const BUILTIN_TEMPLATES = {
   ],
 };
 
-const renderVars = (text, vars = {}) =>
-  String(text || "").replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => (vars[k] != null ? vars[k] : `{${k}}`));
+// A token the caller declared in `vars` (even as null/undefined/"") is substituted, so an unavailable value
+// renders as blank instead of leaking a literal "{companyPhone}" into a sent email. A token the caller never
+// declared is a typo / unsupported placeholder and is left as typed so the sender can spot it before sending.
+const renderVars = (text, vars) =>
+  String(text || "").replace(/\{([a-zA-Z0-9_]+)\}/g, (m, k) => (Object.prototype.hasOwnProperty.call(vars, k) ? String(vars[k] ?? "") : m));
 
 export default function SaleEmailModal({ title, subtitle, emailForm, setEmailForm, sending, onSend, onClose, context = "buyer", vars = {} }) {
   const [apiTemplates, setApiTemplates] = useState([]);
+  const company = useSelector((s) => s.company?.currentCompany);
+
+  // Company placeholders are advertised for every context; supply them here so any caller gets them,
+  // with caller-provided values taking precedence.
+  const allVars = useMemo(() => ({
+    companyName:  company?.companyName || company?.name || "",
+    companyPhone: company?.phoneNo || company?.phone || company?.telephone || "",
+    companyEmail: company?.email || company?.companyEmail || "",
+    ...vars,
+  }), [company, vars]);
 
   useEffect(() => {
     saleApi.getSettings().then((s) => {
@@ -54,7 +68,7 @@ export default function SaleEmailModal({ title, subtitle, emailForm, setEmailFor
   }, [context]);
 
   const applyTemplate = (t) =>
-    setEmailForm({ subject: renderVars(t.subject, vars), body: renderVars(t.body, vars) });
+    setEmailForm({ subject: renderVars(t.subject, allVars), body: renderVars(t.body, allVars) });
 
   const builtins = BUILTIN_TEMPLATES[context] ?? BUILTIN_TEMPLATES.buyer;
   const allTemplates = [...builtins, ...apiTemplates.map((t) => ({ label: t.name, subject: t.subject, body: t.body }))];

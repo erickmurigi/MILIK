@@ -49,6 +49,8 @@ const blankLead      = { fullName: "", phone: "", email: "", source: "walk_in", 
 const blankAct       = { type: "call", subject: "", notes: "", date: "", durationMinutes: "", outcome: "not_applicable", nextAction: "", nextActionDate: "" };
 const blankOfferForm = { listing: "", offerAmount: "", validityDate: "", agent: "", notes: "" };
 
+// "walk_in" -> "Walk In" (matches the placeholder catalog's examples)
+const humanize = (v) => String(v ?? "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 const fmt   = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 const isOld = (date, status) => date && !["converted", "lost"].includes(status) && new Date(date) < new Date();
 const LIMIT = 50;
@@ -117,7 +119,7 @@ export default function SaleLeads() {
     queryKey: ["sale-leads", biz, debSearch, statusFilter, sourceFilter, agentFilter, overdueOnly, createdFrom, createdTo, page, pageSize],
     queryFn:  () => saleApi.listLeads({ business: biz, search: debSearch, status: statusFilter, source: sourceFilter, agent: agentFilter, overdueOnly: overdueOnly ? "1" : "", createdFrom, createdTo, page, limit: pageSize }),
     enabled:  !!biz,
-    placeholderData: (p) => p,
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey?.[1] === biz ? prev : undefined),
     staleTime: 30_000,
   });
 
@@ -184,9 +186,12 @@ export default function SaleLeads() {
   const pipeline   = pipelineData?.pipeline ?? [];
   const leadActs   = activitiesData?.data ?? [];
 
-  const invalidate = useCallback(() => {
+  // Any lead mutation can move funnel counts; pass the lead id to also refresh the open panel's detail query.
+  const invalidate = useCallback((leadId) => {
     qc.invalidateQueries({ queryKey: ["sale-leads", biz] });
     qc.invalidateQueries({ queryKey: ["sale-leads-pipeline", biz] });
+    qc.invalidateQueries({ queryKey: ["sale-funnel", biz] });
+    if (leadId) qc.invalidateQueries({ queryKey: ["sale-lead-detail", biz, leadId] });
   }, [qc, biz]);
 
   // ── Lead CRUD ─────────────────────────────────────────────────────────────
@@ -221,7 +226,7 @@ export default function SaleLeads() {
       } else {
         await saleApi.createLead(payload);
       }
-      invalidate();
+      invalidate(editingId);
       setShowModal(false);
       toast.success(`Lead ${editingId ? "updated" : "created"}`);
     } catch (err) { toast.error(err?.response?.data?.message || "Save failed"); }
@@ -265,8 +270,7 @@ export default function SaleLeads() {
       if (editingAct) await saleApi.updateActivity(editingAct._id, payload);
       else await saleApi.createActivity(payload);
       qc.invalidateQueries({ queryKey: ["sale-activities-lead", biz, selected._id] });
-      qc.invalidateQueries({ queryKey: ["sale-lead-detail", biz, selected._id] });
-      invalidate();
+      invalidate(selected._id);
       setActModal(false);
       toast.success(`Activity ${editingAct ? "updated" : "logged"}`);
     } catch (err) { toast.error(err?.response?.data?.message || "Save failed"); }
@@ -278,6 +282,7 @@ export default function SaleLeads() {
     try {
       await saleApi.deleteActivity(act._id);
       qc.invalidateQueries({ queryKey: ["sale-activities-lead", biz, selected._id] });
+      qc.invalidateQueries({ queryKey: ["sale-lead-detail", biz, selected._id] });
       toast.success("Activity removed");
     } catch (err) { toast.error("Delete failed"); }
   };
@@ -313,9 +318,12 @@ export default function SaleLeads() {
   // ── Conversion ─────────────────────────────────────────────────────────────
   const handleConvert = async () => {
     setConverting(true);
+    const leadId = selected._id;
     try {
-      const res = await saleApi.convertLead(selected._id, { business: biz, idNumber: convertId });
-      invalidate();
+      const res = await saleApi.convertLead(leadId, { business: biz, idNumber: convertId });
+      invalidate(leadId);
+      qc.invalidateQueries({ queryKey: ["sale-buyers", biz] });
+      qc.invalidateQueries({ queryKey: ["sale-buyers-ref", biz] });
       setSelected((p) => ({ ...p, status: "converted", convertedBuyer: res.buyer }));
       setShowConvert(false);
       toast.success("Lead converted to buyer");
@@ -328,13 +336,17 @@ export default function SaleLeads() {
     if (!offerForm.listing)     return toast.warning("Select a listing");
     if (!offerForm.offerAmount) return toast.warning("Offer amount is required");
     setConvertingOffer(true);
+    const leadId = selected._id;
     try {
-      await saleApi.convertLeadToOffer(selected._id, { ...offerForm, business: biz });
+      await saleApi.convertLeadToOffer(leadId, { ...offerForm, business: biz });
       toast.success("Offer created from lead");
       setShowConvertOffer(false);
       setOfferForm(blankOfferForm);
-      invalidate();
+      invalidate(leadId);
       qc.invalidateQueries({ queryKey: ["sale-offers", biz] });
+      // creating the offer reserves the listing and converts the lead server-side
+      qc.invalidateQueries({ queryKey: ["sale-listings", biz] });
+      qc.invalidateQueries({ queryKey: ["sale-listings-ref", biz] });
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to create offer");
     } finally {
@@ -925,12 +937,16 @@ export default function SaleLeads() {
             leadNumber:   emailTarget.leadNumber  || "",
             phone:        emailTarget.phone       || "",
             email:        emailTarget.email       || "",
-            source:       emailTarget.source      || "",
-            status:       emailTarget.status      || "",
+            source:       humanize(emailTarget.source),
+            status:       humanize(emailTarget.status),
             budgetMin:    emailTarget.budgetMin   ? Number(emailTarget.budgetMin).toLocaleString()  : "",
             budgetMax:    emailTarget.budgetMax   ? Number(emailTarget.budgetMax).toLocaleString()  : "",
             assignedAgent: emailTarget.assignedAgent?.fullName || "",
+            lastContactDate:  emailTarget.lastContactDate  ? fmt(emailTarget.lastContactDate)  : "",
+            nextFollowUpDate: emailTarget.nextFollowUpDate ? fmt(emailTarget.nextFollowUpDate) : "",
             companyName:  currentCompany?.companyName || currentCompany?.name || "",
+            companyPhone: currentCompany?.phoneNo || currentCompany?.phone || currentCompany?.telephone || "",
+            companyEmail: currentCompany?.email || currentCompany?.companyEmail || "",
           }}
         />
       )}

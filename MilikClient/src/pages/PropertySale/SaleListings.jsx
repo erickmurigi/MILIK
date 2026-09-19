@@ -87,6 +87,8 @@ const SaleListings = () => {
   const [pageSize,   setPageSize]   = useTabState("/sale/listings:pageSize", PAGE_SIZE);
   const [selected,   setSelected]   = useTabState("/sale/listings:selected", null);
   const [uploading,  setUploading]  = useState(false);
+  const [statusBusy, setStatusBusy] = useState({}); // { [listingId]: true } while a Reserve/Release call is in flight
+  const statusInFlight = useRef(new Set());
   const [lightbox,   setLightbox]   = useState({ open: false, index: 0 });
 
   const debouncedSearch = useDebounce(search, 400);
@@ -96,7 +98,7 @@ const SaleListings = () => {
     queryKey: ["sale-listings", biz, debouncedSearch, statusFilt, typeFilt, agentFilt, page, pageSize],
     queryFn:  () => saleApi.listListings({ business: biz, search: debouncedSearch, status: statusFilt, propertyType: typeFilt, agentId: agentFilt, page, limit: pageSize }),
     enabled:  !!biz,
-    placeholderData: (prev) => prev,
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey?.[1] === biz ? prev : undefined),
     staleTime: 30_000,
   });
 
@@ -160,6 +162,7 @@ const SaleListings = () => {
 
   const invalidate = () => Promise.all([
     queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] }),
+    queryClient.invalidateQueries({ queryKey: ["sale-listings-ref", biz] }),
     queryClient.invalidateQueries({ queryKey: ["sale-dashboard"] }),
   ]);
 
@@ -244,12 +247,18 @@ const SaleListings = () => {
   };
 
   const handleStatusChange = async (row, status) => {
+    if (statusInFlight.current.has(row._id)) return;
+    statusInFlight.current.add(row._id);
+    setStatusBusy((m) => ({ ...m, [row._id]: true }));
     try {
       await saleApi.updateListingStatus(row._id, status);
       await invalidate();
       toast.success(`Listing marked ${status.replace(/_/g, " ")}`);
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to update status");
+    } finally {
+      statusInFlight.current.delete(row._id);
+      setStatusBusy((m) => { const { [row._id]: _done, ...rest } = m; return rest; });
     }
   };
 
@@ -367,8 +376,8 @@ const SaleListings = () => {
 <div class="field"><div class="fl">Listing No.</div><div class="fv">${esc(row.listingNumber)}</div></div>
 <div class="field"><div class="fl">Title</div><div class="fv">${esc(row.title)}</div></div>
 <div class="field"><div class="fl">Listed Date</div><div class="fv">${esc(fmtD(row.listedDate))}</div></div>
-<div class="field"><div class="fl">Size</div><div class="fv">${row.size ? `${row.size} ${row.sizeUnit}` : "Not specified"}</div></div>
-<div class="field"><div class="fl">Title Deed</div><div class="fv">${row.titleDeedAvailable ? `Yes &ndash; ${row.titleDeedNumber || "N/A"}` : "Not available"}</div></div>
+<div class="field"><div class="fl">Size</div><div class="fv">${row.size ? esc(`${row.size} ${row.sizeUnit ?? ""}`.trim()) : "Not specified"}</div></div>
+<div class="field"><div class="fl">Title Deed</div><div class="fv">${row.titleDeedAvailable ? `Yes &ndash; ${esc(row.titleDeedNumber || "N/A")}` : "Not available"}</div></div>
 <div class="field"><div class="fl">Assigned Agent</div><div class="fv">${esc(row.assignedAgent?.fullName || "Unassigned")}</div></div></div>
 <div class="section-title">Location</div><div class="grid">
 <div class="field"><div class="fl">Location / Address</div><div class="fv">${esc(row.location || "—")}</div></div>
@@ -475,12 +484,12 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
                   <FaEdit className="text-[9px]" /> Edit
                 </button>
                 {row.status === "available" && (
-                  <button type="button" onClick={() => handleStatusChange(row, "reserved")} className="border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 hover:bg-amber-100">
+                  <button type="button" disabled={!!statusBusy[row._id]} onClick={() => handleStatusChange(row, "reserved")} className="border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed">
                     Reserve
                   </button>
                 )}
                 {row.status === "reserved" && (
-                  <button type="button" onClick={() => handleStatusChange(row, "available")} className="border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-100">
+                  <button type="button" disabled={!!statusBusy[row._id]} onClick={() => handleStatusChange(row, "available")} className="border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed">
                     Release
                   </button>
                 )}

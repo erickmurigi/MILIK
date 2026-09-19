@@ -36,6 +36,9 @@ const blankForm = {
 };
 
 
+// "walk_in" -> "Walk In" (matches the placeholder catalog's examples)
+const humanize = (v) => String(v ?? "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
 const SaleBuyers = () => {
   const confirm        = useConfirm();
   const queryClient    = useQueryClient();
@@ -71,7 +74,7 @@ const SaleBuyers = () => {
     queryKey: ["sale-buyers", biz, debouncedSearch, kycFilter, sourceFilter, page, pageSize],
     queryFn:  () => saleApi.listBuyers({ business: biz, search: debouncedSearch, kycStatus: kycFilter, source: sourceFilter, page, limit: pageSize }),
     enabled:  !!biz,
-    placeholderData: (prev) => prev,
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey?.[1] === biz ? prev : undefined),
     staleTime: 30_000,
   });
 
@@ -230,17 +233,19 @@ const SaleBuyers = () => {
   const printBuyer = (row) => {
     const co       = currentCompany || {};
     const coName   = co.companyName || co.name || "MILIK";
-    const esc      = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const logoHtml = co.logo
-      ? `<img src="${co.logo}" alt="logo" style="width:72px;height:72px;object-fit:contain;border:1px solid #cbd5e1;" />`
-      : `<div style="width:72px;height:72px;background:#0B3B2E;color:#fff;font-size:26px;font-weight:900;display:flex;align-items:center;justify-content:center;">${coName.slice(0, 1)}</div>`;
-    const coInfo   = [co.phone || co.phoneNumber, co.email || co.companyEmail].filter(Boolean).join(" • ");
+    const esc      = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    // Only http(s) / data:image URLs may reach the <img src>; anything else falls back to the initial tile.
+    const logoSrc  = typeof co.logo === "string" && /^(https?:\/\/|data:image\/)/i.test(co.logo.trim()) ? co.logo.trim() : "";
+    const logoHtml = logoSrc
+      ? `<img src="${esc(logoSrc)}" alt="logo" style="width:72px;height:72px;object-fit:contain;border:1px solid #cbd5e1;" />`
+      : `<div style="width:72px;height:72px;background:#0B3B2E;color:#fff;font-size:26px;font-weight:900;display:flex;align-items:center;justify-content:center;">${esc(coName.slice(0, 1))}</div>`;
+    const coInfo   = [co.phoneNo || co.phone || co.phoneNumber, co.email || co.companyEmail].filter(Boolean).join(" • ");
     const kycC     = { pending: "#92400e", verified: "#166534", rejected: "#9f1239" }[row.kycStatus] || "#334155";
     const kycBg2   = { pending: "#fef3c7", verified: "#dcfce7", rejected: "#ffe4e6" }[row.kycStatus] || "#f1f5f9";
     const printedOn= new Date().toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" });
     const field    = (label, value) => `<div class="field"><div class="fl">${esc(label)}</div><div class="fv">${esc(value || "—")}</div></div>`;
     const docsHtml = Array.isArray(row.kycDocuments) && row.kycDocuments.length
-      ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;margin-bottom:14px"><div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:6px">KYC Documents (${row.kycDocuments.length})</div>${row.kycDocuments.map((d) => `<div style="font-size:11px;color:#1e293b;padding:2px 0">&bull; ${esc(d)}</div>`).join("")}</div>`
+      ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;margin-bottom:14px"><div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:6px">KYC Documents (${esc(row.kycDocuments.length)})</div>${row.kycDocuments.map((d) => `<div style="font-size:11px;color:#1e293b;padding:2px 0">&bull; ${esc(d)}</div>`).join("")}</div>`
       : "";
     const win = window.open("", "_blank", "width=900,height=720");
     if (!win) return;
@@ -713,7 +718,13 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
             buyerNumber: emailTarget.buyerNumber || "",
             phone:       emailTarget.phone       || "",
             email:       emailTarget.email       || "",
-            companyName: currentCompany?.companyName || currentCompany?.name || "",
+            idNumber:    emailTarget.idNumber    || "",
+            kycStatus:   humanize(emailTarget.kycStatus),
+            source:      humanize(emailTarget.source),
+            registrationDate: emailTarget.createdAt ? fmtDate(emailTarget.createdAt) : "",
+            companyName:  currentCompany?.companyName || currentCompany?.name || "",
+            companyPhone: currentCompany?.phoneNo || currentCompany?.phone || currentCompany?.telephone || "",
+            companyEmail: currentCompany?.email || currentCompany?.companyEmail || "",
           }}
         />
       )}

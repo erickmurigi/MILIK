@@ -18,6 +18,14 @@ const LEAD_STATUSES = [
   { key: "lost",          color: "bg-rose-400" },
 ];
 
+// Backend returns camelCase keys for multi-word lead statuses.
+const LEAD_KEY_MAP = {
+  site_visited:  "siteVisited",
+  proposal_sent: "proposalSent",
+};
+const toCamel = (k) => k.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+const leadCount = (leads, key) => leads[LEAD_KEY_MAP[key] ?? toCamel(key)] ?? leads[key] ?? 0;
+
 const OFFER_STATUSES = [
   { key: "pending",     color: "bg-amber-400" },
   { key: "negotiating", color: "bg-orange-400" },
@@ -166,7 +174,7 @@ export default function SaleConversionFunnel() {
                           <span className="text-slate-700">{cap(key)}</span>
                         </div>
                       </td>
-                      <td className="px-3 py-1.5 text-right font-mono font-semibold tabular-nums">{(leads[key === "site_visited" ? "siteVisited" : key] ?? leads[key] ?? 0).toLocaleString()}</td>
+                      <td className="px-3 py-1.5 text-right font-mono font-semibold tabular-nums">{leadCount(leads, key).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>
