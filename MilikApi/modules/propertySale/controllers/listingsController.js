@@ -4,6 +4,7 @@ import SaleListing from "../models/SaleListing.js";
 import SaleAgent from "../models/SaleAgent.js";
 import SaleDeal from "../models/SaleDeal.js";
 import SaleProject from "../models/SaleProject.js";
+import { PROJECT_WITH_AGENT, withEffectiveAgent } from "../services/listingAgent.js";
 import { currentUserId, escapeRegex, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { deleteImageFile } from "../middleware/listingImageUpload.js";
 
@@ -53,7 +54,18 @@ export const listListings = async (req, res, next) => {
     const filter = { business };
     if (status) filter.status = status;
     if (propertyType) filter.propertyType = propertyType;
-    if (agentId) filter.assignedAgent = agentId;
+    // An agent's listings are those assigned to them plus units that inherit them from their project
+    const andClauses = [];
+    if (agentId) {
+      if (!mongoose.isValidObjectId(String(agentId))) return next(createError(400, "Invalid agent"));
+      const agentProjects = await SaleProject.distinct("_id", { business, assignedAgent: agentId });
+      andClauses.push(
+        agentProjects.length
+          ? { $or: [{ assignedAgent: agentId }, { assignedAgent: null, project: { $in: agentProjects } }] }
+          : { assignedAgent: agentId }
+      );
+    }
+    if (andClauses.length) filter.$and = andClauses;
     if (block) filter.block = block;
 
     // Project scope: a project id, "any" (units only), "none" (standalone only). Default: every sellable item,
@@ -84,7 +96,7 @@ export const listListings = async (req, res, next) => {
     const [listings, total, statsRaw] = await Promise.all([
       withUnitOrdering(SaleListing.find(filter), Boolean(projectId))
         .populate("assignedAgent", "fullName agentNumber phone")
-        .populate("project", "name projectNumber")
+        .populate(PROJECT_WITH_AGENT)
         .sort(projectId ? { block: 1, unitNumber: 1 } : { createdAt: -1 })
         .skip((pageNum - 1) * limitNum)
         .limit(limitNum)
@@ -103,7 +115,7 @@ export const listListings = async (req, res, next) => {
       sold:          statsMap.sold          || { count: 0, totalValue: 0 },
       withdrawn:     statsMap.withdrawn     || { count: 0, totalValue: 0 },
     };
-    res.status(200).json({ data: listings, total, page: pageNum, pages: Math.ceil(total / limitNum) || 1, stats });
+    res.status(200).json({ data: listings.map(withEffectiveAgent), total, page: pageNum, pages: Math.ceil(total / limitNum) || 1, stats });
   } catch (err) {
     next(err);
   }
@@ -114,10 +126,10 @@ export const getListing = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const listing = await SaleListing.findOne({ _id: req.params.id, business })
       .populate("assignedAgent", "fullName agentNumber phone email commissionRate commissionType")
-      .populate("project", "name projectNumber")
+      .populate(PROJECT_WITH_AGENT)
       .lean();
     if (!listing) return next(createError(404, "Listing not found"));
-    res.status(200).json(listing);
+    res.status(200).json(withEffectiveAgent(listing));
   } catch (err) {
     next(err);
   }
@@ -153,9 +165,9 @@ export const createListing = async (req, res, next) => {
     });
     const populated = await SaleListing.findById(listing._id)
       .populate("assignedAgent", "fullName agentNumber phone")
-      .populate("project", "name projectNumber")
+      .populate(PROJECT_WITH_AGENT)
       .lean();
-    res.status(201).json(populated);
+    res.status(201).json(withEffectiveAgent(populated));
   } catch (err) {
     next(duplicateUnitError(err) || err);
   }
@@ -198,10 +210,10 @@ export const updateListing = async (req, res, next) => {
       { new: true, runValidators: true }
     )
       .populate("assignedAgent", "fullName agentNumber phone")
-      .populate("project", "name projectNumber")
+      .populate(PROJECT_WITH_AGENT)
       .lean();
     if (!listing) return next(createError(404, "Listing not found"));
-    res.status(200).json(listing);
+    res.status(200).json(withEffectiveAgent(listing));
   } catch (err) {
     next(duplicateUnitError(err) || err);
   }

@@ -16,6 +16,8 @@ const saleProjectSchema = new mongoose.Schema(
     county: { type: String, trim: true, default: "" },
     country: { type: String, trim: true, default: "Kenya" },
     currency: { type: String, default: "KES" },
+    // Default agent for the project's units: a unit with no agent of its own inherits this one
+    assignedAgent: { type: mongoose.Schema.Types.ObjectId, ref: "SaleAgent", default: null },
     launchDate: { type: Date, default: null },
     // Optional goals shown against actual sales on the project page
     targetUnits: { type: Number, min: 0, default: null },

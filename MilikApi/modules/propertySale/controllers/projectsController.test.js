@@ -6,12 +6,13 @@ import { createTestCompany, createTestUser } from "../../../test/factories.js";
 import SaleListing from "../models/SaleListing.js";
 import SaleDeal from "../models/SaleDeal.js";
 import SalePayment from "../models/SalePayment.js";
+import SaleAgent from "../models/SaleAgent.js";
 import {
   applyProjectDetails, assignUnits, createProject, deleteProject, detachUnit, generateUnits,
   getProject, listProjects, listProjectUnits, removeProjectImage, setProjectArchived, updateProject, updateUnitPrices,
   uploadProjectImages,
 } from "./projectsController.js";
-import { createListing, listListings, updateListing } from "./listingsController.js";
+import { createListing, getListing, listListings, updateListing } from "./listingsController.js";
 
 const setup = async () => {
   const company = await createTestCompany();
@@ -195,6 +196,59 @@ describe("projects", () => {
     const list = await call(listProjects, {});
     expect(list.payload.data[0]).toMatchObject({ name: "Sunrise Estate", sellThrough: 25 });
     expect(list.payload.data[0].units.total).toBe(4);
+  });
+
+  it("units inherit the project's agent unless they have their own, and follow it when it changes", async () => {
+    const { company, call, project } = await setup();
+    const id = String(project._id);
+    const mk = (n, extra = {}) => SaleAgent.create({ business: company._id, agentNumber: `AG-${n}`, fullName: n, ...extra });
+    const jane = await mk("Jane");
+    const bob = await mk("Bob");
+    const gone = await mk("Gone", { status: "inactive" });
+
+    // only an active agent of this company can be the project's agent
+    await expect(call(updateProject, { params: { id }, body: { assignedAgent: String(gone._id) } })).rejects.toThrow(/not found or inactive/);
+    await expect(call(updateProject, { params: { id }, body: { assignedAgent: "nope" } })).rejects.toThrow(/not found or inactive/);
+    const other = await setup();
+    await expect(other.call(updateProject, { params: { id: String(other.project._id) }, body: { assignedAgent: String(jane._id) } })).rejects.toThrow(/not found or inactive/);
+
+    const set = await call(updateProject, { params: { id }, body: { assignedAgent: String(jane._id) } });
+    expect(set.payload.assignedAgent.fullName).toBe("Jane");
+    await generate(call, project, { to: 3 });
+    const a2 = await SaleListing.findOne({ project: project._id, unitNumber: "A-2" });
+    await call(updateListing, { params: { id: String(a2._id) }, body: { assignedAgent: String(bob._id) } });
+
+    const agents = async () => Object.fromEntries(
+      (await call(listProjectUnits, { params: { id } })).payload.data.map((u) => [u.unitNumber, [u.effectiveAgent?.fullName ?? null, u.agentInherited]])
+    );
+    expect(await agents()).toEqual({ "A-1": ["Jane", true], "A-2": ["Bob", false], "A-3": ["Jane", true] });
+
+    // listings carry the same fields, and the agent filter finds inherited units too
+    const janes = await call(listListings, { query: { agentId: String(jane._id) } });
+    expect(janes.payload.data.map((u) => u.unitNumber).sort()).toEqual(["A-1", "A-3"]);
+    expect(janes.payload.data[0]).toMatchObject({ agentInherited: true });
+    expect((await call(listListings, { query: { agentId: String(bob._id) } })).payload.data.map((u) => u.unitNumber)).toEqual(["A-2"]);
+    const one = await call(getListing, { params: { id: String((await SaleListing.findOne({ project: project._id, unitNumber: "A-1" }))._id) } });
+    expect(one.payload).toMatchObject({ assignedAgent: null, agentInherited: true });
+    expect(one.payload.effectiveAgent.fullName).toBe("Jane");
+
+    // changing the project's agent moves the inheriting units; the unit with its own agent stays
+    await call(updateProject, { params: { id }, body: { assignedAgent: String(bob._id) } });
+    expect(await agents()).toEqual({ "A-1": ["Bob", true], "A-2": ["Bob", false], "A-3": ["Bob", true] });
+
+    // clearing a unit's own agent returns it to the project's agent
+    await call(updateProject, { params: { id }, body: { assignedAgent: String(jane._id) } });
+    await call(updateListing, { params: { id: String(a2._id) }, body: { assignedAgent: "" } });
+    expect(await agents()).toEqual({ "A-1": ["Jane", true], "A-2": ["Jane", true], "A-3": ["Jane", true] });
+
+    // an agent who was deactivated later can stay on the project while it is edited
+    await SaleAgent.updateOne({ _id: jane._id }, { status: "inactive" });
+    await call(updateProject, { params: { id }, body: { name: "Sunrise Estate II", assignedAgent: String(jane._id) } });
+
+    // clearing the project's agent leaves units with none
+    await call(updateProject, { params: { id }, body: { assignedAgent: "" } });
+    expect(await agents()).toEqual({ "A-1": [null, false], "A-2": [null, false], "A-3": [null, false] });
+    expect((await call(getProject, { params: { id } })).payload.assignedAgent).toBeNull();
   });
 
   it("attaches and removes project photos, and keeps them private to the company", async () => {

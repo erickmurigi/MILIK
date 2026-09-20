@@ -8,6 +8,7 @@ import SaleLead, { LEAD_STATUSES } from "../models/SaleLead.js";
 import SalePaymentSchedule from "../models/SalePaymentSchedule.js";
 import { resolveActiveBusinessId } from "../services/businessScope.js";
 import { ownDealIds } from "../middleware/agentScope.js";
+import { PROJECT_WITH_AGENT, withEffectiveAgent } from "../services/listingAgent.js";
 
 // Filter fragments restricting each report figure to the caller's own records when the company keeps agents to
 // their own data (req.saleAgentId); all empty otherwise. Listings and buyers stay business-wide. Ids are real
@@ -68,6 +69,7 @@ export const getDashboardStats = async (req, res, next) => {
         .sort({ createdAt: -1 })
         .limit(5)
         .populate("assignedAgent", "fullName")
+        .populate(PROJECT_WITH_AGENT)
         .lean(),
     ]);
 
@@ -116,7 +118,7 @@ export const getDashboardStats = async (req, res, next) => {
         total:        Object.values(leadMap).reduce((a, b) => a + b, 0),
       },
       recentDeals,
-      recentListings,
+      recentListings: recentListings.map(withEffectiveAgent),
     });
   } catch (err) {
     next(err);
@@ -394,6 +396,7 @@ export const getMonthlyDetail = async (req, res, next) => {
     const [listings, offers, deals, payments, commissions] = await Promise.all([
       SaleListing.find({ business, createdAt: { $gte: monthStart, $lt: monthEnd } })
         .populate("assignedAgent", "fullName agentNumber")
+        .populate(PROJECT_WITH_AGENT)
         .select("listingNumber title propertyType askingPrice status location createdAt")
         .sort({ createdAt: -1 })
         .lean(),
@@ -452,7 +455,7 @@ export const getMonthlyDetail = async (req, res, next) => {
       year,
       month,
       monthName: MONTH_NAMES[month - 1],
-      listings,
+      listings: listings.map(withEffectiveAgent),
       offers,
       deals,
       payments,

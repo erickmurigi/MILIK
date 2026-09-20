@@ -11,6 +11,7 @@ import {
 } from "../services/businessScope.js";
 import { agentFilter } from "../middleware/agentScope.js";
 import { deleteImageFile } from "../middleware/listingImageUpload.js";
+import { withEffectiveAgent } from "../services/listingAgent.js";
 
 const MAX_UNITS_PER_REQUEST = 500;
 const MAX_UNITS_LISTED = 2000;
@@ -24,12 +25,14 @@ const toObjectId = (v) => new mongoose.Types.ObjectId(String(v));
 const optionalNumber = (v) => (v === "" || v == null ? null : Number(v));
 
 // Fields an admin can set on a project (status only changes through archive, numbers only through the sequence)
-const PROJECT_FIELDS = ["name", "description", "location", "town", "county", "country", "currency", "launchDate", "targetUnits", "targetValue", "notes"];
+const PROJECT_FIELDS = ["name", "description", "location", "town", "county", "country", "currency", "assignedAgent", "launchDate", "targetUnits", "targetValue", "notes"];
+const AGENT_FIELDS = "fullName agentNumber phone";
 
 const pickProjectBody = (body = {}) => {
   const out = {};
   for (const key of PROJECT_FIELDS) if (key in body) out[key] = body[key];
   if ("name" in out) out.name = String(out.name ?? "").trim();
+  if ("assignedAgent" in out) out.assignedAgent = out.assignedAgent || null;
   if ("launchDate" in out) out.launchDate = out.launchDate || null;
   if ("targetUnits" in out) out.targetUnits = optionalNumber(out.targetUnits);
   if ("targetValue" in out) out.targetValue = optionalNumber(out.targetValue);
@@ -41,6 +44,14 @@ const validateTargets = (data) => {
     if (data[key] != null && (!Number.isFinite(data[key]) || data[key] < 0)) return `${key === "targetUnits" ? "Target units" : "Target value"} must be a number of 0 or more`;
   }
   return null;
+};
+
+// A project's default agent must be an active agent of the same company
+const agentProblem = async (business, agentId) => {
+  if (!agentId) return null;
+  if (!mongoose.isValidObjectId(String(agentId))) return "Assigned agent not found or inactive";
+  const agent = await SaleAgent.findOne({ _id: agentId, business, status: "active" }).select("_id").lean();
+  return agent ? null : "Assigned agent not found or inactive";
 };
 
 const findProject = (business, id) =>
@@ -88,7 +99,7 @@ export const listProjects = async (req, res, next) => {
     }
 
     const [projects, total] = await Promise.all([
-      SaleProject.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      SaleProject.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).populate("assignedAgent", AGENT_FIELDS).lean(),
       SaleProject.countDocuments(filter),
     ]);
 
@@ -193,6 +204,7 @@ export const getProject = async (req, res, next) => {
     const rows = await statusRows(business, [project._id]);
     const summary = summarise(rows.map((r) => ({ status: r._id.status, count: r.count, value: r.value })));
     const performance = await projectPerformance(req, business, project, units);
+    await project.populate("assignedAgent", AGENT_FIELDS);
 
     res.status(200).json({ ...project.toObject(), ...summary, performance });
   } catch (err) {
@@ -209,9 +221,12 @@ export const createProject = async (req, res, next) => {
     const targetError = validateTargets(data);
     if (targetError) return next(createError(400, targetError));
     if (await nameTaken(business, data.name)) return next(createError(409, "A project with this name already exists"));
+    const agentError = await agentProblem(business, data.assignedAgent);
+    if (agentError) return next(createError(400, agentError));
 
     const projectNumber = await generateSequentialNumber(SaleProject, business, "PRJ");
     const project = await SaleProject.create({ ...data, business, projectNumber, createdBy: userId, updatedBy: userId });
+    await project.populate("assignedAgent", AGENT_FIELDS);
     res.status(201).json({ ...project.toObject(), ...summarise([]) });
   } catch (err) {
     next(err);
@@ -230,9 +245,15 @@ export const updateProject = async (req, res, next) => {
     const project = await findProject(business, req.params.id);
     if (!project) return next(createError(404, "Project not found"));
     if (data.name && (await nameTaken(business, data.name, project._id))) return next(createError(409, "A project with this name already exists"));
+    // Only a newly chosen agent has to be active: keeping the current one is always allowed
+    if (data.assignedAgent && String(data.assignedAgent) !== String(project.assignedAgent || "")) {
+      const agentError = await agentProblem(business, data.assignedAgent);
+      if (agentError) return next(createError(400, agentError));
+    }
 
     project.set({ ...data, updatedBy: userId });
     await project.save();
+    await project.populate("assignedAgent", AGENT_FIELDS);
     res.status(200).json(project.toObject());
   } catch (err) {
     next(err);
@@ -338,7 +359,10 @@ export const listProjectUnits = async (req, res, next) => {
     if (UNIT_STATUSES.includes(req.query.status)) filter.status = req.query.status;
     if (req.query.block) filter.block = String(req.query.block);
 
-    const [data, total] = await Promise.all([
+    await project.populate("assignedAgent", AGENT_FIELDS);
+    const projectAgent = project.assignedAgent ? project.assignedAgent.toObject() : null;
+
+    const [rows, total] = await Promise.all([
       SaleListing.find(filter)
         .select("listingNumber title unitNumber block propertyType size sizeUnit askingPrice status assignedAgent titleDeedAvailable")
         .populate("assignedAgent", "fullName agentNumber")
@@ -348,7 +372,10 @@ export const listProjectUnits = async (req, res, next) => {
         .lean(),
       SaleListing.countDocuments(filter),
     ]);
-    res.status(200).json({ data, total, truncated: total > data.length });
+    // Units without their own agent show the project's agent (effectiveAgent / agentInherited)
+    const data = rows.map((u) => withEffectiveAgent({ ...u, project: { assignedAgent: projectAgent } }))
+      .map(({ project: _p, ...unit }) => unit);
+    res.status(200).json({ data, total, truncated: total > rows.length });
   } catch (err) {
     next(err);
   }
