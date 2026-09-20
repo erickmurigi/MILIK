@@ -726,4 +726,26 @@ per business (cleared when the setting changes).
 
 ---
 
+## PropertySale projects and units (2026-09-20)
+
+Companies can now sell items grouped into projects (plots in an estate, flats in a development) and track how each
+project is selling. **A unit is an ordinary listing that belongs to a project** (`SaleListing.project`, `unitNumber`,
+`block`), so offers, deals, payments, commissions and GL posting are untouched and standalone listings keep working.
+
+- **Backend:** `SaleProject` model; `/api/sale/projects` (list with unit counts, detail with derived performance:
+  sell-through, booked / collected / outstanding, price realisation, days to sell, monthly pace, per-agent results;
+  generate units in bulk, group existing listings, bulk price change on available units only, apply project details to
+  unsold units, detach a unit, archive, delete). Uses the `sale-listings` permission. Unit numbers are unique per project
+  (partial unique index, standalone listings exempt). `GET /sale/listings` accepts `project=any|none`, `projectId`, `block`.
+  Money figures follow the agent visibility setting; unit counts stay shared like listings.
+- **Switch:** Sale Settings -> Selling Mode (`SaleSettings.useProjects`, default off) shows the Projects and Units pages;
+  when on, the Listings page shows standalone items only. Turning it off only hides pages.
+- **Client:** Projects list, Project page (unit grid, performance tab, generate / bulk price / add existing modals),
+  Units page, shared `SaleListingFormModal`. Wording comes from the company terminology setting (`saleProject`, `saleUnit`, ...).
+- **Tests:** `projectsController.test.js` (11 integration tests on an in-memory Mongo).
+- **Deploy:** no migration. The new listing indexes build automatically on startup.
+- **Not done / open:** one deal covers one unit (a buyer taking several units gets several deals); listing images added
+  while creating a unit inside the form do not preview until the unit is reopened; the "view offers" link on a unit is not
+  filtered; not exercised in a browser.
+
 *Last updated: 2026-09-20 (Track H closed — PropertySale performance pass, see above). Track G note: PropertySale correctness pass, see above. Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C/E/F/G as items are actioned.*

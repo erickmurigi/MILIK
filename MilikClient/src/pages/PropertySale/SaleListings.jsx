@@ -87,7 +87,7 @@ const renderListingRow = (row) => (
 
 
 const SaleListings = () => {
-  const T = useTerms("saleListing", "saleListings", "saleAgent", "saleAgents");
+  const T = useTerms("saleListing", "saleListings", "saleAgent", "saleAgents", "saleUnits", "saleProject");
   const LISTING_TABLE_COLS = useMemo(() => listingTableCols(T), [T]);
   const confirm        = useConfirm();
   const queryClient    = useQueryClient();
@@ -111,20 +111,26 @@ const SaleListings = () => {
   const debouncedSearch = useDebounce(search, 400);
   const biz = currentCompany?._id;
 
-  const { data: listingsData, isLoading: loading, isFetching } = useQuery({
-    queryKey: ["sale-listings", biz, debouncedSearch, statusFilt, typeFilt, agentFilt, page, pageSize],
-    queryFn:  () => saleApi.listListings({ business: biz, search: debouncedSearch, status: statusFilt, propertyType: typeFilt, agentId: agentFilt, page, limit: pageSize }),
-    enabled:  !!biz,
-    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey?.[1] === biz ? prev : undefined),
-    staleTime: 30_000,
-  });
-
-  const { data: saleSettings } = useQuery({
+  const { data: saleSettings, isPending: settingsPending } = useQuery({
     queryKey: ["sale-settings", biz],
     queryFn:  () => saleApi.getSettings(),
     enabled:  !!biz,
     staleTime: 10 * 60_000,
   });
+
+  // When the company sells in projects, items that belong to a project are listed on the units page instead
+  const standaloneOnly = !!saleSettings?.useProjects;
+
+  // Wait for the settings so a company that sells in projects never briefly sees its units in this list
+  const { data: listingsData, isLoading: listingsLoading, isFetching } = useQuery({
+    queryKey: ["sale-listings", biz, debouncedSearch, statusFilt, typeFilt, agentFilt, page, pageSize, standaloneOnly],
+    queryFn:  () => saleApi.listListings({ business: biz, search: debouncedSearch, status: statusFilt, propertyType: typeFilt, agentId: agentFilt, page, limit: pageSize, ...(standaloneOnly && { project: "none" }) }),
+    enabled:  !!biz && !settingsPending,
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey?.[1] === biz ? prev : undefined),
+    staleTime: 30_000,
+  });
+
+  const loading = listingsLoading || settingsPending;
 
   const activePropertyTypes = useMemo(() => (saleSettings?.propertyTypes ?? []).filter((t) => t.isActive !== false), [saleSettings]);
   const PROPERTY_TYPE_OPTIONS = useMemo(() => activePropertyTypes.length
@@ -373,6 +379,9 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
         <AppSelect value={typeFilt} onChange={(v) => { setTypeFilt(v ?? ""); setPage(1); }} options={PROPERTY_TYPE_OPTIONS} placeholder="All Types" clearable size="sm" />
         <AppSelect value={agentFilt} onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }} options={agentFilterOptions} placeholder={`All ${T.saleAgents}`} clearable size="sm" searchable />
       </SaleFilterBar>
+      {standaloneOnly && (
+        <div className="shrink-0 px-1 text-[10px] text-slate-400">Items that belong to a {T.saleProject.toLowerCase()} are listed under {T.saleUnits}.</div>
+      )}
 
       {/* Table + images panel */}
       <div className="relative flex flex-col flex-1 min-h-0 overflow-hidden">
