@@ -68,13 +68,27 @@ const DEFAULTS = {
 // never clears the property-management words (and vice versa).
 export const SALE_TERM_KEYS = Object.keys(DEFAULTS).filter((k) => k.startsWith("sale"));
 
+// Sales plurals and their singular. A company that renames only the singular ("Vehicle") gets the regular plural
+// ("Vehicles") for the plural key, instead of falling back to the default word ("Listings").
+export const SALE_PLURAL_OF = {
+  saleListings: "saleListing", saleProjects: "saleProject", saleUnits: "saleUnit", saleBuyers: "saleBuyer",
+  saleLeads: "saleLead", saleOffers: "saleOffer", saleDeals: "saleDeal", saleAgents: "saleAgent",
+};
+
+const readTerm = (terminology, key) => (terminology instanceof Map ? terminology.get(key) : terminology?.[key]);
+
+const resolveTerm = (terminology, key) => {
+  const custom = readTerm(terminology, key);
+  if (custom) return custom;
+  const singular = SALE_PLURAL_OF[key];
+  const customSingular = singular ? readTerm(terminology, singular) : null;
+  if (customSingular) return `${customSingular}s`;
+  return DEFAULTS[key] || key;
+};
+
 // Returns a stable primitive — no shallowEqual needed; re-renders only when the string value changes.
 export function useTerm(key) {
-  return useSelector((s) => {
-    const terminology = s.companySettings?.companySettings?.terminology;
-    const custom = terminology instanceof Map ? terminology.get(key) : terminology?.[key];
-    return custom || DEFAULTS[key] || key;
-  });
+  return useSelector((s) => resolveTerm(s.companySettings?.companySettings?.terminology, key));
 }
 
 // Multi-key variant — one Redux subscription for many terms.
@@ -83,20 +97,14 @@ export function useTerms(...keys) {
   return useSelector((s) => {
     const terminology = s.companySettings?.companySettings?.terminology;
     const result = {};
-    for (const k of keys) {
-      const custom = terminology instanceof Map ? terminology.get(k) : terminology?.[k];
-      result[k] = custom || DEFAULTS[k] || k;
-    }
+    for (const k of keys) result[k] = resolveTerm(terminology, k);
     return result;
   }, shallowEqual);
 }
 
 // Non-hook version for use outside components — pass the terminology object directly
 export function getTerm(terminology, key) {
-  const custom = terminology instanceof Map
-    ? terminology?.get(key)
-    : terminology?.[key];
-  return custom || DEFAULTS[key] || key;
+  return resolveTerm(terminology, key);
 }
 
 // Returns the active terminology preset label ("Water Vending", etc.) or null if no preset matches.

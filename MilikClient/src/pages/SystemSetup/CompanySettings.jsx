@@ -5,7 +5,7 @@ import { useSelector, useDispatch } from "react-redux";
 import { useQueryClient } from "@tanstack/react-query";
 import { selectCurrentCompany } from "../../redux/selectors";
 import { selectCompanySettings, fetchCompanySettings, getSettingsSuccess } from "../../redux/companySettingsRedux";
-import { SALE_TERM_KEYS, TERM_DEFAULTS } from "../../hooks/useTerm";
+import { SALE_PLURAL_OF, SALE_TERM_KEYS, TERM_DEFAULTS } from "../../hooks/useTerm";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
@@ -888,8 +888,10 @@ const TerminologyPanel = ({ currentCompany }) => {
     if (!currentCompany?._id) return;
     setSaving(true);
     try {
+      // Every word is sent, a blank one as "": the server only changes words it receives, and removes a blank one, which is
+      // how a preset (or clearing a field) returns a word to its default.
       const payload = {};
-      Object.keys(form).forEach((k) => { if (form[k].trim()) payload[k] = form[k].trim(); });
+      Object.keys(form).forEach((k) => { payload[k] = form[k].trim(); });
       const result = await adminRequests.patch(`/company-settings/${currentCompany._id}/terminology`, { terminology: payload });
       // Update Redux directly from the response — the fetchCompanySettings guard would return
       // stale cached data if settings are already in store, so we update the terminology field directly.
@@ -964,7 +966,7 @@ const TerminologyPanel = ({ currentCompany }) => {
                     type="text"
                     className={inputClass}
                     value={custom}
-                    placeholder={`Default: ${defaultVal}`}
+                    placeholder={SALE_PLURAL_OF[key] && form[SALE_PLURAL_OF[key]] ? `Auto: ${form[SALE_PLURAL_OF[key]]}s` : `Default: ${defaultVal}`}
                     maxLength={40}
                     onChange={(e) => handleChange(key, e.target.value)}
                   />
