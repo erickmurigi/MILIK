@@ -70,7 +70,7 @@ const sanitizeDealBody = (body) => {
 
 const populateDeal = (query) =>
   query
-    .populate("listing", "title listingNumber propertyType askingPrice location town status")
+    .populate("listing", "title listingNumber propertyType askingPrice location town county size sizeUnit status")
     .populate("buyer", "fullName buyerNumber phone email")
     .populate("agent", "fullName agentNumber phone commissionRate commissionType")
     .populate("offer", "offerNumber offerAmount");

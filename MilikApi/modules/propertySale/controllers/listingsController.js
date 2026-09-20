@@ -78,7 +78,8 @@ export const createListing = async (req, res, next) => {
 
     // acceptedOffer is server-managed. A new listing may only start as available/withdrawn —
     // reserved / under_contract / sold are driven by the offers + deals workflow.
-    const { acceptedOffer: _ao, ...rawBody } = req.body;
+    // images are managed only through the upload/delete image endpoints.
+    const { acceptedOffer: _ao, images: _im, ...rawBody } = req.body;
     if (rawBody.status && !CREATE_STATUSES.includes(rawBody.status)) {
       return next(createError(400, `A new listing can only be created as ${CREATE_STATUSES.join(" or ")}`));
     }
@@ -109,7 +110,8 @@ export const updateListing = async (req, res, next) => {
     const userId = currentUserId(req);
     // status is stripped: every status change must go through updateListingStatus (deal/offer guards).
     // acceptedOffer is server-managed by the offer workflow.
-    const { business: _b, listingNumber: _n, createdBy: _c, status: _s, acceptedOffer: _ao, ...rawUpdates } = req.body;
+    // images are managed only through the upload/delete image endpoints (a generic edit must not overwrite them).
+    const { business: _b, listingNumber: _n, createdBy: _c, status: _s, acceptedOffer: _ao, images: _im, ...rawUpdates } = req.body;
     const updates = sanitizeListingBody(rawUpdates);
 
     if (updates.assignedAgent) {

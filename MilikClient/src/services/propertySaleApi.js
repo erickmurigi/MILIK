@@ -59,6 +59,14 @@ export const saleApi = {
 
   // Payments
   listPayments: async (params = {}) => unwrapPage(await adminRequests.get("/sale/payments", { params })),
+  // Every payment of one deal (the list endpoint caps a page at 200): first page, then the rest in parallel.
+  listAllDealPayments: async (dealId) => {
+    const get = async (page) => unwrapPage(await adminRequests.get("/sale/payments", { params: { deal: dealId, page, limit: 200 } }));
+    const first = await get(1);
+    const pages = Math.min(Math.max(Number(first.pages) || 1, 1), 50);
+    const rest = pages > 1 ? await Promise.all(Array.from({ length: pages - 1 }, (_, i) => get(i + 2))) : [];
+    return [first, ...rest].flatMap((p) => p?.data ?? []);
+  },
   getPayment: async (id, params = {}) => unwrap(await adminRequests.get(`/sale/payments/${id}`, { params })),
   createPayment: async (payload) => unwrap(await adminRequests.post("/sale/payments", payload)),
   updatePayment: async (id, payload) => unwrap(await adminRequests.put(`/sale/payments/${id}`, payload)),

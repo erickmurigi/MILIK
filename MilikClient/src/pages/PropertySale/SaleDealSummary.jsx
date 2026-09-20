@@ -41,10 +41,10 @@ const SaleDealSummary = () => {
     try {
       const [d, pmtsData] = await Promise.all([
         saleApi.getDeal(id),
-        saleApi.listPayments({ deal: id, limit: 200 }),
+        saleApi.listAllDealPayments(id),
       ]);
       setDeal(d);
-      setPayments((pmtsData?.data ?? []).filter((p) => p.status === "paid"));
+      setPayments((pmtsData ?? []).filter((p) => p.status === "paid"));
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || "Failed to load deal");
     } finally {

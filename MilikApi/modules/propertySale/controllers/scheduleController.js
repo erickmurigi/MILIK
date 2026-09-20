@@ -87,9 +87,28 @@ export const setSchedule = async (req, res, next) => {
       updatedBy:         userId,
     }));
 
-    // Replace all existing schedule items for this deal
-    await SalePaymentSchedule.deleteMany({ business, deal: dealId, status: { $nin: ["paid", "waived"] } });
-    const created = await SalePaymentSchedule.insertMany(docs);
+    // Reject invalid items before anything is deleted
+    for (const d of docs) {
+      const invalid = new SalePaymentSchedule(d).validateSync();
+      if (invalid) return next(createError(400, `Invalid installment: ${invalid.message}`));
+    }
+
+    // Replace all existing schedule items for this deal. Keep a copy of what is being removed so a failed
+    // insert (e.g. a concurrent request) restores the previous schedule instead of leaving the deal with none.
+    const removable = { business, deal: dealId, status: { $nin: ["paid", "waived"] } };
+    const previous = await SalePaymentSchedule.find(removable).lean();
+    await SalePaymentSchedule.deleteMany(removable);
+    let created;
+    try {
+      created = await SalePaymentSchedule.insertMany(docs);
+    } catch (insertErr) {
+      if (previous.length) {
+        await SalePaymentSchedule.insertMany(previous, { ordered: false }).catch((e) =>
+          console.error("[propertySale] schedule restore failed for deal", String(dealId), e?.message)
+        );
+      }
+      throw insertErr;
+    }
 
     res.status(200).json({ data: created, total: created.length });
   } catch (err) { next(err); }

@@ -69,7 +69,7 @@ const insertBatch = async (Model, docs, numberField) => {
 
 // ── Listings bulk import ──────────────────────────────────────────────────────
 
-export const bulkImportListings = async (req, res, next) => {
+const bulkImportListingsHandler = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
@@ -191,7 +191,7 @@ export const bulkImportListings = async (req, res, next) => {
 
 // ── Buyers bulk import ────────────────────────────────────────────────────────
 
-export const bulkImportBuyers = async (req, res, next) => {
+const bulkImportBuyersHandler = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
@@ -303,3 +303,27 @@ export const bulkImportBuyers = async (req, res, next) => {
     next(err);
   }
 };
+
+// Only one import of each kind per business at a time: duplicate detection reads existing rows before inserting,
+// so two overlapping uploads of the same file would otherwise both insert. (Single API process; the guard is in-memory.)
+const runningImports = new Set();
+const withImportLock = (kind, handler) => async (req, res, next) => {
+  let key;
+  try {
+    key = `${resolveActiveBusinessId(req)}:${kind}`;
+  } catch (err) {
+    return next(err);
+  }
+  if (runningImports.has(key)) {
+    return next(createError(409, "An import is already running for this business - wait for it to finish, then try again"));
+  }
+  runningImports.add(key);
+  try {
+    await handler(req, res, next);
+  } finally {
+    runningImports.delete(key);
+  }
+};
+
+export const bulkImportListings = withImportLock("listings", bulkImportListingsHandler);
+export const bulkImportBuyers = withImportLock("buyers", bulkImportBuyersHandler);
