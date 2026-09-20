@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
+import { useQueryClient } from "@tanstack/react-query";
 import { selectCurrentCompany } from "../../redux/selectors";
 import { selectCompanySettings, fetchCompanySettings, getSettingsSuccess } from "../../redux/companySettingsRedux";
 import { SALE_TERM_KEYS, TERM_DEFAULTS } from "../../hooks/useTerm";
@@ -152,6 +153,16 @@ const TAB_CONFIG = {
     icon: FaCog,
     requiredModules: ["propertySale"],
   },
+  saleAgentVisibility: {
+    label: "Agent Visibility",
+    icon: FaCog,
+    requiredModules: ["propertySale"],
+  },
+  saleSellingMode: {
+    label: "Selling Mode",
+    icon: FaCog,
+    requiredModules: ["propertySale"],
+  },
   invPOSSettings: {
     label: "POS & Receipt",
     icon: FaReceipt,
@@ -179,7 +190,7 @@ const SIDEBAR_GROUPS = [
   { label: "Utilities & Maintenance",  items: ["utilities", "maintenanceCategories"] },
   { label: "Financial & Accounting",   items: ["tax", "accounting", "incomeRules", "expenses"] },
   { label: "Billing Rules",            items: ["penaltyRules", "autoInvoicing"] },
-  { label: "Property Sales",           items: ["saleStages", "saleSources", "salePropertyTypes", "saleCommDefaults"] },
+  { label: "Property Sales",           items: ["saleStages", "saleSources", "salePropertyTypes", "saleCommDefaults", "saleAgentVisibility", "saleSellingMode"] },
   { label: "Inventory & POS",          items: ["invPOSSettings"] },
   { label: "Car Wash",                 items: ["cwOperations", "cwSMS"] },
   { label: "System",                   items: ["terminology"] },
@@ -1024,6 +1035,8 @@ const CompanySettings = () => {
   const [saleSettings, setSaleSettings] = useState(null);
   const [saleCommForm, setSaleCommForm] = useState({ rate: 3, commissionType: "percentage", whtRate: 5 });
   const [savingSaleComm, setSavingSaleComm] = useState(false);
+  const [savingSaleSwitch, setSavingSaleSwitch] = useState(false);
+  const queryClient = useQueryClient();
 
   const [invPOSForm, setInvPOSForm] = useState(INV_POS_DEFAULTS);
   const [loadingInvPOS, setLoadingInvPOS] = useState(false);
@@ -2574,6 +2587,84 @@ const CompanySettings = () => {
     </div>
   );
 
+  // Company-wide Sales switches. Each saves immediately, then refreshes the Sales module's cached settings
+  // (the sidebar reads them) so the change shows without a reload.
+  const saveSaleSwitch = async (url, body, message) => {
+    if (savingSaleSwitch) return;
+    setSavingSaleSwitch(true);
+    try {
+      await adminRequests.put(url, body);
+      toast.success(message);
+      await Promise.all([
+        loadSaleSettings(),
+        queryClient.invalidateQueries({ queryKey: ["sale-settings", currentCompany?._id] }),
+      ]);
+    } catch (err) { toast.error(extractErrorMessage(err)); }
+    finally { setSavingSaleSwitch(false); }
+  };
+
+  const renderSaleChoiceCards = (options, selectedValue, onPick) => (
+    <div className="space-y-3">
+      {options.map((o) => {
+        const selected = selectedValue === o.value;
+        return (
+          <button
+            key={String(o.value)}
+            type="button"
+            disabled={savingSaleSwitch}
+            onClick={() => !selected && onPick(o.value)}
+            className={`block w-full border p-3 text-left transition disabled:opacity-60 ${selected ? "border-[#0B3B2E] bg-[#0B3B2E]/5" : "border-slate-200 hover:border-slate-300"}`}
+          >
+            <span className="flex items-center gap-2 text-[12px] font-bold text-slate-800">
+              <span className={`inline-block h-3 w-3 rounded-full border ${selected ? "border-[#0B3B2E] bg-[#0B3B2E]" : "border-slate-300"}`} />
+              {o.title}
+            </span>
+            <span className="mt-1 block pl-5 text-[11px] text-slate-500">{o.body}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const SALE_VISIBILITY_OPTIONS = [
+    { value: "own", title: "Only their own records", body: "Agents see just the leads, offers, deals, payments, schedules, activities, commissions and report figures that belong to them. Listings and buyers stay shared." },
+    { value: "all", title: "Whole business", body: "Agents see every record in the company, like a manager would. They still cannot approve or pay their own commission, and they cannot reassign deals or leads." },
+  ];
+  const renderSaleAgentVisibilityTab = () => (
+    <div className="space-y-4">
+      <Card
+        title="Agent Visibility"
+        subtitle="Controls what users who are linked to an agent profile can see. Managers and admins always see everything."
+      >
+        {renderSaleChoiceCards(
+          SALE_VISIBILITY_OPTIONS,
+          saleSettings?.agentVisibility === "all" ? "all" : "own",
+          (mode) => saveSaleSwitch("/sale/settings/agent-visibility", { mode }, "Agent visibility updated."),
+        )}
+        <p className="mt-3 text-[10px] text-slate-400">Changes apply within about 30 seconds for users who are already signed in.</p>
+      </Card>
+    </div>
+  );
+
+  const SALE_MODE_OPTIONS = [
+    { value: false, title: "Single items", body: "Everything you sell is a standalone listing (a house, a car, one plot). The Projects and Units pages stay hidden." },
+    { value: true, title: "Projects with units", body: "You also sell items grouped into projects (plots in an estate, flats in a development). Adds Projects and Units pages, with a sell-through view for each project. Standalone listings keep working." },
+  ];
+  const renderSaleSellingModeTab = () => (
+    <div className="space-y-4">
+      <Card
+        title="Selling Mode"
+        subtitle="Choose how this company sells. You can switch at any time: turning it off only hides the pages, and no data is removed."
+      >
+        {renderSaleChoiceCards(
+          SALE_MODE_OPTIONS,
+          Boolean(saleSettings?.useProjects),
+          (enabled) => saveSaleSwitch("/sale/settings/use-projects", { enabled }, enabled ? "Projects and units enabled." : "Projects and units hidden."),
+        )}
+      </Card>
+    </div>
+  );
+
   const setInvPOS = (key) => (val) => { setInvPOSForm((f) => ({ ...f, [key]: val })); setDirtyInvPOS(true); };
   const setInvPOSVal = (key) => (e) => setInvPOS(key)(e.target.type === "checkbox" ? e.target.checked : e.target.value);
 
@@ -3232,7 +3323,7 @@ const CompanySettings = () => {
                         >
                           <Icon size={10} className="shrink-0" />
                           <span className="flex-1 truncate">{tab.label}</span>
-                          {!["tax", "accounting", "autoInvoicing", "incomeRules", "penaltyRules", "saleCommDefaults", "invPOSSettings", "cwOperations", "cwSMS"].includes(key) && (
+                          {!["tax", "accounting", "autoInvoicing", "incomeRules", "penaltyRules", "saleCommDefaults", "saleAgentVisibility", "saleSellingMode", "invPOSSettings", "cwOperations", "cwSMS"].includes(key) && (
                             <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${isActive ? "bg-white/20 text-white" : "bg-slate-200 text-slate-500"}`}>
                               {activeCounts[key] ?? 0}
                             </span>
@@ -3268,6 +3359,10 @@ const CompanySettings = () => {
                 renderPenaltyRulesTab()
               ) : activeTab === "saleCommDefaults" ? (
                 <div className="flex-1 overflow-auto px-4 py-4">{renderSaleCommDefaultsTab()}</div>
+              ) : activeTab === "saleAgentVisibility" ? (
+                <div className="flex-1 overflow-auto px-4 py-4">{renderSaleAgentVisibilityTab()}</div>
+              ) : activeTab === "saleSellingMode" ? (
+                <div className="flex-1 overflow-auto px-4 py-4">{renderSaleSellingModeTab()}</div>
               ) : activeTab === "invPOSSettings" ? (
                 <div className="flex-1 overflow-auto px-4 py-4">{renderInvPOSTab()}</div>
               ) : activeTab === "cwOperations" ? (
