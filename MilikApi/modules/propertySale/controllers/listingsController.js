@@ -3,10 +3,36 @@ import { createError } from "../../../utils/error.js";
 import SaleListing from "../models/SaleListing.js";
 import SaleAgent from "../models/SaleAgent.js";
 import SaleDeal from "../models/SaleDeal.js";
-import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
+import SaleProject from "../models/SaleProject.js";
+import { currentUserId, escapeRegex, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { deleteImageFile } from "../middleware/listingImageUpload.js";
 
 const CREATE_STATUSES = ["available", "withdrawn"];
+
+// Validates the project a new unit is created in, and normalises the unit fields.
+// Returns an error (to pass to next) or null; mutates `body` (trimmed unitNumber/block).
+const checkUnitFields = async (body, business) => {
+  if (!body.project) {
+    body.project = null;
+    body.unitNumber = "";
+    body.block = "";
+    return null;
+  }
+  if (!mongoose.isValidObjectId(String(body.project))) return createError(400, "Invalid project");
+  const project = await SaleProject.findOne({ _id: body.project, business }).select("status").lean();
+  if (!project) return createError(400, "Project not found");
+  if (project.status === "archived") return createError(400, "This project is archived — restore it before adding units");
+  body.unitNumber = String(body.unitNumber ?? "").trim();
+  body.block = String(body.block ?? "").trim();
+  if (!body.unitNumber) return createError(400, "Unit number is required for a unit inside a project");
+  return null;
+};
+
+// Numeric-aware ordering so "Plot 2" sorts before "Plot 10" in a project's unit list
+const withUnitOrdering = (query, on) => (on ? query.collation({ locale: "en", numericOrdering: true }) : query);
+
+const duplicateUnitError = (err) =>
+  err?.code === 11000 && /unitNumber|project/.test(String(err.message)) ? createError(409, "That unit number already exists in this project") : null;
 
 const sanitizeListingBody = (body) => {
   const out = { ...body };
@@ -21,26 +47,51 @@ export const listListings = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const bId = new mongoose.Types.ObjectId(String(business));
-    const { search = "", status = "", propertyType = "", agentId = "", page = 1, limit = 50 } = req.query;
+    const { search = "", status = "", propertyType = "", agentId = "", projectId = "", project = "", block = "", page = 1, limit = 50 } = req.query;
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
     const filter = { business };
     if (status) filter.status = status;
     if (propertyType) filter.propertyType = propertyType;
     if (agentId) filter.assignedAgent = agentId;
+    if (block) filter.block = block;
+
+    // Project scope: a project id, "any" (units only), "none" (standalone only). Default: every sellable item,
+    // so offer/deal pickers keep seeing units and standalone listings alike.
+    let scope = {};
+    let aggScope = {};
+    if (projectId) {
+      if (!mongoose.isValidObjectId(String(projectId))) return next(createError(400, "Invalid project"));
+      scope = { project: projectId };
+      aggScope = { project: new mongoose.Types.ObjectId(String(projectId)) };
+    } else if (project === "any") {
+      scope = aggScope = { project: { $ne: null } };
+    } else if (project === "none") {
+      scope = aggScope = { project: null };
+    }
+    Object.assign(filter, scope);
+    const unitView = Boolean(projectId) || project === "any";
+
     if (search.trim()) {
-      filter.$text = { $search: search.trim() };
+      if (unitView) {
+        // Unit lists are searched by unit number / title (the text index does not cover unit numbers)
+        const rx = new RegExp(escapeRegex(search.trim()), "i");
+        filter.$or = [{ unitNumber: rx }, { title: rx }, { listingNumber: rx }];
+      } else {
+        filter.$text = { $search: search.trim() };
+      }
     }
     const [listings, total, statsRaw] = await Promise.all([
-      SaleListing.find(filter)
+      withUnitOrdering(SaleListing.find(filter), Boolean(projectId))
         .populate("assignedAgent", "fullName agentNumber phone")
-        .sort({ createdAt: -1 })
+        .populate("project", "name projectNumber")
+        .sort(projectId ? { block: 1, unitNumber: 1 } : { createdAt: -1 })
         .skip((pageNum - 1) * limitNum)
         .limit(limitNum)
         .lean(),
       SaleListing.countDocuments(filter),
       SaleListing.aggregate([
-        { $match: { business: bId } },
+        { $match: { business: bId, ...aggScope } },
         { $group: { _id: "$status", count: { $sum: 1 }, totalValue: { $sum: "$askingPrice" } } },
       ]),
     ]);
@@ -63,6 +114,7 @@ export const getListing = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const listing = await SaleListing.findOne({ _id: req.params.id, business })
       .populate("assignedAgent", "fullName agentNumber phone email commissionRate commissionType")
+      .populate("project", "name projectNumber")
       .lean();
     if (!listing) return next(createError(404, "Listing not found"));
     res.status(200).json(listing);
@@ -88,6 +140,8 @@ export const createListing = async (req, res, next) => {
       const agent = await SaleAgent.findOne({ _id: body.assignedAgent, business, status: "active" }).lean();
       if (!agent) return next(createError(400, "Assigned agent not found or inactive"));
     }
+    const unitError = await checkUnitFields(body, business);
+    if (unitError) return next(unitError);
 
     const listingNumber = await generateSequentialNumber(SaleListing, business, "LST");
     const listing = await SaleListing.create({
@@ -97,10 +151,13 @@ export const createListing = async (req, res, next) => {
       createdBy: userId,
       updatedBy: userId,
     });
-    const populated = await SaleListing.findById(listing._id).populate("assignedAgent", "fullName agentNumber phone").lean();
+    const populated = await SaleListing.findById(listing._id)
+      .populate("assignedAgent", "fullName agentNumber phone")
+      .populate("project", "name projectNumber")
+      .lean();
     res.status(201).json(populated);
   } catch (err) {
-    next(err);
+    next(duplicateUnitError(err) || err);
   }
 };
 
@@ -111,7 +168,9 @@ export const updateListing = async (req, res, next) => {
     // status is stripped: every status change must go through updateListingStatus (deal/offer guards).
     // acceptedOffer is server-managed by the offer workflow.
     // images are managed only through the upload/delete image endpoints (a generic edit must not overwrite them).
-    const { business: _b, listingNumber: _n, createdBy: _c, status: _s, acceptedOffer: _ao, images: _im, ...rawUpdates } = req.body;
+    // project is stripped too: units are attached/detached only through the project endpoints (moving a unit that
+    // has offers or deals would distort project figures).
+    const { business: _b, listingNumber: _n, createdBy: _c, status: _s, acceptedOffer: _ao, images: _im, project: _p, ...rawUpdates } = req.body;
     const updates = sanitizeListingBody(rawUpdates);
 
     if (updates.assignedAgent) {
@@ -119,15 +178,32 @@ export const updateListing = async (req, res, next) => {
       if (!agent) return next(createError(400, "Assigned agent not found or inactive"));
     }
 
+    // unitNumber / block only make sense on a unit, and a unit must keep its number
+    const existing = await SaleListing.findOne({ _id: req.params.id, business }).select("project").lean();
+    if (!existing) return next(createError(404, "Listing not found"));
+    if (existing.project) {
+      if ("unitNumber" in updates) {
+        updates.unitNumber = String(updates.unitNumber ?? "").trim();
+        if (!updates.unitNumber) return next(createError(400, "Unit number is required for a unit inside a project"));
+      }
+      if ("block" in updates) updates.block = String(updates.block ?? "").trim();
+    } else {
+      delete updates.unitNumber;
+      delete updates.block;
+    }
+
     const listing = await SaleListing.findOneAndUpdate(
       { _id: req.params.id, business },
       { ...updates, updatedBy: userId },
       { new: true, runValidators: true }
-    ).populate("assignedAgent", "fullName agentNumber phone").lean();
+    )
+      .populate("assignedAgent", "fullName agentNumber phone")
+      .populate("project", "name projectNumber")
+      .lean();
     if (!listing) return next(createError(404, "Listing not found"));
     res.status(200).json(listing);
   } catch (err) {
-    next(err);
+    next(duplicateUnitError(err) || err);
   }
 };
 

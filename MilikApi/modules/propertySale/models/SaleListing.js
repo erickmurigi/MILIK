@@ -26,6 +26,10 @@ const saleListingSchema = new mongoose.Schema(
     amenities: [{ type: String, trim: true }],
     images: [{ type: String, trim: true }],
     assignedAgent: { type: mongoose.Schema.Types.ObjectId, ref: "SaleAgent", default: null },
+    // Optional: a unit sold independently inside a project (SaleProject). Standalone listings leave these empty.
+    project: { type: mongoose.Schema.Types.ObjectId, ref: "SaleProject", default: null },
+    unitNumber: { type: String, trim: true, default: "" },
+    block: { type: String, trim: true, default: "" },
     // Offer that currently holds the exclusive "accepted" claim on this listing. Written only by
     // offersController.updateOfferStatus (atomic compare-and-set); never client-writable.
     acceptedOffer: { type: mongoose.Schema.Types.ObjectId, ref: "SaleOffer", default: null },
@@ -41,6 +45,12 @@ saleListingSchema.index({ business: 1, listingNumber: 1 }, { unique: true });
 saleListingSchema.index({ business: 1, status: 1, createdAt: -1 });
 saleListingSchema.index({ business: 1, createdAt: -1 });
 saleListingSchema.index({ business: 1, assignedAgent: 1 });
+saleListingSchema.index({ business: 1, project: 1, status: 1 });
+// A unit number is unique inside its project; standalone listings (project null) are exempt
+saleListingSchema.index(
+  { business: 1, project: 1, unitNumber: 1 },
+  { unique: true, partialFilterExpression: { project: { $type: "objectId" } } }
+);
 saleListingSchema.index({ business: 1, title: "text", listingNumber: "text", location: "text", town: "text", titleDeedNumber: "text" }, { default_language: "none" });
 
 export default mongoose.model("SaleListing", saleListingSchema);

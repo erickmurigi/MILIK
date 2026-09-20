@@ -7,6 +7,7 @@ import {
   addPropertyType,  updatePropertyType,  archivePropertyType,
   updateCommissionDefaults,
   updateAgentVisibility,
+  updateUseProjects,
   loadDefaults,
   addCommTemplate, updateCommTemplate, deleteCommTemplate,
 } from "../controllers/settingsController.js";
@@ -30,6 +31,7 @@ router.delete("/property-types/:itemId",  archivePropertyType);
 
 router.put("/commission-defaults",        updateCommissionDefaults);
 router.put("/agent-visibility",           updateAgentVisibility);
+router.put("/use-projects",               updateUseProjects);
 
 router.post("/load-defaults/:collection", loadDefaults);
 

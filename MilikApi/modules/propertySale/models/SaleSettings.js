@@ -27,6 +27,8 @@ const saleSettingsSchema = new mongoose.Schema(
     commTemplates:  { type: [commTemplateSchema],  default: [] },
     // Whether agent-linked users see only their own records ("own") or the whole business ("all")
     agentVisibility: { type: String, enum: ["own", "all"], default: "own" },
+    // Whether this company sells in projects/units: shows the Projects and Units pages
+    useProjects: { type: Boolean, default: false },
     commissionDefaults: {
       rate:           { type: Number, default: 3,           min: 0 },
       commissionType: { type: String, enum: ["percentage", "flat"], default: "percentage" },

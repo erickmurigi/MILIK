@@ -117,6 +117,18 @@ export const updateAgentVisibility = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// Company-wide switch: shows the Projects and Units pages (selling items grouped into projects)
+export const updateUseProjects = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    if (typeof req.body?.enabled !== "boolean") return next(createError(400, "enabled must be true or false"));
+    const settings = await ensureSettings(business);
+    settings.useProjects = req.body.enabled;
+    await settings.save();
+    res.json({ settings });
+  } catch (err) { next(err); }
+};
+
 // Communication templates CRUD
 export const addCommTemplate = async (req, res, next) => {
   try {
