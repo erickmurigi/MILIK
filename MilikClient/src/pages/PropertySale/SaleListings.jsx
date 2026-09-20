@@ -23,7 +23,8 @@ import Modal from "../../components/common/Modal";
 import StatusBadge from "../../components/common/StatusBadge";
 import MilikTable from "../../components/common/MilikTable";
 import SaleListingFormModal from "./SaleListingFormModal";
-import SalePhotoGallery from "./SalePhotoGallery";
+import SaleListingPanel from "./SaleListingPanel";
+import { printSaleListing } from "../../utils/printSaleListing";
 import { LISTING_STATUS_MAP } from "../../utils/saleListingConstants";
 import useSaleFormOptions from "../../hooks/useSaleFormOptions";
 import SaleListingAgent from "./SaleListingAgent";
@@ -128,7 +129,6 @@ const SaleListings = () => {
   const [page,       setPage]       = useTabState("/sale/listings:page", 1);
   const [pageSize,   setPageSize]   = useTabState("/sale/listings:pageSize", PAGE_SIZE);
   const [selected,   setSelected]   = useTabState("/sale/listings:selected", null);
-  const [uploading,  setUploading]  = useState(false);
   const [statusBusy, setStatusBusy] = useState({}); // { [listingId]: true } while a Reserve/Release call is in flight
   const statusInFlight = useRef(new Set());
 
@@ -209,85 +209,7 @@ const SaleListings = () => {
     }
   }, [invalidate, T.saleListing]);
 
-  const handleUploadFiles = async (files) => {
-    if (!files.length || !selected) return;
-    setUploading(true);
-    try {
-      const fd = new FormData();
-      files.forEach((f) => fd.append("images", f));
-      await saleApi.uploadListingImages(selected._id, fd);
-      await queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] });
-      toast.success(`${files.length} photo${files.length > 1 ? "s" : ""} uploaded`);
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Upload failed");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleDeleteImage = async (url) => {
-    if (!selected || uploading) return;
-    setUploading(true);
-    try {
-      await saleApi.deleteListingImage(selected._id, url);
-      await queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] });
-      toast.success("Photo removed");
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to remove photo");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const printListing = useCallback((row) => {
-    const co = currentCompany || {};
-    const coName = co.companyName || co.name || "MILIK";
-    const coInfo = [co.phone || co.phoneNumber, co.email || co.companyEmail, co.address || co.location].filter(Boolean).join(" • ");
-    const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-    const fmtD = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" }) : "—";
-    const statusLabel = String(row.status || "").replace(/_/g, " ").toUpperCase();
-    const statusC  = { available: "#166534", reserved: "#92400e", under_contract: "#1e40af", sold: "#0f172a", withdrawn: "#9f1239" }[row.status] || "#334155";
-    const statusBg = { available: "#dcfce7", reserved: "#fef3c7", under_contract: "#dbeafe", sold: "#f1f5f9", withdrawn: "#ffe4e6" }[row.status] || "#f1f5f9";
-    const win = window.open("", "_blank", "width=900,height=720");
-    if (!win) return;
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${esc(T.saleListing)} &ndash; ${esc(row.listingNumber)}</title>
-<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font-size:12px}
-.hdr{display:grid;grid-template-columns:1fr 180px;align-items:start;border-bottom:3px solid #0B3B2E;padding-bottom:14px;margin-bottom:18px}
-.co-name{font-size:18px;font-weight:900;color:#0B3B2E;margin-bottom:3px}.co-sub{font-size:9px;color:#64748b;line-height:1.5}
-.doc-block{text-align:right}.doc-type{font-size:13px;font-weight:900;color:#0B3B2E;text-transform:uppercase;letter-spacing:.05em}
-.doc-no{font-family:monospace;font-size:15px;font-weight:700;margin-top:3px}
-.status-badge{display:inline-block;padding:3px 12px;font-size:10px;font-weight:800;margin-top:6px;background:${statusBg};color:${statusC}}
-.price-box{border:2px solid #0B3B2E;padding:12px 16px;margin-bottom:16px;background:#f0faf5;display:flex;align-items:center;justify-content:space-between}
-.price-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#64748b}
-.price-val{font-size:28px;font-weight:900;color:#0B3B2E;font-family:monospace}.price-note{font-size:9px;font-weight:700;color:#64748b;margin-top:3px}
-.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:#e2e8f0;border:1px solid #e2e8f0;overflow:hidden;margin-bottom:14px}
-.field{background:#fff;padding:9px 12px}.fl{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:2px}
-.fv{font-size:11px;font-weight:600;color:#1e293b}.section-title{font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:#0B3B2E;margin:14px 0 6px}
-.desc-box{border:1px solid #e2e8f0;padding:10px 14px;margin-bottom:14px;font-size:11px;color:#334155;line-height:1.6}
-.notice{font-size:9px;color:#94a3b8;text-align:center;margin-top:20px;border-top:1px solid #f1f5f9;padding-top:10px;line-height:1.6}
-@media print{body{padding:14px 16px}@page{size:A4 portrait;margin:10mm}}</style></head><body>
-<div class="hdr"><div><div class="co-name">${esc(coName)}</div>${coInfo ? `<div class="co-sub">${esc(coInfo)}</div>` : ""}</div>
-<div class="doc-block"><div class="doc-type">${esc(T.saleListing)}</div><div class="doc-no">${esc(row.listingNumber)}</div><div class="status-badge">${esc(statusLabel)}</div></div></div>
-<div class="price-box"><div><div class="price-label">Asking Price</div><div class="price-val">${esc(fmtKES(row.askingPrice))}</div><div class="price-note">${row.negotiable ? "Price is negotiable" : "Fixed price – not negotiable"}</div></div>
-<div style="text-align:right"><div class="price-label">Property Type</div><div style="font-size:15px;font-weight:900;color:#0f172a;text-transform:capitalize;margin-top:4px">${esc(row.propertyType)}</div></div></div>
-<div class="section-title">Property Details</div><div class="grid">
-<div class="field"><div class="fl">${esc(T.saleListing)} No.</div><div class="fv">${esc(row.listingNumber)}</div></div>
-<div class="field"><div class="fl">Title</div><div class="fv">${esc(row.title)}</div></div>
-<div class="field"><div class="fl">Listed Date</div><div class="fv">${esc(fmtD(row.listedDate))}</div></div>
-<div class="field"><div class="fl">Size</div><div class="fv">${row.size ? esc(`${row.size} ${row.sizeUnit ?? ""}`.trim()) : "Not specified"}</div></div>
-<div class="field"><div class="fl">Title Deed</div><div class="fv">${row.titleDeedAvailable ? `Yes &ndash; ${esc(row.titleDeedNumber || "N/A")}` : "Not available"}</div></div>
-<div class="field"><div class="fl">Assigned ${esc(T.saleAgent)}</div><div class="fv">${esc(listingAgentText(row, T.saleProject.toLowerCase()) || "Unassigned")}</div></div></div>
-<div class="section-title">Location</div><div class="grid">
-<div class="field"><div class="fl">Location / Address</div><div class="fv">${esc(row.location || "—")}</div></div>
-<div class="field"><div class="fl">Town / City</div><div class="fv">${esc(row.town || "—")}</div></div>
-<div class="field"><div class="fl">County</div><div class="fv">${esc(row.county || "—")}</div></div></div>
-${row.description ? `<div class="section-title">Description</div><div class="desc-box">${esc(row.description)}</div>` : ""}
-${row.amenities?.length ? `<div class="section-title">Amenities</div><div class="desc-box">${row.amenities.map(esc).join(" &bull; ")}</div>` : ""}
-<div class="notice">Official property sale listing issued by ${esc(coName)} &bull; Printed: ${new Date().toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" })} &bull; All prices in KES</div>
-</body></html>`);
-    win.document.close();
-    setTimeout(() => { win.focus(); win.print(); }, 400);
-  }, [currentCompany, T.saleListing, T.saleAgent, T.saleProject]);
+  const printListing = useCallback((row) => printSaleListing(row, { company: currentCompany, T }), [currentCompany, T]);
 
   const handleRowClick = useCallback((row) => setSelected((prev) => (prev?._id === row._id ? null : row)), [setSelected]);
   const selectedId = selected?._id;
@@ -388,73 +310,23 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
           <div className="absolute inset-0 z-[5]" onClick={() => setSelected(null)} />
         )}
 
-        {/* Images Detail Panel */}
         {selected && (
-          <div className="absolute right-0 top-0 bottom-0 w-full sm:w-[360px] flex flex-col bg-white border-l border-slate-200 shadow-xl z-10 overflow-hidden">
-            {/* Header */}
-            <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-3 text-white">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="text-[10px] font-black uppercase tracking-wider text-white/60">{selected.listingNumber}</div>
-                  <div className="mt-0.5 text-sm font-black leading-tight truncate">{selected.title}</div>
-                </div>
-                <button type="button" onClick={() => setSelected(null)} className="flex-shrink-0 p-1 text-white/70 hover:bg-white/10"><FaTimes size={12} /></button>
-              </div>
-              <div className="mt-2">
-                <StatusBadge status={selected.status} map={LISTING_STATUS_MAP} />
-              </div>
-            </div>
-
-            {/* Scrollable body */}
-            <div className="flex-1 min-h-0 overflow-y-auto">
-
-              {/* Listing summary */}
-              <div className="border-b border-slate-100 px-4 py-3">
-                <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Property Details</div>
-                <div className="space-y-1.5">
-                  {[
-                    ["Type",    String(selected.propertyType || "").replace(/_/g, " ")],
-                    ["Price",   fmtKES(selected.askingPrice)],
-                    ["Size",    selected.size ? `${selected.size} ${selected.sizeUnit}` : null],
-                    ["Location",[selected.town, selected.county].filter(Boolean).join(", ") || selected.location],
-                    [T.saleAgent,   listingAgentText(selected, T.saleProject.toLowerCase())],
-                  ].filter(([, v]) => v).map(([label, val]) => (
-                    <div key={label} className="flex items-baseline gap-2">
-                      <span className="w-[80px] flex-shrink-0 text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</span>
-                      <span className="text-xs text-slate-800 capitalize">{val}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <SalePhotoGallery
-                images={selected.images || []}
-                busy={uploading}
-                onUpload={handleUploadFiles}
-                onDelete={handleDeleteImage}
-                emptyHint="Upload photos to showcase this property to buyers"
-              />
-
-            </div>
-
-            {/* Panel footer */}
-            <div className="flex-shrink-0 flex items-center justify-between gap-1 border-t border-slate-200 bg-slate-50 px-3 py-2">
-              <button
-                type="button"
-                onClick={() => printListing(selected)}
-                className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-              >
-                <FaPrint size={9} /> Print
-              </button>
-              <button
-                type="button"
-                onClick={() => openEdit(selected)}
-                className="inline-flex items-center gap-1 bg-[#0B3B2E] px-3 py-1 text-[11px] font-black text-white hover:bg-[#07271e]"
-              >
-                <FaEdit size={9} /> Edit {T.saleListing}
-              </button>
-            </div>
-          </div>
+          <SaleListingPanel
+            row={selected}
+            detailsTitle="Property Details"
+            detailRows={[
+              ["Type", String(selected.propertyType || "").replace(/_/g, " ")],
+              ["Price", fmtKES(selected.askingPrice)],
+              ["Size", selected.size ? `${selected.size} ${selected.sizeUnit}` : null],
+              ["Location", [selected.town, selected.county].filter(Boolean).join(", ") || selected.location],
+              [T.saleAgent, listingAgentText(selected, T.saleProject.toLowerCase())],
+            ]}
+            editLabel={`Edit ${T.saleListing}`}
+            onClose={() => setSelected(null)}
+            onEdit={openEdit}
+            onPrint={printListing}
+            onChanged={invalidate}
+          />
         )}
       </div>
 

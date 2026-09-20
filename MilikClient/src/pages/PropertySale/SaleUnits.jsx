@@ -8,6 +8,8 @@ import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterSearch } from "./SaleFilterBar";
 import SaleListingFormModal from "./SaleListingFormModal";
 import SaleListingAgent from "./SaleListingAgent";
+import SaleListingPanel from "./SaleListingPanel";
+import { printSaleListing } from "../../utils/printSaleListing";
 import { listingAgentText } from "../../utils/saleAgent";
 import { errorMessage } from "./SaleProjectShared";
 import { LISTING_STATUS_MAP, UNIT_STATUSES, STATUS_LABEL } from "../../utils/saleListingConstants";
@@ -81,7 +83,7 @@ const renderUnitRow = (row) => (
 );
 
 const SaleUnits = () => {
-  const T = useTerms("saleProject", "saleProjects", "saleUnit", "saleUnits", "saleAgent", "saleAgents");
+  const T = useTerms("saleListing", "saleProject", "saleProjects", "saleUnit", "saleUnits", "saleAgent", "saleAgents");
   const UNIT_TABLE_COLS = useMemo(() => unitTableCols(T), [T]);
   const queryClient = useQueryClient();
   const navigate    = useNavigate();
@@ -134,6 +136,9 @@ const SaleUnits = () => {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const projectOptions     = useMemo(() => (projectsData?.data ?? []).map((p) => ({ value: p._id, label: p.name })), [projectsData]);
+
+  const currentCompany = useSelector((s) => s.company?.currentCompany);
+  const printListing = useCallback((row) => printSaleListing(row, { company: currentCompany, T }), [currentCompany, T]);
 
   // sync panel with fresh data after mutations
   useEffect(() => {
@@ -279,69 +284,32 @@ const SaleUnits = () => {
         )}
 
         {selected && (
-          <div className="absolute right-0 top-0 bottom-0 w-full sm:w-[360px] flex flex-col bg-white border-l border-slate-200 shadow-xl z-10 overflow-hidden">
-            <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-3 text-white">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="text-[10px] font-black uppercase tracking-wider text-white/60">{selected.listingNumber}</div>
-                  <div className="mt-0.5 text-sm font-black leading-tight truncate">{selected.title}</div>
-                </div>
-                <button type="button" onClick={() => setSelected(null)} className="flex-shrink-0 p-1 text-white/70 hover:bg-white/10"><FaTimes size={12} /></button>
-              </div>
-              <div className="mt-2">
-                <StatusBadge status={selected.status} map={LISTING_STATUS_MAP} />
-              </div>
-            </div>
-
-            <div className="flex-1 min-h-0 overflow-y-auto">
-              <div className="px-4 py-3">
-                <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">{T.saleUnit} Details</div>
-                <div className="space-y-1.5">
-                  {[
-                    [`${T.saleUnit} No.`, selected.unitNumber],
-                    [T.saleProject, selected.project?._id ? (
-                      <button key="project" type="button" onClick={() => navigate(`/sale/projects/${selected.project._id}`)} className="font-semibold text-[#0B3B2E] hover:underline text-left">
-                        {selected.project.name}
-                      </button>
-                    ) : null],
-                    ["Block", selected.block],
-                    ["Type", String(selected.propertyType || "").replace(/_/g, " ")],
-                    ["Price", fmtKES(selected.askingPrice)],
-                    ["Size", selected.size ? `${selected.size} ${selected.sizeUnit ?? ""}`.trim() : null],
-                    ["Location", [selected.town, selected.county].filter(Boolean).join(", ") || selected.location],
-                    [T.saleAgent, listingAgentText(selected, T.saleProject.toLowerCase())],
-                  ].filter(([, v]) => v).map(([label, val]) => (
-                    <div key={label} className="flex items-baseline gap-2">
-                      <span className="w-[80px] flex-shrink-0 text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</span>
-                      <span className="text-xs text-slate-800 capitalize">{val}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex-shrink-0 flex items-center justify-between gap-1 border-t border-slate-200 bg-slate-50 px-3 py-2">
-              <div className="inline-flex items-center gap-1">
-                {selected.status === "available" && (
-                  <button type="button" disabled={!!statusBusy[selected._id]} onClick={() => handleStatusChange(selected, "reserved")} className="border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed">
-                    Reserve
-                  </button>
-                )}
-                {selected.status === "reserved" && (
-                  <button type="button" disabled={!!statusBusy[selected._id]} onClick={() => handleStatusChange(selected, "available")} className="border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed">
-                    Release
-                  </button>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => openEdit(selected)}
-                className="inline-flex items-center gap-1 bg-[#0B3B2E] px-3 py-1 text-[11px] font-black text-white hover:bg-[#07271e]"
-              >
-                <FaEdit size={9} /> Edit {T.saleUnit}
-              </button>
-            </div>
-          </div>
+          <SaleListingPanel
+            row={selected}
+            detailsTitle={`${T.saleUnit} Details`}
+            detailRows={[
+              [`${T.saleUnit} No.`, selected.unitNumber],
+              [T.saleProject, selected.project?._id ? (
+                <button key="project" type="button" onClick={() => navigate(`/sale/projects/${selected.project._id}`)} className="font-semibold text-[#0B3B2E] hover:underline text-left">
+                  {selected.project.name}
+                </button>
+              ) : null],
+              ["Block", selected.block],
+              ["Type", String(selected.propertyType || "").replace(/_/g, " ")],
+              ["Price", fmtKES(selected.askingPrice)],
+              ["Size", selected.size ? `${selected.size} ${selected.sizeUnit ?? ""}`.trim() : null],
+              ["Location", [selected.town, selected.county].filter(Boolean).join(", ") || selected.location],
+              [T.saleAgent, listingAgentText(selected, T.saleProject.toLowerCase())],
+            ]}
+            editLabel={`Edit ${T.saleUnit}`}
+            onClose={() => setSelected(null)}
+            onEdit={openEdit}
+            onPrint={printListing}
+            onChanged={invalidate}
+            statusBusy={statusBusy}
+            onStatusChange={handleStatusChange}
+            emptyHint={`Upload photos to showcase this ${T.saleUnit.toLowerCase()} to buyers`}
+          />
         )}
       </div>
 
