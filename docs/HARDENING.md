@@ -744,8 +744,10 @@ project is selling. **A unit is an ordinary listing that belongs to a project** 
   Units page, shared `SaleListingFormModal`. Wording comes from the company terminology setting (`saleProject`, `saleUnit`, ...).
 - **Tests:** `projectsController.test.js` (11 integration tests on an in-memory Mongo).
 - **Deploy:** no migration. The new listing indexes build automatically on startup.
-- **Not done / open:** one deal covers one unit (a buyer taking several units gets several deals); listing images added
-  while creating a unit inside the form do not preview until the unit is reopened; the "view offers" link on a unit is not
+- **Photos (shared with listings):** projects have photos (`SaleProject.images`, same upload pipeline and folder as listing
+  photos; `POST/DELETE /sale/projects/:id/images`). The photo logic is shared: `useSalePhotoDraft` + `SalePhotosField` (forms),
+  `SalePhotoGallery` (detail panels + lightbox). The Projects list has the same table + detail panel as Listings.
+- **Not done / open:** one deal covers one unit (a buyer taking several units gets several deals); the "view offers" link on a unit is not
   filtered; not exercised in a browser.
 
 *Last updated: 2026-09-20 (Track H closed — PropertySale performance pass, see above). Track G note: PropertySale correctness pass, see above. Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C/E/F/G as items are actioned.*

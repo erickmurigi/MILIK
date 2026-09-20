@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { FaArchive, FaEdit, FaLayerGroup, FaPlus, FaRedoAlt, FaTrash, FaUndo } from "react-icons/fa";
+import { FaArchive, FaEdit, FaExternalLinkAlt, FaLayerGroup, FaPlus, FaRedoAlt, FaTrash, FaUndo } from "react-icons/fa";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterSearch } from "./SaleFilterBar";
@@ -16,6 +16,7 @@ import useDebounce from "../../hooks/useDebounce";
 import { useTerms } from "../../hooks/useTerm";
 import { useTabState } from "../../hooks/useTabState";
 import SaleProjectFormModal from "./SaleProjectFormModal";
+import SaleProjectPanel from "./SaleProjectPanel";
 import SaleProjectProgressBar from "./SaleProjectProgressBar";
 import { PROJECT_STATUS_MAP, errorMessage, fmtPct } from "./SaleProjectShared";
 
@@ -78,6 +79,7 @@ const SaleProjects = () => {
   const [pageSize, setPageSize] = useTabState("/sale/projects:pageSize", PAGE_SIZE);
   const [formModal, setFormModal] = useState(null); // { project } while the create/edit modal is open
   const [busyId, setBusyId] = useState("");
+  const [selectedId, setSelectedId] = useState(null);
 
   const debouncedSearch = useDebounce(search, 400);
 
@@ -92,6 +94,8 @@ const SaleProjects = () => {
   const projects = useMemo(() => data?.data ?? [], [data?.data]);
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, data?.pages ?? Math.ceil(total / pageSize));
+  // The panel shows the row from the current page, so it always reflects fresh data (photos, counts) after a refetch
+  const selected = useMemo(() => projects.find((p) => p._id === selectedId) ?? null, [projects, selectedId]);
 
   const invalidate = useCallback(() => Promise.all([
     queryClient.invalidateQueries({ queryKey: ["sale-projects", biz] }),
@@ -102,7 +106,10 @@ const SaleProjects = () => {
     queryClient.invalidateQueries({ queryKey: ["sale-dashboard"] }),
   ]), [queryClient, biz]);
 
-  const handleRowClick = useCallback((row) => navigate(`/sale/projects/${row._id}`), [navigate]);
+  const handleRowClick = useCallback((row) => setSelectedId((prev) => (prev === row._id ? null : row._id)), []);
+  const isRowSelected = useCallback((row) => selectedId === row._id, [selectedId]);
+  const openProject = useCallback((row) => navigate(`/sale/projects/${row._id}`), [navigate]);
+  const editProject = useCallback((row) => setFormModal({ project: row }), []);
 
   const handleArchive = useCallback(async (row) => {
     const archive = row.status !== "archived";
@@ -143,6 +150,9 @@ const SaleProjects = () => {
 
   const renderProjectActions = useCallback((row) => (
     <div className="inline-flex items-center gap-1">
+      <button type="button" onClick={() => openProject(row)} className={actionBtn}>
+        <FaExternalLinkAlt className="text-[9px]" /> Open
+      </button>
       <button type="button" onClick={() => setFormModal({ project: row })} className={actionBtn}>
         <FaEdit className="text-[9px]" /> Edit
       </button>
@@ -153,7 +163,7 @@ const SaleProjects = () => {
         <FaTrash className="text-[9px]" />
       </button>
     </div>
-  ), [busyId, handleArchive, handleDelete]);
+  ), [busyId, handleArchive, handleDelete, openProject]);
 
   const resetFilters = () => { setSearch(""); setStatusFilt(DEFAULT_STATUS); setPage(1); };
   const activeCount = [search, statusFilt !== DEFAULT_STATUS].filter(Boolean).length;
@@ -192,6 +202,7 @@ const SaleProjects = () => {
         <AppSelect value={statusFilt} onChange={(v) => { setStatusFilt(v ?? ""); setPage(1); }} options={STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
       </SaleFilterBar>
 
+      <div className="relative flex flex-1 min-h-0 flex-col overflow-hidden">
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden border border-slate-200 bg-white shadow-sm">
         {showIntro ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 py-12 text-center">
@@ -218,12 +229,26 @@ const SaleProjects = () => {
               empty={`No ${T.saleProjects.toLowerCase()} match these filters.`}
               minWidth={900}
               onRowClick={handleRowClick}
+              isSelected={isRowSelected}
               renderRow={renderProjectRow}
               renderActions={renderProjectActions}
             />
             <PaginationBar page={page} pages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} label={T.saleProjects.toLowerCase()} />
           </>
         )}
+      </div>
+
+      {/* Dismiss overlay — clicking outside the panel closes it */}
+      {selected && <div className="absolute inset-0 z-[5]" onClick={() => setSelectedId(null)} />}
+      {selected && (
+        <SaleProjectPanel
+          project={selected}
+          onClose={() => setSelectedId(null)}
+          onOpen={openProject}
+          onEdit={editProject}
+          onChanged={invalidate}
+        />
+      )}
       </div>
 
       {formModal && (

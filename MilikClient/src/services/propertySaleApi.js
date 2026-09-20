@@ -34,6 +34,8 @@ export const saleApi = {
   // payload: { mode: "percent" | "amount" | "set", value, block? } (available units only) -> { updated }
   updateProjectUnitPrices: async (id, payload) => (await adminRequests.patch(`/sale/projects/${id}/units/price`, payload))?.data,
   applyProjectDetails: async (id) => (await adminRequests.post(`/sale/projects/${id}/units/apply-details`))?.data,
+  uploadProjectImages: async (id, formData) => (await adminRequests.post(`/sale/projects/${id}/images`, formData))?.data,
+  deleteProjectImage: async (id, url) => (await adminRequests.delete(`/sale/projects/${id}/images`, { data: { url } }))?.data,
   detachProjectUnit: async (id, listingId) => (await adminRequests.delete(`/sale/projects/${id}/units/${listingId}`))?.data,
 
   // Buyers

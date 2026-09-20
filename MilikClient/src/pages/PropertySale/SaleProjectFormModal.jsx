@@ -4,6 +4,8 @@ import { saleApi } from "../../services/propertySaleApi";
 import { useTerms } from "../../hooks/useTerm";
 import Modal from "../../components/common/Modal";
 import AmountInput from "./AmountInput";
+import SalePhotosField from "./SalePhotosField";
+import useSalePhotoDraft from "../../hooks/useSalePhotoDraft";
 import { inputClass, labelClass } from "../../utils/formStyles";
 import { errorMessage } from "./SaleProjectShared";
 
@@ -27,6 +29,19 @@ export default function SaleProjectFormModal({ project = null, onSaved, onClose 
   const [form, setForm] = useState(() => (project ? formFromProject(project) : blankForm()));
   const [saving, setSaving] = useState(false);
 
+  // Photos: staged until the project exists, then uploaded straight away (same behaviour as the listing form)
+  const photos = useSalePhotoDraft({
+    entityId: project?._id || "",
+    initialImages: project?.images ?? [],
+    upload: saleApi.uploadProjectImages,
+    remove: saleApi.deleteProjectImage,
+    onChanged: onSaved,
+  });
+  const handleClose = () => {
+    photos.clearStaged();
+    onClose();
+  };
+
   const set = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
 
   const handleSave = async () => {
@@ -41,6 +56,7 @@ export default function SaleProjectFormModal({ project = null, onSaved, onClose 
         launchDate: form.launchDate || null,
       };
       const saved = project ? await saleApi.updateProject(project._id, payload) : await saleApi.createProject(payload);
+      if (!project) await photos.uploadStaged(saved?._id);
       await onSaved?.(saved);
       toast.success(`${T.saleProject} ${project ? "updated" : "created"}`);
       onClose();
@@ -55,10 +71,10 @@ export default function SaleProjectFormModal({ project = null, onSaved, onClose 
     <Modal
       title={project ? `Edit ${T.saleProject}` : `New ${T.saleProject}`}
       size="lg"
-      onClose={onClose}
+      onClose={handleClose}
       footer={
         <>
-          <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button type="button" onClick={handleClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
           <button type="button" onClick={handleSave} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
             {saving ? "Saving…" : project ? `Update ${T.saleProject}` : `Create ${T.saleProject}`}
           </button>
@@ -105,6 +121,9 @@ export default function SaleProjectFormModal({ project = null, onSaved, onClose 
         <div className="md:col-span-2">
           <label className={labelClass}>Internal Notes</label>
           <textarea rows={2} value={form.notes} onChange={set("notes")} className={textareaClass} />
+        </div>
+        <div className="md:col-span-2">
+          <SalePhotosField photos={photos} hasRecord={Boolean(project)} />
         </div>
       </div>
     </Modal>

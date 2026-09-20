@@ -22,8 +22,8 @@ import Modal from "../../components/common/Modal";
 import StatusBadge from "../../components/common/StatusBadge";
 import MilikTable from "../../components/common/MilikTable";
 import SaleListingFormModal from "./SaleListingFormModal";
+import SalePhotoGallery from "./SalePhotoGallery";
 import { blankListingForm, listingFormFromRow } from "../../utils/saleListingForm";
-import { imgSrc } from "../../utils/saleImage";
 
 // Lazy-load the xlsx-backed helpers only when the Import modal is actually used.
 const parseSaleListingsExcel = (file) => import("../../utils/excelTemplates").then((m) => m.parseSaleListingsExcel(file));
@@ -92,7 +92,6 @@ const SaleListings = () => {
   const confirm        = useConfirm();
   const queryClient    = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
-  const fileInputRef   = useRef(null);
 
   const [listingModal,   setListingModal]   = useState(null);   // { editingId, initial } while the create/edit modal is open
   const [showImportModal, setShowImportModal] = useState(false);
@@ -106,7 +105,6 @@ const SaleListings = () => {
   const [uploading,  setUploading]  = useState(false);
   const [statusBusy, setStatusBusy] = useState({}); // { [listingId]: true } while a Reserve/Release call is in flight
   const statusInFlight = useRef(new Set());
-  const [lightbox,   setLightbox]   = useState({ open: false, index: 0 });
 
   const debouncedSearch = useDebounce(search, 400);
   const biz = currentCompany?._id;
@@ -159,27 +157,6 @@ const SaleListings = () => {
     if (updated) setSelected(updated);
   }, [listings]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // clamp/close lightbox when images are deleted while it's open
-  useEffect(() => {
-    if (!lightbox.open) return;
-    const len = selected?.images?.length ?? 0;
-    if (len === 0) setLightbox({ open: false, index: 0 });
-    else if (lightbox.index >= len) setLightbox((p) => ({ ...p, index: len - 1 }));
-  }, [selected?.images?.length]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // keyboard navigation for lightbox
-  const closeLightbox = useCallback(() => setLightbox({ open: false, index: 0 }), []);
-  useEffect(() => {
-    if (!lightbox.open) return;
-    const len = selected?.images?.length ?? 0;
-    const handler = (e) => {
-      if (e.key === "Escape") closeLightbox();
-      if (e.key === "ArrowLeft")  setLightbox((p) => ({ ...p, index: Math.max(0, p.index - 1) }));
-      if (e.key === "ArrowRight") setLightbox((p) => ({ ...p, index: Math.min(len - 1, p.index + 1) }));
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [lightbox.open, selected?.images?.length, closeLightbox]);
 
   const invalidate = useCallback(() => Promise.all([
     queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] }),
@@ -223,12 +200,8 @@ const SaleListings = () => {
     }
   }, [invalidate, T.saleListing]);
 
-  const handleUploadImages = async (e) => {
-    const files = Array.from(e.target.files || []);
+  const handleUploadFiles = async (files) => {
     if (!files.length || !selected) return;
-    e.target.value = "";
-    const invalidImages = files.filter((f) => f.size > 10 * 1024 * 1024);
-    if (invalidImages.length) return toast.warning(`${invalidImages.length} file(s) exceed 10 MB and were skipped`);
     setUploading(true);
     try {
       const fd = new FormData();
@@ -445,83 +418,13 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
                 </div>
               </div>
 
-              {/* Photos section */}
-              <div className="px-4 py-3">
-                <div className="mb-3 flex items-baseline gap-1.5">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Photos</span>
-                  <span className="text-[10px] font-bold text-slate-500">({(selected.images || []).length})</span>
-                </div>
-
-                {(selected.images || []).length > 0 ? (
-                  <div className="mb-3 grid grid-cols-2 gap-1.5">
-                    {selected.images.map((url, idx) => (
-                      <div
-                        key={idx}
-                        className="group relative aspect-[4/3] cursor-zoom-in overflow-hidden border border-slate-200 bg-slate-100"
-                        onClick={() => setLightbox({ open: true, index: idx })}
-                      >
-                        <img
-                          src={imgSrc(url)}
-                          alt={`Photo ${idx + 1}`}
-                          loading="lazy"
-                          decoding="async"
-                          className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
-                        />
-                        {/* dark hover overlay */}
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-200" />
-                        {/* photo index */}
-                        <div className="absolute bottom-1 left-1.5 text-[9px] font-black text-white/90 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {idx + 1} / {selected.images.length}
-                        </div>
-                        {/* delete */}
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); handleDeleteImage(url); }}
-                          disabled={uploading}
-                          className="absolute right-1 top-1 bg-black/55 p-1 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 disabled:cursor-not-allowed transition-opacity"
-                        >
-                          <FaTimes size={9} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="mb-3 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-200 bg-slate-50/60 py-10">
-                    <FaCamera size={28} className="text-slate-200" />
-                    <div className="text-xs font-semibold text-slate-400">No photos yet</div>
-                    <div className="text-[9px] text-slate-300 text-center px-4">Upload photos to showcase this property to buyers</div>
-                  </div>
-                )}
-
-                {/* Hidden file input */}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  multiple
-                  className="hidden"
-                  onChange={handleUploadImages}
-                />
-
-                {/* Upload zone */}
-                <div
-                  className={`flex flex-col items-center justify-center gap-1.5 border-2 border-dashed py-4 transition-colors cursor-pointer ${uploading ? "border-slate-200 bg-slate-50 cursor-wait" : "border-[#B7C9C0] bg-[#F1F6F3]/60 hover:bg-[#F1F6F3] hover:border-[#0B3B2E]/30"}`}
-                  onClick={() => !uploading && fileInputRef.current?.click()}
-                >
-                  {uploading ? (
-                    <>
-                      <div className="h-5 w-5 border-2 border-[#0B3B2E] border-t-transparent rounded-full animate-spin" />
-                      <div className="text-[11px] font-bold text-[#0B3B2E]">Uploading…</div>
-                    </>
-                  ) : (
-                    <>
-                      <FaCamera size={18} className="text-[#0B3B2E]/40" />
-                      <div className="text-[11px] font-bold text-[#0B3B2E]">Upload Photos</div>
-                      <div className="text-[9px] text-slate-400">Click to select &bull; JPEG, PNG, WebP &bull; 10 MB each</div>
-                    </>
-                  )}
-                </div>
-              </div>
+              <SalePhotoGallery
+                images={selected.images || []}
+                busy={uploading}
+                onUpload={handleUploadFiles}
+                onDelete={handleDeleteImage}
+                emptyHint="Upload photos to showcase this property to buyers"
+              />
 
             </div>
 
@@ -545,49 +448,6 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
           </div>
         )}
       </div>
-
-      {/* Lightbox */}
-      {lightbox.open && selected?.images?.length > 0 && (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/92"
-          onClick={closeLightbox}
-        >
-          {lightbox.index > 0 && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); setLightbox((p) => ({ ...p, index: p.index - 1 })); }}
-              className="absolute left-4 top-1/2 -translate-y-1/2 p-3 text-white/70 hover:text-white hover:bg-white/10"
-            >
-              <FaChevronLeft size={22} />
-            </button>
-          )}
-          <img
-            src={imgSrc(selected.images[lightbox.index])}
-            alt={`Photo ${lightbox.index + 1}`}
-            className="max-h-[85vh] max-w-[calc(100vw-140px)] object-contain shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
-          {lightbox.index < selected.images.length - 1 && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); setLightbox((p) => ({ ...p, index: p.index + 1 })); }}
-              className="absolute right-4 top-1/2 -translate-y-1/2 p-3 text-white/70 hover:text-white hover:bg-white/10"
-            >
-              <FaChevronRight size={22} />
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={closeLightbox}
-            className="absolute right-5 top-5 p-2 text-white/70 hover:text-white hover:bg-white/10"
-          >
-            <FaTimes size={16} />
-          </button>
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/50 text-xs font-semibold tracking-widest">
-            {lightbox.index + 1} / {selected.images.length}
-          </div>
-        </div>
-      )}
 
       {/* Create/Edit Modal */}
       {listingModal && (

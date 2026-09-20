@@ -25,6 +25,7 @@ import SaleAssignListingsModal from "./SaleAssignListingsModal";
 import SaleProjectUnitGrid from "./SaleProjectUnitGrid";
 import SaleProjectUnitPanel from "./SaleProjectUnitPanel";
 import SaleProjectPerformance from "./SaleProjectPerformance";
+import SalePhotoGallery from "./SalePhotoGallery";
 import SaleProjectProgressBar from "./SaleProjectProgressBar";
 import {
   LISTING_STATUS_MAP, PROJECT_STATUS_MAP, STATUS_LABEL, STATUS_SWATCH, UNIT_STATUSES,
@@ -91,6 +92,7 @@ const SaleProjectDetail = () => {
   const { propertyTypeOptions, agentFormOptions } = useSaleFormOptions(biz);
 
   const [tab, setTab] = useState("units");
+  const [photoBusy, setPhotoBusy] = useState(false);
   const [view, setView] = useState("grid");
   const [statusFilt, setStatusFilt] = useState("");
   const [blockFilt, setBlockFilt] = useState("");
@@ -145,6 +147,33 @@ const SaleProjectDetail = () => {
 
   const archived = project?.status === "archived";
   const projectRef = useMemo(() => (project ? { _id: project._id, name: project.name } : null), [project]);
+
+  const handleUploadPhotos = async (files) => {
+    setPhotoBusy(true);
+    try {
+      const fd = new FormData();
+      files.forEach((f) => fd.append("images", f));
+      await saleApi.uploadProjectImages(id, fd);
+      await invalidate();
+      toast.success(`${files.length} photo${files.length > 1 ? "s" : ""} uploaded`);
+    } catch (err) {
+      toast.error(errorMessage(err, "Upload failed"));
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+  const handleDeletePhoto = async (url) => {
+    setPhotoBusy(true);
+    try {
+      await saleApi.deleteProjectImage(id, url);
+      await invalidate();
+      toast.success("Photo removed");
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to remove photo"));
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
 
   const handleArchive = async () => {
     const archive = !archived;
@@ -322,7 +351,7 @@ const SaleProjectDetail = () => {
 
         {/* Tabs */}
         <div className="flex shrink-0 gap-0.5 border-b border-slate-200">
-          {[["units", T.saleUnits], ["performance", "Performance"]].map(([key, label]) => (
+          {[["units", T.saleUnits], ["performance", "Performance"], ["photos", `Photos (${project.images?.length || 0})`]].map(([key, label]) => (
             <button
               key={key}
               type="button"
@@ -337,6 +366,16 @@ const SaleProjectDetail = () => {
         {tab === "performance" ? (
           <div className="min-h-[300px] shrink-0 border border-slate-200 bg-slate-50">
             <SaleProjectPerformance performance={perf} terms={T} />
+          </div>
+        ) : tab === "photos" ? (
+          <div className="max-w-3xl shrink-0 border border-slate-200 bg-white">
+            <SalePhotoGallery
+              images={project.images || []}
+              busy={photoBusy}
+              onUpload={handleUploadPhotos}
+              onDelete={handleDeletePhoto}
+              emptyHint={`Upload photos to showcase this ${T.saleProject.toLowerCase()} to buyers`}
+            />
           </div>
         ) : (
           <div className="relative flex min-h-[420px] flex-1 flex-col">

@@ -1,10 +1,9 @@
-import React, { useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { FaCamera, FaTimes } from "react-icons/fa";
+import React, { useState } from "react";
 import { toast } from "react-toastify";
 import { saleApi } from "../../services/propertySaleApi";
 import { useTerms } from "../../hooks/useTerm";
-import { imgSrc } from "../../utils/saleImage";
+import useSalePhotoDraft from "../../hooks/useSalePhotoDraft";
+import SalePhotosField from "./SalePhotosField";
 import AmountInput from "./AmountInput";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
@@ -17,23 +16,22 @@ const SIZE_UNIT_OPTIONS = SIZE_UNITS.map((u) => ({ value: u, label: u }));
 // block, and a new unit is created inside the project. Without it this is an ordinary standalone listing.
 export default function SaleListingFormModal({ initialEditingId, initialForm, listings, biz, propertyTypeOptions, agentFormOptions, invalidate, onClose, project = null }) {
   const T = useTerms("saleListing", "saleAgent", "saleUnit", "saleProject");
-  const queryClient  = useQueryClient();
-  const modalFileRef = useRef(null);
-  const [editingId,      setEditingId]      = useState(initialEditingId);
-  const [justCreated,    setJustCreated]    = useState(false);
-  const [form,           setForm]           = useState(initialForm);
-  const [saving,         setSaving]         = useState(false);
-  const [modalUploading, setModalUploading] = useState(false);
-  const [stagedFiles,    setStagedFiles]    = useState([]); // Array<{ file: File, preview: string }>
+  const [editingId,   setEditingId]   = useState(initialEditingId);
+  const [justCreated, setJustCreated] = useState(false);
+  const [form,        setForm]        = useState(initialForm);
+  const [saving,      setSaving]      = useState(false);
 
-  const modalSavedImgs = useMemo(
-    () => (editingId ? (listings.find((l) => l._id === editingId)?.images ?? []) : []),
-    [editingId, listings],
-  );
+  // Photos: staged locally until the listing exists, then uploaded straight away (shared with the project form)
+  const photos = useSalePhotoDraft({
+    entityId: editingId,
+    initialImages: listings.find((l) => l._id === initialEditingId)?.images ?? [],
+    upload: saleApi.uploadListingImages,
+    remove: saleApi.deleteListingImage,
+    onChanged: invalidate,
+  });
 
   const handleClose = () => {
-    stagedFiles.forEach(({ preview }) => URL.revokeObjectURL(preview));
-    setStagedFiles([]);
+    photos.clearStaged();
     onClose();
   };
 
@@ -60,14 +58,7 @@ export default function SaleListingFormModal({ initialEditingId, initialForm, li
       } else {
         const created = await saleApi.createListing(payload);
         const newId = created?._id || "";
-        // Upload any staged photos immediately
-        if (stagedFiles.length && newId) {
-          const fd = new FormData();
-          stagedFiles.forEach(({ file }) => fd.append("images", file));
-          try { await saleApi.uploadListingImages(newId, fd); } catch { /* non-fatal */ }
-          stagedFiles.forEach(({ preview }) => URL.revokeObjectURL(preview));
-          setStagedFiles([]);
-        }
+        await photos.uploadStaged(newId);
         await invalidate();
         setEditingId(newId);
         setJustCreated(true);
@@ -78,51 +69,6 @@ export default function SaleListingFormModal({ initialEditingId, initialForm, li
     } finally {
       setSaving(false);
     }
-  };
-
-  // Single handler for both Add (stage locally) and Edit (upload immediately)
-  const handleModalFileChange = async (e) => {
-    const files = Array.from(e.target.files || []);
-    e.target.value = "";
-    if (!files.length) return;
-    const oversized = files.filter((f) => f.size > 10 * 1024 * 1024);
-    if (oversized.length) toast.warning(`${oversized.length} file(s) exceed 10 MB and were skipped`);
-    const valid = files.filter((f) => f.size <= 10 * 1024 * 1024);
-    if (!valid.length) return;
-    if (editingId) {
-      setModalUploading(true);
-      try {
-        const fd = new FormData();
-        valid.forEach((f) => fd.append("images", f));
-        await saleApi.uploadListingImages(editingId, fd);
-        await queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] });
-        toast.success(`${valid.length} photo${valid.length > 1 ? "s" : ""} uploaded`);
-      } catch (err) {
-        toast.error(err?.response?.data?.message || "Upload failed");
-      } finally {
-        setModalUploading(false);
-      }
-    } else {
-      setStagedFiles((prev) => [...prev, ...valid.map((f) => ({ file: f, preview: URL.createObjectURL(f) }))]);
-    }
-  };
-
-  const handleModalDeleteImage = async (url) => {
-    setModalUploading(true);
-    try {
-      await saleApi.deleteListingImage(editingId, url);
-      await queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] });
-      toast.success("Photo removed");
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to remove photo");
-    } finally {
-      setModalUploading(false);
-    }
-  };
-
-  const removeStagedFile = (preview) => {
-    URL.revokeObjectURL(preview);
-    setStagedFiles((prev) => prev.filter((f) => f.preview !== preview));
   };
 
   return (
@@ -223,54 +169,14 @@ export default function SaleListingFormModal({ initialEditingId, initialForm, li
           <label className={labelClass}>Internal Notes</label>
           <textarea rows={2} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
         </div>
-        {/* ── Photos section — shown for both Add and Edit ── */}
+        {/* Photos — shown for both Add and Edit */}
         <div className="md:col-span-2 xl:col-span-3">
           {justCreated && (
             <div className="mb-2 flex items-center gap-2 border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-700">
               ✓ {project ? T.saleUnit : T.saleListing} saved — add more photos below (optional), then click Done.
             </div>
           )}
-          <div className="flex items-center justify-between mb-1.5">
-            <label className={labelClass}>Photos</label>
-            <button
-              type="button"
-              onClick={() => modalFileRef.current?.click()}
-              disabled={modalUploading}
-              className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-50"
-            >
-              <FaCamera size={9} /> {modalUploading ? "Uploading…" : "Add Photos"}
-            </button>
-            <input ref={modalFileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleModalFileChange} />
-          </div>
-          {(modalSavedImgs.length > 0 || stagedFiles.length > 0) ? (
-            <div className="flex flex-wrap gap-2">
-              {modalSavedImgs.map((url) => (
-                <div key={url} className="group relative h-20 w-20 shrink-0">
-                  <img src={imgSrc(url)} alt="" className="h-full w-full object-cover border border-slate-200" />
-                  <button type="button" onClick={() => handleModalDeleteImage(url)} disabled={modalUploading}
-                    className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center bg-black/50 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 disabled:cursor-not-allowed transition-opacity">
-                    <FaTimes size={7} />
-                  </button>
-                </div>
-              ))}
-              {stagedFiles.map(({ file, preview }) => (
-                <div key={preview} className="group relative h-20 w-20 shrink-0">
-                  <img src={preview} alt={file.name} className="h-full w-full object-cover border border-slate-200 opacity-80" />
-                  <div className="absolute inset-0 flex items-end justify-center pb-1">
-                    <span className="bg-black/50 px-1 text-[8px] text-white">pending</span>
-                  </div>
-                  <button type="button" onClick={() => removeStagedFile(preview)}
-                    className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center bg-black/50 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-opacity">
-                    <FaTimes size={7} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-[10px] text-slate-400 border border-dashed border-slate-200 px-3 py-2 bg-slate-50">
-              {editingId ? "No photos yet — click Add Photos to upload" : "Optional — select photos now and they will upload when you save"}
-            </p>
-          )}
+          <SalePhotosField photos={photos} hasRecord={Boolean(editingId)} />
         </div>
       </div>
     </Modal>
