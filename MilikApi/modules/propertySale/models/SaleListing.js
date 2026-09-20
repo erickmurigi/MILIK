@@ -41,6 +41,6 @@ saleListingSchema.index({ business: 1, listingNumber: 1 }, { unique: true });
 saleListingSchema.index({ business: 1, status: 1, createdAt: -1 });
 saleListingSchema.index({ business: 1, createdAt: -1 });
 saleListingSchema.index({ business: 1, assignedAgent: 1 });
-saleListingSchema.index({ title: "text", listingNumber: "text", location: "text", town: "text", titleDeedNumber: "text" }, { default_language: "none" });
+saleListingSchema.index({ business: 1, title: "text", listingNumber: "text", location: "text", town: "text", titleDeedNumber: "text" }, { default_language: "none" });
 
 export default mongoose.model("SaleListing", saleListingSchema);

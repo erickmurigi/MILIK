@@ -717,10 +717,12 @@ commissions, and the dashboard/report/funnel/cash-flow figures; listings and buy
 agents cannot approve/pay/reverse their own commission and cannot reassign deals/leads. The mode is cached 30s
 per business (cleared when the setting changes).
 
-**Still open:** the import lock is in-memory (single API process); `$text` indexes are still not
-business-prefixed (replacing them needs a migration); Buyers/Deals detail requests still load eagerly; bulk
-import still checks property type and source against the built-in lists; none of this has been exercised in a
-browser.
+**Leftovers closed (2026-09-20).**
+- Bulk import now accepts property types and sources from the built-in lists plus the business's active Sale Settings entries (case-insensitive; stored as lowercase / underscored like the forms).
+- Buyers panel loads Payments and Log only when their tab is opened (Offers/Deals stay eager for the header counts).
+- The four PropertySale text indexes (agents, buyers, leads, listings) are now `business`-prefixed. **Deploy step:** run `node scripts/migrateSaleTextIndexes.js` once against production (drops the old text index and rebuilds; search on each collection is briefly unavailable, so run at a quiet time). Idempotent. If the new code starts first, autoIndex can't create the second text index and the old one keeps working, so nothing breaks, it just isn't prefixed until the script runs.
+
+**Still open:** the import lock is in-memory (fine on one API server; needs a DB-backed lock before a second server is added, along with any timer-driven jobs and local-disk uploads); Deals detail is one continuous panel (not tabs), so its four requests stay eager; none of this has been exercised in a browser.
 
 ---
 

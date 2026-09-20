@@ -1,6 +1,7 @@
 import { createError } from "../../../utils/error.js";
 import SaleListing from "../models/SaleListing.js";
 import SaleBuyer from "../models/SaleBuyer.js";
+import SaleSettings from "../models/SaleSettings.js";
 import { resolveActiveBusinessId, currentUserId, reserveSequentialNumberBlock } from "../services/businessScope.js";
 
 const LISTING_PROPERTY_TYPES = ["plot", "house", "apartment", "commercial", "land", "other"];
@@ -10,6 +11,17 @@ const LISTING_SIZE_UNITS     = ["sqm", "sqft", "acres", "hectares"];
 const LISTING_IMPORT_STATUSES = ["available", "withdrawn"];
 const BUYER_SOURCES          = ["walk_in", "referral", "online", "social_media", "agent", "cold_call", "other"];
 const BUYER_KYC_STATUSES     = ["pending", "verified", "rejected"];
+
+// Property types and sources are free-form: the built-ins plus whatever the business added in Sale Settings.
+// Incoming values are matched case-insensitively and stored in the same form the forms use
+// (types: lowercase name; sources: lowercase name with underscores).
+const typeValue   = (v) => String(v ?? "").trim().toLowerCase();
+const sourceValue = (v) => typeValue(v).replace(/\s+/g, "_");
+const allowedFrom = async (business, builtIn, key, toValue) => {
+  const settings = await SaleSettings.findOne({ business }).select(key).lean();
+  const custom = (settings?.[key] ?? []).filter((i) => i.isActive !== false).map((i) => toValue(i.name));
+  return new Set([...builtIn, ...custom]);
+};
 
 // Case-insensitive matching for the duplicate look-ups
 const CI_COLLATION = { locale: "en", strength: 2 };
@@ -80,6 +92,7 @@ const bulkImportListingsHandler = async (req, res, next) => {
     if (rows.length > 1000)
       return next(createError(400, "Maximum 1000 listings per import"));
 
+    const allowedTypes = await allowedFrom(business, LISTING_PROPERTY_TYPES, "propertyTypes", typeValue);
     const failed = [];
     const validRows = []; // { row, rowNo, key, deed }
 
@@ -92,8 +105,11 @@ const bulkImportListingsHandler = async (req, res, next) => {
           throw new Error("Asking Price must be a valid non-negative number");
         if (!isBlank(row.size) && (!Number.isFinite(Number(row.size)) || Number(row.size) < 0))
           throw new Error("Size must be a valid non-negative number");
-        if (row.propertyType && !LISTING_PROPERTY_TYPES.includes(row.propertyType))
-          throw new Error(`Invalid Property Type: ${row.propertyType}`);
+        if (!isBlank(row.propertyType)) {
+          const pt = typeValue(row.propertyType);
+          if (!allowedTypes.has(pt)) throw new Error(`Invalid Property Type: ${row.propertyType} (add it in Sale Settings first)`);
+          row.propertyType = pt;
+        }
         if (row.sizeUnit && !LISTING_SIZE_UNITS.includes(row.sizeUnit))
           throw new Error(`Invalid Size Unit: ${row.sizeUnit}`);
         if (row.status && !LISTING_IMPORT_STATUSES.includes(row.status))
@@ -202,6 +218,7 @@ const bulkImportBuyersHandler = async (req, res, next) => {
     if (rows.length > 1000)
       return next(createError(400, "Maximum 1000 buyers per import"));
 
+    const allowedSources = await allowedFrom(business, BUYER_SOURCES, "leadSources", sourceValue);
     const failed = [];
     const validRows = []; // { row, rowNo, key }
 
@@ -210,8 +227,11 @@ const bulkImportBuyersHandler = async (req, res, next) => {
       try {
         if (isBlank(row.fullName))
           throw new Error("Full Name is required");
-        if (row.source && !BUYER_SOURCES.includes(row.source))
-          throw new Error(`Invalid Source: ${row.source}`);
+        if (!isBlank(row.source)) {
+          const src = sourceValue(row.source);
+          if (!allowedSources.has(src)) throw new Error(`Invalid Source: ${row.source} (add it in Sale Settings first)`);
+          row.source = src;
+        }
         if (row.kycStatus && !BUYER_KYC_STATUSES.includes(row.kycStatus))
           throw new Error(`Invalid KYC Status: ${row.kycStatus}`);
         // Natural key: ID number when present, else phone, else email

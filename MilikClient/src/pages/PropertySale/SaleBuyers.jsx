@@ -275,8 +275,8 @@ const SaleBuyers = () => {
 
   const { data: buyerOffersData }    = useQuery({ queryKey: ["sale-buyer-offers",    biz, selectedId], queryFn: () => saleApi.listOffers({ business: biz, buyerId: selectedId, limit: 100 }), enabled: !!biz && !!selectedId, staleTime: 30_000 });
   const { data: buyerDealsData }     = useQuery({ queryKey: ["sale-buyer-deals",     biz, selectedId], queryFn: () => saleApi.listDeals({ business: biz, buyerId: selectedId, limit: 100 }), enabled: !!biz && !!selectedId, staleTime: 30_000 });
-  const { data: buyerPaymentsData }  = useQuery({ queryKey: ["sale-buyer-payments",  biz, selectedId], queryFn: () => saleApi.listPayments({ business: biz, buyer: selectedId, limit: 100 }), enabled: !!biz && !!selectedId, staleTime: 30_000 });
-  const { data: buyerActivitiesData }= useQuery({ queryKey: ["sale-buyer-activities",biz, selectedId], queryFn: () => saleApi.listActivities({ business: biz, relatedBuyer: selectedId, limit: 100 }), enabled: !!biz && !!selectedId, staleTime: 30_000 });
+  const { data: buyerPaymentsData }  = useQuery({ queryKey: ["sale-buyer-payments",  biz, selectedId], queryFn: () => saleApi.listPayments({ business: biz, buyer: selectedId, limit: 100 }), enabled: !!biz && !!selectedId && panelTab === "payments", staleTime: 30_000 });
+  const { data: buyerActivitiesData }= useQuery({ queryKey: ["sale-buyer-activities",biz, selectedId], queryFn: () => saleApi.listActivities({ business: biz, relatedBuyer: selectedId, limit: 100 }), enabled: !!biz && !!selectedId && panelTab === "activities", staleTime: 30_000 });
 
   const buyerOffers     = buyerOffersData?.data     ?? [];
   const buyerDeals      = buyerDealsData?.data      ?? [];
@@ -564,8 +564,8 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
                 { id: "profile",    label: "Profile / KYC" },
                 { id: "offers",     label: `Offers (${buyerOffers.length})` },
                 { id: "deals",      label: `Deals (${buyerDeals.length})` },
-                { id: "payments",   label: `Payments (${buyerPayments.length})` },
-                { id: "activities", label: `Log (${buyerActivities.length})` },
+                { id: "payments",   label: buyerPaymentsData ? `Payments (${buyerPayments.length})` : "Payments" },
+                { id: "activities", label: buyerActivitiesData ? `Log (${buyerActivities.length})` : "Log" },
               ].map((t) => (
                 <button
                   key={t.id}

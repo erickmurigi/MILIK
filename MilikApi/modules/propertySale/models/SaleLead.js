@@ -33,7 +33,7 @@ saleLeadSchema.index({ business: 1, createdAt: -1 });
 saleLeadSchema.index({ business: 1, assignedAgent: 1 });
 saleLeadSchema.index({ business: 1, nextFollowUpDate: 1 });
 saleLeadSchema.index(
-  { fullName: "text", phone: "text", email: "text", leadNumber: "text" },
+  { business: 1, fullName: "text", phone: "text", email: "text", leadNumber: "text" },
   { default_language: "none" }
 );
 
