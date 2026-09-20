@@ -190,18 +190,20 @@ export const updateListing = async (req, res, next) => {
       if (!agent) return next(createError(400, "Assigned agent not found or inactive"));
     }
 
-    // unitNumber / block only make sense on a unit, and a unit must keep its number
-    const existing = await SaleListing.findOne({ _id: req.params.id, business }).select("project").lean();
-    if (!existing) return next(createError(404, "Listing not found"));
-    if (existing.project) {
-      if ("unitNumber" in updates) {
-        updates.unitNumber = String(updates.unitNumber ?? "").trim();
-        if (!updates.unitNumber) return next(createError(400, "Unit number is required for a unit inside a project"));
+    // unitNumber / block only make sense on a unit, and a unit must keep its number (looked up only when they change)
+    if ("unitNumber" in updates || "block" in updates) {
+      const existing = await SaleListing.findOne({ _id: req.params.id, business }).select("project").lean();
+      if (!existing) return next(createError(404, "Listing not found"));
+      if (existing.project) {
+        if ("unitNumber" in updates) {
+          updates.unitNumber = String(updates.unitNumber ?? "").trim();
+          if (!updates.unitNumber) return next(createError(400, "Unit number is required for a unit inside a project"));
+        }
+        if ("block" in updates) updates.block = String(updates.block ?? "").trim();
+      } else {
+        delete updates.unitNumber;
+        delete updates.block;
       }
-      if ("block" in updates) updates.block = String(updates.block ?? "").trim();
-    } else {
-      delete updates.unitNumber;
-      delete updates.block;
     }
 
     const listing = await SaleListing.findOneAndUpdate(
@@ -228,6 +230,7 @@ export const deleteListing = async (req, res, next) => {
       return next(createError(400, "Cannot delete a listing that is under contract or sold"));
     }
     await listing.deleteOne();
+    listing.images?.forEach(deleteImageFile);
     res.status(200).json({ message: "Listing deleted" });
   } catch (err) {
     next(err);
@@ -268,6 +271,8 @@ export const removeListingImage = async (req, res, next) => {
     if (!url) return next(createError(400, "Image URL required"));
     const listing = await SaleListing.findOne({ _id: req.params.id, business });
     if (!listing) return next(createError(404, "Listing not found"));
+    // Only a photo that is on this listing may be removed (and its file deleted): the URL comes from the client
+    if (!listing.images.includes(url)) return next(createError(404, "Image not found on this listing"));
     listing.images = listing.images.filter((u) => u !== url);
     listing.updatedBy = userId;
     await listing.save();

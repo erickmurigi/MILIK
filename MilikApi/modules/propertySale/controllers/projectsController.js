@@ -201,10 +201,19 @@ export const getProject = async (req, res, next) => {
     if (!project) return next(createError(404, "Project not found"));
 
     const units = await SaleListing.find({ business, project: project._id }).select("askingPrice listedDate status").lean();
-    const rows = await statusRows(business, [project._id]);
-    const summary = summarise(rows.map((r) => ({ status: r._id.status, count: r.count, value: r.value })));
-    const performance = await projectPerformance(req, business, project, units);
-    await project.populate("assignedAgent", AGENT_FIELDS);
+    // Counts and values come from the units already loaded for the performance figures (no second query)
+    const byStatus = new Map();
+    for (const u of units) {
+      const row = byStatus.get(u.status) || { status: u.status, count: 0, value: 0 };
+      row.count += 1;
+      row.value += u.askingPrice || 0;
+      byStatus.set(u.status, row);
+    }
+    const summary = summarise([...byStatus.values()]);
+    const [performance] = await Promise.all([
+      projectPerformance(req, business, project, units),
+      project.populate("assignedAgent", AGENT_FIELDS),
+    ]);
 
     res.status(200).json({ ...project.toObject(), ...summary, performance });
   } catch (err) {
@@ -362,16 +371,15 @@ export const listProjectUnits = async (req, res, next) => {
     await project.populate("assignedAgent", AGENT_FIELDS);
     const projectAgent = project.assignedAgent ? project.assignedAgent.toObject() : null;
 
-    const [rows, total] = await Promise.all([
-      SaleListing.find(filter)
+    const rows = await SaleListing.find(filter)
         .select("listingNumber title unitNumber block propertyType size sizeUnit askingPrice status assignedAgent titleDeedAvailable")
         .populate("assignedAgent", "fullName agentNumber")
         .sort({ block: 1, unitNumber: 1 })
         .collation(NUMERIC_ORDER)
         .limit(MAX_UNITS_LISTED)
-        .lean(),
-      SaleListing.countDocuments(filter),
-    ]);
+        .lean();
+    // A full page means there may be more: only then is the total worth a second query
+    const total = rows.length < MAX_UNITS_LISTED ? rows.length : await SaleListing.countDocuments(filter);
     // Units without their own agent show the project's agent (effectiveAgent / agentInherited)
     const data = rows.map((u) => withEffectiveAgent({ ...u, project: { assignedAgent: projectAgent } }))
       .map(({ project: _p, ...unit }) => unit);
@@ -543,23 +551,15 @@ export const updateUnitPrices = async (req, res, next) => {
     if (mode === "percent" && amount <= -100) return next(createError(400, "A percentage decrease must be less than 100%"));
     if (mode === "set" && amount < 0) return next(createError(400, "Price must be 0 or more"));
 
-    const filter = { business, project: project._id, status: "available" };
+    // One atomic update over the units that are still available at that moment (a sold or reserved unit is never
+    // touched). The $expr skips units whose price would not change, so `updated` is exact and nothing is rewritten.
+    const current = { $ifNull: ["$askingPrice", 0] };
+    const raw = mode === "percent" ? { $multiply: [current, 1 + amount / 100] } : mode === "amount" ? { $add: [current, amount] } : { $literal: amount };
+    const newPrice = { $max: [0, { $round: [raw, 2] }] };
+    const filter = { business, project: project._id, status: "available", $expr: { $ne: [current, newPrice] } };
     if (block) filter.block = String(block);
-    const units = await SaleListing.find(filter).select("askingPrice").limit(MAX_UNITS_LISTED).lean();
-    if (!units.length) return res.status(200).json({ updated: 0 });
-
-    const next$ = (price) => {
-      const raw = mode === "percent" ? price * (1 + amount / 100) : mode === "amount" ? price + amount : amount;
-      return Math.max(0, round2(raw));
-    };
-    const ops = units
-      .map((u) => ({ id: u._id, price: next$(u.askingPrice || 0), old: u.askingPrice }))
-      .filter((u) => u.price !== u.old)
-      .map((u) => ({
-        // status is re-checked in the filter so a unit sold a moment ago is never re-priced
-        updateOne: { filter: { _id: u.id, business, status: "available" }, update: { $set: { askingPrice: u.price, updatedBy: currentUserId(req) } } },
-      }));
-    const updated = ops.length ? (await SaleListing.bulkWrite(ops, { ordered: false })).modifiedCount : 0;
+    const result = await SaleListing.updateMany(filter, [{ $set: { askingPrice: newPrice, updatedBy: { $literal: currentUserId(req) } } }]);
+    const updated = result.modifiedCount;
     res.status(200).json({ updated });
   } catch (err) {
     next(err);

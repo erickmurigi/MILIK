@@ -12,7 +12,7 @@ import {
   getProject, listProjects, listProjectUnits, removeProjectImage, setProjectArchived, updateProject, updateUnitPrices,
   uploadProjectImages,
 } from "./projectsController.js";
-import { createListing, getListing, listListings, updateListing } from "./listingsController.js";
+import { createListing, getListing, listListings, removeListingImage, updateListing, uploadListingImages } from "./listingsController.js";
 
 const setup = async () => {
   const company = await createTestCompany();
@@ -249,6 +249,22 @@ describe("projects", () => {
     await call(updateProject, { params: { id }, body: { assignedAgent: "" } });
     expect(await agents()).toEqual({ "A-1": [null, false], "A-2": [null, false], "A-3": [null, false] });
     expect((await call(getProject, { params: { id } })).payload.assignedAgent).toBeNull();
+  });
+
+  it("a listing can only remove its own photos (a file URL from another record is refused)", async () => {
+    const { call, project } = await setup();
+    const a = (await call(createListing, { body: { title: "House A", askingPrice: 1 } })).payload;
+    const b = (await call(createListing, { body: { title: "House B", askingPrice: 1 } })).payload;
+    await call(uploadListingImages, { params: { id: String(a._id) }, files: [{ filename: "a1.jpg" }] });
+    await call(uploadListingImages, { params: { id: String(b._id) }, files: [{ filename: "b1.jpg" }] });
+    await call(uploadProjectImages, { params: { id: String(project._id) }, files: [{ filename: "p1.jpg" }] });
+
+    // B's and the project's photo URLs are not on A, so A cannot delete them
+    await expect(call(removeListingImage, { params: { id: String(a._id) }, body: { url: "/uploads/sale-listings/b1.jpg" } })).rejects.toThrow(/Image not found/);
+    await expect(call(removeListingImage, { params: { id: String(a._id) }, body: { url: "/uploads/sale-listings/p1.jpg" } })).rejects.toThrow(/Image not found/);
+    const ok = await call(removeListingImage, { params: { id: String(a._id) }, body: { url: "/uploads/sale-listings/a1.jpg" } });
+    expect(ok.payload.images).toEqual([]);
+    expect((await SaleListing.findById(b._id).lean()).images).toEqual(["/uploads/sale-listings/b1.jpg"]);
   });
 
   it("attaches and removes project photos, and keeps them private to the company", async () => {
