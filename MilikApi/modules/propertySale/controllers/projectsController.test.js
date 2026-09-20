@@ -8,7 +8,8 @@ import SaleDeal from "../models/SaleDeal.js";
 import SalePayment from "../models/SalePayment.js";
 import {
   applyProjectDetails, assignUnits, createProject, deleteProject, detachUnit, generateUnits,
-  getProject, listProjects, listProjectUnits, setProjectArchived, updateProject, updateUnitPrices,
+  getProject, listProjects, listProjectUnits, removeProjectImage, setProjectArchived, updateProject, updateUnitPrices,
+  uploadProjectImages,
 } from "./projectsController.js";
 import { createListing, listListings, updateListing } from "./listingsController.js";
 
@@ -194,6 +195,28 @@ describe("projects", () => {
     const list = await call(listProjects, {});
     expect(list.payload.data[0]).toMatchObject({ name: "Sunrise Estate", sellThrough: 25 });
     expect(list.payload.data[0].units.total).toBe(4);
+  });
+
+  it("attaches and removes project photos, and keeps them private to the company", async () => {
+    const { call, project } = await setup();
+    const id = String(project._id);
+    const up = await call(uploadProjectImages, { params: { id }, files: [{ filename: "a.jpg" }, { filename: "b.jpg" }] });
+    expect(up.payload.images).toEqual(["/uploads/sale-listings/a.jpg", "/uploads/sale-listings/b.jpg"]);
+    await expect(call(uploadProjectImages, { params: { id }, files: [] })).rejects.toThrow(/No valid images/);
+
+    // photos come back on the project and the list, but a normal edit cannot overwrite them
+    await call(updateProject, { params: { id }, body: { name: "Sunrise Estate", images: ["/x.jpg"] } });
+    expect((await call(getProject, { params: { id } })).payload.images).toHaveLength(2);
+    expect((await call(listProjects, {})).payload.data[0].images).toHaveLength(2);
+
+    const other = await setup();
+    await expect(other.call(uploadProjectImages, { params: { id }, files: [{ filename: "c.jpg" }] })).rejects.toThrow(/not found/i);
+    await expect(other.call(removeProjectImage, { params: { id }, body: { url: "/uploads/sale-listings/a.jpg" } })).rejects.toThrow(/not found/i);
+
+    const rm = await call(removeProjectImage, { params: { id }, body: { url: "/uploads/sale-listings/a.jpg" } });
+    expect(rm.payload.images).toEqual(["/uploads/sale-listings/b.jpg"]);
+    await expect(call(removeProjectImage, { params: { id }, body: { url: "/uploads/sale-listings/zzz.jpg" } })).rejects.toThrow(/Image not found/);
+    await expect(call(removeProjectImage, { params: { id }, body: {} })).rejects.toThrow(/Image URL required/);
   });
 
   it("refuses to delete or detach units with a deal, and deletes an untouched project with its units", async () => {

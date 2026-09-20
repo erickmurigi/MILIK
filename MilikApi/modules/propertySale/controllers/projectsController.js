@@ -10,6 +10,7 @@ import {
   currentUserId, escapeRegex, generateSequentialNumber, reserveSequentialNumberBlock, resolveActiveBusinessId,
 } from "../services/businessScope.js";
 import { agentFilter } from "../middleware/agentScope.js";
+import { deleteImageFile } from "../middleware/listingImageUpload.js";
 
 const MAX_UNITS_PER_REQUEST = 500;
 const MAX_UNITS_LISTED = 2000;
@@ -269,14 +270,58 @@ export const deleteProject = async (req, res, next) => {
     const project = await findProject(business, req.params.id);
     if (!project) return next(createError(404, "Project not found"));
 
-    const units = await SaleListing.find({ business, project: project._id }).select("status").lean();
+    const units = await SaleListing.find({ business, project: project._id }).select("status images").lean();
     const ids = units.map((u) => u._id);
     if (units.some((u) => !["available", "withdrawn"].includes(u.status)) || (await hasSalesActivity(business, ids))) {
       return next(createError(409, "This project has units with offers or deals — archive it instead of deleting it"));
     }
     if (ids.length) await SaleListing.deleteMany({ business, project: project._id, _id: { $in: ids } });
     await project.deleteOne();
+    // Files are removed last and best-effort: a leftover file is harmless, a missing one would not be
+    [...(project.images || []), ...units.flatMap((u) => u.images || [])].forEach(deleteImageFile);
     res.status(200).json({ message: "Project deleted", unitsDeleted: ids.length });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const uploadProjectImages = async (req, res, next) => {
+  // The upload middleware has already written the processed images to disk — remove them again
+  // whenever they don't end up attached to the project (404, save failure, etc.).
+  let attached = false;
+  const discardUploads = () => req.files?.forEach((f) => deleteImageFile(f.filename));
+  try {
+    const business = resolveActiveBusinessId(req);
+    if (!req.files?.length) return next(createError(400, "No valid images uploaded"));
+    const project = await findProject(business, req.params.id);
+    if (!project) {
+      discardUploads();
+      return next(createError(404, "Project not found"));
+    }
+    project.images.push(...req.files.map((f) => `/uploads/sale-listings/${f.filename}`));
+    project.updatedBy = currentUserId(req);
+    await project.save();
+    attached = true;
+    res.status(200).json({ images: project.images });
+  } catch (err) {
+    if (!attached) discardUploads();
+    next(err);
+  }
+};
+
+export const removeProjectImage = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const { url } = req.body || {};
+    if (!url) return next(createError(400, "Image URL required"));
+    const project = await findProject(business, req.params.id);
+    if (!project) return next(createError(404, "Project not found"));
+    if (!project.images.includes(url)) return next(createError(404, "Image not found on this project"));
+    project.images = project.images.filter((u) => u !== url);
+    project.updatedBy = currentUserId(req);
+    await project.save();
+    deleteImageFile(url);
+    res.status(200).json({ images: project.images });
   } catch (err) {
     next(err);
   }

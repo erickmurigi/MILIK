@@ -22,6 +22,8 @@ const saleProjectSchema = new mongoose.Schema(
     targetValue: { type: Number, min: 0, default: null },
     status: { type: String, enum: PROJECT_STATUSES, default: "active" },
     notes: { type: String, trim: true, default: "" },
+    // Photos are managed only through the upload/delete image endpoints (same storage as listing photos)
+    images: [{ type: String, trim: true }],
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   },

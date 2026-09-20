@@ -1,9 +1,12 @@
 import express from "express";
 import { verifyUser, requireCompanyModule, requireCompanyPermission } from "../../../controllers/verifyToken.js";
 import { attachAgentScope } from "../middleware/agentScope.js";
+import { listingImageUpload } from "../middleware/listingImageUpload.js";
+import { createError } from "../../../utils/error.js";
 import {
   applyProjectDetails, assignUnits, createProject, deleteProject, detachUnit, generateUnits,
-  getProject, listProjects, listProjectUnits, setProjectArchived, updateProject, updateUnitPrices,
+  getProject, listProjects, listProjectUnits, removeProjectImage, setProjectArchived, updateProject, updateUnitPrices,
+  uploadProjectImages,
 } from "../controllers/projectsController.js";
 
 const router = express.Router();
@@ -22,6 +25,15 @@ router.get("/:id", view,   getProject);
 router.put("/:id", update, updateProject);
 router.patch("/:id/archive", update, setProjectArchived);
 router.delete("/:id", update, deleteProject);
+
+// Photos: same upload pipeline and storage folder as listing photos
+router.post(
+  "/:id/images",
+  update,
+  (req, res, next) => listingImageUpload(req, res, (err) => (err ? next(createError(400, err.message || "Upload failed")) : next())),
+  uploadProjectImages
+);
+router.delete("/:id/images", update, removeProjectImage);
 
 router.get("/:id/units",                view,   listProjectUnits);
 router.post("/:id/units/generate",      create, generateUnits);
