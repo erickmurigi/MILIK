@@ -177,6 +177,17 @@ export default function SaleConversionFunnel() {
                       <td className="px-3 py-1.5 text-right font-mono font-semibold tabular-nums">{leadCount(leads, key).toLocaleString()}</td>
                     </tr>
                   ))}
+                  {(leads.other ?? 0) > 0 && (
+                    <tr className="border-b border-slate-50">
+                      <td className="px-3 py-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-block h-2 w-2 shrink-0 bg-slate-400" />
+                          <span className="text-slate-700">Custom stages</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-mono font-semibold tabular-nums">{leads.other.toLocaleString()}</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

@@ -4,7 +4,7 @@ import SaleDeal           from "../models/SaleDeal.js";
 import SalePayment        from "../models/SalePayment.js";
 import SaleCommission     from "../models/SaleCommission.js";
 import SaleOffer          from "../models/SaleOffer.js";
-import SaleLead           from "../models/SaleLead.js";
+import SaleLead, { LEAD_STATUSES } from "../models/SaleLead.js";
 import SalePaymentSchedule from "../models/SalePaymentSchedule.js";
 import { resolveActiveBusinessId } from "../services/businessScope.js";
 
@@ -330,6 +330,8 @@ export const getConversionFunnel = async (req, res, next) => {
         qualified:   lm.qualified    || 0,
         siteVisited: lm.site_visited || 0,
         proposalSent: lm.proposal_sent || 0,
+        // Leads sitting in a custom pipeline stage from Sale Settings (not one of the built-in statuses)
+        other:       Object.entries(lm).reduce((sum, [status, count]) => (LEAD_STATUSES.includes(status) ? sum : sum + count), 0),
         negotiating: lm.negotiating  || 0,
         converted:   lm.converted    || 0,
         lost:        lm.lost         || 0,

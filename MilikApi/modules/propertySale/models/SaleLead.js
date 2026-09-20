@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const LEAD_STATUSES = ["new", "contacted", "qualified", "site_visited", "proposal_sent", "negotiating", "converted", "lost"];
+export const LEAD_STATUSES = ["new", "contacted", "qualified", "site_visited", "proposal_sent", "negotiating", "converted", "lost"];
 
 const saleLeadSchema = new mongoose.Schema(
   {
@@ -10,7 +10,7 @@ const saleLeadSchema = new mongoose.Schema(
     phone:              { type: String,  trim: true, default: "" },
     email:              { type: String,  trim: true, lowercase: true, default: "" },
     source:             { type: String,  trim: true,          default: "walk_in" }, // admin-configurable in Sale Settings
-    status:             { type: String,  enum: LEAD_STATUSES, default: "new" },
+    status:             { type: String,  trim: true,          default: "new" }, // fixed set + the business's own Sale Settings pipeline stages (validated in leadsController)
     assignedAgent:      { type: mongoose.Schema.Types.ObjectId, ref: "SaleAgent",  default: null },
     interestedListings: [{ type: mongoose.Schema.Types.ObjectId, ref: "SaleListing" }],
     budgetMin:          { type: Number,  default: 0 },

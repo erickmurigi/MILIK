@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
-import SaleLead   from "../models/SaleLead.js";
+import SaleLead, { LEAD_STATUSES } from "../models/SaleLead.js";
+import SaleSettings from "../models/SaleSettings.js";
 import SaleBuyer   from "../models/SaleBuyer.js";
 import SaleOffer   from "../models/SaleOffer.js";
 import SaleListing from "../models/SaleListing.js";
@@ -9,6 +10,17 @@ import Company from "../../../models/Company.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { agentFilter } from "../middleware/agentScope.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
+
+// Stage names from Sale Settings become status values the same way the client builds them (lowercase, spaces -> _)
+const statusValueOf = (name) => String(name || "").toLowerCase().replace(/\s+/g, "_");
+
+// A lead status is valid if it is one of the built-in ones or matches one of this business's pipeline stages
+// (archived stages still count so leads already sitting in one stay editable).
+const isKnownLeadStatus = async (business, status) => {
+  if (LEAD_STATUSES.includes(status)) return true;
+  const settings = await SaleSettings.findOne({ business }).select("pipelineStages").lean();
+  return (settings?.pipelineStages ?? []).some((s) => statusValueOf(s.name) === status);
+};
 
 // A converted lead carries its source onto the buyer as-is (sources are admin-configurable)
 const buyerSourceFor = (source) => String(source || "").trim() || "other";
@@ -100,6 +112,7 @@ export const createLead = async (req, res, next) => {
     // Agent-scoped users can only create leads assigned to themselves
     const body = sanitizeLeadBody(req.body);
     if (req.saleAgentId) body.assignedAgent = req.saleAgentId;
+    if (body.status && !(await isKnownLeadStatus(business, body.status))) return next(createError(400, `Unknown lead status "${body.status}"`));
     const lead = await SaleLead.create({ ...body, business, leadNumber, createdBy: userId, updatedBy: userId });
     res.status(201).json(lead);
   } catch (err) { next(err); }
@@ -118,6 +131,7 @@ export const updateLead = async (req, res, next) => {
     if (req.saleAgentId) delete updates.assignedAgent;
     // "converted" status must go through /convert (which creates the buyer record)
     if (updates.status === "converted") delete updates.status;
+    if (updates.status && !(await isKnownLeadStatus(business, updates.status))) return next(createError(400, `Unknown lead status "${updates.status}"`));
     // A lead that already has a buyer keeps its "converted" status — unlinking happens only via
     // buyersController.deleteBuyer, which resets the lead itself.
     if (updates.status !== undefined) {
