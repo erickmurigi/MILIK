@@ -6,6 +6,13 @@ import SalePayment from "../models/SalePayment.js";
 import { round2 } from "../../../utils/math.js";
 import { currentUserId, parseLimit, parsePagination, resolveActiveBusinessId } from "../services/businessScope.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
+import { agentFilter, ownDealIds } from "../middleware/agentScope.js";
+
+// Agent-scoped users only see schedule items on their own deals (query fragment; empty for everyone else)
+const dealScope = async (req, business) => {
+  const ids = await ownDealIds(req, business);
+  return ids ? { deal: { $in: ids } } : {};
+};
 
 const recomputeStatuses = async (business, dealId) => {
   const now   = new Date();
@@ -37,6 +44,8 @@ export const listSchedule = async (req, res, next) => {
 
     await recomputeStatuses(business, dealId);
 
+    if (req.saleAgentId && !(await SaleDeal.exists({ _id: dealId, business, agent: req.saleAgentId }))) return next(createError(404, "Deal not found"));
+
     const items = await SalePaymentSchedule.find({ business, deal: dealId })
       .populate("linkedPayment", "paymentNumber amount paymentDate status")
       .sort({ installmentNumber: 1 })
@@ -55,7 +64,7 @@ export const setSchedule = async (req, res, next) => {
     if (!dealId) return next(createError(400, "dealId is required"));
     if (!Array.isArray(items) || items.length === 0) return next(createError(400, "items must be a non-empty array"));
 
-    const deal = await SaleDeal.findOne({ _id: dealId, business }).lean();
+    const deal = await SaleDeal.findOne({ _id: dealId, business, ...agentFilter(req) }).lean();
     if (!deal) return next(createError(404, "Deal not found"));
     if (deal.status !== "active") return next(createError(400, "Can only set schedule on an active deal"));
 
@@ -120,7 +129,7 @@ export const updateScheduleItem = async (req, res, next) => {
     const userId   = currentUserId(req);
     const { dueDate, expectedAmount, description, status } = req.body;
 
-    const item = await SalePaymentSchedule.findOne({ _id: req.params.id, business });
+    const item = await SalePaymentSchedule.findOne({ _id: req.params.id, business, ...(await dealScope(req, business)) });
     if (!item) return next(createError(404, "Schedule item not found"));
     if (item.status === "paid") return next(createError(400, "Cannot edit a paid installment"));
 
@@ -141,7 +150,7 @@ export const linkPaymentToSchedule = async (req, res, next) => {
     const userId   = currentUserId(req);
     const { paymentId } = req.body;
 
-    const item    = await SalePaymentSchedule.findOne({ _id: req.params.id, business });
+    const item    = await SalePaymentSchedule.findOne({ _id: req.params.id, business, ...(await dealScope(req, business)) });
     if (!item)    return next(createError(404, "Schedule item not found"));
     if (item.status === "paid") return next(createError(400, "Already marked as paid"));
 
@@ -161,7 +170,7 @@ export const linkPaymentToSchedule = async (req, res, next) => {
 export const deleteScheduleItem = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const item     = await SalePaymentSchedule.findOne({ _id: req.params.id, business });
+    const item     = await SalePaymentSchedule.findOne({ _id: req.params.id, business, ...(await dealScope(req, business)) });
     if (!item)     return next(createError(404, "Schedule item not found"));
     if (item.status === "paid") return next(createError(400, "Cannot delete a paid installment — waive it instead"));
     await item.deleteOne();
@@ -178,6 +187,8 @@ export const listAllSchedule = async (req, res, next) => {
     const filter = { business };
     if (status)  filter.status = status;
     if (dealId)  filter.deal   = dealId;
+    const ownDeals = await ownDealIds(req, business);
+    if (ownDeals) filter.$and = [{ deal: { $in: ownDeals } }];
     if (dateFrom || dateTo) {
       filter.dueDate = {};
       if (dateFrom) filter.dueDate.$gte = new Date(dateFrom);
@@ -218,8 +229,9 @@ export const getScheduleSummary = async (req, res, next) => {
 
     const now = new Date();
     const cutoff = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const ownDeals = await ownDealIds(req, business);
     const rows = await SalePaymentSchedule.aggregate([
-      { $match: { business: new mongoose.Types.ObjectId(String(business)), status: { $in: ["overdue", "upcoming"] } } },
+      { $match: { business: new mongoose.Types.ObjectId(String(business)), status: { $in: ["overdue", "upcoming"] }, ...(ownDeals && { deal: { $in: ownDeals } }) } },
       {
         $group: {
           _id: "$status",
@@ -254,7 +266,7 @@ export const getOverdueSchedule = async (req, res, next) => {
     // Optional ?limit=N (clamped 1..200); omitted keeps the historical 200-item behaviour.
     const limit = parseLimit(req.query.limit, 200, 200);
     await recomputeBusinessStatuses(business);
-    const filter = { business, status: "overdue" };
+    const filter = { business, status: "overdue", ...(await dealScope(req, business)) };
     const [items, total] = await Promise.all([
       SalePaymentSchedule.find(filter)
         .select("deal installmentNumber dueDate expectedAmount description status")
@@ -276,7 +288,7 @@ export const sendReminders = async (req, res, next) => {
     if (!["sms", "email", "both"].includes(channel)) return next(createError(400, "channel must be sms, email, or both"));
 
     const items = await SalePaymentSchedule.find({
-      business, _id: { $in: itemIds },
+      business, _id: { $in: itemIds }, ...(await dealScope(req, business)),
       status: { $in: ["overdue", "upcoming"] },
     })
       .populate({

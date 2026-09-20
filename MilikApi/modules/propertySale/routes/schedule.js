@@ -1,10 +1,11 @@
 import express from "express";
 import { verifyUser, requireCompanyModule, requireCompanyPermission } from "../../../controllers/verifyToken.js";
+import { attachAgentScope } from "../middleware/agentScope.js";
 import { deleteScheduleItem, getOverdueSchedule, getScheduleSummary, linkPaymentToSchedule, listAllSchedule, listSchedule, sendReminders, setSchedule, updateScheduleItem } from "../controllers/scheduleController.js";
 
 const router = express.Router();
 
-router.use(verifyUser, requireCompanyModule("propertySale"));
+router.use(verifyUser, requireCompanyModule("propertySale"), attachAgentScope);
 
 router.get("/all",           requireCompanyPermission("sale-deals", "view",   "propertySale"), listAllSchedule);
 router.get("/summary",       requireCompanyPermission("sale-deals", "view",   "propertySale"), getScheduleSummary);

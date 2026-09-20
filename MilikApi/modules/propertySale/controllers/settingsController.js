@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
 import SaleSettings from "../models/SaleSettings.js";
 import { resolveActiveBusinessId } from "../services/businessScope.js";
+import { invalidateAgentVisibilityCache } from "../middleware/agentScope.js";
 
 const ensureSettings = async (business) => {
   let s = await SaleSettings.findOne({ business });
@@ -98,6 +99,20 @@ export const updateCommissionDefaults = async (req, res, next) => {
     if (commissionType != null) settings.commissionDefaults.commissionType = commissionType;
     if (whtRate        != null) settings.commissionDefaults.whtRate        = Number(whtRate);
     await settings.save();
+    res.json({ settings });
+  } catch (err) { next(err); }
+};
+
+// Company-wide switch: agent-linked users see only their own records ("own") or the whole business ("all")
+export const updateAgentVisibility = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const { mode } = req.body;
+    if (!["own", "all"].includes(mode)) return next(createError(400, 'mode must be "own" or "all"'));
+    const settings = await ensureSettings(business);
+    settings.agentVisibility = mode;
+    await settings.save();
+    invalidateAgentVisibilityCache(business);
     res.json({ settings });
   } catch (err) { next(err); }
 };

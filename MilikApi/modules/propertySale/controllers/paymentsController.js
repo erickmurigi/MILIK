@@ -5,10 +5,17 @@ import SalePayment from "../models/SalePayment.js";
 import SaleDeal from "../models/SaleDeal.js";
 import { round2 } from "../../../utils/math.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
+import { agentFilter, ownDealIds } from "../middleware/agentScope.js";
 import {
   postPropertySalePaymentLedger,
   reversePropertySalePaymentLedger,
 } from "../services/propertySaleAccountingService.js";
+
+// Agent-scoped users only see payments on their own deals (query fragment; empty for everyone else)
+const dealScope = async (req, business) => {
+  const ids = await ownDealIds(req, business);
+  return ids ? { deal: { $in: ids } } : {};
+};
 
 // Deep-populate: deal includes nested listing + buyer so receipt/table fields work
 const populatePayment = (query) =>
@@ -85,7 +92,11 @@ export const listPayments = async (req, res, next) => {
       if (dateTo)   filter.paymentDate.$lte = new Date(dateTo + "T23:59:59.999Z");
     }
 
+    const ownDeals = await ownDealIds(req, business);
+    if (ownDeals) filter.$and = [{ deal: { $in: ownDeals } }];
+
     const collectedMatch = { business: bId, status: "paid" };
+    if (ownDeals) collectedMatch.$and = [{ deal: { $in: ownDeals } }];
     if (deal) collectedMatch.deal = new mongoose.Types.ObjectId(String(deal));
 
     const [payments, total, [agg]] = await Promise.all([
@@ -106,7 +117,7 @@ export const listPayments = async (req, res, next) => {
 export const getPayment = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const payment = await populatePayment(SalePayment.findOne({ _id: req.params.id, business })).lean();
+    const payment = await populatePayment(SalePayment.findOne({ _id: req.params.id, business, ...(await dealScope(req, business)) })).lean();
     if (!payment) return next(createError(404, "Payment not found"));
     res.status(200).json(payment);
   } catch (err) {
@@ -119,7 +130,7 @@ export const createPayment = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
 
-    const deal = await SaleDeal.findOne({ _id: req.body.deal, business }).lean();
+    const deal = await SaleDeal.findOne({ _id: req.body.deal, business, ...agentFilter(req) }).lean();
     if (!deal) return next(createError(400, "Deal not found"));
     if (deal.status !== "active") return next(createError(400, "Payments can only be recorded for active deals"));
 
@@ -184,7 +195,7 @@ export const updatePayment = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
 
-    const old = await SalePayment.findOne({ _id: req.params.id, business }).lean();
+    const old = await SalePayment.findOne({ _id: req.params.id, business, ...(await dealScope(req, business)) }).lean();
     if (!old) return next(createError(404, "Payment not found"));
     if (old.status === "cancelled") return next(createError(400, "Cannot edit a voided payment"));
 
@@ -233,7 +244,7 @@ export const updatePayment = async (req, res, next) => {
 
     const payment = await populatePayment(
       SalePayment.findOneAndUpdate(
-        { _id: req.params.id, business },
+        { _id: req.params.id, business, ...(await dealScope(req, business)) },
         { ...updates, updatedBy: userId },
         { new: true, runValidators: true }
       )
@@ -271,7 +282,7 @@ export const voidPayment = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
 
-    const payment = await SalePayment.findOne({ _id: req.params.id, business });
+    const payment = await SalePayment.findOne({ _id: req.params.id, business, ...(await dealScope(req, business)) });
     if (!payment) return next(createError(404, "Payment not found"));
     if (payment.status === "cancelled") return next(createError(400, "Payment is already cancelled/voided"));
 
@@ -303,7 +314,7 @@ export const voidPayment = async (req, res, next) => {
 export const deletePayment = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const payment  = await SalePayment.findOne({ _id: req.params.id, business });
+    const payment  = await SalePayment.findOne({ _id: req.params.id, business, ...(await dealScope(req, business)) });
     if (!payment) return next(createError(404, "Payment not found"));
     if (payment.status === "paid") return next(createError(400, "Cannot delete a confirmed payment — void it first to reverse it"));
     await payment.deleteOne();

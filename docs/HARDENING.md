@@ -709,12 +709,18 @@ also found a real bug (lead-to-buyer conversion failed for "social media" and
   every payment page; deal email preview shows the four placeholders that were
   missing.
 
-**Still open:** agent scoping does not cover payments, schedule, offers, buyers,
-activities, reports or the dashboard (those stay business-wide); the import
-lock is in-memory (single API process); `$text` indexes are still not
-business-prefixed (replacing them needs a migration); Buyers/Deals detail
-requests still load eagerly; bulk import still checks property type and source
-against the built-in lists; none of this has been exercised in a browser.
+**Agent visibility setting (2026-09-20).** New per-company switch in Sale Settings → Access →
+Agent Visibility (`SaleSettings.agentVisibility`, `own` default | `all`, `PUT /sale/settings/agent-visibility`).
+Applies to users linked to a SaleAgent; managers/admins are never scoped. In `own` mode agents see only their
+own leads, offers, deals, payments, installments, activities (their own plus those on their leads/deals),
+commissions, and the dashboard/report/funnel/cash-flow figures; listings and buyers stay shared. In both modes
+agents cannot approve/pay/reverse their own commission and cannot reassign deals/leads. The mode is cached 30s
+per business (cleared when the setting changes).
+
+**Still open:** the import lock is in-memory (single API process); `$text` indexes are still not
+business-prefixed (replacing them needs a migration); Buyers/Deals detail requests still load eagerly; bulk
+import still checks property type and source against the built-in lists; none of this has been exercised in a
+browser.
 
 ---
 

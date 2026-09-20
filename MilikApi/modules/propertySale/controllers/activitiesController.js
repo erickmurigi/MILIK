@@ -6,6 +6,14 @@ import SaleBuyer    from "../models/SaleBuyer.js";
 import SaleDeal     from "../models/SaleDeal.js";
 import SaleListing  from "../models/SaleListing.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
+import { ownDealIds, ownLeadIds } from "../middleware/agentScope.js";
+
+// A scoped agent sees activities they logged themselves plus any on their own leads/deals; empty for everyone else
+const activityScope = async (req, business) => {
+  if (!req.saleAgentId) return {};
+  const [leads, deals] = await Promise.all([ownLeadIds(req, business), ownDealIds(req, business)]);
+  return { $or: [{ createdBy: currentUserId(req) }, { relatedLead: { $in: leads } }, { relatedDeal: { $in: deals } }] };
+};
 
 export const listActivities = async (req, res, next) => {
   try {
@@ -20,6 +28,8 @@ export const listActivities = async (req, res, next) => {
     const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
 
     const filter = { business };
+    const scope = await activityScope(req, business);
+    if (scope.$or) filter.$and = [scope];
     if (relatedLead)  filter.relatedLead  = relatedLead;
     if (relatedBuyer) filter.relatedBuyer = relatedBuyer;
     if (relatedDeal)  filter.relatedDeal  = relatedDeal;
@@ -74,7 +84,7 @@ const RELATED_MODELS = {
 // Verifies every non-empty related* id is a valid ObjectId AND belongs to the
 // active business, so an activity can never link to (or later populate data
 // from) another tenant's records. Returns an error or null.
-const validateRelatedRefs = async (body, business) => {
+const validateRelatedRefs = async (body, business, req) => {
   const checks = [];
   for (const [key, { Model, label }] of Object.entries(RELATED_MODELS)) {
     const value = body[key];
@@ -83,7 +93,9 @@ const validateRelatedRefs = async (body, business) => {
     if (!id || !mongoose.Types.ObjectId.isValid(id)) {
       return createError(400, `Invalid ${label} id`);
     }
-    checks.push(Model.exists({ _id: id, business }).then((found) => (found ? null : label)));
+    // scoped agents may only link to their own leads/deals
+    const own = !req.saleAgentId ? {} : key === "relatedLead" ? { assignedAgent: req.saleAgentId } : key === "relatedDeal" ? { agent: req.saleAgentId } : {};
+    checks.push(Model.exists({ _id: id, business, ...own }).then((found) => (found ? null : label)));
   }
   const missing = (await Promise.all(checks)).find(Boolean);
   return missing ? createError(404, `Related ${missing} not found`) : null;
@@ -100,7 +112,7 @@ export const createActivity = async (req, res, next) => {
     const userId   = currentUserId(req);
     const body     = nullifyEmptyRefs(req.body);
 
-    const refError = await validateRelatedRefs(body, business);
+    const refError = await validateRelatedRefs(body, business, req);
     if (refError) return next(refError);
 
     const label = actorLabel(req, userId);
@@ -143,11 +155,11 @@ export const updateActivity = async (req, res, next) => {
       ...updates
     } = nullifyEmptyRefs(req.body);
 
-    const refError = await validateRelatedRefs(updates, business);
+    const refError = await validateRelatedRefs(updates, business, req);
     if (refError) return next(refError);
 
     const activity = await SaleActivity.findOneAndUpdate(
-      { _id: req.params.id, business },
+      { _id: req.params.id, business, ...(await activityScope(req, business)) },
       { ...updates, updatedBy: userId, updatedByLabel: actorLabel(req, userId) },
       { new: true, runValidators: true }
     )
@@ -173,7 +185,7 @@ export const updateActivity = async (req, res, next) => {
 export const getActivity = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const activity = await SaleActivity.findOne({ _id: req.params.id, business })
+    const activity = await SaleActivity.findOne({ _id: req.params.id, business, ...(await activityScope(req, business)) })
       .populate("relatedLead",    "leadNumber fullName")
       .populate("relatedBuyer",   "buyerNumber fullName")
       .populate("relatedDeal",    "dealNumber")
@@ -188,7 +200,7 @@ export const getActivity = async (req, res, next) => {
 export const deleteActivity = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const activity = await SaleActivity.findOne({ _id: req.params.id, business });
+    const activity = await SaleActivity.findOne({ _id: req.params.id, business, ...(await activityScope(req, business)) });
     if (!activity) return next(createError(404, "Activity not found"));
     await activity.deleteOne();
     res.status(200).json({ message: "Activity deleted" });

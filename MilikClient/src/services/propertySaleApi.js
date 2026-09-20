@@ -129,6 +129,7 @@ export const saleApi = {
 
   // Settings
   getSettings: async () => (await adminRequests.get("/sale/settings"))?.data?.settings,
+  updateAgentVisibility: async (mode) => (await adminRequests.put("/sale/settings/agent-visibility", { mode }))?.data?.settings,
 
   // Communication templates (under settings)
   addCommTemplate:    async (payload) => (await adminRequests.post("/sale/settings/comm-templates", payload))?.data?.settings,

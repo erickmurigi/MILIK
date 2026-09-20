@@ -37,18 +37,9 @@ const ALLOWED_TRANSITIONS = {
   reversed:  ["cancelled"],
 };
 
-// Agent scope for the caller: req.saleAgentId when attachAgentScope already ran, otherwise
-// looked up here (attachAgentScope is only mounted on the list route and only reads
-// query/body.business, so single-commission routes and header-scoped calls would miss it).
-// Returns the caller's SaleAgent id as a string, or null for non-agent users.
-const resolveAgentScope = async (req, business) => {
-  if (req.saleAgentId) return String(req.saleAgentId);
-  if (req.saleAgentId === null) return null; // attachAgentScope already ran and found no linked agent
-  const userId = currentUserId(req);
-  if (!userId) return null;
-  const agent = await SaleAgent.findOne({ business, userId }).select("_id").lean();
-  return agent ? String(agent._id) : null;
-};
+// Agent scope for the caller (set router-wide by attachAgentScope, and only when the company keeps agents to
+// their own records): the agent id as a string, or null for admins/managers and when visibility is "all".
+const resolveAgentScope = async (req) => (req.saleAgentId ? String(req.saleAgentId) : null);
 
 const toObjectId = (v) => new mongoose.Types.ObjectId(String(v));
 
@@ -116,12 +107,15 @@ export const updateCommissionStatus = async (req, res, next) => {
     const userId = currentUserId(req);
     const { status, payoutDate, payoutMethod, payoutReference, cashbook, notes } = req.body;
 
-    // Agent-scoped users may only act on their own commissions (404, not 403, to avoid leaking existence)
+    // In "own" visibility mode an agent-scoped user can't even see other agents' commissions (404, not 403,
+    // to avoid leaking existence)
     const scopedAgentId = await resolveAgentScope(req, business);
-    // ...and can never approve, pay or reverse their own commission — that is for finance/management
-    if (scopedAgentId) return next(createError(403, "Agents cannot change the status of their own commissions"));
-    const oldCommission = await SaleCommission.findOne({ _id: req.params.id, business }).lean();
+    const oldCommission = await SaleCommission.findOne({ _id: req.params.id, business, ...(scopedAgentId && { agent: scopedAgentId }) }).lean();
     if (!oldCommission) return next(createError(404, "Commission not found"));
+    // In every visibility mode an agent can never approve, pay or reverse their OWN commission (finance/management only)
+    if (req.saleAgentSelf && String(oldCommission.agent) === req.saleAgentSelf) {
+      return next(createError(403, "Agents cannot change the status of their own commissions"));
+    }
 
     const allowed = ALLOWED_TRANSITIONS[oldCommission.status] ?? [];
     if (!allowed.includes(status)) {

@@ -7,10 +7,27 @@ import SaleOffer          from "../models/SaleOffer.js";
 import SaleLead, { LEAD_STATUSES } from "../models/SaleLead.js";
 import SalePaymentSchedule from "../models/SalePaymentSchedule.js";
 import { resolveActiveBusinessId } from "../services/businessScope.js";
+import { ownDealIds } from "../middleware/agentScope.js";
+
+// Filter fragments restricting each report figure to the caller's own records when the company keeps agents to
+// their own data (req.saleAgentId); all empty otherwise. Listings and buyers stay business-wide. Ids are real
+// ObjectIds because aggregate() does not cast. Payments and installments follow the agent's deals.
+const reportScope = async (req, business) => {
+  if (!req.saleAgentId) return { deal: {}, offer: {}, lead: {}, commission: {}, dealChild: {} };
+  const agent = new mongoose.Types.ObjectId(String(req.saleAgentId));
+  return {
+    deal: { agent },
+    offer: { agent },
+    lead: { assignedAgent: agent },
+    commission: { agent },
+    dealChild: { deal: { $in: await ownDealIds(req, business) } },
+  };
+};
 
 export const getDashboardStats = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    const sc = await reportScope(req, business);
     const bId = new mongoose.Types.ObjectId(String(business));
 
     const now = new Date();
@@ -20,27 +37,27 @@ export const getDashboardStats = async (req, res, next) => {
         { $group: { _id: "$status", count: { $sum: 1 } } },
       ]),
       SaleDeal.aggregate([
-        { $match: { business: bId } },
+        { $match: { business: bId, ...sc.deal } },
         { $group: { _id: "$status", count: { $sum: 1 }, totalValue: { $sum: "$agreedPrice" } } },
       ]),
       SalePayment.aggregate([
-        { $match: { business: bId, status: "paid" } },
+        { $match: { business: bId, ...sc.dealChild, status: "paid" } },
         { $group: { _id: null, totalCollected: { $sum: "$amount" }, count: { $sum: 1 } } },
       ]),
       SaleCommission.aggregate([
-        { $match: { business: bId } },
+        { $match: { business: bId, ...sc.commission } },
         { $group: { _id: "$status", totalAmount: { $sum: "$commissionAmount" } } },
       ]),
       SaleLead.aggregate([
-        { $match: { business: bId } },
+        { $match: { business: bId, ...sc.lead } },
         { $group: { _id: "$status", count: { $sum: 1 } } },
       ]),
       SaleLead.countDocuments({
-        business: bId,
+        business: bId, ...sc.lead,
         status: { $nin: ["converted", "lost"] },
         nextFollowUpDate: { $lt: now },
       }),
-      SaleDeal.find({ business })
+      SaleDeal.find({ business, ...sc.deal })
         .select("-documents") // uploaded-document metadata is only needed by the deal detail (getDeal)
         .sort({ createdAt: -1 })
         .limit(5)
@@ -111,6 +128,7 @@ const MONTH_NAMES = ["January","February","March","April","May","June","July","A
 export const getSalesReport = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    const sc = await reportScope(req, business);
     const bId = new mongoose.Types.ObjectId(String(business));
     const year = Number(req.query.year) || new Date().getFullYear();
 
@@ -143,11 +161,11 @@ export const getSalesReport = async (req, res, next) => {
 
     const [listingRows, offerRows, dealRows, paymentRows, commissionRows] = await Promise.all([
       bucketByMonth(SaleListing, { business: bId, createdAt: { $gte: yearStart, $lt: yearEnd } }, "$createdAt"),
-      bucketByMonth(SaleOffer, { business: bId, createdAt: { $gte: yearStart, $lt: yearEnd } }, "$createdAt"),
+      bucketByMonth(SaleOffer, { business: bId, ...sc.offer, createdAt: { $gte: yearStart, $lt: yearEnd } }, "$createdAt"),
       SaleDeal.aggregate([
         {
           $match: {
-            business: bId,
+            business: bId, ...sc.deal,
             $or: [
               { dealDate: { $gte: yearStart, $lt: yearEnd } },
               { createdAt: { $gte: yearStart, $lt: yearEnd } },
@@ -166,8 +184,8 @@ export const getSalesReport = async (req, res, next) => {
           },
         },
       ]),
-      bucketByMonth(SalePayment, { business: bId, status: "paid", paymentDate: { $gte: yearStart, $lt: yearEnd } }, "$paymentDate", "amount"),
-      bucketByMonth(SaleCommission, { business: bId, status: { $in: ["approved", "paid"] }, updatedAt: { $gte: yearStart, $lt: yearEnd } }, "$updatedAt", "commissionAmount"),
+      bucketByMonth(SalePayment, { business: bId, ...sc.dealChild, status: "paid", paymentDate: { $gte: yearStart, $lt: yearEnd } }, "$paymentDate", "amount"),
+      bucketByMonth(SaleCommission, { business: bId, ...sc.commission, status: { $in: ["approved", "paid"] }, updatedAt: { $gte: yearStart, $lt: yearEnd } }, "$updatedAt", "commissionAmount"),
     ]);
 
     // Bucket rows are keyed by their lower boundary date -> month index 0-11
@@ -222,6 +240,7 @@ const CASH_FLOW_ITEM_CAP = 200;
 export const getCashFlowForecast = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    const sc = await reportScope(req, business);
     const bId      = new mongoose.Types.ObjectId(String(business));
     const now      = new Date();
 
@@ -245,7 +264,7 @@ export const getCashFlowForecast = async (req, res, next) => {
     // Count/amount for EVERY open installment come from one aggregate; only the listed items are capped.
     const [totalsRows, ...itemLists] = await Promise.all([
       SalePaymentSchedule.aggregate([
-        { $match: { business: bId, status: openStatuses } },
+        { $match: { business: bId, ...sc.dealChild, status: openStatuses } },
         {
           $group: {
             _id: {
@@ -265,7 +284,7 @@ export const getCashFlowForecast = async (req, res, next) => {
         },
       ]),
       ...keys.map((k) =>
-        SalePaymentSchedule.find({ business: bId, status: openStatuses, dueDate: RANGES[k] })
+        SalePaymentSchedule.find({ business: bId, ...sc.dealChild, status: openStatuses, dueDate: RANGES[k] })
           .select("deal installmentNumber dueDate expectedAmount description status")
           .populate({
             path: "deal",
@@ -302,12 +321,13 @@ export const getCashFlowForecast = async (req, res, next) => {
 export const getConversionFunnel = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    const sc = await reportScope(req, business);
     const bId      = new mongoose.Types.ObjectId(String(business));
 
     const [leadStats, offerStats, dealStats] = await Promise.all([
-      SaleLead.aggregate([{ $match: { business: bId } }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
-      SaleOffer.aggregate([{ $match: { business: bId } }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
-      SaleDeal.aggregate([{ $match: { business: bId } }, { $group: { _id: "$status", count: { $sum: 1 }, value: { $sum: "$agreedPrice" } } }]),
+      SaleLead.aggregate([{ $match: { business: bId, ...sc.lead } }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
+      SaleOffer.aggregate([{ $match: { business: bId, ...sc.offer } }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
+      SaleDeal.aggregate([{ $match: { business: bId, ...sc.deal } }, { $group: { _id: "$status", count: { $sum: 1 }, value: { $sum: "$agreedPrice" } } }]),
     ]);
 
     const lm = Object.fromEntries(leadStats.map((s) => [s._id, s.count]));
@@ -364,6 +384,7 @@ export const getConversionFunnel = async (req, res, next) => {
 export const getMonthlyDetail = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    const sc = await reportScope(req, business);
     const year = Number(req.query.year) || new Date().getFullYear();
     const month = Math.min(12, Math.max(1, Number(req.query.month) || 1));
 
@@ -377,7 +398,7 @@ export const getMonthlyDetail = async (req, res, next) => {
         .sort({ createdAt: -1 })
         .lean(),
 
-      SaleOffer.find({ business, createdAt: { $gte: monthStart, $lt: monthEnd } })
+      SaleOffer.find({ business, ...sc.offer, createdAt: { $gte: monthStart, $lt: monthEnd } })
         .populate("listing", "title listingNumber askingPrice")
         .populate("buyer", "fullName buyerNumber")
         .populate("agent", "fullName agentNumber")
@@ -386,7 +407,7 @@ export const getMonthlyDetail = async (req, res, next) => {
         .lean(),
 
       SaleDeal.find({
-        business,
+        business, ...sc.deal,
         $or: [
           { dealDate: { $gte: monthStart, $lt: monthEnd } },
           { createdAt: { $gte: monthStart, $lt: monthEnd } },
@@ -403,7 +424,7 @@ export const getMonthlyDetail = async (req, res, next) => {
         .sort({ dealDate: -1 })
         .lean(),
 
-      SalePayment.find({ business, status: "paid", paymentDate: { $gte: monthStart, $lt: monthEnd } })
+      SalePayment.find({ business, ...sc.dealChild, status: "paid", paymentDate: { $gte: monthStart, $lt: monthEnd } })
         .populate({
           path: "deal",
           select: "dealNumber agreedPrice",
@@ -416,7 +437,7 @@ export const getMonthlyDetail = async (req, res, next) => {
         .sort({ paymentDate: -1 })
         .lean(),
 
-      SaleCommission.find({ business, updatedAt: { $gte: monthStart, $lt: monthEnd } })
+      SaleCommission.find({ business, ...sc.commission, updatedAt: { $gte: monthStart, $lt: monthEnd } })
         .populate("agent", "fullName agentNumber")
         .populate({ path: "deal", select: "dealNumber", populate: { path: "listing", select: "title" } })
         .select("commissionNumber commissionAmount commissionRate commissionType status payoutDate updatedAt")

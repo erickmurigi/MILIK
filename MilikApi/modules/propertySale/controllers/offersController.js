@@ -5,6 +5,7 @@ import SaleDeal from "../models/SaleDeal.js";
 import SaleBuyer from "../models/SaleBuyer.js";
 import SaleAgent from "../models/SaleAgent.js";
 import { currentUserId, escapeRegex, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
+import { agentFilter } from "../middleware/agentScope.js";
 
 const populateOffer = (query) =>
   query
@@ -28,7 +29,7 @@ export const listOffers = async (req, res, next) => {
     const { search = "", status = "", listingId = "", buyerId = "" } = req.query;
     const page = Math.max(Number(req.query.page || 1), 1);
     const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
-    const filter = { business };
+    const filter = { business, ...agentFilter(req) };
     if (status) filter.status = status;
     if (listingId) filter.listing = listingId;
     if (buyerId) filter.buyer = buyerId;
@@ -49,7 +50,7 @@ export const listOffers = async (req, res, next) => {
 export const getOffer = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const offer = await populateOffer(SaleOffer.findOne({ _id: req.params.id, business })).lean();
+    const offer = await populateOffer(SaleOffer.findOne({ _id: req.params.id, business, ...agentFilter(req) })).lean();
     if (!offer) return next(createError(404, "Offer not found"));
     res.status(200).json(offer);
   } catch (err) {
@@ -62,6 +63,8 @@ export const createOffer = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
     const body = sanitizeOfferBody(req.body);
+    // Scoped agents always create offers for themselves
+    if (req.saleAgentId) body.agent = req.saleAgentId;
 
     const [listing, buyer, agent] = await Promise.all([
       SaleListing.findOne({ _id: body.listing, business }).lean(),
@@ -101,9 +104,11 @@ export const updateOffer = async (req, res, next) => {
     const userId = currentUserId(req);
     const { business: _b, offerNumber: _n, createdBy: _c, listing: _l, buyer: _by, status: _s, ...rawUpdates } = req.body;
     const updates = sanitizeOfferBody(rawUpdates);
+    // A scoped agent cannot hand their offer to someone else
+    if (req.saleAgentId) delete updates.agent;
     const offer = await populateOffer(
       SaleOffer.findOneAndUpdate(
-        { _id: req.params.id, business },
+        { _id: req.params.id, business, ...agentFilter(req) },
         { ...updates, updatedBy: userId },
         { new: true, runValidators: true }
       )
@@ -180,7 +185,7 @@ export const updateOfferStatus = async (req, res, next) => {
     const userId = currentUserId(req);
     const { status, counterOfferAmount, negotiationNotes } = req.body;
 
-    existingOffer = await SaleOffer.findOne({ _id: req.params.id, business }).lean();
+    existingOffer = await SaleOffer.findOne({ _id: req.params.id, business, ...agentFilter(req) }).lean();
     if (!existingOffer) return next(createError(404, "Offer not found"));
 
     const allowed = OFFER_TRANSITIONS[existingOffer.status] ?? [];
@@ -219,7 +224,7 @@ export const updateOfferStatus = async (req, res, next) => {
 
     // Compare-and-set on the current status so a concurrent transition can't be silently overwritten
     const offer = await SaleOffer.findOneAndUpdate(
-      { _id: req.params.id, business, status: existingOffer.status },
+      { _id: req.params.id, business, ...agentFilter(req), status: existingOffer.status },
       update,
       { new: true }
     ).populate("listing buyer agent").lean();
@@ -281,7 +286,7 @@ export const updateOfferStatus = async (req, res, next) => {
 export const deleteOffer = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const offer = await SaleOffer.findOne({ _id: req.params.id, business });
+    const offer = await SaleOffer.findOne({ _id: req.params.id, business, ...agentFilter(req) });
     if (!offer) return next(createError(404, "Offer not found"));
     if (offer.status === "accepted") return next(createError(400, "Cannot delete an accepted offer — cancel the deal instead"));
 

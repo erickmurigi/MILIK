@@ -1,10 +1,11 @@
 import express from "express";
 import { verifyUser, requireCompanyModule, requireCompanyPermission } from "../../../controllers/verifyToken.js";
+import { attachAgentScope } from "../middleware/agentScope.js";
 import { createOffer, deleteOffer, getOffer, listOffers, updateOffer, updateOfferStatus } from "../controllers/offersController.js";
 
 const router = express.Router();
 
-router.use(verifyUser, requireCompanyModule("propertySale"));
+router.use(verifyUser, requireCompanyModule("propertySale"), attachAgentScope);
 router.get("/", requireCompanyPermission("sale-offers", "view", "propertySale"), listOffers);
 router.get("/:id", requireCompanyPermission("sale-offers", "view", "propertySale"), getOffer);
 router.post("/", requireCompanyPermission("sale-offers", "create", "propertySale"), createOffer);

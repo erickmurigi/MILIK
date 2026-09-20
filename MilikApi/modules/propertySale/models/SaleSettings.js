@@ -25,6 +25,8 @@ const saleSettingsSchema = new mongoose.Schema(
     leadSources:    { type: [simpleSchema],        default: [] },
     propertyTypes:  { type: [simpleSchema],        default: [] },
     commTemplates:  { type: [commTemplateSchema],  default: [] },
+    // Whether agent-linked users see only their own records ("own") or the whole business ("all")
+    agentVisibility: { type: String, enum: ["own", "all"], default: "own" },
     commissionDefaults: {
       rate:           { type: Number, default: 3,           min: 0 },
       commissionType: { type: String, enum: ["percentage", "flat"], default: "percentage" },

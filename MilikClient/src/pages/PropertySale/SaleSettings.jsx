@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import {
   FaCog, FaFilter, FaHandshake, FaHome, FaMoneyBillWave,
-  FaPlus, FaSave, FaTimes,
+  FaPlus, FaSave, FaTimes, FaUserShield,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { adminRequests } from "../../utils/requestMethods";
@@ -35,6 +35,12 @@ const SIDEBAR_GROUPS = [
     label: "Commissions",
     items: [
       { key: "commissionDefaults", label: "Commission Defaults", icon: FaMoneyBillWave, endpoint: null },
+    ],
+  },
+  {
+    label: "Access",
+    items: [
+      { key: "agentAccess", label: "Agent Visibility", icon: FaUserShield, endpoint: null },
     ],
   },
 ];
@@ -196,6 +202,22 @@ export default function SaleSettings() {
     }
   };
 
+  const [savingVisibility, setSavingVisibility] = useState(false);
+  const agentVisibility = settings?.agentVisibility === "all" ? "all" : "own";
+  const saveAgentVisibility = async (mode) => {
+    if (mode === agentVisibility || savingVisibility) return;
+    setSavingVisibility(true);
+    try {
+      await saleApi.updateAgentVisibility(mode);
+      toast.success("Agent visibility updated");
+      await loadSettings();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to save");
+    } finally {
+      setSavingVisibility(false);
+    }
+  };
+
   const tabCfg = ALL_TABS.find((t) => t.key === activeTab);
 
   const renderCollectionTab = (key) => {
@@ -331,6 +353,40 @@ export default function SaleSettings() {
     </div>
   );
 
+  const VISIBILITY_OPTIONS = [
+    { value: "own", title: "Only their own records", body: "Agents see just the leads, offers, deals, payments, schedules, activities, commissions and report figures that belong to them. Listings and buyers stay shared." },
+    { value: "all", title: "Whole business", body: "Agents see every record in the company, like a manager would. They still cannot approve or pay their own commission, and they cannot reassign deals or leads." },
+  ];
+
+  const renderAgentAccessTab = () => (
+    <div className="flex-1 overflow-auto px-4 py-6">
+      <div className="max-w-xl space-y-4">
+        <p className="text-[11px] text-slate-500">
+          Controls what users who are linked to an agent profile can see. Managers and admins (users without an agent profile) always see everything.
+        </p>
+        {VISIBILITY_OPTIONS.map((o) => {
+          const selected = agentVisibility === o.value;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              disabled={savingVisibility}
+              onClick={() => saveAgentVisibility(o.value)}
+              className={`block w-full border p-3 text-left transition disabled:opacity-60 ${selected ? "border-[#0B3B2E] bg-[#0B3B2E]/5" : "border-slate-200 hover:border-slate-300"}`}
+            >
+              <span className="flex items-center gap-2 text-[12px] font-bold text-slate-800">
+                <span className={`inline-block h-3 w-3 rounded-full border ${selected ? "border-[#0B3B2E] bg-[#0B3B2E]" : "border-slate-300"}`} />
+                {o.title}
+              </span>
+              <span className="mt-1 block pl-5 text-[11px] text-slate-500">{o.body}</span>
+            </button>
+          );
+        })}
+        <p className="text-[10px] text-slate-400">Changes apply within about 30 seconds for users who are already signed in.</p>
+      </div>
+    </div>
+  );
+
   return (
     <PropertySaleShell title="Operational Settings">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
@@ -356,7 +412,7 @@ export default function SaleSettings() {
                 <p className="px-3 pb-1 pt-0.5 text-[9px] font-black uppercase tracking-widest text-slate-400">{group.label}</p>
                 {group.items.map(({ key, label, icon: Icon }) => {
                   const isActive = key === activeTab;
-                  const count = key !== "commissionDefaults"
+                  const count = ALL_TABS.find((t) => t.key === key)?.endpoint
                     ? collectionData(key).filter((i) => i?.isActive !== false).length
                     : null;
                   return (
@@ -389,6 +445,8 @@ export default function SaleSettings() {
               </div>
             ) : activeTab === "commissionDefaults" ? (
               renderCommissionTab()
+            ) : activeTab === "agentAccess" ? (
+              renderAgentAccessTab()
             ) : (
               renderCollectionTab(activeTab)
             )}
