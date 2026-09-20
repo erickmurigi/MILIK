@@ -755,4 +755,18 @@ project is selling. **A unit is an ordinary listing that belongs to a project** 
 - **Not done / open:** one deal covers one unit (a buyer taking several units gets several deals); the "view offers" link on a unit is not
   filtered; not exercised in a browser.
 
+## PropertySale terminology (2026-09-20)
+
+Companies can rename what they sell in Company Settings -> System -> Terminology (keys `saleModule`, `saleListing(s)`,
+`saleProject(s)`, `saleUnit(s)`, `saleBuyer(s)`, `saleLead(s)`, `saleOffer(s)`, `saleDeal(s)`, `saleAgent(s)`; same
+`companySettings.terminology` map and `useTerm` hook as the PMS words; five sales presets). Display only: API, database and
+permission names never change. Every Sales page, its print/PDF sheets, toasts and confirm messages use the words, plus the module
+name in the workspace tab bar, start menu and module chooser. Defaults read as before, with small exceptions: the deals tables'
+"Property" column now says the listing word, and the dashboard quick link "Sale Listings" says "Listings". Compound labels ("Sales
+Agent", "Sale Deals") keep their prefix only while the term is the default (`prefixedTerm`).
+
+Deliberately not renamed: GL account names, stored negotiation notes, SMS/email template bodies and their `{token}` names, the
+lead-source value "agent", the marketing pages, and the admin screens (module picker, roles, access matrix), which use the product
+name. Server-side error messages stay generic.
+
 *Last updated: 2026-09-20 (Track H closed — PropertySale performance pass, see above). Track G note: PropertySale correctness pass, see above. Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C/E/F/G as items are actioned.*

@@ -12,6 +12,7 @@ import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import SaleFilterBar, { FilterDateRange, FilterSearch } from "./SaleFilterBar";
 import { labelClass } from "../../utils/formStyles";
+import { useTerms } from "../../hooks/useTerm";
 
 const ACTIVITY_TYPES = ["call", "email", "meeting", "site_visit", "whatsapp", "note", "follow_up"];
 const OUTCOMES       = ["positive", "neutral", "negative", "no_answer", "not_applicable"];
@@ -45,6 +46,7 @@ function groupByDay(activities) {
 }
 
 export default function SaleActivities() {
+  const T       = useTerms("saleLead", "saleLeads", "saleBuyer", "saleBuyers", "saleDeal", "saleListing");
   const confirm = useConfirm();
   const qc      = useQueryClient();
   const biz     = useSelector((s) => s.company?.currentCompany?._id);
@@ -139,10 +141,10 @@ export default function SaleActivities() {
   };
 
   const entityLabel = (act) => {
-    if (act.relatedLead)    return `Lead: ${act.relatedLead.fullName || act.relatedLead.leadNumber}`;
-    if (act.relatedBuyer)   return `Buyer: ${act.relatedBuyer.fullName || act.relatedBuyer.buyerNumber}`;
-    if (act.relatedDeal)    return `Deal: ${act.relatedDeal.dealNumber}`;
-    if (act.relatedListing) return `Listing: ${act.relatedListing.title || act.relatedListing.listingNumber}`;
+    if (act.relatedLead)    return `${T.saleLead}: ${act.relatedLead.fullName || act.relatedLead.leadNumber}`;
+    if (act.relatedBuyer)   return `${T.saleBuyer}: ${act.relatedBuyer.fullName || act.relatedBuyer.buyerNumber}`;
+    if (act.relatedDeal)    return `${T.saleDeal}: ${act.relatedDeal.dealNumber}`;
+    if (act.relatedListing) return `${T.saleListing}: ${act.relatedListing.title || act.relatedListing.listingNumber}`;
     return null;
   };
 
@@ -169,8 +171,8 @@ export default function SaleActivities() {
           <FilterSearch value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search activities…" />
           <AppSelect value={typeFilter} onChange={(v) => { setType(v ?? ""); setPage(1); }} options={ACTIVITY_TYPE_OPTIONS} placeholder="All Types" size="sm" clearable />
           <AppSelect value={outcomeFilter} onChange={(v) => { setOutcome(v ?? ""); setPage(1); }} options={OUTCOME_OPTIONS} placeholder="All Outcomes" size="sm" clearable />
-          <AppSelect value={leadFilter} onChange={(v) => { setLead(v ?? ""); setPage(1); }} options={leadOptions} placeholder="All Leads" size="sm" searchable clearable />
-          <AppSelect value={buyerFilter} onChange={(v) => { setBuyer(v ?? ""); setPage(1); }} options={buyerOptions} placeholder="All Buyers" size="sm" searchable clearable />
+          <AppSelect value={leadFilter} onChange={(v) => { setLead(v ?? ""); setPage(1); }} options={leadOptions} placeholder={`All ${T.saleLeads}`} size="sm" searchable clearable />
+          <AppSelect value={buyerFilter} onChange={(v) => { setBuyer(v ?? ""); setPage(1); }} options={buyerOptions} placeholder={`All ${T.saleBuyers}`} size="sm" searchable clearable />
           <FilterDateRange
             from={from} to={to}
             onFromChange={(e) => { setFrom(e.target.value); setPage(1); }}
@@ -279,13 +281,13 @@ export default function SaleActivities() {
               </div>
 
               <div>
-                <AppSelect label="Link to Lead" value={form.relatedLead} onChange={(v) => setForm((f) => ({ ...f, relatedLead: v ?? "", relatedBuyer: "", relatedDeal: "" }))} options={leadOptions} placeholder="— None —" size="md" searchable clearable />
+                <AppSelect label={`Link to ${T.saleLead}`} value={form.relatedLead} onChange={(v) => setForm((f) => ({ ...f, relatedLead: v ?? "", relatedBuyer: "", relatedDeal: "" }))} options={leadOptions} placeholder="— None —" size="md" searchable clearable />
               </div>
               <div>
-                <AppSelect label="Link to Buyer" value={form.relatedBuyer} onChange={(v) => setForm((f) => ({ ...f, relatedBuyer: v ?? "", relatedLead: "", relatedDeal: "" }))} options={buyerOptions} placeholder="— None —" size="md" searchable clearable disabled={!!form.relatedLead} />
+                <AppSelect label={`Link to ${T.saleBuyer}`} value={form.relatedBuyer} onChange={(v) => setForm((f) => ({ ...f, relatedBuyer: v ?? "", relatedLead: "", relatedDeal: "" }))} options={buyerOptions} placeholder="— None —" size="md" searchable clearable disabled={!!form.relatedLead} />
               </div>
               <div className="col-span-2">
-                <AppSelect label="Link to Deal" value={form.relatedDeal} onChange={(v) => setForm((f) => ({ ...f, relatedDeal: v ?? "", relatedLead: "", relatedBuyer: "" }))} options={dealOptions} placeholder="— None —" size="md" searchable clearable disabled={!!(form.relatedLead || form.relatedBuyer)} />
+                <AppSelect label={`Link to ${T.saleDeal}`} value={form.relatedDeal} onChange={(v) => setForm((f) => ({ ...f, relatedDeal: v ?? "", relatedLead: "", relatedBuyer: "" }))} options={dealOptions} placeholder="— None —" size="md" searchable clearable disabled={!!(form.relatedLead || form.relatedBuyer)} />
               </div>
 
               <div className="col-span-2">

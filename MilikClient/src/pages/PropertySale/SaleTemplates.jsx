@@ -9,32 +9,36 @@ import Spinner from "../../components/common/Spinner";
 import AppSelect from "../../components/common/AppSelect";
 import { inputClass, labelClass } from "../../utils/formStyles";
 import { saleApi } from "../../services/propertySaleApi";
+import { useTerms } from "../../hooks/useTerm";
 
-const CONTEXT_OPTIONS = [
-  { value: "buyer", label: "Buyer" },
-  { value: "deal",  label: "Deal"  },
-  { value: "lead",  label: "Lead"  },
+const contextOptions = (T) => [
+  { value: "buyer", label: T.saleBuyer },
+  { value: "deal",  label: T.saleDeal  },
+  { value: "lead",  label: T.saleLead  },
 ];
 const CHANNEL_OPTIONS = [
   { value: "email", label: "Email" },
   { value: "sms",   label: "SMS"   },
 ];
 
-const CONTEXT_LABELS = { buyer: "Buyer", deal: "Deal", lead: "Lead" };
+const contextLabels = (T) => ({ buyer: T.saleBuyer, deal: T.saleDeal, lead: T.saleLead });
 const CHANNEL_LABELS = { email: "Email", sms: "SMS" };
 
-const PLACEHOLDERS = {
+// Only the descriptions (tooltips) follow the company's wording; the {tokens} are fixed names.
+const placeholdersFor = (T) => {
+  const buyer = T.saleBuyer.toLowerCase(), deal = T.saleDeal.toLowerCase(), lead = T.saleLead.toLowerCase(), agent = T.saleAgent.toLowerCase();
+  return {
   buyer: [
     // Contact
-    { key: "{buyerName}",        desc: "Buyer's full name" },
-    { key: "{buyerNumber}",      desc: "Buyer reference (e.g. BYR-001)" },
+    { key: "{buyerName}",        desc: `${T.saleBuyer}'s full name` },
+    { key: "{buyerNumber}",      desc: `${T.saleBuyer} reference (e.g. BYR-001)` },
     { key: "{phone}",            desc: "Phone number" },
     { key: "{email}",            desc: "Email address" },
     { key: "{idNumber}",         desc: "National ID / Passport number" },
     // KYC & acquisition
     { key: "{kycStatus}",        desc: "KYC verification status (pending / verified / rejected)" },
     { key: "{source}",           desc: "Acquisition source (e.g. Referral, Walk In)" },
-    { key: "{registrationDate}", desc: "Date the buyer profile was created" },
+    { key: "{registrationDate}", desc: `Date the ${buyer} profile was created` },
     // Company
     { key: "{companyName}",      desc: "Your company name" },
     { key: "{companyPhone}",     desc: "Your company phone number" },
@@ -42,22 +46,22 @@ const PLACEHOLDERS = {
   ],
   deal: [
     // Buyer
-    { key: "{buyerName}",           desc: "Buyer's full name" },
-    { key: "{buyerNumber}",         desc: "Buyer reference (e.g. BYR-001)" },
-    { key: "{phone}",               desc: "Buyer's phone number" },
-    { key: "{email}",               desc: "Buyer's email address" },
+    { key: "{buyerName}",           desc: `${T.saleBuyer}'s full name` },
+    { key: "{buyerNumber}",         desc: `${T.saleBuyer} reference (e.g. BYR-001)` },
+    { key: "{phone}",               desc: `${T.saleBuyer}'s phone number` },
+    { key: "{email}",               desc: `${T.saleBuyer}'s email address` },
     // Deal
-    { key: "{dealNumber}",          desc: "Deal reference (e.g. DL-001)" },
-    { key: "{dealStatus}",          desc: "Deal status (active / closed / cancelled)" },
+    { key: "{dealNumber}",          desc: `${T.saleDeal} reference (e.g. DL-001)` },
+    { key: "{dealStatus}",          desc: `${T.saleDeal} status (active / closed / cancelled)` },
     { key: "{salePrice}",           desc: "Agreed sale price" },
-    { key: "{dealDate}",            desc: "Date the deal was created" },
+    { key: "{dealDate}",            desc: `Date the ${deal} was created` },
     { key: "{expectedClosingDate}", desc: "Target closing / handover date" },
-    { key: "{actualClosingDate}",   desc: "Actual date the deal was closed" },
+    { key: "{actualClosingDate}",   desc: `Actual date the ${deal} was closed` },
     { key: "{titleTransferDate}",   desc: "Title deed transfer date" },
     { key: "{stampDuty}",           desc: "Stamp duty amount" },
     // Property / Listing
     { key: "{listingTitle}",        desc: "Property name" },
-    { key: "{listingNumber}",       desc: "Listing reference (e.g. LST-001)" },
+    { key: "{listingNumber}",       desc: `${T.saleListing} reference (e.g. LST-001)` },
     { key: "{propertyType}",        desc: "Property type (Plot, House, Apartment…)" },
     { key: "{propertyLocation}",    desc: "Property location / area" },
     { key: "{propertyTown}",        desc: "Town the property is in" },
@@ -65,22 +69,22 @@ const PLACEHOLDERS = {
     { key: "{propertySize}",        desc: "Property size with unit (e.g. 50 sqm)" },
     { key: "{askingPrice}",         desc: "Original asking / listed price" },
     // Agent & company
-    { key: "{agentName}",           desc: "Assigned agent's name" },
+    { key: "{agentName}",           desc: `Assigned ${agent}'s name` },
     { key: "{companyName}",         desc: "Your company name" },
     { key: "{companyPhone}",        desc: "Your company phone number" },
     { key: "{companyEmail}",        desc: "Your company email address" },
   ],
   lead: [
     // Contact
-    { key: "{leadName}",         desc: "Lead's full name" },
-    { key: "{leadNumber}",       desc: "Lead reference (e.g. LDR-001)" },
+    { key: "{leadName}",         desc: `${T.saleLead}'s full name` },
+    { key: "{leadNumber}",       desc: `${T.saleLead} reference (e.g. LDR-001)` },
     { key: "{phone}",            desc: "Phone number" },
     { key: "{email}",            desc: "Email address" },
     // Pipeline
-    { key: "{source}",           desc: "Lead source (e.g. Walk In, Referral, Online)" },
+    { key: "{source}",           desc: `${T.saleLead} source (e.g. Walk In, Referral, Online)` },
     { key: "{status}",           desc: "Current pipeline stage" },
-    { key: "{assignedAgent}",    desc: "Agent handling this lead" },
-    { key: "{lastContactDate}",  desc: "Date the lead was last contacted" },
+    { key: "{assignedAgent}",    desc: `${T.saleAgent} handling this ${lead}` },
+    { key: "{lastContactDate}",  desc: `Date the ${lead} was last contacted` },
     { key: "{nextFollowUpDate}", desc: "Scheduled next follow-up date" },
     // Budget
     { key: "{budgetMin}",        desc: "Minimum budget" },
@@ -90,11 +94,13 @@ const PLACEHOLDERS = {
     { key: "{companyPhone}",     desc: "Your company phone number" },
     { key: "{companyEmail}",     desc: "Your company email address" },
   ],
+  };
 };
 
 const blankForm = { name: "", channel: "email", context: "buyer", subject: "", body: "", isActive: true };
 
 export default function SaleTemplates() {
+  const T = useTerms("saleBuyer", "saleDeal", "saleLead", "saleAgent", "saleListing");
   const queryClient = useQueryClient();
   const biz     = useSelector((s) => s.company?.currentCompany?._id);
   const [showInactive, setShowInactive] = useState(false);
@@ -171,7 +177,10 @@ export default function SaleTemplates() {
     } catch { toast.error("Failed to delete"); }
   };
 
-  const placeholders = PLACEHOLDERS[form.context] ?? [];
+  const CONTEXT_OPTIONS = useMemo(() => contextOptions(T), [T]);
+  const CONTEXT_LABELS  = useMemo(() => contextLabels(T), [T]);
+  const allPlaceholders = useMemo(() => placeholdersFor(T), [T]);
+  const placeholders = allPlaceholders[form.context] ?? [];
   const insertPlaceholder = (key) => setForm((f) => ({ ...f, body: f.body + key }));
 
   return (

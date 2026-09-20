@@ -9,6 +9,7 @@ import {
 } from "react-icons/fa";
 import { saleApi, fmtKES } from "../../services/propertySaleApi";
 import PropertySaleShell from "./PropertySaleShell";
+import { useTerms } from "../../hooks/useTerm";
 import SaleListingAgent from "./SaleListingAgent";
 import DashboardCard, { DashboardStatCard } from "../../components/Dashboard/DashboardCard";
 
@@ -23,28 +24,31 @@ const dealStatusBadge = (status) => ({
   cancelled: "border-slate-200 bg-slate-50 text-slate-500",
 }[status] || "border-slate-200 bg-slate-50 text-slate-500");
 
-const pipelineStages = [
+const pipelineStagesOf = (T) => [
   { key: "available",      label: "Available",      icon: FaBuilding,    ring: "border-emerald-400", num: "text-emerald-700", bg: "bg-emerald-50",  hover: "hover:bg-emerald-50",  link: "/sale/listings?status=available"      },
   { key: "reserved",       label: "Reserved",       icon: FaClock,       ring: "border-amber-400",   num: "text-amber-600",   bg: "bg-amber-50",    hover: "hover:bg-amber-50",    link: "/sale/listings?status=reserved"       },
   { key: "underContract",  label: "Under Contract", icon: FaTag,         ring: "border-blue-400",    num: "text-blue-600",    bg: "bg-blue-50",     hover: "hover:bg-blue-50",     link: "/sale/deals?status=active"            },
-  { key: "closedDeals",    label: "Deals Closed",   icon: FaHandshake,   ring: "border-indigo-400",  num: "text-indigo-600",  bg: "bg-indigo-50",   hover: "hover:bg-indigo-50",   link: "/sale/deals?status=closed"            },
+  { key: "closedDeals",    label: `${T.saleDeals} Closed`,   icon: FaHandshake,   ring: "border-indigo-400",  num: "text-indigo-600",  bg: "bg-indigo-50",   hover: "hover:bg-indigo-50",   link: "/sale/deals?status=closed"            },
   { key: "sold",           label: "Sold",           icon: FaCheck,       ring: "border-slate-400",   num: "text-slate-600",   bg: "bg-slate-100",   hover: "hover:bg-slate-100",   link: "/sale/listings?status=sold"           },
 ];
 
-const QUICK_LINKS = [
-  { label: "Sale Listings",  to: "/sale/listings",       Icon: FaBuilding    },
-  { label: "Buyers",         to: "/sale/buyers",         Icon: FaUsers       },
-  { label: "Agents",         to: "/sale/agents",         Icon: FaUserTie     },
-  { label: "Offers",         to: "/sale/offers",         Icon: FaTag         },
-  { label: "Deals",          to: "/sale/deals",          Icon: FaHandshake   },
+const quickLinksOf = (T) => [
+  { label: T.saleListings,  to: "/sale/listings",       Icon: FaBuilding    },
+  { label: T.saleBuyers,         to: "/sale/buyers",         Icon: FaUsers       },
+  { label: T.saleAgents,         to: "/sale/agents",         Icon: FaUserTie     },
+  { label: T.saleOffers,         to: "/sale/offers",         Icon: FaTag         },
+  { label: T.saleDeals,          to: "/sale/deals",          Icon: FaHandshake   },
   { label: "Payments",       to: "/sale/payments",       Icon: FaMoneyBillWave },
   { label: "Commissions",    to: "/sale/commissions",    Icon: FaChartLine   },
   { label: "Reports",        to: "/sale/reports",        Icon: FaFileAlt     },
-  { label: "Leads Pipeline", to: "/sale/crm/leads",      Icon: FaUserFriends },
+  { label: `${T.saleLeads} Pipeline`, to: "/sale/crm/leads",      Icon: FaUserFriends },
   { label: "Activity Log",   to: "/sale/crm/activities", Icon: FaClipboard   },
 ];
 
 const PropertySaleDashboard = () => {
+  const T = useTerms("saleListing", "saleListings", "saleBuyer", "saleBuyers", "saleAgent", "saleAgents", "saleOffers", "saleDeal", "saleDeals", "saleLeads");
+  const pipelineStages = useMemo(() => pipelineStagesOf(T), [T]);
+  const QUICK_LINKS = useMemo(() => quickLinksOf(T), [T]);
   const navigate    = useNavigate();
   const queryClient = useQueryClient();
   const biz         = useSelector((s) => s.company?.currentCompany?._id);
@@ -110,7 +114,7 @@ const PropertySaleDashboard = () => {
             onClick={() => navigate("/sale/listings")}
             className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
           >
-            <FaPlus size={9} /> New Listing
+            <FaPlus size={9} /> New {T.saleListing}
           </button>
         </>
       }
@@ -141,18 +145,18 @@ const PropertySaleDashboard = () => {
               </div>
             </div>
             <button type="button" onClick={() => navigate("/sale/deals")} className="flex-shrink-0 border border-rose-300 bg-white px-3 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-50">
-              View Deals
+              View {T.saleDeals}
             </button>
           </div>
         )}
 
         {/* ── KPI stat cards ─────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-5">
-          <StatCard label="Available Listings" value={loading ? "…" : (s.listings?.available ?? 0)} icon={FaBuilding}      tone="green"  sub="Ready to sell" />
-          <StatCard label="Active Deals"       value={loading ? "…" : (s.deals?.active ?? 0)}       icon={FaHandshake}     tone="orange" sub={loading ? "" : fmtKES(activeDealsValue)} />
+          <StatCard label={`Available ${T.saleListings}`} value={loading ? "…" : (s.listings?.available ?? 0)} icon={FaBuilding}      tone="green"  sub="Ready to sell" />
+          <StatCard label={`Active ${T.saleDeals}`} value={loading ? "…" : (s.deals?.active ?? 0)}       icon={FaHandshake}     tone="orange" sub={loading ? "" : fmtKES(activeDealsValue)} />
           <StatCard label="Total Collected"    value={loading ? "…" : fmtKES(totalCollected)}        icon={FaMoneyBillWave} tone="green"  sub={`${s.payments?.count ?? 0} payments`} />
           <StatCard label="Commissions Due"    value={loading ? "…" : fmtKES(commissionsDue)}        icon={FaChartLine}     tone="orange" sub="Pending payout" />
-          <StatCard label="Active Leads"       value={loading ? "…" : (leads.active ?? 0)}            icon={FaUserFriends}   tone="green"  sub={`${leads.total ?? 0} total`} />
+          <StatCard label={`Active ${T.saleLeads}`} value={loading ? "…" : (leads.active ?? 0)}            icon={FaUserFriends}   tone="green"  sub={`${leads.total ?? 0} total`} />
         </div>
 
         {/* ── Pipeline strip ─────────────────────────────────────────────── */}
@@ -189,7 +193,7 @@ const PropertySaleDashboard = () => {
           {/* Left: Recent Deals */}
           <div className="flex flex-col gap-1.5">
             <Card
-              title="Recent Deals"
+              title={`Recent ${T.saleDeals}`}
               right={
                 <button
                   type="button"
@@ -230,10 +234,10 @@ const PropertySaleDashboard = () => {
                 <table className="w-full min-w-[640px] text-xs">
                   <thead>
                     <tr className="bg-[#0B3B2E]">
-                      <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Deal No.</th>
+                      <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">{T.saleDeal} No.</th>
                       <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Property</th>
-                      <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Buyer</th>
-                      <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Agent</th>
+                      <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">{T.saleBuyer}</th>
+                      <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">{T.saleAgent}</th>
                       <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Status</th>
                       <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-white">Agreed Price</th>
                       <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-white">Collected %</th>
@@ -285,7 +289,7 @@ const PropertySaleDashboard = () => {
             {/* Recent Listings */}
             {recentListings.length > 0 && (
               <Card
-                title="New Listings"
+                title={`New ${T.saleListings}`}
                 right={
                   <button
                     type="button"
@@ -303,7 +307,7 @@ const PropertySaleDashboard = () => {
                         <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">No.</th>
                         <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Title</th>
                         <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Type</th>
-                        <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Agent</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">{T.saleAgent}</th>
                         <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-white">Asking Price</th>
                         <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Status</th>
                       </tr>
@@ -347,10 +351,10 @@ const PropertySaleDashboard = () => {
             <Card title="Portfolio Summary">
               <div className="divide-y divide-slate-100">
                 {[
-                  { label: "Total Listings",      value: s.listings?.total ?? 0,                     note: "all statuses" },
+                  { label: `Total ${T.saleListings}`,      value: s.listings?.total ?? 0,                     note: "all statuses" },
                   { label: "Available",            value: s.listings?.available ?? 0,                 note: "ready to sell",      bold: true },
                   { label: "Under Negotiation",    value: (s.listings?.reserved ?? 0) + (s.deals?.active ?? 0), note: "offers + active deals", warn: true },
-                  { label: "Closed Deals Value",   value: fmtKES(closedValue),                        note: "total revenue closed", money: true },
+                  { label: `Closed ${T.saleDeals} Value`,   value: fmtKES(closedValue),                        note: "total revenue closed", money: true },
                   { label: "Outstanding Balance",  value: fmtKES((activeDealsValue || 0) - (totalCollected || 0)), note: "still to collect",    warn: activeDealsValue > totalCollected },
                 ].map(({ label, value, note, bold, warn, money }) => (
                   <div key={label} className="flex items-center justify-between gap-2 px-3 py-2">
@@ -372,7 +376,7 @@ const PropertySaleDashboard = () => {
             </Card>
 
             {/* Leads Funnel */}
-            <Card title="CRM Leads Funnel" right={
+            <Card title={`CRM ${T.saleLeads} Funnel`} right={
               <button
                 type="button"
                 onClick={() => navigate("/sale/crm/leads")}

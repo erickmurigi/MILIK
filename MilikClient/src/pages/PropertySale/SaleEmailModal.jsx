@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { FaEnvelope, FaTimes } from "react-icons/fa";
 import { saleApi } from "../../services/propertySaleApi";
+import { useTerms } from "../../hooks/useTerm";
 
 const BUILTIN_TEMPLATES = {
   buyer: [
@@ -48,6 +49,7 @@ const renderVars = (text, vars) =>
   String(text || "").replace(/\{([a-zA-Z0-9_]+)\}/g, (m, k) => (Object.prototype.hasOwnProperty.call(vars, k) ? String(vars[k] ?? "") : m));
 
 export default function SaleEmailModal({ title, subtitle, emailForm, setEmailForm, sending, onSend, onClose, context = "buyer", vars = {} }) {
+  const T       = useTerms("saleDeal");
   const company = useSelector((s) => s.company?.currentCompany);
   const biz     = company?._id;
 
@@ -75,7 +77,8 @@ export default function SaleEmailModal({ title, subtitle, emailForm, setEmailFor
   const applyTemplate = (t) =>
     setEmailForm({ subject: renderVars(t.subject, allVars), body: renderVars(t.body, allVars) });
 
-  const builtins = BUILTIN_TEMPLATES[context] ?? BUILTIN_TEMPLATES.buyer;
+  // Only the quick-button caption follows the company's wording; the subject/body text stays as written.
+  const builtins = (BUILTIN_TEMPLATES[context] ?? BUILTIN_TEMPLATES.buyer).map((t) => ({ ...t, label: t.label.replace(/^Deal\b/, () => T.saleDeal) }));
   const allTemplates = [...builtins, ...apiTemplates.map((t) => ({ label: t.name, subject: t.subject, body: t.body }))];
 
   return (

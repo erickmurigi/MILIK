@@ -16,6 +16,7 @@ import { fmtDate } from "../../utils/dates";
 import AmountInput from "./AmountInput";
 import { useConfirm } from "../../context/ConfirmContext";
 import { useTabState } from "../../hooks/useTabState";
+import { useTerms, prefixedTerm } from "../../hooks/useTerm";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
 import { inputClass, labelClass } from "../../utils/formStyles";
@@ -46,11 +47,11 @@ const COMMISSION_TYPE_OPTIONS = [{ value: "percentage", label: "Percentage (%)" 
 const DEAL_STATUS_OPTIONS    = [{ value: "active", label: "Active" }, { value: "closed", label: "Closed" }, { value: "cancelled", label: "Cancelled" }];
 const blankPayForm    = { amount: "", paymentType: "installment", paymentMethod: "bank_transfer", cashbook: "", reference: "", paymentDate: todayISO(), notes: "" };
 
-const DEAL_TABLE_COLS = [
-  { label: "Deal No." },
+const dealTableCols = (T) => [
+  { label: `${T.saleDeal} No.` },
   { label: "Property" },
-  { label: "Buyer" },
-  { label: "Agent" },
+  { label: T.saleBuyer },
+  { label: T.saleAgent },
   { label: "Agreed Price", align: "right" },
   { label: "Paid",         align: "right" },
   { label: "Balance",      align: "right" },
@@ -97,30 +98,31 @@ const renderDealRow = (row) => {
 // Submit handlers stay in the page (they own the in-flight guards); each modal hands its current form up on submit.
 
 function DealFormModal({ editingId, initial, saving, listingFormOptions, buyerOptions, agentFormOptions, agents, onClose, onSubmit }) {
+  const T = useTerms("saleDeal", "saleListing", "saleBuyer", "saleAgent");
   const [form, setForm] = useState(initial);
   return (
     <Modal
-      title={editingId ? "Edit Deal" : "New Sale Deal"}
+      title={editingId ? `Edit ${T.saleDeal}` : `New ${prefixedTerm("Sale", T.saleDeal, "saleDeal")}`}
       wide
       onClose={onClose}
       footer={
         <>
           <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
           <button type="button" onClick={() => onSubmit(form)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-            {saving ? "Saving…" : editingId ? "Update Deal" : "Create Deal"}
+            {saving ? "Saving…" : editingId ? `Update ${T.saleDeal}` : `Create ${T.saleDeal}`}
           </button>
         </>
       }
     >
       <div className="grid gap-3 md:grid-cols-2">
         <div>
-          <AppSelect label="Listing / Property" value={form.listing} onChange={(v) => setForm((p) => ({ ...p, listing: v ?? "" }))} options={listingFormOptions} placeholder="Select listing…" size="md" searchable />
+          <AppSelect label={`${T.saleListing} / Property`} value={form.listing} onChange={(v) => setForm((p) => ({ ...p, listing: v ?? "" }))} options={listingFormOptions} placeholder={`Select ${T.saleListing.toLowerCase()}…`} size="md" searchable />
         </div>
         <div>
-          <AppSelect label="Buyer" value={form.buyer} onChange={(v) => setForm((p) => ({ ...p, buyer: v ?? "" }))} options={buyerOptions} placeholder="Select buyer…" size="md" searchable />
+          <AppSelect label={T.saleBuyer} value={form.buyer} onChange={(v) => setForm((p) => ({ ...p, buyer: v ?? "" }))} options={buyerOptions} placeholder={`Select ${T.saleBuyer.toLowerCase()}…`} size="md" searchable />
         </div>
         <div>
-          <AppSelect label="Sales Agent (Optional)" value={form.agent} onChange={(v) => setForm((p) => ({ ...p, agent: v ?? "", commOverrideEnabled: false, commissionRateOverride: "", commissionTypeOverride: "", commissionAmountOverride: "" }))} options={agentFormOptions} placeholder="No agent" size="md" searchable clearable />
+          <AppSelect label={`${prefixedTerm("Sales", T.saleAgent, "saleAgent")} (Optional)`} value={form.agent} onChange={(v) => setForm((p) => ({ ...p, agent: v ?? "", commOverrideEnabled: false, commissionRateOverride: "", commissionTypeOverride: "", commissionAmountOverride: "" }))} options={agentFormOptions} placeholder={`No ${T.saleAgent.toLowerCase()}`} size="md" searchable clearable />
         </div>
         {!editingId && form.agent && (() => {
           const selAgent = agents.find((a) => a._id === form.agent);
@@ -158,7 +160,7 @@ function DealFormModal({ editingId, initial, saving, listingFormOptions, buyerOp
           <AmountInput value={form.agreedPrice} onChange={(v) => setForm((p) => ({ ...p, agreedPrice: v }))} className={inputClass} placeholder="e.g. 8,500,000" />
         </div>
         <div>
-          <label className={labelClass}>Deal Date</label>
+          <label className={labelClass}>{T.saleDeal} Date</label>
           <input type="date" value={form.dealDate} onChange={(e) => setForm((p) => ({ ...p, dealDate: e.target.value }))} className={inputClass} />
         </div>
         <div>
@@ -175,23 +177,24 @@ function DealFormModal({ editingId, initial, saving, listingFormOptions, buyerOp
 }
 
 function CancelDealModal({ deal, actionKey, onClose, onConfirm }) {
+  const T = useTerms("saleDeal", "saleListing", "saleBuyer");
   const [cancelReason,  setCancelReason]  = useState("");
   const [depositAction, setDepositAction] = useState("void");
   return (
     <Modal
-      title={`Cancel Deal — ${deal.dealNumber}`}
+      title={`Cancel ${T.saleDeal} — ${deal.dealNumber}`}
       onClose={onClose}
       footer={
         <>
           <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Back</button>
           <button type="button" onClick={() => onConfirm({ cancelReason, depositAction })} disabled={!!actionKey} className="bg-rose-700 px-4 py-1.5 text-xs font-black text-white hover:bg-rose-800 disabled:opacity-60">
-            {actionKey ? "Cancelling…" : "Cancel Deal"}
+            {actionKey ? "Cancelling…" : `Cancel ${T.saleDeal}`}
           </button>
         </>
       }
     >
       <div className="mb-3 border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
-        Cancelling will revert the listing to <strong>Available</strong> and cancel any pending commissions.
+        Cancelling will revert the {T.saleListing.toLowerCase()} to <strong>Available</strong> and cancel any pending commissions.
       </div>
       <div className="mb-3 border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs">
         <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-500">Deposit Payments</div>
@@ -207,16 +210,17 @@ function CancelDealModal({ deal, actionKey, onClose, onConfirm }) {
         </label>
       </div>
       <label className={labelClass}>Reason for Cancellation</label>
-      <textarea rows={3} value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder="Optional — e.g. buyer withdrew, financing fell through…" className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-rose-500 focus:outline-none" />
+      <textarea rows={3} value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder={`Optional — e.g. ${T.saleBuyer.toLowerCase()} withdrew, financing fell through…`} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-rose-500 focus:outline-none" />
     </Modal>
   );
 }
 
 function CloseDealModal({ deal, cashbookOptions, actionKey, onClose, onConfirm }) {
+  const T = useTerms("saleDeal");
   const [closeForm, setCloseForm] = useState(blankCloseForm);
   return (
     <Modal
-      title={`Close Deal — ${deal.dealNumber}`}
+      title={`Close ${T.saleDeal} — ${deal.dealNumber}`}
       onClose={onClose}
       footer={
         <>
@@ -419,7 +423,8 @@ function ScheduleBuilderModal({ initialItems, agreedPrice, saving, onClose, onSa
 const fmtEmailDate = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "";
 
 function DealEmailModal({ target, company, sending, onSend, onClose }) {
-  const [emailForm, setEmailForm] = useState(() => ({ subject: `Re: Deal ${target.dealNumber}`, body: `Dear ${target.buyer?.fullName || "Client"},\n\n` }));
+  const T = useTerms("saleDeal", "saleBuyer");
+  const [emailForm, setEmailForm] = useState(() => ({ subject: `Re: ${T.saleDeal} ${target.dealNumber}`, body: `Dear ${target.buyer?.fullName || "Client"},\n\n` }));
   const vars = useMemo(() => ({
     buyerName:           target.buyer?.fullName       || "",
     buyerNumber:         target.buyer?.buyerNumber    || "",
@@ -446,7 +451,7 @@ function DealEmailModal({ target, company, sending, onSend, onClose }) {
   }), [target, company]);
   return (
     <SaleEmailModal
-      title="Email Buyer"
+      title={`Email ${T.saleBuyer}`}
       subtitle={`To: ${target.buyer?.email} · ${target.dealNumber}`}
       emailForm={emailForm}
       setEmailForm={setEmailForm}
@@ -513,6 +518,8 @@ function DealDocUpload({ dealId }) {
 }
 
 const SaleDeals = () => {
+  const T = useTerms("saleDeal", "saleDeals", "saleListing", "saleListings", "saleBuyer", "saleBuyers", "saleAgent", "saleAgents");
+  const dealCols = useMemo(() => dealTableCols(T), [T]);
   const confirm        = useConfirm();
   const queryClient    = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
@@ -736,8 +743,8 @@ const SaleDeals = () => {
   }, []);
 
   const handleSave = async (form) => {
-    if (!form.listing) return toast.warning("Select a listing");
-    if (!form.buyer)   return toast.warning("Select a buyer");
+    if (!form.listing) return toast.warning(`Select the ${T.saleListing.toLowerCase()}`);
+    if (!form.buyer)   return toast.warning(`Select the ${T.saleBuyer.toLowerCase()}`);
     if (!form.agreedPrice || Number(form.agreedPrice) <= 0) return toast.warning("Valid agreed price required");
     setSaving(true);
     try {
@@ -753,9 +760,9 @@ const SaleDeals = () => {
       invalidate();
       if (editingId) invalidateDeal(editingId);
       setDealModal(null);
-      toast.success(`Deal ${editingId ? "updated" : "created"}`);
+      toast.success(`${T.saleDeal} ${editingId ? "updated" : "created"}`);
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to save deal");
+      toast.error(err?.response?.data?.message || `Failed to save ${T.saleDeal.toLowerCase()}`);
     } finally {
       setSaving(false);
     }
@@ -774,9 +781,9 @@ const SaleDeals = () => {
       await saleApi.closeDeal(closingDeal._id, payload);
       await Promise.all([invalidate(), invalidateDeal(closingDeal._id)]);
       setClosingDeal(null);
-      toast.success("Deal closed");
+      toast.success(`${T.saleDeal} closed`);
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to close deal");
+      toast.error(err?.response?.data?.message || `Failed to close ${T.saleDeal.toLowerCase()}`);
     } finally {
       setActionKey("");
     }
@@ -789,29 +796,29 @@ const SaleDeals = () => {
       await saleApi.cancelDeal(cancellingDeal._id, { cancellationReason: cancelReason, depositAction, business: biz });
       await Promise.all([invalidate(), invalidateDeal(cancellingDeal._id)]);
       setCancellingDeal(null);
-      toast.success("Deal cancelled");
+      toast.success(`${T.saleDeal} cancelled`);
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to cancel deal");
+      toast.error(err?.response?.data?.message || `Failed to cancel ${T.saleDeal.toLowerCase()}`);
     } finally {
       setActionKey("");
     }
   };
 
   const handleDelete = useCallback(async (row) => {
-    if (!await confirm({ title: "Delete Deal", message: `Permanently delete deal ${row.dealNumber}? All associated pending payments and commissions will also be removed.`, confirmText: "Delete", isDangerous: true })) return;
+    if (!await confirm({ title: `Delete ${T.saleDeal}`, message: `Permanently delete ${T.saleDeal.toLowerCase()} ${row.dealNumber}? All associated pending payments and commissions will also be removed.`, confirmText: "Delete", isDangerous: true })) return;
     setActionKey(`${row._id}:delete`);
     try {
       await saleApi.deleteDeal(row._id);
       setSelected((prev) => (prev?._id === row._id ? null : prev));
       queryClient.removeQueries({ queryKey: ["deal-detail-docs", row._id] });
       invalidate();
-      toast.success("Deal deleted");
+      toast.success(`${T.saleDeal} deleted`);
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to delete deal");
+      toast.error(err?.response?.data?.message || `Failed to delete ${T.saleDeal.toLowerCase()}`);
     } finally {
       setActionKey("");
     }
-  }, [confirm, queryClient, setSelected, invalidate]);
+  }, [confirm, queryClient, setSelected, invalidate, T.saleDeal]);
 
   const handleRecordPayment = async (payForm) => {
     if (!payingDeal) return;
@@ -851,7 +858,7 @@ const SaleDeals = () => {
   };
 
   const handleSendDealEmail = async (emailForm) => {
-    if (!emailTarget?.buyer?.email) { toast.warn("Buyer has no email address"); return; }
+    if (!emailTarget?.buyer?.email) { toast.warn(`${T.saleBuyer} has no email address`); return; }
     if (!emailForm.subject.trim() || !emailForm.body.trim()) { toast.warn("Subject and message are required"); return; }
     setEmailSending(true);
     try {
@@ -917,16 +924,16 @@ const SaleDeals = () => {
         <div>
           <div className="flex items-center gap-2">
             <FaHandshake size={13} className="text-[#B7C9C0]" />
-            <span className="font-black text-sm text-white tracking-tight">Sale Deals</span>
+            <span className="font-black text-sm text-white tracking-tight">{prefixedTerm("Sale", T.saleDeals, "saleDeals")}</span>
           </div>
-          <div className="text-[10px] text-[#B7C9C0] mt-0.5 font-mono">{total} deal{total !== 1 ? "s" : ""}</div>
+          <div className="text-[10px] text-[#B7C9C0] mt-0.5 font-mono">{total} {(total !== 1 ? T.saleDeals : T.saleDeal).toLowerCase()}</div>
         </div>
         <button
           type="button"
           onClick={openCreate}
           className="inline-flex items-center gap-1.5 border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-black text-white hover:bg-white/20"
         >
-          <FaPlus size={9} /> New Deal
+          <FaPlus size={9} /> New {T.saleDeal}
         </button>
       </div>
 
@@ -948,15 +955,15 @@ const SaleDeals = () => {
         <FilterSearch
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Deal no. / property / buyer"
+          placeholder={`${T.saleDeal} no. / property / ${T.saleBuyer.toLowerCase()}`}
         />
         <button type="submit" className="inline-flex h-8 shrink-0 items-center gap-1.5 border border-[#C8511A] bg-[#C8511A] px-3 text-xs font-bold text-white hover:bg-[#a84115]">
           <FaSearch size={9} /> Search
         </button>
         <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={DEAL_STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
-        <AppSelect value={agentFilt} onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }} options={agentFilterOptions} placeholder="All Agents" clearable size="sm" searchable />
-        <AppSelect value={buyerFilt} onChange={(v) => { setBuyerFilt(v ?? ""); setPage(1); }} options={buyerOptions} placeholder="All Buyers" clearable size="sm" searchable />
-        <AppSelect value={listingFilt} onChange={(v) => { setListingFilt(v ?? ""); setPage(1); }} options={listingFilterOptions} placeholder="All Listings" clearable size="sm" searchable />
+        <AppSelect value={agentFilt} onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }} options={agentFilterOptions} placeholder={`All ${T.saleAgents}`} clearable size="sm" searchable />
+        <AppSelect value={buyerFilt} onChange={(v) => { setBuyerFilt(v ?? ""); setPage(1); }} options={buyerOptions} placeholder={`All ${T.saleBuyers}`} clearable size="sm" searchable />
+        <AppSelect value={listingFilt} onChange={(v) => { setListingFilt(v ?? ""); setPage(1); }} options={listingFilterOptions} placeholder={`All ${T.saleListings}`} clearable size="sm" searchable />
         <FilterDateRange
           from={dateFrom} to={dateTo}
           onFromChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
@@ -967,10 +974,10 @@ const SaleDeals = () => {
       {/* ── Table ────────────────────────────────────────────────────────── */}
       <div className={`flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm transition-all ${selected ? "mr-[364px]" : ""}`}>
         <MilikTable
-          columns={DEAL_TABLE_COLS}
+          columns={dealCols}
           rows={deals}
           loading={loading}
-          empty="No deals found."
+          empty={`No ${T.saleDeals.toLowerCase()} found.`}
           minWidth={780}
           onRowClick={handleRowClick}
           isSelected={isRowSelected}
@@ -1013,7 +1020,7 @@ const SaleDeals = () => {
               <span className="font-semibold truncate">{liveSelected.listing?.title || "—"}</span>
             </div>
             {liveSelected.listing?.listingNumber && <div className="pl-4 text-[10px] font-mono text-slate-400">{liveSelected.listing.listingNumber}</div>}
-            {liveSelected.agent && <div className="text-[10px] text-slate-500 pt-0.5">Agent: <span className="font-semibold text-slate-700">{liveSelected.agent.fullName}</span></div>}
+            {liveSelected.agent && <div className="text-[10px] text-slate-500 pt-0.5">{T.saleAgent}: <span className="font-semibold text-slate-700">{liveSelected.agent.fullName}</span></div>}
           </div>
 
           {/* Financial summary */}
@@ -1213,12 +1220,12 @@ const SaleDeals = () => {
             </button>
             {liveSelected.buyer?.phone && (
               <button onClick={() => setSmsTarget(liveSelected)} className="inline-flex items-center gap-1 border border-teal-200 bg-teal-50 px-2.5 py-1 text-[10px] font-bold text-teal-700 hover:bg-teal-100">
-                <FaSms size={8} /> SMS Buyer
+                <FaSms size={8} /> SMS {T.saleBuyer}
               </button>
             )}
             {liveSelected.buyer?.email && (
               <button onClick={() => setEmailTarget(liveSelected)} className="inline-flex items-center gap-1 border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-100">
-                <FaEnvelope size={8} /> Email Buyer
+                <FaEnvelope size={8} /> Email {T.saleBuyer}
               </button>
             )}
             {liveSelected.status === "active" && (
@@ -1267,9 +1274,9 @@ const SaleDeals = () => {
           context={smsTarget.dealNumber}
           defaultBody={`Dear ${smsTarget.buyer?.fullName || "Client"}, `}
           templates={[
-            { label: "Payment Reminder", color: "amber",  body: `Dear ${smsTarget.buyer?.fullName || "Client"}, this is a friendly reminder that your next installment for deal ${smsTarget.dealNumber} is due. Kindly settle the outstanding balance to avoid delays. Contact us for assistance.` },
-            { label: "Deal Update",      color: "green",  body: `Dear ${smsTarget.buyer?.fullName || "Client"}, there is an update on your property purchase (${smsTarget.dealNumber}). Please contact us at your earliest convenience.` },
-            { label: "Closing Notice",   color: "violet", body: `Dear ${smsTarget.buyer?.fullName || "Client"}, congratulations! Your property deal ${smsTarget.dealNumber} is ready for closing. Please contact us to schedule the final handover.` },
+            { label: "Payment Reminder", color: "amber",  body: `Dear ${smsTarget.buyer?.fullName || "Client"}, this is a friendly reminder that your next installment for ${T.saleDeal.toLowerCase()} ${smsTarget.dealNumber} is due. Kindly settle the outstanding balance to avoid delays. Contact us for assistance.` },
+            { label: `${T.saleDeal} Update`,      color: "green",  body: `Dear ${smsTarget.buyer?.fullName || "Client"}, there is an update on your property purchase (${smsTarget.dealNumber}). Please contact us at your earliest convenience.` },
+            { label: "Closing Notice",   color: "violet", body: `Dear ${smsTarget.buyer?.fullName || "Client"}, congratulations! Your property ${T.saleDeal.toLowerCase()} ${smsTarget.dealNumber} is ready for closing. Please contact us to schedule the final handover.` },
             { label: "Document Request", color: "slate",  body: `Dear ${smsTarget.buyer?.fullName || "Client"}, kindly submit the required documents for your property transaction (${smsTarget.dealNumber}) at your earliest convenience. Contact us for details.` },
           ]}
           onSend={handleSendSms}

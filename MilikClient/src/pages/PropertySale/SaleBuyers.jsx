@@ -17,6 +17,7 @@ import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
 import { inputClass, labelClass } from "../../utils/formStyles";
+import { useTerms } from "../../hooks/useTerm";
 
 const SOURCES      = ["walk_in", "referral", "online", "social_media", "agent", "cold_call", "other"];
 const KYC_STATUSES = ["pending", "verified", "rejected"];
@@ -48,7 +49,7 @@ const KYC_FILTER_OPTIONS    = KYC_STATUSES.map((s) => ({ value: s, label: s.char
 const SOURCE_FILTER_OPTIONS = SOURCES.map((s) => ({ value: s, label: s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) }));
 const SOURCE_FORM_OPTIONS   = SOURCES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }));
 const KYC_FORM_OPTIONS      = KYC_STATUSES.map((s) => ({ value: s, label: s }));
-const BUYER_HEADERS         = ["Buyer No.", "Name", "Phone", "Email", "Source", "KYC", "Actions"];
+const buyerHeaders          = (T) => [`${T.saleBuyer} No.`, "Name", "Phone", "Email", "Source", "KYC", "Actions"];
 
 // One table row — memoised so unrelated page state (search text, panel tab, modal open/close, ...) doesn't re-render every row.
 const BuyerRow = React.memo(function BuyerRow({ row, isSelected, onSelect, onPrint, onEdit, onDelete }) {
@@ -82,6 +83,7 @@ const BuyerRow = React.memo(function BuyerRow({ row, isSelected, onSelect, onPri
 // Modals / inputs below own their own text state so keystrokes never re-render the page, rows or detail panel.
 
 function BuyerFormModal({ editingId, initial, saving, onClose, onSubmit }) {
+  const T = useTerms("saleBuyer");
   const [form, setForm] = useState(initial);
   const [docModalInput, setDocModalInput] = useState("");
   const f = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
@@ -95,14 +97,14 @@ function BuyerFormModal({ editingId, initial, saving, onClose, onSubmit }) {
 
   return (
     <Modal
-      title={editingId ? "Edit Buyer" : "Register Buyer"}
+      title={editingId ? `Edit ${T.saleBuyer}` : `Register ${T.saleBuyer}`}
       wide
       onClose={onClose}
       footer={
         <>
           <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
           <button type="button" onClick={() => onSubmit(form)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-            {saving ? "Saving…" : editingId ? "Update Buyer" : "Register Buyer"}
+            {saving ? "Saving…" : editingId ? `Update ${T.saleBuyer}` : `Register ${T.saleBuyer}`}
           </button>
         </>
       }
@@ -234,6 +236,7 @@ function KycDocAdd({ kycSaving, onAdd }) {
 }
 
 const SaleBuyers = () => {
+  const T              = useTerms("saleModule", "saleBuyer", "saleBuyers", "saleOffer", "saleOffers", "saleDeal", "saleDeals", "saleAgent");
   const confirm        = useConfirm();
   const queryClient    = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
@@ -256,6 +259,7 @@ const SaleBuyers = () => {
   const [panelTab,      setPanelTab]      = useState("profile");
 
   const biz = currentCompany?._id;
+  const BUYER_HEADERS = useMemo(() => buyerHeaders(T), [T]);
 
   const { data: buyersData, isLoading: loading, isFetching, error } = useQuery({
     queryKey: ["sale-buyers", biz, debouncedSearch, kycFilter, sourceFilter, page, pageSize],
@@ -265,7 +269,7 @@ const SaleBuyers = () => {
     staleTime: 30_000,
   });
 
-  useEffect(() => { if (error) toast.error("Failed to load buyers"); }, [error]);
+  useEffect(() => { if (error) toast.error(`Failed to load ${T.saleBuyers.toLowerCase()}`); }, [error, T.saleBuyers]);
 
   const buyers     = useMemo(() => buyersData?.data ?? [], [buyersData]);
   const total      = buyersData?.total ?? 0;
@@ -326,25 +330,25 @@ const SaleBuyers = () => {
       else await saleApi.createBuyer(payload);
       invalidate();
       setBuyerModal(null);
-      toast.success(`Buyer ${editingId ? "updated" : "registered"}`);
+      toast.success(`${T.saleBuyer} ${editingId ? "updated" : "registered"}`);
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to save buyer");
+      toast.error(err?.response?.data?.message || `Failed to save ${T.saleBuyer.toLowerCase()}`);
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = useCallback(async (row) => {
-    if (!await confirm({ title: "Remove Buyer", message: `Remove "${row.fullName}"?`, confirmText: "Remove", isDangerous: true })) return;
+    if (!await confirm({ title: `Remove ${T.saleBuyer}`, message: `Remove "${row.fullName}"?`, confirmText: "Remove", isDangerous: true })) return;
     try {
       await saleApi.deleteBuyer(row._id);
       setSelected((prev) => (prev?._id === row._id ? null : prev));
       invalidate();
-      toast.success("Buyer removed");
+      toast.success(`${T.saleBuyer} removed`);
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Cannot delete this buyer");
+      toast.error(err?.response?.data?.message || `Cannot delete this ${T.saleBuyer.toLowerCase()}`);
     }
-  }, [confirm, invalidate, setSelected]);
+  }, [confirm, invalidate, setSelected, T.saleBuyer]);
 
   const handleKycAction = async (buyer, newStatus) => {
     setKycSaving(true);
@@ -404,7 +408,7 @@ const SaleBuyers = () => {
   };
 
   const handleSendEmail = async (emailForm) => {
-    if (!emailTarget?.email) { toast.warn("Buyer has no email address"); return; }
+    if (!emailTarget?.email) { toast.warn(`${T.saleBuyer} has no email address`); return; }
     if (!emailForm.subject.trim() || !emailForm.body.trim()) { toast.warn("Subject and message are required"); return; }
     setEmailSending(true);
     try {
@@ -438,7 +442,7 @@ const SaleBuyers = () => {
     const win = window.open("", "_blank", "width=900,height=720");
     if (!win) return;
     win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-<title>Buyer Profile &mdash; ${esc(row.buyerNumber)}</title>
+<title>${esc(T.saleBuyer)} Profile &mdash; ${esc(row.buyerNumber)}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font-size:12px}
@@ -457,13 +461,13 @@ body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font
   <div>${logoHtml}</div>
   <div><div class="co-name">${esc(coName)}</div>${coInfo ? `<div class="co-sub">${esc(coInfo)}</div>` : ""}</div>
   <div>
-    <div class="doc-type">Buyer Profile</div>
+    <div class="doc-type">${esc(T.saleBuyer)} Profile</div>
     <div class="doc-no">${esc(row.buyerNumber)}</div>
     <div class="badge">KYC: ${esc(String(row.kycStatus || "").toUpperCase())}</div>
   </div>
 </div>
 <div class="grid">
-  ${field("Buyer No.", row.buyerNumber)}
+  ${field(`${T.saleBuyer} No.`, row.buyerNumber)}
   ${field("Full Name", row.fullName)}
   ${field("ID / Passport", row.idNumber)}
   ${field("Phone", row.phone)}
@@ -475,18 +479,18 @@ body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font
 </div>
 ${docsHtml}
 ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:11px;color:#334155;line-height:1.6"><div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:4px">Notes</div>${esc(row.notes)}</div>` : ""}
-<div class="notice">Buyer profile issued by ${esc(coName)} &bull; Printed: ${esc(printedOn)}</div>
+<div class="notice">${esc(T.saleBuyer)} profile issued by ${esc(coName)} &bull; Printed: ${esc(printedOn)}</div>
 </body></html>`);
     win.document.close();
     setTimeout(() => { win.focus(); win.print(); }, 400);
-  }, [currentCompany]);
+  }, [currentCompany, T.saleBuyer]);
 
   const handleSelectRow = useCallback((row) => setSelected((prev) => (prev?._id === row._id ? null : row)), [setSelected]);
 
   return (
     <PropertySaleShell>
       <SaleFilterBar
-        leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} buyer{total !== 1 ? "s" : ""}</span>}
+        leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} {(total === 1 ? T.saleBuyer : T.saleBuyers).toLowerCase()}</span>}
         onReset={() => { setSearch(""); setKycFilter(""); setSourceFilter(""); setPage(1); }}
         activeCount={[search, kycFilter, sourceFilter].filter(Boolean).length}
         trailing={
@@ -498,7 +502,7 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
               <FaFileImport size={9} /> Import
             </button>
             <button type="button" onClick={openCreate} className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]">
-              <FaPlus size={8} /> New Buyer
+              <FaPlus size={8} /> New {T.saleBuyer}
             </button>
           </>
         }
@@ -522,9 +526,9 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={7} className="px-3 py-10 text-center text-xs text-slate-400">Loading buyers…</td></tr>
+                  <tr><td colSpan={7} className="px-3 py-10 text-center text-xs text-slate-400">Loading {T.saleBuyers.toLowerCase()}…</td></tr>
                 ) : buyers.length === 0 ? (
-                  <tr><td colSpan={7} className="px-3 py-10 text-center text-xs text-slate-400">No buyers found.</td></tr>
+                  <tr><td colSpan={7} className="px-3 py-10 text-center text-xs text-slate-400">No {T.saleBuyers.toLowerCase()} found.</td></tr>
                 ) : buyers.map((row) => (
                   <BuyerRow key={row._id} row={row} isSelected={selectedId === row._id} onSelect={handleSelectRow} onPrint={printBuyer} onEdit={openEdit} onDelete={handleDelete} />
                 ))}
@@ -554,7 +558,7 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
               </div>
               <div className="mt-2 flex items-center gap-2">
                 <span className={`border px-1.5 py-0.5 text-[9px] font-black uppercase ${kycBadge(selected.kycStatus)}`}>{selected.kycStatus}</span>
-                <span className="text-[10px] text-white/50">{buyerDeals.length} deal{buyerDeals.length !== 1 ? "s" : ""} · {buyerOffers.length} offer{buyerOffers.length !== 1 ? "s" : ""}</span>
+                <span className="text-[10px] text-white/50">{buyerDeals.length} {(buyerDeals.length === 1 ? T.saleDeal : T.saleDeals).toLowerCase()} · {buyerOffers.length} {(buyerOffers.length === 1 ? T.saleOffer : T.saleOffers).toLowerCase()}</span>
               </div>
             </div>
 
@@ -562,8 +566,8 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
             <div className="flex-shrink-0 flex border-b border-slate-200 bg-slate-50 overflow-x-auto">
               {[
                 { id: "profile",    label: "Profile / KYC" },
-                { id: "offers",     label: `Offers (${buyerOffers.length})` },
-                { id: "deals",      label: `Deals (${buyerDeals.length})` },
+                { id: "offers",     label: `${T.saleOffers} (${buyerOffers.length})` },
+                { id: "deals",      label: `${T.saleDeals} (${buyerDeals.length})` },
                 { id: "payments",   label: buyerPaymentsData ? `Payments (${buyerPayments.length})` : "Payments" },
                 { id: "activities", label: buyerActivitiesData ? `Log (${buyerActivities.length})` : "Log" },
               ].map((t) => (
@@ -660,7 +664,7 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
               {panelTab === "offers" && (
                 <div className="px-4 py-3">
                   {buyerOffers.length === 0 ? (
-                    <div className="py-8 text-center text-xs text-slate-400">No offers found for this buyer.</div>
+                    <div className="py-8 text-center text-xs text-slate-400">No {T.saleOffers.toLowerCase()} found for this {T.saleBuyer.toLowerCase()}.</div>
                   ) : (
                     <div className="space-y-2">
                       {buyerOffers.map((o) => (
@@ -692,7 +696,7 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
               {panelTab === "deals" && (
                 <div className="px-4 py-3">
                   {buyerDeals.length === 0 ? (
-                    <div className="py-8 text-center text-xs text-slate-400">No deals found for this buyer.</div>
+                    <div className="py-8 text-center text-xs text-slate-400">No {T.saleDeals.toLowerCase()} found for this {T.saleBuyer.toLowerCase()}.</div>
                   ) : (
                     <div className="space-y-2">
                       {buyerDeals.map((d) => {
@@ -725,7 +729,7 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
                                 <span className="text-[10px] font-black text-slate-500">{pct}%</span>
                               </div>
                             </div>
-                            <div className="mt-1 text-[10px] text-slate-400">{fmtDate(d.dealDate)}{d.agent ? ` · Agent: ${d.agent.fullName}` : ""}</div>
+                            <div className="mt-1 text-[10px] text-slate-400">{fmtDate(d.dealDate)}{d.agent ? ` · ${T.saleAgent}: ${d.agent.fullName}` : ""}</div>
                           </div>
                         );
                       })}
@@ -738,7 +742,7 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
               {panelTab === "payments" && (
                 <div className="px-4 py-3">
                   {buyerPayments.length === 0 ? (
-                    <div className="py-8 text-center text-xs text-slate-400">No payments found for this buyer.</div>
+                    <div className="py-8 text-center text-xs text-slate-400">No payments found for this {T.saleBuyer.toLowerCase()}.</div>
                   ) : (
                     <>
                       <div className="mb-2 flex items-baseline justify-between">
@@ -772,7 +776,7 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
               {panelTab === "activities" && (
                 <div className="px-4 py-3">
                   {buyerActivities.length === 0 ? (
-                    <div className="py-8 text-center text-xs text-slate-400">No activity log for this buyer.</div>
+                    <div className="py-8 text-center text-xs text-slate-400">No activity log for this {T.saleBuyer.toLowerCase()}.</div>
                   ) : (
                     <div className="relative">
                       <div className="absolute left-[7px] top-0 bottom-0 w-px bg-slate-200" />
@@ -842,7 +846,7 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
             { label: "KYC Verified",      color: "green",  body: `Dear ${smsTarget.fullName}, your KYC verification is complete. You are now cleared to proceed with property transactions. Contact us for next steps.` },
             { label: "Document Request",  color: "amber",  body: `Dear ${smsTarget.fullName}, please submit your outstanding KYC documents at your earliest convenience. Contact us for assistance.` },
             { label: "Payment Reminder",  color: "violet", body: `Dear ${smsTarget.fullName}, this is a friendly payment reminder. Kindly ensure your outstanding balance is settled to avoid delays. Contact us for details.` },
-            { label: "Welcome",           color: "slate",  body: `Welcome to MILIK Property Sales, ${smsTarget.fullName}! We are delighted to have you as a client. Our team is ready to assist you. Contact us anytime.` },
+            { label: "Welcome",           color: "slate",  body: `Welcome to MILIK ${T.saleModule}, ${smsTarget.fullName}! We are delighted to have you as a client. Our team is ready to assist you. Contact us anytime.` },
           ]}
           onSend={handleSendSms}
           onClose={() => setSmsTarget(null)}
@@ -863,8 +867,8 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
       <ImportModal
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
-        title="Import Buyers"
-        entityName="buyer"
+        title={`Import ${T.saleBuyers}`}
+        entityName={T.saleBuyer.toLowerCase()}
         parseFile={parseSaleBuyersExcel}
         downloadTemplate={downloadSaleBuyersTemplate}
         onImport={async (rows) => {

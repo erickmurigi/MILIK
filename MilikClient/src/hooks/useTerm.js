@@ -104,4 +104,8 @@ export function useTermPresetLabel() {
   return useSelector((s) => detectPresetLabel(s.companySettings?.companySettings?.terminology));
 }
 
+// Compound labels such as "Sales Agent" / "Sale Deals": the prefix is kept only while the term is still the built-in
+// default, so a renamed term stands alone ("Salesperson", not "Sales Salesperson").
+export const prefixedTerm = (prefix, term, key) => (term === DEFAULTS[key] ? `${prefix} ${term}` : term);
+
 export { DEFAULTS as TERM_DEFAULTS };

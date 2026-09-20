@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
@@ -9,6 +9,7 @@ import SaleFilterBar, { FilterDateRange } from "./SaleFilterBar";
 import PaginationBar from "../../components/PaginationBar";
 import { fmtKES, saleApi } from "../../services/propertySaleApi";
 import { useTabState } from "../../hooks/useTabState";
+import { useTerms } from "../../hooks/useTerm";
 import AppSelect from "../../components/common/AppSelect";
 import { fmtDate } from "../../utils/dates";
 import MilikTable from "../../components/common/MilikTable";
@@ -30,11 +31,11 @@ const STATUS_OPTS = [
   { value: "waived",   label: "Waived" },
 ];
 
-const SCHEDULE_TABLE_COLS = [
+const scheduleTableCols = (T) => [
   { label: "#" },
-  { label: "Deal" },
+  { label: T.saleDeal },
   { label: "Property" },
-  { label: "Buyer" },
+  { label: T.saleBuyer },
   { label: "Description" },
   { label: "Due Date" },
   { label: "Amount", align: "right" },
@@ -42,6 +43,8 @@ const SCHEDULE_TABLE_COLS = [
 ];
 
 const SaleSchedule = () => {
+  const T = useTerms("saleDeal", "saleBuyer");
+  const scheduleCols = useMemo(() => scheduleTableCols(T), [T]);
   const navigate       = useNavigate();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const biz            = currentCompany?._id;
@@ -177,7 +180,7 @@ const SaleSchedule = () => {
       {/* Table */}
       <div className="border border-slate-200 bg-white shadow-sm overflow-hidden">
         <MilikTable
-          columns={SCHEDULE_TABLE_COLS}
+          columns={scheduleCols}
           rows={items}
           loading={isLoading}
           empty="No schedule items found for the selected filter."
@@ -206,7 +209,7 @@ const SaleSchedule = () => {
             );
           }}
           renderActions={(item) => item.deal?._id ? (
-            <button onClick={() => navigate("/sale/deals", { state: { openDealId: item.deal._id } })} className="border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50" title="Open deal">
+            <button onClick={() => navigate("/sale/deals", { state: { openDealId: item.deal._id } })} className="border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50" title={`Open ${T.saleDeal.toLowerCase()}`}>
               <FaExternalLinkAlt className="inline" />
             </button>
           ) : null}

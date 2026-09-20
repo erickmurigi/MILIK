@@ -10,6 +10,7 @@ import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
+import { useTerms } from "../../hooks/useTerm";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
 import { fmtDate } from "../../utils/dates";
@@ -29,10 +30,10 @@ const PAGE_SIZE      = 50;
 
 const fmtLabel = (s) => (s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
-const COMMISSION_COLS = [
+const commissionCols = (T) => [
   { label: "Comm. No." },
-  { label: "Agent" },
-  { label: "Deal" },
+  { label: T.saleAgent },
+  { label: T.saleDeal },
   { label: "Property" },
   { label: "Rate" },
   { label: "Gross Amt",   align: "right" },
@@ -143,6 +144,8 @@ function PayoutModal({ commission, cashbookOptions, saving, onClose, onSubmit })
 }
 
 const SaleCommissions = () => {
+  const T = useTerms("saleAgent", "saleAgents", "saleDeal", "saleDeals");
+  const commissionColumns = useMemo(() => commissionCols(T), [T]);
   const confirm        = useConfirm();
   const queryClient    = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
@@ -323,7 +326,7 @@ const SaleCommissions = () => {
             <input
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              placeholder="Agent, deal, comm. no."
+              placeholder={`${T.saleAgent}, ${T.saleDeal.toLowerCase()}, comm. no.`}
               className="h-7 w-full border border-slate-200 bg-white pl-7 pr-2 text-xs text-slate-700 placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none"
             />
           </div>
@@ -339,13 +342,13 @@ const SaleCommissions = () => {
             value={agentFilt}
             onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }}
             options={agentFilterOptions}
-            placeholder="All Agents" clearable size="sm" searchable
+            placeholder={`All ${T.saleAgents}`} clearable size="sm" searchable
           />
           <AppSelect
             value={dealFilt}
             onChange={(v) => { setDealFilt(v ?? ""); setPage(1); }}
             options={dealFilterOptions}
-            placeholder="All Deals" clearable size="sm" searchable
+            placeholder={`All ${T.saleDeals}`} clearable size="sm" searchable
           />
 
           {/* Date range */}
@@ -386,7 +389,7 @@ const SaleCommissions = () => {
         {/* Table */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white">
           <MilikTable
-            columns={COMMISSION_COLS}
+            columns={commissionColumns}
             rows={commissions}
             loading={loading}
             empty="No commissions found."

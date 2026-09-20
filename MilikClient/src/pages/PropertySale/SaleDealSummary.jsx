@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { saleApi } from "../../services/propertySaleApi";
+import { useTerms } from "../../hooks/useTerm";
 import { fmtDate } from "../../utils/dates";
 
 const fmtKES  = (n) => new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", minimumFractionDigits: 2 }).format(Number(n) || 0);
@@ -22,6 +23,7 @@ const SaleDealSummary = () => {
   const { id }   = useParams();
   const navigate = useNavigate();
   const company  = useSelector((s) => s.company?.currentCompany);
+  const T = useTerms("saleDeal", "saleListing", "saleBuyer", "saleAgent", "saleModule");
   const [deal,     setDeal]     = useState(null);
   const [payments, setPayments] = useState([]);
   const [loading,  setLoading]  = useState(true);
@@ -46,11 +48,11 @@ const SaleDealSummary = () => {
       setDeal(d);
       setPayments((pmtsData ?? []).filter((p) => p.status === "paid"));
     } catch (err) {
-      setError(err?.response?.data?.message || err?.message || "Failed to load deal");
+      setError(err?.response?.data?.message || err?.message || `Failed to load ${T.saleDeal.toLowerCase()}`);
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, T.saleDeal]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -86,7 +88,7 @@ const SaleDealSummary = () => {
                 }
                 <div>
                   <div className="text-xl font-black text-[#0B3B2E]">{coName}</div>
-                  <div className="text-[11px] text-slate-500">Property Sales Division</div>
+                  <div className="text-[11px] text-slate-500">{T.saleModule} Division</div>
                   {[co.phone || co.phoneNumber, co.email || co.companyEmail].filter(Boolean).map((v, i) => (
                     <div key={i} className="text-[11px] text-slate-500">{v}</div>
                   ))}
@@ -121,7 +123,7 @@ const SaleDealSummary = () => {
                 {(co.phone || co.phoneNumber) && <div className="text-[11px] text-slate-600">{co.phone || co.phoneNumber}</div>}
               </div>
               <div className="border-l-4 border-slate-400 bg-slate-50 px-4 py-4">
-                <div className="mb-1 text-[9px] font-black uppercase tracking-widest text-slate-500">Purchaser / Buyer</div>
+                <div className="mb-1 text-[9px] font-black uppercase tracking-widest text-slate-500">Purchaser / {T.saleBuyer}</div>
                 <div className="text-sm font-black text-slate-900">{buyer.fullName || "—"}</div>
                 {buyer.idNumber && <div className="text-[11px] text-slate-600 mt-0.5">ID/Passport: {buyer.idNumber}</div>}
                 {buyer.phone   && <div className="text-[11px] text-slate-600">{buyer.phone}</div>}
@@ -136,7 +138,7 @@ const SaleDealSummary = () => {
             <div className="mb-3 text-[9px] font-black uppercase tracking-widest text-slate-400">Property Details</div>
             <div className="grid grid-cols-3 gap-0 border border-slate-200">
               {[
-                ["Listing No.", listing.listingNumber || "—"],
+                [`${T.saleListing} No.`, listing.listingNumber || "—"],
                 ["Property Type", fmtLabel(listing.propertyType || "—")],
                 ["Location", [listing.location, listing.town].filter(Boolean).join(", ") || "—"],
                 ["Title", listing.title || "—"],
@@ -169,7 +171,7 @@ const SaleDealSummary = () => {
               </div>
               <div className="grid grid-cols-3 text-xs text-slate-500">
                 {[
-                  ["Deal Date",             fmtDate(deal.dealDate)],
+                  [`${T.saleDeal} Date`,             fmtDate(deal.dealDate)],
                   ["Expected Closing Date", fmtDate(deal.expectedClosingDate)],
                   ["Payments Made",         `${payments.length} payment${payments.length !== 1 ? "s" : ""}`],
                 ].map(([label, val]) => (
@@ -184,7 +186,7 @@ const SaleDealSummary = () => {
           {/* Agent */}
           {agent && (
             <div className="mb-8 border border-slate-200 px-4 py-3 text-xs">
-              <div className="mb-1 text-[9px] font-black uppercase tracking-widest text-slate-400">Facilitating Agent</div>
+              <div className="mb-1 text-[9px] font-black uppercase tracking-widest text-slate-400">Facilitating {T.saleAgent}</div>
               <div className="font-semibold text-slate-800">{agent.fullName} ({agent.agentNumber}){agent.phone ? ` · ${agent.phone}` : ""}</div>
             </div>
           )}
@@ -215,7 +217,7 @@ const SaleDealSummary = () => {
 
           {/* Footer */}
           <div className="border-t border-slate-200 pt-4 text-center text-[10px] text-slate-400">
-            This is a summary cover sheet issued by <strong>{coName}</strong>. Deal ref: {deal.dealNumber}. Printed: {fmtDate(new Date())}
+            This is a summary cover sheet issued by <strong>{coName}</strong>. {T.saleDeal} ref: {deal.dealNumber}. Printed: {fmtDate(new Date())}
           </div>
         </div>
       </div>

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { saleApi } from "../../services/propertySaleApi";
+import { useTerms } from "../../hooks/useTerm";
 import { fmtDate } from "../../utils/dates";
 
 const fmtKES  = (n) => new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", minimumFractionDigits: 2 }).format(Number(n) || 0);
@@ -30,6 +31,7 @@ const SaleCommissionStatement = () => {
   const { id }   = useParams();
   const navigate = useNavigate();
   const company  = useSelector((s) => s.company?.currentCompany);
+  const T = useTerms("saleDeal", "saleBuyer", "saleAgent");
   const [comm,    setComm]    = useState(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState(null);
@@ -102,16 +104,16 @@ const SaleCommissionStatement = () => {
           {/* Agent info */}
           <div className="mb-6 grid grid-cols-2 gap-4">
             <div className="border border-slate-200 p-4">
-              <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Agent</div>
+              <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">{T.saleAgent}</div>
               <div className="text-sm font-black text-slate-900">{agent.fullName || "—"}</div>
               {agent.agentNumber && <div className="text-[11px] text-slate-500">ID: {agent.agentNumber}</div>}
               {agent.phone && <div className="text-[11px] text-slate-500">{agent.phone}</div>}
             </div>
             <div className="border border-slate-200 p-4">
-              <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Property / Deal</div>
+              <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Property / {T.saleDeal}</div>
               <div className="text-xs font-bold text-slate-800">{typeof listing === "object" ? listing.title || listing.listingNumber : listing || "—"}</div>
-              {deal.dealNumber && <div className="text-[11px] text-slate-500">Deal: {deal.dealNumber}</div>}
-              {buyer.fullName  && <div className="text-[11px] text-slate-500">Buyer: {buyer.fullName}</div>}
+              {deal.dealNumber && <div className="text-[11px] text-slate-500">{T.saleDeal}: {deal.dealNumber}</div>}
+              {buyer.fullName  && <div className="text-[11px] text-slate-500">{T.saleBuyer}: {buyer.fullName}</div>}
             </div>
           </div>
 
@@ -173,7 +175,7 @@ const SaleCommissionStatement = () => {
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Net Commission {payLabel} (after WHT)</div>
             <div className="mt-2 font-mono text-3xl font-black text-[#0B3B2E] tabular-nums">{fmtKES(netAmt)}</div>
             <div className="mt-1 font-mono text-[11px] text-slate-500 tabular-nums">Gross {fmtKES(grossAmt)} − WHT {fmtKES(whtAmt)} = Net {fmtKES(netAmt)}</div>
-            <div className="mt-1 text-[11px] text-slate-500">for deal {deal.dealNumber || "—"} · {agent.fullName || "—"}</div>
+            <div className="mt-1 text-[11px] text-slate-500">for {T.saleDeal.toLowerCase()} {deal.dealNumber || "—"} · {agent.fullName || "—"}</div>
           </div>
 
           {/* Footer */}

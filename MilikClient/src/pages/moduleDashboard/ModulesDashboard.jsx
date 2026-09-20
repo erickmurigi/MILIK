@@ -144,6 +144,7 @@ const ModulesDashboard = () => {
   const presetLabel = useTermPresetLabel();
   const companySubtitle = presetLabel || operatingModeLabel;
   const termLandlord = useTerm("landlord");
+  const saleModuleName = useTerm("saleModule");
 
   useEffect(() => {
     const name = String(activeCompanyContext?.companyName || activeCompanyContext?.name || "").trim();
@@ -154,6 +155,7 @@ const ModulesDashboard = () => {
     if (!activeCompanyContext) return [];
     return moduleRegistry
       .map((m) => {
+        if (m.id === "propertySale") return { ...m, title: saleModuleName };
         if (m.id !== "milik") return m;
         return {
           ...m,
@@ -161,7 +163,7 @@ const ModulesDashboard = () => {
         };
       })
       .filter((m) => hasCompanyModule(activeCompanyContext, m.moduleKey));
-  }, [activeCompanyContext, isLandlordMode, termLandlord]);
+  }, [activeCompanyContext, isLandlordMode, termLandlord, saleModuleName]);
 
   const filteredModules = useMemo(() => {
     let list = visibleModules;

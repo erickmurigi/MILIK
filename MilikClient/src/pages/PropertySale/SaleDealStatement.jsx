@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { saleApi } from "../../services/propertySaleApi";
+import { useTerms } from "../../hooks/useTerm";
 import { fmtDate } from "../../utils/dates";
 
 const fmtKES  = (n) => new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", minimumFractionDigits: 2 }).format(Number(n) || 0);
@@ -22,6 +23,7 @@ const SaleDealStatement = () => {
   const { id }   = useParams();
   const navigate = useNavigate();
   const company  = useSelector((s) => s.company?.currentCompany);
+  const T = useTerms("saleDeal", "saleBuyer", "saleAgent");
   const [deal,     setDeal]     = useState(null);
   const [payments, setPayments] = useState([]);
   const [loading,  setLoading]  = useState(true);
@@ -46,11 +48,11 @@ const SaleDealStatement = () => {
       setDeal(d);
       setPayments(pmtsData ?? []);
     } catch (err) {
-      setError(err?.response?.data?.message || err?.message || "Failed to load deal");
+      setError(err?.response?.data?.message || err?.message || `Failed to load ${T.saleDeal.toLowerCase()}`);
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, T.saleDeal]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -94,7 +96,7 @@ const SaleDealStatement = () => {
               </div>
             </div>
             <div className="text-right">
-              <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Deal Statement</div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">{T.saleDeal} Statement</div>
               <div className="mt-1 font-mono text-xl font-black text-[#0B3B2E]">{deal.dealNumber}</div>
               <div className="mt-1 text-[11px] text-slate-500">Printed: {fmtDate(new Date())}</div>
               <div className={`mt-2 inline-block border px-2 py-0.5 text-[10px] font-black uppercase ${
@@ -108,7 +110,7 @@ const SaleDealStatement = () => {
           {/* Parties */}
           <div className="mb-6 grid grid-cols-2 gap-4">
             <div className="border border-slate-200 p-4">
-              <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Buyer</div>
+              <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">{T.saleBuyer}</div>
               <div className="text-sm font-black text-slate-900">{buyer.fullName || "—"}</div>
               {buyer.buyerNumber && <div className="text-[11px] text-slate-500">ID: {buyer.buyerNumber}</div>}
               {buyer.phone && <div className="text-[11px] text-slate-500">{buyer.phone}</div>}
@@ -129,7 +131,7 @@ const SaleDealStatement = () => {
               ["Agreed Price",    fmtKES(deal.agreedPrice)],
               ["Total Paid",      fmtKES(totalPaid)],
               ["Balance",         fmtKES(balance)],
-              ["Agent",           agent ? agent.fullName : "No Agent"],
+              [T.saleAgent,       agent ? agent.fullName : `No ${T.saleAgent}`],
             ].map(([label, val]) => (
               <div key={label} className="border-r border-slate-200 last:border-r-0 px-4 py-3">
                 <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</div>
@@ -141,7 +143,7 @@ const SaleDealStatement = () => {
           {/* Deal dates */}
           <div className="mb-6 grid grid-cols-3 gap-4 text-xs">
             {[
-              ["Deal Date",     deal.dealDate],
+              [`${T.saleDeal} Date`,     deal.dealDate],
               ["Expected Close", deal.expectedClosingDate],
               ["Actual Close",  deal.actualClosingDate],
             ].map(([label, date]) => (
@@ -205,7 +207,7 @@ const SaleDealStatement = () => {
           {/* Notes */}
           {deal.notes && (
             <div className="mb-6 border border-slate-200 px-4 py-3">
-              <div className="mb-1 text-[9px] font-black uppercase tracking-widest text-slate-400">Deal Notes</div>
+              <div className="mb-1 text-[9px] font-black uppercase tracking-widest text-slate-400">{T.saleDeal} Notes</div>
               <div className="text-xs leading-relaxed text-slate-600">{deal.notes}</div>
             </div>
           )}

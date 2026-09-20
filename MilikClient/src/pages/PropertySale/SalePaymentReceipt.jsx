@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { saleApi } from "../../services/propertySaleApi";
+import { useTerms } from "../../hooks/useTerm";
 import { fmtDate } from "../../utils/dates";
 
 const fmtKES  = (n) => new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", minimumFractionDigits: 2 }).format(Number(n) || 0);
@@ -22,6 +23,7 @@ const SalePaymentReceipt = () => {
   const { id }     = useParams();
   const navigate   = useNavigate();
   const company    = useSelector((s) => s.company?.currentCompany);
+  const T = useTerms("saleDeal");
   const [payment, setPayment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
@@ -119,10 +121,10 @@ const SalePaymentReceipt = () => {
               {buyer.email  && <div className="text-[11px] text-slate-500">{buyer.email}</div>}
             </div>
             <div className="border border-slate-200 p-4">
-              <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Property / Deal</div>
+              <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Property / {T.saleDeal}</div>
               <div className="text-xs font-bold text-slate-800">{listing.title || listing.listingNumber || "—"}</div>
               {listing.listingNumber && listing.title && <div className="text-[11px] text-slate-500">{listing.listingNumber}</div>}
-              {deal.dealNumber && <div className="text-[11px] text-slate-500">Deal: {deal.dealNumber}</div>}
+              {deal.dealNumber && <div className="text-[11px] text-slate-500">{T.saleDeal}: {deal.dealNumber}</div>}
               {listing.location && <div className="text-[11px] text-slate-500">{listing.location}{listing.town ? `, ${listing.town}` : ""}</div>}
             </div>
           </div>

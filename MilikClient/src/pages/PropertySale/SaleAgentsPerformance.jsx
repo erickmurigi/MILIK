@@ -10,9 +10,10 @@ import { fmtKES, saleApi } from "../../services/propertySaleApi";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import SaleFilterBar from "./SaleFilterBar";
+import { useTerms } from "../../hooks/useTerm";
 
-const STATUS_OPTS = [
-  { value: "",         label: "All Agents" },
+const statusOpts = (T) => [
+  { value: "",         label: `All ${T.saleAgents}` },
   { value: "active",   label: "Active" },
   { value: "inactive", label: "Inactive" },
 ];
@@ -21,9 +22,11 @@ const EMPTY = [];
 const ZERO  = { totalDeals: 0, closedDeals: 0, activeDeals: 0, totalRevenue: 0, commPaid: 0, commPending: 0, closeRate: 0 };
 
 const SaleAgentsPerformance = () => {
+  const T              = useTerms("saleAgent", "saleAgents");
   const navigate       = useNavigate();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const biz            = currentCompany?._id;
+  const STATUS_OPTS    = useMemo(() => statusOpts(T), [T]);
 
   const [statusFilter, setStatusFilter] = useTabState("/sale/agents/performance:status", "active");
   const [sortCol,      setSortCol]      = useState("totalRevenue");
@@ -44,8 +47,8 @@ const SaleAgentsPerformance = () => {
   });
 
   React.useEffect(() => {
-    if (agentsError) toast.error("Failed to load agents");
-  }, [agentsError]);
+    if (agentsError) toast.error(`Failed to load ${T.saleAgents.toLowerCase()}`);
+  }, [agentsError, T.saleAgents]);
 
   const agents    = agentsData?.data ?? EMPTY;
   const perfList  = perfData?.agents ?? EMPTY;
@@ -94,7 +97,7 @@ const SaleAgentsPerformance = () => {
       <SaleFilterBar
         leading={
           <>
-            <span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{agents.length} agent{agents.length !== 1 ? "s" : ""}</span>
+            <span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{agents.length} {(agents.length === 1 ? T.saleAgent : T.saleAgents).toLowerCase()}</span>
             <span className="shrink-0 select-none text-slate-200">|</span>
             <span className="shrink-0 font-mono text-[10px] font-black text-emerald-700">{closedAll}</span>
             <span className="shrink-0 text-[10px] text-slate-400">closed</span>
@@ -113,7 +116,7 @@ const SaleAgentsPerformance = () => {
           value={statusFilter}
           onChange={(v) => setStatusFilter(v ?? "")}
           options={STATUS_OPTS}
-          placeholder="All Agents"
+          placeholder={`All ${T.saleAgents}`}
           clearable
           size="sm"
         />
@@ -123,7 +126,7 @@ const SaleAgentsPerformance = () => {
       <div className="border border-slate-200 bg-white shadow-sm overflow-hidden">
         <MilikTable
           columns={[
-            { label: "Agent" },
+            { label: T.saleAgent },
             { label: "Status" },
             { label: "Total", sortKey: "totalDeals" },
             { label: "Closed", sortKey: "closedDeals" },
@@ -135,7 +138,7 @@ const SaleAgentsPerformance = () => {
           ]}
           rows={sorted}
           loading={isLoading}
-          empty="No agents found."
+          empty={`No ${T.saleAgents.toLowerCase()} found.`}
           sortKey={sortCol}
           sortDir={sortDir}
           onSort={toggleSort}

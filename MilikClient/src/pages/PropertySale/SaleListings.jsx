@@ -189,7 +189,7 @@ const SaleListings = () => {
       await invalidate();
       toast.success(`${T.saleListing} deleted`);
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Cannot delete this listing");
+      toast.error(err?.response?.data?.message || `Cannot delete this ${T.saleListing.toLowerCase()}`);
     }
   }, [confirm, invalidate, setSelected, T.saleListing]);
 
@@ -355,7 +355,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
         <FilterSearch
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          placeholder="Search listings..."
+          placeholder={`Search ${T.saleListings.toLowerCase()}...`}
         />
         <AppSelect value={statusFilt} onChange={(v) => { setStatusFilt(v ?? ""); setPage(1); }} options={STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
         <AppSelect value={typeFilt} onChange={(v) => { setTypeFilt(v ?? ""); setPage(1); }} options={PROPERTY_TYPE_OPTIONS} placeholder="All Types" clearable size="sm" />
@@ -372,7 +372,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
             columns={LISTING_TABLE_COLS}
             rows={listings}
             loading={loading}
-            empty="No listings found. Create your first listing."
+            empty={`No ${T.saleListings.toLowerCase()} found. Create your first ${T.saleListing.toLowerCase()}.`}
             minWidth={720}
             onRowClick={handleRowClick}
             isSelected={isRowSelected}
@@ -477,7 +477,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
         title={`Import ${T.saleListings}`}
-        entityName="listing"
+        entityName={T.saleListing.toLowerCase()}
         parseFile={parseSaleListingsExcel}
         downloadTemplate={downloadSaleListingsTemplate}
         onImport={async (rows) => {

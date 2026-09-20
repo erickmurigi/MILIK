@@ -5,6 +5,7 @@ import { FaExclamationTriangle } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar from "./SaleFilterBar";
 import { fmtKES, saleApi } from "../../services/propertySaleApi";
+import { useTerms } from "../../hooks/useTerm";
 
 const fmt = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
@@ -25,6 +26,7 @@ const colorMap = {
 };
 
 export default function SaleCashFlow() {
+  const T = useTerms("saleDeal", "saleBuyer", "saleListing");
   const biz = useSelector((s) => s.company?.currentCompany?._id);
   const [expanded, setExpanded] = useState("overdue");
 
@@ -102,9 +104,9 @@ export default function SaleCashFlow() {
                         <thead>
                           <tr className="border-b border-slate-100 bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
                             <th className="px-3 py-2 text-left">Due Date</th>
-                            <th className="px-3 py-2 text-left">Deal</th>
-                            <th className="px-3 py-2 text-left">Buyer</th>
-                            <th className="px-3 py-2 text-left">Listing</th>
+                            <th className="px-3 py-2 text-left">{T.saleDeal}</th>
+                            <th className="px-3 py-2 text-left">{T.saleBuyer}</th>
+                            <th className="px-3 py-2 text-left">{T.saleListing}</th>
                             <th className="px-3 py-2 text-right">Expected (KES)</th>
                             <th className="px-3 py-2 text-left">Label</th>
                           </tr>

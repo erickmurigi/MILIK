@@ -6,12 +6,14 @@ import { toast } from "react-toastify";
 import { FaPrint } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
 import AppSelect from "../../components/common/AppSelect";
+import { useTerms } from "../../hooks/useTerm";
 import { fmtKES, SALE_MONTHS as MONTHS, saleApi } from "../../services/propertySaleApi";
 const currentYear = new Date().getFullYear();
 const YEAR_OPTS   = Array.from({ length: 6 }, (_, i) => currentYear - i + 1)
   .map((y) => ({ value: String(y), label: String(y) }));
 
 const SaleReports = () => {
+  const T = useTerms("saleModule", "saleListings", "saleOffers", "saleDeals");
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const biz            = currentCompany?._id;
 
@@ -63,7 +65,7 @@ const SaleReports = () => {
 
     const html = `<!DOCTYPE html><html lang="en"><head>
 <meta charset="UTF-8"/>
-<title>Property Sales Report — ${esc(year)}</title>
+<title>${esc(T.saleModule)} Report — ${esc(year)}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:"Helvetica Neue",Arial,sans-serif;font-size:10.5px;color:#111;background:#fff}
@@ -104,7 +106,7 @@ tfoot td:first-child{text-align:left}
 <div class="hdr">
   <div>${logoSrc
     ? `<img src="${esc(logoSrc)}" alt=""/>`
-    : `<div class="brand-name">${esc(coName)}</div><div class="brand-sub">Property Sales</div>`
+    : `<div class="brand-name">${esc(coName)}</div><div class="brand-sub">${esc(T.saleModule)}</div>`
   }</div>
   <div class="co-meta">
     <strong>${esc(coName)}</strong><br/>
@@ -116,10 +118,10 @@ tfoot td:first-child{text-align:left}
   <p>Financial Year: ${esc(year)} &nbsp;·&nbsp; Generated: ${new Date().toLocaleString("en-KE")}</p>
 </div>
 <div class="summary-row">
-  <div class="summary-cell"><div class="lbl">Listings Created</div><div class="val">${totals.listings??0}</div></div>
-  <div class="summary-cell"><div class="lbl">Offers Received</div><div class="val">${totals.offers??0}</div></div>
-  <div class="summary-cell"><div class="lbl">Active Deals</div><div class="val">${totals.dealsActive??0}</div></div>
-  <div class="summary-cell"><div class="lbl">Deals Closed</div><div class="val">${totals.dealsClosed??0}</div></div>
+  <div class="summary-cell"><div class="lbl">${esc(T.saleListings)} Created</div><div class="val">${totals.listings??0}</div></div>
+  <div class="summary-cell"><div class="lbl">${esc(T.saleOffers)} Received</div><div class="val">${totals.offers??0}</div></div>
+  <div class="summary-cell"><div class="lbl">Active ${esc(T.saleDeals)}</div><div class="val">${totals.dealsActive??0}</div></div>
+  <div class="summary-cell"><div class="lbl">${esc(T.saleDeals)} Closed</div><div class="val">${totals.dealsClosed??0}</div></div>
   <div class="summary-cell"><div class="lbl">Total Revenue</div><div class="val">${fmtKES(totals.revenue??0)}</div></div>
   <div class="summary-cell"><div class="lbl">Commissions</div><div class="val">${fmtKES(totals.commissionsApproved??0)}</div></div>
 </div>
@@ -127,7 +129,7 @@ tfoot td:first-child{text-align:left}
   <thead>
     <tr>
       <th style="text-align:left">Month</th>
-      <th>Listings</th><th>Offers</th><th>Active Deals</th><th>Closed Deals</th>
+      <th>${esc(T.saleListings)}</th><th>${esc(T.saleOffers)}</th><th>Active ${esc(T.saleDeals)}</th><th>Closed ${esc(T.saleDeals)}</th>
       <th>Revenue (KES)</th><th>Commissions (KES)</th>
     </tr>
   </thead>
@@ -142,7 +144,7 @@ tfoot td:first-child{text-align:left}
   </tfoot>
 </table>
 <div class="footer">
-  <span>CONFIDENTIAL — MILIK Property Sales System</span>
+  <span>CONFIDENTIAL — MILIK ${esc(T.saleModule)} System</span>
   <span>Page 1 of 1</span>
 </div>
 </div></body></html>`;
@@ -178,8 +180,8 @@ tfoot td:first-child{text-align:left}
           {!loading && report && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 border-l border-slate-200 pl-4">
               {[
-                ["Listings",    totals.listings    ?? 0, false, false],
-                ["Offers",      totals.offers      ?? 0, false, false],
+                [T.saleListings,    totals.listings    ?? 0, false, false],
+                [T.saleOffers,      totals.offers      ?? 0, false, false],
                 ["Active",      totals.dealsActive ?? 0, false, false],
                 ["Closed",      totals.dealsClosed ?? 0, true,  false],
                 ["Revenue",     fmtKES(totals.revenue             ?? 0), false, true],
@@ -254,10 +256,10 @@ tfoot td:first-child{text-align:left}
             <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
               <tr>
                 <th className="px-3 py-2 text-left text-[9px] font-black uppercase tracking-wide border-r border-white/10">Month</th>
-                <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-wide border-r border-white/10">Listings</th>
-                <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-wide border-r border-white/10">Offers</th>
-                <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-wide border-r border-white/10">Active Deals</th>
-                <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-wide border-r border-white/10">Closed Deals</th>
+                <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-wide border-r border-white/10">{T.saleListings}</th>
+                <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-wide border-r border-white/10">{T.saleOffers}</th>
+                <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-wide border-r border-white/10">Active {T.saleDeals}</th>
+                <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-wide border-r border-white/10">Closed {T.saleDeals}</th>
                 <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-wide border-r border-white/10">Revenue (KES)</th>
                 <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-wide">Commissions (KES)</th>
               </tr>

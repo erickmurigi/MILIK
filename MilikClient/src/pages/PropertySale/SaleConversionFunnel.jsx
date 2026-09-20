@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar from "./SaleFilterBar";
+import { useTerms } from "../../hooks/useTerm";
 import { fmtKES, saleApi } from "../../services/propertySaleApi";
 
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ");
@@ -66,6 +67,7 @@ function RateCard({ label, value, note }) {
 }
 
 export default function SaleConversionFunnel() {
+  const T = useTerms("saleLeads", "saleOffers", "saleDeal", "saleDeals");
   const biz = useSelector((s) => s.company?.currentCompany?._id);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
@@ -107,30 +109,30 @@ export default function SaleConversionFunnel() {
         <div className="space-y-6 px-1 pb-4">
           {/* KPI cards */}
           <div className="grid grid-cols-3 gap-2">
-            <RateCard label="Leads → Offers" value={rates.leadsToOffers ?? 0} note={`${offers.total} of ${leads.total} leads`} />
-            <RateCard label="Offers → Deals" value={rates.offersToDeals ?? 0} note={`${deals.total} of ${offers.total} offers`} />
-            <RateCard label="Deals Closed" value={rates.dealsToClose ?? 0} note={`${deals.closed} of ${deals.total} deals`} />
+            <RateCard label={`${T.saleLeads} → ${T.saleOffers}`} value={rates.leadsToOffers ?? 0} note={`${offers.total} of ${leads.total} ${T.saleLeads.toLowerCase()}`} />
+            <RateCard label={`${T.saleOffers} → ${T.saleDeals}`} value={rates.offersToDeals ?? 0} note={`${deals.total} of ${offers.total} ${T.saleOffers.toLowerCase()}`} />
+            <RateCard label={`${T.saleDeals} Closed`} value={rates.dealsToClose ?? 0} note={`${deals.closed} of ${deals.total} ${T.saleDeals.toLowerCase()}`} />
           </div>
 
           {/* Funnel bars */}
           <div className="border border-slate-200 bg-white px-4 py-4 space-y-1.5">
             <div className="mb-3 text-[10px] font-black uppercase tracking-wide text-slate-500">Pipeline Funnel</div>
             <FunnelStep
-              label="Leads"
+              label={T.saleLeads}
               count={leads.total || 0}
               rate={100}
               color="bg-[#0B3B2E]"
               rateLabel="Starting point"
             />
             <FunnelStep
-              label="Offers"
+              label={T.saleOffers}
               count={offers.total || 0}
               rate={maxCount > 0 ? Math.round(((offers.total || 0) / maxCount) * 100) : 0}
               color="bg-violet-500"
               rateLabel={`${rates.leadsToOffers ?? 0}% conversion`}
             />
             <FunnelStep
-              label="Deals"
+              label={T.saleDeals}
               count={deals.total || 0}
               rate={maxCount > 0 ? Math.round(((deals.total || 0) / maxCount) * 100) : 0}
               color="bg-emerald-500"
@@ -148,12 +150,12 @@ export default function SaleConversionFunnel() {
           {/* Value summary */}
           <div className="grid grid-cols-2 gap-2">
             <div className="border border-slate-200 bg-white px-4 py-3">
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Active Deal Value</div>
+              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Active {T.saleDeal} Value</div>
               <div className="mt-1 text-lg font-black tabular-nums text-[#0B3B2E]">{fmtKES(deals.activeValue ?? 0)}</div>
               <div className="mt-0.5 text-[10px] text-slate-400">{deals.active} active deal{deals.active !== 1 ? "s" : ""}</div>
             </div>
             <div className="border border-emerald-200 bg-emerald-50 px-4 py-3">
-              <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">Closed Deal Value</div>
+              <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">Closed {T.saleDeal} Value</div>
               <div className="mt-1 text-lg font-black tabular-nums text-emerald-700">{fmtKES(deals.closedValue ?? 0)}</div>
               <div className="mt-0.5 text-[10px] text-emerald-600">{deals.closed} closed deal{deals.closed !== 1 ? "s" : ""}</div>
             </div>
@@ -163,7 +165,7 @@ export default function SaleConversionFunnel() {
           <div className="grid grid-cols-2 gap-3">
             {/* Leads by status */}
             <div className="border border-slate-200 bg-white">
-              <div className="border-b border-slate-100 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-500">Leads by Status</div>
+              <div className="border-b border-slate-100 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-500">{T.saleLeads} by Status</div>
               <table className="w-full text-xs">
                 <tbody>
                   {LEAD_STATUSES.map(({ key, color }) => (
@@ -194,7 +196,7 @@ export default function SaleConversionFunnel() {
 
             {/* Offers by status */}
             <div className="border border-slate-200 bg-white">
-              <div className="border-b border-slate-100 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-500">Offers by Status</div>
+              <div className="border-b border-slate-100 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-500">{T.saleOffers} by Status</div>
               <table className="w-full text-xs">
                 <tbody>
                   {OFFER_STATUSES.map(({ key, color }) => (

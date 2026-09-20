@@ -11,6 +11,7 @@ import AmountInput from "./AmountInput";
 import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
+import { useTerms } from "../../hooks/useTerm";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
 import MilikTable from "../../components/common/MilikTable";
@@ -34,10 +35,10 @@ const TYPE_BADGE = {
   other:         "border-slate-200 bg-slate-50 text-slate-600",
 };
 
-const PAYMENT_TABLE_COLS = [
+const paymentTableCols = (T) => [
   { label: "Receipt No." },
-  { label: "Deal" },
-  { label: "Property / Buyer" },
+  { label: T.saleDeal },
+  { label: `Property / ${T.saleBuyer}` },
   { label: "Type" },
   { label: "Method" },
   { label: "Reference" },
@@ -158,6 +159,7 @@ function EditPaymentModal({ target, cashbookOptions, hasCashbooks, saving, onClo
 }
 
 function RecordPaymentModal({ deals, activeDealOptions, cashbookOptions, hasCashbooks, saving, onClose, onSubmit }) {
+  const T = useTerms("saleDeal");
   const [form, setForm] = useState(EMPTY_FORM);
   const [selectedDeal, setSelectedDeal] = useState(null);
 
@@ -183,14 +185,14 @@ function RecordPaymentModal({ deals, activeDealOptions, cashbookOptions, hasCash
       <div className="flex flex-col gap-3">
         {/* Deal selector */}
         <div>
-          <AppSelect label="Deal *" value={form.deal} onChange={(v) => handleDealSelect(v ?? "")} options={activeDealOptions} placeholder="Select active deal…" size="md" searchable />
+          <AppSelect label={`${T.saleDeal} *`} value={form.deal} onChange={(v) => handleDealSelect(v ?? "")} options={activeDealOptions} placeholder={`Select active ${T.saleDeal.toLowerCase()}…`} size="md" searchable />
         </div>
 
         {/* Deal balance summary */}
         {selectedDeal && (
           <div className="grid grid-cols-3 gap-2 border border-slate-200 bg-slate-50 px-3 py-2 text-[10px]">
             <div>
-              <div className="font-black uppercase tracking-wider text-slate-400">Deal Value</div>
+              <div className="font-black uppercase tracking-wider text-slate-400">{T.saleDeal} Value</div>
               <div className="mt-0.5 font-black text-slate-800">{fmtKES(selectedDeal.agreedPrice)}</div>
             </div>
             <div>
@@ -279,6 +281,8 @@ function RecordPaymentModal({ deals, activeDealOptions, cashbookOptions, hasCash
 }
 
 const SalePayments = () => {
+  const T = useTerms("saleDeal", "saleDeals");
+  const paymentCols = useMemo(() => paymentTableCols(T), [T]);
   const confirm        = useConfirm();
   const queryClient    = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
@@ -347,7 +351,7 @@ const SalePayments = () => {
 
   const handleCreate = async (form) => {
     if (!form.deal || !form.amount || !form.paymentDate) {
-      toast.warn("Deal, amount and date are required");
+      toast.warn(`${T.saleDeal}, amount and date are required`);
       return;
     }
     if (!form.cashbook && cashbookAccounts.length > 0) {
@@ -482,7 +486,7 @@ const SalePayments = () => {
           placeholder="Receipt no. / buyer…"
           minWidth="130px"
         />
-        <AppSelect value={dealFilter} onChange={(v) => { setDealFilter(v ?? ""); setPage(1); }} options={dealFilterOptions} placeholder="All Deals" clearable size="sm" searchable />
+        <AppSelect value={dealFilter} onChange={(v) => { setDealFilter(v ?? ""); setPage(1); }} options={dealFilterOptions} placeholder={`All ${T.saleDeals}`} clearable size="sm" searchable />
         <AppSelect value={typeFilter} onChange={(v) => { setTypeFilter(v ?? ""); setPage(1); }} options={PAYMENT_TYPE_OPTIONS} placeholder="All Types" clearable size="sm" />
         <AppSelect value={methodFilter} onChange={(v) => { setMethodFilter(v ?? ""); setPage(1); }} options={PAYMENT_METHOD_OPTIONS} placeholder="All Methods" clearable size="sm" />
         <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
@@ -496,7 +500,7 @@ const SalePayments = () => {
       {/* Table */}
       <div className="flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm">
         <MilikTable
-          columns={PAYMENT_TABLE_COLS}
+          columns={paymentCols}
           rows={payments}
           loading={loading}
           empty={`No payments found.${hasFilters ? " Try clearing filters." : ""}`}

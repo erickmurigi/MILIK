@@ -14,6 +14,7 @@ import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
 import { inputClass, labelClass } from "../../utils/formStyles";
+import { useTerms, TERM_DEFAULTS } from "../../hooks/useTerm";
 
 const PAGE_SIZE = 50;
 
@@ -26,7 +27,9 @@ const blankForm = {
 const STATUS_OPTIONS         = [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }];
 const COMM_TYPE_FILTER_OPTIONS = [{ value: "percentage", label: "Percentage" }, { value: "flat", label: "Flat" }];
 const COMM_TYPE_FORM_OPTIONS = [{ value: "percentage", label: "Percentage (%)" }, { value: "flat", label: "Flat Amount (KES)" }];
-const AGENT_HEADERS = ["Agent No.", "Name", "Phone", "Email", "Commission", "Deals", "Status", "Actions"];
+const agentHeaders = (T) => [`${T.saleAgent} No.`, "Name", "Phone", "Email", "Commission", T.saleDeals, "Status", "Actions"];
+// The stock word keeps its "Sales" prefix ("Sales Agent"); a renamed word stands on its own.
+const salesAgentLabel = (agent) => (agent === TERM_DEFAULTS.saleAgent ? `Sales ${agent}` : agent);
 
 // One table row — memoised so unrelated page state (search text, modal open/close, ...) doesn't re-render every row.
 const AgentRow = React.memo(function AgentRow({ row, onPerformance, onPrint, onEdit, onDelete }) {
@@ -60,17 +63,18 @@ const AgentRow = React.memo(function AgentRow({ row, onPerformance, onPrint, onE
 
 // Modal owns its form state so keystrokes never re-render the page or its rows.
 function AgentFormModal({ editingId, initial, saving, onClose, onSubmit }) {
+  const T = useTerms("saleAgent");
   const [form, setForm] = useState(initial);
   const f = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
   return (
     <Modal
-      title={editingId ? "Edit Agent" : "New Sales Agent"}
+      title={editingId ? `Edit ${T.saleAgent}` : `New ${salesAgentLabel(T.saleAgent)}`}
       onClose={onClose}
       footer={
         <>
           <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
           <button type="button" onClick={() => onSubmit(form)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-            {saving ? "Saving…" : editingId ? "Update Agent" : "Save Agent"}
+            {saving ? "Saving…" : editingId ? `Update ${T.saleAgent}` : `Save ${T.saleAgent}`}
           </button>
         </>
       }
@@ -112,6 +116,7 @@ function AgentFormModal({ editingId, initial, saving, onClose, onSubmit }) {
 }
 
 const SaleAgents = () => {
+  const T              = useTerms("saleAgent", "saleAgents", "saleDeals");
   const confirm        = useConfirm();
   const queryClient    = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
@@ -126,6 +131,7 @@ const SaleAgents = () => {
   const [pageSize,     setPageSize]     = useTabState("/sale/agents:pageSize", PAGE_SIZE);
 
   const biz = currentCompany?._id;
+  const AGENT_HEADERS = useMemo(() => agentHeaders(T), [T]);
 
   const { data: agentsData, isLoading: loading, isFetching, error } = useQuery({
     queryKey: ["sale-agents", biz, debouncedSearch, statusFilter, commTypeFilt, page, pageSize],
@@ -135,7 +141,7 @@ const SaleAgents = () => {
     staleTime: 30_000,
   });
 
-  useEffect(() => { if (error) toast.error("Failed to load agents"); }, [error]);
+  useEffect(() => { if (error) toast.error(`Failed to load ${T.saleAgents.toLowerCase()}`); }, [error, T.saleAgents]);
 
   const { data: saleSettings } = useQuery({
     queryKey: ["sale-settings", biz],
@@ -180,24 +186,24 @@ const SaleAgents = () => {
       else await saleApi.createAgent(payload);
       invalidate();
       setAgentModal(null);
-      toast.success(`Agent ${editingId ? "updated" : "registered"}`);
+      toast.success(`${T.saleAgent} ${editingId ? "updated" : "registered"}`);
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to save agent");
+      toast.error(err?.response?.data?.message || `Failed to save ${T.saleAgent.toLowerCase()}`);
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = useCallback(async (row) => {
-    if (!await confirm({ title: "Remove Agent", message: `Remove agent "${row.fullName}"?`, confirmText: "Remove", isDangerous: true })) return;
+    if (!await confirm({ title: `Remove ${T.saleAgent}`, message: `Remove ${T.saleAgent.toLowerCase()} "${row.fullName}"?`, confirmText: "Remove", isDangerous: true })) return;
     try {
       await saleApi.deleteAgent(row._id);
       invalidate();
-      toast.success("Agent removed");
+      toast.success(`${T.saleAgent} removed`);
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Cannot remove this agent");
+      toast.error(err?.response?.data?.message || `Cannot remove this ${T.saleAgent.toLowerCase()}`);
     }
-  }, [confirm, invalidate]);
+  }, [confirm, invalidate, T.saleAgent]);
 
   const printAgent = useCallback((row) => {
     const co        = currentCompany || {};
@@ -215,9 +221,9 @@ const SaleAgents = () => {
     const commDisplay = row.commissionType === "percentage" ? `${row.commissionRate}%` : `${fmtKES(row.commissionRate)} flat`;
     const printedOn = new Date().toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" });
     const win = window.open("", "_blank", "width=900,height=680");
-    if (!win) { toast.warn("Allow pop-ups to print the agent profile"); return; }
+    if (!win) { toast.warn(`Allow pop-ups to print the ${T.saleAgent.toLowerCase()} profile`); return; }
     win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-<title>Agent Profile — ${esc(row.agentNumber)}</title>
+<title>${esc(T.saleAgent)} Profile — ${esc(row.agentNumber)}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font-size:12px}
@@ -239,14 +245,14 @@ body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font
   <div>${logoHtml}</div>
   <div><div class="co-name">${esc(coName)}</div>${coInfo ? `<div class="co-sub">${esc(coInfo)}</div>` : ""}</div>
   <div>
-    <div class="doc-type">Sales Agent</div>
+    <div class="doc-type">${esc(salesAgentLabel(T.saleAgent))}</div>
     <div class="doc-no">${esc(row.agentNumber)}</div>
     <div class="badge">${esc(String(row.status || "").toUpperCase())}</div>
   </div>
 </div>
 <div class="comm-box">
   <div><div class="comm-label">Commission Rate</div><div class="comm-val">${esc(commDisplay)}</div><div class="comm-label" style="margin-top:4px">Type: ${esc(row.commissionType)}</div></div>
-  <div style="text-align:right"><div class="comm-label">Agent Code</div><div style="font-size:18px;font-weight:900;font-family:monospace;color:#0f172a;margin-top:4px">${esc(row.agentNumber)}</div></div>
+  <div style="text-align:right"><div class="comm-label">${esc(T.saleAgent)} Code</div><div style="font-size:18px;font-weight:900;font-family:monospace;color:#0f172a;margin-top:4px">${esc(row.agentNumber)}</div></div>
 </div>
 <div class="grid">
   <div class="field"><div class="fl">Full Name</div><div class="fv">${esc(row.fullName)}</div></div>
@@ -256,18 +262,18 @@ body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font
   <div class="field"><div class="fl">Status</div><div class="fv">${esc(row.status)}</div></div>
 </div>
 ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:11px;color:#334155;line-height:1.6"><div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:4px">Notes</div>${esc(row.notes)}</div>` : ""}
-<div class="notice">Agent profile issued by ${esc(coName)} • Printed: ${esc(printedOn)}</div>
+<div class="notice">${esc(T.saleAgent)} profile issued by ${esc(coName)} • Printed: ${esc(printedOn)}</div>
 </body></html>`);
     win.document.close();
     setTimeout(() => { win.focus(); win.print(); }, 400);
-  }, [currentCompany]);
+  }, [currentCompany, T.saleAgent]);
 
   const handlePerformance = useCallback((id) => navigate(`/sale/agents/${id}/performance`), [navigate]);
 
   return (
     <PropertySaleShell>
       <SaleFilterBar
-        leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} agent{total !== 1 ? "s" : ""}</span>}
+        leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} {(total === 1 ? T.saleAgent : T.saleAgents).toLowerCase()}</span>}
         onReset={() => { setSearch(""); setStatusFilter(""); setCommTypeFilt(""); setPage(1); }}
         activeCount={[search, statusFilter, commTypeFilt].filter(Boolean).length}
         trailing={
@@ -276,12 +282,12 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
               <FaRedoAlt size={8} className={isFetching ? "animate-spin" : ""} /> Refresh
             </button>
             <button type="button" onClick={openCreate} className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]">
-              <FaPlus size={8} /> New Agent
+              <FaPlus size={8} /> New {T.saleAgent}
             </button>
           </>
         }
       >
-        <FilterSearch value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search agents…" />
+        <FilterSearch value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder={`Search ${T.saleAgents.toLowerCase()}…`} />
         <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
         <AppSelect value={commTypeFilt} onChange={(v) => { setCommTypeFilt(v ?? ""); setPage(1); }} options={COMM_TYPE_FILTER_OPTIONS} placeholder="All Comm. Types" clearable size="sm" />
       </SaleFilterBar>
@@ -292,16 +298,16 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
           <table className="w-full min-w-[640px] text-xs border-collapse">
             <thead>
               <tr className="bg-[#0B3B2E]">
-                {AGENT_HEADERS.map((h) => (
-                  <th key={h} className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white ${h === "Actions" || h === "Deals" ? "text-right" : "text-left"}`}>{h}</th>
+                {AGENT_HEADERS.map((h, i) => (
+                  <th key={h} className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white ${i === 5 || i === 7 ? "text-right" : "text-left"}`}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={8} className="px-3 py-10 text-center text-xs text-slate-400">Loading agents…</td></tr>
+                <tr><td colSpan={8} className="px-3 py-10 text-center text-xs text-slate-400">Loading {T.saleAgents.toLowerCase()}…</td></tr>
               ) : agents.length === 0 ? (
-                <tr><td colSpan={8} className="px-3 py-10 text-center text-xs text-slate-400">No agents found.</td></tr>
+                <tr><td colSpan={8} className="px-3 py-10 text-center text-xs text-slate-400">No {T.saleAgents.toLowerCase()} found.</td></tr>
               ) : agents.map((row) => (
                 <AgentRow key={row._id} row={row} onPerformance={handlePerformance} onPrint={printAgent} onEdit={openEdit} onDelete={handleDelete} />
               ))}

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { saleApi, fmtKES } from "../../services/propertySaleApi";
 import { fmtDate } from "../../utils/dates";
+import { useTerms } from "../../hooks/useTerm";
 
 const fmtLabel = (s) => String(s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
@@ -54,6 +55,7 @@ const fetchAllPages = async (listFn, params = {}) => {
 const EMPTY = [];
 
 const SaleAgentPerformance = () => {
+  const T        = useTerms("saleAgent", "saleAgents", "saleDeal", "saleDeals", "saleBuyer");
   const { id }   = useParams();
   const navigate = useNavigate();
   const company  = useSelector((s) => s.company?.currentCompany);
@@ -92,7 +94,7 @@ const SaleAgentPerformance = () => {
   const deals       = perf?.deals ?? EMPTY;
   const commissions = perf?.commissions ?? EMPTY;
   const truncated   = !!perf?.truncated;
-  const error       = loadError ? (loadError?.response?.data?.message || loadError?.message || "Failed to load agent") : null;
+  const error       = loadError ? (loadError?.response?.data?.message || loadError?.message || `Failed to load ${T.saleAgent.toLowerCase()}`) : null;
 
   if (loading) return <div className="flex h-screen items-center justify-center text-sm text-slate-500">Loading performance data…</div>;
   if (error)   return <div className="flex h-screen items-center justify-center text-sm text-rose-600">{error}</div>;
@@ -110,7 +112,7 @@ const SaleAgentPerformance = () => {
   return (
     <div className="min-h-screen bg-slate-100 p-6 print:bg-white print:p-0">
       <div id="sale-print-toolbar" className="mx-auto mb-4 flex max-w-[860px] items-center justify-between gap-3 print:hidden">
-        <button onClick={() => navigate("/sale/agents")} className="border border-slate-300 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">← Back to Agents</button>
+        <button onClick={() => navigate("/sale/agents")} className="border border-slate-300 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">← Back to {T.saleAgents}</button>
         <button onClick={() => window.print()} className="bg-[#0B3B2E] px-5 py-1.5 text-xs font-black text-white hover:bg-[#07271e]">Print / Save PDF</button>
       </div>
 
@@ -131,7 +133,7 @@ const SaleAgentPerformance = () => {
               </div>
             </div>
             <div className="text-right">
-              <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Agent Performance</div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">{T.saleAgent} Performance</div>
               <div className="mt-1 font-mono text-lg font-black text-[#0B3B2E]">{agent.agentNumber}</div>
               <div className="mt-1 text-[11px] text-slate-500">Printed: {fmtDate(new Date())}</div>
               <div className={`mt-1.5 inline-block border px-2 py-0.5 text-[9px] font-black uppercase ${agent.status === "active" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-500"}`}>{agent.status}</div>
@@ -141,7 +143,7 @@ const SaleAgentPerformance = () => {
           {/* Agent Profile */}
           <div className="mb-6 grid grid-cols-2 gap-4">
             <div className="border border-slate-200 p-4">
-              <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Agent Details</div>
+              <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">{T.saleAgent} Details</div>
               <div className="text-base font-black text-slate-900">{agent.fullName}</div>
               {agent.phone && <div className="text-[11px] text-slate-500 mt-0.5">{agent.phone}</div>}
               {agent.email && <div className="text-[11px] text-slate-500">{agent.email}</div>}
@@ -167,13 +169,13 @@ const SaleAgentPerformance = () => {
           {/* Performance KPIs */}
           <div className="mb-6 grid grid-cols-4 gap-0 border border-slate-200">
             {[
-              ["Total Deals",     deals.length,                false],
-              ["Closed Deals",    closedDeals.length,          false],
-              ["Active Deals",    activeDeals.length,          false],
+              [`Total ${T.saleDeals}`,     deals.length,                false],
+              [`Closed ${T.saleDeals}`,    closedDeals.length,          false],
+              [`Active ${T.saleDeals}`,    activeDeals.length,          false],
               ["Total Value",     fmtKES(totalDealsValue),     false],
               ["Commissions Paid",fmtKES(totalCommEarned),     false],
               ["Comm. Pending",   fmtKES(totalCommPending),    totalCommPending > 0],
-              ["Deals — Active",  fmtKES(activeDeals.reduce((s,d) => s + Number(d.agreedPrice||0), 0)), false],
+              [`${T.saleDeals} — Active`,  fmtKES(activeDeals.reduce((s,d) => s + Number(d.agreedPrice||0), 0)), false],
               ["Close Rate",      deals.length > 0 ? `${Math.round((closedDeals.length / deals.length) * 100)}%` : "—", false],
             ].map(([label, val, warn], i) => (
               <div key={label} className={`border-b border-r border-slate-200 last:border-r-0 px-4 py-3 ${i >= 4 ? "border-b-0" : ""}`}>
@@ -185,18 +187,18 @@ const SaleAgentPerformance = () => {
 
           {/* Deals */}
           <div className="mb-6">
-            <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Deals ({deals.length})</div>
+            <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">{T.saleDeals} ({deals.length})</div>
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="bg-[#0B3B2E] text-white">
-                  {["Deal No.", "Property", "Buyer", "Agreed Price", "Paid", "Balance", "Date", "Status"].map((h) => (
+                  {[`${T.saleDeal} No.`, "Property", T.saleBuyer, "Agreed Price", "Paid", "Balance", "Date", "Status"].map((h) => (
                     <th key={h} className="px-3 py-2 text-left text-[9px] font-black uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {deals.length === 0 ? (
-                  <tr><td colSpan={8} className="px-3 py-4 text-center text-slate-400">No deals found.</td></tr>
+                  <tr><td colSpan={8} className="px-3 py-4 text-center text-slate-400">No {T.saleDeals.toLowerCase()} found.</td></tr>
                 ) : deals.map((d, i) => (
                   <tr key={d._id} className={`border-b border-slate-100 ${i % 2 ? "bg-slate-50" : ""}`}>
                     <td className="px-3 py-2 font-mono font-black text-[#0B3B2E]">{d.dealNumber}</td>
@@ -219,7 +221,7 @@ const SaleAgentPerformance = () => {
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="bg-[#0B3B2E] text-white">
-                  {["Comm. No.", "Deal", "Sale Amount", "Rate", "Commission", "Status", "Payout Date"].map((h) => (
+                  {["Comm. No.", T.saleDeal, "Sale Amount", "Rate", "Commission", "Status", "Payout Date"].map((h) => (
                     <th key={h} className="px-3 py-2 text-left text-[9px] font-black uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
@@ -258,7 +260,7 @@ const SaleAgentPerformance = () => {
 
           {/* Footer */}
           <div className="border-t border-slate-200 pt-4 text-center text-[10px] text-slate-400">
-            Agent performance report for {agent.fullName} ({agent.agentNumber}) · Issued by {coName} · Printed: {fmtDate(new Date())}
+            {T.saleAgent} performance report for {agent.fullName} ({agent.agentNumber}) · Issued by {coName} · Printed: {fmtDate(new Date())}
           </div>
         </div>
       </div>

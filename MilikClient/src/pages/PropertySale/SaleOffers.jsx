@@ -10,6 +10,7 @@ import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
 import AmountInput from "./AmountInput";
 import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
+import { useTerms, prefixedTerm } from "../../hooks/useTerm";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
@@ -31,20 +32,20 @@ const OFFER_STATUS_FILTER_OPTIONS = ["pending", "negotiating", "accepted", "reje
   value: s,
   label: s === "negotiating" ? "Counter Active" : s.charAt(0).toUpperCase() + s.slice(1),
 }));
-const OFFER_STATUS_UPDATE_OPTIONS = [
-  { value: "negotiating", label: "Send Counter Offer" },
-  { value: "accepted",    label: "Accept Offer / Counter" },
+const offerStatusUpdateOptions = (T) => [
+  { value: "negotiating", label: `Send Counter ${T.saleOffer}` },
+  { value: "accepted",    label: `Accept ${T.saleOffer} / Counter` },
   { value: "rejected",    label: "Reject" },
   { value: "expired",     label: "Mark as Expired" },
-  { value: "withdrawn",   label: "Withdrawn by Buyer" },
+  { value: "withdrawn",   label: `Withdrawn by ${T.saleBuyer}` },
 ];
 
-const OFFER_TABLE_COLS = [
-  { label: "Offer No." },
+const offerTableCols = (T) => [
+  { label: `${T.saleOffer} No.` },
   { label: "Property" },
-  { label: "Buyer" },
-  { label: "Agent" },
-  { label: "Offer Amount",      align: "right" },
+  { label: T.saleBuyer },
+  { label: T.saleAgent },
+  { label: `${T.saleOffer} Amount`,      align: "right" },
   { label: "Counter / Final",   align: "right" },
   { label: "Validity" },
   { label: "Status" },
@@ -56,7 +57,8 @@ const offerRowClassName = (o) => {
   return isCounterActive ? "!bg-[#F1F6F3]" : "";
 };
 
-const renderOfferRow = (o) => {
+// Built once per terminology (memoized in the page) so MilikTable's React.memo still holds.
+const offerRowRenderer = (T) => (o) => {
   const hasCounter = !!o.counterOfferAmount;
   const isCounterActive = o.status === "negotiating" && hasCounter;
   const isAccepted = o.status === "accepted";
@@ -83,7 +85,7 @@ const renderOfferRow = (o) => {
               {isCounterActive && <span className="inline-flex border border-violet-300 bg-violet-100 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-violet-700">counter</span>}
               {isAccepted && <span className="inline-flex border border-emerald-300 bg-emerald-100 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-emerald-700">final</span>}
             </div>
-            {counterDelta !== null && <div className={`text-[10px] font-bold ${counterDelta > 0 ? "text-rose-500" : "text-emerald-500"}`}>{counterDelta > 0 ? "+" : ""}{counterDelta}% vs offer</div>}
+            {counterDelta !== null && <div className={`text-[10px] font-bold ${counterDelta > 0 ? "text-rose-500" : "text-emerald-500"}`}>{counterDelta > 0 ? "+" : ""}{counterDelta}% vs {T.saleOffer.toLowerCase()}</div>}
           </div>
         ) : isAccepted ? (
           <div>
@@ -106,29 +108,30 @@ const renderOfferRow = (o) => {
 // Submit handlers stay in the page (they own the shared `saving`/`converting` in-flight guards).
 
 function CreateOfferModal({ saving, listingFormOptions, buyerFormOptions, activeAgentOptions, onClose, onSubmit }) {
+  const T = useTerms("saleOffer", "saleListing", "saleBuyer", "saleAgent");
   const [form, setForm] = useState(EMPTY_FORM);
   return (
     <div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
       <form onSubmit={(e) => { e.preventDefault(); onSubmit(form); }} className="flex w-full max-w-lg flex-col bg-white shadow-2xl sm:border sm:border-slate-200 max-h-[92dvh] rounded-t-2xl sm:rounded-none">
         <div className="flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
           <div>
-            <div className="text-sm font-extrabold uppercase tracking-wide">Record New Offer</div>
-            <div className="text-xs font-semibold text-white/70">Formal purchase offer against a listing</div>
+            <div className="text-sm font-extrabold uppercase tracking-wide">Record New {T.saleOffer}</div>
+            <div className="text-xs font-semibold text-white/70">Formal purchase {T.saleOffer.toLowerCase()} against the {T.saleListing.toLowerCase()}</div>
           </div>
           <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
         </div>
         <div className="grid gap-4 overflow-y-auto p-5 md:grid-cols-2">
           <div className="md:col-span-2">
-            <AppSelect label="Listing *" value={form.listing} onChange={(v) => setForm((f) => ({ ...f, listing: v ?? "" }))} options={listingFormOptions} placeholder="Select listing" size="md" searchable />
+            <AppSelect label={`${T.saleListing} *`} value={form.listing} onChange={(v) => setForm((f) => ({ ...f, listing: v ?? "" }))} options={listingFormOptions} placeholder={`Select ${T.saleListing.toLowerCase()}`} size="md" searchable />
           </div>
           <div>
-            <AppSelect label="Buyer *" value={form.buyer} onChange={(v) => setForm((f) => ({ ...f, buyer: v ?? "" }))} options={buyerFormOptions} placeholder="Select buyer" size="md" searchable />
+            <AppSelect label={`${T.saleBuyer} *`} value={form.buyer} onChange={(v) => setForm((f) => ({ ...f, buyer: v ?? "" }))} options={buyerFormOptions} placeholder={`Select ${T.saleBuyer.toLowerCase()}`} size="md" searchable />
           </div>
           <div>
-            <AppSelect label="Sales Agent" value={form.agent} onChange={(v) => setForm((f) => ({ ...f, agent: v ?? "" }))} options={activeAgentOptions} placeholder="Unassigned" size="md" searchable clearable />
+            <AppSelect label={prefixedTerm("Sales", T.saleAgent, "saleAgent")} value={form.agent} onChange={(v) => setForm((f) => ({ ...f, agent: v ?? "" }))} options={activeAgentOptions} placeholder="Unassigned" size="md" searchable clearable />
           </div>
           <div>
-            <label className="mb-0.5 block text-xs font-semibold text-slate-700">Offer Amount (KES) *</label>
+            <label className="mb-0.5 block text-xs font-semibold text-slate-700">{T.saleOffer} Amount (KES) *</label>
             <AmountInput
               value={form.offerAmount}
               onChange={(v) => setForm((f) => ({ ...f, offerAmount: v }))}
@@ -152,7 +155,7 @@ function CreateOfferModal({ saving, listingFormOptions, buyerFormOptions, active
         <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
           <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
           <button type="submit" disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-            {saving ? "Saving…" : "Record Offer"}
+            {saving ? "Saving…" : `Record ${T.saleOffer}`}
           </button>
         </div>
       </form>
@@ -161,13 +164,15 @@ function CreateOfferModal({ saving, listingFormOptions, buyerFormOptions, active
 }
 
 function OfferStatusModal({ offer, saving, onClose, onSubmit }) {
+  const T = useTerms("saleOffer", "saleBuyer", "saleDeal");
+  const statusUpdateOptions = useMemo(() => offerStatusUpdateOptions(T), [T]);
   const [statusForm, setStatusForm] = useState(() => ({ ...EMPTY_STATUS, counterOfferAmount: offer.counterOfferAmount || "" }));
   return (
     <div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
       <form onSubmit={(e) => { e.preventDefault(); onSubmit(statusForm); }} className="flex w-full max-w-md flex-col bg-white shadow-2xl sm:border sm:border-slate-200 max-h-[92dvh] rounded-t-2xl sm:rounded-none">
         <div className="flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 bg-slate-800 px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
           <div>
-            <div className="text-sm font-extrabold uppercase tracking-wide">Update Offer Status</div>
+            <div className="text-sm font-extrabold uppercase tracking-wide">Update {T.saleOffer} Status</div>
             <div className="text-xs font-semibold text-white/70">{offer.offerNumber} — {offer.listing?.title || ""}</div>
           </div>
           <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
@@ -175,7 +180,7 @@ function OfferStatusModal({ offer, saving, onClose, onSubmit }) {
         <div className="grid gap-4 overflow-y-auto p-5">
           <div className="grid grid-cols-2 gap-2">
             <div className="border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
-              <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Buyer's Offer</div>
+              <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">{T.saleBuyer}'s {T.saleOffer}</div>
               <div className="font-black text-slate-900">{fmtKES(offer.offerAmount)}</div>
             </div>
             {offer.counterOfferAmount ? (
@@ -192,12 +197,12 @@ function OfferStatusModal({ offer, saving, onClose, onSubmit }) {
           </div>
 
           <div>
-            <AppSelect label="New Status *" value={statusForm.status} onChange={(v) => setStatusForm((f) => ({ ...f, status: v ?? "" }))} options={OFFER_STATUS_UPDATE_OPTIONS} placeholder="Select status" size="md" />
+            <AppSelect label="New Status *" value={statusForm.status} onChange={(v) => setStatusForm((f) => ({ ...f, status: v ?? "" }))} options={statusUpdateOptions} placeholder="Select status" size="md" />
           </div>
 
           {statusForm.status === "negotiating" && (
             <div>
-              <label className="mb-0.5 block text-xs font-semibold text-slate-700">Counter-Offer Amount (KES) *</label>
+              <label className="mb-0.5 block text-xs font-semibold text-slate-700">Counter-{T.saleOffer} Amount (KES) *</label>
               <AmountInput
                 value={statusForm.counterOfferAmount}
                 onChange={(v) => setStatusForm((f) => ({ ...f, counterOfferAmount: v }))}
@@ -207,7 +212,7 @@ function OfferStatusModal({ offer, saving, onClose, onSubmit }) {
               {statusForm.counterOfferAmount && offer.offerAmount && (
                 <div className={`mt-1 text-[10px] font-bold ${Number(statusForm.counterOfferAmount) > Number(offer.offerAmount) ? "text-rose-500" : "text-emerald-500"}`}>
                   {Number(statusForm.counterOfferAmount) > Number(offer.offerAmount) ? "+" : ""}
-                  {Math.round(((Number(statusForm.counterOfferAmount) - Number(offer.offerAmount)) / Number(offer.offerAmount)) * 100)}% vs buyer's offer
+                  {Math.round(((Number(statusForm.counterOfferAmount) - Number(offer.offerAmount)) / Number(offer.offerAmount)) * 100)}% vs {T.saleBuyer.toLowerCase()}'s {T.saleOffer.toLowerCase()}
                 </div>
               )}
             </div>
@@ -217,8 +222,8 @@ function OfferStatusModal({ offer, saving, onClose, onSubmit }) {
             <div className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] text-emerald-800">
               <span className="font-black">Accepted price: </span>
               <span className="font-bold">{fmtKES(offer.counterOfferAmount || offer.offerAmount)}</span>
-              {offer.counterOfferAmount && <span className="ml-1 opacity-70">(counter offer)</span>}
-              <div className="mt-1 opacity-80">After accepting, use the <strong>Deal</strong> button to convert this offer into a transaction.</div>
+              {offer.counterOfferAmount && <span className="ml-1 opacity-70">(counter {T.saleOffer.toLowerCase()})</span>}
+              <div className="mt-1 opacity-80">After accepting, use the <strong>{T.saleDeal}</strong> button to convert this {T.saleOffer.toLowerCase()} into a transaction.</div>
             </div>
           )}
 
@@ -241,20 +246,21 @@ function OfferStatusModal({ offer, saving, onClose, onSubmit }) {
 }
 
 function ConvertDealModal({ offer, converting, activeAgentOptions, onClose, onSubmit }) {
+  const T = useTerms("saleOffer", "saleDeal", "saleBuyer", "saleAgent");
   const [dealForm, setDealForm] = useState(() => ({
     listing: offer.listing?._id || offer.listing || "",
     buyer: offer.buyer?._id || offer.buyer || "",
     agent: offer.agent?._id || offer.agent || "",
     agreedPrice: String(offer.counterOfferAmount || offer.offerAmount || ""),
     dealDate: todayISO(),
-    notes: `Converted from offer ${offer.offerNumber}`,
+    notes: `Converted from ${T.saleOffer.toLowerCase()} ${offer.offerNumber}`,
   }));
   return (
     <div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
       <form onSubmit={(e) => { e.preventDefault(); onSubmit(dealForm); }} className="flex w-full max-w-lg flex-col bg-white shadow-2xl sm:border sm:border-slate-200 max-h-[92dvh] rounded-t-2xl sm:rounded-none">
         <div className="flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
           <div>
-            <div className="text-sm font-extrabold uppercase tracking-wide">Convert Offer to Deal</div>
+            <div className="text-sm font-extrabold uppercase tracking-wide">Convert {T.saleOffer} to {T.saleDeal}</div>
             <div className="text-xs font-semibold text-white/70">{offer.offerNumber} — {offer.buyer?.fullName || ""}</div>
           </div>
           <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
@@ -267,7 +273,7 @@ function ConvertDealModal({ offer, converting, activeAgentOptions, onClose, onSu
                 <div className="font-black text-emerald-900">{fmtKES(offer.listing?.askingPrice)}</div>
               </div>
               <div className="text-center">
-                <div className="text-[10px] font-black uppercase tracking-wider text-emerald-500">Buyer Offered</div>
+                <div className="text-[10px] font-black uppercase tracking-wider text-emerald-500">{T.saleBuyer} Offered</div>
                 <div className="font-black text-emerald-900">{fmtKES(offer.offerAmount)}</div>
               </div>
               <div className="text-center">
@@ -294,16 +300,16 @@ function ConvertDealModal({ offer, converting, activeAgentOptions, onClose, onSu
           </div>
 
           <div>
-            <label className="mb-0.5 block text-xs font-semibold text-slate-700">Deal Date *</label>
+            <label className="mb-0.5 block text-xs font-semibold text-slate-700">{T.saleDeal} Date *</label>
             <input type="date" value={dealForm.dealDate}
               onChange={(e) => setDealForm((f) => ({ ...f, dealDate: e.target.value }))}
               className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" required />
           </div>
           <div>
-            <AppSelect label="Assign Agent" value={dealForm.agent} onChange={(v) => setDealForm((f) => ({ ...f, agent: v ?? "" }))} options={activeAgentOptions} placeholder="Unassigned" size="md" searchable clearable />
+            <AppSelect label={`Assign ${T.saleAgent}`} value={dealForm.agent} onChange={(v) => setDealForm((f) => ({ ...f, agent: v ?? "" }))} options={activeAgentOptions} placeholder="Unassigned" size="md" searchable clearable />
           </div>
           <div className="md:col-span-2">
-            <label className="mb-0.5 block text-xs font-semibold text-slate-700">Deal Notes</label>
+            <label className="mb-0.5 block text-xs font-semibold text-slate-700">{T.saleDeal} Notes</label>
             <textarea rows={2} value={dealForm.notes}
               onChange={(e) => setDealForm((f) => ({ ...f, notes: e.target.value }))}
               className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" />
@@ -312,7 +318,7 @@ function ConvertDealModal({ offer, converting, activeAgentOptions, onClose, onSu
         <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
           <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
           <button type="submit" disabled={converting} className="inline-flex items-center gap-1 bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-            <FaHandshake className="text-[9px]" /> {converting ? "Creating…" : "Create Deal"}
+            <FaHandshake className="text-[9px]" /> {converting ? "Creating…" : `Create ${T.saleDeal}`}
           </button>
         </div>
       </form>
@@ -321,6 +327,9 @@ function ConvertDealModal({ offer, converting, activeAgentOptions, onClose, onSu
 }
 
 const SaleOffers = () => {
+  const T = useTerms("saleOffer", "saleOffers", "saleListing", "saleListings", "saleBuyer", "saleBuyers", "saleAgent", "saleDeal", "saleDeals", "saleModule");
+  const offerCols = useMemo(() => offerTableCols(T), [T]);
+  const renderOfferRow = useMemo(() => offerRowRenderer(T), [T]);
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const biz = currentCompany?._id;
   const confirm = useConfirm();
@@ -400,17 +409,17 @@ const SaleOffers = () => {
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleCreate = async (form) => {
     if (!form.listing || !form.buyer || !form.offerAmount) {
-      toast.warn("Listing, buyer and offer amount are required");
+      toast.warn(`${T.saleListing}, ${T.saleBuyer.toLowerCase()} and ${T.saleOffer.toLowerCase()} amount are required`);
       return;
     }
     setSaving(true);
     try {
       await saleApi.createOffer({ ...form, business: biz });
-      toast.success("Offer recorded");
+      toast.success(`${T.saleOffer} recorded`);
       setShowCreate(false);
       invalidateWithListings();
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to record offer");
+      toast.error(err?.response?.data?.message || `Failed to record ${T.saleOffer.toLowerCase()}`);
     } finally {
       setSaving(false);
     }
@@ -421,7 +430,7 @@ const SaleOffers = () => {
     setSaving(true);
     try {
       await saleApi.updateOfferStatus(showStatus._id, { ...statusForm, business: biz });
-      toast.success("Offer status updated");
+      toast.success(`${T.saleOffer} status updated`);
       setShowStatus(null);
       invalidateWithListings();
     } catch (err) {
@@ -433,8 +442,8 @@ const SaleOffers = () => {
 
   const handleAcceptCounter = useCallback(async (offer) => {
     if (!await confirm({
-      title: "Accept Counter Offer",
-      message: `Accept the counter offer of ${fmtKES(offer.counterOfferAmount)} for ${offer.offerNumber}? The original offer was ${fmtKES(offer.offerAmount)}.`,
+      title: `Accept Counter ${T.saleOffer}`,
+      message: `Accept the counter ${T.saleOffer.toLowerCase()} of ${fmtKES(offer.counterOfferAmount)} for ${offer.offerNumber}? The original ${T.saleOffer.toLowerCase()} was ${fmtKES(offer.offerAmount)}.`,
       confirmText: "Accept Counter",
     })) return;
     setSaving(true);
@@ -444,19 +453,19 @@ const SaleOffers = () => {
         negotiationNotes: "Counter offer accepted by buyer",
         business: biz,
       });
-      toast.success("Counter offer accepted — offer is now Accepted");
+      toast.success(`Counter ${T.saleOffer.toLowerCase()} accepted — ${T.saleOffer.toLowerCase()} is now Accepted`);
       invalidateWithListings();
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to accept counter offer");
+      toast.error(err?.response?.data?.message || `Failed to accept counter ${T.saleOffer.toLowerCase()}`);
     } finally {
       setSaving(false);
     }
-  }, [confirm, biz, invalidateWithListings]);
+  }, [confirm, biz, invalidateWithListings, T.saleOffer]);
 
   const handleRejectCounter = useCallback(async (offer) => {
     if (!await confirm({
-      title: "Reject Counter Offer",
-      message: `Reject the counter offer for ${offer.offerNumber}? The offer status will be marked as rejected.`,
+      title: `Reject Counter ${T.saleOffer}`,
+      message: `Reject the counter ${T.saleOffer.toLowerCase()} for ${offer.offerNumber}? The ${T.saleOffer.toLowerCase()} status will be marked as rejected.`,
       confirmText: "Reject",
       isDangerous: true,
     })) return;
@@ -467,14 +476,14 @@ const SaleOffers = () => {
         negotiationNotes: "Counter offer rejected by buyer",
         business: biz,
       });
-      toast.success("Offer rejected");
+      toast.success(`${T.saleOffer} rejected`);
       invalidateWithListings();
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to reject offer");
+      toast.error(err?.response?.data?.message || `Failed to reject ${T.saleOffer.toLowerCase()}`);
     } finally {
       setSaving(false);
     }
-  }, [confirm, biz, invalidateWithListings]);
+  }, [confirm, biz, invalidateWithListings, T.saleOffer]);
 
   const handleConvertDeal = async (dealForm) => {
     if (!dealForm.agreedPrice) { toast.warn("Agreed price is required"); return; }
@@ -486,12 +495,12 @@ const SaleOffers = () => {
         expectedClosingDate: dealForm.expectedClosingDate,
         notes:               dealForm.notes,
       });
-      toast.success("Deal created! View it in the Deals section.");
+      toast.success(`${T.saleDeal} created! View it in the ${T.saleDeals} section.`);
       setShowConvertDeal(null);
       invalidateWithListings();
       queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] });
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to create deal");
+      toast.error(err?.response?.data?.message || `Failed to create ${T.saleDeal.toLowerCase()}`);
     } finally {
       setConverting(false);
     }
@@ -499,19 +508,19 @@ const SaleOffers = () => {
 
   const handleDelete = useCallback(async (offer) => {
     if (!await confirm({
-      title: "Delete Offer",
-      message: `Permanently delete offer ${offer.offerNumber}? This cannot be undone.`,
+      title: `Delete ${T.saleOffer}`,
+      message: `Permanently delete ${T.saleOffer.toLowerCase()} ${offer.offerNumber}? This cannot be undone.`,
       confirmText: "Delete",
       isDangerous: true,
     })) return;
     try {
       await saleApi.deleteOffer(offer._id);
-      toast.success("Offer deleted");
+      toast.success(`${T.saleOffer} deleted`);
       invalidateWithListings();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to delete");
     }
-  }, [confirm, invalidateWithListings]);
+  }, [confirm, invalidateWithListings, T.saleOffer]);
 
   const printOffer = useCallback((offer) => {
     const co = currentCompany || {};
@@ -521,7 +530,7 @@ const SaleOffers = () => {
     const logoSrc = typeof co.logo === "string" && /^(https?:\/\/|data:image\/)/i.test(co.logo.trim()) ? co.logo.trim() : "";
     const fmtD = (d) => (d ? new Date(d).toLocaleDateString("en-KE") : "");
     const askingPrice = esc(fmtKES(offer.listing?.askingPrice));
-    const html = `<!DOCTYPE html><html><head><title>Offer — ${esc(offer.offerNumber)}</title>
+    const html = `<!DOCTYPE html><html><head><title>${esc(T.saleOffer)} — ${esc(offer.offerNumber)}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;background:#fff}
@@ -555,38 +564,38 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;background:#fff}
   <div class="brand">${logoSrc ? `<img src="${esc(logoSrc)}" alt="logo"/>` : esc(co.companyName || "MILIK")}</div>
   <div class="co-info"><strong>${esc(co.companyName)}</strong><br/>${esc(co.physicalAddress || co.postalAddress)}<br/>${esc([co.telephone, co.email].filter(Boolean).join(" | "))}<br/>${co.pinNumber ? "PIN: " + esc(co.pinNumber) : ""}</div>
 </div>
-<div class="doc-title"><h1>Purchase Offer Document</h1><p>Formal Expression of Interest / Offer to Purchase</p></div>
+<div class="doc-title"><h1>Purchase ${esc(T.saleOffer)} Document</h1><p>Formal Expression of Interest / ${esc(T.saleOffer)} to Purchase</p></div>
 <div class="ref-bar">
-  <div>Offer Ref: <span>${esc(offer.offerNumber)}</span></div>
+  <div>${esc(T.saleOffer)} Ref: <span>${esc(offer.offerNumber)}</span></div>
   <div>Status: <span>${esc((offer.status || "pending").toUpperCase())}</span></div>
   <div>Dated: <span>${esc(fmtD(offer.createdAt || Date.now()))}</span></div>
 </div>
 <div class="price-box">
-  <div><div class="lbl">Buyer's Offer Price</div><div class="amt">${esc(fmtKES(offer.offerAmount))}</div></div>
+  <div><div class="lbl">${esc(T.saleBuyer)}'s ${esc(T.saleOffer)} Price</div><div class="amt">${esc(fmtKES(offer.offerAmount))}</div></div>
   <div style="text-align:right;font-size:10px;opacity:.8">Asking: ${askingPrice}</div>
 </div>
 ${offer.counterOfferAmount ? `<div class="counter-box">
-  <div><div class="lbl">Counter Offer (Seller)</div><div class="amt">${esc(fmtKES(offer.counterOfferAmount))}</div></div>
-  <div style="text-align:right;font-size:10px;opacity:.8">Delta vs offer: ${esc(`${offer.counterOfferAmount > offer.offerAmount ? "+" : ""}${Math.round(((offer.counterOfferAmount - offer.offerAmount) / offer.offerAmount) * 100)}`)}%</div>
+  <div><div class="lbl">Counter ${esc(T.saleOffer)} (Seller)</div><div class="amt">${esc(fmtKES(offer.counterOfferAmount))}</div></div>
+  <div style="text-align:right;font-size:10px;opacity:.8">Delta vs ${esc(T.saleOffer.toLowerCase())}: ${esc(`${offer.counterOfferAmount > offer.offerAmount ? "+" : ""}${Math.round(((offer.counterOfferAmount - offer.offerAmount) / offer.offerAmount) * 100)}`)}%</div>
 </div>` : ""}
 <div class="sec">Property Details</div>
 <div class="g3">
-  <div class="f"><label>Listing No.</label><span>${esc(offer.listing?.listingNumber || "-")}</span></div>
+  <div class="f"><label>${esc(T.saleListing)} No.</label><span>${esc(offer.listing?.listingNumber || "-")}</span></div>
   <div class="f"><label>Property Title</label><span>${esc(offer.listing?.title || "-")}</span></div>
   <div class="f"><label>Asking Price</label><span>${askingPrice}</span></div>
   <div class="f"><label>Type</label><span style="text-transform:capitalize">${esc(offer.listing?.propertyType || "-")}</span></div>
   <div class="f"><label>Location</label><span>${esc([offer.listing?.location?.area, offer.listing?.location?.city].filter(Boolean).join(", ") || "-")}</span></div>
 </div>
-<div class="sec">Buyer Information</div>
+<div class="sec">${esc(T.saleBuyer)} Information</div>
 <div class="g3">
-  <div class="f"><label>Buyer No.</label><span>${esc(offer.buyer?.buyerNumber || "-")}</span></div>
+  <div class="f"><label>${esc(T.saleBuyer)} No.</label><span>${esc(offer.buyer?.buyerNumber || "-")}</span></div>
   <div class="f"><label>Full Name</label><span>${esc(offer.buyer?.fullName || "-")}</span></div>
   <div class="f"><label>Phone</label><span>${esc(offer.buyer?.phone || "-")}</span></div>
   <div class="f"><label>Email</label><span>${esc(offer.buyer?.email || "-")}</span></div>
   <div class="f"><label>ID / Passport</label><span>${esc(offer.buyer?.idNumber || "-")}</span></div>
 </div>
-${offer.agent ? `<div class="sec">Sales Agent</div><div class="g3">
-  <div class="f"><label>Agent No.</label><span>${esc(offer.agent?.agentNumber || "-")}</span></div>
+${offer.agent ? `<div class="sec">Sales ${esc(T.saleAgent)}</div><div class="g3">
+  <div class="f"><label>${esc(T.saleAgent)} No.</label><span>${esc(offer.agent?.agentNumber || "-")}</span></div>
   <div class="f"><label>Name</label><span>${esc(offer.agent?.fullName || "-")}</span></div>
   <div class="f"><label>Commission</label><span>${esc(offer.agent?.commissionRate || 0)}${offer.agent?.commissionType === "percentage" ? "%" : " KES (Flat)"}</span></div>
 </div>` : ""}
@@ -598,21 +607,21 @@ ${offer.agent ? `<div class="sec">Sales Agent</div><div class="g3">
 ${offer.negotiationNotes ? `<div class="sec">Negotiation Notes</div><div class="notes">${esc(offer.negotiationNotes)}</div>` : ""}
 ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${esc(offer.notes)}</div>` : ""}
 <div class="sigs">
-  <div class="sig"><br/><p>Buyer Signature</p><p style="color:#111">${esc(offer.buyer?.fullName)}</p></div>
-  <div class="sig"><br/><p>Sales Agent</p><p style="color:#111">${esc(offer.agent?.fullName || "Unassigned")}</p></div>
+  <div class="sig"><br/><p>${esc(T.saleBuyer)} Signature</p><p style="color:#111">${esc(offer.buyer?.fullName)}</p></div>
+  <div class="sig"><br/><p>Sales ${esc(T.saleAgent)}</p><p style="color:#111">${esc(offer.agent?.fullName || "Unassigned")}</p></div>
   <div class="sig"><br/><p>Authorized Officer</p><p style="color:#111">${esc(co.companyName)}</p></div>
 </div>
 <div class="footer">
   This document is a formal expression of interest and does not constitute a binding sale agreement until countersigned by all parties and a formal Sale Agreement is executed.
-  &nbsp;|&nbsp; Generated: ${esc(new Date().toLocaleString("en-KE"))} &nbsp;|&nbsp; MILIK Property Sales System
+  &nbsp;|&nbsp; Generated: ${esc(new Date().toLocaleString("en-KE"))} &nbsp;|&nbsp; MILIK ${esc(T.saleModule)} System
 </div>
 </div></body></html>`;
     const w = window.open("", "_blank", "width=900,height=700");
-    if (!w) { toast.warn("Allow pop-ups to print the offer"); return; }
+    if (!w) { toast.warn(`Allow pop-ups to print the ${T.saleOffer.toLowerCase()}`); return; }
     w.document.write(html);
     w.document.close();
     w.onload = () => w.print();
-  }, [currentCompany]);
+  }, [currentCompany, T.saleOffer, T.saleBuyer, T.saleListing, T.saleAgent, T.saleModule]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -627,17 +636,17 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${esc
         </button>
         {isCounterActive && (
           <>
-            <button onClick={() => handleAcceptCounter(o)} disabled={saving} title="Accept Counter Offer" className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40">
+            <button onClick={() => handleAcceptCounter(o)} disabled={saving} title={`Accept Counter ${T.saleOffer}`} className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40">
               <FaCheck size={9} /> Accept
             </button>
-            <button onClick={() => handleRejectCounter(o)} disabled={saving} title="Reject Counter Offer" className="inline-flex items-center gap-1 border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-40">
+            <button onClick={() => handleRejectCounter(o)} disabled={saving} title={`Reject Counter ${T.saleOffer}`} className="inline-flex items-center gap-1 border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-40">
               <FaTimes size={9} /> Reject
             </button>
           </>
         )}
         {isAccepted && (
-          <button onClick={() => setShowConvertDeal(o)} title="Convert to Deal" className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-[#F1F6F3] px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#B7C9C0]/40">
-            <FaHandshake size={9} /> Deal
+          <button onClick={() => setShowConvertDeal(o)} title={`Convert to ${T.saleDeal}`} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-[#F1F6F3] px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#B7C9C0]/40">
+            <FaHandshake size={9} /> {T.saleDeal}
           </button>
         )}
         {["pending", "negotiating"].includes(o.status) && (
@@ -652,14 +661,14 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${esc
         )}
       </div>
     );
-  }, [printOffer, saving, handleAcceptCounter, handleRejectCounter, handleDelete]);
+  }, [printOffer, saving, handleAcceptCounter, handleRejectCounter, handleDelete, T.saleOffer, T.saleDeal]);
 
   return (
     <PropertySaleShell>
       <div className="flex-1 min-h-0 flex flex-col gap-1">
         {/* Filter bar */}
         <SaleFilterBar
-          leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} offer{total !== 1 ? "s" : ""}</span>}
+          leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} {(total !== 1 ? T.saleOffers : T.saleOffer).toLowerCase()}</span>}
           onReset={() => { setSearch(""); setStatusFilter(""); setListingFilt(""); setBuyerFilt(""); setPage(1); }}
           activeCount={[search, statusFilter, listingFilt, buyerFilt].filter(Boolean).length}
           trailing={
@@ -675,7 +684,7 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${esc
                 onClick={() => setShowCreate(true)}
                 className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
               >
-                <FaPlus size={9} /> New Offer
+                <FaPlus size={9} /> New {T.saleOffer}
               </button>
             </>
           }
@@ -683,20 +692,20 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${esc
           <FilterSearch
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            placeholder="Offer no. / listing / buyer…"
+            placeholder={`${T.saleOffer} no. / ${T.saleListing.toLowerCase()} / ${T.saleBuyer.toLowerCase()}…`}
           />
           <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={OFFER_STATUS_FILTER_OPTIONS} placeholder="All Statuses" clearable size="sm" />
-          <AppSelect value={listingFilt} onChange={(v) => { setListingFilt(v ?? ""); setPage(1); }} options={listingFilterOptions} placeholder="All Listings" clearable size="sm" searchable />
-          <AppSelect value={buyerFilt} onChange={(v) => { setBuyerFilt(v ?? ""); setPage(1); }} options={buyerFilterOptions} placeholder="All Buyers" clearable size="sm" searchable />
+          <AppSelect value={listingFilt} onChange={(v) => { setListingFilt(v ?? ""); setPage(1); }} options={listingFilterOptions} placeholder={`All ${T.saleListings}`} clearable size="sm" searchable />
+          <AppSelect value={buyerFilt} onChange={(v) => { setBuyerFilt(v ?? ""); setPage(1); }} options={buyerFilterOptions} placeholder={`All ${T.saleBuyers}`} clearable size="sm" searchable />
         </SaleFilterBar>
 
         {/* Table */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
           <MilikTable
-            columns={OFFER_TABLE_COLS}
+            columns={offerCols}
             rows={offers}
             loading={isFetching && offers.length === 0}
-            empty="No offers found."
+            empty={`No ${T.saleOffers.toLowerCase()} found.`}
             rowClassName={offerRowClassName}
             renderRow={renderOfferRow}
             renderActions={renderOfferActions}

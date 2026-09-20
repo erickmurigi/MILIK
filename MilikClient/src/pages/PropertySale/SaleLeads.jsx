@@ -18,6 +18,7 @@ import AppSelect from "../../components/common/AppSelect";
 import SaleFilterBar, { FilterSearch, FilterDateRange } from "./SaleFilterBar";
 import MilikTable from "../../components/common/MilikTable";
 import { labelClass } from "../../utils/formStyles";
+import { useTerms } from "../../hooks/useTerm";
 
 const ACTIVITY_TYPES = ["call", "email", "meeting", "site_visit", "whatsapp", "note", "follow_up"];
 const OUTCOMES       = ["positive", "neutral", "negative", "no_answer", "not_applicable"];
@@ -55,14 +56,14 @@ const fmt   = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit
 const isOld = (date, status) => date && !["converted", "lost"].includes(status) && new Date(date) < new Date();
 const LIMIT = 50;
 
-const LEAD_TABLE_COLS = [
+const leadTableCols = (T) => [
   { label: "#", width: 36 },
-  { label: "Lead #" },
+  { label: `${T.saleLead} #` },
   { label: "Name" },
   { label: "Contact" },
   { label: "Source" },
   { label: "Status" },
-  { label: "Agent" },
+  { label: T.saleAgent },
   { label: "Budget" },
   { label: "Next Follow-up" },
 ];
@@ -76,13 +77,14 @@ const rowClassName = (row) => isOld(row.nextFollowUpDate, row.status) ? "border-
 // Submit handlers stay in the page (they own the in-flight `saving` guards); each modal hands its current form up on submit.
 
 function LeadFormModal({ editingId, initial, saving, sourceOptions, statusOptions, agentOptions, onClose, onSubmit }) {
+  const T = useTerms("saleLead", "saleAgent");
   const [form, setForm] = useState(initial);
   return (
     <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
       <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-lg sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
         <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
           <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
-            <FaUserFriends />{editingId ? "Edit Lead" : "Add Lead"}
+            <FaUserFriends />{editingId ? `Edit ${T.saleLead}` : `Add ${T.saleLead}`}
           </h3>
           <button onClick={onClose} className="p-1 text-white/70 hover:bg-white/10 hover:text-white"><FaTimes /></button>
         </div>
@@ -118,7 +120,7 @@ function LeadFormModal({ editingId, initial, saving, sourceOptions, statusOption
             />
           </div>
           <div>
-            <label className={labelClass}>Assigned Agent</label>
+            <label className={labelClass}>Assigned {T.saleAgent}</label>
             <AppSelect
               value={form.assignedAgent}
               onChange={(v) => setForm((f) => ({ ...f, assignedAgent: v ?? "" }))}
@@ -155,7 +157,7 @@ function LeadFormModal({ editingId, initial, saving, sourceOptions, statusOption
         <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
           <button onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
           <button onClick={() => onSubmit(form)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-            {saving ? "Saving…" : editingId ? "Update Lead" : "Create Lead"}
+            {saving ? "Saving…" : editingId ? `Update ${T.saleLead}` : `Create ${T.saleLead}`}
           </button>
         </div>
       </div>
@@ -233,19 +235,20 @@ function ActivityModal({ leadName, editingAct, initial, saving, onClose, onSubmi
 }
 
 function ConvertBuyerModal({ leadName, converting, onClose, onConfirm }) {
+  const T = useTerms("saleBuyer");
   const [convertId, setConvertId] = useState("");
   return (
     <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
       <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-sm sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
         <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
           <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
-            <FaExchangeAlt />Convert to Buyer
+            <FaExchangeAlt />Convert to {T.saleBuyer}
           </h3>
           <button onClick={onClose} className="p-1 text-white/70 hover:bg-white/10 hover:text-white"><FaTimes /></button>
         </div>
         <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-4">
           <p className="text-xs text-slate-600">
-            Convert <strong>{leadName}</strong> to a registered buyer. A buyer profile will be created automatically.
+            Convert <strong>{leadName}</strong> to registered {T.saleBuyer.toLowerCase()}. The {T.saleBuyer.toLowerCase()} profile will be created automatically.
           </p>
           <div>
             <label className={labelClass}>ID / Passport Number</label>
@@ -255,7 +258,7 @@ function ConvertBuyerModal({ leadName, converting, onClose, onConfirm }) {
         <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
           <button onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
           <button onClick={() => onConfirm(convertId)} disabled={converting} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-            {converting ? "Converting…" : "Convert to Buyer"}
+            {converting ? "Converting…" : `Convert to ${T.saleBuyer}`}
           </button>
         </div>
       </div>
@@ -264,6 +267,7 @@ function ConvertBuyerModal({ leadName, converting, onClose, onConfirm }) {
 }
 
 function ConvertOfferModal({ leadName, listingOptions, agentOptions, converting, onClose, onSubmit }) {
+  const T = useTerms("saleLead", "saleOffer", "saleListing", "saleAgent");
   const [offerForm, setOfferForm] = useState(blankOfferForm);
   return (
     <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
@@ -271,7 +275,7 @@ function ConvertOfferModal({ leadName, listingOptions, agentOptions, converting,
         <div className="flex flex-shrink-0 items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
           <div>
             <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
-              <FaExchangeAlt />Convert Lead → Offer
+              <FaExchangeAlt />Convert {T.saleLead} → {T.saleOffer}
             </h3>
             <div className="text-[10px] text-white/60 mt-0.5">{leadName}</div>
           </div>
@@ -279,18 +283,18 @@ function ConvertOfferModal({ leadName, listingOptions, agentOptions, converting,
         </div>
         <div className="flex-1 overflow-y-auto bg-white px-5 py-4 grid grid-cols-2 gap-3">
           <div className="col-span-2">
-            <label className={labelClass}>Listing *</label>
+            <label className={labelClass}>{T.saleListing} *</label>
             <AppSelect
               value={offerForm.listing}
               onChange={(v) => setOfferForm((f) => ({ ...f, listing: v ?? "" }))}
               options={listingOptions}
-              placeholder="Select listing…"
+              placeholder={`Select ${T.saleListing.toLowerCase()}…`}
               searchable
               size="md"
             />
           </div>
           <div>
-            <label className={labelClass}>Offer Amount (KES) *</label>
+            <label className={labelClass}>{T.saleOffer} Amount (KES) *</label>
             <input type="number" min="0" step="1" value={offerForm.offerAmount} onChange={(e) => setOfferForm((f) => ({ ...f, offerAmount: e.target.value }))} className={`${modalInputCls} h-8`} />
           </div>
           <div>
@@ -298,12 +302,12 @@ function ConvertOfferModal({ leadName, listingOptions, agentOptions, converting,
             <input type="date" value={offerForm.validityDate} onChange={(e) => setOfferForm((f) => ({ ...f, validityDate: e.target.value }))} className={`${modalInputCls} h-8`} />
           </div>
           <div className="col-span-2">
-            <label className={labelClass}>Assigned Agent</label>
+            <label className={labelClass}>Assigned {T.saleAgent}</label>
             <AppSelect
               value={offerForm.agent}
               onChange={(v) => setOfferForm((f) => ({ ...f, agent: v ?? "" }))}
               options={agentOptions}
-              placeholder="Select agent…"
+              placeholder={`Select ${T.saleAgent.toLowerCase()}…`}
               size="md"
             />
           </div>
@@ -315,7 +319,7 @@ function ConvertOfferModal({ leadName, listingOptions, agentOptions, converting,
         <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
           <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
           <button type="submit" disabled={converting} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-            {converting ? "Creating…" : "Create Offer"}
+            {converting ? "Creating…" : `Create ${T.saleOffer}`}
           </button>
         </div>
       </form>
@@ -357,6 +361,7 @@ function LeadEmailModal({ target, company, sending, onSend, onClose }) {
 }
 
 export default function SaleLeads() {
+  const T       = useTerms("saleLead", "saleLeads", "saleBuyer", "saleOffer", "saleListing", "saleListings", "saleAgent", "saleAgents");
   const confirm = useConfirm();
   const qc      = useQueryClient();
   const biz     = useSelector((s) => s.company?.currentCompany?._id);
@@ -405,6 +410,8 @@ export default function SaleLeads() {
     enabled:  !!biz,
     staleTime: 10 * 60_000,
   });
+
+  const LEAD_TABLE_COLS = useMemo(() => leadTableCols(T), [T]);
 
   const settingStages  = useMemo(() => (saleSettings?.pipelineStages ?? []).filter((s) => s.isActive !== false).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)), [saleSettings]);
   const settingSources = useMemo(() => (saleSettings?.leadSources    ?? []).filter((s) => s.isActive !== false), [saleSettings]);
@@ -511,20 +518,20 @@ export default function SaleLeads() {
       }
       invalidate(editingId);
       setLeadModal(null);
-      toast.success(`Lead ${editingId ? "updated" : "created"}`);
+      toast.success(`${T.saleLead} ${editingId ? "updated" : "created"}`);
     } catch (err) { toast.error(err?.response?.data?.message || "Save failed"); }
     finally { setSaving(false); }
   };
 
   const handleDelete = useCallback(async (lead) => {
-    if (!await confirm({ title: "Delete Lead", message: `Delete "${lead.fullName}"?`, confirmText: "Delete", isDangerous: true })) return;
+    if (!await confirm({ title: `Delete ${T.saleLead}`, message: `Delete "${lead.fullName}"?`, confirmText: "Delete", isDangerous: true })) return;
     try {
       await saleApi.deleteLead(lead._id);
       invalidate();
       setSelected((prev) => (prev?._id === lead._id ? null : prev));
-      toast.success("Lead deleted");
+      toast.success(`${T.saleLead} deleted`);
     } catch (err) { toast.error(err?.response?.data?.message || "Delete failed"); }
-  }, [confirm, invalidate, setSelected]);
+  }, [confirm, invalidate, setSelected, T.saleLead]);
 
   // ── Activities ─────────────────────────────────────────────────────────────
   const editingAct = actModal?.editing ?? null;
@@ -603,19 +610,19 @@ export default function SaleLeads() {
       qc.invalidateQueries({ queryKey: ["sale-buyers-ref", biz] });
       setSelected((p) => ({ ...p, status: "converted", convertedBuyer: res.buyer }));
       setShowConvert(false);
-      toast.success("Lead converted to buyer");
+      toast.success(`${T.saleLead} converted to ${T.saleBuyer.toLowerCase()}`);
     } catch (err) { toast.error(err?.response?.data?.message || "Conversion failed"); }
     finally { setConverting(false); }
   };
 
   const handleConvertToOffer = async (offerForm) => {
-    if (!offerForm.listing)     return toast.warning("Select a listing");
-    if (!offerForm.offerAmount) return toast.warning("Offer amount is required");
+    if (!offerForm.listing)     return toast.warning(`Select ${T.saleListing.toLowerCase()}`);
+    if (!offerForm.offerAmount) return toast.warning(`${T.saleOffer} amount is required`);
     setConvertingOffer(true);
     const leadId = selected._id;
     try {
       await saleApi.convertLeadToOffer(leadId, { ...offerForm, business: biz });
-      toast.success("Offer created from lead");
+      toast.success(`${T.saleOffer} created from ${T.saleLead.toLowerCase()}`);
       setShowConvertOffer(false);
       invalidate(leadId);
       qc.invalidateQueries({ queryKey: ["sale-offers", biz] });
@@ -623,7 +630,7 @@ export default function SaleLeads() {
       qc.invalidateQueries({ queryKey: ["sale-listings", biz] });
       qc.invalidateQueries({ queryKey: ["sale-listings-ref", biz] });
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to create offer");
+      toast.error(err?.response?.data?.message || `Failed to create ${T.saleOffer.toLowerCase()}`);
     } finally {
       setConvertingOffer(false);
     }
@@ -638,9 +645,9 @@ export default function SaleLeads() {
     try {
       await saleApi.updateLead(selected._id, { interestedListings: updated, business: biz });
       qc.invalidateQueries({ queryKey: ["sale-lead-detail", biz, selected._id] });
-      toast.success(add ? "Listing linked" : "Listing removed");
+      toast.success(add ? `${T.saleListing} linked` : `${T.saleListing} removed`);
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to update listings");
+      toast.error(err?.response?.data?.message || `Failed to update ${T.saleListings.toLowerCase()}`);
     }
   };
 
@@ -741,7 +748,7 @@ export default function SaleLeads() {
 
           {/* Filter bar */}
           <SaleFilterBar
-            leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} lead{total !== 1 ? "s" : ""}</span>}
+            leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} {(total === 1 ? T.saleLead : T.saleLeads).toLowerCase()}</span>}
             onReset={() => { setSearch(""); setStatus(""); setSource(""); setAgent(""); setOverdue(false); setCreatedFrom(""); setCreatedTo(""); setPage(1); }}
             activeCount={[search, statusFilter, sourceFilter, agentFilter, overdueOnly ? "1" : "", createdFrom, createdTo].filter(Boolean).length}
             trailing={
@@ -749,18 +756,18 @@ export default function SaleLeads() {
                 onClick={openCreate}
                 className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
               >
-                <FaPlus size={9} /> Add Lead
+                <FaPlus size={9} /> Add {T.saleLead}
               </button>
             }
           >
             <FilterSearch
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              placeholder="Search leads…"
+              placeholder={`Search ${T.saleLeads.toLowerCase()}…`}
             />
             <AppSelect value={statusFilter} onChange={(v) => { setStatus(v ?? ""); setPage(1); }} options={LEAD_STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
             <AppSelect value={sourceFilter} onChange={(v) => { setSource(v ?? ""); setPage(1); }} options={LEAD_SOURCE_OPTIONS} placeholder="All Sources" clearable size="sm" />
-            <AppSelect value={agentFilter} onChange={(v) => { setAgent(v ?? ""); setPage(1); }} options={agentOptions} placeholder="All Agents" searchable clearable size="sm" />
+            <AppSelect value={agentFilter} onChange={(v) => { setAgent(v ?? ""); setPage(1); }} options={agentOptions} placeholder={`All ${T.saleAgents}`} searchable clearable size="sm" />
             <label className="flex shrink-0 items-center gap-1.5 text-[11px] font-semibold text-slate-600 cursor-pointer select-none whitespace-nowrap">
               <input type="checkbox" checked={overdueOnly} onChange={(e) => { setOverdue(e.target.checked); setPage(1); }} className="accent-[#0B3B2E]" />
               Overdue
@@ -778,7 +785,7 @@ export default function SaleLeads() {
               columns={LEAD_TABLE_COLS}
               rows={leads}
               loading={isLoading}
-              empty="No leads found."
+              empty={`No ${T.saleLeads.toLowerCase()} found.`}
               minWidth={860}
               onRowClick={handleRowClick}
               isSelected={isRowSelected}
@@ -825,7 +832,7 @@ export default function SaleLeads() {
             <div className="flex-shrink-0 border-b border-slate-100 px-4 py-3 space-y-1.5 text-xs">
               {panelLead.phone && <div className="flex items-center gap-2 text-slate-600"><FaPhone size={9} className="text-slate-400 flex-shrink-0" />{panelLead.phone}</div>}
               {panelLead.email && <div className="flex items-center gap-2 text-slate-500"><FaEnvelope size={9} className="text-slate-400 flex-shrink-0" />{panelLead.email}</div>}
-              {panelLead.assignedAgent && <div className="text-slate-500">Agent: <span className="font-semibold text-slate-700">{panelLead.assignedAgent?.fullName || panelLead.assignedAgent}</span></div>}
+              {panelLead.assignedAgent && <div className="text-slate-500">{T.saleAgent}: <span className="font-semibold text-slate-700">{panelLead.assignedAgent?.fullName || panelLead.assignedAgent}</span></div>}
               {(panelLead.budgetMin || panelLead.budgetMax) && (
                 <div className="text-slate-500">Budget: <span className="font-semibold text-slate-700">{panelLead.budgetMin ? fmtKES(panelLead.budgetMin) : "?"} – {panelLead.budgetMax ? fmtKES(panelLead.budgetMax) : "?"}</span></div>
               )}
@@ -841,7 +848,7 @@ export default function SaleLeads() {
 
             {/* Interested Listings */}
             <div className="flex-shrink-0 border-b border-slate-100 px-4 py-3">
-              <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Interested Listings</div>
+              <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Interested {T.saleListings}</div>
               {interestedListings.length > 0 ? (
                 <div className="mb-2 space-y-1">
                   {interestedListings.map((l) => (
@@ -854,13 +861,13 @@ export default function SaleLeads() {
                   ))}
                 </div>
               ) : (
-                <div className="mb-2 text-[11px] text-slate-400">No listings linked yet.</div>
+                <div className="mb-2 text-[11px] text-slate-400">No {T.saleListings.toLowerCase()} linked yet.</div>
               )}
               <AppSelect
                 value=""
                 onChange={(v) => { if (v) handleToggleListing(v, true); }}
                 options={linkableListingOptions}
-                placeholder="+ Link a listing…"
+                placeholder={`+ Link ${T.saleListing.toLowerCase()}…`}
                 searchable
                 size="sm"
               />
@@ -875,14 +882,14 @@ export default function SaleLeads() {
                 {panelLead.status !== "converted" && panelLead.status !== "lost" ? (
                   <>
                     <button onClick={() => setShowConvert(true)} className="flex-1 inline-flex items-center justify-center gap-1 border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100">
-                      <FaExchangeAlt size={9} /> Buyer
+                      <FaExchangeAlt size={9} /> {T.saleBuyer}
                     </button>
                     <button onClick={() => setShowConvertOffer(true)} className="flex-1 inline-flex items-center justify-center gap-1 border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-100">
-                      <FaExchangeAlt size={9} /> → Offer
+                      <FaExchangeAlt size={9} /> → {T.saleOffer}
                     </button>
                   </>
                 ) : panelLead.convertedBuyer ? (
-                  <span className="flex-1 border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-center text-emerald-700">✓ Buyer Created</span>
+                  <span className="flex-1 border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-center text-emerald-700">✓ {T.saleBuyer} Created</span>
                 ) : null}
               </div>
               <div className="flex gap-1.5">

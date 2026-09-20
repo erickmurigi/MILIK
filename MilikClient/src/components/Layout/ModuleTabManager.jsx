@@ -10,6 +10,7 @@ import {
 } from '../../utils/workspaceRoutes';
 import { hasCompanyModule } from '../../utils/companyModules';
 import { clearAllTabCache } from '../../hooks/useTabState';
+import { useTerm } from '../../hooks/useTerm';
 
 const MODULES = {
   [WORKSPACE_IDS.PROPERTY]: {
@@ -123,6 +124,7 @@ const readActiveModule = (companyKey, company, openModules = []) => {
 };
 
 const ModuleTabManager = ({ darkMode }) => {
+  const saleModuleName = useTerm('saleModule');
   const location = useLocation();
   const navigate = useNavigate();
   const currentCompany = useSelector(selectCurrentCompany);
@@ -227,11 +229,13 @@ const ModuleTabManager = ({ darkMode }) => {
       )}
       {visibleModules.map((module) => {
         const isActive = activeModule === module.id;
+        // The Sales module carries the company's own name for it (Company Settings -> Terminology)
+        const moduleTitle = module.moduleKey === 'propertySale' ? saleModuleName : module.title;
         return (
           <div
             key={module.id}
             onClick={() => switchModule(module.id)}
-            title={module.title}
+            title={moduleTitle}
             className={`flex items-center gap-2 px-3 py-1.5 rounded cursor-pointer whitespace-nowrap transition-all duration-150 text-sm font-medium border-t-2 ${
               isActive
                 ? darkMode
@@ -245,7 +249,7 @@ const ModuleTabManager = ({ darkMode }) => {
             <span className={`flex-shrink-0 ${isActive ? 'text-current' : 'opacity-60'}`}>
               {module.icon}
             </span>
-            <span className="text-xs uppercase truncate max-w-[130px]">{module.title}</span>
+            <span className="text-xs uppercase truncate max-w-[130px]">{moduleTitle}</span>
             {module.closable && (
               <button
                 onClick={(e) => { e.stopPropagation(); closeModule(module.id); }}

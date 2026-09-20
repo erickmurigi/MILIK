@@ -9,6 +9,7 @@ import PropertySaleShell from "./PropertySaleShell";
 import { fmtKES, SALE_MONTHS, saleApi } from "../../services/propertySaleApi";
 import { fmtDate } from "../../utils/dates";
 import { listingAgentName } from "../../utils/saleAgent";
+import { useTerms } from "../../hooks/useTerm";
 const fmtLabel = (s) => (s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
 const METHOD_BADGE = {
@@ -52,6 +53,7 @@ const EmptyRow = ({ cols, label }) => (
 );
 
 const SaleMonthlyDetail = () => {
+  const T = useTerms("saleModule", "saleListing", "saleListings", "saleBuyer", "saleAgent", "saleOffer", "saleOffers", "saleDeal", "saleDeals");
   const { year, month } = useParams();
   const location = useLocation();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
@@ -79,9 +81,9 @@ const SaleMonthlyDetail = () => {
 
   const TABS = [
     { key: "payments", label: "Payments", count: payments.length },
-    { key: "deals", label: "Deals", count: deals.length },
-    { key: "offers", label: "Offers", count: offers.length },
-    { key: "listings", label: "Listings", count: listings.length },
+    { key: "deals", label: T.saleDeals, count: deals.length },
+    { key: "offers", label: T.saleOffers, count: offers.length },
+    { key: "listings", label: T.saleListings, count: listings.length },
     { key: "commissions", label: "Commissions", count: commissions.length },
   ];
 
@@ -112,21 +114,21 @@ const SaleMonthlyDetail = () => {
       tbody td.r{text-align:right}tbody tr:nth-child(even){background:#f8fafc}
       *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
     </style></head><body>
-    <div class="hdr"><div>${logo ? `<img src="${esc(logo)}" class="logo" alt="">` : ''}<div class="co">${esc(name)}</div><div class="ttl">${esc(monthName)} ${esc(year)} — Monthly Detail</div><div class="sub">Property Sales Report</div></div>
+    <div class="hdr"><div>${logo ? `<img src="${esc(logo)}" class="logo" alt="">` : ''}<div class="co">${esc(name)}</div><div class="ttl">${esc(monthName)} ${esc(year)} — Monthly Detail</div><div class="sub">${esc(T.saleModule)} Report</div></div>
     <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div></div></div>
     <div class="cards">
       <div class="card"><div class="cl">Payments</div><div class="cv">${payments.length}</div></div>
       <div class="card"><div class="cl">Revenue</div><div class="cv" style="color:#0B3B2E">${fmt(summary.totalRevenue)}</div></div>
-      <div class="card"><div class="cl">Deals</div><div class="cv">${deals.length}</div></div>
+      <div class="card"><div class="cl">${esc(T.saleDeals)}</div><div class="cv">${deals.length}</div></div>
       <div class="card"><div class="cl">Commissions</div><div class="cv" style="color:#FF8C00">${fmt(summary.totalCommissions)}</div></div>
     </div>
-    ${payments.length > 0 ? `<h3>Payments (${payments.length})</h3><table><thead><tr><th>Payment #</th><th>Deal</th><th>Type</th><th>Method</th><th class="r">Amount</th><th>Date</th><th>Status</th></tr></thead><tbody>${payments.map((p) => `<tr><td>${esc(p.paymentNumber || '—')}</td><td>${esc(p.deal?.dealNumber || (typeof p.deal === 'string' ? p.deal : '') || '—')}</td><td>${esc(fmtLabel(p.paymentType || p.type))}</td><td>${esc(fmtLabel(p.method || p.paymentMethod))}</td><td class="r"><strong>${fmt(p.amount)}</strong></td><td>${esc(fmtDate(p.paymentDate || p.date))}</td><td>${esc(fmtLabel(p.status))}</td></tr>`).join('')}</tbody></table>` : ''}
-    ${deals.length > 0 ? `<h3>Deals (${deals.length})</h3><table><thead><tr><th>Deal #</th><th>Property</th><th>Buyer</th><th>Agent</th><th class="r">Value</th><th>Date</th><th>Status</th></tr></thead><tbody>${deals.map((d) => `<tr><td>${esc(d.dealNumber || '—')}</td><td>${esc(d.listing?.title || d.listing?.property?.propertyName || '—')}</td><td>${esc(d.buyer?.fullName || '—')}</td><td>${esc(d.agent?.fullName || '—')}</td><td class="r">${fmt(d.agreedPrice || d.dealValue)}</td><td>${esc(fmtDate(d.closedAt || d.createdAt))}</td><td>${esc(fmtLabel(d.status))}</td></tr>`).join('')}</tbody></table>` : ''}
-    ${commissions.length > 0 ? `<h3>Commissions (${commissions.length})</h3><table><thead><tr><th>Deal</th><th>Agent</th><th class="r">Commission</th><th>Date</th><th>Status</th></tr></thead><tbody>${commissions.map((c) => `<tr><td>${esc(c.deal?.dealNumber || '—')}</td><td>${esc(c.agent?.fullName || '—')}</td><td class="r">${fmt(c.amount || c.commissionAmount)}</td><td>${esc(fmtDate(c.createdAt))}</td><td>${esc(fmtLabel(c.status))}</td></tr>`).join('')}</tbody></table>` : ''}
+    ${payments.length > 0 ? `<h3>Payments (${payments.length})</h3><table><thead><tr><th>Payment #</th><th>${esc(T.saleDeal)}</th><th>Type</th><th>Method</th><th class="r">Amount</th><th>Date</th><th>Status</th></tr></thead><tbody>${payments.map((p) => `<tr><td>${esc(p.paymentNumber || '—')}</td><td>${esc(p.deal?.dealNumber || (typeof p.deal === 'string' ? p.deal : '') || '—')}</td><td>${esc(fmtLabel(p.paymentType || p.type))}</td><td>${esc(fmtLabel(p.method || p.paymentMethod))}</td><td class="r"><strong>${fmt(p.amount)}</strong></td><td>${esc(fmtDate(p.paymentDate || p.date))}</td><td>${esc(fmtLabel(p.status))}</td></tr>`).join('')}</tbody></table>` : ''}
+    ${deals.length > 0 ? `<h3>${esc(T.saleDeals)} (${deals.length})</h3><table><thead><tr><th>${esc(T.saleDeal)} #</th><th>${esc(T.saleListing)}</th><th>${esc(T.saleBuyer)}</th><th>${esc(T.saleAgent)}</th><th class="r">Value</th><th>Date</th><th>Status</th></tr></thead><tbody>${deals.map((d) => `<tr><td>${esc(d.dealNumber || '—')}</td><td>${esc(d.listing?.title || d.listing?.property?.propertyName || '—')}</td><td>${esc(d.buyer?.fullName || '—')}</td><td>${esc(d.agent?.fullName || '—')}</td><td class="r">${fmt(d.agreedPrice || d.dealValue)}</td><td>${esc(fmtDate(d.closedAt || d.createdAt))}</td><td>${esc(fmtLabel(d.status))}</td></tr>`).join('')}</tbody></table>` : ''}
+    ${commissions.length > 0 ? `<h3>Commissions (${commissions.length})</h3><table><thead><tr><th>${esc(T.saleDeal)}</th><th>${esc(T.saleAgent)}</th><th class="r">Commission</th><th>Date</th><th>Status</th></tr></thead><tbody>${commissions.map((c) => `<tr><td>${esc(c.deal?.dealNumber || '—')}</td><td>${esc(c.agent?.fullName || '—')}</td><td class="r">${fmt(c.amount || c.commissionAmount)}</td><td>${esc(fmtDate(c.createdAt))}</td><td>${esc(fmtLabel(c.status))}</td></tr>`).join('')}</tbody></table>` : ''}
     </body></html>`);
     win.document.close();
     win.onload = () => { win.focus(); win.print(); };
-  }, [currentCompany, monthName, year, payments, deals, commissions, summary]);
+  }, [currentCompany, monthName, year, payments, deals, commissions, summary, T]);
 
   return (
     <PropertySaleShell
@@ -177,9 +179,9 @@ const SaleMonthlyDetail = () => {
                 <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                   <tr>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Receipt No.</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Deal</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Buyer</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{T.saleDeal}</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{T.saleListing}</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{T.saleBuyer}</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Method</th>
                     <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
@@ -227,13 +229,13 @@ const SaleMonthlyDetail = () => {
               <table className="min-w-full text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                   <tr>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Deal No.</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Buyer</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Agent</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{T.saleDeal} No.</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{T.saleListing}</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{T.saleBuyer}</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{T.saleAgent}</th>
                     <th className="px-3 py-1 text-right font-bold border-r border-white/10">Agreed Price</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Deal Date</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{T.saleDeal} Date</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -266,12 +268,12 @@ const SaleMonthlyDetail = () => {
               <table className="min-w-full text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                   <tr>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Offer No.</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Buyer</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Agent</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Offer Amount</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Counter Offer</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{T.saleOffer} No.</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{T.saleListing}</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{T.saleBuyer}</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{T.saleAgent}</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">{T.saleOffer} Amount</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Counter {T.saleOffer}</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
                   </tr>
@@ -304,12 +306,12 @@ const SaleMonthlyDetail = () => {
               <table className="min-w-full text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                   <tr>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Listing No.</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{T.saleListing} No.</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Title</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
                     <th className="px-3 py-1 text-right font-bold border-r border-white/10">Asking Price</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Agent</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{T.saleAgent}</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Listed On</th>
                   </tr>
                 </thead>
@@ -341,9 +343,9 @@ const SaleMonthlyDetail = () => {
                 <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                   <tr>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Comm. No.</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Agent</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Deal</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{T.saleAgent}</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{T.saleDeal}</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{T.saleListing}</th>
                     <th className="px-3 py-1 text-right font-bold border-r border-white/10">Rate</th>
                     <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>

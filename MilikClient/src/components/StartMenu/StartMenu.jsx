@@ -19,7 +19,7 @@ import {
   getCompanyOperatingModeLabel, hasCompanyModule, hasAnyCompanyModule,
   GL_ACCESS_MODULES, isSelfManagingLandlordCompany,
 } from "../../utils/companyModules";
-import { useTermPresetLabel } from "../../hooks/useTerm";
+import { useTermPresetLabel, useTerm } from "../../hooks/useTerm";
 
 const initials = (value = "") =>
   String(value || "")
@@ -83,6 +83,7 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
   const isLandlordMode    = isSelfManagingLandlordCompany(activeCompanyCtx);
   const operatingMode     = getCompanyOperatingModeLabel(activeCompanyCtx?.companyMode);
   const presetLabel       = useTermPresetLabel();
+  const saleModuleName    = useTerm("saleModule");
   const isHeader          = variant === "header";
 
   useEffect(() => {
@@ -111,11 +112,12 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
     if (!activeCompanyCtx) return [];
     return moduleRegistry
       .map((item) => item.id !== "milik" ? item : { ...item, label: isLandlordMode ? "MILIK Landlord" : item.label })
+      .map((item) => item.id !== "propertySale" ? item : { ...item, label: saleModuleName })
       .filter((item) => item.id === "accounts"
         ? hasAnyCompanyModule(activeCompanyCtx, GL_ACCESS_MODULES)
         : hasCompanyModule(activeCompanyCtx, item.moduleKey)
       );
-  }, [activeCompanyCtx, isLandlordMode]);
+  }, [activeCompanyCtx, isLandlordMode, saleModuleName]);
 
   const configItems = useMemo(() => {
     const items = [
