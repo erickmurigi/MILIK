@@ -686,4 +686,36 @@ Deals/Buyers now clears when the panel closes.
 
 ---
 
+## PropertySale gap closure (2026-09-20)
+
+Closed the "known gaps" from Track G after the first local testing round, which
+also found a real bug (lead-to-buyer conversion failed for "social media" and
+"cold call" leads: the buyer model's source list was shorter than the lead's).
+
+- Lead/buyer source and listing property type are free-form (Sale Settings lets
+  admins add their own; the old fixed lists rejected them). Lead status stays
+  validated: the built-in statuses plus the business's own pipeline stage names,
+  and the funnel now shows leads in custom stages as "Custom stages".
+- Agent-linked users are scoped on every by-id deal and lead route, not just the
+  lists: they can only create deals/leads for themselves, cannot reassign, and
+  the pipeline counts only their leads. They can no longer approve/pay their
+  own commissions.
+- Changing a deal's price recalculates its pending commission when it was a
+  percentage derived from the old price (flat amounts, overrides and
+  approved/paid commissions are left alone).
+- Partial lead updates no longer wipe unsent fields; listing edits can't
+  overwrite images; `setSchedule` restores the old schedule if the insert
+  fails; bulk imports are serialized per business; deal statement/summary load
+  every payment page; deal email preview shows the four placeholders that were
+  missing.
+
+**Still open:** agent scoping does not cover payments, schedule, offers, buyers,
+activities, reports or the dashboard (those stay business-wide); the import
+lock is in-memory (single API process); `$text` indexes are still not
+business-prefixed (replacing them needs a migration); Buyers/Deals detail
+requests still load eagerly; bulk import still checks property type and source
+against the built-in lists; none of this has been exercised in a browser.
+
+---
+
 *Last updated: 2026-09-20 (Track H closed — PropertySale performance pass, see above). Track G note: PropertySale correctness pass, see above. Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C/E/F/G as items are actioned.*
