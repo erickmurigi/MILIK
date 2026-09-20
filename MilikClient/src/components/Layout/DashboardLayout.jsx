@@ -33,7 +33,7 @@ import {
 } from "../../utils/workspaceRoutes";
 import { GL_ACCESS_MODULES, hasCompanyModule, isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { hasCompanyPermission } from "../../utils/permissions";
-import { useTerm } from "../../hooks/useTerm";
+import { useTerm, useTerms } from "../../hooks/useTerm";
 
 const MENU_PERMISSION_MAP = {
   "properties-list": { resource: "properties", action: "view", moduleKey: "propertyManagement" },
@@ -648,6 +648,8 @@ const TopToolbar = ({
   const termUnits      = useTerm("units");
   const termRent       = useTerm("rent");
   const termLease      = useTerm("lease");
+  // Sales workspace words (one subscription; stable while the values are unchanged)
+  const saleT = useTerms("saleListings", "saleLeads", "saleBuyers", "saleOffers", "saleDeals", "saleAgent", "saleAgents");
 
   // Dynamic color map that reflects company terminology in dropdown headers
   const dynamicMenuColorMap = useMemo(() => ({
@@ -1012,10 +1014,10 @@ const TopToolbar = ({
       const saleItems = [
         {
           id: "sale-listings-grp",
-          label: "Listings",
+          label: saleT.saleListings,
           icon: FaBuilding,
           submenu: [
-            { id: "sale-listings", label: "Listings", icon: FaBuilding },
+            { id: "sale-listings", label: saleT.saleListings, icon: FaBuilding },
           ],
         },
         {
@@ -1023,25 +1025,25 @@ const TopToolbar = ({
           label: "CRM",
           icon: FaUserClock,
           submenu: [
-            { id: "sale-crm-leads",      label: "Leads",      icon: FaUserFriends },
+            { id: "sale-crm-leads",      label: saleT.saleLeads,      icon: FaUserFriends },
             { id: "sale-crm-activities", label: "Activities", icon: FaClipboard },
           ],
         },
         {
           id: "sale-clients",
-          label: "Buyers",
+          label: saleT.saleBuyers,
           icon: FaUsers,
           submenu: [
-            { id: "sale-buyers", label: "Buyers", icon: FaUsers },
+            { id: "sale-buyers", label: saleT.saleBuyers, icon: FaUsers },
           ],
         },
         {
           id: "sale-pipeline",
-          label: "Deals",
+          label: saleT.saleDeals,
           icon: FaHandshake,
           submenu: [
-            { id: "sale-offers", label: "Offers", icon: FaTag },
-            { id: "sale-deals",  label: "Deals",  icon: FaHandshake },
+            { id: "sale-offers", label: saleT.saleOffers, icon: FaTag },
+            { id: "sale-deals",  label: saleT.saleDeals,  icon: FaHandshake },
           ],
         },
         {
@@ -1062,15 +1064,15 @@ const TopToolbar = ({
             { id: "sale-reports",    label: "Sales Report",       icon: FaChartLine },
             { id: "sale-cash-flow",  label: "Cash Flow Forecast", icon: FaCalendarAlt },
             { id: "sale-funnel",     label: "Conversion Funnel",  icon: FaChartLine },
-            { id: "sale-agent-perf", label: "Agent Performance",  icon: FaUser },
+            { id: "sale-agent-perf", label: `${saleT.saleAgent} Performance`,  icon: FaUser },
           ],
         },
         {
           id: "sale-agents-grp",
-          label: "Agents",
+          label: saleT.saleAgents,
           icon: FaUser,
           submenu: [
-            { id: "sale-agents", label: "Agents", icon: FaUser },
+            { id: "sale-agents", label: saleT.saleAgents, icon: FaUser },
           ],
         },
         {
@@ -1660,7 +1662,7 @@ const TopToolbar = ({
       });
 
     return filterMenuByPermissions(items, currentUser, activeCompanyContext);
-  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isClientsWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace, termTenant, termTenants, termUnit, termUnits, termProperty, termProperties, termLandlord, termLandlords, termRent, termLease]);
+  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isClientsWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace, termTenant, termTenants, termUnit, termUnits, termProperty, termProperties, termLandlord, termLandlords, termRent, termLease, saleT]);
 
   const nestedSubmenus = useMemo(() => {
     if (isSystemAdminWorkspace || isCompanySetupWorkspace || isAccountsWorkspace || isCarWashWorkspace || isClientsWorkspace || isPropertySaleWorkspace || isHumanResourceWorkspace || isCommunicationsWorkspace) {

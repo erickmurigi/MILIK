@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import { selectCompanySettings, fetchCompanySettings, getSettingsSuccess } from "../../redux/companySettingsRedux";
-import { TERM_DEFAULTS } from "../../hooks/useTerm";
+import { SALE_TERM_KEYS, TERM_DEFAULTS } from "../../hooks/useTerm";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
@@ -735,6 +735,55 @@ const TERM_PRESETS = {
   },
 };
 
+// Sales presets only touch the sales words (scope "sales"); the presets above only touch the property-management words.
+const SALE_TERM_PRESETS = {
+  saleRealEstate: {
+    scope: "sales", label: "Sales: Real estate", description: "Listings, Projects, Units",
+    values: {},
+  },
+  saleLand: {
+    scope: "sales", label: "Sales: Land & plots", description: "Parcels, Estates, Plots",
+    values: {
+      saleModule: "Land Sales",
+      saleListing: "Parcel", saleListings: "Parcels",
+      saleProject: "Estate", saleProjects: "Estates",
+      saleUnit: "Plot", saleUnits: "Plots",
+    },
+  },
+  saleApartments: {
+    scope: "sales", label: "Sales: Developments", description: "Properties, Developments, Units",
+    values: {
+      saleListing: "Property", saleListings: "Properties",
+      saleProject: "Development", saleProjects: "Developments",
+    },
+  },
+  saleVehicles: {
+    scope: "sales", label: "Sales: Vehicles", description: "Vehicles, Customers, Salespeople",
+    values: {
+      saleModule: "Vehicle Sales",
+      saleListing: "Vehicle", saleListings: "Vehicles",
+      saleProject: "Showroom", saleProjects: "Showrooms",
+      saleUnit: "Vehicle", saleUnits: "Vehicles",
+      saleBuyer: "Customer", saleBuyers: "Customers",
+      saleLead: "Enquiry", saleLeads: "Enquiries",
+      saleDeal: "Sale", saleDeals: "Sales",
+      saleAgent: "Salesperson", saleAgents: "Salespeople",
+    },
+  },
+  saleGeneric: {
+    scope: "sales", label: "Sales: Generic items", description: "Items, Customers, Salespeople",
+    values: {
+      saleModule: "Sales",
+      saleListing: "Item", saleListings: "Items",
+      saleProject: "Group", saleProjects: "Groups",
+      saleBuyer: "Customer", saleBuyers: "Customers",
+      saleDeal: "Sale", saleDeals: "Sales",
+      saleAgent: "Salesperson", saleAgents: "Salespeople",
+    },
+  },
+};
+const ALL_TERM_PRESETS = { ...TERM_PRESETS, ...SALE_TERM_PRESETS };
+
 const TERM_GROUPS = [
   {
     label: "People",
@@ -761,6 +810,21 @@ const TERM_GROUPS = [
     keys: ["invoice", "invoices", "receipt", "receipts", "utility", "utilities"],
     hint: "Financial document and charge terminology.",
   },
+  {
+    label: "Sales: what you sell",
+    keys: ["saleModule", "saleListing", "saleListings", "saleProject", "saleProjects", "saleUnit", "saleUnits"],
+    hint: "Rename the Sales module and the things it sells (cars, plots, houses, anything sold one at a time).",
+  },
+  {
+    label: "Sales: people",
+    keys: ["saleBuyer", "saleBuyers", "saleLead", "saleLeads", "saleAgent", "saleAgents"],
+    hint: "What do you call buyers, prospects and your sales staff?",
+  },
+  {
+    label: "Sales: process",
+    keys: ["saleOffer", "saleOffers", "saleDeal", "saleDeals"],
+    hint: "What do you call a price proposal and an agreed sale?",
+  },
 ];
 
 const TerminologyPanel = ({ currentCompany }) => {
@@ -785,11 +849,13 @@ const TerminologyPanel = ({ currentCompany }) => {
   }, [companySettings, readSaved]);
 
   const applyPreset = (presetKey) => {
-    const preset = TERM_PRESETS[presetKey];
+    const preset = ALL_TERM_PRESETS[presetKey];
     if (!preset) return;
-    setForm(() => {
-      const next = {};
-      Object.keys(TERM_DEFAULTS).forEach((k) => {
+    // Only reset the words in the preset's own scope so a Sales preset never clears the property-management words
+    const inScope = (k) => (preset.scope === "sales") === SALE_TERM_KEYS.includes(k);
+    setForm((prev) => {
+      const next = { ...prev };
+      Object.keys(TERM_DEFAULTS).filter(inScope).forEach((k) => {
         next[k] = preset.values[k] ?? "";
       });
       return next;
@@ -841,7 +907,7 @@ const TerminologyPanel = ({ currentCompany }) => {
       <div>
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Quick Presets</p>
         <div className="flex flex-wrap gap-2">
-          {Object.entries(TERM_PRESETS).map(([key, preset]) => (
+          {Object.entries(ALL_TERM_PRESETS).map(([key, preset]) => (
             <button
               key={key}
               type="button"
@@ -877,7 +943,7 @@ const TerminologyPanel = ({ currentCompany }) => {
                 <div key={key}>
                   <div className="mb-1 flex items-center justify-between">
                     <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                      {defaultVal}
+                      {key === "saleModule" ? "Sales module name" : key.startsWith("sale") ? `Sales ${defaultVal}` : defaultVal}
                     </label>
                     {custom && (
                       <span className="text-[10px] text-[#0B3B2E] font-medium">→ {custom}</span>

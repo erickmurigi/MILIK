@@ -1256,6 +1256,16 @@ const ALLOWED_TERMINOLOGY_KEYS = [
   "utility", "utilities",
   "invoice", "invoices",
   "receipt", "receipts",
+  // Sales module (prefixed so they never clash with the PMS "unit"/"property" terms)
+  "saleModule",
+  "saleListing", "saleListings",
+  "saleProject", "saleProjects",
+  "saleUnit", "saleUnits",
+  "saleBuyer", "saleBuyers",
+  "saleLead", "saleLeads",
+  "saleOffer", "saleOffers",
+  "saleDeal", "saleDeals",
+  "saleAgent", "saleAgents",
 ];
 
 export const updateTerminology = async (req, res, next) => {

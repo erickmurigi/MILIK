@@ -44,7 +44,29 @@ const DEFAULTS = {
   invoices: "Invoices",
   receipt: "Receipt",
   receipts: "Receipts",
+  // Sales module — display words only (API and database names never change)
+  saleModule: "Property Sales",
+  saleListing: "Listing",
+  saleListings: "Listings",
+  saleProject: "Project",
+  saleProjects: "Projects",
+  saleUnit: "Unit",
+  saleUnits: "Units",
+  saleBuyer: "Buyer",
+  saleBuyers: "Buyers",
+  saleLead: "Lead",
+  saleLeads: "Leads",
+  saleOffer: "Offer",
+  saleOffers: "Offers",
+  saleDeal: "Deal",
+  saleDeals: "Deals",
+  saleAgent: "Agent",
+  saleAgents: "Agents",
 };
+
+// Keys owned by the Sales module. The Terminology screen applies presets per scope, so choosing a Sales preset
+// never clears the property-management words (and vice versa).
+export const SALE_TERM_KEYS = Object.keys(DEFAULTS).filter((k) => k.startsWith("sale"));
 
 // Returns a stable primitive — no shallowEqual needed; re-renders only when the string value changes.
 export function useTerm(key) {

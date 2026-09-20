@@ -1,7 +1,9 @@
 import React from "react";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { useTerm } from "../../hooks/useTerm";
 
 const PropertySaleShell = ({ title, subtitle, action, children }) => {
+  const moduleName = useTerm("saleModule");
   const hasHeader = title || subtitle || action;
   return (
     <DashboardLayout lockContentScroll>
@@ -14,7 +16,7 @@ const PropertySaleShell = ({ title, subtitle, action, children }) => {
             style={{ borderLeftWidth: 3, borderLeftColor: "#0B3B2E", borderLeftStyle: "solid" }}
           >
             <div className="flex items-baseline gap-2.5">
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#0B3B2E]">MILIK PROPERTY SALES</span>
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#0B3B2E]">MILIK {moduleName}</span>
               {title    && <span className="text-sm font-extrabold text-slate-900">{title}</span>}
               {subtitle && <span className="hidden text-xs font-semibold text-slate-500 sm:inline">{subtitle}</span>}
             </div>

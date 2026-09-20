@@ -14,6 +14,7 @@ import PaginationBar from "../../components/PaginationBar";
 import { saleApi, fmtKES, todayISO } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
+import { useTerms } from "../../hooks/useTerm";
 import { useTabState } from "../../hooks/useTabState";
 import AmountInput from "./AmountInput";
 import AppSelect from "../../components/common/AppSelect";
@@ -41,13 +42,13 @@ const PAGE_SIZE      = 50;
 const SIZE_UNIT_OPTIONS = SIZE_UNITS.map((u) => ({ value: u, label: u }));
 const STATUS_OPTIONS    = STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }));
 
-const LISTING_TABLE_COLS = [
-  { label: "Listing No." },
+const listingTableCols = (T) => [
+  { label: `${T.saleListing} No.` },
   { label: "Title" },
   { label: "Type" },
   { label: "Location" },
   { label: "Asking Price", align: "right" },
-  { label: "Agent" },
+  { label: T.saleAgent },
   { label: "Status" },
 ];
 
@@ -100,6 +101,7 @@ const renderListingRow = (row) => (
 // Create/Edit modal — owns the form, staged photos and its own save/upload state (and the post-create "Done" mode),
 // so typing here never re-renders the page or its table.
 function ListingFormModal({ initialEditingId, initialForm, listings, biz, propertyTypeOptions, agentFormOptions, invalidate, onClose }) {
+  const T = useTerms("saleListing", "saleAgent");
   const queryClient  = useQueryClient();
   const modalFileRef = useRef(null);
   const [editingId,      setEditingId]      = useState(initialEditingId);
@@ -136,7 +138,7 @@ function ListingFormModal({ initialEditingId, initialForm, listings, biz, proper
         await saleApi.updateListing(editingId, payload);
         await invalidate();
         onClose();
-        toast.success("Listing updated");
+        toast.success(`${T.saleListing} updated`);
       } else {
         const created = await saleApi.createListing(payload);
         const newId = created?._id || "";
@@ -151,7 +153,7 @@ function ListingFormModal({ initialEditingId, initialForm, listings, biz, proper
         await invalidate();
         setEditingId(newId);
         setJustCreated(true);
-        toast.success("Listing saved — add more photos below or click Done");
+        toast.success(`${T.saleListing} saved — add more photos below or click Done`);
       }
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to save listing");
@@ -207,7 +209,7 @@ function ListingFormModal({ initialEditingId, initialForm, listings, biz, proper
 
   return (
     <Modal
-      title={editingId ? "Edit Sale Listing" : "New Sale Listing"}
+      title={editingId ? `Edit ${T.saleListing}` : `New ${T.saleListing}`}
       extraWide
       onClose={handleClose}
       footer={
@@ -217,7 +219,7 @@ function ListingFormModal({ initialEditingId, initialForm, listings, biz, proper
           </button>
           {!justCreated && (
             <button type="button" onClick={handleSave} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
-              {saving ? "Saving…" : editingId ? "Update Listing" : "Save Listing"}
+              {saving ? "Saving…" : editingId ? `Update ${T.saleListing}` : `Save ${T.saleListing}`}
             </button>
           )}
         </>
@@ -243,7 +245,7 @@ function ListingFormModal({ initialEditingId, initialForm, listings, biz, proper
           </div>
         </div>
         <div>
-          <AppSelect label="Assigned Agent" value={form.assignedAgent} onChange={(v) => setForm((p) => ({ ...p, assignedAgent: v ?? "" }))} options={agentFormOptions} placeholder="Unassigned" size="md" searchable clearable />
+          <AppSelect label={`Assigned ${T.saleAgent}`} value={form.assignedAgent} onChange={(v) => setForm((p) => ({ ...p, assignedAgent: v ?? "" }))} options={agentFormOptions} placeholder="Unassigned" size="md" searchable clearable />
         </div>
         <div>
           <label className={labelClass}>Location / Address</label>
@@ -342,6 +344,8 @@ function ListingFormModal({ initialEditingId, initialForm, listings, biz, proper
 }
 
 const SaleListings = () => {
+  const T = useTerms("saleListing", "saleListings", "saleAgent", "saleAgents");
+  const LISTING_TABLE_COLS = useMemo(() => listingTableCols(T), [T]);
   const confirm        = useConfirm();
   const queryClient    = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
@@ -458,16 +462,16 @@ const SaleListings = () => {
   }, []);
 
   const handleDelete = useCallback(async (row) => {
-    if (!await confirm({ title: "Delete Listing", message: `Delete "${row.title}"?`, confirmText: "Delete", isDangerous: true })) return;
+    if (!await confirm({ title: `Delete ${T.saleListing}`, message: `Delete "${row.title}"?`, confirmText: "Delete", isDangerous: true })) return;
     try {
       await saleApi.deleteListing(row._id);
       setSelected((prev) => (prev?._id === row._id ? null : prev));
       await invalidate();
-      toast.success("Listing deleted");
+      toast.success(`${T.saleListing} deleted`);
     } catch (err) {
       toast.error(err?.response?.data?.message || "Cannot delete this listing");
     }
-  }, [confirm, invalidate, setSelected]);
+  }, [confirm, invalidate, setSelected, T.saleListing]);
 
   const handleStatusChange = useCallback(async (row, status) => {
     if (statusInFlight.current.has(row._id)) return;
@@ -476,14 +480,14 @@ const SaleListings = () => {
     try {
       await saleApi.updateListingStatus(row._id, status);
       await invalidate();
-      toast.success(`Listing marked ${status.replace(/_/g, " ")}`);
+      toast.success(`${T.saleListing} marked ${status.replace(/_/g, " ")}`);
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to update status");
     } finally {
       statusInFlight.current.delete(row._id);
       setStatusBusy((m) => { const { [row._id]: _done, ...rest } = m; return rest; });
     }
-  }, [invalidate]);
+  }, [invalidate, T.saleListing]);
 
   const handleUploadImages = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -530,7 +534,7 @@ const SaleListings = () => {
     const statusBg = { available: "#dcfce7", reserved: "#fef3c7", under_contract: "#dbeafe", sold: "#f1f5f9", withdrawn: "#ffe4e6" }[row.status] || "#f1f5f9";
     const win = window.open("", "_blank", "width=900,height=720");
     if (!win) return;
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Sale Listing &ndash; ${esc(row.listingNumber)}</title>
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${esc(T.saleListing)} &ndash; ${esc(row.listingNumber)}</title>
 <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font-size:12px}
 .hdr{display:grid;grid-template-columns:1fr 180px;align-items:start;border-bottom:3px solid #0B3B2E;padding-bottom:14px;margin-bottom:18px}
 .co-name{font-size:18px;font-weight:900;color:#0B3B2E;margin-bottom:3px}.co-sub{font-size:9px;color:#64748b;line-height:1.5}
@@ -547,16 +551,16 @@ const SaleListings = () => {
 .notice{font-size:9px;color:#94a3b8;text-align:center;margin-top:20px;border-top:1px solid #f1f5f9;padding-top:10px;line-height:1.6}
 @media print{body{padding:14px 16px}@page{size:A4 portrait;margin:10mm}}</style></head><body>
 <div class="hdr"><div><div class="co-name">${esc(coName)}</div>${coInfo ? `<div class="co-sub">${esc(coInfo)}</div>` : ""}</div>
-<div class="doc-block"><div class="doc-type">Sale Listing</div><div class="doc-no">${esc(row.listingNumber)}</div><div class="status-badge">${esc(statusLabel)}</div></div></div>
+<div class="doc-block"><div class="doc-type">${esc(T.saleListing)}</div><div class="doc-no">${esc(row.listingNumber)}</div><div class="status-badge">${esc(statusLabel)}</div></div></div>
 <div class="price-box"><div><div class="price-label">Asking Price</div><div class="price-val">${esc(fmtKES(row.askingPrice))}</div><div class="price-note">${row.negotiable ? "Price is negotiable" : "Fixed price – not negotiable"}</div></div>
 <div style="text-align:right"><div class="price-label">Property Type</div><div style="font-size:15px;font-weight:900;color:#0f172a;text-transform:capitalize;margin-top:4px">${esc(row.propertyType)}</div></div></div>
 <div class="section-title">Property Details</div><div class="grid">
-<div class="field"><div class="fl">Listing No.</div><div class="fv">${esc(row.listingNumber)}</div></div>
+<div class="field"><div class="fl">${esc(T.saleListing)} No.</div><div class="fv">${esc(row.listingNumber)}</div></div>
 <div class="field"><div class="fl">Title</div><div class="fv">${esc(row.title)}</div></div>
 <div class="field"><div class="fl">Listed Date</div><div class="fv">${esc(fmtD(row.listedDate))}</div></div>
 <div class="field"><div class="fl">Size</div><div class="fv">${row.size ? esc(`${row.size} ${row.sizeUnit ?? ""}`.trim()) : "Not specified"}</div></div>
 <div class="field"><div class="fl">Title Deed</div><div class="fv">${row.titleDeedAvailable ? `Yes &ndash; ${esc(row.titleDeedNumber || "N/A")}` : "Not available"}</div></div>
-<div class="field"><div class="fl">Assigned Agent</div><div class="fv">${esc(row.assignedAgent?.fullName || "Unassigned")}</div></div></div>
+<div class="field"><div class="fl">Assigned ${esc(T.saleAgent)}</div><div class="fv">${esc(row.assignedAgent?.fullName || "Unassigned")}</div></div></div>
 <div class="section-title">Location</div><div class="grid">
 <div class="field"><div class="fl">Location / Address</div><div class="fv">${esc(row.location || "—")}</div></div>
 <div class="field"><div class="fl">Town / City</div><div class="fv">${esc(row.town || "—")}</div></div>
@@ -567,7 +571,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
 </body></html>`);
     win.document.close();
     setTimeout(() => { win.focus(); win.print(); }, 400);
-  }, [currentCompany]);
+  }, [currentCompany, T.saleListing, T.saleAgent]);
 
   const handleRowClick = useCallback((row) => setSelected((prev) => (prev?._id === row._id ? null : row)), [setSelected]);
   const selectedId = selected?._id;
@@ -627,7 +631,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
               onClick={openCreate}
               className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
             >
-              <FaPlus size={9} /> New Listing
+              <FaPlus size={9} /> New {T.saleListing}
             </button>
           </>
         }
@@ -639,7 +643,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
         />
         <AppSelect value={statusFilt} onChange={(v) => { setStatusFilt(v ?? ""); setPage(1); }} options={STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
         <AppSelect value={typeFilt} onChange={(v) => { setTypeFilt(v ?? ""); setPage(1); }} options={PROPERTY_TYPE_OPTIONS} placeholder="All Types" clearable size="sm" />
-        <AppSelect value={agentFilt} onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }} options={agentFilterOptions} placeholder="All Agents" clearable size="sm" searchable />
+        <AppSelect value={agentFilt} onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }} options={agentFilterOptions} placeholder={`All ${T.saleAgents}`} clearable size="sm" searchable />
       </SaleFilterBar>
 
       {/* Table + images panel */}
@@ -694,7 +698,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
                     ["Price",   fmtKES(selected.askingPrice)],
                     ["Size",    selected.size ? `${selected.size} ${selected.sizeUnit}` : null],
                     ["Location",[selected.town, selected.county].filter(Boolean).join(", ") || selected.location],
-                    ["Agent",   selected.assignedAgent?.fullName],
+                    [T.saleAgent,   selected.assignedAgent?.fullName],
                   ].filter(([, v]) => v).map(([label, val]) => (
                     <div key={label} className="flex items-baseline gap-2">
                       <span className="w-[80px] flex-shrink-0 text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</span>
@@ -798,7 +802,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
                 onClick={() => openEdit(selected)}
                 className="inline-flex items-center gap-1 bg-[#0B3B2E] px-3 py-1 text-[11px] font-black text-white hover:bg-[#07271e]"
               >
-                <FaEdit size={9} /> Edit Listing
+                <FaEdit size={9} /> Edit {T.saleListing}
               </button>
             </div>
           </div>
@@ -865,7 +869,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
       <ImportModal
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
-        title="Import Sale Listings"
+        title={`Import ${T.saleListings}`}
         entityName="listing"
         parseFile={parseSaleListingsExcel}
         downloadTemplate={downloadSaleListingsTemplate}

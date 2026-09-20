@@ -39,6 +39,14 @@ const resolveRouteTitle = (route, terminology) => {
     '/receipts':                      t('receipts'),
     '/receipts/landlord':             `${t('landlord')} ${t('receipts')}`,
     '/meter-readings':                `${t('meter')} Readings`,
+    // Sales module
+    '/sale/listings':                 t('saleListings'),
+    '/sale/buyers':                   t('saleBuyers'),
+    '/sale/agents':                   t('saleAgents'),
+    '/sale/agents/performance':       `${t('saleAgent')} Performance`,
+    '/sale/offers':                   t('saleOffers'),
+    '/sale/deals':                    t('saleDeals'),
+    '/sale/crm/leads':                t('saleLeads'),
   };
   if (overrides[route] != null) return overrides[route];
 
