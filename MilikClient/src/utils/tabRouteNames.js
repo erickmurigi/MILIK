@@ -138,6 +138,8 @@ const routeNames = {
   '/hr/letters': 'HR Letters',
   '/sale/dashboard': 'Dashboard',
   '/sale/listings': 'Listings',
+  '/sale/projects': 'Projects',
+  '/sale/units': 'Units',
   '/sale/buyers': 'Buyers',
   '/sale/agents': 'Agents',
   '/sale/offers': 'Offers',

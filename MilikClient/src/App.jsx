@@ -252,6 +252,9 @@ const HRReportAttendance    = lazy(() => import("./pages/HR/HRReportAttendance")
 // Property Sale module
 const PropertySaleDashboard = lazy(() => import("./pages/PropertySale/PropertySaleDashboard"));
 const SaleListings          = lazy(() => import("./pages/PropertySale/SaleListings"));
+const SaleProjects          = lazy(() => import("./pages/PropertySale/SaleProjects"));
+const SaleProjectDetail     = lazy(() => import("./pages/PropertySale/SaleProjectDetail"));
+const SaleUnits             = lazy(() => import("./pages/PropertySale/SaleUnits"));
 const SaleBuyers            = lazy(() => import("./pages/PropertySale/SaleBuyers"));
 const SaleAgents            = lazy(() => import("./pages/PropertySale/SaleAgents"));
 const SaleOffers            = lazy(() => import("./pages/PropertySale/SaleOffers"));
@@ -811,6 +814,9 @@ function App() {
             {/* ── Property Sale module ──────────────────────────────────── */}
             <Route path="/sale/dashboard"                    element={<Guard moduleKey="propertySale"><PropertySaleDashboard /></Guard>} />
             <Route path="/sale/listings"                     element={<Guard moduleKey="propertySale" resource="saleListings"><SaleListings /></Guard>} />
+            <Route path="/sale/projects"                     element={<Guard moduleKey="propertySale" resource="saleListings"><SaleProjects /></Guard>} />
+            <Route path="/sale/projects/:id"                 element={<Guard moduleKey="propertySale" resource="saleListings"><SaleProjectDetail /></Guard>} />
+            <Route path="/sale/units"                        element={<Guard moduleKey="propertySale" resource="saleListings"><SaleUnits /></Guard>} />
             <Route path="/sale/buyers"                       element={<Guard moduleKey="propertySale" resource="saleBuyers"><SaleBuyers /></Guard>} />
             <Route path="/sale/agents"                       element={<Guard moduleKey="propertySale" resource="saleAgents"><SaleAgents /></Guard>} />
             <Route path="/sale/offers"                       element={<Guard moduleKey="propertySale" resource="saleOffers"><SaleOffers /></Guard>} />

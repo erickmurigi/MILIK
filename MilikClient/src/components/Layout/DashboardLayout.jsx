@@ -17,7 +17,7 @@ import {
   FaHandshake, FaChartLine, FaChartPie, FaFileAlt, FaBalanceScale,
   FaToolbox, FaDatabase, FaWrench, FaHeadset, FaInfoCircle, FaList,
   FaBuilding, FaKey, FaUserSlash, FaRedoAlt, FaCar, FaUserPlus, FaUserCheck,
-  FaLayerGroup, FaStar, FaCodeBranch,
+  FaLayerGroup, FaThLarge, FaStar, FaCodeBranch,
   FaBoxes, FaWarehouse, FaCashRegister, FaEnvelope, FaSms, FaUserClock, FaUserFriends,
   FaArchive, FaShieldAlt, FaRulerCombined, FaPercent, FaMoneyCheckAlt,
 } from "react-icons/fa";
@@ -34,6 +34,8 @@ import {
 import { GL_ACCESS_MODULES, hasCompanyModule, isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { useTerm, useTerms } from "../../hooks/useTerm";
+import { useQuery } from "@tanstack/react-query";
+import { saleApi } from "../../services/propertySaleApi";
 
 const MENU_PERMISSION_MAP = {
   "properties-list": { resource: "properties", action: "view", moduleKey: "propertyManagement" },
@@ -167,6 +169,8 @@ const MENU_PERMISSION_MAP = {
   "comm-email-templates": { resource: "email", action: "manage" },
   "sale-dashboard":       { resource: "sale-dashboard",       action: "view", moduleKey: "propertySale" },
   "sale-listings":        { resource: "sale-listings",        action: "view", moduleKey: "propertySale" },
+  "sale-projects":        { resource: "sale-listings",        action: "view", moduleKey: "propertySale" },
+  "sale-units":           { resource: "sale-listings",        action: "view", moduleKey: "propertySale" },
   "sale-buyers":          { resource: "sale-buyers",          action: "view", moduleKey: "propertySale" },
   "sale-agents":          { resource: "sale-agents",          action: "view", moduleKey: "propertySale" },
   "sale-offers":          { resource: "sale-offers",          action: "view", moduleKey: "propertySale" },
@@ -649,7 +653,7 @@ const TopToolbar = ({
   const termRent       = useTerm("rent");
   const termLease      = useTerm("lease");
   // Sales workspace words (one subscription; stable while the values are unchanged)
-  const saleT = useTerms("saleListings", "saleLeads", "saleBuyers", "saleOffers", "saleDeals", "saleAgent", "saleAgents");
+  const saleT = useTerms("saleListings", "saleProjects", "saleUnits", "saleLeads", "saleBuyers", "saleOffers", "saleDeals", "saleAgent", "saleAgents");
 
   // Dynamic color map that reflects company terminology in dropdown headers
   const dynamicMenuColorMap = useMemo(() => ({
@@ -678,6 +682,14 @@ const TopToolbar = ({
   const isCarWashWorkspace        = effectiveMenuWorkspace === WORKSPACE_IDS.CARWASH;
   const isInventoryWorkspace      = effectiveMenuWorkspace === WORKSPACE_IDS.INVENTORY;
   const isPropertySaleWorkspace   = effectiveMenuWorkspace === WORKSPACE_IDS.PROPERTY_SALE;
+  // Sale Settings -> Selling Mode: shows the Projects and Units pages (shares the query cache with the Sales pages)
+  const { data: saleSettings } = useQuery({
+    queryKey: ["sale-settings", activeCompanyContext?._id],
+    queryFn: () => saleApi.getSettings(),
+    enabled: isPropertySaleWorkspace && !!activeCompanyContext?._id,
+    staleTime: 10 * 60_000,
+  });
+  const saleUsesProjects = Boolean(saleSettings?.useProjects);
   const isHumanResourceWorkspace  = effectiveMenuWorkspace === WORKSPACE_IDS.HUMAN_RESOURCE;
   const isCommunicationsWorkspace = effectiveMenuWorkspace === WORKSPACE_IDS.COMMUNICATIONS;
   const isClientsWorkspace        = effectiveMenuWorkspace === WORKSPACE_IDS.CLIENTS;
@@ -772,6 +784,8 @@ const TopToolbar = ({
       return {
         "sale-dashboard":      "/sale/dashboard",
         "sale-listings":       "/sale/listings",
+        "sale-projects":       "/sale/projects",
+        "sale-units":          "/sale/units",
         "sale-buyers":         "/sale/buyers",
         "sale-agents":         "/sale/agents",
         "sale-offers":         "/sale/offers",
@@ -1018,6 +1032,10 @@ const TopToolbar = ({
           icon: FaBuilding,
           submenu: [
             { id: "sale-listings", label: saleT.saleListings, icon: FaBuilding },
+            ...(saleUsesProjects ? [
+              { id: "sale-projects", label: saleT.saleProjects, icon: FaLayerGroup },
+              { id: "sale-units",    label: saleT.saleUnits,    icon: FaThLarge },
+            ] : []),
           ],
         },
         {
@@ -1662,7 +1680,7 @@ const TopToolbar = ({
       });
 
     return filterMenuByPermissions(items, currentUser, activeCompanyContext);
-  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isClientsWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace, termTenant, termTenants, termUnit, termUnits, termProperty, termProperties, termLandlord, termLandlords, termRent, termLease, saleT]);
+  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isClientsWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace, termTenant, termTenants, termUnit, termUnits, termProperty, termProperties, termLandlord, termLandlords, termRent, termLease, saleT, saleUsesProjects]);
 
   const nestedSubmenus = useMemo(() => {
     if (isSystemAdminWorkspace || isCompanySetupWorkspace || isAccountsWorkspace || isCarWashWorkspace || isClientsWorkspace || isPropertySaleWorkspace || isHumanResourceWorkspace || isCommunicationsWorkspace) {

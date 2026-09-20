@@ -18,6 +18,24 @@ export const saleApi = {
   uploadListingImages: async (id, formData) => (await adminRequests.post(`/sale/listings/${id}/images`, formData))?.data,
   deleteListingImage: async (id, url) => (await adminRequests.delete(`/sale/listings/${id}/images`, { data: { url } }))?.data,
 
+  // Projects: a project groups units, and each unit is a listing that belongs to it
+  listProjects: async (params = {}) => unwrapPage(await adminRequests.get("/sale/projects", { params })),
+  getProject: async (id) => unwrap(await adminRequests.get(`/sale/projects/${id}`)),
+  createProject: async (payload) => unwrap(await adminRequests.post("/sale/projects", payload)),
+  updateProject: async (id, payload) => unwrap(await adminRequests.put(`/sale/projects/${id}`, payload)),
+  archiveProject: async (id, archived) => unwrap(await adminRequests.patch(`/sale/projects/${id}/archive`, { archived })),
+  deleteProject: async (id) => (await adminRequests.delete(`/sale/projects/${id}`))?.data,
+  // -> { data: [units], total, truncated }
+  listProjectUnits: async (id, params = {}) => (await adminRequests.get(`/sale/projects/${id}/units`, { params }))?.data,
+  // payload: { prefix, from, to, pad, block, propertyType, size, sizeUnit, askingPrice, titleDeedAvailable, negotiable, assignedAgent, description } -> { created, skipped, requested }
+  generateProjectUnits: async (id, payload) => (await adminRequests.post(`/sale/projects/${id}/units/generate`, payload))?.data,
+  // items: [{ listingId, unitNumber, block }] -> { assigned, failed: [{ listingId, error }] }
+  assignProjectUnits: async (id, items) => (await adminRequests.post(`/sale/projects/${id}/units/assign`, { items }))?.data,
+  // payload: { mode: "percent" | "amount" | "set", value, block? } (available units only) -> { updated }
+  updateProjectUnitPrices: async (id, payload) => (await adminRequests.patch(`/sale/projects/${id}/units/price`, payload))?.data,
+  applyProjectDetails: async (id) => (await adminRequests.post(`/sale/projects/${id}/units/apply-details`))?.data,
+  detachProjectUnit: async (id, listingId) => (await adminRequests.delete(`/sale/projects/${id}/units/${listingId}`))?.data,
+
   // Buyers
   listBuyers: async (params = {}) => unwrapPage(await adminRequests.get("/sale/buyers", { params })),
   getBuyer: async (id, params = {}) => unwrap(await adminRequests.get(`/sale/buyers/${id}`, { params })),
@@ -128,6 +146,7 @@ export const saleApi = {
   deleteActivity:   async (id)          => unwrap(await adminRequests.delete(`/sale/activities/${id}`)),
 
   // Settings
+  updateUseProjects: async (enabled) => (await adminRequests.put("/sale/settings/use-projects", { enabled }))?.data?.settings,
   getSettings: async () => (await adminRequests.get("/sale/settings"))?.data?.settings,
   updateAgentVisibility: async (mode) => (await adminRequests.put("/sale/settings/agent-visibility", { mode }))?.data?.settings,
 

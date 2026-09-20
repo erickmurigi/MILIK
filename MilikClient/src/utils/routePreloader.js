@@ -129,6 +129,8 @@ const PRELOAD_ENTRIES = [
   // Property Sale
   ['/sale/dashboard',                     () => import('../pages/PropertySale/PropertySaleDashboard')],
   ['/sale/listings',                      () => import('../pages/PropertySale/SaleListings')],
+  ['/sale/projects',                      () => import('../pages/PropertySale/SaleProjects')],
+  ['/sale/units',                         () => import('../pages/PropertySale/SaleUnits')],
   ['/sale/buyers',                        () => import('../pages/PropertySale/SaleBuyers')],
   ['/sale/agents',                        () => import('../pages/PropertySale/SaleAgents')],
   ['/sale/offers',                        () => import('../pages/PropertySale/SaleOffers')],

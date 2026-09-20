@@ -41,6 +41,8 @@ const resolveRouteTitle = (route, terminology) => {
     '/meter-readings':                `${t('meter')} Readings`,
     // Sales module
     '/sale/listings':                 t('saleListings'),
+    '/sale/projects':                 t('saleProjects'),
+    '/sale/units':                    t('saleUnits'),
     '/sale/buyers':                   t('saleBuyers'),
     '/sale/agents':                   t('saleAgents'),
     '/sale/agents/performance':       `${t('saleAgent')} Performance`,
@@ -51,6 +53,7 @@ const resolveRouteTitle = (route, terminology) => {
   if (overrides[route] != null) return overrides[route];
 
   if (route.startsWith('/properties/edit/')) return `${t('property')} Details`;
+  if (route.startsWith('/sale/projects/')) return `${t('saleProject')} Details`;
   if (
     route === '/tenant/new' ||
     (route.startsWith('/tenant/') && route.endsWith('/edit'))

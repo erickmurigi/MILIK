@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import {
   FaCog, FaFilter, FaHandshake, FaHome, FaMoneyBillWave,
-  FaPlus, FaSave, FaTimes, FaUserShield,
+  FaLayerGroup, FaPlus, FaSave, FaTimes, FaUserShield,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { adminRequests } from "../../utils/requestMethods";
@@ -29,6 +29,7 @@ const SIDEBAR_GROUPS = [
     label: "Listings",
     items: [
       { key: "propertyTypes",  label: "Property Types",    icon: FaHome,       endpoint: "property-types"  },
+      { key: "sellingMode", label: "Selling Mode", icon: FaLayerGroup, endpoint: null },
     ],
   },
   {
@@ -202,6 +203,22 @@ export default function SaleSettings() {
     }
   };
 
+  const [savingProjects, setSavingProjects] = useState(false);
+  const usesProjects = Boolean(settings?.useProjects);
+  const saveUsesProjects = async (enabled) => {
+    if (enabled === usesProjects || savingProjects) return;
+    setSavingProjects(true);
+    try {
+      await saleApi.updateUseProjects(enabled);
+      toast.success(enabled ? "Projects and units enabled" : "Projects and units hidden");
+      await loadSettings();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to save");
+    } finally {
+      setSavingProjects(false);
+    }
+  };
+
   const [savingVisibility, setSavingVisibility] = useState(false);
   const agentVisibility = settings?.agentVisibility === "all" ? "all" : "own";
   const saveAgentVisibility = async (mode) => {
@@ -353,6 +370,39 @@ export default function SaleSettings() {
     </div>
   );
 
+  const MODE_OPTIONS = [
+    { value: false, title: "Single items", body: "Everything you sell is a standalone listing (a house, a car, one plot). The Projects and Units pages stay hidden." },
+    { value: true,  title: "Projects with units", body: "You also sell items grouped into projects (plots in an estate, flats in a development). Adds Projects and Units pages, with a sell-through view for each project. Standalone listings keep working." },
+  ];
+
+  const renderSellingModeTab = () => (
+    <div className="flex-1 overflow-auto px-4 py-6">
+      <div className="max-w-xl space-y-4">
+        <p className="text-[11px] text-slate-500">
+          Choose how this company sells. You can switch at any time: turning it off only hides the pages, and no data is removed.
+        </p>
+        {MODE_OPTIONS.map((o) => {
+          const selected = usesProjects === o.value;
+          return (
+            <button
+              key={String(o.value)}
+              type="button"
+              disabled={savingProjects}
+              onClick={() => saveUsesProjects(o.value)}
+              className={`block w-full border p-3 text-left transition disabled:opacity-60 ${selected ? "border-[#0B3B2E] bg-[#0B3B2E]/5" : "border-slate-200 hover:border-slate-300"}`}
+            >
+              <span className="flex items-center gap-2 text-[12px] font-bold text-slate-800">
+                <span className={`inline-block h-3 w-3 rounded-full border ${selected ? "border-[#0B3B2E] bg-[#0B3B2E]" : "border-slate-300"}`} />
+                {o.title}
+              </span>
+              <span className="mt-1 block pl-5 text-[11px] text-slate-500">{o.body}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   const VISIBILITY_OPTIONS = [
     { value: "own", title: "Only their own records", body: "Agents see just the leads, offers, deals, payments, schedules, activities, commissions and report figures that belong to them. Listings and buyers stay shared." },
     { value: "all", title: "Whole business", body: "Agents see every record in the company, like a manager would. They still cannot approve or pay their own commission, and they cannot reassign deals or leads." },
@@ -445,6 +495,8 @@ export default function SaleSettings() {
               </div>
             ) : activeTab === "commissionDefaults" ? (
               renderCommissionTab()
+            ) : activeTab === "sellingMode" ? (
+              renderSellingModeTab()
             ) : activeTab === "agentAccess" ? (
               renderAgentAccessTab()
             ) : (
