@@ -118,7 +118,9 @@ export const updateCommissionStatus = async (req, res, next) => {
 
     // Agent-scoped users may only act on their own commissions (404, not 403, to avoid leaking existence)
     const scopedAgentId = await resolveAgentScope(req, business);
-    const oldCommission = await SaleCommission.findOne({ _id: req.params.id, business, ...(scopedAgentId && { agent: scopedAgentId }) }).lean();
+    // ...and can never approve, pay or reverse their own commission — that is for finance/management
+    if (scopedAgentId) return next(createError(403, "Agents cannot change the status of their own commissions"));
+    const oldCommission = await SaleCommission.findOne({ _id: req.params.id, business }).lean();
     if (!oldCommission) return next(createError(404, "Commission not found"));
 
     const allowed = ALLOWED_TRANSITIONS[oldCommission.status] ?? [];

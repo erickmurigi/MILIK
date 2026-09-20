@@ -5,8 +5,8 @@ import { attachAgentScope } from "../middleware/agentScope.js";
 
 const router = express.Router();
 
-router.use(verifyUser, requireCompanyModule("propertySale"));
-router.get("/", requireCompanyPermission("sale-commissions", "view", "propertySale"), attachAgentScope, listCommissions);
+router.use(verifyUser, requireCompanyModule("propertySale"), attachAgentScope);
+router.get("/", requireCompanyPermission("sale-commissions", "view", "propertySale"), listCommissions);
 router.get("/:id", requireCompanyPermission("sale-commissions", "view", "propertySale"), getCommission);
 router.patch("/:id/status", requireCompanyPermission("sale-commissions", "process", "propertySale"), updateCommissionStatus);
 

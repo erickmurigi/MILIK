@@ -20,6 +20,7 @@ import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import Company from "../../../models/Company.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
 import { deleteDocumentFile } from "../middleware/dealDocumentUpload.js";
+import { agentFilter } from "../middleware/agentScope.js";
 import { round2 } from "../../../utils/math.js";
 
 const fillPlaceholders = (text, vars) =>
@@ -172,7 +173,7 @@ export const listDeals = async (req, res, next) => {
 export const getDeal = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const deal = await populateDeal(SaleDeal.findOne({ _id: req.params.id, business })).lean();
+    const deal = await populateDeal(SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req) })).lean();
     if (!deal) return next(createError(404, "Deal not found"));
     const totalPaid = await computeTotals(business, deal._id);
     res.status(200).json({ ...deal, totalPaid, balance: deal.agreedPrice - totalPaid });
@@ -186,7 +187,9 @@ export const createDeal = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
 
-    const { listing: listingId, buyer: buyerId, agent: agentId, offer: offerId } = req.body;
+    const { listing: listingId, buyer: buyerId, offer: offerId } = req.body;
+    // Agent-scoped users can only create deals assigned to themselves
+    const agentId = req.saleAgentId || req.body.agent;
 
     if (!isIdString(listingId)) return next(createError(400, "Listing not found"));
     if (!isIdString(buyerId))   return next(createError(400, "Buyer not found"));
@@ -256,18 +259,23 @@ export const updateDeal = async (req, res, next) => {
     const { business: _b, dealNumber: _n, createdBy: _c, listing: _l, buyer: _by, offer: _o, status: _s, documents: _d, _id: _i, ...rawUpdates } = req.body;
     const updates = sanitizeDealBody(rawUpdates);
 
+    // Agent-scoped users cannot reassign a deal to another agent
+    if (req.saleAgentId) delete updates.agent;
+
     // Agent id comes from the body — must belong to this business
     if (updates.agent && (!isIdString(updates.agent) || !(await SaleAgent.exists({ _id: updates.agent, business })))) {
       return next(createError(400, "Agent not found"));
     }
 
     // agreedPrice changes must be reconciled with payments already taken and any payment schedule
+    let priceChange = null;
     if ("agreedPrice" in updates) {
-      const existing = await SaleDeal.findOne({ _id: req.params.id, business }).select("agreedPrice status").lean();
+      const existing = await SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req) }).select("agreedPrice status").lean();
       if (!existing) return next(createError(404, "Deal not found"));
       const newPrice = round2(updates.agreedPrice);
       if (newPrice !== round2(existing.agreedPrice)) {
         if (existing.status !== "active") return next(createError(400, `Agreed price cannot be changed on a ${existing.status} deal`));
+        priceChange = { old: existing.agreedPrice, new: newPrice };
         const [totalPaid, scheduleAgg] = await Promise.all([
           computeTotals(business, existing._id),
           SalePaymentSchedule.aggregate([
@@ -288,12 +296,32 @@ export const updateDeal = async (req, res, next) => {
 
     const deal = await populateDeal(
       SaleDeal.findOneAndUpdate(
-        { _id: req.params.id, business },
+        { _id: req.params.id, business, ...agentFilter(req) },
         { ...updates, updatedBy: userId },
         { new: true, runValidators: true }
       )
     ).lean();
     if (!deal) return next(createError(404, "Deal not found"));
+
+    // Keep the agent's not-yet-approved commission in step with the new price. Only percentage
+    // commissions that were derived from the old price follow it; flat amounts and manual overrides stay.
+    // Approved/paid commissions are never touched (they may already have ledger entries).
+    if (priceChange) {
+      const pending = await SaleCommission.find({ business, deal: deal._id, status: "pending" }).lean();
+      await Promise.all(pending.map((c) => {
+        const patch = { saleAmount: priceChange.new };
+        const derivedFromOldPrice =
+          c.commissionType === "percentage" &&
+          Math.abs(c.commissionAmount - round2((priceChange.old * c.commissionRate) / 100)) <= 0.01;
+        if (derivedFromOldPrice) {
+          const commissionAmount = round2((priceChange.new * c.commissionRate) / 100);
+          const { whtAmount, netAmount } = calcWHT(commissionAmount, c.whtRate);
+          Object.assign(patch, { commissionAmount, whtAmount, netAmount });
+        }
+        return SaleCommission.updateOne({ _id: c._id, business, status: "pending" }, { $set: { ...patch, updatedBy: userId } });
+      }));
+    }
+
     const totalPaid = await computeTotals(business, deal._id);
     res.status(200).json({ ...deal, totalPaid, balance: deal.agreedPrice - totalPaid });
   } catch (err) {
@@ -305,7 +333,7 @@ export const closeDeal = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
-    const deal = await SaleDeal.findOne({ _id: req.params.id, business });
+    const deal = await SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req) });
     if (!deal) return next(createError(404, "Deal not found"));
     if (deal.status !== "active") return next(createError(400, `Deal is already ${deal.status}`));
 
@@ -391,7 +419,7 @@ export const cancelDeal = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
-    const deal = await SaleDeal.findOne({ _id: req.params.id, business });
+    const deal = await SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req) });
     if (!deal) return next(createError(404, "Deal not found"));
     if (deal.status === "closed") return next(createError(400, "Cannot cancel a closed deal"));
     if (deal.status === "cancelled") return next(createError(400, "Deal is already cancelled"));
@@ -464,7 +492,7 @@ export const cancelDeal = async (req, res, next) => {
 export const deleteDeal = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const deal = await SaleDeal.findOne({ _id: req.params.id, business }).lean();
+    const deal = await SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req) }).lean();
     if (!deal) return next(createError(404, "Deal not found"));
     if (deal.status !== "cancelled") return next(createError(400, "Only cancelled deals can be deleted"));
 
@@ -489,7 +517,7 @@ export const deleteDeal = async (req, res, next) => {
 export const sendDealSms = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const deal = await SaleDeal.findOne({ _id: req.params.id, business })
+    const deal = await SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req) })
       .populate("buyer", "fullName phone").lean();
     if (!deal) return next(createError(404, "Deal not found"));
     const phone = String(req.body.phone || deal.buyer?.phone || "").trim();
@@ -507,7 +535,7 @@ export const sendDealEmail = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const [deal, company] = await Promise.all([
-      SaleDeal.findOne({ _id: req.params.id, business })
+      SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req) })
         .populate("buyer",   "fullName email phone buyerNumber")
         .populate("listing", "title listingNumber propertyType location town county askingPrice size sizeUnit")
         .populate("agent",   "fullName")
@@ -570,7 +598,7 @@ export const createDealFromOffer = async (req, res, next) => {
     // The duplicate-deal lookup is independent of the offer fetch — run both together; the checks
     // below still evaluate in the original order so error precedence is unchanged.
     const [offer, existingDeal] = await Promise.all([
-      SaleOffer.findOne({ _id: req.params.offerId, business }).populate("listing buyer agent").lean(),
+      SaleOffer.findOne({ _id: req.params.offerId, business, ...agentFilter(req) }).populate("listing buyer agent").lean(),
       SaleDeal.findOne({ business, offer: req.params.offerId }).select("_id").lean(),
     ]);
     if (!offer) return next(createError(404, "Offer not found"));
@@ -630,7 +658,7 @@ export const uploadDealDocument = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
-    const deal = await SaleDeal.findOne({ _id: req.params.id, business });
+    const deal = await SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req) });
     if (!deal) { discardUpload(); return next(createError(404, "Deal not found")); }
     if (!req.file)  return next(createError(400, "No file uploaded"));
 
@@ -654,7 +682,7 @@ export const uploadDealDocument = async (req, res, next) => {
 export const deleteDealDocument = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const deal = await SaleDeal.findOne({ _id: req.params.id, business });
+    const deal = await SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req) });
     if (!deal) return next(createError(404, "Deal not found"));
     const doc = deal.documents.id(req.params.docId);
     if (!doc) return next(createError(404, "Document not found"));

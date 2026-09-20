@@ -5,10 +5,10 @@ import { attachAgentScope } from "../middleware/agentScope.js";
 
 const router = express.Router();
 
-router.use(verifyUser, requireCompanyModule("propertySale"));
+router.use(verifyUser, requireCompanyModule("propertySale"), attachAgentScope);
 
 router.get("/pipeline", requireCompanyPermission("sale-crm-leads", "view",   "propertySale"), getPipeline);
-router.get("/",         requireCompanyPermission("sale-crm-leads", "view",   "propertySale"), attachAgentScope, listLeads);
+router.get("/",         requireCompanyPermission("sale-crm-leads", "view",   "propertySale"), listLeads);
 router.get("/:id",      requireCompanyPermission("sale-crm-leads", "view",   "propertySale"), getLead);
 router.post("/",        requireCompanyPermission("sale-crm-leads", "create", "propertySale"), createLead);
 router.put("/:id",      requireCompanyPermission("sale-crm-leads", "update", "propertySale"), updateLead);

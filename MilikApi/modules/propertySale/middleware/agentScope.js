@@ -29,3 +29,10 @@ export const attachAgentScope = async (req, _res, next) => {
     return next(err);
   }
 };
+
+/**
+ * Query fragment restricting a lookup to the caller's own records when they are an agent-scoped user
+ * (req.saleAgentId set by attachAgentScope); empty for admins/managers. Spread into a filter:
+ *   Model.findOne({ _id, business, ...agentFilter(req, 'assignedAgent') })
+ */
+export const agentFilter = (req, field = "agent") => (req.saleAgentId ? { [field]: req.saleAgentId } : {});

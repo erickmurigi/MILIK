@@ -7,6 +7,7 @@ import SaleListing from "../models/SaleListing.js";
 import SaleActivity from "../models/SaleActivity.js";
 import Company from "../../../models/Company.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
+import { agentFilter } from "../middleware/agentScope.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
 
 // A converted lead carries its source onto the buyer as-is (sources are admin-configurable)
@@ -70,7 +71,7 @@ export const getPipeline = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     // aggregate() does not auto-cast — business must be an ObjectId to match stored documents
     const pipeline = await SaleLead.aggregate([
-      { $match: { business: new mongoose.Types.ObjectId(String(business)) } },
+      { $match: { business: new mongoose.Types.ObjectId(String(business)), ...(req.saleAgentId && { assignedAgent: new mongoose.Types.ObjectId(String(req.saleAgentId)) }) } },
       { $group: { _id: "$status", count: { $sum: 1 } } },
       { $sort: { _id: 1 } },
     ]);
@@ -81,7 +82,7 @@ export const getPipeline = async (req, res, next) => {
 export const getLead = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const lead = await SaleLead.findOne({ _id: req.params.id, business })
+    const lead = await SaleLead.findOne({ _id: req.params.id, business, ...agentFilter(req, "assignedAgent") })
       .populate("assignedAgent",     "fullName phone")
       .populate("interestedListings","listingNumber title")
       .populate("convertedBuyer",    "buyerNumber fullName")
@@ -96,7 +97,10 @@ export const createLead = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
     const leadNumber = await generateSequentialNumber(SaleLead, business, "LDR");
-    const lead = await SaleLead.create({ ...sanitizeLeadBody(req.body), business, leadNumber, createdBy: userId, updatedBy: userId });
+    // Agent-scoped users can only create leads assigned to themselves
+    const body = sanitizeLeadBody(req.body);
+    if (req.saleAgentId) body.assignedAgent = req.saleAgentId;
+    const lead = await SaleLead.create({ ...body, business, leadNumber, createdBy: userId, updatedBy: userId });
     res.status(201).json(lead);
   } catch (err) { next(err); }
 };
@@ -106,13 +110,18 @@ export const updateLead = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
     const { business: _b, leadNumber: _n, createdBy: _c, convertedBuyer: _cv, convertedAt: _ca, ...rawUpdates } = req.body;
-    const updates = sanitizeLeadBody(rawUpdates);
+    // Only touch fields the client actually sent: sanitizeLeadBody fills defaults for absent fields,
+    // which would otherwise wipe assignedAgent, budgets, follow-up dates and interested listings on a partial update.
+    const sanitized = sanitizeLeadBody(rawUpdates);
+    const updates = Object.fromEntries(Object.entries(sanitized).filter(([k]) => k in rawUpdates));
+    // Agent-scoped users cannot reassign a lead to another agent
+    if (req.saleAgentId) delete updates.assignedAgent;
     // "converted" status must go through /convert (which creates the buyer record)
     if (updates.status === "converted") delete updates.status;
     // A lead that already has a buyer keeps its "converted" status — unlinking happens only via
     // buyersController.deleteBuyer, which resets the lead itself.
     if (updates.status !== undefined) {
-      const current = await SaleLead.findOne({ _id: req.params.id, business }).select("status convertedBuyer").lean();
+      const current = await SaleLead.findOne({ _id: req.params.id, business, ...agentFilter(req, "assignedAgent") }).select("status convertedBuyer").lean();
       if (!current) return next(createError(404, "Lead not found"));
       if (current.convertedBuyer) {
         if (updates.status !== current.status) {
@@ -122,7 +131,7 @@ export const updateLead = async (req, res, next) => {
       }
     }
     const lead = await SaleLead.findOneAndUpdate(
-      { _id: req.params.id, business },
+      { _id: req.params.id, business, ...agentFilter(req, "assignedAgent") },
       { ...updates, updatedBy: userId },
       { new: true, runValidators: true }
     ).populate("assignedAgent", "fullName").lean();
@@ -134,7 +143,7 @@ export const updateLead = async (req, res, next) => {
 export const deleteLead = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const lead = await SaleLead.findOne({ _id: req.params.id, business });
+    const lead = await SaleLead.findOne({ _id: req.params.id, business, ...agentFilter(req, "assignedAgent") });
     if (!lead) return next(createError(404, "Lead not found"));
     if (lead.status === "converted") return next(createError(400, "Cannot delete a converted lead"));
     await Promise.all([
@@ -174,15 +183,15 @@ export const convertLead = async (req, res, next) => {
     const userId   = currentUserId(req);
 
     // Claim first: only the request that flips the lead to "converted" may create the buyer.
-    const previous = await claimLeadForConversion(business, req.params.id, userId, { status: { $ne: "converted" } });
+    const previous = await claimLeadForConversion(business, req.params.id, userId, { status: { $ne: "converted" }, ...agentFilter(req, "assignedAgent") });
     if (!previous) {
-      const exists = await SaleLead.exists({ _id: req.params.id, business });
+      const exists = await SaleLead.exists({ _id: req.params.id, business, ...agentFilter(req, "assignedAgent") });
       return next(exists ? createError(400, "Lead is already converted") : createError(404, "Lead not found"));
     }
 
     let buyer = null;
     try {
-      const lead = await SaleLead.findOne({ _id: req.params.id, business }).lean();
+      const lead = await SaleLead.findOne({ _id: req.params.id, business, ...agentFilter(req, "assignedAgent") }).lean();
       const { idNumber = "" } = req.body;
       const buyerNumber = await generateSequentialNumber(SaleBuyer, business, "BYR");
       buyer = await SaleBuyer.create({
@@ -214,7 +223,7 @@ export const convertLead = async (req, res, next) => {
 export const sendLeadSms = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const lead = await SaleLead.findOne({ _id: req.params.id, business }).lean();
+    const lead = await SaleLead.findOne({ _id: req.params.id, business, ...agentFilter(req, "assignedAgent") }).lean();
     if (!lead) return next(createError(404, "Lead not found"));
     const phone = String(req.body.phone || lead.phone || "").trim();
     const body  = String(req.body.body  || "").trim();
@@ -229,7 +238,7 @@ export const sendLeadEmail = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const [lead, company] = await Promise.all([
-      SaleLead.findOne({ _id: req.params.id, business }).populate("assignedAgent", "fullName").lean(),
+      SaleLead.findOne({ _id: req.params.id, business, ...agentFilter(req, "assignedAgent") }).populate("assignedAgent", "fullName").lean(),
       Company.findById(business).select("companyName name phoneNo email").lean(),
     ]);
     if (!lead) return next(createError(404, "Lead not found"));
@@ -281,7 +290,7 @@ export const convertLeadToOffer = async (req, res, next) => {
     if (!Number.isFinite(amount) || amount < 0) return next(createError(400, "Offer amount must be a valid non-negative number"));
 
     const [lead, listing] = await Promise.all([
-      SaleLead.findOne({ _id: req.params.id, business }).lean(),
+      SaleLead.findOne({ _id: req.params.id, business, ...agentFilter(req, "assignedAgent") }).lean(),
       SaleListing.findOne({ _id: listingId, business }).lean(),
     ]);
     if (!lead) return next(createError(404, "Lead not found"));
