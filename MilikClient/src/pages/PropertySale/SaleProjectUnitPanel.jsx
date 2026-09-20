@@ -4,6 +4,7 @@ import { FaEdit, FaExternalLinkAlt, FaTimes, FaUnlink } from "react-icons/fa";
 import { fmtKES } from "../../services/propertySaleApi";
 import StatusBadge from "../../components/common/StatusBadge";
 import { LISTING_STATUS_MAP } from "./SaleProjectShared";
+import { listingAgentText } from "../../utils/saleAgent";
 
 // Side panel with one unit's details and actions
 const SaleProjectUnitPanel = React.memo(function SaleProjectUnitPanel({ unit, terms, busy, onClose, onEdit, onDetach }) {
@@ -14,7 +15,7 @@ const SaleProjectUnitPanel = React.memo(function SaleProjectUnitPanel({ unit, te
     ["Type", String(unit.propertyType || "").replace(/_/g, " ")],
     ["Size", unit.size ? `${unit.size} ${unit.sizeUnit || ""}`.trim() : null],
     ["Price", fmtKES(unit.askingPrice)],
-    [terms.saleAgent, unit.assignedAgent?.fullName],
+    [terms.saleAgent, listingAgentText(unit, terms.saleProject.toLowerCase())],
     ["Title deed", unit.titleDeedAvailable ? "Available" : "Not available"],
   ].filter(([, v]) => v);
 

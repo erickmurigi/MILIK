@@ -125,7 +125,7 @@ export default function SaleListingFormModal({ initialEditingId, initialForm, li
           </div>
         </div>
         <div>
-          <AppSelect label={`Assigned ${T.saleAgent}`} value={form.assignedAgent} onChange={(v) => setForm((p) => ({ ...p, assignedAgent: v ?? "" }))} options={agentFormOptions} placeholder="Unassigned" size="md" searchable clearable />
+          <AppSelect label={`Assigned ${T.saleAgent}`} value={form.assignedAgent} onChange={(v) => setForm((p) => ({ ...p, assignedAgent: v ?? "" }))} options={agentFormOptions} placeholder={project?.assignedAgent?.fullName ? `Inherited: ${project.assignedAgent.fullName}` : "Unassigned"} size="md" searchable clearable />
         </div>
         <div>
           <label className={labelClass}>Location / Address</label>

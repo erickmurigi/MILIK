@@ -747,6 +747,10 @@ project is selling. **A unit is an ordinary listing that belongs to a project** 
 - **Photos (shared with listings):** projects have photos (`SaleProject.images`, same upload pipeline and folder as listing
   photos; `POST/DELETE /sale/projects/:id/images`). The photo logic is shared: `useSalePhotoDraft` + `SalePhotosField` (forms),
   `SalePhotoGallery` (detail panels + lightbox). The Projects list has the same table + detail panel as Listings.
+- **Project agent (inherited):** a project can have a default agent (`SaleProject.assignedAgent`, must be an active agent of the
+  company). A unit with no agent of its own inherits it; setting an agent on the unit overrides it. The unit's own
+  `assignedAgent` is never rewritten: reads add `effectiveAgent` and `agentInherited` (`services/listingAgent.js`), and the
+  listings agent filter also matches inherited units. Informational only: offers, deals and commissions use their own agent.
 - **Not done / open:** one deal covers one unit (a buyer taking several units gets several deals); the "view offers" link on a unit is not
   filtered; not exercised in a browser.
 

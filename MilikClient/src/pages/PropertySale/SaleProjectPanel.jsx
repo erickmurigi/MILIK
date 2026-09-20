@@ -12,7 +12,7 @@ const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("en-KE", { day: "2-di
 
 // Right-hand detail panel of the Projects list (same pattern as the Listings panel): summary, photos, quick actions.
 export default function SaleProjectPanel({ project, onClose, onOpen, onEdit, onChanged }) {
-  const T = useTerms("saleProject", "saleUnits");
+  const T = useTerms("saleProject", "saleUnits", "saleAgent");
   const [busy, setBusy] = useState(false);
   const u = project.units || {};
 
@@ -46,6 +46,7 @@ export default function SaleProjectPanel({ project, onClose, onOpen, onEdit, onC
 
   const rows = [
     ["Location", [project.town, project.county].filter(Boolean).join(", ") || project.location],
+    [T.saleAgent, project.assignedAgent?.fullName],
     [T.saleUnits, `${u.total || 0} (${u.available || 0} available)`],
     ["Sold", `${u.sold || 0} · ${fmtPct(project.sellThrough)} sell-through`],
     ["Value", fmtKES(project.value?.total || 0)],

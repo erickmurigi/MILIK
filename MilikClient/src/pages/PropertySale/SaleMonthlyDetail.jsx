@@ -8,6 +8,7 @@ import { FaPrint } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
 import { fmtKES, SALE_MONTHS, saleApi } from "../../services/propertySaleApi";
 import { fmtDate } from "../../utils/dates";
+import { listingAgentName } from "../../utils/saleAgent";
 const fmtLabel = (s) => (s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
 const METHOD_BADGE = {
@@ -326,7 +327,7 @@ const SaleMonthlyDetail = () => {
                       <td className="px-3 py-1 border-r border-gray-100">
                         <Badge text={l.status} cls={STATUS_BADGE[l.status]} />
                       </td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{l.assignedAgent?.fullName || <span className="italic text-slate-300">—</span>}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{listingAgentName(l) || <span className="italic text-slate-300">—</span>}</td>
                       <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{l.createdAt ? new Date(l.createdAt).toLocaleDateString("en-KE") : "—"}</td>
                     </tr>
                   ))}

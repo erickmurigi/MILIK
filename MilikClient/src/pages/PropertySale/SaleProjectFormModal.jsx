@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { saleApi } from "../../services/propertySaleApi";
 import { useTerms } from "../../hooks/useTerm";
@@ -7,13 +8,14 @@ import AmountInput from "./AmountInput";
 import SalePhotosField from "./SalePhotosField";
 import useSalePhotoDraft from "../../hooks/useSalePhotoDraft";
 import { inputClass, labelClass } from "../../utils/formStyles";
-import { errorMessage } from "./SaleProjectShared";
+import AppSelect from "../../components/common/AppSelect";
+import { errorMessage, useSaleFormOptions } from "./SaleProjectShared";
 
 const textareaClass = "w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none";
 
 const blankForm = () => ({
   name: "", description: "", location: "", town: "", county: "", country: "Kenya",
-  launchDate: "", targetUnits: "", targetValue: "", notes: "",
+  launchDate: "", targetUnits: "", targetValue: "", notes: "", assignedAgent: "",
 });
 
 const formFromProject = (p) => ({
@@ -21,11 +23,14 @@ const formFromProject = (p) => ({
   town: p.town || "", county: p.county || "", country: p.country || "Kenya",
   launchDate: p.launchDate ? new Date(p.launchDate).toISOString().split("T")[0] : "",
   targetUnits: p.targetUnits ?? "", targetValue: p.targetValue ?? "", notes: p.notes || "",
+  assignedAgent: p.assignedAgent?._id || p.assignedAgent || "",
 });
 
 // Create / edit a project. Owns its form state so typing never re-renders the page behind it.
 export default function SaleProjectFormModal({ project = null, onSaved, onClose }) {
-  const T = useTerms("saleProject", "saleUnits");
+  const T = useTerms("saleProject", "saleUnits", "saleAgent");
+  const biz = useSelector((s) => s.company?.currentCompany?._id);
+  const { agentFormOptions } = useSaleFormOptions(biz);
   const [form, setForm] = useState(() => (project ? formFromProject(project) : blankForm()));
   const [saving, setSaving] = useState(false);
 
@@ -54,6 +59,7 @@ export default function SaleProjectFormModal({ project = null, onSaved, onClose 
         targetUnits: form.targetUnits === "" ? null : Number(form.targetUnits),
         targetValue: form.targetValue === "" ? null : Number(form.targetValue),
         launchDate: form.launchDate || null,
+        assignedAgent: form.assignedAgent || null,
       };
       const saved = project ? await saleApi.updateProject(project._id, payload) : await saleApi.createProject(payload);
       if (!project) await photos.uploadStaged(saved?._id);
@@ -109,6 +115,21 @@ export default function SaleProjectFormModal({ project = null, onSaved, onClose 
         <div>
           <label className={labelClass}>Launch Date</label>
           <input type="date" value={form.launchDate} onChange={set("launchDate")} className={inputClass} />
+        </div>
+        <div className="md:col-span-2">
+          <AppSelect
+            label={`Default ${T.saleAgent} for ${T.saleUnits.toLowerCase()}`}
+            value={form.assignedAgent}
+            onChange={(v) => setForm((p) => ({ ...p, assignedAgent: v ?? "" }))}
+            options={agentFormOptions}
+            placeholder="None"
+            size="md"
+            searchable
+            clearable
+          />
+          <p className="mt-1 text-[10px] text-slate-400">
+            Every {T.saleUnits.toLowerCase()} without its own {T.saleAgent.toLowerCase()} follows this one. Set an {T.saleAgent.toLowerCase()} on a single {T.saleUnits.toLowerCase()} to override it.
+          </p>
         </div>
         <div>
           <label className={labelClass}>Target {T.saleUnits}</label>

@@ -23,6 +23,8 @@ import StatusBadge from "../../components/common/StatusBadge";
 import MilikTable from "../../components/common/MilikTable";
 import SaleListingFormModal from "./SaleListingFormModal";
 import SalePhotoGallery from "./SalePhotoGallery";
+import SaleListingAgent from "./SaleListingAgent";
+import { listingAgentText } from "../../utils/saleAgent";
 import { blankListingForm, listingFormFromRow } from "../../utils/saleListingForm";
 
 // Lazy-load the xlsx-backed helpers only when the Import modal is actually used.
@@ -77,7 +79,7 @@ const renderListingRow = (row) => (
     </td>
     <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold tabular-nums text-slate-900">{fmtKES(row.askingPrice)}</td>
     <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">
-      {row.assignedAgent?.fullName || <span className="italic text-slate-400">Unassigned</span>}
+      <SaleListingAgent row={row} />
     </td>
     <td className="px-3 py-1.5">
       <StatusBadge status={row.status} map={LISTING_STATUS_MAP} />
@@ -267,7 +269,7 @@ const SaleListings = () => {
 <div class="field"><div class="fl">Listed Date</div><div class="fv">${esc(fmtD(row.listedDate))}</div></div>
 <div class="field"><div class="fl">Size</div><div class="fv">${row.size ? esc(`${row.size} ${row.sizeUnit ?? ""}`.trim()) : "Not specified"}</div></div>
 <div class="field"><div class="fl">Title Deed</div><div class="fv">${row.titleDeedAvailable ? `Yes &ndash; ${esc(row.titleDeedNumber || "N/A")}` : "Not available"}</div></div>
-<div class="field"><div class="fl">Assigned ${esc(T.saleAgent)}</div><div class="fv">${esc(row.assignedAgent?.fullName || "Unassigned")}</div></div></div>
+<div class="field"><div class="fl">Assigned ${esc(T.saleAgent)}</div><div class="fv">${esc(listingAgentText(row, T.saleProject.toLowerCase()) || "Unassigned")}</div></div></div>
 <div class="section-title">Location</div><div class="grid">
 <div class="field"><div class="fl">Location / Address</div><div class="fv">${esc(row.location || "—")}</div></div>
 <div class="field"><div class="fl">Town / City</div><div class="fv">${esc(row.town || "—")}</div></div>
@@ -278,7 +280,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
 </body></html>`);
     win.document.close();
     setTimeout(() => { win.focus(); win.print(); }, 400);
-  }, [currentCompany, T.saleListing, T.saleAgent]);
+  }, [currentCompany, T.saleListing, T.saleAgent, T.saleProject]);
 
   const handleRowClick = useCallback((row) => setSelected((prev) => (prev?._id === row._id ? null : row)), [setSelected]);
   const selectedId = selected?._id;
@@ -408,7 +410,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
                     ["Price",   fmtKES(selected.askingPrice)],
                     ["Size",    selected.size ? `${selected.size} ${selected.sizeUnit}` : null],
                     ["Location",[selected.town, selected.county].filter(Boolean).join(", ") || selected.location],
-                    [T.saleAgent,   selected.assignedAgent?.fullName],
+                    [T.saleAgent,   listingAgentText(selected, T.saleProject.toLowerCase())],
                   ].filter(([, v]) => v).map(([label, val]) => (
                     <div key={label} className="flex items-baseline gap-2">
                       <span className="w-[80px] flex-shrink-0 text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</span>

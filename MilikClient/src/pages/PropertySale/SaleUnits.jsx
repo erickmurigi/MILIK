@@ -7,6 +7,8 @@ import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterSearch } from "./SaleFilterBar";
 import SaleListingFormModal from "./SaleListingFormModal";
+import SaleListingAgent from "./SaleListingAgent";
+import { listingAgentText } from "../../utils/saleAgent";
 import { LISTING_STATUS_MAP, UNIT_STATUSES, STATUS_LABEL, useSaleFormOptions, errorMessage } from "./SaleProjectShared";
 import PaginationBar from "../../components/PaginationBar";
 import AppSelect from "../../components/common/AppSelect";
@@ -68,7 +70,7 @@ const renderUnitRow = (row) => (
     </td>
     <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold tabular-nums text-slate-900">{fmtKES(row.askingPrice)}</td>
     <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">
-      {row.assignedAgent?.fullName || <span className="italic text-slate-400">Unassigned</span>}
+      <SaleListingAgent row={row} />
     </td>
     <td className="px-3 py-1.5">
       <StatusBadge status={row.status} map={LISTING_STATUS_MAP} />
@@ -313,7 +315,7 @@ const SaleUnits = () => {
                     ["Price", fmtKES(selected.askingPrice)],
                     ["Size", selected.size ? `${selected.size} ${selected.sizeUnit ?? ""}`.trim() : null],
                     ["Location", [selected.town, selected.county].filter(Boolean).join(", ") || selected.location],
-                    [T.saleAgent, selected.assignedAgent?.fullName],
+                    [T.saleAgent, listingAgentText(selected, T.saleProject.toLowerCase())],
                   ].filter(([, v]) => v).map(([label, val]) => (
                     <div key={label} className="flex items-baseline gap-2">
                       <span className="w-[80px] flex-shrink-0 text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</span>

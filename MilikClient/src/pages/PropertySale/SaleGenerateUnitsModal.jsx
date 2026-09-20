@@ -134,7 +134,7 @@ export default function SaleGenerateUnitsModal({ project, propertyTypeOptions, a
           <AmountInput value={form.askingPrice} onChange={setVal("askingPrice")} className={inputClass} placeholder="e.g. 1,500,000" />
         </div>
         <div className="md:col-span-2">
-          <AppSelect label={`Assigned ${T.saleAgent}`} value={form.assignedAgent} onChange={setVal("assignedAgent")} options={agentFormOptions} placeholder="Unassigned" size="md" searchable clearable />
+          <AppSelect label={`${T.saleAgent} override (optional)`} value={form.assignedAgent} onChange={setVal("assignedAgent")} options={agentFormOptions} placeholder={project?.assignedAgent?.fullName ? `Inherit: ${project.assignedAgent.fullName}` : "Unassigned"} size="md" searchable clearable />
         </div>
         <div className="flex items-center gap-4 pt-4 md:col-span-2">
           <label className="flex cursor-pointer items-center gap-2">

@@ -26,6 +26,7 @@ import SaleProjectUnitGrid from "./SaleProjectUnitGrid";
 import SaleProjectUnitPanel from "./SaleProjectUnitPanel";
 import SaleProjectPerformance from "./SaleProjectPerformance";
 import SalePhotoGallery from "./SalePhotoGallery";
+import SaleListingAgent from "./SaleListingAgent";
 import SaleProjectProgressBar from "./SaleProjectProgressBar";
 import {
   LISTING_STATUS_MAP, PROJECT_STATUS_MAP, STATUS_LABEL, STATUS_SWATCH, UNIT_STATUSES,
@@ -52,7 +53,7 @@ const renderUnitRow = (row) => (
     <td className="px-3 py-1.5 border-r border-gray-100"><span className="capitalize text-slate-500">{(row.propertyType || "—").replace(/_/g, " ")}</span></td>
     <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{row.size ? `${row.size} ${row.sizeUnit || ""}` : "—"}</td>
     <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold tabular-nums text-slate-900">{fmtKES(row.askingPrice)}</td>
-    <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{row.assignedAgent?.fullName || <span className="italic text-slate-400">Unassigned</span>}</td>
+    <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600"><SaleListingAgent row={row} /></td>
     <td className="px-3 py-1.5"><StatusBadge status={row.status} map={LISTING_STATUS_MAP} /></td>
   </>
 );
@@ -146,7 +147,8 @@ const SaleProjectDetail = () => {
   const closeModal = useCallback(() => setModal(null), []);
 
   const archived = project?.status === "archived";
-  const projectRef = useMemo(() => (project ? { _id: project._id, name: project.name } : null), [project]);
+  // assignedAgent lets the unit form show "Inherited: <agent>" as its placeholder
+  const projectRef = useMemo(() => (project ? { _id: project._id, name: project.name, assignedAgent: project.assignedAgent || null } : null), [project]);
 
   const handleUploadPhotos = async (files) => {
     setPhotoBusy(true);
@@ -299,6 +301,9 @@ const SaleProjectDetail = () => {
                 {isFetching && <FaRedoAlt size={9} className="animate-spin text-slate-400" />}
               </div>
               {location && <div className="mt-0.5 text-xs text-slate-500">{location}</div>}
+              {project.assignedAgent?.fullName && (
+                <div className="mt-0.5 text-[11px] text-slate-500">{T.saleAgent}: <span className="font-semibold text-slate-700">{project.assignedAgent.fullName}</span></div>
+              )}
               {project.description && <div className="mt-0.5 max-w-3xl text-[11px] text-slate-400">{project.description}</div>}
             </div>
             <div className="flex flex-wrap items-center gap-1.5">

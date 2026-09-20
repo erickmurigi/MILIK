@@ -9,6 +9,7 @@ import {
 } from "react-icons/fa";
 import { saleApi, fmtKES } from "../../services/propertySaleApi";
 import PropertySaleShell from "./PropertySaleShell";
+import SaleListingAgent from "./SaleListingAgent";
 import DashboardCard, { DashboardStatCard } from "../../components/Dashboard/DashboardCard";
 
 const ACC = "#0B3B2E";
@@ -317,7 +318,7 @@ const PropertySaleDashboard = () => {
                           <td className="px-3 py-2 font-mono font-bold text-slate-600">{listing.listingNumber}</td>
                           <td className="max-w-[180px] truncate px-3 py-2 font-semibold text-slate-800">{listing.title}</td>
                           <td className="px-3 py-2 capitalize text-slate-500">{listing.propertyType}</td>
-                          <td className="px-3 py-2 text-slate-600">{listing.assignedAgent?.fullName || <span className="italic text-slate-400">Unassigned</span>}</td>
+                          <td className="px-3 py-2 text-slate-600"><SaleListingAgent row={listing} /></td>
                           <td className="px-3 py-2 text-right font-bold text-slate-900">{fmtKES(listing.askingPrice)}</td>
                           <td className="px-3 py-2">
                             <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${
