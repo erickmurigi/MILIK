@@ -4,11 +4,19 @@ import SaleListing from "../models/SaleListing.js";
 import SaleAgent from "../models/SaleAgent.js";
 import SaleDeal from "../models/SaleDeal.js";
 import SaleProject from "../models/SaleProject.js";
+import SaleSettings from "../models/SaleSettings.js";
+import { cleanAttributes, typeValue } from "../services/listingAttributes.js";
 import { PROJECT_WITH_AGENT, withEffectiveAgent } from "../services/listingAgent.js";
 import { currentUserId, escapeRegex, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { deleteImageFile } from "../middleware/listingImageUpload.js";
 
 const CREATE_STATUSES = ["available", "withdrawn"];
+
+// The extra fields the company defined for a property type (empty for a type without any)
+const typeFields = async (business, propertyType) => {
+  const settings = await SaleSettings.findOne({ business }).select("propertyTypes").lean();
+  return (settings?.propertyTypes ?? []).find((t) => typeValue(t.name) === typeValue(propertyType))?.fields ?? [];
+};
 
 // Validates the project a new unit is created in, and normalises the unit fields.
 // Returns an error (to pass to next) or null; mutates `body` (trimmed unitNumber/block).
@@ -154,6 +162,9 @@ export const createListing = async (req, res, next) => {
     }
     const unitError = await checkUnitFields(body, business);
     if (unitError) return next(unitError);
+    const cleaned = cleanAttributes(await typeFields(business, body.propertyType ?? "plot"), body.attributes);
+    if (cleaned.error) return next(createError(400, cleaned.error));
+    body.attributes = cleaned.attributes;
 
     const listingNumber = await generateSequentialNumber(SaleListing, business, "LST");
     const listing = await SaleListing.create({
@@ -188,6 +199,21 @@ export const updateListing = async (req, res, next) => {
     if (updates.assignedAgent) {
       const agent = await SaleAgent.findOne({ _id: updates.assignedAgent, business, status: "active" }).lean();
       if (!agent) return next(createError(400, "Assigned agent not found or inactive"));
+    }
+
+    // Custom field values are checked against the (possibly new) property type. Changing the type without sending
+    // values clears them, since the old type's fields no longer apply.
+    if ("attributes" in updates || "propertyType" in updates) {
+      const current = await SaleListing.findOne({ _id: req.params.id, business }).select("propertyType").lean();
+      if (!current) return next(createError(404, "Listing not found"));
+      const nextType = updates.propertyType ?? current.propertyType;
+      if ("attributes" in updates) {
+        const cleaned = cleanAttributes(await typeFields(business, nextType), updates.attributes);
+        if (cleaned.error) return next(createError(400, cleaned.error));
+        updates.attributes = cleaned.attributes;
+      } else if (typeValue(nextType) !== typeValue(current.propertyType)) {
+        updates.attributes = {};
+      }
     }
 
     // unitNumber / block only make sense on a unit, and a unit must keep its number (looked up only when they change)

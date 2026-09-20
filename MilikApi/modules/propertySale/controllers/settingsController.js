@@ -3,6 +3,7 @@ import { createError } from "../../../utils/error.js";
 import SaleSettings from "../models/SaleSettings.js";
 import { resolveActiveBusinessId } from "../services/businessScope.js";
 import { invalidateAgentVisibilityCache } from "../middleware/agentScope.js";
+import { sanitizeTypeConfig } from "../services/listingAttributes.js";
 
 const ensureSettings = async (business) => {
   let s = await SaleSettings.findOne({ business });
@@ -86,8 +87,45 @@ export const addLeadSource    = makeAdd("leadSources");
 export const updateLeadSource = makeUpdate("leadSources");
 export const archiveLeadSource = makeArchive("leadSources");
 
-export const addPropertyType    = makeAdd("propertyTypes");
-export const updatePropertyType = makeUpdate("propertyTypes");
+// Property types also carry extra field definitions and hidden standard fields (see services/listingAttributes.js)
+export const addPropertyType = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const name = String(req.body?.name || "").trim();
+    if (!name) return next(createError(400, "Name is required"));
+    const config = sanitizeTypeConfig({ fields: req.body?.fields ?? [], hiddenFields: req.body?.hiddenFields ?? [] });
+    if (config.error) return next(createError(400, config.error));
+    const settings = await ensureSettings(business);
+    if (settings.propertyTypes.some((i) => i.name.toLowerCase() === name.toLowerCase() && i.isActive !== false)) {
+      return next(createError(400, `"${name}" already exists`));
+    }
+    settings.propertyTypes.push({ _id: new mongoose.Types.ObjectId(), name, isActive: true, fields: config.fields, hiddenFields: config.hiddenFields });
+    await settings.save();
+    res.status(201).json({ settings });
+  } catch (err) { next(err); }
+};
+
+export const updatePropertyType = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const settings = await SaleSettings.findOne({ business });
+    if (!settings) return next(createError(404, "Settings not found"));
+    const item = settings.propertyTypes.id(req.params.itemId);
+    if (!item) return next(createError(404, "Item not found"));
+    const config = sanitizeTypeConfig({ fields: req.body?.fields, hiddenFields: req.body?.hiddenFields });
+    if (config.error) return next(createError(400, config.error));
+    if (req.body?.name !== undefined) {
+      const name = String(req.body.name || "").trim();
+      if (!name) return next(createError(400, "Name is required"));
+      item.name = name;
+    }
+    if (req.body?.isActive !== undefined) item.isActive = Boolean(req.body.isActive);
+    if (config.fields !== undefined) item.fields = config.fields;
+    if (config.hiddenFields !== undefined) item.hiddenFields = config.hiddenFields;
+    await settings.save();
+    res.json({ settings });
+  } catch (err) { next(err); }
+};
 export const archivePropertyType = makeArchive("propertyTypes");
 
 export const updateCommissionDefaults = async (req, res, next) => {

@@ -24,6 +24,8 @@ const saleListingSchema = new mongoose.Schema(
     titleDeedAvailable: { type: Boolean, default: false },
     titleDeedNumber: { type: String, trim: true, default: "" },
     amenities: [{ type: String, trim: true }],
+    // Values of the custom fields defined by this listing's property type ({ fieldKey: value }); see services/listingAttributes.js
+    attributes: { type: mongoose.Schema.Types.Mixed, default: {} },
     images: [{ type: String, trim: true }],
     assignedAgent: { type: mongoose.Schema.Types.ObjectId, ref: "SaleAgent", default: null },
     // Optional: a unit sold independently inside a project (SaleProject). Standalone listings leave these empty.

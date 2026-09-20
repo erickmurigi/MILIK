@@ -12,6 +12,8 @@ import {
 import { agentFilter } from "../middleware/agentScope.js";
 import { deleteImageFile } from "../middleware/listingImageUpload.js";
 import { withEffectiveAgent } from "../services/listingAgent.js";
+import { cleanAttributes, typeValue } from "../services/listingAttributes.js";
+import SaleSettings from "../models/SaleSettings.js";
 
 const MAX_UNITS_PER_REQUEST = 500;
 const MAX_UNITS_LISTED = 2000;
@@ -423,11 +425,19 @@ export const generateUnits = async (req, res, next) => {
     const toCreate = wanted.filter((u) => !taken.has(u));
     if (!toCreate.length) return res.status(200).json({ created: 0, skipped: wanted.length, requested: wanted.length });
 
+    // Custom field values (same for every generated unit; required fields are not enforced here since units differ)
+    const propertyType = String(b.propertyType || "plot").trim();
+    const typeSettings = await SaleSettings.findOne({ business }).select("propertyTypes").lean();
+    const typeDef = (typeSettings?.propertyTypes ?? []).find((t) => typeValue(t.name) === typeValue(propertyType));
+    const cleaned = cleanAttributes(typeDef?.fields ?? [], b.attributes, { enforceRequired: false });
+    if (cleaned.error) return next(createError(400, cleaned.error));
+
     const base = {
       business,
       project: project._id,
       block,
-      propertyType: String(b.propertyType || "plot").trim(),
+      attributes: cleaned.attributes,
+      propertyType,
       size: optionalNumber(b.size),
       sizeUnit: b.sizeUnit || "sqm",
       description: String(b.description ?? "").trim(),
