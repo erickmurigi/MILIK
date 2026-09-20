@@ -739,7 +739,8 @@ project is selling. **A unit is an ordinary listing that belongs to a project** 
   (partial unique index, standalone listings exempt). `GET /sale/listings` accepts `project=any|none`, `projectId`, `block`.
   Money figures follow the agent visibility setting; unit counts stay shared like listings.
 - **Switch:** Sale Settings -> Selling Mode (`SaleSettings.useProjects`, default off) shows the Projects and Units pages;
-  when on, the Listings page shows standalone items only. Turning it off only hides pages.
+  when on, the Listings page still lists everything (units included, with a Project / Unit column and an
+  "All / Standalone only / In projects" filter). Turning it off only hides pages.
 - **Client:** Projects list, Project page (unit grid, performance tab, generate / bulk price / add existing modals),
   Units page, shared `SaleListingFormModal`. Wording comes from the company terminology setting (`saleProject`, `saleUnit`, ...).
 - **Tests:** `projectsController.test.js` (11 integration tests on an in-memory Mongo).

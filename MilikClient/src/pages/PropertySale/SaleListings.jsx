@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
+import { Link } from "react-router-dom";
 import {
   FaCamera, FaChevronLeft, FaChevronRight,
   FaEdit, FaFileImport, FaPlus, FaPrint, FaRedoAlt,
@@ -39,9 +40,10 @@ const PAGE_SIZE      = 50;
 
 const STATUS_OPTIONS    = STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }));
 
-const listingTableCols = (T) => [
+const listingTableCols = (T, withProject) => [
   { label: `${T.saleListing} No.` },
   { label: "Title" },
+  ...(withProject ? [{ label: `${T.saleProject} / ${T.saleUnit}` }] : []),
   { label: "Type" },
   { label: "Location" },
   { label: "Asking Price", align: "right" },
@@ -51,7 +53,7 @@ const listingTableCols = (T) => [
 
 
 // Module scope so MilikTable's React.memo isn't defeated by a fresh function identity each parent render.
-const renderListingRow = (row) => (
+const renderListingHead = (row) => (
   <>
     <td className="px-3 py-1.5 font-mono font-bold text-[#0B3B2E] border-r border-gray-100">{row.listingNumber}</td>
     <td className="px-3 py-1.5 border-r border-gray-100">
@@ -64,6 +66,11 @@ const renderListingRow = (row) => (
         )}
       </div>
     </td>
+  </>
+);
+
+const renderListingTail = (row) => (
+  <>
     <td className="px-3 py-1.5 border-r border-gray-100">
       <span className="capitalize text-slate-500">{(row.propertyType || "—").replace(/_/g, " ")}</span>
     </td>
@@ -80,10 +87,33 @@ const renderListingRow = (row) => (
   </>
 );
 
+// The link must not select the row underneath it
+const stopRowClick = (e) => e.stopPropagation();
+
+const renderListingRow = (row) => <>{renderListingHead(row)}{renderListingTail(row)}</>;
+
+// Same row with a Project / Unit cell (companies that sell in projects)
+const renderListingRowWithProject = (row) => (
+  <>
+    {renderListingHead(row)}
+    <td className="px-3 py-1.5 border-r border-gray-100 max-w-[180px]">
+      {row.project?._id ? (
+        <Link
+          to={`/sale/projects/${row.project._id}`}
+          onClick={stopRowClick}
+          className="block truncate font-semibold text-[#0B3B2E] hover:underline"
+        >
+          {row.project.name}{row.unitNumber ? ` · ${row.unitNumber}` : ""}
+        </Link>
+      ) : <span className="text-slate-300">—</span>}
+    </td>
+    {renderListingTail(row)}
+  </>
+);
+
 
 const SaleListings = () => {
-  const T = useTerms("saleListing", "saleListings", "saleAgent", "saleAgents", "saleUnits", "saleProject");
-  const LISTING_TABLE_COLS = useMemo(() => listingTableCols(T), [T]);
+  const T = useTerms("saleListing", "saleListings", "saleAgent", "saleAgents", "saleUnit", "saleProject", "saleProjects");
   const confirm        = useConfirm();
   const queryClient    = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
@@ -93,6 +123,7 @@ const SaleListings = () => {
   const [search,     setSearch]     = useTabState("/sale/listings:search", "");
   const [statusFilt, setStatusFilt] = useTabState("/sale/listings:statusFilt", "");
   const [typeFilt,   setTypeFilt]   = useTabState("/sale/listings:typeFilt", "");
+  const [scopeFilt,  setScopeFilt]  = useTabState("/sale/listings:scopeFilt", ""); // "" all | "none" standalone | "any" in a project
   const [agentFilt,  setAgentFilt]  = useTabState("/sale/listings:agentFilt", "");
   const [page,       setPage]       = useTabState("/sale/listings:page", 1);
   const [pageSize,   setPageSize]   = useTabState("/sale/listings:pageSize", PAGE_SIZE);
@@ -104,21 +135,24 @@ const SaleListings = () => {
   const debouncedSearch = useDebounce(search, 400);
   const biz = currentCompany?._id;
 
-  const { saleSettings, settingsPending, propertyTypeOptions: PROPERTY_TYPE_OPTIONS, agentFormOptions, agentFilterOptions } = useSaleFormOptions(biz);
+  const { saleSettings, propertyTypeOptions: PROPERTY_TYPE_OPTIONS, agentFormOptions, agentFilterOptions } = useSaleFormOptions(biz);
 
-  // When the company sells in projects, items that belong to a project are listed on the units page instead
-  const standaloneOnly = !!saleSettings?.useProjects;
+  // Companies that sell in projects see units in this list too (with a Project / Unit column) and can narrow it
+  const usesProjects = !!saleSettings?.useProjects;
+  const scope = usesProjects ? scopeFilt : "";
+  const LISTING_TABLE_COLS = useMemo(() => listingTableCols(T, usesProjects), [T, usesProjects]);
+  const SCOPE_OPTIONS = useMemo(() => [
+    { value: "none", label: "Standalone only" },
+    { value: "any", label: `In ${T.saleProjects.toLowerCase()} only` },
+  ], [T.saleProjects]);
 
-  // Wait for the settings so a company that sells in projects never briefly sees its units in this list
-  const { data: listingsData, isLoading: listingsLoading, isFetching } = useQuery({
-    queryKey: ["sale-listings", biz, debouncedSearch, statusFilt, typeFilt, agentFilt, page, pageSize, standaloneOnly],
-    queryFn:  () => saleApi.listListings({ business: biz, search: debouncedSearch, status: statusFilt, propertyType: typeFilt, agentId: agentFilt, page, limit: pageSize, ...(standaloneOnly && { project: "none" }) }),
-    enabled:  !!biz && !settingsPending,
+  const { data: listingsData, isLoading: loading, isFetching } = useQuery({
+    queryKey: ["sale-listings", biz, debouncedSearch, statusFilt, typeFilt, agentFilt, page, pageSize, scope],
+    queryFn:  () => saleApi.listListings({ business: biz, search: debouncedSearch, status: statusFilt, propertyType: typeFilt, agentId: agentFilt, page, limit: pageSize, ...(scope && { project: scope }) }),
+    enabled:  !!biz,
     placeholderData: (prev, prevQuery) => (prevQuery?.queryKey?.[1] === biz ? prev : undefined),
     staleTime: 30_000,
   });
-
-  const loading = listingsLoading || settingsPending;
 
   const listings   = useMemo(() => listingsData?.data ?? [], [listingsData?.data]);
   const total      = listingsData?.total ?? 0;
@@ -283,7 +317,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
     </div>
   ), [printListing, openEdit, statusBusy, handleStatusChange, handleDelete]);
 
-  const resetFilters = () => { setSearch(""); setStatusFilt(""); setTypeFilt(""); setAgentFilt(""); setPage(1); };
+  const resetFilters = () => { setSearch(""); setStatusFilt(""); setTypeFilt(""); setAgentFilt(""); setScopeFilt(""); setPage(1); };
 
   return (
     <PropertySaleShell>
@@ -291,7 +325,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
       <SaleFilterBar
         leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} listing{total !== 1 ? "s" : ""}</span>}
         onReset={resetFilters}
-        activeCount={[search, statusFilt, typeFilt, agentFilt].filter(Boolean).length}
+        activeCount={[search, statusFilt, typeFilt, agentFilt, scope].filter(Boolean).length}
         trailing={
           <>
             <button
@@ -326,10 +360,10 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
         <AppSelect value={statusFilt} onChange={(v) => { setStatusFilt(v ?? ""); setPage(1); }} options={STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
         <AppSelect value={typeFilt} onChange={(v) => { setTypeFilt(v ?? ""); setPage(1); }} options={PROPERTY_TYPE_OPTIONS} placeholder="All Types" clearable size="sm" />
         <AppSelect value={agentFilt} onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }} options={agentFilterOptions} placeholder={`All ${T.saleAgents}`} clearable size="sm" searchable />
+        {usesProjects && (
+          <AppSelect value={scopeFilt} onChange={(v) => { setScopeFilt(v ?? ""); setPage(1); }} options={SCOPE_OPTIONS} placeholder="All items" clearable size="sm" />
+        )}
       </SaleFilterBar>
-      {standaloneOnly && (
-        <div className="shrink-0 px-1 text-[10px] text-slate-400">Items that belong to a {T.saleProject.toLowerCase()} are listed under {T.saleUnits}.</div>
-      )}
 
       {/* Table + images panel */}
       <div className="relative flex flex-col flex-1 min-h-0 overflow-hidden">
@@ -342,7 +376,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
             minWidth={720}
             onRowClick={handleRowClick}
             isSelected={isRowSelected}
-            renderRow={renderListingRow}
+            renderRow={usesProjects ? renderListingRowWithProject : renderListingRow}
             renderActions={renderListingActions}
           />
 
