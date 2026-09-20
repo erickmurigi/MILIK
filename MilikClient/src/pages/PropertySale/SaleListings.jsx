@@ -23,6 +23,8 @@ import StatusBadge from "../../components/common/StatusBadge";
 import MilikTable from "../../components/common/MilikTable";
 import SaleListingFormModal from "./SaleListingFormModal";
 import SalePhotoGallery from "./SalePhotoGallery";
+import { LISTING_STATUS_MAP } from "../../utils/saleListingConstants";
+import useSaleFormOptions from "../../hooks/useSaleFormOptions";
 import SaleListingAgent from "./SaleListingAgent";
 import { listingAgentText } from "../../utils/saleAgent";
 import { blankListingForm, listingFormFromRow } from "../../utils/saleListingForm";
@@ -32,7 +34,6 @@ const parseSaleListingsExcel = (file) => import("../../utils/excelTemplates").th
 const downloadSaleListingsTemplate = () => import("../../utils/excelTemplates").then((m) => m.downloadSaleListingsTemplate());
 
 
-const FALLBACK_PROPERTY_TYPES = ["plot", "house", "apartment", "commercial", "land", "other"];
 const STATUSES       = ["available", "reserved", "under_contract", "sold", "withdrawn"];
 const PAGE_SIZE      = 50;
 
@@ -47,14 +48,6 @@ const listingTableCols = (T) => [
   { label: T.saleAgent },
   { label: "Status" },
 ];
-
-const LISTING_STATUS_MAP = {
-  available:      "border-emerald-200 bg-emerald-50 text-emerald-700",
-  reserved:       "border-amber-200 bg-amber-50 text-amber-700",
-  under_contract: "border-[#B7C9C0] bg-[#F1F6F3] text-[#0B3B2E]",
-  sold:           "border-slate-600 bg-slate-800 text-white",
-  withdrawn:      "border-rose-200 bg-rose-50 text-rose-700",
-};
 
 
 // Module scope so MilikTable's React.memo isn't defeated by a fresh function identity each parent render.
@@ -111,12 +104,7 @@ const SaleListings = () => {
   const debouncedSearch = useDebounce(search, 400);
   const biz = currentCompany?._id;
 
-  const { data: saleSettings, isPending: settingsPending } = useQuery({
-    queryKey: ["sale-settings", biz],
-    queryFn:  () => saleApi.getSettings(),
-    enabled:  !!biz,
-    staleTime: 10 * 60_000,
-  });
+  const { saleSettings, settingsPending, propertyTypeOptions: PROPERTY_TYPE_OPTIONS, agentFormOptions, agentFilterOptions } = useSaleFormOptions(biz);
 
   // When the company sells in projects, items that belong to a project are listed on the units page instead
   const standaloneOnly = !!saleSettings?.useProjects;
@@ -132,25 +120,10 @@ const SaleListings = () => {
 
   const loading = listingsLoading || settingsPending;
 
-  const activePropertyTypes = useMemo(() => (saleSettings?.propertyTypes ?? []).filter((t) => t.isActive !== false), [saleSettings]);
-  const PROPERTY_TYPE_OPTIONS = useMemo(() => activePropertyTypes.length
-    ? activePropertyTypes.map((t) => ({ value: t.name.toLowerCase(), label: t.name }))
-    : FALLBACK_PROPERTY_TYPES.map((t) => ({ value: t, label: t })), [activePropertyTypes]);
-
-  const { data: agentsData } = useQuery({
-    queryKey: ["sale-agents-ref", biz, "active"],
-    queryFn:  () => saleApi.listAgents({ business: biz, status: "active", limit: 200 }),
-    enabled:  !!biz,
-    staleTime: 5 * 60_000,
-  });
-
   const listings   = useMemo(() => listingsData?.data ?? [], [listingsData?.data]);
   const total      = listingsData?.total ?? 0;
-  const agents     = useMemo(() => agentsData?.data ?? [], [agentsData]);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  const agentFilterOptions = useMemo(() => agents.map((a) => ({ value: a._id, label: a.fullName })), [agents]);
-  const agentFormOptions   = useMemo(() => agents.map((a) => ({ value: a._id, label: `${a.fullName} (${a.agentNumber})` })), [agents]);
 
   // sync panel with fresh data after mutations
   useEffect(() => {

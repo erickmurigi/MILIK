@@ -8,9 +8,8 @@ import AmountInput from "./AmountInput";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
 import { inputClass, labelClass } from "../../utils/formStyles";
+import { SIZE_UNIT_OPTIONS } from "../../utils/saleListingConstants";
 
-const SIZE_UNITS = ["sqm", "sqft", "acres", "hectares"];
-const SIZE_UNIT_OPTIONS = SIZE_UNITS.map((u) => ({ value: u, label: u }));
 
 // `project` ({ _id, name }) marks the listing as a unit inside that project: the form then asks for a unit number and
 // block, and a new unit is created inside the project. Without it this is an ordinary standalone listing.

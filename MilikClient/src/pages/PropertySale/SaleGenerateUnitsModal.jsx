@@ -6,7 +6,8 @@ import Modal from "../../components/common/Modal";
 import AppSelect from "../../components/common/AppSelect";
 import AmountInput from "./AmountInput";
 import { inputClass, labelClass } from "../../utils/formStyles";
-import { SIZE_UNIT_OPTIONS, errorMessage } from "./SaleProjectShared";
+import { errorMessage } from "./SaleProjectShared";
+import { SIZE_UNIT_OPTIONS } from "../../utils/saleListingConstants";
 
 const MAX_PER_CALL = 500;
 const textareaClass = "w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none";

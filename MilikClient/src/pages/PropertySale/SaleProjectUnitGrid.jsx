@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { fmtKES } from "../../services/propertySaleApi";
-import { LISTING_STATUS_MAP, STATUS_LABEL } from "./SaleProjectShared";
+import { LISTING_STATUS_MAP, STATUS_LABEL } from "../../utils/saleListingConstants";
 
 // Compact price for a small tile: 1.5M, 850K
 const shortPrice = (n) => {

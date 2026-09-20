@@ -9,7 +9,8 @@ import SalePhotosField from "./SalePhotosField";
 import useSalePhotoDraft from "../../hooks/useSalePhotoDraft";
 import { inputClass, labelClass } from "../../utils/formStyles";
 import AppSelect from "../../components/common/AppSelect";
-import { errorMessage, useSaleFormOptions } from "./SaleProjectShared";
+import { errorMessage } from "./SaleProjectShared";
+import useSaleFormOptions from "../../hooks/useSaleFormOptions";
 
 const textareaClass = "w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none";
 

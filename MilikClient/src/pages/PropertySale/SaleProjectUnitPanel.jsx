@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { FaEdit, FaExternalLinkAlt, FaTimes, FaUnlink } from "react-icons/fa";
 import { fmtKES } from "../../services/propertySaleApi";
 import StatusBadge from "../../components/common/StatusBadge";
-import { LISTING_STATUS_MAP } from "./SaleProjectShared";
+import { LISTING_STATUS_MAP } from "../../utils/saleListingConstants";
 import { listingAgentText } from "../../utils/saleAgent";
 
 // Side panel with one unit's details and actions

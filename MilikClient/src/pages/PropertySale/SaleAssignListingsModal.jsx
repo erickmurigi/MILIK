@@ -9,7 +9,8 @@ import AppSelect from "../../components/common/AppSelect";
 import Spinner from "../../components/common/Spinner";
 import StatusBadge from "../../components/common/StatusBadge";
 import { inputClass, labelClass } from "../../utils/formStyles";
-import { LISTING_STATUS_MAP, UNIT_STATUSES, STATUS_LABEL, errorMessage } from "./SaleProjectShared";
+import { errorMessage } from "./SaleProjectShared";
+import { LISTING_STATUS_MAP, UNIT_STATUSES, STATUS_LABEL } from "../../utils/saleListingConstants";
 
 const STATUS_OPTIONS = UNIT_STATUSES.map((s) => ({ value: s, label: STATUS_LABEL[s] }));
 const CANDIDATE_LIMIT = 200;

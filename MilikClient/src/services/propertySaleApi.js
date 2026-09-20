@@ -148,9 +148,7 @@ export const saleApi = {
   deleteActivity:   async (id)          => unwrap(await adminRequests.delete(`/sale/activities/${id}`)),
 
   // Settings
-  updateUseProjects: async (enabled) => (await adminRequests.put("/sale/settings/use-projects", { enabled }))?.data?.settings,
   getSettings: async () => (await adminRequests.get("/sale/settings"))?.data?.settings,
-  updateAgentVisibility: async (mode) => (await adminRequests.put("/sale/settings/agent-visibility", { mode }))?.data?.settings,
 
   // Communication templates (under settings)
   addCommTemplate:    async (payload) => (await adminRequests.post("/sale/settings/comm-templates", payload))?.data?.settings,

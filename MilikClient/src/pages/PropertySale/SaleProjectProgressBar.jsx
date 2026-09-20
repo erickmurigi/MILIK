@@ -1,5 +1,6 @@
 import React from "react";
-import { STATUS_LABEL, STATUS_SWATCH } from "./SaleProjectShared";
+import { STATUS_SWATCH } from "./SaleProjectShared";
+import { STATUS_LABEL } from "../../utils/saleListingConstants";
 
 // Order the segments run in: closed sales first, open stock last
 const SEGMENTS = ["sold", "under_contract", "reserved", "available"];

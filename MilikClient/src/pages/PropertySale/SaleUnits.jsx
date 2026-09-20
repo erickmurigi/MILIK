@@ -9,7 +9,9 @@ import SaleFilterBar, { FilterSearch } from "./SaleFilterBar";
 import SaleListingFormModal from "./SaleListingFormModal";
 import SaleListingAgent from "./SaleListingAgent";
 import { listingAgentText } from "../../utils/saleAgent";
-import { LISTING_STATUS_MAP, UNIT_STATUSES, STATUS_LABEL, useSaleFormOptions, errorMessage } from "./SaleProjectShared";
+import { errorMessage } from "./SaleProjectShared";
+import { LISTING_STATUS_MAP, UNIT_STATUSES, STATUS_LABEL } from "../../utils/saleListingConstants";
+import useSaleFormOptions from "../../hooks/useSaleFormOptions";
 import PaginationBar from "../../components/PaginationBar";
 import AppSelect from "../../components/common/AppSelect";
 import StatusBadge from "../../components/common/StatusBadge";
@@ -124,14 +126,7 @@ const SaleUnits = () => {
     staleTime: 5 * 60_000,
   });
 
-  const { data: agentsData } = useQuery({
-    queryKey: ["sale-agents-ref", biz, "active"],
-    queryFn: () => saleApi.listAgents({ business: biz, status: "active", limit: 200 }),
-    enabled: !!biz,
-    staleTime: 5 * 60_000,
-  });
-
-  const { propertyTypeOptions, agentFormOptions } = useSaleFormOptions(biz);
+  const { propertyTypeOptions, agentFormOptions, agentFilterOptions } = useSaleFormOptions(biz);
 
   const units      = useMemo(() => unitsData?.data ?? [], [unitsData?.data]);
   const total      = unitsData?.total ?? 0;
@@ -139,7 +134,6 @@ const SaleUnits = () => {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const projectOptions     = useMemo(() => (projectsData?.data ?? []).map((p) => ({ value: p._id, label: p.name })), [projectsData]);
-  const agentFilterOptions = useMemo(() => (agentsData?.data ?? []).map((a) => ({ value: a._id, label: a.fullName })), [agentsData]);
 
   // sync panel with fresh data after mutations
   useEffect(() => {

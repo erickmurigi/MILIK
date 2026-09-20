@@ -28,10 +28,9 @@ import SaleProjectPerformance from "./SaleProjectPerformance";
 import SalePhotoGallery from "./SalePhotoGallery";
 import SaleListingAgent from "./SaleListingAgent";
 import SaleProjectProgressBar from "./SaleProjectProgressBar";
-import {
-  LISTING_STATUS_MAP, PROJECT_STATUS_MAP, STATUS_LABEL, STATUS_SWATCH, UNIT_STATUSES,
-  errorMessage, fmtPct, useProjectInvalidate, useSaleFormOptions,
-} from "./SaleProjectShared";
+import { PROJECT_STATUS_MAP, STATUS_SWATCH, errorMessage, fmtPct, useProjectInvalidate } from "./SaleProjectShared";
+import { LISTING_STATUS_MAP, STATUS_LABEL, UNIT_STATUSES } from "../../utils/saleListingConstants";
+import useSaleFormOptions from "../../hooks/useSaleFormOptions";
 
 const TERM_KEYS = ["saleProject", "saleProjects", "saleUnit", "saleUnits", "saleListing", "saleListings", "saleAgent", "saleAgents", "saleDeal", "saleDeals", "saleOffers"];
 
@@ -114,8 +113,9 @@ const SaleProjectDetail = () => {
   const { data: unitsData, isLoading: unitsLoading } = useQuery({
     queryKey: ["sale-project-units", biz, id],
     queryFn: () => saleApi.listProjectUnits(id),
-    enabled: !!biz && !!id && !!project,
+    enabled: !!biz && !!id,
     staleTime: 30_000,
+    retry: (count, err) => err?.response?.status !== 404 && count < 1,
   });
   const units = useMemo(() => unitsData?.data ?? [], [unitsData?.data]);
 
