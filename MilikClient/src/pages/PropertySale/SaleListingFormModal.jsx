@@ -3,6 +3,8 @@ import { toast } from "react-toastify";
 import { saleApi } from "../../services/propertySaleApi";
 import { useTerms } from "../../hooks/useTerm";
 import useSalePhotoDraft from "../../hooks/useSalePhotoDraft";
+import useSaleFormOptions from "../../hooks/useSaleFormOptions";
+import SaleCustomField from "./SaleCustomField";
 import SalePhotosField from "./SalePhotosField";
 import AmountInput from "./AmountInput";
 import AppSelect from "../../components/common/AppSelect";
@@ -10,6 +12,8 @@ import Modal from "../../components/common/Modal";
 import { inputClass, labelClass } from "../../utils/formStyles";
 import { SIZE_UNIT_OPTIONS } from "../../utils/saleListingConstants";
 
+
+const NO_TYPE_DEF = { fields: [], hiddenFields: [] };
 
 // `project` ({ _id, name }) marks the listing as a unit inside that project: the form then asks for a unit number and
 // block, and a new unit is created inside the project. Without it this is an ordinary standalone listing.
@@ -19,6 +23,12 @@ export default function SaleListingFormModal({ initialEditingId, initialForm, li
   const [justCreated, setJustCreated] = useState(false);
   const [form,        setForm]        = useState(initialForm);
   const [saving,      setSaving]      = useState(false);
+
+  // The property type decides which extra fields are asked for and which standard ones are left out
+  const { propertyTypeDefs } = useSaleFormOptions(biz);
+  const typeDef = propertyTypeDefs[String(form.propertyType || "").toLowerCase()] ?? NO_TYPE_DEF;
+  const hides = (group) => typeDef.hiddenFields.includes(group);
+  const setAttr = (key, value) => setForm((p) => ({ ...p, attributes: { ...(p.attributes || {}), [key]: value } }));
 
   // Photos: staged locally until the listing exists, then uploaded straight away (shared with the project form)
   const photos = useSalePhotoDraft({
@@ -38,6 +48,8 @@ export default function SaleListingFormModal({ initialEditingId, initialForm, li
     if (!form.title.trim()) return toast.warning("Title is required");
     if (project && !String(form.unitNumber ?? "").trim()) return toast.warning(`${T.saleUnit} number is required`);
     if (!form.askingPrice || Number(form.askingPrice) <= 0) return toast.warning("Valid asking price is required");
+    const missing = typeDef.fields.find((f) => f.required && f.kind !== "boolean" && String(form.attributes?.[f.key] ?? "").trim() === "");
+    if (missing) return toast.warning(`${missing.label} is required`);
     setSaving(true);
     try {
       const payload = {
@@ -116,6 +128,7 @@ export default function SaleListingFormModal({ initialEditingId, initialForm, li
           <label className={labelClass}>Asking Price (KES)</label>
           <AmountInput value={form.askingPrice} onChange={(v) => setForm((p) => ({ ...p, askingPrice: v }))} className={inputClass} placeholder="e.g. 8,500,000" />
         </div>
+        {!hides("size") && (
         <div>
           <label className={labelClass}>Size</label>
           <div className="flex gap-1.5">
@@ -123,9 +136,12 @@ export default function SaleListingFormModal({ initialEditingId, initialForm, li
             <AppSelect value={form.sizeUnit} onChange={(v) => setForm((p) => ({ ...p, sizeUnit: v ?? "" }))} options={SIZE_UNIT_OPTIONS} size="md" />
           </div>
         </div>
+        )}
         <div>
           <AppSelect label={`Assigned ${T.saleAgent}`} value={form.assignedAgent} onChange={(v) => setForm((p) => ({ ...p, assignedAgent: v ?? "" }))} options={agentFormOptions} placeholder={project?.assignedAgent?.fullName ? `Inherited: ${project.assignedAgent.fullName}` : "Unassigned"} size="md" searchable clearable />
         </div>
+        {!hides("location") && (
+        <>
         <div>
           <label className={labelClass}>Location / Address</label>
           <input value={form.location} onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))} className={inputClass} />
@@ -138,28 +154,46 @@ export default function SaleListingFormModal({ initialEditingId, initialForm, li
           <label className={labelClass}>County</label>
           <input value={form.county} onChange={(e) => setForm((p) => ({ ...p, county: e.target.value }))} className={inputClass} />
         </div>
+        </>
+        )}
         <div>
           <label className={labelClass}>Listed Date</label>
           <input type="date" value={form.listedDate} onChange={(e) => setForm((p) => ({ ...p, listedDate: e.target.value }))} className={inputClass} />
         </div>
+        {!hides("titleDeed") && (
         <div>
           <label className={labelClass}>Title Deed No.</label>
           <input value={form.titleDeedNumber} onChange={(e) => setForm((p) => ({ ...p, titleDeedNumber: e.target.value }))} className={inputClass} />
         </div>
+        )}
         <div className="flex items-center gap-4 pt-4">
           <label className="flex cursor-pointer items-center gap-2">
             <input type="checkbox" checked={form.negotiable} onChange={(e) => setForm((p) => ({ ...p, negotiable: e.target.checked }))} className="accent-[#0B3B2E]" />
             <span className="text-xs font-semibold text-slate-700">Negotiable</span>
           </label>
+        {!hides("titleDeed") && (
           <label className="flex cursor-pointer items-center gap-2">
             <input type="checkbox" checked={form.titleDeedAvailable} onChange={(e) => setForm((p) => ({ ...p, titleDeedAvailable: e.target.checked }))} className="accent-[#0B3B2E]" />
             <span className="text-xs font-semibold text-slate-700">Title Deed Available</span>
           </label>
+        )}
         </div>
+        {typeDef.fields.length > 0 && (
+          <div className="md:col-span-2 xl:col-span-3">
+            <div className="mb-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400">Details</div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {typeDef.fields.map((f) => (
+                <SaleCustomField key={f.key} field={f} value={form.attributes?.[f.key]} onChange={setAttr} />
+              ))}
+            </div>
+          </div>
+        )}
+        {!hides("amenities") && (
         <div className="md:col-span-2 xl:col-span-3">
           <label className={labelClass}>Amenities (comma-separated)</label>
           <input value={form.amenities} onChange={(e) => setForm((p) => ({ ...p, amenities: e.target.value }))} className={inputClass} placeholder="Borehole, Power, Road access…" />
         </div>
+        )}
         <div className="md:col-span-2 xl:col-span-3">
           <label className={labelClass}>Description</label>
           <textarea rows={3} value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />

@@ -19,7 +19,7 @@ import AppSelect from "../../components/common/AppSelect";
 import StatusBadge from "../../components/common/StatusBadge";
 import MilikTable from "../../components/common/MilikTable";
 import { saleApi, fmtKES } from "../../services/propertySaleApi";
-import { listingFormFromRow } from "../../utils/saleListingForm";
+import { customFieldRows, listingFormFromRow, typeDefOf } from "../../utils/saleListingForm";
 import useDebounce from "../../hooks/useDebounce";
 import { useTerms } from "../../hooks/useTerm";
 import { useTabState } from "../../hooks/useTabState";
@@ -128,7 +128,7 @@ const SaleUnits = () => {
     staleTime: 5 * 60_000,
   });
 
-  const { propertyTypeOptions, agentFormOptions, agentFilterOptions } = useSaleFormOptions(biz);
+  const { propertyTypeOptions, propertyTypeDefs, agentFormOptions, agentFilterOptions } = useSaleFormOptions(biz);
 
   const units      = useMemo(() => unitsData?.data ?? [], [unitsData?.data]);
   const total      = unitsData?.total ?? 0;
@@ -138,7 +138,7 @@ const SaleUnits = () => {
   const projectOptions     = useMemo(() => (projectsData?.data ?? []).map((p) => ({ value: p._id, label: p.name })), [projectsData]);
 
   const currentCompany = useSelector((s) => s.company?.currentCompany);
-  const printListing = useCallback((row) => printSaleListing(row, { company: currentCompany, T }), [currentCompany, T]);
+  const printListing = useCallback((row) => printSaleListing(row, { company: currentCompany, T, typeDef: typeDefOf(propertyTypeDefs, row) }), [currentCompany, T, propertyTypeDefs]);
 
   // sync panel with fresh data after mutations
   useEffect(() => {
@@ -300,6 +300,7 @@ const SaleUnits = () => {
               ["Size", selected.size ? `${selected.size} ${selected.sizeUnit ?? ""}`.trim() : null],
               ["Location", [selected.town, selected.county].filter(Boolean).join(", ") || selected.location],
               [T.saleAgent, listingAgentText(selected, T.saleProject.toLowerCase())],
+              ...customFieldRows(selected, typeDefOf(propertyTypeDefs, selected).fields),
             ]}
             editLabel={`Edit ${T.saleUnit}`}
             onClose={() => setSelected(null)}

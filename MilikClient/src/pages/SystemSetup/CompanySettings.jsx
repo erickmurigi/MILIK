@@ -9,6 +9,7 @@ import { SALE_PLURAL_OF, SALE_TERM_KEYS, TERM_DEFAULTS } from "../../hooks/useTe
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
+import SalePropertyTypeEditor from "./SalePropertyTypeEditor";
 import { useConfirm } from "../../context/ConfirmContext";
 import { adminRequests } from "../../utils/requestMethods";
 import { createLatePenaltyRule, getChartOfAccounts, getLatePenaltyRules, updateLatePenaltyRule } from "../../redux/apiCalls";
@@ -205,7 +206,7 @@ const emptyForms = {
   maintenanceCategories: { name: "", description: "", priority: "medium", isActive: true },
   saleStages:        { name: "" },
   saleSources:       { name: "" },
-  salePropertyTypes: { name: "" },
+  salePropertyTypes: { name: "", fields: [], hiddenFields: [] },
 };
 
 const SALE_TAB_ENDPOINTS = {
@@ -1433,12 +1434,18 @@ const CompanySettings = () => {
       const endpoint = SALE_TAB_ENDPOINTS[modalTab];
       const name = String(formData?.name || "").trim();
       if (!name) { toast.error("Name is required before saving."); return; }
+      // A property type also carries its extra fields and the standard fields it leaves out
+      const body = modalTab === "salePropertyTypes"
+        ? { name, fields: formData.fields || [], hiddenFields: formData.hiddenFields || [] }
+        : { name };
+      if (body.fields?.some((f) => !String(f.label || "").trim())) { toast.error("Every extra field needs a name."); return; }
+      if (body.fields?.some((f) => f.kind === "select" && !(f.options || []).length)) { toast.error("A list field needs at least one choice."); return; }
       setSaving(true);
       try {
         if (editingItem?._id) {
-          await adminRequests.put(`/sale/settings/${endpoint}/${editingItem._id}`, { name });
+          await adminRequests.put(`/sale/settings/${endpoint}/${editingItem._id}`, body);
         } else {
-          await adminRequests.post(`/sale/settings/${endpoint}`, { name });
+          await adminRequests.post(`/sale/settings/${endpoint}`, body);
         }
         toast.success(editingItem?._id ? "Setting updated successfully" : "Setting added successfully");
         closeModal();
@@ -3226,14 +3233,7 @@ const CompanySettings = () => {
     }
 
     if (tabKey === "salePropertyTypes") {
-      return (
-        <div className="space-y-4">
-          <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">Property Type *</label>
-            <Input value={formData.name || ""} onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))} placeholder="e.g. Apartment" />
-          </div>
-        </div>
-      );
+      return <SalePropertyTypeEditor formData={formData} setFormData={setFormData} />;
     }
 
     // expenses and any other future tabs
@@ -3388,6 +3388,7 @@ const CompanySettings = () => {
       {showModal && (
         <Modal
           onClose={closeModal}
+          wide={modalTab === "salePropertyTypes"}
           title={editingItem?._id ? `Edit ${TAB_CONFIG[modalTab]?.singularLabel || TAB_CONFIG[modalTab].label.replace(/ies$/, "y").replace(/s$/, "")}` : `Add ${TAB_CONFIG[modalTab]?.singularLabel || TAB_CONFIG[modalTab].label.replace(/ies$/, "y").replace(/s$/, "")}`}
           footer={
             <div className="flex flex-wrap justify-end gap-2">

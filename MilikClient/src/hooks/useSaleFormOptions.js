@@ -29,9 +29,16 @@ export default function useSaleFormOptions(biz) {
       : FALLBACK_PROPERTY_TYPES.map((t) => ({ value: t, label: t }));
   }, [saleSettings]);
 
+  // Extra fields / hidden standard fields per property type, keyed by the type value stored on listings (lowercased name).
+  // Inactive types are included so listings that still use them keep their fields.
+  const propertyTypeDefs = useMemo(
+    () => Object.fromEntries((saleSettings?.propertyTypes ?? []).map((t) => [String(t.name).toLowerCase(), { fields: t.fields || [], hiddenFields: t.hiddenFields || [] }])),
+    [saleSettings]
+  );
+
   const agents = useMemo(() => agentsData?.data ?? [], [agentsData]);
   const agentFormOptions = useMemo(() => agents.map((a) => ({ value: a._id, label: `${a.fullName} (${a.agentNumber})` })), [agents]);
   const agentFilterOptions = useMemo(() => agents.map((a) => ({ value: a._id, label: a.fullName })), [agents]);
 
-  return { saleSettings, settingsPending, propertyTypeOptions, agentFormOptions, agentFilterOptions };
+  return { saleSettings, settingsPending, propertyTypeOptions, propertyTypeDefs, agentFormOptions, agentFilterOptions };
 }

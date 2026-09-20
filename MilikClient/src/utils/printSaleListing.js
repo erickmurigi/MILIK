@@ -1,9 +1,12 @@
 import { fmtKES } from "../services/propertySaleApi";
 import { listingAgentText } from "./saleAgent";
+import { customFieldRows } from "./saleListingForm";
 
 // Opens the printable sheet of a listing or unit. `company` is the current company; `T` the sales terms
 // (saleListing, saleAgent, saleProject).
-export function printSaleListing(row, { company, T }) {
+export function printSaleListing(row, { company, T, typeDef }) {
+  const hides = (group) => Boolean(typeDef?.hiddenFields?.includes(group));
+  const extraRows = customFieldRows(row, typeDef?.fields);
   const co = company || {};
   const coName = co.companyName || co.name || "MILIK";
   const coInfo = [co.phone || co.phoneNumber, co.email || co.companyEmail, co.address || co.location].filter(Boolean).join(" • ");
@@ -38,15 +41,16 @@ export function printSaleListing(row, { company, T }) {
 <div class="field"><div class="fl">${esc(T.saleListing)} No.</div><div class="fv">${esc(row.listingNumber)}</div></div>
 <div class="field"><div class="fl">Title</div><div class="fv">${esc(row.title)}</div></div>
 <div class="field"><div class="fl">Listed Date</div><div class="fv">${esc(fmtD(row.listedDate))}</div></div>
-<div class="field"><div class="fl">Size</div><div class="fv">${row.size ? esc(`${row.size} ${row.sizeUnit ?? ""}`.trim()) : "Not specified"}</div></div>
-<div class="field"><div class="fl">Title Deed</div><div class="fv">${row.titleDeedAvailable ? `Yes &ndash; ${esc(row.titleDeedNumber || "N/A")}` : "Not available"}</div></div>
+${hides("size") ? "" : `<div class="field"><div class="fl">Size</div><div class="fv">${row.size ? esc(`${row.size} ${row.sizeUnit ?? ""}`.trim()) : "Not specified"}</div></div>`}
+${hides("titleDeed") ? "" : `<div class="field"><div class="fl">Title Deed</div><div class="fv">${row.titleDeedAvailable ? `Yes &ndash; ${esc(row.titleDeedNumber || "N/A")}` : "Not available"}</div></div>`}
 <div class="field"><div class="fl">Assigned ${esc(T.saleAgent)}</div><div class="fv">${esc(listingAgentText(row, T.saleProject.toLowerCase()) || "Unassigned")}</div></div></div>
-<div class="section-title">Location</div><div class="grid">
+${extraRows.length ? `<div class="section-title">Details</div><div class="grid">${extraRows.map(([l, v]) => `<div class="field"><div class="fl">${esc(l)}</div><div class="fv">${esc(v)}</div></div>`).join("")}</div>` : ""}
+${hides("location") ? "" : `<div class="section-title">Location</div><div class="grid">
 <div class="field"><div class="fl">Location / Address</div><div class="fv">${esc(row.location || "—")}</div></div>
 <div class="field"><div class="fl">Town / City</div><div class="fv">${esc(row.town || "—")}</div></div>
-<div class="field"><div class="fl">County</div><div class="fv">${esc(row.county || "—")}</div></div></div>
+<div class="field"><div class="fl">County</div><div class="fv">${esc(row.county || "—")}</div></div></div>`}
 ${row.description ? `<div class="section-title">Description</div><div class="desc-box">${esc(row.description)}</div>` : ""}
-${row.amenities?.length ? `<div class="section-title">Amenities</div><div class="desc-box">${row.amenities.map(esc).join(" &bull; ")}</div>` : ""}
+${!hides("amenities") && row.amenities?.length ? `<div class="section-title">Amenities</div><div class="desc-box">${row.amenities.map(esc).join(" &bull; ")}</div>` : ""}
 <div class="notice">Official property sale listing issued by ${esc(coName)} &bull; Printed: ${new Date().toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" })} &bull; All prices in KES</div>
 </body></html>`);
   win.document.close();

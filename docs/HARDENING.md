@@ -769,4 +769,24 @@ Deliberately not renamed: GL account names, stored negotiation notes, SMS/email 
 lead-source value "agent", the marketing pages, and the admin screens (module picker, roles, access matrix), which use the product
 name. Server-side error messages stay generic.
 
+## PropertySale custom fields per item type (2026-09-21)
+
+A property type (Company Settings -> Property Sales -> Property Types) can define up to 20 extra fields (text, number, list
+of choices, date, yes/no; each optionally required) and leave out standard fields (size, location, title deed, amenities). A
+"vehicle template" fills registration, make, model, year, mileage, engine, fuel, transmission and colour. Values live on
+`SaleListing.attributes` ({ fieldKey: value }); field keys are stable, so renaming a label keeps stored values.
+
+- **Validation** (`services/listingAttributes.js`, pure): on create/update only defined keys are kept, values are coerced to
+  the field kind, a list value must be one of its choices, required fields must be filled. Changing a listing's type without
+  sending values clears them. Generated units may share values (required not enforced for a batch). Unknown types define none.
+- **Screens:** the listing/unit form asks for the type's fields and hides the standard ones it leaves out; the Listings and
+  Units detail panels and the print sheet show them (and skip hidden standard fields).
+- **Not covered:** bulk import (Excel) does not read custom fields; the "Generate units" modal has no UI for shared values
+  (the API accepts `attributes`); custom fields are not searchable or reportable; hiding a standard field is a form/print
+  choice only, existing values stay stored.
+- **Also this pass:** the Units page panel is now the same shared panel as Listings (photos, print, edit); a new offer
+  pre-fills its agent from the chosen item (own or project agent, if active); terminology presets now really clear words
+  (the panel used to omit blank words and the server only changes words it receives), and a renamed singular gets a
+  regular plural automatically.
+
 *Last updated: 2026-09-20 (Track H closed — PropertySale performance pass, see above). Track G note: PropertySale correctness pass, see above. Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C/E/F/G as items are actioned.*

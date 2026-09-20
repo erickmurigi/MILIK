@@ -29,7 +29,7 @@ import { LISTING_STATUS_MAP } from "../../utils/saleListingConstants";
 import useSaleFormOptions from "../../hooks/useSaleFormOptions";
 import SaleListingAgent from "./SaleListingAgent";
 import { listingAgentText } from "../../utils/saleAgent";
-import { blankListingForm, listingFormFromRow } from "../../utils/saleListingForm";
+import { blankListingForm, customFieldRows, listingFormFromRow, typeDefOf } from "../../utils/saleListingForm";
 
 // Lazy-load the xlsx-backed helpers only when the Import modal is actually used.
 const parseSaleListingsExcel = (file) => import("../../utils/excelTemplates").then((m) => m.parseSaleListingsExcel(file));
@@ -135,7 +135,7 @@ const SaleListings = () => {
   const debouncedSearch = useDebounce(search, 400);
   const biz = currentCompany?._id;
 
-  const { saleSettings, propertyTypeOptions: PROPERTY_TYPE_OPTIONS, agentFormOptions, agentFilterOptions } = useSaleFormOptions(biz);
+  const { saleSettings, propertyTypeOptions: PROPERTY_TYPE_OPTIONS, propertyTypeDefs, agentFormOptions, agentFilterOptions } = useSaleFormOptions(biz);
 
   // Companies that sell in projects see units in this list too (with a Project / Unit column) and can narrow it
   const usesProjects = !!saleSettings?.useProjects;
@@ -209,7 +209,7 @@ const SaleListings = () => {
     }
   }, [invalidate, T.saleListing]);
 
-  const printListing = useCallback((row) => printSaleListing(row, { company: currentCompany, T }), [currentCompany, T]);
+  const printListing = useCallback((row) => printSaleListing(row, { company: currentCompany, T, typeDef: typeDefOf(propertyTypeDefs, row) }), [currentCompany, T, propertyTypeDefs]);
 
   const handleRowClick = useCallback((row) => setSelected((prev) => (prev?._id === row._id ? null : row)), [setSelected]);
   const selectedId = selected?._id;
@@ -320,6 +320,7 @@ const SaleListings = () => {
               ["Size", selected.size ? `${selected.size} ${selected.sizeUnit}` : null],
               ["Location", [selected.town, selected.county].filter(Boolean).join(", ") || selected.location],
               [T.saleAgent, listingAgentText(selected, T.saleProject.toLowerCase())],
+              ...customFieldRows(selected, typeDefOf(propertyTypeDefs, selected).fields),
             ]}
             editLabel={`Edit ${T.saleListing}`}
             onClose={() => setSelected(null)}

@@ -122,7 +122,12 @@ function CreateOfferModal({ saving, listingFormOptions, buyerFormOptions, active
         </div>
         <div className="grid gap-4 overflow-y-auto p-5 md:grid-cols-2">
           <div className="md:col-span-2">
-            <AppSelect label={`${T.saleListing} *`} value={form.listing} onChange={(v) => setForm((f) => ({ ...f, listing: v ?? "" }))} options={listingFormOptions} placeholder={`Select ${T.saleListing.toLowerCase()}`} size="md" searchable />
+            <AppSelect label={`${T.saleListing} *`} value={form.listing} onChange={(v) => setForm((f) => {
+              // A new offer starts with the agent of the chosen item (its own, or its project's) unless one was already picked
+              const suggested = listingFormOptions.find((o) => o.value === v)?.agent;
+              const usable = suggested && activeAgentOptions.some((o) => o.value === suggested);
+              return { ...f, listing: v ?? "", ...(!f.agent && usable && { agent: suggested }) };
+            })} options={listingFormOptions} placeholder={`Select ${T.saleListing.toLowerCase()}`} size="md" searchable />
           </div>
           <div>
             <AppSelect label={`${T.saleBuyer} *`} value={form.buyer} onChange={(v) => setForm((f) => ({ ...f, buyer: v ?? "" }))} options={buyerFormOptions} placeholder={`Select ${T.saleBuyer.toLowerCase()}`} size="md" searchable />
@@ -392,7 +397,7 @@ const SaleOffers = () => {
 
   const activeAgentOptions  = useMemo(() => agents.filter((a) => a.status === "active").map((a) => ({ value: a._id, label: `${a.agentNumber} — ${a.fullName}` })), [agents]);
   const listingFilterOptions= useMemo(() => listings.map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}` })), [listings]);
-  const listingFormOptions  = useMemo(() => listings.filter((l) => ["available", "reserved", "under_contract"].includes(l.status)).map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}` })), [listings]);
+  const listingFormOptions  = useMemo(() => listings.filter((l) => ["available", "reserved", "under_contract"].includes(l.status)).map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}`, agent: l.effectiveAgent?._id ?? null })), [listings]);
   const buyerFilterOptions  = useMemo(() => buyers.map((b) => ({ value: b._id, label: `${b.fullName}${b.buyerNumber ? ` (${b.buyerNumber})` : ""}` })), [buyers]);
   const buyerFormOptions    = useMemo(() => buyers.map((b) => ({ value: b._id, label: `${b.buyerNumber} — ${b.fullName}` })), [buyers]);
 
