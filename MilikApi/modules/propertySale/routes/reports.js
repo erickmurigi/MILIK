@@ -1,6 +1,7 @@
 import express from "express";
 import { verifyUser, requireCompanyModule, requireCompanyPermission } from "../../../controllers/verifyToken.js";
 import { getDashboardStats, getMonthlyDetail, getSalesReport, getCashFlowForecast, getConversionFunnel, getAgentsPerformance } from "../controllers/reportsController.js";
+import { getOverdueInstallments, getReceivables, getSalesRegister } from "../controllers/collectionsReportsController.js";
 import { attachAgentScope } from "../middleware/agentScope.js";
 
 const router = express.Router();
@@ -11,6 +12,9 @@ router.get("/sales", requireCompanyPermission("sale-reports", "view", "propertyS
 router.get("/monthly-detail", requireCompanyPermission("sale-reports", "view", "propertySale"), getMonthlyDetail);
 router.get("/cash-flow",      requireCompanyPermission("sale-reports", "view", "propertySale"), getCashFlowForecast);
 router.get("/funnel",         requireCompanyPermission("sale-reports", "view", "propertySale"), getConversionFunnel);
+router.get("/receivables",    requireCompanyPermission("sale-reports", "view", "propertySale"), getReceivables);
+router.get("/overdue-installments", requireCompanyPermission("sale-reports", "view", "propertySale"), getOverdueInstallments);
+router.get("/register",       requireCompanyPermission("sale-reports", "view", "propertySale"), getSalesRegister);
 // Per-agent figures for the all-agents page: gated like that page (sale-agents view), agent-scoped like listDeals
 router.get("/agents-performance", requireCompanyPermission("sale-agents", "view", "propertySale"), getAgentsPerformance);
 
