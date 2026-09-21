@@ -14,6 +14,7 @@ import { hasCompanyPermission } from '../../utils/permissions';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 import { fmtDate } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
+import printTabularList from '../../utils/printList';
 
 const MILIK_GREEN = '#0B3B2E';
 const formatPercent = (value) => (value === null || value === undefined ? '—' : `${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}%`);
@@ -169,49 +170,45 @@ const PropertyIncomeSummaryReport = () => {
 
   const handlePrint = useCallback(() => {
     if (!canExportReports) { toast.error('You do not have permission to print reports'); return; }
-    const co = currentCompany || {};
-    const name = co.companyName || co.name || co.businessName || 'Milik';
-    const logo = co.logo || '';
-    const by = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || '';
-    const win = window.open('', '_blank', 'width=1120,height=800');
-    if (!win) { toast.error('Pop-up blocked. Please allow pop-ups to print.'); return; }
-    const fmt = (v) => `KES ${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+    const sm = report.summary || {};
     const fmtP = (v) => (v === null || v === undefined ? '—' : `${Number(v || 0).toFixed(1)}%`);
-    win.document.write(`<!DOCTYPE html><html><head><title>Property Income Summary</title><style>
-      @page{size:A4 landscape;margin:12mm 14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
-      .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
-      .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
-      .sub{font-size:10px;color:#475569;margin-top:2px}.meta{text-align:right;color:#64748b;font-size:8.5px;line-height:1.6}
-      .logo{max-height:40px;max-width:110px;object-fit:contain;margin-bottom:4px}
-      .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
-      .card{border:1px solid #dbe2ea;border-radius:6px;background:#f8fafc;padding:6px 8px}
-      .cl{font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:800}
-      .cv{font-size:12px;font-weight:900;color:#0f172a;margin-top:3px}
-      h3{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:#0B3B2E;font-weight:900;margin:12px 0 5px}
-      table{width:100%;border-collapse:collapse;font-size:8.5px;margin-bottom:10px}
-      thead th{background:#0B3B2E;color:#fff;padding:4px 6px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:.1em}
-      thead th.r{text-align:right}tbody td{border-bottom:1px solid #dbe2ea;padding:3.5px 6px}
-      tbody td.r{text-align:right}tbody tr:nth-child(even){background:#f8fafc}
-      tfoot td{border-top:2px solid #0B3B2E;padding:4px 6px;font-weight:900;background:#EDF5F1}tfoot td.r{text-align:right}
-      *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
-    </style></head><body>
-    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">Property Income Summary</div><div class="sub">Period: ${fmtDate(filters.startDate)} to ${fmtDate(filters.endDate)}</div></div>
-    <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div><div>Prepared by: ${by}</div></div></div>
-    <div class="cards">
-      <div class="card"><div class="cl">Total Invoiced</div><div class="cv">${fmt(summary.totalInvoiced)}</div></div>
-      <div class="card"><div class="cl">Total Collected</div><div class="cv" style="color:#0B3B2E">${fmt(summary.totalCollected)}</div></div>
-      <div class="card"><div class="cl">Total Expenses</div><div class="cv" style="color:#b91c1c">${fmt(summary.totalExpenses)}</div></div>
-      <div class="card"><div class="cl">Net Income</div><div class="cv" style="color:${Number(summary.netIncome || 0) >= 0 ? '#047857' : '#b91c1c'}">${fmt(summary.netIncome)}</div></div>
-    </div>
-    <h3>By ${termProperty}</h3>
-    <table><thead><tr><th>${termProperty}</th><th class="r">Rent Invoiced</th><th class="r">Utilities</th><th class="r">Total Invoiced</th><th class="r">Collected</th><th class="r">Expenses</th><th class="r">Net Income</th><th class="r">Collection Rate</th></tr></thead>
-    <tbody>${(report.byProperty || []).map((row) => `<tr><td><strong>${row.propertyName || '—'}</strong></td><td class="r">${fmt(row.rentInvoiced)}</td><td class="r">${fmt(row.utilitiesInvoiced)}</td><td class="r">${fmt(row.totalInvoiced)}</td><td class="r">${fmt(row.totalCollected)}</td><td class="r" style="color:#b91c1c">${fmt(row.totalExpenses)}</td><td class="r" style="color:${Number(row.netIncome || 0) >= 0 ? '#047857' : '#b91c1c'}"><strong>${fmt(row.netIncome)}</strong></td><td class="r">${fmtP(row.collectionRate)}</td></tr>`).join('')}</tbody>
-    <tfoot><tr><td><strong>TOTAL</strong></td><td class="r"><strong>${fmt(summary.totalRentInvoiced)}</strong></td><td class="r"><strong>${fmt(summary.totalUtilitiesInvoiced)}</strong></td><td class="r"><strong>${fmt(summary.totalInvoiced)}</strong></td><td class="r"><strong>${fmt(summary.totalCollected)}</strong></td><td class="r"><strong>${fmt(summary.totalExpenses)}</strong></td><td class="r"><strong>${fmt(summary.netIncome)}</strong></td><td class="r"><strong>${fmtP(summary.collectionRate)}</strong></td></tr></tfoot></table>
-    ${(report.expensesByCategory || []).length > 0 ? `<h3>Expenses by Category</h3><table><thead><tr><th>Category</th><th class="r">Total</th><th class="r">Count</th></tr></thead><tbody>${(report.expensesByCategory || []).map((row) => `<tr><td>${formatCategory(row.category)}</td><td class="r">${fmt(row.total)}</td><td class="r">${row.count}</td></tr>`).join('')}</tbody></table>` : ''}
-    </body></html>`);
-    win.document.close();
-    win.onload = () => { win.focus(); win.print(); };
-  }, [canExportReports, currentCompany, currentUser, report, summary, filters.startDate, filters.endDate]);
+    const netTone = (v) => (Number(v || 0) >= 0 ? 'pos' : 'neg');
+    const expenseCategories = report.expensesByCategory || [];
+    const printed = printTabularList({
+      title: 'Property Income Summary',
+      subtitle: `Period: ${fmtDate(filters.startDate)} to ${fmtDate(filters.endDate)}`,
+      company: currentCompany,
+      columns: [
+        { label: termProperty, value: (r) => r.propertyName || '—', bold: true },
+        { label: 'Rent Invoiced', align: 'right', value: (r) => formatMoney(r.rentInvoiced) },
+        { label: 'Utilities', align: 'right', value: (r) => formatMoney(r.utilitiesInvoiced) },
+        { label: 'Total Invoiced', align: 'right', value: (r) => formatMoney(r.totalInvoiced) },
+        { label: 'Collected', align: 'right', value: (r) => formatMoney(r.totalCollected) },
+        { label: 'Expenses', align: 'right', value: (r) => formatMoney(r.totalExpenses), tone: () => 'neg' },
+        { label: 'Net Income', align: 'right', value: (r) => formatMoney(r.netIncome), tone: (r) => netTone(r.netIncome), bold: true },
+        { label: 'Collection Rate', align: 'right', value: (r) => fmtP(r.collectionRate) },
+      ],
+      rows: report.byProperty || [],
+      summaryItems: [
+        ['Total Invoiced', formatMoney(sm.totalInvoiced)],
+        ['Total Collected', formatMoney(sm.totalCollected)],
+        ['Total Expenses', formatMoney(sm.totalExpenses)],
+        ['Net Income', formatMoney(sm.netIncome)],
+      ],
+      totalsRow: ['TOTAL', formatMoney(sm.totalRentInvoiced), formatMoney(sm.totalUtilitiesInvoiced), formatMoney(sm.totalInvoiced), formatMoney(sm.totalCollected), formatMoney(sm.totalExpenses), formatMoney(sm.netIncome), fmtP(sm.collectionRate)],
+      sections: expenseCategories.length ? [{
+        heading: 'Expenses by Category',
+        columns: [
+          { label: 'Category', value: (r) => formatCategory(r.category) },
+          { label: 'Total', align: 'right', value: (r) => formatMoney(r.total) },
+          { label: 'Count', align: 'right', value: (r) => r.count },
+        ],
+        rows: expenseCategories,
+        totalsRow: ['TOTAL', formatMoney(expenseCategories.reduce((s, r) => s + Number(r.total || 0), 0)), String(expenseCategories.reduce((s, r) => s + Number(r.count || 0), 0))],
+      }] : [],
+    });
+    if (!printed) toast.error('Pop-up blocked — allow pop-ups for this site to print');
+  }, [canExportReports, currentCompany, report, filters.startDate, filters.endDate, termProperty]);
 
   return (
     <DashboardLayout lockContentScroll>

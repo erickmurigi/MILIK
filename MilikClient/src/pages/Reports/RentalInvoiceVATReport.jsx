@@ -13,6 +13,7 @@ import { adminRequests } from "../../utils/requestMethods";
 import { fmtDate } from "../../utils/dates";
 import { formatMoney } from "../../utils/money";
 import PaginationBar from "../../components/PaginationBar";
+import printTabularList from "../../utils/printList";
 
 
 const RentalInvoiceVATReport = () => {
@@ -153,44 +154,37 @@ const RentalInvoiceVATReport = () => {
 
   const handlePrint = useCallback(() => {
     if (!canExportReports) { toast.warning("You do not have permission to print reports"); return; }
-    const co = currentCompany || {};
-    const name = co.companyName || co.name || co.businessName || 'Milik';
-    const logo = co.logo || '';
-    const win = window.open('', '_blank', 'width=1120,height=800');
-    if (!win) { toast.error('Pop-up blocked. Please allow pop-ups to print.'); return; }
-    const fmt = (v) => `KES ${Number(v || 0).toLocaleString()}`;
-    win.document.write(`<!DOCTYPE html><html><head><title>Rental Invoice VAT Report</title><style>
-      @page{size:A4 landscape;margin:12mm 14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
-      .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
-      .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
-      .sub{font-size:10px;color:#475569;margin-top:2px}.meta{text-align:right;color:#64748b;font-size:8.5px;line-height:1.6}
-      .logo{max-height:40px;max-width:110px;object-fit:contain;margin-bottom:4px}
-      .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
-      .card{border:1px solid #dbe2ea;border-radius:6px;background:#f8fafc;padding:6px 8px}
-      .cl{font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:800}
-      .cv{font-size:13px;font-weight:900;color:#0f172a;margin-top:3px}
-      table{width:100%;border-collapse:collapse;font-size:8.5px}
-      thead th{background:#0B3B2E;color:#fff;padding:4px 6px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:.1em}
-      thead th.r{text-align:right}tbody td{border-bottom:1px solid #dbe2ea;padding:3.5px 6px}
-      tbody td.r{text-align:right}tbody tr:nth-child(even){background:#f8fafc}
-      tfoot td{border-top:2px solid #0B3B2E;padding:4px 6px;font-weight:900;background:#EDF5F1}tfoot td.r{text-align:right}
-      *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
-    </style></head><body>
-    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">Rental Invoice VAT Report</div><div class="sub">Generated: ${new Date().toLocaleString()}</div></div>
-    <div class="meta"><div>Prepared by: ${preparedBy}</div><div>Records: ${filteredRows.length}</div></div></div>
-    <div class="cards">
-      <div class="card"><div class="cl">Invoices</div><div class="cv">${totals.count}</div></div>
-      <div class="card"><div class="cl">Net Amount</div><div class="cv" style="color:#0B3B2E">${fmt(totals.net)}</div></div>
-      <div class="card"><div class="cl">VAT</div><div class="cv" style="color:#b45309">${fmt(totals.tax)}</div></div>
-      <div class="card"><div class="cl">Gross</div><div class="cv">${fmt(totals.gross)}</div></div>
-    </div>
-    <table><thead><tr><th>Invoice</th><th>${termTenant}</th><th>${termProperty}</th><th>${termUnit}</th><th>Category</th><th>Invoice Date</th><th>Tax Code</th><th class="r">Rate</th><th class="r">Net</th><th class="r">VAT</th><th class="r">Gross</th><th>Status</th></tr></thead>
-    <tbody>${filteredRows.map((row) => `<tr><td>${row?.invoiceNumber || '—'}</td><td>${row?.tenant?.tenantName || row?.tenant?.name || '—'}</td><td>${row?.property?.propertyName || '—'}</td><td>${row?.unit?.unitNumber || '—'}</td><td>${row?.category || '—'}</td><td>${fmtDate(row?.invoiceDate)}</td><td>${row?.taxSnapshot?.taxCodeName || '—'}</td><td class="r">${Number(row?.taxSnapshot?.taxRate || 0)}%</td><td class="r">${fmt(row?.taxSnapshot?.netAmount || row?.amount)}</td><td class="r">${fmt(row?.taxSnapshot?.taxAmount)}</td><td class="r"><strong>${fmt(row?.taxSnapshot?.grossAmount || row?.amount)}</strong></td><td>${row?.status || '—'}</td></tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="8"><strong>TOTALS</strong></td><td class="r">${fmt(totals.net)}</td><td class="r">${fmt(totals.tax)}</td><td class="r"><strong>${fmt(totals.gross)}</strong></td><td></td></tr></tfoot>
-    </table></body></html>`);
-    win.document.close();
-    win.onload = () => { win.focus(); win.print(); };
-  }, [canExportReports, currentCompany, filteredRows, totals, preparedBy]);
+    const netOf = (r) => r?.taxSnapshot?.netAmount || r?.amount;
+    const grossOf = (r) => r?.taxSnapshot?.grossAmount || r?.amount;
+    const printed = printTabularList({
+      title: "Rental Invoice VAT Report",
+      subtitle: `${filteredRows.length} taxable invoice${filteredRows.length !== 1 ? "s" : ""}`,
+      company: currentCompany,
+      columns: [
+        { label: "Invoice", value: (r) => r?.invoiceNumber || "—" },
+        { label: termTenant, value: (r) => r?.tenant?.tenantName || r?.tenant?.name || "—", bold: true },
+        { label: termProperty, value: (r) => r?.property?.propertyName || "—" },
+        { label: termUnit, value: (r) => r?.unit?.unitNumber || "—" },
+        { label: "Category", value: (r) => r?.category || "—" },
+        { label: "Invoice Date", value: (r) => fmtDate(r?.invoiceDate) },
+        { label: "Tax Code", value: (r) => r?.taxSnapshot?.taxCodeName || "—" },
+        { label: "Rate", align: "right", value: (r) => `${Number(r?.taxSnapshot?.taxRate || 0)}%` },
+        { label: "Net", align: "right", value: (r) => formatMoney(netOf(r)) },
+        { label: "VAT", align: "right", value: (r) => formatMoney(r?.taxSnapshot?.taxAmount) },
+        { label: "Gross", align: "right", value: (r) => formatMoney(grossOf(r)), bold: true },
+        { label: "Status", value: (r) => r?.status || "—" },
+      ],
+      rows: filteredRows,
+      summaryItems: [
+        ["Invoices", String(totals.count)],
+        ["Net Amount", formatMoney(totals.net)],
+        ["VAT", formatMoney(totals.tax)],
+        ["Gross", formatMoney(totals.gross)],
+      ],
+      totalsRow: ["TOTALS", "", "", "", "", "", "", "", formatMoney(totals.net), formatMoney(totals.tax), formatMoney(totals.gross), ""],
+    });
+    if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
+  }, [canExportReports, currentCompany, filteredRows, totals, termTenant, termProperty, termUnit]);
 
   return (
     <DashboardLayout lockContentScroll>

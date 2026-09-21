@@ -28,6 +28,7 @@ import { isCashbookAccount } from "../../utils/cashbookUtils";
 import { useConfirm } from "../../context/ConfirmContext";
 import { fmtDate } from "../../utils/dates";
 import { formatMoney } from "../../utils/money";
+import { printDocument, formatMoney as formatPrintMoney } from "../../utils/printKit";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -364,152 +365,37 @@ const LandlordReceipts = () => {
 
   const handlePrint = (receipt) => {
     if (!receipt) return;
-    const esc = (v) => String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-    const fmtAmt = (n) => `KES ${Number(n||0).toLocaleString("en-KE",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
-    const co = currentCompany || {};
-    const coName = esc(co.companyName || co.name || "MILIK");
-    const coPhone = esc(co.phone || co.phoneNo || co.phoneNumber || co.contactPhone || "");
-    const coEmail = esc(co.email || co.companyEmail || co.contactEmail || "");
-    const coAddr = esc([co.address || co.postalAddress || co.location || "", co.town || co.city || ""].filter(Boolean).join(", "));
-    const coSub = [coAddr, coPhone, coEmail].filter(Boolean).join(" · ");
-    const logoHtml = co.logo
-      ? `<img src="${esc(co.logo)}" style="max-height:60px;max-width:150px;object-fit:contain;border-radius:6px;" alt="logo"/>`
-      : `<div style="width:56px;height:56px;border-radius:10px;background:#0B3B2E;color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;">${coName.slice(0,1)}</div>`;
+    const money = (v) => `KES ${formatPrintMoney(v)}`;
     const categoryLabel = CATEGORY_OPTIONS.find((item) => item.value === receipt?.category)?.label || receipt?.category || "-";
-    const statusColor = { draft:"#d97706", posted:"#16a34a", reversed:"#dc2626" }[receipt?.status] || "#475569";
-    const statusBgColor = { draft:"#fef3c7", posted:"#dcfce7", reversed:"#fee2e2" }[receipt?.status] || "#f1f5f9";
-    const preparedByName = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || 'Milik Admin';
-
-    const printWindow = window.open("", "_blank", "width=900,height=720");
-    if (!printWindow) { toast.error("Unable to open print window."); return; }
-
-    printWindow.document.write(`<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <title>Landlord Receipt ${esc(receipt?.receiptNumber || "")}</title>
-  <style>
-    @page { size:A4; margin:14mm 16mm; }
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Helvetica Neue',Arial,sans-serif;font-size:13px;color:#0f172a;background:#fff}
-    .header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding-bottom:16px;gap:16px}
-    .co-center{text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px}
-    .co-center-name{font-size:18px;font-weight:900;color:#0f172a;letter-spacing:-0.01em;margin-top:6px}
-    .co-center-sub{font-size:10px;color:#64748b;line-height:1.6}
-    .doc-title{text-align:right;align-self:center}
-    .doc-label{font-size:34px;font-weight:900;color:#0f172a;letter-spacing:-0.03em;line-height:1}
-    .doc-number{font-size:14px;color:#64748b;margin-top:6px}
-    .divider{height:2px;background:linear-gradient(90deg,#0B3B2E,#E65F1A);border-radius:2px;margin:16px 0 20px}
-    .body-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-bottom:20px}
-    .sec-label{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.18em;color:#94a3b8;margin-bottom:12px}
-    .fk{font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;margin-top:8px}
-    .fv{font-size:13px;font-weight:700;color:#0f172a}
-    .fv.lg{font-size:16px;font-weight:800}
-    .status-badge{display:inline-block;padding:4px 14px;border-radius:6px;font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:18px}
-    .amount-row{display:flex;justify-content:flex-end;margin-bottom:20px}
-    .amount-box{text-align:right}
-    .amount-label{font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:4px}
-    .amount-value{font-size:28px;font-weight:900;color:#0f172a;letter-spacing:-0.02em}
-    table{width:100%;border-collapse:collapse;margin-bottom:16px}
-    thead tr{background:#1e293b;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    th{padding:10px 14px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#fff}
-    th.r{text-align:right}
-    tbody tr{border-bottom:1px solid #f1f5f9}
-    td{padding:11px 14px;font-size:13px;color:#0f172a}
-    td.r{text-align:right;font-weight:600}
-    .sig-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;padding-top:20px;border-top:1px solid #e2e8f0;margin-top:28px}
-    .sig-block{text-align:center}
-    .sig-line{height:40px;border-bottom:1px solid #94a3b8;margin-bottom:6px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:3px}
-    .sig-role{font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:0.12em}
-    .footer-note{margin-top:18px;padding-top:12px;border-top:1px solid #f1f5f9;font-size:11px;color:#94a3b8}
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div></div>
-    <div class="co-center">
-      ${logoHtml}
-      <div class="co-center-name">${coName}</div>
-      ${coSub ? `<div class="co-center-sub">${coSub}</div>` : ""}
-    </div>
-    <div class="doc-title">
-      <div class="doc-label">RECEIPT</div>
-      <div class="doc-number"># ${esc(receipt?.receiptNumber || "-")}</div>
-    </div>
-  </div>
-
-  <div class="divider"></div>
-
-  <div class="body-grid">
-    <div>
-      <div class="sec-label">Received From</div>
-      <div class="fk">Landlord</div>
-      <div class="fv lg">${esc(receipt?.landlord?.landlordName || "-")}</div>
-      <div class="fk">Property</div>
-      <div class="fv">${esc(receipt?.property?.propertyName || "-")}</div>
-    </div>
-    <div>
-      <div class="sec-label">Receipt Details</div>
-      <div class="fk">Receipt Date</div>
-      <div class="fv">${esc(fmtDate(receipt?.receiptDate))}</div>
-      <div class="fk">Payment Method</div>
-      <div class="fv">${esc(String(receipt?.paymentMethod || "-").replace(/_/g," "))}</div>
-      <div class="fk">Reference</div>
-      <div class="fv">${esc(receipt?.referenceNumber || "-")}</div>
-      <div class="fk">Cashbook</div>
-      <div class="fv">${esc(receipt?.cashbook || "-")}</div>
-    </div>
-  </div>
-
-  <span class="status-badge" style="background:${statusBgColor};color:${statusColor};">${esc(String(receipt?.status || "Draft").replace(/_/g," ").toUpperCase())}</span>
-
-  <table>
-    <thead>
-      <tr>
-        <th>Description</th>
-        <th>Category</th>
-        <th class="r">Amount (KES)</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>${esc(receipt?.narration || categoryLabel)}</td>
-        <td>${esc(categoryLabel)}</td>
-        <td class="r">${fmtAmt(receipt?.amount)}</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <div style="display:flex;justify-content:flex-end;margin-bottom:20px">
-    <div style="width:260px;border-top:2px solid #0f172a;padding-top:12px">
-      <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:800;color:#0f172a">
-        <span>Total Received</span><span>${fmtAmt(receipt?.amount)}</span>
-      </div>
-    </div>
-  </div>
-
-  <div class="sig-grid">
-    <div class="sig-block">
-      <div class="sig-line"><span style="font-size:11px;font-weight:700;color:#0f172a">${esc(preparedByName)}</span></div>
-      <div class="sig-role">Prepared By</div>
-    </div>
-    <div class="sig-block">
-      <div class="sig-line"></div>
-      <div class="sig-role">Verified By</div>
-    </div>
-    <div class="sig-block">
-      <div class="sig-line"></div>
-      <div class="sig-role">Landlord / Received By</div>
-    </div>
-  </div>
-
-  <div class="footer-note">
-    Official landlord receipt generated by ${coName} · Milik Property Management System · ${esc(new Date().toLocaleString())}
-  </div>
-</body>
-</html>`);
-    printWindow.document.close();
-    setTimeout(() => { printWindow.focus(); printWindow.print(); }, 450);
+    const status = String(receipt?.status || "draft").toLowerCase();
+    const preparedByName = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(" ") || currentUser?.email || "Milik Admin";
+    const printed = printDocument({
+      company: currentCompany,
+      docType: "Landlord Receipt",
+      docNumber: receipt?.receiptNumber || "-",
+      status: { label: status.replace(/_/g, " "), tone: { draft: "warning", posted: "success", reversed: "danger" }[status] || "neutral" },
+      watermark: status === "reversed" ? "VOID" : "",
+      meta: [["Date", fmtDate(receipt?.receiptDate)]],
+      parties: [{ heading: "Received from", name: receipt?.landlord?.landlordName || "-", lines: [receipt?.property?.propertyName ? `Property: ${receipt.property.propertyName}` : ""] }],
+      details: [
+        ["Payment method", String(receipt?.paymentMethod || "-").replace(/_/g, " ")],
+        ["Reference", receipt?.referenceNumber || "-"],
+        ["Cashbook", receipt?.cashbook || "-"],
+      ],
+      table: {
+        columns: [
+          { label: "Description", value: () => receipt?.narration || categoryLabel },
+          { label: "Category", value: () => categoryLabel },
+          { label: "Amount (KES)", align: "right", value: () => money(receipt?.amount) },
+        ],
+        rows: [receipt],
+      },
+      totals: [{ label: "Total received", value: money(receipt?.amount), hero: true }],
+      amountWords: { amount: receipt?.amount, currency: currentCompany?.baseCurrency || "KES" },
+      signatures: [{ label: "Prepared by", name: preparedByName }, { label: "Verified by" }, { label: "Landlord / Received by" }],
+      preparedBy: preparedByName,
+    });
+    if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
   };
 
   return (

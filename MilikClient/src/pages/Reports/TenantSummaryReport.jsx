@@ -12,6 +12,7 @@ import { selectAllProperties } from "../../redux/selectors";
 import { formatMoney } from "../../utils/money";
 import useDebounce from "../../hooks/useDebounce";
 import PaginationBar from "../../components/PaginationBar";
+import printTabularList from "../../utils/printList";
 
 
 
@@ -140,46 +141,32 @@ const TenantSummaryReport = () => {
 
   const handlePrint = useCallback(() => {
     if (!canExportReports) { toast.warning("You do not have permission to print reports"); return; }
-    const co = currentCompany || {};
-    const name = co.companyName || co.name || co.businessName || 'Milik';
-    const logo = co.logo || '';
-    const win = window.open('', '_blank', 'width=1120,height=800');
-    if (!win) { toast.error('Pop-up blocked. Please allow pop-ups to print.'); return; }
-    const fmt = (v) => `KES ${Number(v || 0).toLocaleString()}`;
-    win.document.write(`<!DOCTYPE html><html><head><title>${termTenant} Summary Report</title><style>
-      @page{size:A4 landscape;margin:12mm 14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
-      .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
-      .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
-      .sub{font-size:10px;color:#475569;margin-top:2px}.meta{text-align:right;color:#64748b;font-size:8.5px;line-height:1.6}
-      .logo{max-height:40px;max-width:110px;object-fit:contain;margin-bottom:4px}
-      .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
-      .card{border:1px solid #dbe2ea;border-radius:6px;background:#f8fafc;padding:6px 8px}
-      .cl{font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:800}
-      .cv{font-size:13px;font-weight:900;color:#0f172a;margin-top:3px}
-      table{width:100%;border-collapse:collapse;font-size:8.5px}
-      thead th{background:#0B3B2E;color:#fff;padding:4px 6px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:.1em}
-      thead th.r{text-align:right}tbody td{border-bottom:1px solid #dbe2ea;padding:3.5px 6px}
-      tbody td.r{text-align:right}tbody tr:nth-child(even){background:#f8fafc}
-      tfoot td{border-top:2px solid #0B3B2E;padding:4px 6px;font-weight:900;background:#EDF5F1}tfoot td.r{text-align:right}
-      .ba{display:inline-block;padding:1px 6px;border-radius:99px;font-size:8px;font-weight:800}
-      .act{background:#d1fae5;color:#065f46}.ina{background:#f1f5f9;color:#475569}
-      *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
-    </style></head><body>
-    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">${termTenant} Summary Report</div><div class="sub">Generated: ${new Date().toLocaleString()}</div></div>
-    <div class="meta"><div>Prepared by: ${preparedBy}</div><div>${termTenants}: ${filteredRows.length}</div></div></div>
-    <div class="cards">
-      <div class="card"><div class="cl">${termTenants}</div><div class="cv">${filteredRows.length}</div></div>
-      <div class="card"><div class="cl">Total Invoiced</div><div class="cv">${fmt(totals.invoiced)}</div></div>
-      <div class="card"><div class="cl">Total Collected</div><div class="cv" style="color:#0B3B2E">${fmt(totals.paid)}</div></div>
-      <div class="card"><div class="cl">Outstanding</div><div class="cv" style="color:${totals.balance > 0 ? '#b91c1c' : '#047857'}">${fmt(totals.balance)}</div></div>
-    </div>
-    <table><thead><tr><th>${termTenant}</th><th>Email</th><th>Phone</th><th>${termProperty}</th><th>${termUnit}</th><th class="r">Invoiced</th><th class="r">Collected</th><th class="r">Outstanding</th><th>Status</th></tr></thead>
-    <tbody>${filteredRows.map((row) => `<tr><td><strong>${row.tenantName}</strong></td><td>${row.email}</td><td>${row.phone}</td><td>${row.propertyName}</td><td>${row.unitNumber}</td><td class="r">${fmt(row.totalInvoiced)}</td><td class="r" style="color:#047857"><strong>${fmt(row.totalPaid)}</strong></td><td class="r" style="color:${row.balance > 0 ? '#b91c1c' : row.balance < 0 ? '#047857' : '#64748b'}">${fmt(row.balance)}</td><td><span class="${row.status === 'active' ? 'ba act' : 'ba ina'}">${row.status}</span></td></tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="5"><strong>TOTALS (${filteredRows.length} ${termTenants.toLowerCase()})</strong></td><td class="r">${fmt(totals.invoiced)}</td><td class="r">${fmt(totals.paid)}</td><td class="r">${fmt(totals.balance)}</td><td></td></tr></tfoot>
-    </table></body></html>`);
-    win.document.close();
-    win.onload = () => { win.focus(); win.print(); };
-  }, [canExportReports, currentCompany, filteredRows, totals, preparedBy]);
+    const printed = printTabularList({
+      title: `${termTenant} Summary Report`,
+      subtitle: `${termProperty}: ${filters.propertyId ? (propertyById.get(filters.propertyId)?.propertyName || "Selected") : `All ${termProperties.toLowerCase()}`}  ·  Status: ${filters.status || `All ${termTenants.toLowerCase()}`}`,
+      company: currentCompany,
+      columns: [
+        { label: termTenant, value: (r) => r.tenantName, bold: true },
+        { label: "Email", value: (r) => r.email },
+        { label: "Phone", value: (r) => r.phone },
+        { label: termProperty, value: (r) => r.propertyName },
+        { label: termUnit, value: (r) => r.unitNumber },
+        { label: "Invoiced", align: "right", value: (r) => formatMoney(r.totalInvoiced) },
+        { label: "Collected", align: "right", value: (r) => formatMoney(r.totalPaid), tone: () => "pos" },
+        { label: "Outstanding", align: "right", value: (r) => formatMoney(r.balance), tone: (r) => (r.balance > 0 ? "neg" : r.balance < 0 ? "pos" : "muted") },
+        { label: "Status", value: (r) => r.status, tone: (r) => (r.status === "active" ? "pos" : "muted") },
+      ],
+      rows: filteredRows,
+      summaryItems: [
+        [termTenants, String(filteredRows.length)],
+        ["Total Invoiced", formatMoney(totals.invoiced)],
+        ["Total Collected", formatMoney(totals.paid)],
+        ["Outstanding", formatMoney(totals.balance)],
+      ],
+      totalsRow: [`TOTALS (${filteredRows.length} ${termTenants.toLowerCase()})`, "", "", "", "", formatMoney(totals.invoiced), formatMoney(totals.paid), formatMoney(totals.balance), ""],
+    });
+    if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
+  }, [canExportReports, currentCompany, filteredRows, totals, filters.propertyId, filters.status, propertyById, termTenant, termTenants, termUnit, termProperty, termProperties]);
 
   return (
     <DashboardLayout lockContentScroll>

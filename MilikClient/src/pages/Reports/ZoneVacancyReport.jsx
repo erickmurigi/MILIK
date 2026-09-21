@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { FaDoorOpen, FaPrint, FaRedoAlt } from 'react-icons/fa';
 import { toast } from 'react-toastify';
@@ -7,6 +7,8 @@ import AppSelect from '../../components/common/AppSelect';
 import { adminRequests } from '../../utils/requestMethods';
 import { selectCurrentCompany, selectCurrentUser } from '../../redux/selectors';
 import { fmtDate } from '../../utils/dates';
+import { formatMoney } from '../../utils/money';
+import printTabularList from '../../utils/printList';
 
 const fmt = (v) => `KES ${Number(v || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
 const pct = (v) => `${Number(v || 0).toFixed(1)}%`;
@@ -30,7 +32,6 @@ export default function ZoneVacancyReport() {
   const [report,     setReport]     = useState(null);
   const [loading,    setLoading]    = useState(false);
   const [zoneFilter, setZoneFilter] = useState('');
-  const printRef = useRef();
 
   const loadReport = useCallback(async () => {
     setLoading(true);
@@ -56,20 +57,41 @@ export default function ZoneVacancyReport() {
   const filteredPotentialRent = rows.reduce((s, r) => s + r.rent, 0);
 
   const handlePrint = () => {
-    const w = window.open('', '_blank');
-    w.document.write(`<html><head><title>Zone Vacancy Report</title>
-      <style>
-        body { font-family: Arial, sans-serif; font-size: 11px; color: #1e293b; margin: 20px; }
-        h2 { font-size: 15px; margin: 0 0 2px; } p { margin: 0 0 12px; color: #64748b; font-size: 10px; }
-        table { width: 100%; border-collapse: collapse; } th { background: #0B3B2E; color: white; padding: 6px 8px; text-align: left; font-size: 10px; }
-        td { padding: 5px 8px; border-bottom: 1px solid #e2e8f0; font-size: 10px; }
-        tr:nth-child(even) td { background: #f8fafc; }
-        .right { text-align: right; } .total td { font-weight: bold; background: #f1f5f9 !important; border-top: 2px solid #0B3B2E; }
-      </style></head><body>
-      ${printRef.current.innerHTML}
-    </body></html>`);
-    w.document.close();
-    w.print();
+    const overall = report?.totalUnits > 0 ? pct(report.totalVacant / report.totalUnits * 100) : '0%';
+    const printed = printTabularList({
+      title: 'Zone Vacancy Report',
+      subtitle: `As at ${new Date().toLocaleDateString()}${zoneFilter ? ` · Zone: ${zoneFilter}` : ''}`,
+      company: currentCompany,
+      columns: [
+        { label: 'Unit', value: (r) => r.unitNumber, bold: true },
+        { label: 'Property', value: (r) => r.propertyName },
+        { label: 'Zone', value: (r) => r.zoneName },
+        { label: 'Type', value: (r) => UNIT_TYPE_LABELS[r.unitType] || r.unitType },
+        { label: 'Vacant Since', value: (r) => fmtDate(r.vacantSince) },
+        { label: 'Days', align: 'right', value: (r) => r.daysVacant, tone: (r) => (r.daysVacant > 60 ? 'neg' : '') },
+        { label: 'Rent / Mo. (KES)', align: 'right', value: (r) => formatMoney(r.rent) },
+      ],
+      rows,
+      summaryItems: report ? [
+        ['Vacant Units', String(report.totalVacant ?? 0)],
+        ['Total Units', String(report.totalUnits ?? 0)],
+        ['Overall Vacancy', overall],
+        ['Lost Rent / Mo.', fmt(report.totalPotentialRent)],
+      ] : [],
+      totalsRow: [`${rows.length} vacant unit${rows.length !== 1 ? 's' : ''}`, '', '', '', '', '', formatMoney(filteredPotentialRent)],
+      sections: summary.length ? [{
+        heading: 'Vacancy by Zone',
+        columns: [
+          { label: 'Zone', value: (z) => `${z.zoneName}${z.zoneCode ? ` (${z.zoneCode})` : ''}`, bold: true },
+          { label: 'Total', align: 'right', value: (z) => z.totalUnits },
+          { label: 'Vacant', align: 'right', value: (z) => z.vacantUnits },
+          { label: 'Vacancy %', align: 'right', value: (z) => pct(z.vacancyRate), tone: (z) => (z.vacancyRate >= 30 ? 'neg' : '') },
+          { label: 'Lost Rent / Mo. (KES)', align: 'right', value: (z) => formatMoney(z.potentialRent) },
+        ],
+        rows: summary,
+      }] : [],
+    });
+    if (!printed) toast.error('Pop-up blocked — allow pop-ups for this site to print');
   };
 
   return (
@@ -98,7 +120,7 @@ export default function ZoneVacancyReport() {
 
         {/* Content */}
         <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2 space-y-3">
-          <div ref={printRef}>
+          <div>
             <h2 className="text-sm font-black text-slate-900">Zone Vacancy Report</h2>
             <p className="text-[10px] text-slate-500 mb-3">{companyName} · As at {new Date().toLocaleDateString()}</p>
 

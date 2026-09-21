@@ -43,6 +43,7 @@ import AppSelect from "../../components/common/AppSelect";
 import { toast } from "react-toastify";
 import { fetchCompanySettings, selectCompanySettings } from "../../redux/companySettingsRedux";
 import { normalizeCompanyTaxConfig } from "./invoiceTaxUtils";
+import { printDocument, printTabularList, formatMoney as formatPrintMoney, formatDate as formatPrintDate } from "../../utils/printKit";
 import {
   FaArrowLeft,
   FaDownload,
@@ -1383,9 +1384,6 @@ const TenantStatement = () => {
   );
 
   const handlePrint = useCallback(() => {
-    const co = currentCompany || {};
-    const name = co.companyName || co.name || co.businessName || 'Milik';
-    const logo = co.logo || '';
     const tenantName = tenant?.tenantName || tenant?.name || 'Tenant';
     const unit = (() => {
       const all = [tenant?.unit, ...(Array.isArray(tenant?.additionalUnits) ? tenant.additionalUnits : [])]
@@ -1426,55 +1424,37 @@ const TenantStatement = () => {
       ...txns,
       ...(printBcfBalance !== null ? [{ id: 'BCF', type: 'BCF', description: 'Balance Carried Forward', amount: printBcfBalance, balance: printBcfBalance }] : []),
     ];
-    const win = window.open('', '_blank', 'width=900,height=1100');
-    if (!win) { window.print(); return; }
-    win.document.write(`<!DOCTYPE html><html><head><title>Tenant Statement — ${tenantName}</title><style>
-      @page{size:A4 portrait;margin:14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
-      .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
-      .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
-      .sub{font-size:10px;color:#475569;margin-top:2px}.meta{text-align:right;color:#64748b;font-size:8.5px;line-height:1.6}
-      .logo{max-height:44px;max-width:120px;object-fit:contain;margin-bottom:4px}
-      .info{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
-      .box{border:1px solid #dbe2ea;border-radius:6px;padding:7px 10px;font-size:8.5px;line-height:1.7}
-      .box-label{font-size:8px;text-transform:uppercase;letter-spacing:.1em;color:#64748b;font-weight:800;margin-bottom:4px}
-      table{width:100%;border-collapse:collapse;font-size:8.5px}
-      thead th{background:#0B3B2E;color:#fff;padding:4px 8px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:.1em}
-      thead th.r{text-align:right}thead th.c{text-align:center}
-      tbody td{border-bottom:1px solid #f1f5f9;padding:3.5px 8px}tbody td.r{text-align:right}tbody td.c{text-align:center}
-      tbody tr:nth-child(even){background:#f8fafc}
-      .totals{margin-top:10px;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-      .t-card{border:1px solid #dbe2ea;border-radius:6px;background:#f8fafc;padding:6px 8px}
-      .t-cl{font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:800}
-      .t-cv{font-size:12px;font-weight:900;margin-top:3px}
-      .chg{color:#dc2626}.pay{color:#047857}.amb{color:#b45309}
-      *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
-    </style></head><body>
-    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">Tenant Statement</div><div class="sub">Period: ${stmtFrom || 'All'} to ${stmtTo || 'All'}</div></div>
-    <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div></div></div>
-    <div class="info">
-      <div class="box"><div class="box-label">Tenant</div><strong>${tenantName}</strong></div>
-      <div class="box"><div class="box-label">Unit / Property</div><strong>${unit}</strong> · ${property}</div>
-    </div>
-    <table><thead><tr><th>Date</th><th>Description</th><th class="c">Type</th><th>Code</th><th class="r">Amount</th><th class="r">Balance</th></tr></thead>
-    <tbody>${allPrintRows.map((t) => {
-      const isBbcf = t.type === 'BBF' || t.type === 'BCF';
-      const isDebit = ['CHARGE','DEBIT_NOTE'].includes(t.type);
-      const balColor = t.balance > 0 ? '#b91c1c' : t.balance < 0 ? '#047857' : '#475569';
-      const balLabel = `Ksh ${Math.abs(t.balance || 0).toLocaleString()}${t.balance < 0 ? ' CR' : t.balance > 0 ? ' DR' : ''}`;
-      if (isBbcf) return `<tr style="background:#f0fdf4;border-top:2px solid #0B3B2E40;border-bottom:2px solid #0B3B2E40"><td style="color:#475569">—</td><td colspan="3" style="font-weight:900;font-size:8px;text-transform:uppercase;letter-spacing:.1em;color:#0B3B2E">${t.description}</td><td class="r"></td><td class="r" style="font-weight:900;color:${balColor}">${balLabel}</td></tr>`;
-      return `<tr><td>${new Date(t.date).toLocaleDateString()}</td><td>${t.description || '—'}</td><td class="c"><span style="padding:1px 5px;border-radius:3px;font-size:7.5px;font-weight:800;background:${isDebit ? '#fee2e2' : '#d1fae5'};color:${isDebit ? '#b91c1c' : '#065f46'}">${t.type}</span></td><td>${t.transactionCode || '—'}</td><td class="r ${isDebit ? 'chg' : 'pay'}"><strong>${isDebit ? '+' : '-'}Ksh ${Math.abs(t.amount || 0).toLocaleString()}</strong></td><td class="r">Ksh ${(t.balance || 0).toLocaleString()}</td></tr>`;
-    }).join('')}
-    ${allPrintRows.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:20px;color:#94a3b8">No transactions for the selected filters.</td></tr>' : ''}
-    </tbody></table>
-    <div class="totals">
-      <div class="t-card"><div class="t-cl">Charges</div><div class="t-cv chg">Ksh ${printCharges.toLocaleString()}</div></div>
-      <div class="t-card"><div class="t-cl">Payments</div><div class="t-cv pay">Ksh ${printPayments.toLocaleString()}</div></div>
-      <div class="t-card"><div class="t-cl">Outstanding</div><div class="t-cv amb">Ksh ${printOutstanding.toLocaleString()}</div></div>
-      <div class="t-card"><div class="t-cl">Balance</div><div class="t-cv" style="color:${printBalance >= 0 ? '#047857' : '#dc2626'}">Ksh ${Math.abs(printBalance).toLocaleString()}</div></div>
-    </div>
-    </body></html>`);
-    win.document.close();
-    win.onload = () => { win.focus(); win.print(); };
+    const money = (v) => `Ksh ${formatPrintMoney(v, { decimals: 0 })}`;
+    const balLabel = (v) => `Ksh ${formatPrintMoney(Math.abs(v || 0), { decimals: 0 })}${v < 0 ? " CR" : v > 0 ? " DR" : ""}`;
+    const isDebitRow = (t) => t.type === "CHARGE" || t.type === "DEBIT_NOTE";
+    const rows = allPrintRows.map((t) => (t.type === "BBF" || t.type === "BCF"
+      ? { __subtotal: ["—", t.description, "", "", "", balLabel(t.balance)] }
+      : t));
+    const printed = printTabularList({
+      title: "Tenant Statement",
+      kicker: "Statement",
+      subtitle: `${tenantName}  ·  ${unit} · ${property}  ·  Period: ${stmtFrom || "All"} to ${stmtTo || "All"}`,
+      company: currentCompany,
+      orientation: "portrait",
+      summaryItems: [
+        ["Charges", money(printCharges)],
+        ["Payments", money(printPayments)],
+        ["Outstanding", money(printOutstanding)],
+        ["Balance", money(Math.abs(printBalance))],
+      ],
+      columns: [
+        { label: "Date", value: (t) => formatPrintDate(t.date) },
+        { label: "Description", value: (t) => t.description || "—" },
+        { label: "Type", value: (t) => t.type },
+        { label: "Code", value: (t) => t.transactionCode || "—" },
+        { label: "Amount", align: "right", bold: true, tone: (t) => (isDebitRow(t) ? "neg" : "pos"), value: (t) => `${isDebitRow(t) ? "+" : "-"}${money(Math.abs(t.amount || 0))}` },
+        { label: "Balance", align: "right", tone: (t) => (t.balance > 0 ? "neg" : t.balance < 0 ? "pos" : "muted"), value: (t) => money(t.balance || 0) },
+      ],
+      rows,
+      totalsRow: ["", `${txns.length} transaction${txns.length !== 1 ? "s" : ""}`, "", "", "", ""],
+      notes: ["Computer-generated statement. DR = amount owed by the tenant, CR = credit in the tenant's favour."],
+    });
+    if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
   }, [currentCompany, tenant, statementData, stmtFrom, stmtTo, stmtTypeFilter]);
 
   const handleDownload = () => {
@@ -2951,151 +2931,24 @@ const TenantStatement = () => {
   };
 
   const handlePrintReceipt = (receipt) => {
-    const printWindow = window.open("", "_blank");
-    const receiptHTML = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Receipt #${receipt.receiptNumber}</title>
-        <style>
-          body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            background: white;
-          }
-          .receipt-container {
-            max-width: 600px;
-            margin: 0 auto;
-            border: 2px solid #165946;
-            padding: 30px;
-            border-radius: 8px;
-          }
-          .header {
-            text-align: center;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #165946;
-            padding-bottom: 15px;
-          }
-          .company-name {
-            font-size: 24px;
-            font-weight: bold;
-            color: #165946;
-            margin-bottom: 5px;
-          }
-          .receipt-title {
-            font-size: 18px;
-            font-weight: bold;
-            color: #333;
-            margin-top: 15px;
-          }
-          .receipt-number {
-            font-size: 14px;
-            color: #666;
-            margin-top: 10px;
-          }
-          .detail-row {
-            display: flex;
-            justify-content: space-between;
-            margin: 8px 0;
-            font-size: 14px;
-          }
-          .detail-label {
-            font-weight: bold;
-            color: #333;
-          }
-          .detail-value {
-            color: #666;
-          }
-          .divider {
-            border-top: 1px solid #ddd;
-            margin: 15px 0;
-          }
-          .amount-section {
-            margin: 20px 0;
-            padding: 15px;
-            background: #f5f5f5;
-            border-radius: 4px;
-          }
-          .total-amount {
-            display: flex;
-            justify-content: space-between;
-            font-size: 18px;
-            font-weight: bold;
-            color: #165946;
-          }
-          .footer {
-            text-align: center;
-            margin-top: 20px;
-            font-size: 12px;
-            color: #999;
-          }
-          @media print {
-            body {
-              background: white;
-            }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="receipt-container">
-          <div class="header">
-            <div class="company-name">${currentCompany?.companyName || "MILIK"}</div>
-            <div class="receipt-title">RENT RECEIPT</div>
-            <div class="receipt-number">Receipt #${receipt.receiptNumber}</div>
-          </div>
-
-          <div class="detail-row">
-            <span class="detail-label">Tenant Name:</span>
-            <span class="detail-value">${tenant?.name || "-"}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Reference:</span>
-            <span class="detail-value">${receipt.referenceNumber || "-"}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Payment Date:</span>
-            <span class="detail-value">${new Date(receipt.paymentDate).toLocaleDateString()}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Payment Method:</span>
-            <span class="detail-value">${receipt.paymentMethod || "-"}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Payment Type:</span>
-            <span class="detail-value">${receipt.paymentType || "-"}</span>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="amount-section">
-            <div class="total-amount">
-              <span>Amount Received:</span>
-              <span>Ksh ${(receipt.amount || 0).toLocaleString()}</span>
-            </div>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="detail-row">
-            <span class="detail-label">Status:</span>
-            <span class="detail-value">${receipt.isConfirmed ? "CONFIRMED" : "PENDING"}</span>
-          </div>
-
-          <div class="footer">
-            <p>Thank you for your payment</p>
-            <p>This is an electronically generated receipt</p>
-          </div>
-        </div>
-        <script>
-          window.onload = function() {
-            window.print();
-          }
-        </script>
-      </body>
-      </html>
-    `;
-    printWindow.document.write(receiptHTML);
-    printWindow.document.close();
+    const amount = Number(receipt.amount || 0);
+    const printed = printDocument({
+      company: currentCompany,
+      docType: "Rent Receipt",
+      docNumber: receipt.receiptNumber || "",
+      status: { label: receipt.isConfirmed ? "Confirmed" : "Pending", tone: receipt.isConfirmed ? "success" : "warning" },
+      meta: [["Payment date", formatPrintDate(receipt.paymentDate)]],
+      parties: [{ heading: "Received from", name: tenant?.name || tenant?.tenantName || "-" }],
+      details: [
+        ["Reference", receipt.referenceNumber || "-"],
+        ["Payment method", receipt.paymentMethod || "-"],
+        ["Payment type", receipt.paymentType || "-"],
+      ],
+      totals: [{ label: "Amount received", value: `Ksh ${formatPrintMoney(amount)}`, hero: true }],
+      amountWords: { amount, currency: currentCompany?.baseCurrency || "KES" },
+      footerNote: "Thank you for your payment",
+    });
+    if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
   };
 
   const renderContent = () => {

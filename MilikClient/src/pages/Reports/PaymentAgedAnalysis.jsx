@@ -7,6 +7,7 @@ import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getAPAgingReport } from "../../redux/apiCalls";
 import { useTerms } from "../../hooks/useTerm";
+import printTabularList from "../../utils/printList";
 
 const GRN = "#0B3B2E";
 
@@ -43,9 +44,6 @@ const PERIOD_PRESETS = (() => {
   ];
 })();
 
-const escapeHtml = (v) =>
-  String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-
 const BUCKETS = [
   { key: "current", label: "Current",    headerCls: "text-emerald-700", valueCls: "text-emerald-700", footerCls: "text-emerald-800" },
   { key: "d1_30",   label: "1–30 Days",  headerCls: "text-yellow-600",  valueCls: "text-yellow-700",  footerCls: "text-yellow-700"  },
@@ -72,7 +70,6 @@ const CATEGORY_LABELS = {
 
 const PaymentAgedAnalysis = () => {
   const currentCompany = useSelector((s) => s.company?.currentCompany);
-  const companyName = String(currentCompany?.companyName || currentCompany?.name || "").trim();
   const businessId = currentCompany?._id;
 
   const [asOf, setAsOf] = useState(todayString());
@@ -193,52 +190,29 @@ const PaymentAgedAnalysis = () => {
 
   // ── Print PDF ─────────────────────────────────────────────────────────────
   const handlePrintPDF = useCallback(() => {
-    const bucketHeaders = BUCKETS.map((b) => `<th class="r">${b.label}</th>`).join("");
-    const bodyRows = filteredRows.map((r) => {
-      const bucketCells = BUCKETS.map((b) =>
-        `<td class="r">${r.bucket === b.key ? fmt(r.amount) : ""}</td>`
-      ).join("");
-      return `<tr>
-        <td>${r.reference}</td>
-        <td>${escapeHtml(r.narration)}</td>
-        <td>${escapeHtml(r.propertyName)}${r.landlordName && r.landlordName !== "—" ? ` / ${escapeHtml(r.landlordName)}` : ""}</td>
-        <td>${STATUS_LABELS[r.status] || r.status}</td>
-        <td class="r">${new Date(r.dueDate).toLocaleDateString("en-KE")}</td>
-        <td class="r">${r.daysOverdue <= 0 ? "Current" : `${r.daysOverdue}d`}</td>
-        ${bucketCells}
-      </tr>`;
-    }).join("");
-    const footerCells = BUCKETS.map((b) =>
-      `<td class="r">${bucketTotals[b.key] > 0 ? fmt(bucketTotals[b.key]) : "—"}</td>`
-    ).join("");
-    const html = `<!DOCTYPE html><html><head><title>Payment Aged Analysis</title>
-<style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;color:#1e293b}
-h2{font-size:13px;color:#0B3B2E;margin-bottom:2px}p.sub{font-size:9px;color:#64748b;margin:0 0 10px}
-table{width:100%;border-collapse:collapse}
-th{background:#f1f5f9;padding:4px 6px;text-align:left;font-size:8px;border-bottom:2px solid #cbd5e1;text-transform:uppercase}
-td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
-.r{text-align:right}tfoot td{font-weight:700;border-top:2px solid #94a3b8;background:#f8fafc}</style></head>
-<body><h2>${escapeHtml(companyName)} — Payment Aged Analysis</h2>
-<p class="sub">As of ${new Date(asOf).toLocaleDateString("en-KE",{day:"2-digit",month:"long",year:"numeric"})} · ${filteredRows.length} record${filteredRows.length !== 1 ? "s" : ""} · KES ${fmt(bucketTotals.all)}</p>
-<table>
-  <thead><tr>
-    <th>Reference</th><th>Narration</th><th>${termProperty} / ${termLandlord}</th><th>Status</th><th class="r">Due Date</th><th class="r">Days Over</th>
-    ${bucketHeaders}
-  </tr></thead>
-  <tbody>${bodyRows}</tbody>
-  <tfoot><tr>
-    <td colspan="6" style="font-size:8px;text-align:right;text-transform:uppercase;font-weight:700">Total Pending</td>
-    ${footerCells}
-  </tr></tfoot>
-</table>
-</body></html>`;
-    const w = window.open("", "_blank");
-    if (!w) return toast.error("Pop-ups blocked");
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    setTimeout(() => { w.print(); w.close(); }, 400);
-  }, [filteredRows, bucketTotals, asOf, companyName, termProperty, termLandlord]);
+    const asOfText = new Date(asOf).toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" });
+    const printed = printTabularList({
+      title: "Payment Aged Analysis",
+      subtitle: `As of ${asOfText} · ${filteredRows.length} record${filteredRows.length !== 1 ? "s" : ""}`,
+      company: currentCompany,
+      columns: [
+        { label: "Reference", value: (r) => r.reference },
+        { label: "Narration", value: (r) => r.narration },
+        { label: `${termProperty} / ${termLandlord}`, value: (r) => `${r.propertyName || ""}${r.landlordName && r.landlordName !== "—" ? ` / ${r.landlordName}` : ""}` },
+        { label: "Status", value: (r) => STATUS_LABELS[r.status] || r.status },
+        { label: "Due Date", align: "right", value: (r) => new Date(r.dueDate).toLocaleDateString("en-KE") },
+        { label: "Days Over", align: "right", value: (r) => (r.daysOverdue <= 0 ? "Current" : `${r.daysOverdue}d`) },
+        ...BUCKETS.map((b) => ({ label: b.label, align: "right", value: (r) => (r.bucket === b.key ? fmt(r.amount) : "") })),
+      ],
+      rows: filteredRows,
+      summaryItems: [
+        ["Total Pending", fmt(bucketTotals.all)],
+        ...BUCKETS.map((b) => [b.label, fmt(bucketTotals[b.key])]),
+      ],
+      totalsRow: ["Total Pending", "", "", "", "", "", ...BUCKETS.map((b) => (bucketTotals[b.key] > 0 ? fmt(bucketTotals[b.key]) : "—"))],
+    });
+    if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
+  }, [filteredRows, bucketTotals, asOf, currentCompany, termProperty, termLandlord]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (

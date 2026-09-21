@@ -14,7 +14,9 @@ import { hasCompanyPermission } from '../../utils/permissions';
 import { fmtDate } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 import useDebounce from '../../hooks/useDebounce';
+import printTabularList from '../../utils/printList';
 
+const POPUP_BLOCKED = 'Pop-up blocked — allow pop-ups for this site to print';
 const toDateInputValue = (value) => new Date(value).toISOString().split('T')[0];
 const formatPercent = (value) => (value === null || value === undefined ? '—' : `${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}%`);
 
@@ -136,10 +138,6 @@ const PaidBalanceReport = () => {
 
   const businessId = useMemo(
     () => currentCompany?._id || currentUser?.company?._id || currentUser?.company || '',
-    [currentCompany, currentUser]
-  );
-  const companyName = useMemo(
-    () => currentCompany?.name || currentCompany?.companyName || currentCompany?.businessName || currentUser?.company?.name || 'Milik',
     [currentCompany, currentUser]
   );
 
@@ -338,40 +336,24 @@ const PaidBalanceReport = () => {
   const handlePrint = useCallback(() => {
     if (!canExportReports) { toast.error("You do not have permission to print reports"); return; }
 
-    const GRN = "#0B3B2E";
     const allRows = searchFilteredRows;
     const summ = report.summary || {};
     const dateRange = [filters.startDate && fmtDate(filters.startDate), filters.asOfDate && fmtDate(filters.asOfDate)].filter(Boolean).join(" – ");
+    const dash = (v) => (Number(v || 0) === 0 ? "—" : formatMoney(v));
+    const bfText = (v) => (v !== 0 ? formatMoney(v) : "—");
+    const balTone = (v) => (v > 0 ? "neg" : v < 0 ? "pos" : "muted");
 
-    const co = {
-      name: companyName,
-      logo: currentCompany?.logo || "",
-      phone: currentCompany?.phone || currentCompany?.phoneNo || currentCompany?.phoneNumber || "",
-      email: currentCompany?.email || currentCompany?.companyEmail || "",
-      address: [currentCompany?.address || currentCompany?.postalAddress || "", currentCompany?.town || currentCompany?.city || ""].filter(Boolean).join(", "),
-    };
-    const infoLine = [co.address, co.phone, co.email].filter(Boolean).join(" · ");
+    // Rows grouped by property, each group followed by its subtotal
+    const map = new Map();
+    for (const row of allRows) {
+      const key = String(row.propertyId || row.propertyName || "Unknown");
+      if (!map.has(key)) map.set(key, { name: row.propertyName || "Unknown Property", rows: [] });
+      map.get(key).rows.push(row);
+    }
+    const groups = [...map.values()];
 
-    const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const mon = (v) => esc(formatMoney(v));
-    const dash = (v) => Number(v || 0) === 0 ? "—" : mon(v);
-    const cfStyle = (v) => Number(v || 0) > 0 ? "color:#dc2626;font-weight:700" : Number(v || 0) < 0 ? "color:#059669;font-weight:700" : "color:#94a3b8";
-    const statusColor = (s) => s === "owing" ? "#dc2626" : s === "credit" ? "#059669" : "#64748b";
-
-    // Build grouped rows
-    const groups = (() => {
-      const map = new Map();
-      for (const row of allRows) {
-        const key = String(row.propertyId || row.propertyName || "Unknown");
-        if (!map.has(key)) map.set(key, { name: row.propertyName || "Unknown Property", rows: [] });
-        map.get(key).rows.push(row);
-      }
-      return [...map.values()];
-    })();
-
-    let rowsHtml = "";
+    const printRows = [];
     let grandBF = 0, grandRent = 0, grandOther = 0, grandAmtPaid = 0, grandOtherPaid = 0, grandTotalPaid = 0, grandBalance = 0;
-
     groups.forEach((group) => {
       const gr = group.rows;
       const gBF = sumBalBF(gr);
@@ -384,140 +366,55 @@ const PaidBalanceReport = () => {
       grandBF += gBF; grandRent += gRent; grandOther += gOther;
       grandAmtPaid += gAmtPaid; grandOtherPaid += gOtherPaid; grandTotalPaid += gTotalPaid; grandBalance += gBalance;
 
-      const gOwing = gr.filter((r) => r.status === 'owing').length;
-      const gCredit = gr.filter((r) => r.status === 'credit').length;
-      const gSettled = gr.filter((r) => r.status === 'settled').length;
-      const badges = [
-        gOwing > 0 ? `<span style="color:#dc2626">${gOwing} ${STATUS_LABEL.owing}</span>` : "",
-        gCredit > 0 ? `<span style="color:#059669">${gCredit} ${STATUS_LABEL.credit}</span>` : "",
-        gSettled > 0 ? `<span style="color:#94a3b8">${gSettled} ${STATUS_LABEL.settled}</span>` : "",
-      ].filter(Boolean).join(" &nbsp;&middot;&nbsp; ");
-
-      rowsHtml += `<tr class="prop-hdr">
-        <td colspan="2"><span class="prop-name">${esc(group.name)}</span> <span class="prop-meta">${gr.length} unit${gr.length !== 1 ? "s" : ""} &nbsp;&middot;&nbsp; ${badges}</span></td>
-        <td style="text-align:right;${gBF > 0 ? "color:#ea580c;font-weight:700" : gBF < 0 ? "color:#059669;font-weight:700" : "color:#94a3b8"}">${gBF !== 0 ? mon(gBF) : "—"}</td>
-        <td style="text-align:right">${mon(gRent)}</td>
-        <td style="text-align:right">${dash(gOther)}</td>
-        <td style="text-align:right;color:#059669;font-weight:700">${mon(gAmtPaid)}</td>
-        <td style="text-align:right;${gOtherPaid > 0 ? "color:#059669;font-weight:700" : "color:#94a3b8"}">${dash(gOtherPaid)}</td>
-        <td style="text-align:right;color:#059669;font-weight:900">${mon(gTotalPaid)}</td>
-        <td style="text-align:right;${cfStyle(gBalance)}">${mon(gBalance)}</td>
-        <td></td><td></td>
-      </tr>`;
-
-      gr.forEach((row, i) => {
-        const bf = calcBalBF(row);
-        const otherExpd = calcOtherExpd(row);
-        const amtPaid = calcRentPaid(row);
-        const otherPaid = calcOtherPaid(row);
-        const totalPaid = Number(row.periodReceiptTotal || 0);
-        const cf = Number(row.netBalance || 0);
-        const st = row.status || "";
-        rowsHtml += `<tr class="${i % 2 === 1 ? "alt" : ""}">
-          <td>${esc(row.tenantName || "—")}</td>
-          <td>${esc(row.unitNumber || "—")}</td>
-          <td style="text-align:right;${bf > 0 ? "color:#ea580c;font-weight:600" : bf < 0 ? "color:#059669;font-weight:600" : "color:#cbd5e1"}">${bf !== 0 ? mon(bf) : "—"}</td>
-          <td style="text-align:right">${mon(row.rentInvoiced)}</td>
-          <td style="text-align:right;${otherExpd > 0 ? "" : "color:#cbd5e1"}">${dash(otherExpd)}</td>
-          <td style="text-align:right;color:#059669">${mon(amtPaid)}</td>
-          <td style="text-align:right;${otherPaid > 0 ? "color:#059669" : "color:#cbd5e1"}">${dash(otherPaid)}</td>
-          <td style="text-align:right;color:#059669;font-weight:700">${mon(totalPaid)}</td>
-          <td style="text-align:right;${cfStyle(cf)}">${mon(cf)}</td>
-          <td>${row.oldestDueDate ? esc(fmtDate(row.oldestDueDate)) : "—"}</td>
-          <td style="color:${statusColor(st)};font-weight:700">${esc(STATUS_LABEL[st] || (st.charAt(0).toUpperCase() + st.slice(1)))}</td>
-        </tr>`;
-      });
+      const statusCounts = ['owing', 'credit', 'settled']
+        .map((st) => { const n = gr.filter((r) => r.status === st).length; return n > 0 ? `${n} ${STATUS_LABEL[st]}` : ""; })
+        .filter(Boolean);
+      printRows.push({ __group: group.name, meta: [`${gr.length} unit${gr.length !== 1 ? "s" : ""}`, ...statusCounts].join("  ·  ") });
+      gr.forEach((row) => printRows.push({
+        ...row,
+        _bf: calcBalBF(row),
+        _otherExpd: calcOtherExpd(row),
+        _rentPaid: calcRentPaid(row),
+        _otherPaid: calcOtherPaid(row),
+        _totalPaid: Number(row.periodReceiptTotal || 0),
+        _cf: Number(row.netBalance || 0),
+      }));
+      printRows.push({ __subtotal: ["Subtotal", "", bfText(gBF), formatMoney(gRent), dash(gOther), formatMoney(gAmtPaid), dash(gOtherPaid), formatMoney(gTotalPaid), formatMoney(gBalance), "", ""] });
     });
 
-    rowsHtml += `<tr class="grand-total">
-      <td>GRAND TOTAL</td>
-      <td style="color:rgba(255,255,255,.6)">${allRows.length} tenants</td>
-      <td style="text-align:right;${grandBF > 0 ? "color:#fca5a5" : grandBF < 0 ? "color:#6ee7b7" : ""}">${grandBF !== 0 ? mon(grandBF) : "—"}</td>
-      <td style="text-align:right">${mon(grandRent)}</td>
-      <td style="text-align:right">${dash(grandOther)}</td>
-      <td style="text-align:right">${mon(grandAmtPaid)}</td>
-      <td style="text-align:right">${dash(grandOtherPaid)}</td>
-      <td style="text-align:right;font-weight:900">${mon(grandTotalPaid)}</td>
-      <td style="text-align:right;${grandBalance > 0 ? "color:#fca5a5" : grandBalance < 0 ? "color:#6ee7b7" : ""}">${mon(grandBalance)}</td>
-      <td></td><td></td>
-    </tr>`;
+    const columns = [
+      { label: termTenant, value: (r) => r.tenantName || "—" },
+      { label: termUnit, value: (r) => r.unitNumber || "—" },
+      { label: "BAL B/F", align: "right", value: (r) => bfText(r._bf), tone: (r) => (r._bf > 0 ? "neg" : r._bf < 0 ? "pos" : "muted") },
+      { label: "Rent", align: "right", value: (r) => formatMoney(r.rentInvoiced) },
+      { label: "Other Exp'd", align: "right", value: (r) => dash(r._otherExpd), tone: (r) => (r._otherExpd > 0 ? "" : "muted") },
+      { label: "Rent Paid", align: "right", value: (r) => formatMoney(r._rentPaid), tone: () => "pos" },
+      { label: "Others Paid", align: "right", value: (r) => dash(r._otherPaid), tone: (r) => (r._otherPaid > 0 ? "pos" : "muted") },
+      { label: "Total Paid", align: "right", value: (r) => formatMoney(r._totalPaid), tone: () => "pos" },
+      { label: "BAL C/F", align: "right", value: (r) => formatMoney(r._cf), tone: (r) => balTone(r._cf) },
+      { label: "Oldest Due", value: (r) => (r.oldestDueDate ? fmtDate(r.oldestDueDate) : "—") },
+      { label: "Status", value: (r) => STATUS_LABEL[r.status] || (r.status ? r.status.charAt(0).toUpperCase() + r.status.slice(1) : "—"), tone: (r) => (r.status === "owing" ? "neg" : r.status === "credit" ? "pos" : "muted") },
+    ];
 
-    const css = `
-      * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; background: #fff; padding: 22px 26px; font-size: 11px; }
-      .hdr { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding-bottom: 14px; gap: 16px; }
-      .hdr-center { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
-      .logo-fallback { width: 52px; height: 52px; background: ${GRN}; color: #fff; font-size: 20px; font-weight: 900; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
-      .logo-img { max-height: 52px; max-width: 140px; object-fit: contain; border-radius: 6px; }
-      .co-name { font-size: 16px; font-weight: 900; color: #0f172a; margin-top: 5px; }
-      .co-sub { font-size: 9px; color: #64748b; }
-      .rpt-title { font-size: 13px; font-weight: 800; color: #1e293b; margin-top: 5px; }
-      .rpt-sub { font-size: 10px; color: #475569; margin-top: 2px; }
-      .hdr-right { text-align: right; align-self: flex-start; }
-      .print-date { font-size: 9px; color: #64748b; line-height: 1.7; }
-      .divider { height: 2px; background: ${GRN}; margin: 12px 0; }
-      .summary-bar { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 10px; color: #334155; background: #f8fafc; border-left: 3px solid ${GRN}; padding: 7px 10px; margin-bottom: 12px; border-radius: 0 4px 4px 0; }
-      table { width: 100%; border-collapse: collapse; font-size: 10px; }
-      thead tr { background: ${GRN}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      thead th { color: #fff; padding: 7px 8px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; border-right: 1px solid rgba(255,255,255,.15); white-space: nowrap; }
-      tbody td { padding: 6px 8px; border: 1px solid #e2e8f0; vertical-align: middle; white-space: nowrap; }
-      tbody tr.alt td { background: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      tr.prop-hdr td { background: #f0faf5; border-top: 2px solid ${GRN}; border-bottom: 1px solid #b7c9c0; padding: 6px 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .prop-name { font-weight: 900; color: ${GRN}; text-transform: uppercase; letter-spacing: .06em; font-size: 9px; }
-      .prop-meta { font-size: 8.5px; color: #64748b; margin-left: 8px; }
-      tr.grand-total td { background: ${GRN}; color: #fff; font-weight: 700; font-size: 10px; padding: 7px 8px; border: 1px solid rgba(255,255,255,.15); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      @media print { body { padding: 10px 12px; } @page { size: A4 landscape; margin: 8mm; } }
-    `;
-
-    const html = `<!DOCTYPE html>
-<html><head><meta charset="UTF-8"/><title>Paid &amp; Balance Report</title><style>${css}</style></head>
-<body>
-<div class="hdr">
-  <div></div>
-  <div class="hdr-center">
-    ${co.logo ? `<img src="${esc(co.logo)}" class="logo-img" alt="logo"/>` : `<div class="logo-fallback">${esc(co.name.slice(0,1).toUpperCase())}</div>`}
-    <div class="co-name">${esc(co.name)}</div>
-    ${infoLine ? `<div class="co-sub">${esc(infoLine)}</div>` : ""}
-    <div class="rpt-title">Paid &amp; Balance Report</div>
-    <div class="rpt-sub">Tenant receivables &mdash; ${esc(dateRange)}</div>
-  </div>
-  <div class="hdr-right"><div class="print-date">Printed: ${new Date().toLocaleDateString("en-KE", { day:"2-digit", month:"long", year:"numeric", hour:"2-digit", minute:"2-digit" })}<br/>${groups.length} ${groups.length === 1 ? "property" : "properties"} &middot; ${allRows.length} tenants</div></div>
-</div>
-<div class="divider"></div>
-<div class="summary-bar">
-  <span>Invoiced: <b>${mon(summ.totalInvoiced)}</b></span>
-  <span>Paid: <b style="color:#059669">${mon(grandTotalPaid)}</b></span>
-  <span>Outstanding: <b style="color:#dc2626">${mon(summ.totalOutstanding)}</b></span>
-  <span>Net Balance: <b>${mon(summ.netBalance)}</b></span>
-  <span>Arrears: <b style="color:#dc2626">${summ.owingCount || 0}</b></span>
-  <span>Overpaid: <b style="color:#059669">${summ.creditCount || 0}</b></span>
-  <span>Settled: <b>${summ.settledCount || 0}</b></span>
-</div>
-<table>
-  <thead><tr>
-    <th style="text-align:left">${termTenant}</th>
-    <th style="text-align:left">${termUnit}</th>
-    <th style="text-align:right">BAL B/F</th>
-    <th style="text-align:right">Rent</th>
-    <th style="text-align:right">Other Exp'd</th>
-    <th style="text-align:right">Rent Paid</th>
-    <th style="text-align:right">Others Paid</th>
-    <th style="text-align:right">Total Paid</th>
-    <th style="text-align:right">BAL C/F</th>
-    <th style="text-align:left">Oldest Due</th>
-    <th style="text-align:left">Status</th>
-  </tr></thead>
-  <tbody>${rowsHtml}</tbody>
-</table>
-</body></html>`;
-
-    const win = window.open("", "_blank", "width=1200,height=800");
-    if (!win) return;
-    win.document.write(html);
-    win.document.close();
-    setTimeout(() => { win.focus(); win.print(); }, 450);
-  // propertyGroups removed: handlePrint builds its own groups directly from searchFilteredRows
-  }, [canExportReports, companyName, currentCompany, searchFilteredRows, report.summary, filters]);
+    const printed = printTabularList({
+      title: "Paid & Balance Report",
+      subtitle: `Tenant receivables — ${dateRange}`,
+      company: currentCompany,
+      columns,
+      rows: printRows,
+      summaryItems: [
+        ["Invoiced", formatMoney(summ.totalInvoiced)],
+        ["Paid", formatMoney(grandTotalPaid)],
+        ["Outstanding", formatMoney(summ.totalOutstanding)],
+        ["Net Balance", formatMoney(summ.netBalance)],
+        ["Arrears", String(summ.owingCount || 0)],
+        ["Overpaid", String(summ.creditCount || 0)],
+        ["Settled", String(summ.settledCount || 0)],
+      ],
+      totalsRow: ["GRAND TOTAL", `${allRows.length} tenants`, bfText(grandBF), formatMoney(grandRent), dash(grandOther), formatMoney(grandAmtPaid), dash(grandOtherPaid), formatMoney(grandTotalPaid), formatMoney(grandBalance), "", ""],
+    });
+    if (!printed) toast.error(POPUP_BLOCKED);
+  }, [canExportReports, currentCompany, searchFilteredRows, report.summary, filters, termTenant, termUnit]);
 
   return (
     <DashboardLayout lockContentScroll>

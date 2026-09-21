@@ -14,6 +14,7 @@ import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 import { fmtDate } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 import { useTerms } from '../../hooks/useTerm';
+import printTabularList from '../../utils/printList';
 
 const toDateInputValue = (value) => new Date(value).toISOString().split('T')[0];
 
@@ -132,53 +133,49 @@ const MRITaxSummaryReport = () => {
 
   const handlePrint = useCallback(() => {
     if (!canExportReports) { toast.error('No print permission'); return; }
-    const co = currentCompany || {};
-    const name = co.companyName || co.name || co.businessName || 'Milik';
-    const logo = co.logo || '';
-    const by = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || '';
-    const win = window.open('', '_blank', 'width=900,height=800');
-    if (!win) { toast.error('Pop-up blocked. Please allow pop-ups to print.'); return; }
-    const fmt = (v) => `KES ${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+    const sm = report.summary || {};
+    const byProperty = report.byProperty || [];
+    const byMonth = report.byMonth || [];
     const printTitle = isLandlordMode ? 'Rental Income Tax (MRI)' : 'MRI Tax Summary';
-    win.document.write(`<!DOCTYPE html><html><head><title>${printTitle}</title><style>
-      @page{size:A4 portrait;margin:14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
-      .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
-      .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
-      .sub{font-size:10px;color:#475569;margin-top:2px}.meta{text-align:right;color:#64748b;font-size:8.5px;line-height:1.6}
-      .logo{max-height:40px;max-width:110px;object-fit:contain;margin-bottom:4px}
-      .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}
-      .card{border:1px solid #dbe2ea;border-radius:6px;background:#f8fafc;padding:6px 8px}
-      .cl{font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:800}
-      .cv{font-size:13px;font-weight:900;color:#0f172a;margin-top:3px}
-      h3{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:#0B3B2E;font-weight:900;margin:14px 0 6px}
-      table{width:100%;border-collapse:collapse;font-size:9px;margin-bottom:12px}
-      thead th{background:#0B3B2E;color:#fff;padding:4px 8px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:.1em}
-      thead th.r{text-align:right}tbody td{border-bottom:1px solid #dbe2ea;padding:4px 8px}
-      tbody td.r{text-align:right}tbody tr:nth-child(even){background:#f8fafc}
-      tfoot td{border-top:2px solid #0B3B2E;padding:4px 8px;font-weight:900;background:#EDF5F1}tfoot td.r{text-align:right}
-      .note{margin-top:14px;border-left:4px solid #f59e0b;background:#fffbeb;border-radius:8px;padding:8px 10px;font-size:8.5px;color:#78350f}
-      *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
-    </style></head><body>
-    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">${printTitle}</div><div class="sub">Residential Rental Income — ${mriRatePercent}% flat rate · Period: ${fmtDate(filters.startDate)} to ${fmtDate(filters.endDate)}</div></div>
-    <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div><div>Prepared by: ${by}</div></div></div>
-    <div class="cards">
-      <div class="card"><div class="cl">Total Gross Rent</div><div class="cv">${fmt(summary.totalGrossRent)}</div></div>
-      <div class="card"><div class="cl">Total MRI Tax (${mriRatePercent}%)</div><div class="cv" style="color:#c2410c">${fmt(summary.totalMriTax)}</div></div>
-      <div class="card"><div class="cl">Properties</div><div class="cv">${(report.byProperty || []).length}</div></div>
-    </div>
-    <h3>By ${termProperty}</h3>
-    <table><thead><tr><th>${termProperty}</th><th class="r">Gross Rent</th><th class="r">MRI Tax (${mriRatePercent}%)</th></tr></thead>
-    <tbody>${(report.byProperty || []).map((row) => `<tr><td>${row.propertyName || '—'}</td><td class="r">${fmt(row.grossRent)}</td><td class="r" style="color:#c2410c"><strong>${fmt(row.mriTax)}</strong></td></tr>`).join('')}</tbody>
-    <tfoot><tr><td><strong>TOTAL</strong></td><td class="r"><strong>${fmt(summary.totalGrossRent)}</strong></td><td class="r" style="color:#c2410c"><strong>${fmt(summary.totalMriTax)}</strong></td></tr></tfoot></table>
-    <h3>Monthly Breakdown</h3>
-    <table><thead><tr><th>Month</th><th class="r">Gross Rent</th><th class="r">MRI Tax (${mriRatePercent}%)</th></tr></thead>
-    <tbody>${(report.byMonth || []).map((row) => `<tr><td>${MONTH_NAMES[(row.month || 1) - 1]} ${row.year}</td><td class="r">${fmt(row.grossRent)}</td><td class="r" style="color:#c2410c">${fmt(row.mriTax)}</td></tr>`).join('')}</tbody>
-    </table>
-    <div class="note">MRI tax is computed at ${mriRatePercent}% on gross residential rent as per Kenya Revenue Authority guidelines. This report is for informational purposes and should be reviewed alongside official KRA submissions.</div>
-    </body></html>`);
-    win.document.close();
-    win.onload = () => { win.focus(); win.print(); };
-  }, [canExportReports, currentCompany, currentUser, report, summary, mriRatePercent, filters.startDate, filters.endDate, termProperty]);
+    const totalGross = formatMoney(sm.totalGrossRent);
+    const totalTax = formatMoney(sm.totalMriTax);
+    const printed = printTabularList({
+      title: printTitle,
+      subtitle: `Residential Rental Income — ${mriRatePercent}% flat rate · Period: ${fmtDate(filters.startDate)} to ${fmtDate(filters.endDate)}`,
+      company: currentCompany,
+      orientation: 'portrait',
+      columns: [],
+      sections: [
+        {
+          heading: `By ${termProperty}`,
+          columns: [
+            { label: termProperty, value: (r) => r.propertyName || '—' },
+            { label: 'Gross Rent', align: 'right', value: (r) => formatMoney(r.grossRent) },
+            { label: `MRI Tax (${mriRatePercent}%)`, align: 'right', value: (r) => formatMoney(r.mriTax), bold: true },
+          ],
+          rows: byProperty,
+          totalsRow: ['TOTAL', totalGross, totalTax],
+        },
+        {
+          heading: 'Monthly Breakdown',
+          columns: [
+            { label: 'Month', value: (r) => `${MONTH_NAMES[(r.month || 1) - 1]} ${r.year}` },
+            { label: 'Gross Rent', align: 'right', value: (r) => formatMoney(r.grossRent) },
+            { label: `MRI Tax (${mriRatePercent}%)`, align: 'right', value: (r) => formatMoney(r.mriTax), bold: true },
+          ],
+          rows: byMonth,
+          totalsRow: ['TOTAL', totalGross, totalTax],
+        },
+      ],
+      summaryItems: [
+        ['Total Gross Rent', totalGross],
+        [`Total MRI Tax (${mriRatePercent}%)`, totalTax],
+        ['Properties', String(byProperty.length)],
+      ],
+      notes: [`MRI tax is computed at ${mriRatePercent}% on gross residential rent as per Kenya Revenue Authority guidelines. This report is for informational purposes and should be reviewed alongside official KRA submissions.`],
+    });
+    if (!printed) toast.error('Pop-up blocked — allow pop-ups for this site to print');
+  }, [canExportReports, currentCompany, report, isLandlordMode, mriRatePercent, filters.startDate, filters.endDate, termProperty]);
 
   return (
     <DashboardLayout lockContentScroll>

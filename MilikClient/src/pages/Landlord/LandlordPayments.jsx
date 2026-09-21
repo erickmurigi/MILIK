@@ -17,6 +17,7 @@ import { getLandlords, getLandlordPayments } from "../../redux/apiCalls";
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectAllTenants, selectAllLandlords, selectLandlordIsFetching } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { fmtDate } from "../../utils/dates";
+import { printDocument, formatMoney, formatDate as formatPrintDate } from "../../utils/printKit";
 import AppSelect from "../../components/common/AppSelect";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { getProperties } from "../../redux/propertyRedux";
@@ -203,363 +204,42 @@ const LandlordPayments = ({ mode = "payments" }) => {
   };
 
   const handlePrintLandlordStatement = (landlord) => {
-    const printWindow = window.open("", "_blank");
     const currentDate = new Date();
-    const periodStart = new Date(currentDate.getFullYear(), currentDate.getMonth() - 2, 1).toLocaleDateString();
-    const periodEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).toLocaleDateString();
-    
-    const statementHTML = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Statement - ${landlord.landlordName}</title>
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body {
-            font-family: 'Segoe UI', Arial, sans-serif;
-            padding: 20px;
-            background: white;
-            color: #333;
-          }
-          .statement-container {
-            max-width: 900px;
-            margin: 0 auto;
-            border: 3px solid #0B3B2E;
-            padding: 40px;
-            border-radius: 8px;
-            background: white;
-          }
-          .header {
-            text-align: center;
-            margin-bottom: 35px;
-            border-bottom: 4px solid #0B3B2E;
-            padding-bottom: 25px;
-          }
-          .company-name {
-            font-size: 32px;
-            font-weight: bold;
-            color: #0B3B2E;
-            margin-bottom: 5px;
-            letter-spacing: 1px;
-          }
-          .statement-title {
-            font-size: 22px;
-            font-weight: bold;
-            color: #333;
-            margin-top: 15px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-          }
-          .period-info {
-            font-size: 12px;
-            color: #666;
-            margin-top: 8px;
-            font-style: italic;
-          }
-          .landlord-info {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            background: #f9fafb;
-            padding: 20px;
-            border-radius: 6px;
-            margin: 25px 0;
-            border-left: 4px solid #FF8C00;
-          }
-          .info-section {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-          }
-          .info-row {
-            display: flex;
-            justify-content: space-between;
-            font-size: 13px;
-            padding: 6px 0;
-          }
-          .info-label {
-            font-weight: bold;
-            color: #0B3B2E;
-            min-width: 120px;
-          }
-          .info-value {
-            color: #555;
-            text-align: right;
-            flex: 1;
-          }
-          .summary-section {
-            margin: 30px 0;
-            padding: 20px;
-            background: #f0f7ff;
-            border-radius: 6px;
-            border: 2px solid #e0e7ff;
-            border-left: 5px solid #0B3B2E;
-          }
-          .summary-title {
-            font-size: 14px;
-            font-weight: bold;
-            color: #0B3B2E;
-            text-transform: uppercase;
-            margin-bottom: 15px;
-            letter-spacing: 1px;
-          }
-          .summary-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
-          }
-          .summary-card {
-            text-align: center;
-            padding: 15px;
-            border-radius: 4px;
-            border: 1px solid #ddd;
-          }
-          .summary-card.collected {
-            background: #DBEAFE;
-            border-color: #0EA5E9;
-          }
-          .summary-card.paid {
-            background: #DCFCE7;
-            border-color: #4ADE80;
-          }
-          .summary-card.outstanding {
-            background: #FED7AA;
-            border-color: #FB923C;
-          }
-          .summary-label {
-            font-size: 11px;
-            font-weight: bold;
-            color: #555;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
-          }
-          .summary-value {
-            font-size: 22px;
-            font-weight: bold;
-            color: #0B3B2E;
-          }
-          .table-section {
-            margin: 30px 0;
-          }
-          .section-title {
-            font-size: 13px;
-            font-weight: bold;
-            color: #0B3B2E;
-            margin-bottom: 12px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            padding-bottom: 8px;
-            border-bottom: 2px solid #0B3B2E;
-          }
-          .properties-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 12px;
-            margin-bottom: 20px;
-          }
-          .properties-table th {
-            background: #0B3B2E;
-            color: white;
-            padding: 12px;
-            text-align: left;
-            font-weight: bold;
-            border: none;
-          }
-          .properties-table th:last-child,
-          .properties-table td:last-child {
-            text-align: right;
-          }
-          .properties-table td {
-            padding: 12px;
-            border-bottom: 1px solid #e5e7eb;
-          }
-          .properties-table tbody tr:nth-child(even) {
-            background: #f9fafb;
-          }
-          .properties-table tbody tr:hover {
-            background: #f3f4f6;
-          }
-          .properties-table tr:last-child td {
-            border-bottom: 2px solid #0B3B2E;
-          }
-          .amount {
-            font-weight: 600;
-            color: #0B3B2E;
-            font-family: 'Courier New', monospace;
-          }
-          .positive { color: #059669; }
-          .negative { color: #DC2626; }
-          .totals-row {
-            background: #e8f5e9;
-            font-weight: bold;
-            color: #0B3B2E;
-          }
-          .footer {
-            margin-top: 35px;
-            padding-top: 25px;
-            border-top: 2px solid #e5e7eb;
-            text-align: center;
-            font-size: 11px;
-            color: #888;
-            line-height: 1.6;
-          }
-          .timestamp {
-            margin-top: 12px;
-            font-size: 10px;
-            color: #aaa;
-          }
-          @media print {
-            body { background: white; }
-            .statement-container { border: 2px solid #0B3B2E; box-shadow: none; }
-            page { margin: 0; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="statement-container">
-          <!-- Header -->
-          <div class="header">
-            <div class="company-name">${currentCompany?.companyName || "MILIK"}</div>
-            <div class="statement-title">Landlord Payment Statement</div>
-            <div class="period-info">For Period: ${periodStart} to ${periodEnd}</div>
-          </div>
-
-          <!-- Landlord Information -->
-          <div class="landlord-info">
-            <div class="info-section">
-              <div class="info-row">
-                <span class="info-label">Landlord Name:</span>
-                <span class="info-value"><strong>${landlord.landlordName}</strong></span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">Landlord Code:</span>
-                <span class="info-value">${landlord.landlordCode}</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">Landlord Type:</span>
-                <span class="info-value">${landlord.landlordType || "Individual"}</span>
-              </div>
-            </div>
-            <div class="info-section">
-              <div class="info-row">
-                <span class="info-label">Email:</span>
-                <span class="info-value">${landlord.email || "—"}</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">Phone:</span>
-                <span class="info-value">${landlord.phoneNumber || "—"}</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">Status:</span>
-                <span class="info-value"><strong>${landlord.status}</strong></span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Summary Section -->
-          <div class="summary-section">
-            <div class="summary-title">💰 Payment Summary</div>
-            <div class="summary-grid">
-              <div class="summary-card paid">
-                <div class="summary-label">Paid to Landlord</div>
-                <div class="summary-value">Ksh ${landlord.paymentsMade.toLocaleString()}</div>
-              </div>
-              <div class="summary-card outstanding">
-                <div class="summary-label">Balance Owed</div>
-                <div class="summary-value">Ksh ${landlord.balance.toLocaleString()}</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Properties Breakdown -->
-          <div class="table-section">
-            <div class="section-title">📋 Properties & Collections by Unit</div>
-            <table class="properties-table">
-              <thead>
-                <tr>
-                  <th>Property Name</th>
-                  <th style="text-align: center;">Units</th>
-                  <th>Monthly Rent Expected</th>
-                  <th>Outstanding</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${
-                  landlord.propertyBreakdown && landlord.propertyBreakdown.length > 0
-                    ? landlord.propertyBreakdown
-                        .map(
-                          (prop, idx) => `
-                  <tr>
-                    <td><strong>${prop.propertyName}</strong></td>
-                    <td style="text-align: center;">${prop.tenantsCount}</td>
-                    <td><span class="amount">Ksh ${prop.rentExpected.toLocaleString()}</span></td>
-                    <td><span class="amount negative">Ksh ${prop.rentExpected.toLocaleString()}</span></td>
-                  </tr>
-                `
-                        )
-                        .join("")
-                    : `
-                  <tr>
-                    <td colspan="4" style="text-align: center; padding: 20px; color: #999;">
-                      No properties assigned yet for this landlord
-                    </td>
-                  </tr>
-                `
-                }
-                <tr class="totals-row">
-                  <td colspan="1"><strong>TOTAL</strong></td>
-                  <td style="text-align: center;"><strong>${landlord.tenantsCount || 0}</strong></td>
-                  <td><span class="amount">Ksh ${landlord.rentExpected?.toLocaleString?.() || "0"}</span></td>
-                  <td><span class="amount">${landlord.balance > 0 ? "Ksh " + Math.max(0, landlord.balance).toLocaleString() : "—"}</span></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <!-- Summary Statement -->
-          <div class="table-section">
-            <div class="section-title">📊 Account Summary</div>
-            <table class="properties-table" style="margin-bottom: 0;">
-              <tbody>
-                <tr>
-                  <td><strong>Properties Managed:</strong></td>
-                  <td style="text-align: right;"><strong>${landlord.propertiesCount || 0}</strong></td>
-                </tr>
-                <tr>
-                  <td><strong>Total Units/Tenants:</strong></td>
-                  <td style="text-align: right;"><strong>${landlord.tenantsCount || 0}</strong></td>
-                </tr>
-                <tr>
-                  <td><strong>Already Paid to Landlord:</strong></td>
-                  <td style="text-align: right;"><strong>Ksh ${landlord.paymentsMade.toLocaleString()}</strong></td>
-                </tr>
-                <tr class="totals-row">
-                  <td><strong>Outstanding Balance:</strong></td>
-                  <td style="text-align: right;"><strong>Ksh ${landlord.balance.toLocaleString()}</strong></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <!-- Footer -->
-          <div class="footer">
-            <p><strong>Account Status:</strong> This statement reflects all rent collected from properties managed on behalf of ${landlord.landlordName}.</p>
-            <p style="margin-top: 10px;">This is an electronically generated statement from ${currentCompany?.companyName || "MILIK"} Property Management System.</p>
-            <div class="timestamp">Generated on ${currentDate.toLocaleString()} | Statement Period: ${periodStart} to ${periodEnd}</div>
-          </div>
-        </div>
-
-        <script>
-          window.onload = function() {
-            window.print();
-          }
-        </script>
-      </body>
-      </html>
-    `;
-    printWindow.document.write(statementHTML);
-    printWindow.document.close();
+    const periodStart = new Date(currentDate.getFullYear(), currentDate.getMonth() - 2, 1);
+    const periodEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+    const breakdown = landlord.propertyBreakdown || [];
+    const balance = Number(landlord.balance || 0);
+    const printed = printDocument({
+      company: currentCompany,
+      docType: "Landlord Payment Statement",
+      docNumber: landlord.landlordCode || "",
+      status: { label: landlord.status || "", tone: String(landlord.status || "").toLowerCase() === "active" ? "success" : "neutral" },
+      meta: [["Period", `${formatPrintDate(periodStart)} - ${formatPrintDate(periodEnd)}`], ["Generated", formatPrintDate(currentDate)]],
+      parties: [{
+        heading: "Landlord",
+        name: landlord.landlordName,
+        lines: [landlord.landlordCode ? `Code: ${landlord.landlordCode}` : "", `Type: ${landlord.landlordType || "Individual"}`, landlord.email, landlord.phoneNumber],
+      }],
+      details: { heading: "Payment Summary", rows: [["Paid to landlord", `Ksh ${formatMoney(landlord.paymentsMade)}`], ["Balance owed", `Ksh ${formatMoney(balance)}`], ["Properties managed", String(landlord.propertiesCount || 0)]] },
+      table: {
+        columns: [
+          { label: "Property Name", value: (row) => row.propertyName },
+          { label: "Units", align: "right", value: (row) => String(row.tenantsCount) },
+          { label: "Monthly Rent Expected", align: "right", value: (row) => `Ksh ${formatMoney(row.rentExpected)}` },
+          { label: "Outstanding", align: "right", value: (row) => `Ksh ${formatMoney(row.rentExpected)}` },
+        ],
+        rows: breakdown,
+        empty: "No properties assigned yet for this landlord",
+      },
+      totals: [
+        { label: "Total units / tenants", value: String(landlord.tenantsCount || 0) },
+        { label: "Monthly rent expected", value: `Ksh ${formatMoney(landlord.rentExpected)}` },
+        { label: "Already paid to landlord", value: `Ksh ${formatMoney(landlord.paymentsMade)}` },
+        { label: "Outstanding balance", value: `Ksh ${formatMoney(balance)}`, hero: true },
+      ],
+      notes: [{ heading: "Account status", text: `This statement reflects all rent collected from properties managed on behalf of ${landlord.landlordName}.` }],
+    });
+    if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
   };
 
   const toggleSelection = (id) => {

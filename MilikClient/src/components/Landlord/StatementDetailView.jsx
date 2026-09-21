@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, useRef } from "react";
+import React, { useMemo, useState, useRef } from "react";
 import { useSelector } from "react-redux";
 import { selectCurrentUser, selectCurrentCompany } from "../../redux/selectors";
 import { useTerms } from "../../hooks/useTerm";
@@ -13,6 +13,8 @@ import {
   FaShieldAlt,
   FaPrint,
 } from "react-icons/fa";
+import { toast } from "react-toastify";
+import { openPrintWindow, letterheadHtml, footerHtml, wrapPage, pageBoxCss, escapeHtml, formatMoney as formatPrintMoney, formatDate as formatPrintDate, BRAND } from "../../utils/printKit";
 import StatementPrintView from "./StatementPrintView";
 
 const MILIK_GREEN = "#0B3B2E";
@@ -135,57 +137,6 @@ const StatementDetailView = ({
     if (lower.includes("statement type: provisional")) return "Provisional";
     return "Draft";
   };
-
-  const handlePrintAdvice = useCallback(() => {
-    const co = company || {};
-    const coName = co.companyName || co.name || co.businessName || 'Milik';
-    const logo = co.logo || '';
-    const win = window.open('', '_blank', 'width=870,height=1100');
-    if (!win) { window.print(); return; }
-    const fmt = (v) => `KES ${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-    const stmtNum = statement?.statementNumber || statement?.sourceStatementNumber || '—';
-    const period = [statement?.periodStart, statement?.periodEnd].filter(Boolean).map(d => new Date(d).toLocaleDateString()).join(' — ') || '—';
-    win.document.write(`<!DOCTYPE html><html><head><title>${termLandlord} Statement ${stmtNum}</title><style>
-      @page{size:A4 portrait;margin:14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
-      .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
-      .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
-      .sub{font-size:10px;color:#475569;margin-top:2px}.meta{text-align:right;color:#64748b;font-size:8.5px;line-height:1.6}
-      .logo{max-height:44px;max-width:120px;object-fit:contain;margin-bottom:4px}
-      .info{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
-      .box{border:1px solid #dbe2ea;border-radius:6px;padding:7px 10px;font-size:8.5px;line-height:1.7}
-      .box-label{font-size:8px;text-transform:uppercase;letter-spacing:.1em;color:#64748b;font-weight:800;margin-bottom:4px}
-      table{width:100%;border-collapse:collapse;font-size:8.5px;margin-bottom:10px}
-      thead th{background:#0B3B2E;color:#fff;padding:4px 8px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:.1em}
-      thead th.r{text-align:right}tbody td{border-bottom:1px solid #dbe2ea;padding:3.5px 8px}
-      tbody td.r{text-align:right}tbody tr:nth-child(even){background:#f8fafc}
-      tfoot td{border-top:2px solid #0B3B2E;padding:4px 8px;font-weight:900;background:#EDF5F1}tfoot td.r{text-align:right}
-      .settle{margin-top:12px;border:2px solid #0B3B2E;border-radius:8px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center}
-      .settle-label{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.1em;color:#0B3B2E}
-      .settle-amount{font-size:18px;font-weight:900;color:${settlement.isNegative ? '#b91c1c' : '#0B3B2E'}}
-      h3{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#0B3B2E;font-weight:900;margin:12px 0 5px}
-      *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
-    </style></head><body>
-    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${coName}</div><div class="ttl">${termLandlord} Statement</div><div class="sub">Stmt #${stmtNum} · ${period} · ${statementTypeLabel}</div></div>
-    <div class="meta"><div>${coName}</div>${companyAddress ? `<div>${companyAddress}</div>` : ''}${companyPhone ? `<div>Tel: ${companyPhone}</div>` : ''}<div>Generated: ${new Date().toLocaleString()}</div></div></div>
-    <div class="info">
-      <div class="box"><div class="box-label">${termLandlord}</div><strong>${landlordName}</strong>${landlordEmail ? `<br>${landlordEmail}` : ''}</div>
-      <div class="box"><div class="box-label">${termProperty}</div><strong>${propertyName}</strong>${propertyAddress ? `<br>${propertyAddress}` : ''}</div>
-    </div>
-    ${tenantRows.length > 0 ? `<h3>${termTenant} Collection Summary</h3>
-    <table><thead><tr><th>${termTenant}</th><th>${termUnit}</th><th class="r">${termRent} Invoiced</th><th class="r">${termRent} Collected</th><th class="r">${termUtility} Invoiced</th><th class="r">${termUtility} Collected</th></tr></thead>
-    <tbody>${tenantRows.map((row) => `<tr><td>${row.tenantName || '—'}</td><td>${row.unit || '—'}</td><td class="r">${fmt(row.invoicedRent || row.rent)}</td><td class="r">${fmt(row.paidRent || row.collected)}</td><td class="r">${fmt(row.invoicedUtility || row.utilityCharges)}</td><td class="r">${fmt(row.paidUtility || row.utilitiesCollected)}</td></tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="2"><strong>TOTAL</strong></td><td class="r"><strong>${fmt(totalRentInvoiced)}</strong></td><td class="r"><strong>${fmt(totalRentReceived)}</strong></td><td class="r"></td><td class="r"></td></tr></tfoot></table>` : ''}
-    ${expenseLines.length > 0 ? `<h3>Deductions / Expenses</h3>
-    <table><thead><tr><th>Description</th><th>Category</th><th class="r">Amount</th></tr></thead>
-    <tbody>${expenseLines.map((line) => `<tr><td>${line.description || '—'}</td><td>${line.category || '—'}</td><td class="r" style="color:#b91c1c">${fmt(line.amount)}</td></tr>`).join('')}</tbody></table>` : ''}
-    <div class="settle">
-      <div class="settle-label">${settlement.label}</div>
-      <div class="settle-amount">${fmt(settlement.amount)}</div>
-    </div>
-    </body></html>`);
-    win.document.close();
-    win.onload = () => { win.focus(); win.print(); };
-  }, [company, statement, tenantRows, summary, expenseLines, settlement, statementTypeLabel, companyAddress, companyPhone, landlordName, landlordEmail, propertyName, propertyAddress, totalRentInvoiced, totalRentReceived]);
 
   const handleDownloadPdf = () => {
     if (onDownloadPdf) onDownloadPdf(statement);
@@ -344,6 +295,53 @@ const StatementDetailView = ({
   const propertyName = statement?.property?.propertyName || statement?.property?.name || "N/A";
   const propertyAddress = [statement?.property?.address, statement?.property?.city].filter(Boolean).join(", ");
   const statementTypeLabel = parseStatementType(statement?.notes);
+
+  const handlePrintAdvice = () => {
+    const win = openPrintWindow();
+    if (!win) { toast.error("Pop-up blocked — allow pop-ups for this site to print"); return; }
+    const fmt = (v) => `KES ${formatPrintMoney(v)}`;
+    const stmtNum = statement?.statementNumber || statement?.sourceStatementNumber || "—";
+    const period = [statement?.periodStart, statement?.periodEnd].filter(Boolean).map((d) => formatPrintDate(d)).join(" — ") || "—";
+    const coName = company?.companyName || company?.name || company?.businessName || "Milik";
+    const cell = (v, cls = "") => `<td${cls ? ` class="${cls}"` : ""}>${escapeHtml(v)}</td>`;
+    const th = (v, cls = "") => `<th${cls ? ` class="${cls}"` : ""}>${escapeHtml(v)}</th>`;
+    const partyBox = (label, name, extra) => `<div class="box"><div class="box-label">${escapeHtml(label)}</div><strong>${escapeHtml(name)}</strong>${extra ? `<br>${escapeHtml(extra)}` : ""}</div>`;
+    const collectionTable = tenantRows.length > 0 ? `<h3>${escapeHtml(termTenant)} Collection Summary</h3>
+      <table><thead><tr>${th(termTenant)}${th(termUnit)}${th(`${termRent} Invoiced`, "r")}${th(`${termRent} Collected`, "r")}${th(`${termUtility} Invoiced`, "r")}${th(`${termUtility} Collected`, "r")}</tr></thead>
+      <tbody>${tenantRows.map((row) => `<tr>${cell(row.tenantName || "—")}${cell(row.unit || "—")}${cell(fmt(row.invoicedRent || row.rent), "r")}${cell(fmt(row.paidRent || row.collected), "r")}${cell(fmt(row.invoicedUtility || row.utilityCharges), "r")}${cell(fmt(row.paidUtility || row.utilitiesCollected), "r")}</tr>`).join("")}</tbody>
+      <tfoot><tr><td colspan="2">TOTAL</td>${cell(fmt(totalRentInvoiced), "r")}${cell(fmt(totalRentReceived), "r")}<td></td><td></td></tr></tfoot></table>` : "";
+    const expenseTable = expenseLines.length > 0 ? `<h3>Deductions / Expenses</h3>
+      <table><thead><tr>${th("Description")}${th("Category")}${th("Amount", "r")}</tr></thead>
+      <tbody>${expenseLines.map((line) => `<tr>${cell(line.description || "—")}${cell(line.category || "—")}${cell(fmt(line.amount), "r neg")}</tr>`).join("")}</tbody></table>` : "";
+    const css = `
+      .info { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+      .box { border: 1px solid #e2e8f0; border-radius: 4px; padding: 8px 12px; font-size: 10.5px; line-height: 1.6; }
+      .box-label { font-size: 8.5px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: ${BRAND.gold}; margin-bottom: 3px; }
+      h3 { font-size: 9px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: ${BRAND.green}; margin: 14px 0 6px; }
+      table { width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 10px; }
+      thead th { background: ${BRAND.green}; color: #fff; padding: 6px 8px; text-align: left; font-size: 8.5px; text-transform: uppercase; letter-spacing: .07em; }
+      th.r, td.r { text-align: right; font-variant-numeric: tabular-nums; }
+      tbody td { border-bottom: 1px solid #e2e8f0; padding: 5px 8px; }
+      tbody tr:nth-child(even) td { background: #f8fafc; }
+      td.neg { color: #b91c1c; }
+      tfoot td { border-top: 2px solid ${BRAND.green}; padding: 6px 8px; font-weight: 800; background: #eef7f2; color: ${BRAND.green}; }
+      tr { page-break-inside: avoid; }
+      .settle { margin-top: 14px; border: 2px solid ${BRAND.green}; border-radius: 6px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; page-break-inside: avoid; }
+      .settle-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: ${BRAND.green}; }
+      .settle-amount { font-size: 18px; font-weight: 800; color: ${settlement.isNegative ? "#b91c1c" : BRAND.green}; }`;
+    const body = `
+      ${letterheadHtml(company, { kicker: `${termLandlord} Statement`, title: `Stmt #${stmtNum}`, subtitle: `${period} · ${statementTypeLabel}` })}
+      <div class="info">${partyBox(termLandlord, landlordName, landlordEmail)}${partyBox(termProperty, propertyName, propertyAddress)}</div>
+      ${collectionTable}
+      ${expenseTable}
+      <div class="settle"><div class="settle-label">${escapeHtml(settlement.label)}</div><div class="settle-amount">${escapeHtml(fmt(settlement.amount))}</div></div>
+      ${footerHtml(company, { left: `${coName} · Stmt ${stmtNum}` })}`;
+    const html = wrapPage({ title: `${termLandlord} Statement ${stmtNum}`, css, body, pageCss: pageBoxCss({ size: "A4", left: `${coName} · ${stmtNum}` }) });
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    setTimeout(() => { win.focus(); win.print(); }, 450);
+  };
 
   return (
     <>

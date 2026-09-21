@@ -40,6 +40,7 @@ import { adminRequests } from "../../utils/requestMethods";
 import { useConfirm } from "../../context/ConfirmContext";
 import { formatMoney } from "../../utils/money";
 import { fmtDate } from "../../utils/dates";
+import { printTabularList } from "../../utils/printKit";
 import {
   billMeterReading,
   billMeterReadingsBatch,
@@ -172,124 +173,6 @@ const getStatusLabel = (reading) => {
   if (String(reading.status || "").toLowerCase() === "deleted") return "Deleted";
   const ps = getMeterPaymentStatus(reading);
   return PAYMENT_LABEL[ps] || "Unknown";
-};
-
-const escapeHtml = (v) =>
-  String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-
-const buildRegisterPrintHtml = ({ company, companyName, rows, totalAmount, filters }) => {
-  const co = company || {};
-  const name = co.companyName || co.name || companyName || "Current Company";
-  const logo = co.logo || "";
-  const phone = co.phone || co.phoneNumber || co.mobile || "";
-  const email = co.email || co.companyEmail || "";
-  const address = co.address || co.location || co.city || "";
-  const infoLine = [phone, email, address].filter(Boolean).join(" • ");
-
-  const logoHtml = logo
-    ? `<img src="${escapeHtml(logo)}" alt="logo" style="width:80px;height:80px;object-fit:cover;border-radius:12px;border:1px solid #cbd5e1;padding:4px;" />`
-    : `<div style="width:80px;height:80px;background:#0B3B2E;color:#fff;font-size:28px;font-weight:900;display:flex;align-items:center;justify-content:center;border-radius:12px">${escapeHtml(name.slice(0, 1).toUpperCase())}</div>`;
-
-  const tableRows = rows
-    .map(
-      (row, i) => `
-        <tr style="${i % 2 === 1 ? "background:#f8fafc" : ""}">
-          <td>${escapeHtml(row.billingPeriod || "-")}</td>
-          <td>${escapeHtml(row.tenant?.name || "—")}</td>
-          <td>${escapeHtml(row.property?.propertyName || "-")}</td>
-          <td>${escapeHtml(row.unit?.unitNumber || "-")}</td>
-          <td>${escapeHtml(row.utilityType || "-")}</td>
-          <td style="text-align:right;font-family:monospace">${formatNumber(row.previousReading)}</td>
-          <td style="text-align:right;font-family:monospace">${formatNumber(row.currentReading)}</td>
-          <td style="text-align:right;font-family:monospace;font-weight:700">${formatNumber(row.unitsConsumed)}</td>
-          <td style="text-align:right;font-family:monospace">${formatNumber(row.rate)}</td>
-          <td style="text-align:right;font-family:monospace;font-weight:700">${formatMoney(row.amount)}</td>
-          <td>${escapeHtml(getStatusLabel(row))}</td>
-          <td>${escapeHtml(fmtDate(row.readingDate))}</td>
-        </tr>
-      `
-    )
-    .join("");
-
-  const printedOn = new Date().toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
-
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8" />
-  <title>Meter Readings Register — ${escapeHtml(name)}</title>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:24px 28px;font-size:11px}
-    .hdr{display:grid;grid-template-columns:96px 1fr 160px;align-items:center;border-bottom:3px solid #0B3B2E;padding-bottom:14px;margin-bottom:16px;gap:12px}
-    .co-name{font-size:20px;font-weight:900;color:#0B3B2E;letter-spacing:.01em}
-    .co-sub{font-size:10px;color:#64748b;margin-top:3px;line-height:1.5}
-    .rpt-title{font-size:15px;font-weight:800;margin-top:5px;color:#1e293b}
-    .hdr-right{text-align:right;font-size:10px;color:#64748b;line-height:1.6}
-    .summary-bar{display:flex;gap:16px;margin-bottom:14px;padding:8px 12px;background:#f0faf5;border-left:3px solid #0B3B2E;border-radius:0 6px 6px 0;font-size:11px;font-weight:700;color:#334155}
-    .summary-bar span{color:#0B3B2E}
-    table{width:100%;border-collapse:collapse;font-size:10px}
-    thead th{background:#0B3B2E;color:#fff;padding:8px 9px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;border:1px solid rgba(255,255,255,.15);white-space:nowrap}
-    thead th.right{text-align:right}
-    tbody td{padding:7px 9px;border:1px solid #e2e8f0;vertical-align:top}
-    tfoot td{padding:8px 9px;font-weight:800;border-top:2px solid #0B3B2E;background:#f0faf5;color:#0B3B2E}
-    tfoot td.right{text-align:right;font-family:monospace}
-    @media print{
-      body{padding:10px 12px}
-      @page{size:A4 landscape;margin:8mm 10mm}
-      thead th{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    }
-  </style>
-</head>
-<body>
-  <div class="hdr">
-    <div>${logoHtml}</div>
-    <div style="text-align:center">
-      <div class="co-name">${escapeHtml(name)}</div>
-      ${infoLine ? `<div class="co-sub">${escapeHtml(infoLine)}</div>` : ""}
-      <div class="rpt-title">Meter Readings Register</div>
-    </div>
-    <div class="hdr-right">
-      Printed: ${escapeHtml(printedOn)}<br/>
-      Records: <strong>${rows.length.toLocaleString()}</strong>
-    </div>
-  </div>
-
-  <div class="summary-bar">
-    <div>Total Records: <span>${rows.length.toLocaleString()}</span></div>
-    <div>Total Amount: <span>${formatMoney(totalAmount)}</span></div>
-    ${filters?.billingPeriod ? `<div>Period: <span>${escapeHtml(filters.billingPeriod)}</span></div>` : ""}
-    ${filters?.utilityType && filters.utilityType !== "any" ? `<div>Utility: <span>${escapeHtml(filters.utilityType)}</span></div>` : ""}
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th>Period</th>
-        <th>Tenant</th>
-        <th>Property</th>
-        <th>Unit</th>
-        <th>Utility</th>
-        <th class="right">Previous</th>
-        <th class="right">Current</th>
-        <th class="right">Consumed</th>
-        <th class="right">Rate</th>
-        <th class="right">Amount</th>
-        <th>Status</th>
-        <th>Reading Date</th>
-      </tr>
-    </thead>
-    <tbody>${tableRows || `<tr><td colspan="12" style="text-align:center;padding:16px;color:#94a3b8;font-style:italic">No records</td></tr>`}</tbody>
-    <tfoot>
-      <tr>
-        <td colspan="9" style="text-align:right">Total (${rows.length.toLocaleString()} records)</td>
-        <td class="right">${formatMoney(totalAmount)}</td>
-        <td colspan="2"></td>
-      </tr>
-    </tfoot>
-  </table>
-</body>
-</html>`;
 };
 
 const MeterReadings = () => {
@@ -1296,28 +1179,33 @@ const MeterReadings = () => {
       toast.info("There are no meter readings to print.");
       return;
     }
-
-    const printWindow = window.open("", "_blank", "width=1200,height=800");
-    if (!printWindow) {
-      toast.error("Allow popups to print the meter readings register.");
-      return;
-    }
-
-    printWindow.document.open();
-    printWindow.document.write(
-      buildRegisterPrintHtml({
-        company: currentCompany,
-        rows: filteredReadings,
-        totalAmount,
-        filters: appliedFilters,
-      })
-    );
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 300);
+    const filterNote = [
+      appliedFilters?.billingPeriod ? `Period: ${appliedFilters.billingPeriod}` : "",
+      appliedFilters?.utilityType && appliedFilters.utilityType !== "any" ? `Utility: ${appliedFilters.utilityType}` : "",
+    ].filter(Boolean).join("  ·  ");
+    const printed = printTabularList({
+      title: "Meter Readings Register",
+      subtitle: [`${filteredReadings.length.toLocaleString()} reading${filteredReadings.length !== 1 ? "s" : ""}`, filterNote].filter(Boolean).join("  ·  "),
+      company: currentCompany,
+      summaryItems: [["Total Records", filteredReadings.length.toLocaleString()], ["Total Amount", formatMoney(totalAmount)]],
+      columns: [
+        { label: "Period", value: (row) => row.billingPeriod || "-" },
+        { label: "Tenant", value: (row) => row.tenant?.name || "—" },
+        { label: "Property", value: (row) => row.property?.propertyName || "-" },
+        { label: "Unit", value: (row) => row.unit?.unitNumber || "-" },
+        { label: "Utility", value: (row) => row.utilityType || "-" },
+        { label: "Previous", align: "right", value: (row) => formatNumber(row.previousReading) },
+        { label: "Current", align: "right", value: (row) => formatNumber(row.currentReading) },
+        { label: "Consumed", align: "right", bold: true, value: (row) => formatNumber(row.unitsConsumed) },
+        { label: "Rate", align: "right", value: (row) => formatNumber(row.rate) },
+        { label: "Amount", align: "right", bold: true, value: (row) => formatMoney(row.amount) },
+        { label: "Status", value: (row) => getStatusLabel(row) },
+        { label: "Reading Date", value: (row) => fmtDate(row.readingDate) },
+      ],
+      rows: filteredReadings,
+      totalsRow: [`Total (${filteredReadings.length.toLocaleString()} records)`, "", "", "", "", "", "", "", "", formatMoney(totalAmount), "", ""],
+    });
+    if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
   };
 
   return (

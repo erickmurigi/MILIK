@@ -19,6 +19,7 @@ import { adminRequests } from '../../utils/requestMethods';
 import { fmtDate } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 import { useTerms } from '../../hooks/useTerm';
+import printTabularList from '../../utils/printList';
 
 const formatPercent = (value) => (value === null || value === undefined ? '—' : `${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}%`);
 const toDateInputValue = (value) => new Date(value).toISOString().split('T')[0];
@@ -199,189 +200,105 @@ const RentalCollectionReport = () => {
   const handlePrint = useCallback(() => {
     if (!canExportReports) { toast.error("You do not have permission to print reports"); return; }
 
-    const GRN = "#0B3B2E";
-    const co = {
-      name: currentCompany?.companyName || currentCompany?.name || currentCompany?.businessName || 'Milik',
-      logo: currentCompany?.logo || '',
-      phone: currentCompany?.phone || currentCompany?.phoneNo || currentCompany?.phoneNumber || '',
-      email: currentCompany?.email || currentCompany?.companyEmail || '',
-      address: [currentCompany?.address || currentCompany?.postalAddress || '', currentCompany?.town || currentCompany?.city || ''].filter(Boolean).join(', '),
-    };
-    const infoLine = [co.address, co.phone, co.email].filter(Boolean).join(' · ');
-    const by = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || '';
-
-    const win = window.open('', '_blank', 'width=1200,height=900');
-    if (!win) { toast.error('Pop-up blocked. Please allow pop-ups to print.'); return; }
-
-    const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const fmt = (v) => esc(`KES ${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`);
     const rows = Array.isArray(report.rows) ? report.rows : [];
     const byProp = Array.isArray(report.byProperty) ? report.byProperty : [];
     const utTypes = allUtilityTypes;
     const hasUt = utTypes.length > 0;
+    const sumOf = (list, pick) => list.reduce((s, r) => s + Number(pick(r) || 0), 0);
+    const tenantCountByProperty = new Map(byProp.map((p) => [String(p.propertyName), p.tenantCount]));
 
-    const totCollected = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
-    const totAllocated = rows.reduce((s, r) => s + Number(r.allocatedAmount || 0), 0);
-    const totRent = rows.reduce((s, r) => s + Number(r.rentApplied || 0), 0);
-    const totUnapplied = rows.reduce((s, r) => s + Number(r.unappliedAmount || 0), 0);
-    const totPenalty = rows.reduce((s, r) => s + Number(r.penaltyApplied || 0), 0);
-    const totUtility = rows.reduce((s, r) => s + Number(r.utilityApplied || 0), 0);
-    const utTotals = hasUt
-      ? utTypes.reduce((m, ut) => { m[ut] = rows.reduce((s, r) => s + Number(r.utilityBreakdown?.[ut] || 0), 0); return m; }, {})
-      : {};
-    const propByUtTotals = hasUt
-      ? utTypes.reduce((m, ut) => { m[ut] = byProp.reduce((s, r) => s + Number(r.utilityBreakdown?.[ut] || 0), 0); return m; }, {})
-      : {};
+    // Receipts grouped by property, each group closed with its subtotal
+    const pGroups = new Map();
+    rows.forEach((r) => {
+      const key = String(r.propertyId || r.propertyName || 'Unknown');
+      if (!pGroups.has(key)) pGroups.set(key, { name: r.propertyName || 'Unknown', rows: [] });
+      pGroups.get(key).rows.push(r);
+    });
 
-    const utHeader = hasUt ? utTypes.map((ut) => `<th class="r">${esc(ut)}</th>`).join('') : `<th class="r">Utilities</th>`;
+    // Cells after the first five columns: Collected, Allocated, Rent, utilities..., Penalty, Unapplied, Cashbook
+    const moneyCells = (list) => [
+      formatMoney(sumOf(list, (r) => r.amount)),
+      formatMoney(sumOf(list, (r) => r.allocatedAmount)),
+      formatMoney(sumOf(list, (r) => r.rentApplied)),
+      ...(hasUt ? utTypes.map((ut) => formatMoney(sumOf(list, (r) => r.utilityBreakdown?.[ut]))) : [formatMoney(sumOf(list, (r) => r.utilityApplied))]),
+      formatMoney(sumOf(list, (r) => r.penaltyApplied)),
+      formatMoney(sumOf(list, (r) => r.unappliedAmount)),
+      '',
+    ];
 
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Rental Collection — ${esc(co.name)}</title><style>
-      @page{size:A4 landscape;margin:8mm 10mm}
-      *{box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
-      body{font-family:'Arial Narrow',Arial,sans-serif;color:#0f172a;font-size:7.5px;margin:0;line-height:1.3}
-      .hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:5px;margin-bottom:6px}
-      .hdr-left .logo{max-height:32px;max-width:90px;object-fit:contain;display:block;margin-bottom:2px}
-      .hdr-left .co{font-size:9.5px;font-weight:900;color:${GRN};letter-spacing:.04em;text-transform:uppercase}
-      .hdr-left .ttl{font-size:14px;font-weight:900;color:#0f172a;margin:1px 0}
-      .hdr-left .sub{font-size:7px;color:#64748b}
-      .hdr-right{text-align:right;font-size:7px;color:#64748b;line-height:1.7}
-      .divider{height:2px;background:${GRN};margin-bottom:6px}
-      .cards{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-bottom:7px}
-      .card{border:1px solid #dbe2ea;background:#f8fafc;padding:4px 6px}
-      .card.grn{border-color:#d1fae5;background:#f0fdf4}.card.amb{border-color:#fef3c7;background:#fffbeb}
-      .cl{font-size:6px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:800}
-      .cv{font-size:10px;font-weight:900;color:#0f172a;margin-top:1px;white-space:nowrap}
-      .cv.grn{color:#047857}.cv.amb{color:#b45309}
-      .sec{font-size:7.5px;text-transform:uppercase;letter-spacing:.12em;color:${GRN};font-weight:900;margin:7px 0 3px;border-bottom:1px solid #dbe2ea;padding-bottom:2px}
-      table{width:100%;border-collapse:collapse;font-size:7px;margin-bottom:7px}
-      thead th{background:${GRN};color:#fff;padding:2.5px 4px;font-size:6.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:800;white-space:nowrap;text-align:left}
-      thead th.r{text-align:right}
-      tbody td{border-bottom:1px solid #e2e8f0;padding:2px 4px;vertical-align:middle}
-      tbody td.r{text-align:right}
-      tbody td.nm{font-weight:700}
-      tbody tr:nth-child(even){background:#f8fafc}
-      .prop-row td{background:#f0fdf4;border-top:1.5px solid rgba(11,59,46,.2);border-bottom:1px solid rgba(11,59,46,.12)}
-      .prop-row td{font-weight:800;font-size:7px;color:${GRN}}
-      tfoot td{border-top:2px solid ${GRN};padding:2.5px 4px;font-weight:900;background:#edf5f1;font-size:7px;color:#0f172a}
-      tfoot td.r{text-align:right}
-      .pb{page-break-before:always}
-    </style></head><body>
-    <div class="hdr">
-      <div class="hdr-left">
-        ${co.logo ? `<img src="${esc(co.logo)}" class="logo" alt="">` : ''}
-        <div class="co">${esc(co.name)}</div>
-        <div class="ttl">Rental Collection Report</div>
-        <div class="sub">${infoLine ? `${esc(infoLine)} &nbsp;·&nbsp; ` : ''}${esc(fmtDate(filters.startDate))} to ${esc(fmtDate(filters.endDate))}</div>
-      </div>
-      <div class="hdr-right">
-        <div><strong>Period:</strong> ${esc(fmtDate(filters.startDate))} to ${esc(fmtDate(filters.endDate))}</div>
-        <div><strong>Generated:</strong> ${esc(new Date().toLocaleString())}</div>
-        <div><strong>Prepared by:</strong> ${esc(by)}</div>
-        <div><strong>Receipts:</strong> ${rows.length}</div>
-      </div>
-    </div>
-    <div class="divider"></div>
-    <div class="cards">
-      <div class="card grn"><div class="cl">Op. Income</div><div class="cv grn">${fmt(summary.operationalCollected ?? summary.totalCollected)}</div></div>
-      <div class="card"><div class="cl">Total Collected</div><div class="cv">${fmt(summary.totalCollected)}</div></div>
-      <div class="card"><div class="cl">Allocated</div><div class="cv">${fmt(summary.allocatedAmount)}</div></div>
-      <div class="card amb"><div class="cl">Unapplied</div><div class="cv amb">${fmt(summary.unappliedAmount)}</div></div>
-      <div class="card"><div class="cl">Receipts</div><div class="cv">${Number(summary.totalPayments || rows.length)}</div></div>
-      <div class="card"><div class="cl">Collection Rate</div><div class="cv">${esc(formatPercent(summary.collectionRate))}</div></div>
-    </div>
-    <div class="sec">Collection Summary by Property</div>
-    <table><thead><tr>
-      <th>${termProperty}</th><th class="r">Receipts</th><th class="r">${termTenants}</th><th class="r">Collected</th><th class="r">Rent</th>${utHeader}<th class="r">Penalty</th><th class="r">Unapplied</th>
-    </tr></thead>
-    <tbody>${byProp.map((row) => `<tr>
-      <td class="nm">${esc(row.propertyName)}</td>
-      <td class="r">${row.paymentCount}</td>
-      <td class="r">${row.tenantCount}</td>
-      <td class="r" style="color:#047857;font-weight:700">${fmt(row.totalCollected)}</td>
-      <td class="r">${fmt(row.rentApplied)}</td>
-      ${hasUt ? utTypes.map((ut) => `<td class="r">${fmt(row.utilityBreakdown?.[ut] || 0)}</td>`).join('') : `<td class="r">${fmt(row.utilityApplied)}</td>`}
-      <td class="r">${fmt(row.penaltyApplied)}</td>
-      <td class="r" style="color:${Number(row.unappliedAmount || 0) > 0 ? '#b45309' : 'inherit'}">${fmt(row.unappliedAmount)}</td>
-    </tr>`).join('')}</tbody>
-    <tfoot><tr>
-      <td><strong>TOTAL</strong></td>
-      <td class="r"><strong>${byProp.reduce((s, r) => s + Number(r.paymentCount || 0), 0)}</strong></td>
-      <td></td>
-      <td class="r" style="color:#047857"><strong>${fmt(byProp.reduce((s, r) => s + Number(r.totalCollected || 0), 0))}</strong></td>
-      <td class="r"><strong>${fmt(byProp.reduce((s, r) => s + Number(r.rentApplied || 0), 0))}</strong></td>
-      ${hasUt ? utTypes.map((ut) => `<td class="r"><strong>${fmt(propByUtTotals[ut] || 0)}</strong></td>`).join('') : `<td class="r"><strong>${fmt(byProp.reduce((s, r) => s + Number(r.utilityApplied || 0), 0))}</strong></td>`}
-      <td class="r"><strong>${fmt(byProp.reduce((s, r) => s + Number(r.penaltyApplied || 0), 0))}</strong></td>
-      <td class="r" style="color:#b45309"><strong>${fmt(byProp.reduce((s, r) => s + Number(r.unappliedAmount || 0), 0))}</strong></td>
-    </tr></tfoot></table>
-    <div class="sec pb">Receipts by Property</div>
-    <table><thead><tr>
-      <th>Date</th><th>Receipt #</th><th>${termTenant}</th><th>${termUnit}</th><th>Method</th>
-      <th class="r">Collected</th><th class="r">Allocated</th><th class="r">Rent</th>
-      ${utHeader}<th class="r">Penalty</th><th class="r">Unapplied</th><th>Cashbook</th>
-    </tr></thead>
-    <tbody>${(() => {
-      const pGroups = new Map();
-      rows.forEach((r) => {
-        const key = String(r.propertyId || r.propertyName || 'Unknown');
-        if (!pGroups.has(key)) pGroups.set(key, { name: r.propertyName || 'Unknown', rows: [] });
-        pGroups.get(key).rows.push(r);
+    const printRows = [];
+    for (const g of pGroups.values()) {
+      const tenantCount = tenantCountByProperty.get(String(g.name));
+      printRows.push({
+        __group: g.name,
+        meta: `${g.rows.length} receipt${g.rows.length !== 1 ? 's' : ''}${tenantCount ? `  ·  ${tenantCount} ${tenantCount !== 1 ? termTenants.toLowerCase() : termTenant.toLowerCase()}` : ''}`,
       });
-      let html = '';
-      for (const [, g] of pGroups) {
-        const gC = g.rows.reduce((s, r) => s + Number(r.amount || 0), 0);
-        const gA = g.rows.reduce((s, r) => s + Number(r.allocatedAmount || 0), 0);
-        const gR = g.rows.reduce((s, r) => s + Number(r.rentApplied || 0), 0);
-        const gP = g.rows.reduce((s, r) => s + Number(r.penaltyApplied || 0), 0);
-        const gU = g.rows.reduce((s, r) => s + Number(r.unappliedAmount || 0), 0);
-        const gUt = g.rows.reduce((s, r) => s + Number(r.utilityApplied || 0), 0);
-        const gUtMap = hasUt ? utTypes.reduce((m, ut) => { m[ut] = g.rows.reduce((s, r) => s + Number(r.utilityBreakdown?.[ut] || 0), 0); return m; }, {}) : {};
-        const utSubtotals = hasUt ? utTypes.map((ut) => `<td class="r" style="font-weight:700">${fmt(gUtMap[ut] || 0)}</td>`).join('') : `<td class="r" style="font-weight:700">${fmt(gUt)}</td>`;
-        html += `<tr style="background:#f0fdf4;border-top:1.5px solid rgba(11,59,46,.2);border-bottom:1px solid rgba(11,59,46,.12)">
-          <td colspan="5" style="padding:2.5px 4px;font-weight:900;font-size:7.5px;color:#0B3B2E;text-transform:uppercase;letter-spacing:.04em">${esc(g.name)} <span style="font-weight:500;font-size:6.5px;color:#64748b;text-transform:none">${g.rows.length} receipt${g.rows.length !== 1 ? 's' : ''}</span></td>
-          <td class="r" style="color:#047857;font-weight:800">${fmt(gC)}</td>
-          <td class="r" style="font-weight:700">${fmt(gA)}</td>
-          <td class="r" style="font-weight:700">${fmt(gR)}</td>
-          ${utSubtotals}
-          <td class="r" style="font-weight:700">${fmt(gP)}</td>
-          <td class="r" style="color:${gU > 0 ? '#b45309' : 'inherit'};font-weight:700">${fmt(gU)}</td>
-          <td></td>
-        </tr>`;
-        g.rows.forEach((row, idx) => {
-          const utCells = hasUt
-            ? utTypes.map((ut) => `<td class="r">${fmt(row.utilityBreakdown?.[ut] || 0)}</td>`).join('')
-            : `<td class="r">${fmt(row.utilityApplied)}</td>`;
-          html += `<tr style="${idx % 2 === 1 ? 'background:#f8fafc' : ''}">
-            <td style="white-space:nowrap">${row.paymentDate ? esc(new Date(row.paymentDate).toLocaleDateString()) : '—'}</td>
-            <td>${esc(row.receiptNumber || '—')}</td>
-            <td class="nm">${esc(row.tenantName || '—')}</td>
-            <td>${esc(row.unitNumber || '—')}</td>
-            <td style="text-transform:capitalize">${esc(formatMethod(row.paymentMethod))}</td>
-            <td class="r" style="color:#047857;font-weight:700">${fmt(row.amount)}</td>
-            <td class="r">${fmt(row.allocatedAmount)}</td>
-            <td class="r">${fmt(row.rentApplied)}</td>
-            ${utCells}
-            <td class="r">${fmt(row.penaltyApplied)}</td>
-            <td class="r" style="color:${Number(row.unappliedAmount || 0) > 0 ? '#b45309' : 'inherit'}">${fmt(row.unappliedAmount)}</td>
-            <td>${esc(row.cashbook || '—')}</td>
-          </tr>`;
-        });
-      }
-      return html;
-    })()}</tbody>
-    <tfoot><tr>
-      <td colspan="5"><strong>GRAND TOTAL — ${rows.length} receipts</strong></td>
-      <td class="r" style="color:#047857"><strong>${fmt(totCollected)}</strong></td>
-      <td class="r"><strong>${fmt(totAllocated)}</strong></td>
-      <td class="r"><strong>${fmt(totRent)}</strong></td>
-      ${hasUt ? utTypes.map((ut) => `<td class="r"><strong>${fmt(utTotals[ut] || 0)}</strong></td>`).join('') : `<td class="r"><strong>${fmt(totUtility)}</strong></td>`}
-      <td class="r"><strong>${fmt(totPenalty)}</strong></td>
-      <td class="r" style="color:#b45309"><strong>${fmt(totUnapplied)}</strong></td>
-      <td></td>
-    </tr></tfoot></table>
-    </body></html>`);
-    win.document.close();
-    win.onload = () => { win.focus(); win.print(); };
-  }, [canExportReports, currentCompany, currentUser, report, filters, allUtilityTypes, summary]);
+      printRows.push(...g.rows);
+      printRows.push({ __subtotal: ['Subtotal', '', '', '', '', ...moneyCells(g.rows)] });
+    }
+
+    const amountCol = (label, value, extra = {}) => ({ label, align: 'right', value, ...extra });
+    const columns = [
+      { label: 'Date', value: (r) => (r.paymentDate ? fmtDate(r.paymentDate) : '—') },
+      { label: 'Receipt #', value: (r) => r.receiptNumber || '—' },
+      { label: termTenant, value: (r) => r.tenantName || '—', bold: true },
+      { label: termUnit, value: (r) => r.unitNumber || '—' },
+      { label: 'Method', value: (r) => formatMethod(r.paymentMethod) },
+      amountCol('Collected', (r) => formatMoney(r.amount), { tone: () => 'pos' }),
+      amountCol('Allocated', (r) => formatMoney(r.allocatedAmount)),
+      amountCol('Rent', (r) => formatMoney(r.rentApplied)),
+      ...(hasUt
+        ? utTypes.map((ut) => amountCol(ut, (r) => formatMoney(r.utilityBreakdown?.[ut] || 0)))
+        : [amountCol('Utilities', (r) => formatMoney(r.utilityApplied))]),
+      amountCol('Penalty', (r) => formatMoney(r.penaltyApplied)),
+      amountCol('Unapplied', (r) => formatMoney(r.unappliedAmount), { tone: (r) => (Number(r.unappliedAmount || 0) > 0 ? 'neg' : '') }),
+      { label: 'Cashbook', value: (r) => r.cashbook || '—' },
+    ];
+
+    const printed = printTabularList({
+      title: 'Rental Collection Report',
+      subtitle: `Receipts by ${termProperty.toLowerCase()} — ${fmtDate(filters.startDate)} to ${fmtDate(filters.endDate)}`,
+      company: currentCompany,
+      columns,
+      rows: printRows,
+      summaryItems: [
+        ['Op. Income', formatMoney(summary.operationalCollected ?? summary.totalCollected)],
+        ['Total Collected', formatMoney(summary.totalCollected)],
+        ['Allocated', formatMoney(summary.allocatedAmount)],
+        ['Unapplied', formatMoney(summary.unappliedAmount)],
+        ['Receipts', String(Number(summary.totalPayments || rows.length))],
+        ['Collection Rate', formatPercent(summary.collectionRate)],
+      ],
+      totalsRow: [`GRAND TOTAL — ${rows.length} receipts`, '', '', '', '', ...moneyCells(rows)],
+      sections: byProp.length > 0 ? [{
+        heading: `Collection Summary by ${termProperty}`,
+        columns: [
+          { label: termProperty, value: (r) => r.propertyName, bold: true },
+          { label: 'Receipts', align: 'right', value: (r) => r.paymentCount },
+          { label: termTenants, align: 'right', value: (r) => r.tenantCount },
+          { label: 'Collected', align: 'right', value: (r) => formatMoney(r.totalCollected), tone: () => 'pos' },
+          { label: 'Rent', align: 'right', value: (r) => formatMoney(r.rentApplied) },
+          ...(hasUt
+            ? utTypes.map((ut) => amountCol(ut, (r) => formatMoney(r.utilityBreakdown?.[ut] || 0)))
+            : [amountCol('Utilities', (r) => formatMoney(r.utilityApplied))]),
+          amountCol('Penalty', (r) => formatMoney(r.penaltyApplied)),
+          amountCol('Unapplied', (r) => formatMoney(r.unappliedAmount), { tone: (r) => (Number(r.unappliedAmount || 0) > 0 ? 'neg' : '') }),
+        ],
+        rows: byProp,
+        totalsRow: [
+          'TOTAL',
+          String(sumOf(byProp, (r) => r.paymentCount)),
+          '',
+          formatMoney(sumOf(byProp, (r) => r.totalCollected)),
+          formatMoney(sumOf(byProp, (r) => r.rentApplied)),
+          ...(hasUt ? utTypes.map((ut) => formatMoney(sumOf(byProp, (r) => r.utilityBreakdown?.[ut]))) : [formatMoney(sumOf(byProp, (r) => r.utilityApplied))]),
+          formatMoney(sumOf(byProp, (r) => r.penaltyApplied)),
+          formatMoney(sumOf(byProp, (r) => r.unappliedAmount)),
+        ],
+      }] : [],
+    });
+    if (!printed) toast.error('Pop-up blocked — allow pop-ups for this site to print');
+  }, [canExportReports, currentCompany, report, filters, allUtilityTypes, summary, termTenant, termTenants, termUnit, termProperty]);
 
   return (
     <DashboardLayout lockContentScroll>

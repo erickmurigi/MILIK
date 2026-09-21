@@ -13,6 +13,7 @@ import { adminRequests } from '../../utils/requestMethods';
 import { formatMoney } from '../../utils/money';
 import PaginationBar from '../../components/PaginationBar';
 import { useTerms } from '../../hooks/useTerm';
+import printTabularList from '../../utils/printList';
 
 const GREEN_BG = 'bg-[#0B3B2E]';
 const ORANGE = '#F97316';
@@ -232,43 +233,33 @@ const TaxReports = () => {
 
   const handlePrint = useCallback(() => {
     if (!canExportReports) { toast.error("You do not have permission to print reports"); return; }
-    const co = currentCompany || {};
-    const name = co.companyName || co.name || co.businessName || 'Milik';
-    const logo = co.logo || '';
-    const win = window.open('', '_blank', 'width=1120,height=800');
-    if (!win) { toast.error('Pop-up blocked. Please allow pop-ups to print.'); return; }
-    const fmt = (v) => `KES ${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-    win.document.write(`<!DOCTYPE html><html><head><title>Tax Report</title><style>
-      @page{size:A4 landscape;margin:12mm 14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
-      .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
-      .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
-      .sub{font-size:10px;color:#475569;margin-top:2px}.meta{text-align:right;color:#64748b;font-size:8.5px;line-height:1.6}
-      .logo{max-height:40px;max-width:110px;object-fit:contain;margin-bottom:4px}
-      .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px}
-      .card{border:1px solid #dbe2ea;border-radius:6px;background:#f8fafc;padding:6px 8px}
-      .cl{font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:800}
-      .cv{font-size:13px;font-weight:900;color:#0f172a;margin-top:3px}
-      table{width:100%;border-collapse:collapse;font-size:8.5px}
-      thead th{background:#0B3B2E;color:#fff;padding:4px 6px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:.1em}
-      thead th.r{text-align:right}tbody td{border-bottom:1px solid #dbe2ea;padding:3.5px 6px}
-      tbody td.r{text-align:right}tbody tr:nth-child(even){background:#f8fafc}
-      tfoot td{border-top:2px solid #0B3B2E;padding:4px 6px;font-weight:900;background:#EDF5F1}tfoot td.r{text-align:right}
-      *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
-    </style></head><body>
-    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">Tax Report</div><div class="sub">Period: ${filters.startDate} to ${filters.endDate}</div></div>
-    <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div><div>Prepared by: ${preparedBy}</div><div>Total records: ${rows.length}</div></div></div>
-    <div class="cards">
-      <div class="card"><div class="cl">Taxable Net Amount</div><div class="cv">${fmt(totals.netAmount)}</div></div>
-      <div class="card"><div class="cl">Output VAT / Tax</div><div class="cv" style="color:#c2410c">${fmt(totals.taxAmount)}</div></div>
-      <div class="card"><div class="cl">Gross Value</div><div class="cv" style="color:#047857">${fmt(totals.grossAmount)}</div></div>
-    </div>
-    <table><thead><tr><th>Date</th><th>Source</th><th>Reference</th><th>${termProperty}</th><th>Party</th><th>Tax Code</th><th class="r">Rate</th><th class="r">Net</th><th class="r">Tax</th><th class="r">Gross</th></tr></thead>
-    <tbody>${rows.map((row) => `<tr><td>${row.date ? new Date(row.date).toLocaleDateString() : '—'}</td><td>${row.source || ''}</td><td>${row.reference || ''}</td><td>${row.propertyName || ''}</td><td>${row.partyName || ''}</td><td>${row.taxCode || ''}</td><td class="r">${row.taxRate || 0}%</td><td class="r">${fmt(row.netAmount)}</td><td class="r">${fmt(row.taxAmount)}</td><td class="r"><strong>${fmt(row.grossAmount)}</strong></td></tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="7"><strong>TOTALS (${rows.length} records)</strong></td><td class="r">${fmt(totals.netAmount)}</td><td class="r">${fmt(totals.taxAmount)}</td><td class="r"><strong>${fmt(totals.grossAmount)}</strong></td></tr></tfoot>
-    </table></body></html>`);
-    win.document.close();
-    win.onload = () => { win.focus(); win.print(); };
-  }, [canExportReports, currentCompany, rows, totals, filters.startDate, filters.endDate, preparedBy, termProperty]);
+    const printed = printTabularList({
+      title: 'Tax Report',
+      subtitle: `Period: ${filters.startDate} to ${filters.endDate}`,
+      company: currentCompany,
+      columns: [
+        { label: 'Date', value: (r) => (r.date ? new Date(r.date).toLocaleDateString() : '—') },
+        { label: 'Source', value: (r) => r.source || '' },
+        { label: 'Reference', value: (r) => r.reference || '' },
+        { label: termProperty, value: (r) => r.propertyName || '' },
+        { label: 'Party', value: (r) => r.partyName || '', bold: true },
+        { label: 'Tax Code', value: (r) => r.taxCode || '' },
+        { label: 'Rate', align: 'right', value: (r) => `${r.taxRate || 0}%` },
+        { label: 'Net', align: 'right', value: (r) => formatMoney(r.netAmount) },
+        { label: 'Tax', align: 'right', value: (r) => formatMoney(r.taxAmount) },
+        { label: 'Gross', align: 'right', value: (r) => formatMoney(r.grossAmount), bold: true },
+      ],
+      rows,
+      summaryItems: [
+        ['Taxable Net Amount', formatMoney(totals.netAmount)],
+        ['Output VAT / Tax', formatMoney(totals.taxAmount)],
+        ['Gross Value', formatMoney(totals.grossAmount)],
+        ['Total Records', String(rows.length)],
+      ],
+      totalsRow: [`TOTALS (${rows.length} records)`, '', '', '', '', '', '', formatMoney(totals.netAmount), formatMoney(totals.taxAmount), formatMoney(totals.grossAmount)],
+    });
+    if (!printed) toast.error('Pop-up blocked — allow pop-ups for this site to print');
+  }, [canExportReports, currentCompany, rows, totals, filters.startDate, filters.endDate, termProperty]);
 
   return (
     <DashboardLayout lockContentScroll>

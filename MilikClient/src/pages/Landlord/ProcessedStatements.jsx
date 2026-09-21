@@ -26,6 +26,7 @@ import {
 } from "../../redux/processedStatementsRedux";
 import PayLandlordModal from "../../components/Modals/PayLandlordModal";
 import { fmtDate } from "../../utils/dates";
+import { printDocument } from "../../utils/printKit";
 import RecordLandlordRecoveryModal from "../../components/Modals/RecordLandlordRecoveryModal";
 import PostCommissionModal from "../../components/Modals/PostCommissionModal";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
@@ -406,110 +407,48 @@ const ProcessedStatements = () => {
       }
     }
 
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      toast.error("Unable to open print window");
-      return;
-    }
-
-    const printContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>Processed Statement</title>
-  <style>
-    @page { margin: 0.5cm; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: Arial, sans-serif; font-size: 10pt; line-height: 1.3; padding: 10px; }
-    .header { text-align: center; margin-bottom: 15px; }
-    .header h1 { font-size: 14pt; font-weight: bold; margin-bottom: 3px; }
-    .header p { font-size: 9pt; margin: 1px 0; }
-    .title { text-align: center; font-size: 11pt; font-weight: bold; margin: 10px 0; border-top: 2px solid black; border-bottom: 2px solid black; padding: 5px 0; }
-    .info-section { display: flex; justify-content: space-between; margin: 10px 0; font-size: 9pt; }
-    .statement-table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 9pt; }
-    .statement-table th { background: #0B3B2E; color: white; padding: 5px; text-align: left; border: 1px solid #999; font-weight: bold; }
-    .statement-table td { padding: 5px; border: 1px solid #ccc; text-align: left; }
-    .statement-table .number { text-align: right; }
-    .statement-table .total-row { font-weight: bold; background: #f5f5f5; }
-    .summary { width: 50%; margin-left: auto; margin-top: 20px; font-size: 9pt; }
-    .summary table { width: 100%; border-collapse: collapse; }
-    .summary th { text-align: left; padding: 5px; background: #0B3B2E; color: white; border: 1px solid #999; font-weight: bold; }
-    .summary td { padding: 5px; border: 1px solid #ccc; text-align: right; }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <h1>${statement.business?.companyName || "PROPERTY MANAGEMENT SYSTEM"}</h1>
-    <p>${statement.business?.address || ""}</p>
-    <p>TEL: ${statement.business?.phone || ""} | EMAIL: ${statement.business?.email || ""}</p>
-  </div>
-  <div class="title">PROCESSED LANDLORD STATEMENT</div>
-  <div class="info-section">
-    <div>
-      <p><strong>LANDLORD:</strong> ${statement.landlord?.landlordName || "N/A"}</p>
-      <p><strong>PROPERTY:</strong> [${statement.property?.propertyCode || "N/A"}] ${statement.property?.propertyName || "N/A"}</p>
-      <p><strong>PERIOD:</strong> ${formatPeriodRange(statement)}</p>
-    </div>
-    <div style="text-align: right;">
-      <p><strong>STATUS:</strong> ${String(statement.status || "processed").toUpperCase()}</p>
-      <p><strong>PROCESSED:</strong> ${fmtDate(statement.closedAt)}</p>
-      ${statement.reversedAt ? `<p><strong>REVERSED:</strong> ${fmtDate(statement.reversedAt)}</p>` : ""}
-      ${statement.paidDate ? `<p><strong>PAID DATE:</strong> ${fmtDate(statement.paidDate)}</p>` : ""}
-      ${statement.recoveryDate ? `<p><strong>RECOVERY DATE:</strong> ${fmtDate(statement.recoveryDate)}</p>` : ""}
-    </div>
-  </div>
-  <table class="statement-table">
-    <thead>
-      <tr>
-        <th>UNIT</th>
-        <th>TENANT</th>
-        <th class="number">PER MONTH</th>
-        <th class="number">BALANCE B/F</th>
-        <th class="number">RENT EXPECTED</th>
-        <th class="number">RENT COLLECTED</th>
-        <th class="number">BALANCE C/F</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${(statement.tenantRows || [])
-        .map(
-          (row) => `
-        <tr>
-          <td>${row.unit || ""}</td>
-          <td>${row.tenantName || ""}</td>
-          <td class="number">${money(row.rentPerMonth)}</td>
-          <td class="number">${money(row.openingBalance)}</td>
-          <td class="number">${money(row.totalInvoiced)}</td>
-          <td class="number">${money(row.totalReceived)}</td>
-          <td class="number">${money(row.closingBalance)}</td>
-        </tr>`
-        )
-        .join("")}
-    </tbody>
-  </table>
-  <div class="summary">
-    <h3 style="margin-bottom: 10px;">FINANCIAL SUMMARY</h3>
-    <table>
-      <tr><th>RENT EXPECTED</th><td>${money(statement.totalRentInvoiced)}</td></tr>
-      <tr><th>RENT COLLECTED</th><td>${money(statement.totalRentReceived)}</td></tr>
-      <tr><th>ARREARS</th><td>${money((statement.totalRentInvoiced || 0) - (statement.totalRentReceived || 0))}</td></tr>
-      <tr><th>COMMISSION BASIS</th><td>${getCommissionBasisLabel(statement.commissionBasis)}</td></tr>
-      <tr><th>COMMISSION</th><td>(${money(statement.commissionAmount)})</td></tr>
-      ${isNegativeProcessedStatement(statement) ? `<tr><th>AMOUNT RECOVERED</th><td>${money(statement.amountRecovered || 0)}</td></tr>` : ""}
-      <tr style="background: #0B3B2E; color: white; font-weight: bold;"><th>${isNegativeProcessedStatement(statement) ? "OUTSTANDING RECOVERY" : "NET AMOUNT DUE"}</th><td>${money(getStatementDisplayAmount(statement))}</td></tr>
-    </table>
-  </div>
-</body>
-</html>`;
-
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 250);
+    const negative = isNegativeProcessedStatement(statement);
+    const stStatus = String(statement.status || "processed").toLowerCase();
+    const printed = printDocument({
+      company: currentCompany || statement.business || {},
+      docType: "Processed Landlord Statement",
+      docNumber: statement.statementNumber || statement.property?.propertyCode || "",
+      status: { label: stStatus.replace(/_/g, " "), tone: stStatus === "paid" ? "success" : stStatus === "reversed" ? "danger" : stStatus === "part_paid" ? "info" : "neutral" },
+      watermark: stStatus === "reversed" ? "VOID" : "",
+      meta: [
+        ["Period", formatPeriodRange(statement)],
+        ["Processed", fmtDate(statement.closedAt)],
+        ...(statement.reversedAt ? [["Reversed", fmtDate(statement.reversedAt)]] : []),
+        ...(statement.paidDate ? [["Paid date", fmtDate(statement.paidDate)]] : []),
+        ...(statement.recoveryDate ? [["Recovery date", fmtDate(statement.recoveryDate)]] : []),
+      ],
+      parties: [
+        { heading: "Landlord", name: statement.landlord?.landlordName || "N/A" },
+        { heading: "Property", name: statement.property?.propertyName || "N/A", lines: [statement.property?.propertyCode ? `Code: ${statement.property.propertyCode}` : ""] },
+      ],
+      table: {
+        columns: [
+          { label: "Unit", value: (row) => row.unit || "" },
+          { label: "Tenant", value: (row) => row.tenantName || "" },
+          { label: "Per Month", align: "right", value: (row) => money(row.rentPerMonth) },
+          { label: "Balance B/F", align: "right", value: (row) => money(row.openingBalance) },
+          { label: "Rent Expected", align: "right", value: (row) => money(row.totalInvoiced) },
+          { label: "Rent Collected", align: "right", value: (row) => money(row.totalReceived) },
+          { label: "Balance C/F", align: "right", value: (row) => money(row.closingBalance) },
+        ],
+        rows: statement.tenantRows || [],
+      },
+      totals: [
+        { label: "Rent expected", value: money(statement.totalRentInvoiced) },
+        { label: "Rent collected", value: money(statement.totalRentReceived) },
+        { label: "Arrears", value: money((statement.totalRentInvoiced || 0) - (statement.totalRentReceived || 0)) },
+        { label: "Commission basis", value: String(getCommissionBasisLabel(statement.commissionBasis) ?? "") },
+        { label: "Commission", value: `(${money(statement.commissionAmount)})` },
+        ...(negative ? [{ label: "Amount recovered", value: money(statement.amountRecovered || 0) }] : []),
+        { label: negative ? "Outstanding recovery" : "Net amount due", value: money(getStatementDisplayAmount(statement)), hero: true },
+      ],
+    });
+    if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
   };
 
   const getStatusBadge = (statement) => {
