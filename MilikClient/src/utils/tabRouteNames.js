@@ -148,6 +148,7 @@ const routeNames = {
   '/sale/payments': 'Payments',
   '/sale/commissions': 'Commissions',
   '/sale/reports': 'Reports',
+  '/sale/reports/sales': 'Monthly Sales',
   '/sale/financials': 'GL & Accounts',
   '/sale/chart-of-accounts': 'Chart of Accounts',
 };

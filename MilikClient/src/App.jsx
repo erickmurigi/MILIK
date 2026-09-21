@@ -264,6 +264,7 @@ const SaleDeals             = lazy(() => import("./pages/PropertySale/SaleDeals"
 const SalePayments          = lazy(() => import("./pages/PropertySale/SalePayments"));
 const SaleCommissions       = lazy(() => import("./pages/PropertySale/SaleCommissions"));
 const SaleReports           = lazy(() => import("./pages/PropertySale/SaleReports"));
+const SaleReportsHub        = lazy(() => import("./pages/PropertySale/SaleReportsHub"));
 const SaleMonthlyDetail     = lazy(() => import("./pages/PropertySale/SaleMonthlyDetail"));
 const SaleLeads                  = lazy(() => import("./pages/PropertySale/SaleLeads"));
 const SaleActivities             = lazy(() => import("./pages/PropertySale/SaleActivities"));
@@ -830,7 +831,8 @@ function App() {
             <Route path="/sale/deals"                        element={<Guard moduleKey="propertySale" resource="saleDeals"><SaleDeals /></Guard>} />
             <Route path="/sale/payments"                     element={<Guard moduleKey="propertySale" resource="salePayments"><SalePayments /></Guard>} />
             <Route path="/sale/commissions"                  element={<Guard moduleKey="propertySale" resource="saleCommissions"><SaleCommissions /></Guard>} />
-            <Route path="/sale/reports"                      element={<Guard moduleKey="propertySale" resource="saleReports"><SaleReports /></Guard>} />
+            <Route path="/sale/reports"                      element={<Guard moduleKey="propertySale" resource="saleReports"><SaleReportsHub /></Guard>} />
+            <Route path="/sale/reports/sales"                element={<Guard moduleKey="propertySale" resource="saleReports"><SaleReports /></Guard>} />
             <Route path="/sale/reports/monthly/:year/:month" element={<Guard moduleKey="propertySale" resource="saleReports"><SaleMonthlyDetail /></Guard>} />
             <Route path="/sale/reports/cash-flow"            element={<Guard moduleKey="propertySale" resource="saleReports"><SaleCashFlow /></Guard>} />
             <Route path="/sale/reports/funnel"               element={<Guard moduleKey="propertySale" resource="saleReports"><SaleConversionFunnel /></Guard>} />

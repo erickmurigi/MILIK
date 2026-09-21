@@ -138,7 +138,7 @@ const PRELOAD_ENTRIES = [
   ['/sale/deals',                         () => import('../pages/PropertySale/SaleDeals')],
   ['/sale/payments',                      () => import('../pages/PropertySale/SalePayments')],
   ['/sale/commissions',                   () => import('../pages/PropertySale/SaleCommissions')],
-  ['/sale/reports',                       () => import('../pages/PropertySale/SaleReports')],
+  ['/sale/reports',                       () => import('../pages/PropertySale/SaleReportsHub')],
   ['/sale/crm/leads',                     () => import('../pages/PropertySale/SaleLeads')],
   ['/sale/crm/activities',                () => import('../pages/PropertySale/SaleActivities')],
 

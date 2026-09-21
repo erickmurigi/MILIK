@@ -823,4 +823,22 @@ keep their own path; the list shows multi-line ones as "N lines".
   reflects tagged journal lines; attachments on journals; enforcing approvals by company setting; templates for common
   entries. Writing journals still requires the Accounting module (existing route rule).
 
+### Property Sales Report Center
+
+`/sale/reports` is now one page with the reports grouped by the question they answer (Money owed, Sales & pipeline, Agents &
+commission, Projects & stock), a live strip of four figures on top (owed, overdue, due in 30 days, owed with no due date),
+and filters shared by every report (project, agent, as-of / date range). The old monthly report moved to
+`/sale/reports/sales`; cash flow, funnel, agent performance, commissions and projects still open as their own pages.
+
+- **Receivables aging** (`GET /sale/reports/receivables`): per deal, agreed price - paid payments, split into not yet due
+  and 1-30 / 31-60 / 61-90 / 90+ days late by the unpaid instalments. Whatever is owed beyond the instalment plan is shown as
+  "no due date" (a deal with no plan has all of its balance there). Active and closed deals with a balance count; cancelled do not.
+- **Overdue instalments** (`/overdue-installments`): unpaid instalments past due on active deals, oldest first, optional
+  minimum days late, with call and WhatsApp reminder links built from the buyer's phone (0712... becomes 254712...).
+- **Sales register** (`/register`): every deal with asking price, discount, agreed, paid, balance, status, title transfer date;
+  search by deal, buyer or unit; totals cover the whole filter, not the page. Paid money on a cancelled deal is counted as
+  paid but its balance is 0.
+- Excel export of any of the three (up to 5000 rows). Agents kept to their own deals see only those, as everywhere else.
+- **Planned, shown as "Soon":** aging stock, title and transfer tracker, project profit and loss.
+
 *Last updated: 2026-09-21 (multi-line journals added; Track H closed — PropertySale performance pass, see above). Track G note: PropertySale correctness pass, see above. Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C/E/F/G as items are actioned.*

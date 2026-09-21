@@ -115,6 +115,9 @@ export const saleApi = {
   getMonthlyDetail:     async (params = {}) => unwrap(await adminRequests.get("/sale/reports/monthly-detail",  { params })),
   getCashFlowForecast:  async (params = {}) => unwrap(await adminRequests.get("/sale/reports/cash-flow",       { params })),
   getConversionFunnel:  async (params = {}) => unwrap(await adminRequests.get("/sale/reports/funnel",          { params })),
+  getReceivables:          async (params = {}) => unwrapPage(await adminRequests.get("/sale/reports/receivables",           { params })),
+  getOverdueInstallments:  async (params = {}) => unwrapPage(await adminRequests.get("/sale/reports/overdue-installments", { params })),
+  getSalesRegister:        async (params = {}) => unwrapPage(await adminRequests.get("/sale/reports/register",             { params })),
   getAgentsPerformance: async (params = {}) => unwrap(await adminRequests.get("/sale/reports/agents-performance", { params })),
 
   // CRM — Leads
