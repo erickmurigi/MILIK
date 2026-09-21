@@ -1,4 +1,5 @@
 import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
+import { printTabularList, formatMoney as formatPrintMoney } from "../../utils/printKit";
 import { buildInvoiceNarration } from "../../utils/invoiceNarrationUtils";
 import PaginationBar from '../../components/PaginationBar';
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -131,21 +132,6 @@ const getAdditionalUnitDisplayNames = (tenant) => {
     .filter(Boolean);
 };
 
-
-const formatDateTimeDisplay = (dateValue, options = {}) => {
-  if (!dateValue) return "-";
-  const date = new Date(dateValue);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString("en-GB", options);
-};
-
-const escapeHtml = (value) =>
-  String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 
 const formatCurrency = (value = 0) => `KES ${Number(value || 0).toLocaleString()}`;
 
@@ -1116,18 +1102,6 @@ const visibleInvoiceKeys = useMemo(
   const selectedCount = selectedInvoices.length;
   const canEdit = selectedCount === 1;
 
-  const { companyDisplayName, companyPhone, companyEmail, companyTown, companyAddress, companyLogo } = useMemo(() => {
-    const town = currentCompany?.town || currentCompany?.city || "";
-    return {
-      companyDisplayName: currentCompany?.companyName || currentCompany?.name || currentCompany?.company || "MILIK Property Management",
-      companyPhone: currentCompany?.phone || currentCompany?.phoneNo || currentCompany?.phoneNumber || currentCompany?.contactPhone || "",
-      companyEmail: currentCompany?.email || currentCompany?.companyEmail || currentCompany?.contactEmail || "",
-      companyTown: town,
-      companyAddress: [currentCompany?.address || currentCompany?.postalAddress || currentCompany?.location || "", town].filter(Boolean).join(", "),
-      companyLogo: currentCompany?.logo || "",
-    };
-  }, [currentCompany]);
-
   const {
     activeInvoiceSource,
     activeInvoiceMetadata,
@@ -1344,291 +1318,33 @@ const visibleInvoiceKeys = useMemo(
     setSelectAll(visibleInvoiceKeys.every((key) => selectedInvoicesSet.has(key)));
   }, [selectedInvoices, currentPageInvoices, visibleInvoiceKeys]);
 
-  const openHtmlDocument = (title, html) => {
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = window.URL.createObjectURL(blob);
-    const printWindow = window.open(url, "_blank", "width=1100,height=850");
-    if (!printWindow) {
-      toast.error("Please allow popups to view or print invoices");
-      window.URL.revokeObjectURL(url);
-      return null;
-    }
-
-    setTimeout(() => window.URL.revokeObjectURL(url), 15000);
-
-    try {
-      printWindow.document.title = title;
-    } catch {
-      // ignore
-    }
-
-    return printWindow;
-  };
-
-  const buildInvoiceHtml = (invoice) => {
-    const sourceInvoice = invoice?.originalInvoice || {};
-    const taxSnapshot = sourceInvoice?.taxSnapshot || {};
-    const chargeTypeLabel = invoice?.chargeTypeLabel || getInvoiceChargeTypeLabel(invoice?.chargeType);
-    const utilityBreakdown = Array.isArray(sourceInvoice?.metadata?.utilityBreakdown)
-      ? sourceInvoice.metadata.utilityBreakdown
-      : [];
-    const invoiceDateLabel = invoice?.invoiceDateLabel || formatDateDisplay(sourceInvoice?.invoiceDate);
-    const dueDateLabel = invoice?.dueDateLabel || formatDateDisplay(sourceInvoice?.dueDate);
-    const preparedLabel = formatDateTimeDisplay(new Date());
-    const subtotal = Number(
-      taxSnapshot?.netAmount ?? taxSnapshot?.enteredAmount ?? sourceInvoice?.amount ?? invoice?.amount ?? 0
-    );
-    const taxAmount = Number(taxSnapshot?.taxAmount || 0);
-    const hasTaxClassification = Boolean(taxSnapshot?.isTaxable || (taxSnapshot?.taxCodeKey && taxSnapshot.taxCodeKey !== "no_tax"));
-    const totalAmount = Number(
-      taxSnapshot?.grossAmount ?? sourceInvoice?.amount ?? invoice?.amount ?? 0
-    );
-
-    const baseLineItems =
-      invoice?.chargeType === "combined"
-        ? [
-            {
-              description: sourceInvoice?.description || buildRecurringInvoiceDescription({ month: new Date(sourceInvoice?.invoiceDate || sourceInvoice?.createdAt || Date.now()).getMonth(), year: new Date(sourceInvoice?.invoiceDate || sourceInvoice?.createdAt || Date.now()).getFullYear(), label: "Rent" }),
-              amount: Math.max(0, subtotal - utilityBreakdown.reduce((sum, item) => sum + Number(item?.amount || 0), 0)),
-            },
-            ...utilityBreakdown.map((item) => ({
-              description: `${item?.label || "Utility"}${item?.periodLabel ? ` (${item.periodLabel})` : ""}`,
-              amount: Number(item?.amount || 0),
-            })),
-          ].filter((item) => Number(item.amount || 0) > 0)
-        : [
-            {
-              description: invoice?.invoiceDescription || deriveInvoiceDescription(sourceInvoice) || `${chargeTypeLabel} charge`,
-              amount: subtotal,
-            },
-          ];
-
-    const lineItems = baseLineItems.length > 0 ? baseLineItems : [{ description: invoice?.invoiceDescription || deriveInvoiceDescription(sourceInvoice) || `${chargeTypeLabel} charge`, amount: subtotal }];
-
-    const lineRows = lineItems
-      .map(
-        (item, index) => `<tr>
-          <td>${index + 1}</td>
-          <td>${escapeHtml(item.description)}</td>
-          <td class="num">KES ${Number(item.amount || 0).toLocaleString()}</td>
-        </tr>`
-      )
-      .join("\n");
-
-    const preparedByName = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || 'Milik Admin';
-
-    const tenantCode = escapeHtml(sourceInvoice?.tenant?.tenantCode || '');
-    const tenantEmail = escapeHtml(sourceInvoice?.tenant?.email || invoice?.tenantEmail || '');
-    const statusRaw = String(invoice?.status || 'Issued').toLowerCase().replace(/\s+/g, '_');
-    const statusColors = { paid:'#16a34a', partially_paid:'#d97706', issued:'#dc2626', unpaid:'#dc2626', cancelled:'#6b7280', reversed:'#dc2626' };
-    const statusBg = { paid:'#dcfce7', partially_paid:'#fef3c7', issued:'#fee2e2', unpaid:'#fee2e2', cancelled:'#f1f5f9', reversed:'#fee2e2' };
-    const statusColor = statusColors[statusRaw] || '#475569';
-    const statusBgColor = statusBg[statusRaw] || '#f1f5f9';
-    const formatAmt = (n) => Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-    return `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>Invoice ${escapeHtml(invoice?.id || '')}</title>
-  <style>
-    @page { size: A4; margin: 14mm 16mm; }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 13px; color: #0f172a; background: #fff; }
-    .header { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; padding-bottom:16px; gap:16px; }
-    .co-center { text-align:center; display:flex; flex-direction:column; align-items:center; gap:6px; }
-    .logo-img { max-height:60px; max-width:150px; object-fit:contain; border-radius:6px; }
-    .logo-fb { width:56px; height:56px; border-radius:10px; background:#0B3B2E; color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:900; }
-    .co-center-name { font-size:18px; font-weight:900; color:#0f172a; letter-spacing:-0.01em; margin-top:6px; }
-    .co-center-sub { font-size:10px; color:#64748b; line-height:1.6; }
-    .inv-title { text-align:right; align-self:center; }
-    .inv-label { font-size:38px; font-weight:900; color:#0f172a; letter-spacing:-0.03em; line-height:1; }
-    .inv-number { font-size:14px; color:#64748b; margin-top:6px; }
-    .divider { height:2px; background:linear-gradient(90deg,#3b82f6,#93c5fd); border-radius:2px; margin:16px 0 20px; }
-    .body-grid { display:grid; grid-template-columns:1fr 1fr; gap:28px; margin-bottom:20px; }
-    .sec-label { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.18em; color:#94a3b8; margin-bottom:12px; }
-    .fk { font-size:10px; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:0.1em; margin-top:8px; }
-    .fv { font-size:13px; font-weight:700; color:#0f172a; }
-    .fv.lg { font-size:16px; font-weight:800; }
-    .status-badge { display:inline-block; padding:4px 14px; border-radius:6px; font-size:11px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:18px; }
-    table { width:100%; border-collapse:collapse; margin-bottom:16px; }
-    thead tr { background:#1e293b; }
-    th { padding:10px 14px; text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#fff; }
-    th.r { text-align:right; }
-    tbody tr { border-bottom:1px solid #f1f5f9; }
-    td { padding:11px 14px; font-size:13px; color:#0f172a; }
-    td.r { text-align:right; font-weight:600; }
-    .totals { width:280px; margin-left:auto; border-top:1px solid #e2e8f0; padding-top:10px; }
-    .t-row { display:flex; justify-content:space-between; padding:7px 0; font-size:13px; border-bottom:1px solid #f8fafc; }
-    .t-row .tl { color:#64748b; }
-    .t-row .tv { font-weight:700; }
-    .t-row.grand { border-top:2px solid #0f172a; border-bottom:none; padding-top:12px; margin-top:4px; }
-    .t-row.grand .tl, .t-row.grand .tv { font-size:15px; font-weight:800; color:#0f172a; }
-    .footer-note { margin-top:28px; padding-top:12px; border-top:1px solid #f1f5f9; font-size:11px; color:#94a3b8; }
-    @media print {
-      thead tr { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-    }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div></div>
-    <div class="co-center">
-      ${companyLogo ? `<img class="logo-img" src="${escapeHtml(companyLogo)}" alt="logo" />` : `<div class="logo-fb">${escapeHtml(companyDisplayName.slice(0,1).toUpperCase())}</div>`}
-      <div class="co-center-name">${escapeHtml(companyDisplayName)}</div>
-      ${[companyAddress, companyPhone, companyEmail].filter(Boolean).length ? `<div class="co-center-sub">${[companyAddress, companyPhone, companyEmail].filter(Boolean).map(escapeHtml).join(' · ')}</div>` : ''}
-    </div>
-    <div class="inv-title">
-      <div class="inv-label">INVOICE</div>
-      <div class="inv-number"># ${escapeHtml(invoice?.id || '')}</div>
-    </div>
-  </div>
-
-  <div class="divider"></div>
-
-  <div class="body-grid">
-    <div>
-      <div class="sec-label">Billed To</div>
-      <div class="fk">${escapeHtml(termTenant)}</div>
-      <div class="fv lg">${escapeHtml(invoice?.tenantName || termTenant)}</div>
-      ${tenantCode ? `<div class="fk">${escapeHtml(termTenant)} Code</div><div class="fv">${tenantCode}</div>` : ''}
-      ${tenantEmail ? `<div class="fk">Email</div><div class="fv">${tenantEmail}</div>` : ''}
-      <div class="fk">${escapeHtml(termProperty)}</div>
-      <div class="fv">${escapeHtml(invoice?.propertyName || '-')}</div>
-      <div class="fk">${escapeHtml(termUnit)}</div>
-      <div class="fv">${escapeHtml(invoice?.unitName || '-')}</div>
-    </div>
-    <div>
-      <div class="sec-label">Invoice Details</div>
-      <div class="fk">Invoice Date</div>
-      <div class="fv">${escapeHtml(invoiceDateLabel)}</div>
-      <div class="fk">Due Date</div>
-      <div class="fv">${escapeHtml(dueDateLabel)}</div>
-      <div class="fk">Category</div>
-      <div class="fv">${escapeHtml(chargeTypeLabel)}</div>
-      ${hasTaxClassification ? `<div class="fk">Tax Code</div><div class="fv">${escapeHtml(taxSnapshot?.taxCodeName || 'Tax')} (${Number(taxSnapshot?.taxRate || 0)}%)</div>` : ''}
-    </div>
-  </div>
-
-  <span class="status-badge" style="background:${statusBgColor};color:${statusColor};">${escapeHtml(invoice?.status || 'Issued')}</span>
-
-  <table>
-    <thead>
-      <tr>
-        <th>Description</th>
-        <th class="r">Amount (KES)</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${lineItems.map((item) => `<tr><td>${escapeHtml(item.description)}</td><td class="r">${formatAmt(item.amount)}</td></tr>`).join('')}
-      ${hasTaxClassification && taxAmount > 0 ? `<tr><td style="color:#64748b">Tax (${Number(taxSnapshot?.taxRate||0)}%)</td><td class="r" style="color:#64748b">${formatAmt(taxAmount)}</td></tr>` : ''}
-    </tbody>
-  </table>
-
-  <div class="totals">
-    ${hasTaxClassification ? `<div class="t-row"><span class="tl">Subtotal</span><span class="tv">KES ${formatAmt(subtotal)}</span></div>
-    <div class="t-row"><span class="tl">Tax (${Number(taxSnapshot?.taxRate||0)}%)</span><span class="tv">KES ${formatAmt(taxAmount)}</span></div>` : ''}
-    <div class="t-row grand"><span class="tl">Total Due</span><span class="tv">KES ${formatAmt(totalAmount)}</span></div>
-  </div>
-
-  <div class="footer-note">
-    Please settle the amount due by ${escapeHtml(dueDateLabel)}. Late payments may attract a penalty charge.<br/>
-    Generated by ${escapeHtml(companyDisplayName)} · Milik Property Management System · ${escapeHtml(preparedLabel)}
-  </div>
-</body>
-</html>`;
-  };
-
-  const buildInvoiceListHtml = (rows) => {
+  // The invoices register, printed with the shared report layout (single invoices print from the server PDF)
+  const buildInvoiceListSpec = (rows) => {
     const total = rows.reduce((sum, inv) => sum + (Number(inv?.amount) || 0), 0);
-    const tableRows = rows
-      .map(
-        (inv) => `<tr>
-  <td>${escapeHtml(inv.id)}</td>
-  <td>${escapeHtml(inv.tenantName)}</td>
-  <td>${escapeHtml(inv.propertyName)}</td>
-  <td>${escapeHtml(inv.unitName)}</td>
-  <td>${escapeHtml(inv.invoiceDescription || inv.period)}</td>
-  <td>${escapeHtml(inv.invoiceDateLabel || "-")}</td>
-  <td>${escapeHtml(inv.dueDateLabel || "-")}</td>
-  <td style="text-align:right;">KES ${Number(inv.amount || 0).toLocaleString()}</td>
-  <td style="text-align:right;">${Number(inv.appliedAmount || 0) > 0 ? `KES ${Number(inv.appliedAmount).toLocaleString()}` : "—"}</td>
-  <td style="text-align:right;">${Number(inv.outstandingAmount || 0) > 0.005 ? Number(inv.outstandingAmount).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</td>
-  <td>${escapeHtml(inv.status)}</td>
-</tr>`
-      )
-      .join("\n");
-
-    return `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>MILIK Rental Invoices List</title>
-  <style>
-    @page { size: A4 landscape; margin: 10mm; }
-    body { font-family: Inter, Arial, sans-serif; margin: 20px; color: #111827; }
-    .header { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; border-bottom:3px solid #0B3B2E; padding-bottom:14px; margin-bottom:14px; }
-    .brand-wrap { display:flex; align-items:center; gap:14px; }
-    .logo { width:74px; height:74px; border-radius:16px; background:#0B3B2E; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:30px; border:1px solid #cbd5e1; overflow:hidden; }
-    .logo img { width:74px; height:74px; object-fit:cover; }
-    h1 { margin: 0; color: #0B3B2E; font-size: 22px; }
-    .company { margin-top:4px; color:#111827; font-size:13px; font-weight:700; }
-    .meta { margin: 0; color: #4b5563; font-size: 12px; text-align:right; line-height:1.6; }
-    table { width: 100%; border-collapse: collapse; font-size: 11px; }
-    th, td { border: 1px solid #d1d5db; padding: 7px 9px; }
-    th { background: #0B3B2E; color: white; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
-    tbody tr:nth-child(even) td { background: #f8fafc; }
-    tfoot td { font-weight: 700; background: #f0faf5; color: #0B3B2E; border-top: 2px solid #0B3B2E; }
-    @media print {
-      body { margin: 0; }
-      th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      tbody tr:nth-child(even) td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      tfoot td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div class="brand-wrap">
-      <div class="logo">${companyLogo ? `<img src="${escapeHtml(companyLogo)}" alt="logo" />` : escapeHtml(companyDisplayName.slice(0, 1).toUpperCase())}</div>
-      <div>
-        <h1>${termTenants} Invoices Register</h1>
-        <div class="company">${escapeHtml(companyDisplayName)}</div>
-        ${companyPhone || companyEmail ? `<div style="font-size:11px; color:#64748b; margin-top:3px;">${[companyPhone, companyEmail].filter(Boolean).map(escapeHtml).join(" · ")}</div>` : ""}
-      </div>
-    </div>
-    <div class="meta">Generated: ${escapeHtml(formatDateTimeDisplay(new Date()))}<br/>${rows.length} record${rows.length !== 1 ? "s" : ""} · Total: KES ${total.toLocaleString()}</div>
-  </div>
-  <table>
-    <thead>
-      <tr>
-        <th>Invoice #</th>
-        <th>${termTenant}</th>
-        <th>Property</th>
-        <th>${termUnit}</th>
-        <th>Description</th>
-        <th>Invoice Date</th>
-        <th>Due Date</th>
-        <th style="text-align:right;">Amount</th>
-        <th style="text-align:right;">Paid</th>
-        <th style="text-align:right;">Balance</th>
-        <th>Status</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${tableRows}
-    </tbody>
-    <tfoot>
-      <tr>
-        <td colspan="8" style="font-weight:800;">Total</td>
-        <td style="text-align:right; font-weight:800;">KES ${total.toLocaleString()}</td>
-        <td></td>
-        <td></td>
-      </tr>
-    </tfoot>
-  </table>
-</body>
-</html>`;
+    const totalPaid = rows.reduce((sum, inv) => sum + (Number(inv?.appliedAmount) || 0), 0);
+    const totalBalance = rows.reduce((sum, inv) => sum + (Number(inv?.outstandingAmount) || 0), 0);
+    const money = (v) => formatPrintMoney(v);
+    return {
+      title: `${termTenants} Invoices Register`,
+      subtitle: `${rows.length} invoice${rows.length !== 1 ? "s" : ""}`,
+      company: currentCompany,
+      summaryItems: [["Invoices", String(rows.length)], ["Invoiced", money(total)], ["Paid", money(totalPaid)], ["Balance", money(totalBalance)]],
+      columns: [
+        { label: "Invoice #", value: (inv) => inv.id, bold: true },
+        { label: termTenant, value: (inv) => inv.tenantName },
+        { label: "Property", value: (inv) => inv.propertyName },
+        { label: termUnit, value: (inv) => inv.unitName },
+        { label: "Description", value: (inv) => inv.invoiceDescription || inv.period },
+        { label: "Invoice Date", value: (inv) => inv.invoiceDateLabel || "-" },
+        { label: "Due Date", value: (inv) => inv.dueDateLabel || "-" },
+        { label: "Amount", align: "right", value: (inv) => money(inv.amount) },
+        { label: "Paid", align: "right", value: (inv) => (Number(inv.appliedAmount || 0) > 0 ? money(inv.appliedAmount) : "—") },
+        { label: "Balance", align: "right", tone: (inv) => (Number(inv.outstandingAmount || 0) > 0.005 ? "neg" : "muted"), value: (inv) => (Number(inv.outstandingAmount || 0) > 0.005 ? money(inv.outstandingAmount) : "—") },
+        { label: "Status", value: (inv) => inv.status },
+      ],
+      rows,
+      totalsRow: ["TOTAL", `${rows.length} invoices`, "", "", "", "", "", money(total), money(totalPaid), money(totalBalance), ""],
+    };
   };
 
   const handleViewInvoice = useCallback((invoice) => {
@@ -1668,25 +1384,23 @@ const visibleInvoiceKeys = useMemo(
       return;
     }
 
+    // open the window now, inside the click, so the browser does not block it while the rows are fetched
+    const win = window.open("", "_blank", "width=1200,height=800");
+    if (!win) {
+      toast.error("Pop-up blocked — allow pop-ups for this site to print");
+      return;
+    }
     try {
       const printableRows = await fetchAllFilteredInvoiceRows();
       if (printableRows.length === 0) {
+        win.close();
         toast.warn("No invoices to print");
         return;
       }
-
-      const printWindow = openHtmlDocument(
-        `MILIK Rental ${termInvoices} List`,
-        buildInvoiceListHtml(printableRows)
-      );
-      if (!printWindow) return;
-
-      setTimeout(() => {
-        printWindow.focus();
-        printWindow.print();
-      }, 500);
+      printTabularList({ ...buildInvoiceListSpec(printableRows), win });
     } catch (error) {
       console.error("Failed to prepare invoice list for printing:", error);
+      win.close();
       toast.error("Failed to prepare invoice list");
     }
   };

@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { printTabularList } from "../../utils/printList";
 import PaginationBar from '../../components/PaginationBar';
 import { useDispatch, useSelector } from "react-redux";
 import { useEntityCache } from "../../hooks/useEntityCache";
@@ -917,58 +918,29 @@ const TenantDeposits = () => {
 
   const handlePrintList = () => {
     if (!canExportInvoice || filteredRows.length === 0) return;
-    const rowsHtml = filteredRows
-      .map(
-        (row) => `
-          <tr>
-            <td>${row.id}</td>
-            <td>${row.tenantName}</td>
-            <td>${row.propertyName}</td>
-            <td>${row.unitName}</td>
-            <td>${row.depositTypeLabel}</td>
-            <td>${row.holder}</td>
-            <td>${row.invoiceDateLabel}</td>
-            <td>${row.dueDateLabel}</td>
-            <td>${formatCurrency(row.amount)}</td>
-            <td>${formatCurrency(row.outstandingAmount)}</td>
-            <td>${row.status}</td>
-          </tr>`
-      )
-      .join("");
-
-    const printWindow = window.open("", "_blank", "width=1100,height=800");
-    if (!printWindow) return;
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Deposit Invoices Register</title>
-          <style>
-            body { font-family: Arial, sans-serif; color: #172b24; padding: 24px; }
-            h1 { font-size: 18px; margin: 0 0 4px; }
-            p { margin: 0 0 14px; font-size: 12px; color: #52635d; }
-            table { width: 100%; border-collapse: collapse; font-size: 11px; }
-            th { background: #0B3B2E; color: white; text-align: left; padding: 7px; }
-            td { border-bottom: 1px solid #dbe4df; padding: 7px; }
-          </style>
-        </head>
-        <body>
-          <h1>Deposit Invoices Register</h1>
-          <p>${currentCompany?.name || currentCompany?.companyName || ""} - ${filteredRows.length} invoice(s)</p>
-          <table>
-            <thead>
-              <tr>
-                <th>Invoice #</th><th>${termTenant}</th><th>${termProperty}</th><th>${termUnit}</th><th>Deposit Type</th>
-                <th>Holder</th><th>Invoice Date</th><th>Due Date</th><th>Amount</th><th>Outstanding</th><th>Status</th>
-              </tr>
-            </thead>
-            <tbody>${rowsHtml}</tbody>
-          </table>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    const sum = (key) => filteredRows.reduce((total, row) => total + Number(row[key] || 0), 0);
+    const printed = printTabularList({
+      title: "Deposit Invoices Register",
+      subtitle: `${filteredRows.length} invoice${filteredRows.length !== 1 ? "s" : ""}`,
+      company: currentCompany,
+      summaryItems: [["Deposits", String(filteredRows.length)], ["Amount", formatCurrency(sum("amount"))], ["Outstanding", formatCurrency(sum("outstandingAmount"))]],
+      columns: [
+        { label: "Invoice #", value: (row) => row.id, bold: true },
+        { label: termTenant, value: (row) => row.tenantName },
+        { label: termProperty, value: (row) => row.propertyName },
+        { label: termUnit, value: (row) => row.unitName },
+        { label: "Deposit Type", value: (row) => row.depositTypeLabel },
+        { label: "Holder", value: (row) => row.holder },
+        { label: "Invoice Date", value: (row) => row.invoiceDateLabel },
+        { label: "Due Date", value: (row) => row.dueDateLabel },
+        { label: "Amount", align: "right", value: (row) => formatCurrency(row.amount) },
+        { label: "Outstanding", align: "right", tone: (row) => (Number(row.outstandingAmount || 0) > 0.005 ? "neg" : "muted"), value: (row) => formatCurrency(row.outstandingAmount) },
+        { label: "Status", value: (row) => row.status },
+      ],
+      rows: filteredRows,
+      totalsRow: ["TOTAL", `${filteredRows.length} invoices`, "", "", "", "", "", "", formatCurrency(sum("amount")), formatCurrency(sum("outstandingAmount")), ""],
+    });
+    if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
   };
 
   const totalFilteredCount = filteredRows.length;

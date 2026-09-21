@@ -1,4 +1,5 @@
 import { createPage, resetBrowser } from "./browserService.js";
+import { MILIK_STAMP_LOGO } from "../utils/printKitLogo.js";
 
 let activeRenders = 0;
 const MAX_CONCURRENT = 2;
@@ -500,7 +501,7 @@ export const generateLeasePdf = async (lease) => {
   const footerTemplate = `<div style="font-family:Helvetica,Arial,sans-serif;font-size:7px;color:#9ca3af;width:100%;padding:0 15mm;box-sizing:border-box;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #e5e7eb;">
     <span>Agreement No: ${agreementNo}</span>
     <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span> &bull; Confidential</span>
-    <span>${businessName} via Milik PMS &bull; ${generatedDate}</span>
+    <span style="display:inline-flex;align-items:center;gap:4px;">${businessName} &bull; ${generatedDate} &bull; Powered by <img src="${MILIK_STAMP_LOGO}" style="height:9px;width:auto;" alt="Milik"/></span>
   </div>`;
 
   await acquireSlot();

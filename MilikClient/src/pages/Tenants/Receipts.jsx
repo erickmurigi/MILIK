@@ -69,6 +69,7 @@ import {
 import { getProperties } from "../../redux/propertyRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { printTabularList } from "../../utils/printList";
+import { printDocument, formatMoney as formatPrintMoney } from "../../utils/printKit";
 import { isCashbookAccount } from "../../utils/cashbookUtils";
 import { useTabState } from "../../hooks/useTabState";
 import { useTerm } from "../../hooks/useTerm";
@@ -100,14 +101,6 @@ const CASHBOOK_ACCOUNT_MAP = {
   "M-Pesa Collections": { code: "1130", name: "M-Pesa Collections" },
   "Agency Collections": { code: "1140", name: "Agency Collections Control" },
 };
-
-const escapeHtml = (value = "") =>
-  String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#039;");
 
 const toInputDate = (date) => {
   const year = date.getFullYear();
@@ -1126,16 +1119,6 @@ const Receipts = ({ viewMode = "tenant" }) => {
 
 
   const handlePrintReceipt = (receipt) => {
-    const tenantName = getTenantName(receipt, tenants);
-    const unitName = getUnitName(receipt, tenants);
-    const propertyName = getPropertyName(receipt, tenants);
-    const companyName = currentCompany?.companyName || currentCompany?.name || "MILIK";
-    const companyEmail = currentCompany?.email || currentCompany?.companyEmail || "";
-    const companyPhone = currentCompany?.phoneNo || currentCompany?.phone || currentCompany?.phoneNumber || "";
-    const companyAddress = currentCompany?.address || currentCompany?.location || currentCompany?.postalAddress || "";
-    const companyTown = currentCompany?.town || currentCompany?.city || "";
-    const companyLogo = currentCompany?.logo || "";
-
     const amount = Math.abs(Number(receipt?.amount || 0));
     const allocationSummary = receipt?.allocationSummary || {};
     const summaryRows = [
@@ -1149,171 +1132,54 @@ const Receipts = ({ viewMode = "tenant" }) => {
     ].filter((row) => row.value > 0);
 
     const allocationRows = Array.isArray(receipt?.allocations) ? receipt.allocations : [];
-    const allocationTable = allocationRows.length > 0
-      ? allocationRows
-          .map((row, index) => {
-            const invoiceRef = row?.invoiceNumber || row?.invoiceRef || row?.description || row?.invoice || `Line ${index + 1}`;
-            const category = getAllocationGroupLabel(row?.priorityGroup || row?.chargeType || row?.allocationGroup || "");
-            return `
-              <tr>
-                <td>${escapeHtml(String(index + 1))}</td>
-                <td>${escapeHtml(String(invoiceRef || "-"))}</td>
-                <td>${escapeHtml(String(category || "-"))}</td>
-                <td style="text-align:right;">KES ${Math.abs(Number(row?.appliedAmount || 0)).toLocaleString()}</td>
-              </tr>
-            `;
-          })
-          .join("")
-      : `
-          <tr>
-            <td>1</td>
-            <td colspan="2">Receipt captured without explicit allocation lines</td>
-            <td style="text-align:right;">KES ${amount.toLocaleString()}</td>
-          </tr>
-        `;
+    const rows = allocationRows.length > 0
+      ? allocationRows.map((row, index) => ({
+          n: index + 1,
+          ref: row?.invoiceNumber || row?.invoiceRef || row?.description || row?.invoice || `Line ${index + 1}`,
+          category: getAllocationGroupLabel(row?.priorityGroup || row?.chargeType || row?.allocationGroup || "") || "-",
+          amount: Math.abs(Number(row?.appliedAmount || 0)),
+        }))
+      : [{ n: 1, ref: "Receipt captured without explicit allocation lines", category: "-", amount }];
 
-    const breakdownHtml = summaryRows.length > 0
-      ? summaryRows
-          .map(
-            (row) => `
-              <div class="mini-row">
-                <span>${escapeHtml(row.label)}</span>
-                <strong>KES ${Math.abs(Number(row.value || 0)).toLocaleString()}</strong>
-              </div>
-            `
-          )
-          .join("")
-      : `
-          <div class="mini-row">
-            <span>Total receipt amount</span>
-            <strong>KES ${amount.toLocaleString()}</strong>
-          </div>
-        `;
+    const money = (v) => `KES ${formatPrintMoney(v)}`;
+    const preparedByName = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(" ") || currentUser?.email || "Milik Admin";
+    const confirmed = Boolean(receipt.isConfirmed);
 
-    const preparedByName = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || 'Milik Admin';
-    const preparedLabel = new Date().toLocaleString();
-    const formatAmt = (n) => Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const statusColor = receipt.isConfirmed ? '#16a34a' : '#d97706';
-    const statusBgColor = receipt.isConfirmed ? '#dcfce7' : '#fef3c7';
-    const logoBlock = companyLogo
-      ? `<img style="max-height:60px;max-width:150px;object-fit:contain;border-radius:6px;" src="${escapeHtml(companyLogo)}" alt="logo" />`
-      : `<div style="width:56px;height:56px;border-radius:10px;background:#0B3B2E;color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;">${escapeHtml(String(companyName || "M").slice(0,1).toUpperCase())}</div>`;
-
-    const printWindow = window.open("", "_blank", "width=980,height=760");
-    if (!printWindow) return;
-
-    printWindow.document.write(`<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>Receipt ${escapeHtml(receipt.receiptNumber || receipt.referenceNumber || "")}</title>
-  <style>
-    @page { size: A4; margin: 14mm 16mm; }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 13px; color: #0f172a; background: #fff; }
-    .header { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; padding-bottom:16px; gap:16px; }
-    .co-center { text-align:center; display:flex; flex-direction:column; align-items:center; gap:6px; }
-    .co-center-name { font-size:18px; font-weight:900; color:#0f172a; letter-spacing:-0.01em; margin-top:6px; }
-    .co-center-sub { font-size:10px; color:#64748b; line-height:1.6; }
-    .rcpt-title { text-align:right; align-self:center; }
-    .rcpt-label { font-size:38px; font-weight:900; color:#0f172a; letter-spacing:-0.03em; line-height:1; }
-    .rcpt-number { font-size:14px; color:#64748b; margin-top:6px; }
-    .divider { height:2px; background:linear-gradient(90deg,#3b82f6,#93c5fd); border-radius:2px; margin:16px 0 20px; }
-    .body-grid { display:grid; grid-template-columns:1fr 1fr; gap:28px; margin-bottom:20px; }
-    .sec-label { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.18em; color:#94a3b8; margin-bottom:12px; }
-    .fk { font-size:10px; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:0.1em; margin-top:8px; }
-    .fv { font-size:13px; font-weight:700; color:#0f172a; }
-    .fv.lg { font-size:16px; font-weight:800; }
-    .status-badge { display:inline-block; padding:4px 14px; border-radius:6px; font-size:11px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:18px; }
-    table { width:100%; border-collapse:collapse; margin-bottom:16px; }
-    thead tr { background:#1e293b; }
-    th { padding:10px 14px; text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#fff; }
-    th.r { text-align:right; }
-    tbody tr { border-bottom:1px solid #f1f5f9; }
-    td { padding:11px 14px; font-size:13px; color:#0f172a; }
-    td.r { text-align:right; font-weight:600; }
-    .totals { width:280px; margin-left:auto; border-top:1px solid #e2e8f0; padding-top:10px; }
-    .t-row { display:flex; justify-content:space-between; padding:7px 0; font-size:13px; border-bottom:1px solid #f8fafc; }
-    .t-row .tl { color:#64748b; }
-    .t-row .tv { font-weight:700; }
-    .t-row.grand { border-top:2px solid #0f172a; border-bottom:none; padding-top:12px; margin-top:4px; }
-    .t-row.grand .tl, .t-row.grand .tv { font-size:15px; font-weight:800; color:#0f172a; }
-    .footer-note { margin-top:28px; padding-top:12px; border-top:1px solid #f1f5f9; font-size:11px; color:#94a3b8; }
-    @media print {
-      thead tr { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-    }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div></div>
-    <div class="co-center">
-      ${logoBlock}
-      <div class="co-center-name">${escapeHtml(companyName)}</div>
-      ${[companyAddress, companyTown, companyPhone, companyEmail].filter(Boolean).length ? `<div class="co-center-sub">${[companyAddress, companyTown, companyPhone, companyEmail].filter(Boolean).map(escapeHtml).join(' · ')}</div>` : ''}
-    </div>
-    <div class="rcpt-title">
-      <div class="rcpt-label">RECEIPT</div>
-      <div class="rcpt-number"># ${escapeHtml(receipt.receiptNumber || receipt.referenceNumber || '-')}</div>
-    </div>
-  </div>
-
-  <div class="divider"></div>
-
-  <div class="body-grid">
-    <div>
-      <div class="sec-label">Received From</div>
-      <div class="fk">${termTenant}</div>
-      <div class="fv lg">${escapeHtml(tenantName)}</div>
-      <div class="fk">${termProperty}</div>
-      <div class="fv">${escapeHtml(propertyName)}</div>
-      <div class="fk">${termUnit}</div>
-      <div class="fv">${escapeHtml(unitName)}</div>
-    </div>
-    <div>
-      <div class="sec-label">Receipt Details</div>
-      <div class="fk">Receipt Date</div>
-      <div class="fv">${escapeHtml(fmtDate(receipt.paymentDate))}</div>
-      <div class="fk">Payment Method</div>
-      <div class="fv">${escapeHtml(String(receipt.paymentMethod || '-').replaceAll('_', ' '))}</div>
-      <div class="fk">Reference</div>
-      <div class="fv">${escapeHtml(receipt.referenceNumber || '-')}</div>
-      <div class="fk">Cashbook</div>
-      <div class="fv">${escapeHtml(getCashbookLabel(receipt))}</div>
-    </div>
-  </div>
-
-  <span class="status-badge" style="background:${statusBgColor};color:${statusColor};">${receipt.isConfirmed ? 'Confirmed' : 'Pending Confirmation'}</span>
-
-  <table>
-    <thead>
-      <tr>
-        <th style="width:40px;">#</th>
-        <th>Reference</th>
-        <th>Category</th>
-        <th class="r">Applied Amount (KES)</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${allocationTable}
-    </tbody>
-  </table>
-
-  <div class="totals">
-    ${summaryRows.map((row) => `<div class="t-row"><span class="tl">${escapeHtml(row.label)}</span><span class="tv">KES ${formatAmt(row.value)}</span></div>`).join('')}
-    <div class="t-row grand"><span class="tl">Total Received</span><span class="tv">KES ${formatAmt(amount)}</span></div>
-  </div>
-
-  ${receipt?.description ? `<div style="margin-top:16px;padding:10px 14px;background:#f8fafc;border-left:3px solid #3b82f6;border-radius:4px;font-size:12px;color:#334155;line-height:1.6;">${escapeHtml(receipt.description)}</div>` : ''}
-
-  <div class="footer-note">
-    This is an official receipt confirming payment received by ${escapeHtml(companyName)}.<br/>
-    Generated by ${escapeHtml(companyName)} · Milik Property Management System · ${escapeHtml(preparedLabel)} · Prepared by ${escapeHtml(preparedByName)}
-  </div>
-</body>
-</html>`);
-    printWindow.document.close();
-    setTimeout(() => { printWindow.focus(); printWindow.print(); }, 450);
+    const printed = printDocument({
+      company: currentCompany,
+      docType: "Receipt",
+      docNumber: receipt.receiptNumber || receipt.referenceNumber || "",
+      status: confirmed ? { label: "Confirmed", tone: "success" } : { label: "Pending confirmation", tone: "warning" },
+      watermark: confirmed ? "PAID" : "",
+      meta: [
+        ["Date", fmtDate(receipt.paymentDate)],
+        ["Method", String(receipt.paymentMethod || "-").replaceAll("_", " ")],
+        ...(receipt.referenceNumber ? [["Reference", receipt.referenceNumber]] : []),
+      ],
+      parties: [
+        { heading: "Received from", name: getTenantName(receipt, tenants), lines: [`${termProperty}: ${getPropertyName(receipt, tenants)}`, `${termUnit}: ${getUnitName(receipt, tenants)}`] },
+      ],
+      details: { heading: "Payment", rows: [["Cashbook", getCashbookLabel(receipt)], ["Status", confirmed ? "Confirmed" : "Pending confirmation"]] },
+      table: {
+        columns: [
+          { label: "#", width: "34px", value: (r) => r.n },
+          { label: "Applied to", value: (r) => r.ref, sub: (r) => r.category !== "-" ? r.category : "" },
+          { label: "Amount (KES)", align: "right", value: (r) => formatPrintMoney(r.amount) },
+        ],
+        rows,
+      },
+      totals: [
+        ...summaryRows.map((row) => ({ label: row.label, value: money(Math.abs(row.value)) })),
+        { label: "Total received", value: money(amount), hero: true },
+      ],
+      amountWords: { amount, currency: currentCompany?.baseCurrency || "KES" },
+      notes: receipt?.description ? [{ heading: "Notes", text: receipt.description }] : [],
+      signatures: [{ label: "Received by", name: preparedByName }, { label: `${termTenant} signature` }],
+      stamp: true,
+      preparedBy: preparedByName,
+      footerNote: "Thank you for your payment.",
+    });
+    if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
   };
 
   const syncActiveReceipt = useCallback((updatedReceipt) => {
