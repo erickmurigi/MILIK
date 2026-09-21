@@ -841,4 +841,25 @@ and filters shared by every report (project, agent, as-of / date range). The old
 - Excel export of any of the three (up to 5000 rows). Agents kept to their own deals see only those, as everywhere else.
 - **Planned, shown as "Soon":** aging stock, title and transfer tracker, project profit and loss.
 
+### One print engine for every printout
+
+Every printout (customer invoices, receipts, payment vouchers, statements, payslips, petty cash, reports, registers) is built
+from one shared engine, so they all carry the same letterhead (logo or initial, name, address, contact, tax PIN, registration
+no.), title block with status pill and watermark (PAID / VOID), footer, page numbers and the **"Powered by Milik" stamp** (the
+Milik logo in a small badge, embedded so it prints anywhere).
+
+- **Core** (`printKitCore.js`, pure, no window/DOM): `documentPageHtml` (A4 portrait customer documents: parties, table,
+  totals, amount in words, signature lines, company-stamp box) and `listPageHtml` (A4 landscape/portrait reports: key-figure
+  cards, table with group / subtotal rows, totals row, extra `sections` tables, notes, sign-off lines).
+  It exists twice, identical: `MilikClient/src/utils/printKitCore.js` and `MilikApi/utils/printKitCore.js` (+ `printKitLogo.js`);
+  an API test fails if they drift. Edit one, copy to the other.
+- **Browser** (`printKit.js` / `printList.js`): `printDocument`, `printTabularList`. A page that must fetch data first opens the
+  window inside the click and passes `win` (otherwise the browser blocks it as a pop-up).
+- **Server PDFs** (puppeteer) use the same core: rental invoice, receipt, landlord statement (letterhead + footer around its own
+  schedule), management-fee tax invoice, payment voucher, car wash receipt; the lease PDF keeps its layout and gets the stamp in
+  its page footer. `utils/printCompanyFields.js` lists the company fields to populate so the letterhead is complete.
+- **Safety:** everything a user can type is HTML-escaped (a test proves a hostile company name / customer name / logo URL cannot
+  inject markup or close the `<style>` tag); a logo is used only if it is an http(s) or data:image URL.
+- **Not on the A4 kit by design:** narrow POS / thermal roll receipts (they keep their layout and carry a Powered by Milik line).
+
 *Last updated: 2026-09-21 (multi-line journals added; Track H closed — PropertySale performance pass, see above). Track G note: PropertySale correctness pass, see above. Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C/E/F/G as items are actioned.*
