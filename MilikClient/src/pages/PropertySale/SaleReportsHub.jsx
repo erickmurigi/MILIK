@@ -77,7 +77,7 @@ const Grid = ({ columns, rows, loading, empty }) => (
 // what one cell prints as: an explicit print value, else the export value (money formatted), else the raw field
 const printCell = (c, r) => {
   const v = c.xl ? c.xl(r) : c.render ? "" : r[c.key];
-  return typeof v === "number" && c.right ? n2(v) : v ?? "";
+  return typeof v === "number" && c.right ? (v === 0 ? "—" : n2(v)) : v ?? "";
 };
 
 const exportExcel = async (columns, rows, name) => {
