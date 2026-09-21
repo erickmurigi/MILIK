@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { saleApi } from "../../services/propertySaleApi";
 import { useTerms } from "../../hooks/useTerm";
@@ -7,10 +8,14 @@ import AppSelect from "../../components/common/AppSelect";
 import AmountInput from "./AmountInput";
 import { inputClass, labelClass } from "../../utils/formStyles";
 import { errorMessage } from "./SaleProjectShared";
+import SaleCustomField from "./SaleCustomField";
+import useSaleFormOptions from "../../hooks/useSaleFormOptions";
 import { SIZE_UNIT_OPTIONS } from "../../utils/saleListingConstants";
 
 const MAX_PER_CALL = 500;
 const textareaClass = "w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none";
+
+const NO_TYPE_DEF = { fields: [], hiddenFields: [] };
 
 const unitLabel = (prefix, n, pad) => `${prefix}${pad ? String(n).padStart(pad, "0") : n}`;
 
@@ -21,9 +26,17 @@ export default function SaleGenerateUnitsModal({ project, propertyTypeOptions, a
     prefix: "", from: "1", to: "", pad: "0", block: "",
     propertyType: propertyTypeOptions[0]?.value ?? "plot",
     size: "", sizeUnit: "sqm", askingPrice: "", assignedAgent: "",
-    negotiable: true, titleDeedAvailable: false, description: "",
+    negotiable: true, titleDeedAvailable: false, description: "", attributes: {},
   }));
   const [saving, setSaving] = useState(false);
+
+  // The chosen property type's extra fields are shared by every generated unit (edit single units afterwards);
+  // its hidden standard fields are left out here as on the unit form
+  const biz = useSelector((s) => s.company?.currentCompany?._id);
+  const { propertyTypeDefs } = useSaleFormOptions(biz);
+  const typeDef = propertyTypeDefs[String(form.propertyType || "").toLowerCase()] ?? NO_TYPE_DEF;
+  const hides = (group) => typeDef.hiddenFields.includes(group);
+  const setAttr = (key, value) => setForm((p) => ({ ...p, attributes: { ...p.attributes, [key]: value } }));
 
   const set = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
   const setVal = (key) => (v) => setForm((p) => ({ ...p, [key]: v ?? "" }));
@@ -62,6 +75,7 @@ export default function SaleGenerateUnitsModal({ project, propertyTypeOptions, a
         negotiable: form.negotiable,
         assignedAgent: form.assignedAgent || undefined,
         description: form.description,
+        attributes: form.attributes,
       });
       await onDone?.();
       const skipped = res?.skipped ? `, ${res.skipped} skipped (already exist)` : "";
@@ -123,13 +137,15 @@ export default function SaleGenerateUnitsModal({ project, propertyTypeOptions, a
         <div>
           <AppSelect label="Property Type" value={form.propertyType} onChange={setVal("propertyType")} options={propertyTypeOptions} size="md" />
         </div>
-        <div>
-          <label className={labelClass}>Size</label>
-          <div className="flex gap-1.5">
-            <input type="number" min="0" value={form.size} onChange={set("size")} className="h-8 min-w-0 flex-1 border border-slate-200 bg-white px-3 text-xs focus:border-[#0B3B2E] focus:outline-none" placeholder="e.g. 50" />
-            <AppSelect value={form.sizeUnit} onChange={setVal("sizeUnit")} options={SIZE_UNIT_OPTIONS} size="md" />
+        {!hides("size") && (
+          <div>
+            <label className={labelClass}>Size</label>
+            <div className="flex gap-1.5">
+              <input type="number" min="0" value={form.size} onChange={set("size")} className="h-8 min-w-0 flex-1 border border-slate-200 bg-white px-3 text-xs focus:border-[#0B3B2E] focus:outline-none" placeholder="e.g. 50" />
+              <AppSelect value={form.sizeUnit} onChange={setVal("sizeUnit")} options={SIZE_UNIT_OPTIONS} size="md" />
+            </div>
           </div>
-        </div>
+        )}
         <div>
           <label className={labelClass}>Asking Price (KES) *</label>
           <AmountInput value={form.askingPrice} onChange={setVal("askingPrice")} className={inputClass} placeholder="e.g. 1,500,000" />
@@ -142,11 +158,24 @@ export default function SaleGenerateUnitsModal({ project, propertyTypeOptions, a
             <input type="checkbox" checked={form.negotiable} onChange={setCheck("negotiable")} className="accent-[#0B3B2E]" />
             <span className="text-xs font-semibold text-slate-700">Negotiable</span>
           </label>
-          <label className="flex cursor-pointer items-center gap-2">
-            <input type="checkbox" checked={form.titleDeedAvailable} onChange={setCheck("titleDeedAvailable")} className="accent-[#0B3B2E]" />
-            <span className="text-xs font-semibold text-slate-700">Title Deed Available</span>
-          </label>
+          {!hides("titleDeed") && (
+            <label className="flex cursor-pointer items-center gap-2">
+              <input type="checkbox" checked={form.titleDeedAvailable} onChange={setCheck("titleDeedAvailable")} className="accent-[#0B3B2E]" />
+              <span className="text-xs font-semibold text-slate-700">Title Deed Available</span>
+            </label>
+          )}
         </div>
+        {typeDef.fields.length > 0 && (
+          <div className="md:col-span-4">
+            <div className="mb-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400">Details shared by every {T.saleUnit.toLowerCase()}</div>
+            <div className="grid gap-3 md:grid-cols-3">
+              {typeDef.fields.map((f) => (
+                // "required" is not enforced for a batch (each unit is completed afterwards), so no asterisk here
+                <SaleCustomField key={f.key} field={{ ...f, required: false }} value={form.attributes[f.key]} onChange={setAttr} />
+              ))}
+            </div>
+          </div>
+        )}
         <div className="md:col-span-4">
           <label className={labelClass}>Description</label>
           <textarea rows={2} value={form.description} onChange={set("description")} className={textareaClass} />

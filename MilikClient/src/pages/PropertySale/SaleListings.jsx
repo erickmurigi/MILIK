@@ -33,7 +33,7 @@ import { blankListingForm, customFieldRows, listingFormFromRow, typeDefOf } from
 
 // Lazy-load the xlsx-backed helpers only when the Import modal is actually used.
 const parseSaleListingsExcel = (file) => import("../../utils/excelTemplates").then((m) => m.parseSaleListingsExcel(file));
-const downloadSaleListingsTemplate = () => import("../../utils/excelTemplates").then((m) => m.downloadSaleListingsTemplate());
+const downloadSaleListingsTemplate = (opts) => import("../../utils/excelTemplates").then((m) => m.downloadSaleListingsTemplate(opts));
 
 
 const STATUSES       = ["available", "reserved", "under_contract", "sold", "withdrawn"];
@@ -140,6 +140,19 @@ const SaleListings = () => {
   // Companies that sell in projects see units in this list too (with a Project / Unit column) and can narrow it
   const usesProjects = !!saleSettings?.useProjects;
   const scope = usesProjects ? scopeFilt : "";
+  // The import template lists the company's own property types and one column per custom field of those types
+  const importTemplateOptions = useMemo(() => {
+    const types = (saleSettings?.propertyTypes ?? []).filter((t) => t.isActive !== false);
+    const seen = new Set();
+    const extraColumns = [];
+    types.forEach((t) => (t.fields || []).forEach((f) => {
+      const k = f.label.toLowerCase();
+      if (seen.has(k)) return;
+      seen.add(k);
+      extraColumns.push(`${f.label}${f.required ? " *" : ""}`);
+    }));
+    return { types: types.map((t) => t.name.toLowerCase()), extraColumns };
+  }, [saleSettings]);
   const LISTING_TABLE_COLS = useMemo(() => listingTableCols(T, usesProjects), [T, usesProjects]);
   const SCOPE_OPTIONS = useMemo(() => [
     { value: "none", label: "Standalone only" },
@@ -352,7 +365,7 @@ const SaleListings = () => {
         title={`Import ${T.saleListings}`}
         entityName={T.saleListing.toLowerCase()}
         parseFile={parseSaleListingsExcel}
-        downloadTemplate={downloadSaleListingsTemplate}
+        downloadTemplate={() => downloadSaleListingsTemplate(importTemplateOptions)}
         onImport={async (rows) => {
           const res = await saleApi.bulkImportListings(rows);
           await Promise.all([

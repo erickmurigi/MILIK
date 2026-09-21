@@ -1977,11 +1977,16 @@ const boolCell = (v) => {
   return ["yes", "true", "1"].includes(s);
 };
 
-export const downloadSaleListingsTemplate = () => {
+// `types`: the company's own property types (added to the valid values); `extraColumns`: one column per custom field of
+// those types ("Registration No. *"), filled only on rows of the type that owns the field.
+export const downloadSaleListingsTemplate = ({ types = [], extraColumns = [] } = {}) => {
+  const BUILT_IN_TYPES = ["plot", "house", "apartment", "commercial", "land", "other"];
+  const allTypes = [...BUILT_IN_TYPES, ...types.filter((t) => !BUILT_IN_TYPES.includes(t))];
   const headers = [
     "Title *", "Property Type", "Size", "Size Unit", "Location", "Town",
     "County", "Country", "Asking Price *", "Negotiable", "Status",
     "Title Deed Available", "Title Deed Number", "Amenities", "Notes",
+    ...extraColumns,
   ];
 
   const dataSheet = XLSX.utils.aoa_to_sheet([headers]);
@@ -1989,6 +1994,7 @@ export const downloadSaleListingsTemplate = () => {
     { wch: 30 }, { wch: 16 }, { wch: 10 }, { wch: 12 }, { wch: 25 }, { wch: 18 },
     { wch: 18 }, { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 18 },
     { wch: 20 }, { wch: 22 }, { wch: 35 }, { wch: 40 },
+    ...extraColumns.map(() => ({ wch: 20 })),
   ];
 
   const instructionsSheet = XLSX.utils.aoa_to_sheet([
@@ -1999,7 +2005,7 @@ export const downloadSaleListingsTemplate = () => {
     ["• Asking Price: KES amount — numbers only, no currency symbols"],
     [""],
     ["OPTIONAL FIELDS (leave blank or use – if not available)"],
-    ["• Property Type: plot, house, apartment, commercial, land, other (default: plot)"],
+    [`• Property Type: ${allTypes.join(", ")} (default: plot)`],
     ["• Size: numeric value only (e.g. 50 or 0.5)"],
     ["• Size Unit: sqm, sqft, acres, hectares (default: sqm)"],
     ["• Location: Estate or area name"],
@@ -2012,6 +2018,9 @@ export const downloadSaleListingsTemplate = () => {
     ["• Title Deed Number: LR No. or title deed reference"],
     ["• Amenities: comma-separated — e.g. Borehole, Electricity, Tarmac Road"],
     ["• Notes: Additional remarks"],
+    ...(extraColumns.length
+      ? [["• Extra columns (after Notes): details of your own property types, e.g. Registration No. for a vehicle. Fill a column only on rows of the type it belongs to; required ones are marked *"]]
+      : []),
     [""],
     ["EXAMPLE DATA"],
     [""],
@@ -2020,11 +2029,13 @@ export const downloadSaleListingsTemplate = () => {
       "Prime 50x100 Plot - Kitengela", "plot", "5000", "sqm", "Acacia Estate", "Kitengela",
       "Kajiado", "Kenya", "850000", "Yes", "available",
       "Yes", "LR/12345/678", "Borehole, Electricity, Tarmac Road", "Corner plot",
+      ...extraColumns.map(() => ""),
     ],
     [
       "3BR House - Ruiru", "house", "120", "sqm", "Greenpark", "Ruiru",
       "Kiambu", "Kenya", "5500000", "No", "available",
       "No", "", "Parking, Borehole", "Gated community",
+      ...extraColumns.map(() => ""),
     ],
     [""],
     ["IMPORTANT NOTES"],
@@ -2038,7 +2049,7 @@ export const downloadSaleListingsTemplate = () => {
   const dropdownSheet = XLSX.utils.aoa_to_sheet([
     ["VALID VALUES"],
     [""],
-    ["Property Type:"], ["plot"], ["house"], ["apartment"], ["commercial"], ["land"], ["other"],
+    ["Property Type:"], ...allTypes.map((t) => [t]),
     [""],
     ["Size Unit:"], ["sqm"], ["sqft"], ["acres"], ["hectares"],
     [""],
@@ -2076,8 +2087,14 @@ export const parseSaleListingsExcel = (file) =>
 
         if (!rows.length) { reject(new Error("No data found in file")); return; }
 
-        const VALID_TYPES    = ["plot", "house", "apartment", "commercial", "land", "other"];
+        // The property type is not checked here: the server accepts the built-in types and the company's own
         const VALID_UNITS    = ["sqm", "sqft", "acres", "hectares"];
+        // Columns that are not standard become "extra" values, matched to the row type's custom fields by the server
+        const KNOWN_HEADERS = new Set([
+          "title", "title *", "property type", "propertytype", "size", "size unit", "sizeunit", "location", "town", "county",
+          "country", "asking price", "asking price *", "askingprice", "negotiable", "status", "title deed available",
+          "titledeedavailable", "title deed number", "titledeednumber", "amenities", "notes",
+        ]);
         const VALID_STATUSES = ["available", "reserved", "under_contract", "sold", "withdrawn"];
 
         const seenTitles = new Set();
@@ -2100,7 +2117,6 @@ export const parseSaleListingsExcel = (file) =>
           const sizeRaw      = get("Size", "size");
           const sizeVal      = sizeRaw ? num(sizeRaw) : null;
 
-          if (!VALID_TYPES.includes(propertyType))    rowErrors.push(`Invalid Property Type: ${propertyType}`);
           if (!VALID_UNITS.includes(sizeUnit))        rowErrors.push(`Invalid Size Unit: ${sizeUnit}`);
           if (!VALID_STATUSES.includes(status))       rowErrors.push(`Invalid Status: ${status}`);
           if (sizeRaw && sizeVal === null)             rowErrors.push("Size must be a number when provided");
@@ -2113,6 +2129,12 @@ export const parseSaleListingsExcel = (file) =>
             errors.push({ row: i + 2, title, errors: rowErrors });
           } else {
             const amenitiesRaw = get("Amenities", "amenities");
+            const extra = {};
+            Object.keys(row).forEach((h) => {
+              if (KNOWN_HEADERS.has(h.trim().toLowerCase())) return;
+              const v = strip(row[h]);
+              if (v) extra[h.replace(/\s*\*\s*$/, "").trim()] = v;
+            });
             valid.push({
               title,
               propertyType,
@@ -2129,6 +2151,7 @@ export const parseSaleListingsExcel = (file) =>
               titleDeedNumber:    get("Title Deed Number", "titleDeedNumber"),
               amenities:          amenitiesRaw ? amenitiesRaw.split(",").map(s => s.trim()).filter(Boolean) : [],
               notes:              get("Notes", "notes"),
+              ...(Object.keys(extra).length && { extra }),
             });
           }
         });

@@ -511,7 +511,7 @@ const COLLECTION_COLUMNS = {
   maintenanceCategories: ["Name", "Priority", "Description", "Status", "Actions"],
   saleStages:        ["#", "Stage Name", "Status", "Actions"],
   saleSources:       ["Source Name", "Status", "Actions"],
-  salePropertyTypes: ["Type Name", "Status", "Actions"],
+  salePropertyTypes: ["Type Name", "Extra Fields", "Status", "Actions"],
 };
 
 const DEFAULT_UNIT_TYPES_SEED = [
@@ -1745,6 +1745,12 @@ const CompanySettings = () => {
           <td className="w-8 px-3 py-1.5 border-r border-gray-100 text-center text-slate-400 font-bold">{(item.order ?? idx) + 1}</td>
         )}
         <td className="px-3 py-1.5 border-r border-gray-100 font-medium text-slate-900">{item.name || "—"}</td>
+        {tabKey === "salePropertyTypes" && (
+          <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">
+            {(item.fields || []).length ? `${item.fields.length} extra field${item.fields.length > 1 ? "s" : ""}` : "—"}
+            {(item.hiddenFields || []).length > 0 && <span className="text-slate-400">{` · ${item.hiddenFields.length} standard hidden`}</span>}
+          </td>
+        )}
         {tabKey === "utilities" && (
           <>
             <td className="px-3 py-1.5 border-r border-gray-100 capitalize text-slate-600">{String(item.category || "").replace(/_/g, " ") || "—"}</td>

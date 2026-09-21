@@ -781,9 +781,14 @@ of choices, date, yes/no; each optionally required) and leave out standard field
   sending values clears them. Generated units may share values (required not enforced for a batch). Unknown types define none.
 - **Screens:** the listing/unit form asks for the type's fields and hides the standard ones it leaves out; the Listings and
   Units detail panels and the print sheet show them (and skip hidden standard fields).
-- **Not covered:** bulk import (Excel) does not read custom fields; the "Generate units" modal has no UI for shared values
-  (the API accepts `attributes`); custom fields are not searchable or reportable; hiding a standard field is a form/print
-  choice only, existing values stay stored.
+- **Excel import:** the template lists the company's own property types and adds one column per custom field of those types
+  (required ones marked *). The server matches extra columns to the row's type by field name or key (case-insensitive, "*"
+  ignored), validates them like the form, and ignores columns that belong to other types. The client parser no longer rejects
+  property types outside the built-in list (it used to block custom types before they reached the server).
+- **Generate units:** the modal asks for the chosen type's fields (shared by every generated unit; not enforced as required)
+  and leaves out the type's hidden standard fields. The property types list shows the extra-field and hidden counts.
+- **Not covered:** custom field values are not searchable or reportable (the text index cannot cover dynamic keys); hiding a
+  standard field is a form/print choice only, existing values stay stored.
 - **Also this pass:** the Units page panel is now the same shared panel as Listings (photos, print, edit); a new offer
   pre-fills its agent from the chosen item (own or project agent, if active); terminology presets now really clear words
   (the panel used to omit blank words and the server only changes words it receives), and a renamed singular gets a
