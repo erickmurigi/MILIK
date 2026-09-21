@@ -4,9 +4,49 @@ import { useSelector } from "react-redux";
 import { saleApi } from "../../services/propertySaleApi";
 import { useTerms } from "../../hooks/useTerm";
 import { fmtDate } from "../../utils/dates";
+import { printDocument } from "../../utils/printKit";
+import { toast } from "react-toastify";
+import { POPUP_BLOCKED, money } from "./salePrint";
 
 const fmtKES  = (n) => new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", minimumFractionDigits: 2 }).format(Number(n) || 0);
 const fmtLabel = (s) => String(s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+const kes = (n) => `KES ${money(n)}`;
+
+const printDealSummary = (company, { deal, payments, totalPaid, balance }, T) => {
+  const buyer = deal.buyer || {};
+  const listing = deal.listing || {};
+  const agent = deal.agent || null;
+  const co = company || {};
+  const coName = co.companyName || co.name || "MILIK";
+  const printed = printDocument({
+    company,
+    docType: "Sale Agreement Summary",
+    docNumber: deal.dealNumber || "",
+    meta: [[`${T.saleDeal} date`, fmtDate(deal.dealDate)], ["Expected closing", fmtDate(deal.expectedClosingDate)]],
+    parties: [
+      { heading: "Vendor / Seller", name: coName, lines: [co.address || co.postalAddress, co.phone || co.phoneNumber] },
+      { heading: `Purchaser / ${T.saleBuyer}`, name: buyer.fullName || "—", lines: [buyer.idNumber ? `ID/Passport: ${buyer.idNumber}` : "", buyer.phone, buyer.email, buyer.address] },
+    ],
+    details: {
+      heading: "Property details",
+      rows: [
+        [`${T.saleListing} No.`, listing.listingNumber || "—"], ["Title", listing.title || "—"], ["Property type", fmtLabel(listing.propertyType || "—")],
+        ["Location", [listing.location, listing.town].filter(Boolean).join(", ") || "—"], ["Asking price", kes(listing.askingPrice)],
+        ...(agent ? [[`Facilitating ${T.saleAgent}`, `${agent.fullName}${agent.agentNumber ? ` (${agent.agentNumber})` : ""}`]] : []),
+      ],
+    },
+    totals: [
+      { label: "Agreed purchase price", value: kes(deal.agreedPrice), strong: true },
+      { label: `Amount paid to date (${payments.length} payment${payments.length !== 1 ? "s" : ""})`, value: kes(totalPaid), tone: "pos" },
+      { label: "Outstanding balance", value: kes(balance), hero: true },
+    ],
+    notes: deal.notes ? [{ heading: "Special conditions / notes", text: deal.notes }] : [],
+    signatures: [{ label: "Vendor signature", name: "" }, { label: "Purchaser signature", name: "" }],
+    footerNote: "Summary cover sheet for the property sale agreement",
+  });
+  if (!printed) toast.error(POPUP_BLOCKED);
+};
 
 const PRINT_STYLES = `
   @page { size: A4; margin: 20mm 18mm; }
@@ -73,7 +113,7 @@ const SaleDealSummary = () => {
     <div className="min-h-screen bg-slate-100 p-6 print:bg-white print:p-0">
       <div id="sale-print-toolbar" className="mx-auto mb-4 flex max-w-[780px] items-center justify-between gap-3 print:hidden">
         <button onClick={() => navigate(-1)} className="border border-slate-300 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">← Back</button>
-        <button onClick={() => window.print()} className="bg-[#0B3B2E] px-5 py-1.5 text-xs font-black text-white hover:bg-[#07271e]">Print / Save PDF</button>
+        <button onClick={() => printDealSummary(company, { deal, payments, totalPaid, balance }, T)} className="bg-[#0B3B2E] px-5 py-1.5 text-xs font-black text-white hover:bg-[#07271e]">Print / Save PDF</button>
       </div>
 
       <div id="sale-print-root" className="mx-auto max-w-[780px] bg-white shadow-lg print:shadow-none">

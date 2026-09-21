@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
+import { printTabularList } from "../../utils/printList";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
@@ -18,11 +19,6 @@ const fmtSigned = (value) => {
   const n = Number(value || 0);
   return n < 0 ? `(${fmt(Math.abs(n))})` : fmt(n);
 };
-
-const escapeHtml = (v) =>
-  String(v ?? "")
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 
 // Local-timezone date helpers — avoids UTC-shift on UTC+3 (Kenya)
 const localDateStr = (d) => {
@@ -221,74 +217,45 @@ const CashFlowReport = () => {
   const handlePrintPDF = () => {
     if (!canExport) return toast.warning("You do not have permission to print reports");
     if (!report) return toast.info("Report is still loading.");
-    const win = window.open("", "_blank", "width=1200,height=900");
-    if (!win) return toast.error("Popup blocked. Allow popups to print.");
-
-    const sectionHtml = (title, section) => {
-      const rows = (section.items || []).map((item) => `
-        <tr>
-          <td>${escapeHtml(item.label)}</td>
-          <td class="amt">${item.inflow > 0 ? `KES ${fmt(item.inflow)}` : "—"}</td>
-          <td class="amt red">${item.outflow > 0 ? `KES ${fmt(item.outflow)}` : "—"}</td>
-          <td class="amt bold" style="color:${item.net >= 0 ? "#166534" : RED}">KES ${fmtSigned(item.net)}</td>
-        </tr>`).join("");
-      return `
-        <div class="card">
-          <div class="card-hdr">${escapeHtml(title)}<span class="card-net">Net: KES ${fmtSigned(section.net)}</span></div>
-          <table>
-            <thead><tr><th>Item</th><th class="amt">Cash In</th><th class="amt">Cash Out</th><th class="amt">Net</th></tr></thead>
-            <tbody>${rows || `<tr><td colspan="4" class="empty">No movements in this category.</td></tr>`}</tbody>
-            ${section.items.length ? `<tfoot><tr><td><b>Total</b></td><td class="amt grn"><b>KES ${fmt(section.totalInflows)}</b></td><td class="amt red"><b>KES ${fmt(section.totalOutflows)}</b></td><td class="amt bold" style="color:${section.net >= 0 ? "#166534" : RED}"><b>KES ${fmtSigned(section.net)}</b></td></tr></tfoot>` : ""}
-          </table>
-        </div>`;
-    };
-
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Cash Flow Statement</title>
-      <style>
-        *{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;color:#111;padding:24px}
-        h1{font-size:22px;font-weight:900;color:${GRN}}p.sub{font-size:11px;color:#4b5563;margin:4px 0 14px}
-        .kpi{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px}
-        .kpi-box{border:1px solid #d1d5db;border-radius:6px;padding:10px 12px}
-        .kpi-box .lbl{font-size:9px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:4px}
-        .kpi-box .val{font-size:15px;font-weight:900}
-        .card{border:1px solid #d1d5db;border-radius:6px;overflow:hidden;margin-bottom:14px}
-        .card-hdr{background:${GRN};color:#fff;padding:8px 12px;font-size:12px;font-weight:800;display:flex;justify-content:space-between}
-        .card-net{font-size:11px;opacity:.85}
-        table{width:100%;border-collapse:collapse}
-        th,td{border:1px solid #e5e7eb;padding:5px 8px;font-size:10px}
-        th{background:#f8fafc;font-weight:700;text-align:left}
-        .amt{text-align:right}.bold{font-weight:900}.grn{color:#166534}.red{color:${RED}}
-        tfoot tr td{background:#f1f5f9;font-weight:700}
-        .empty{text-align:center;font-style:italic;color:#9ca3af;padding:10px}
-        .summary{border:2px solid ${GRN};border-radius:6px;padding:14px;margin-top:8px}
-        .sum-row{display:flex;justify-content:space-between;padding:3px 0;font-size:11px;border-bottom:1px solid #f1f5f9}
-        .sum-row.total{font-weight:900;font-size:14px;border-top:2px solid #cbd5e1;border-bottom:none;margin-top:6px;padding-top:8px}
-        @media print{body{padding:8px}@page{size:A4 portrait;margin:10mm}}
-      </style></head><body>
-      <h1>Cash Flow Statement</h1>
-      <p class="sub">${escapeHtml(businessName)} · ${escapeHtml(filters.startDate)} to ${escapeHtml(filters.endDate)}</p>
-      <div class="kpi">
-        <div class="kpi-box"><div class="lbl">Opening Cash</div><div class="val">KES ${fmt(summary.openingCash)}</div></div>
-        <div class="kpi-box"><div class="lbl">Cash from Operations</div><div class="val" style="color:${summary.netCashFromOperations >= 0 ? "#166534" : RED}">KES ${fmtSigned(summary.netCashFromOperations)}</div></div>
-        <div class="kpi-box"><div class="lbl">Cash from Financing</div><div class="val" style="color:${summary.netCashFromFinancing >= 0 ? "#166534" : RED}">KES ${fmtSigned(summary.netCashFromFinancing)}</div></div>
-        <div class="kpi-box"><div class="lbl">Net Change</div><div class="val" style="color:${summary.netChange >= 0 ? "#166534" : RED}">KES ${fmtSigned(summary.netChange)}</div></div>
-        <div class="kpi-box"><div class="lbl">Closing Cash</div><div class="val" style="color:${closingColor}">KES ${fmt(summary.closingCash)}</div></div>
-      </div>
-      ${sectionHtml("Operating Activities", operating)}
-      ${sectionHtml("Financing Activities", financing)}
-      ${sectionHtml("Other Adjustments", adjustments)}
-      <div class="summary">
-        <b style="font-size:12px;color:${GRN}">CASH POSITION SUMMARY</b>
-        <div class="sum-row"><span>Opening Cash Balance</span><span>KES ${fmt(summary.openingCash)}</span></div>
-        <div class="sum-row"><span>+ Net Cash from Operations</span><span>KES ${fmtSigned(summary.netCashFromOperations)}</span></div>
-        <div class="sum-row"><span>+ Net Cash from Financing</span><span>KES ${fmtSigned(summary.netCashFromFinancing)}</span></div>
-        <div class="sum-row"><span>+ Net Cash from Adjustments</span><span>KES ${fmtSigned(summary.netCashFromAdjustments)}</span></div>
-        <div class="sum-row total" style="color:${closingColor}"><span>Closing Cash Balance</span><span>KES ${fmt(summary.closingCash)}</span></div>
-      </div>
-    </body></html>`);
-    win.document.close();
-    win.focus();
-    setTimeout(() => win.print(), 400);
+    const block = (heading, section) => [
+      { __group: heading, meta: `Net: KES ${fmtSigned(section.net)}` },
+      ...(section.items || []),
+      ...((section.items || []).length
+        ? [{ __subtotal: ["Total", fmt(section.totalInflows), fmt(section.totalOutflows), fmtSigned(section.net)] }]
+        : [{ __subtotal: ["No movements in this category.", "", "", ""] }]),
+    ];
+    const printed = printTabularList({
+      title: "Cash Flow Statement",
+      subtitle: `${filters.startDate} to ${filters.endDate}`,
+      company: currentCompany,
+      orientation: "portrait",
+      summaryItems: [
+        ["Opening cash", `KES ${fmt(summary.openingCash)}`],
+        ["From operations", `KES ${fmtSigned(summary.netCashFromOperations)}`],
+        ["From financing", `KES ${fmtSigned(summary.netCashFromFinancing)}`],
+        ["Net change", `KES ${fmtSigned(summary.netChange)}`],
+        ["Closing cash", `KES ${fmt(summary.closingCash)}`],
+      ],
+      columns: [
+        { label: "Item", value: (item) => item.label },
+        { label: "Cash in", align: "right", value: (item) => (item.inflow > 0 ? fmt(item.inflow) : "—") },
+        { label: "Cash out", align: "right", tone: () => "neg", value: (item) => (item.outflow > 0 ? fmt(item.outflow) : "—") },
+        { label: "Net", align: "right", bold: true, tone: (item) => (item.net >= 0 ? "pos" : "neg"), value: (item) => fmtSigned(item.net) },
+      ],
+      rows: [
+        ...block("Operating activities", operating),
+        ...block("Financing activities", financing),
+        ...block("Other adjustments", adjustments),
+        { __group: "Cash position summary" },
+        { __subtotal: ["Opening cash balance", "", "", fmt(summary.openingCash)] },
+        { __subtotal: ["+ Net cash from operations", "", "", fmtSigned(summary.netCashFromOperations)] },
+        { __subtotal: ["+ Net cash from financing", "", "", fmtSigned(summary.netCashFromFinancing)] },
+        { __subtotal: ["+ Net cash from adjustments", "", "", fmtSigned(summary.netCashFromAdjustments)] },
+      ],
+      totalsRow: ["Closing cash balance", "", "", fmt(summary.closingCash)],
+      signatures: [{ label: "Prepared by" }, { label: "Reviewed by" }],
+    });
+    if (!printed) toast.error("Popup blocked. Allow popups to print.");
   };
 
   // ─────────────────────────────────────────────────────────────────────────────

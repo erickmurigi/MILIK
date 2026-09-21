@@ -7,6 +7,7 @@ import { hasCompanyPermission } from "../../utils/permissions";
 import { FaChevronDown, FaChevronRight, FaFileDownload, FaFilePdf, FaSyncAlt } from "react-icons/fa";
 import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { printTabularList } from "../../utils/printList";
 import { getIncomeStatementReport } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { selectAllProperties } from "../../redux/selectors";
@@ -29,11 +30,6 @@ const toLocalDateString = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const firstDayOfMonth = () => { const d = new Date(); return toLocalDateString(new Date(d.getFullYear(), d.getMonth(), 1)); };
 const todayString = () => toLocalDateString(new Date());
-
-const escapeHtml = (v) =>
-  String(v ?? "")
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 
 // ─── Section row with proportion bar ─────────────────────────────────────────
 const AccountRow = React.memo(({ row, sectionTotal, accentColor }) => {
@@ -257,101 +253,48 @@ const IncomeStatementReport = () => {
   const handlePrintPDF = () => {
     if (!canExport) return toast.warning("You do not have permission to print reports");
     if (loading) return toast.info("Please wait for the report to finish loading.");
-    const win = window.open("", "_blank", "width=1200,height=900");
-    if (!win) return toast.error("Popup blocked. Allow popups to print.");
-
-    const sectionHtml = (title, sections, total, color) => {
-      const content = sections.length
-        ? sections.map((s) => `
-            <div class="s-block">
-              <div class="s-head"><span>${escapeHtml(s.label)}</span><span>${pctStr(s.total, total)} · KES ${escapeHtml(fmt(s.total))}</span></div>
-              ${s.rows.map((r) => `
-                <div class="s-row">
-                  <span class="code">${escapeHtml(r.code)}</span>
-                  <span class="rname">${escapeHtml(r.name)}</span>
-                  <span class="rpct">${pctStr(r.amount, s.total)}</span>
-                  <span class="amt">KES ${escapeHtml(fmt(r.amount))}</span>
-                </div>`).join("")}
-            </div>`).join("")
-        : `<div class="empty">No accounts found for this period.</div>`;
-      return `<div class="card"><div class="card-hdr">${escapeHtml(title)} <span style="float:right;opacity:.7">KES ${escapeHtml(fmt(total))}</span></div><div class="card-body">${content}</div></div>`;
-    };
-
-    const np       = Number(report.summary?.netProfit || 0);
-    const nc       = np >= 0 ? "#166534" : RED;
-    const expRatio = Number(report.summary?.totalIncome || 0) > 0
-      ? ((Number(report.summary?.totalExpenses || 0) / Number(report.summary?.totalIncome || 0)) * 100).toFixed(1)
+    const summary = report.summary || {};
+    const np = Number(summary.netProfit || 0);
+    const expRatio = Number(summary.totalIncome || 0) > 0
+      ? ((Number(summary.totalExpenses || 0) / Number(summary.totalIncome || 0)) * 100).toFixed(1)
       : "0.0";
-
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Income Statement</title>
-      <style>
-        *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:Arial,sans-serif;color:#111;padding:20px;font-size:11px}
-        h1{font-size:20px;font-weight:900;color:${GRN};margin-bottom:2px}
-        .sub{font-size:10px;color:#6b7280;margin-bottom:12px}
-        .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
-        .kpi-box{border-left:3px solid;padding:8px 10px}
-        .kpi-box .lbl{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#9ca3af;margin-bottom:3px}
-        .kpi-box .val{font-size:16px;font-weight:900}
-        .kpi-box .sub2{font-size:8px;color:#9ca3af;margin-top:2px}
-        .two{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
-        .card{border:1px solid #e5e7eb;overflow:hidden}
-        .card-hdr{background:${GRN};color:#fff;padding:8px 10px;font-size:11px;font-weight:800;letter-spacing:.06em}
-        .card-body{padding:10px}
-        .s-block{margin-bottom:10px}
-        .s-head{display:flex;justify-content:space-between;border-bottom:1px solid #f3f4f6;padding-bottom:4px;margin-bottom:4px;font-size:10px;font-weight:800;color:#374151}
-        .s-row{display:flex;align-items:baseline;gap:6px;font-size:9.5px;padding:2px 0;color:#4b5563;border-bottom:1px solid #f9fafb}
-        .code{font-family:monospace;color:#9ca3af;min-width:32px;font-weight:700}
-        .rname{flex:1}
-        .rpct{min-width:32px;text-align:right;color:#9ca3af;font-size:8.5px}
-        .amt{min-width:80px;text-align:right;font-family:monospace;font-weight:700}
-        .empty{font-size:10px;color:#9ca3af;font-style:italic}
-        .waterfall{border:1px solid #e5e7eb;padding:12px 14px}
-        .wf-row{display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid #f3f4f6}
-        .wf-row:last-child{border-top:2px solid #d1d5db;border-bottom:none;padding-top:8px;margin-top:4px}
-        .wf-lbl{min-width:120px;font-size:10px;font-weight:700;color:#6b7280}
-        .wf-bar-wrap{flex:1;height:6px;background:#f3f4f6;overflow:hidden}
-        .wf-bar{height:100%;opacity:.6}
-        .wf-val{min-width:100px;text-align:right;font-family:monospace;font-weight:800;font-size:11px}
-        @media print{body{padding:8px}@page{size:A4 portrait;margin:8mm}}
-      </style></head><body>
-      <h1>Income Statement</h1>
-      <p class="sub">${escapeHtml(businessName)} · ${escapeHtml(filters.startDate)} → ${escapeHtml(filters.endDate)}${selectedProperty ? ` · ${escapeHtml(selectedProperty.propertyCode)} – ${escapeHtml(selectedProperty.propertyName)}` : ""}</p>
-      <div class="kpi">
-        <div class="kpi-box" style="border-color:#166534">
-          <div class="lbl">Total Income</div>
-          <div class="val" style="color:#166534">KES ${escapeHtml(fmt(report.summary?.totalIncome))}</div>
-          <div class="sub2">${escapeHtml(String(report.income.count))} account(s)</div>
-        </div>
-        <div class="kpi-box" style="border-color:${RED}">
-          <div class="lbl">Total Expenses</div>
-          <div class="val" style="color:${RED}">KES ${escapeHtml(fmt(report.summary?.totalExpenses))}</div>
-          <div class="sub2">${escapeHtml(String(report.expenses.count))} account(s)</div>
-        </div>
-        <div class="kpi-box" style="border-color:${nc}">
-          <div class="lbl">${escapeHtml(report.summary?.resultLabel || "Net Profit")}</div>
-          <div class="val" style="color:${nc}">KES ${escapeHtml(fmt(report.summary?.netProfit))}</div>
-          <div class="sub2" style="color:${nc}">${np >= 0 ? "Profitable" : "Loss"}</div>
-        </div>
-        <div class="kpi-box" style="border-color:#92400e">
-          <div class="lbl">Expense Ratio</div>
-          <div class="val" style="color:#92400e">${escapeHtml(expRatio)}%</div>
-          <div class="sub2">of total income</div>
-        </div>
-      </div>
-      <div class="two">
-        ${sectionHtml("Income",   report.income?.sections  || [], report.summary?.totalIncome   || 0, "#166534")}
-        ${sectionHtml("Expenses", report.expenses?.sections || [], report.summary?.totalExpenses || 0, RED)}
-      </div>
-      <div class="waterfall">
-        <div class="wf-row"><div class="wf-lbl">Total Income</div><div class="wf-bar-wrap"><div class="wf-bar" style="width:100%;background:#166534"></div></div><div class="wf-val" style="color:#166534">KES ${escapeHtml(fmt(report.summary?.totalIncome))}</div></div>
-        <div class="wf-row"><div class="wf-lbl">Total Expenses</div><div class="wf-bar-wrap"><div class="wf-bar" style="width:${expRatio}%;background:${RED}"></div></div><div class="wf-val" style="color:${RED}">KES ${escapeHtml(fmt(report.summary?.totalExpenses))}</div></div>
-        <div class="wf-row"><div class="wf-lbl">${escapeHtml(report.summary?.resultLabel || "Net Profit")}</div><div class="wf-bar-wrap"><div class="wf-bar" style="width:${Math.max(0, 100 - Number(expRatio))}%;background:${nc}"></div></div><div class="wf-val" style="color:${nc}">KES ${escapeHtml(fmt(report.summary?.netProfit))}</div></div>
-      </div>
-    </body></html>`);
-    win.document.close();
-    win.focus();
-    setTimeout(() => win.print(), 400);
+    // one statement: an Income block and an Expenses block, each with a heading per account group and its subtotal
+    const block = (heading, sections, total) => [
+      { __group: heading },
+      ...(sections.length
+        ? sections.flatMap((sec) => [
+            { __group: sec.label, meta: `${pctStr(sec.total, total)} of ${heading.toLowerCase()}` },
+            ...sec.rows.map((r) => ({ ...r, __share: pctStr(r.amount, sec.total) })),
+            { __subtotal: ["", `Subtotal – ${sec.label}`, pctStr(sec.total, total), fmt(sec.total)] },
+          ])
+        : [{ __subtotal: ["", "No accounts found for this period.", "", ""] }]),
+      { __subtotal: ["", `Total ${heading}`, "", fmt(total)] },
+    ];
+    const printed = printTabularList({
+      title: "Income Statement",
+      subtitle: `${filters.startDate} to ${filters.endDate}${selectedProperty ? ` · ${selectedProperty.propertyCode} – ${selectedProperty.propertyName || selectedProperty.name || ""}` : ""}`,
+      company: currentCompany,
+      orientation: "portrait",
+      summaryItems: [
+        ["Total income", `KES ${fmt(summary.totalIncome)}`],
+        ["Total expenses", `KES ${fmt(summary.totalExpenses)}`],
+        [summary.resultLabel || "Net profit", `KES ${fmt(summary.netProfit)}`],
+        ["Expense ratio", `${expRatio}%`],
+      ],
+      columns: [
+        { label: "Code", value: (r) => r.code },
+        { label: "Account", value: (r) => r.name },
+        { label: "% of group", align: "right", tone: () => "muted", value: (r) => r.__share },
+        { label: "Amount (KES)", align: "right", value: (r) => fmt(r.amount) },
+      ],
+      rows: [
+        ...block("Income", report.income?.sections || [], summary.totalIncome || 0),
+        ...block("Expenses", report.expenses?.sections || [], summary.totalExpenses || 0),
+      ],
+      totalsRow: ["", summary.resultLabel || "Net profit", np >= 0 ? "Profitable" : "Loss", fmt(summary.netProfit)],
+      signatures: [{ label: "Prepared by" }, { label: "Reviewed by" }],
+    });
+    if (!printed) toast.error("Popup blocked. Allow popups to print.");
   };
 
   const netProfit     = Number(report.summary?.netProfit    || 0);

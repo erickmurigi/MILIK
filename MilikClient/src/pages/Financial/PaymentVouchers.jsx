@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { printDocument } from "../../utils/printKit";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import AppSelect from "../../components/common/AppSelect";
 import { adminRequests } from "../../utils/requestMethods";
@@ -465,137 +466,36 @@ const PaymentVouchers = () => {
   };
 
   const handlePrintVoucher = (voucher) => {
-    const co = currentCompany || {};
-    const coName = co.companyName || co.name || "MILIK";
-    const coAddr = [co.address || co.postalAddress || co.location || "", co.town || co.city || ""].filter(Boolean).join(", ");
-    const coPhone = co.phone || co.phoneNo || co.phoneNumber || co.contactPhone || "";
-    const coEmail = co.email || co.companyEmail || co.contactEmail || "";
-    const coInfo = [coAddr, coPhone, coEmail].filter(Boolean).join(" · ");
-    const logoHtml = co.logo
-      ? `<img src="${String(co.logo)}" alt="logo" style="max-height:60px;max-width:150px;object-fit:contain;border-radius:6px;" />`
-      : `<div style="width:56px;height:56px;background:#0B3B2E;color:#fff;font-size:22px;font-weight:900;display:flex;align-items:center;justify-content:center;border-radius:10px;">${String(coName).slice(0,1).toUpperCase()}</div>`;
-
-    const esc = (v) => String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-    const fmtAmt = (n) => `KES ${Number(n||0).toLocaleString("en-KE",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
-
-    const catLabel = categories.find(c => c.value === voucher.category)?.label || voucher.category || "—";
-    const statusColor = { draft:"#92400e", approved:"#1e40af", paid:"#166534", reversed:"#92400e" }[voucher.status] || "#334155";
-    const statusBg = { draft:"#fef3c7", approved:"#dbeafe", paid:"#dcfce7", reversed:"#fef3c7" }[voucher.status] || "#f1f5f9";
-    const printedOn = new Date().toLocaleDateString("en-KE",{day:"2-digit",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"});
-
-    const field = (label, value, mono = false) => `
-      <div class="field">
-        <div class="field-label">${esc(label)}</div>
-        <div class="field-val${mono ? " mono" : ""}">${esc(value || "—")}</div>
-      </div>`;
-
-    const preparedByName = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || 'Milik Admin';
-
-    const win = window.open("", "_blank", "width=900,height=720");
-    if (!win) return;
-    win.document.write(`<!DOCTYPE html>
-<html><head><meta charset="UTF-8"/>
-<title>Payment Voucher — ${esc(voucher.voucherNo)}</title>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Helvetica Neue',Arial,sans-serif;color:#0f172a;padding:0}
-  .page{max-width:794px;margin:0 auto;padding:32px 40px}
-  .hdr{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding-bottom:16px;gap:16px}
-  .co-center{text-align:center;display:flex;flex-direction:column;align-items:center;gap:5px}
-  .co-center-name{font-size:18px;font-weight:900;color:#0f172a;letter-spacing:-0.01em;margin-top:6px}
-  .co-sub{font-size:10px;color:#64748b;line-height:1.6}
-  .doc-title-wrap{text-align:right;align-self:center}
-  .doc-type{font-size:28px;font-weight:900;color:#0f172a;letter-spacing:-0.03em;line-height:1}
-  .doc-no{font-size:13px;color:#64748b;margin-top:6px}
-  .doc-date{font-size:10px;color:#64748b;margin-top:3px}
-  .divider{height:2px;background:linear-gradient(90deg,#3b82f6,#93c5fd);border-radius:2px;margin:16px 0 20px}
-  .status-badge{display:inline-block;padding:4px 14px;border-radius:6px;font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:16px;background:${statusBg};color:${statusColor}}
-  .fields-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:#e2e8f0;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:16px}
-  .field{background:#fff;padding:10px 12px}
-  .field-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:3px}
-  .field-val{font-size:12px;font-weight:600;color:#1e293b;line-height:1.4}
-  .field-val.mono{font-family:monospace;font-size:13px}
-  .amt-box{border:2px solid #0B3B2E;border-radius:8px;padding:14px 16px;margin-bottom:16px;background:#f0faf5}
-  .amt-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#64748b;margin-bottom:5px}
-  .amt-val{font-size:26px;font-weight:900;color:#0B3B2E;font-family:monospace}
-  .narration-box{border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;margin-bottom:16px}
-  .narration-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:4px}
-  .narration-val{font-size:12px;color:#334155;line-height:1.5}
-  .sig-section{border-top:2px solid #0B3B2E;padding-top:18px;margin-top:24px}
-  .sig-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px}
-  .sig-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#0B3B2E;margin-bottom:14px}
-  .sig-line{border-bottom:1.5px solid #94a3b8;height:28px;margin-bottom:4px}
-  .sig-sub{font-size:9px;color:#94a3b8;margin-bottom:10px}
-  .notice{font-size:9px;color:#94a3b8;text-align:center;margin-top:18px;border-top:1px solid #f1f5f9;padding-top:10px;line-height:1.6}
-  @media print{body{padding:12px 14px}@page{size:A4 portrait;margin:12mm}}
-</style></head>
-<body>
-  <div class="page">
-  <div class="hdr">
-    <div></div>
-    <div class="co-center">
-      ${logoHtml}
-      <div class="co-center-name">${esc(coName)}</div>
-      ${coInfo ? `<div class="co-sub">${esc(coInfo)}</div>` : ""}
-    </div>
-    <div class="doc-title-wrap">
-      <div class="doc-type">PAYMENT VOUCHER</div>
-      <div class="doc-no"># ${esc(voucher.voucherNo)}</div>
-      <div class="doc-date">${fmtDate(voucher.dueDate)}</div>
-    </div>
-  </div>
-
-  <div class="divider"></div>
-  <div class="status-badge">${esc(String(voucher.status||"").toUpperCase())}</div>
-
-  <div class="amt-box">
-    <div class="amt-label">Amount</div>
-    <div class="amt-val">${fmtAmt(voucher.amount)}</div>
-  </div>
-
-  <div class="fields-grid">
-    ${field("Voucher No.", voucher.voucherNo, true)}
-    ${field("Category", catLabel)}
-    ${field("Due Date", fmtDate(voucher.dueDate))}
-    ${field("Property", voucher.propertyName)}
-    ${field("Landlord / Owner", voucher.landlordName)}
-    ${field("Reference", isRawObjectId(voucher.reference) ? "" : voucher.reference)}
-    ${field("Liability Account", voucher.liabilityAccountName)}
-    ${field("Debit Account", voucher.debitAccountName)}
-    ${field("Settlement Account", voucher.settlementAccountName)}
-  </div>
-
-  ${voucher.narration ? `
-  <div class="narration-box">
-    <div class="narration-label">Narration / Description</div>
-    <div class="narration-val">${esc(voucher.narration)}</div>
-  </div>` : ""}
-
-  <div class="sig-section">
-    <div class="sig-grid">
-      <div>
-        <div class="sig-title">Prepared By</div>
-        <div class="sig-line" style="display:flex;align-items:flex-end;padding-bottom:3px;"><span style="font-size:11px;font-weight:700;color:#0f172a;">${esc(preparedByName)}</span></div>
-        <div class="sig-sub">Signature &amp; Date</div>
-      </div>
-      <div>
-        <div class="sig-title">Approved By</div>
-        <div class="sig-line"></div><div class="sig-sub">Signature</div>
-        <div class="sig-line"></div><div class="sig-sub">Name &amp; Date</div>
-      </div>
-      <div>
-        <div class="sig-title">Received / Paid By</div>
-        <div class="sig-line"></div><div class="sig-sub">Signature</div>
-        <div class="sig-line"></div><div class="sig-sub">Name &amp; Date</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="notice">Official payment voucher generated by ${esc(coName)} • Printed: ${esc(printedOn)}</div>
-  </div>
-</body></html>`);
-    win.document.close();
-    setTimeout(() => { win.focus(); win.print(); }, 450);
+    const catLabel = categories.find((c) => c.value === voucher.category)?.label || voucher.category || "—";
+    const preparedByName = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(" ") || currentUser?.email || "Milik Admin";
+    const STATUS_TONE = { draft: "warning", approved: "info", paid: "success", reversed: "danger" };
+    const paid = voucher.status === "paid";
+    const printed = printDocument({
+      company: currentCompany,
+      docType: "Payment Voucher",
+      docNumber: voucher.voucherNo || "",
+      status: { label: voucher.status || "draft", tone: STATUS_TONE[voucher.status] || "neutral" },
+      watermark: paid ? "PAID" : voucher.status === "reversed" ? "VOID" : "",
+      meta: [["Due date", fmtDate(voucher.dueDate)]],
+      parties: [
+        { heading: "Pay to", name: voucher.landlordName || voucher.payeeName || "—", lines: [voucher.propertyName ? `Property: ${voucher.propertyName}` : ""] },
+        { heading: "Purpose", name: catLabel, lines: [isRawObjectId(voucher.reference) ? "" : (voucher.reference ? `Reference: ${voucher.reference}` : ""), voucher.narration || ""] },
+      ],
+      table: {
+        columns: [{ label: "Account", value: (r) => r.label }, { label: "Name", value: (r) => r.name }],
+        rows: [
+          { label: "Liability account", name: voucher.liabilityAccountName },
+          { label: "Debit account", name: voucher.debitAccountName },
+          { label: "Settlement account", name: voucher.settlementAccountName },
+        ].filter((r) => r.name),
+      },
+      totals: [{ label: "Amount", value: `KES ${Number(voucher.amount || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, hero: true }],
+      amountWords: { amount: Number(voucher.amount || 0), currency: currentCompany?.baseCurrency || "KES" },
+      signatures: [{ label: "Prepared by", name: preparedByName }, { label: "Approved by" }, { label: "Received / paid by" }],
+      stamp: true,
+      preparedBy: preparedByName,
+    });
+    if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
   };
 
   const downloadVoucherPdf = async (voucher) => {

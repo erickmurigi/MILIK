@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
+import { printTabularList } from "../../utils/printList";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
@@ -21,11 +22,6 @@ const fmtSigned = (v) => {
 };
 
 const todayString = () => new Date().toISOString().split("T")[0];
-
-const escapeHtml = (v) =>
-  String(v ?? "")
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 
 // ─── Section block ────────────────────────────────────────────────────────────
 const SectionBlock = React.memo(({ section, categoryTotal, accentColor }) => {
@@ -222,82 +218,46 @@ const BalanceSheetReport = () => {
   const handlePrintPDF = () => {
     if (!canExport) return toast.warning("You do not have permission to print reports");
     if (loading)   return toast.info("Please wait for the report to finish loading.");
-    const win = window.open("", "_blank", "width=1200,height=900");
-    if (!win) return toast.error("Popup blocked. Allow popups to print.");
-
-    const buildCard = (title, sections = [], total = 0, totalColor = "#111") => {
-      const content = sections.length
-        ? sections.map((s) => `
-            <div class="s-block">
-              <div class="s-head"><span>${escapeHtml(s.label)}</span><span>KES ${escapeHtml(fmtSigned(s.total))}</span></div>
-              ${s.rows.map((r) => `
-                <div class="s-row">
-                  <span><span class="code">${escapeHtml(r.code)}</span>${escapeHtml(r.name)}</span>
-                  <span class="amt">KES ${escapeHtml(fmtSigned(r.amount))}</span>
-                </div>`).join("")}
-            </div>`).join("")
-        : `<div class="empty">No accounts found.</div>`;
-      return `<div class="card"><div class="card-hdr">${escapeHtml(title)}</div><div class="card-body">${content}
-        <div class="total-row" style="color:${totalColor}"><span>Total ${escapeHtml(title)}</span><span>KES ${escapeHtml(fmtSigned(total))}</span></div>
-      </div></div>`;
-    };
-
-    const bal = report.summary?.balanced;
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Balance Sheet</title>
-      <style>
-        *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:Arial,sans-serif;color:#111;padding:20px;font-size:11px}
-        h1{font-size:20px;font-weight:900;color:${GRN};margin-bottom:2px}
-        .sub{font-size:10px;color:#6b7280;margin-bottom:12px}
-        .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
-        .kpi-box{border-left:3px solid;padding:8px 10px}
-        .kpi-box .lbl{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#9ca3af;margin-bottom:3px}
-        .kpi-box .val{font-size:15px;font-weight:900}
-        .two{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
-        .stack{display:flex;flex-direction:column;gap:12px}
-        .card{border:1px solid #e5e7eb;overflow:hidden}
-        .card-hdr{background:${GRN};color:#fff;padding:8px 10px;font-size:11px;font-weight:800;letter-spacing:.06em}
-        .card-body{padding:10px}
-        .s-block{margin-bottom:10px}
-        .s-head{display:flex;justify-content:space-between;border-bottom:1px solid #f3f4f6;padding-bottom:3px;margin-bottom:4px;font-size:10px;font-weight:800;color:#374151}
-        .s-row{display:flex;justify-content:space-between;align-items:baseline;font-size:9.5px;padding:2px 0 2px 8px;color:#4b5563;border-bottom:1px solid #f9fafb}
-        .code{font-family:monospace;color:#9ca3af;margin-right:6px;font-weight:700}
-        .amt{font-family:monospace;font-weight:700;white-space:nowrap}
-        .total-row{display:flex;justify-content:space-between;border-top:2px solid #e5e7eb;margin-top:8px;padding-top:7px;font-size:12px;font-weight:800}
-        .empty{font-size:10px;color:#9ca3af;font-style:italic}
-        .summary{border:1px solid #e5e7eb;overflow:hidden}
-        .summary .hdr{background:#374151;color:#fff;padding:8px 10px;font-size:11px;font-weight:800}
-        .summary .row{display:flex;justify-content:space-between;padding:5px 10px;font-size:11px;border-bottom:1px solid #f3f4f6}
-        .summary .diff{font-weight:900;border-top:2px solid #d1d5db;border-bottom:none;padding-top:8px;font-size:12px}
-        @media print{body{padding:8px}@page{size:A4 portrait;margin:8mm}}
-      </style></head><body>
-      <h1>Balance Sheet</h1>
-      <p class="sub">${escapeHtml(businessName)} · As at ${escapeHtml(filters.asOfDate)} · ${escapeHtml(report.reportBasis || "Accrual basis")}</p>
-      <div class="kpi">
-        <div class="kpi-box" style="border-color:${GRN}"><div class="lbl">Total Assets</div><div class="val" style="color:${GRN}">KES ${escapeHtml(fmtSigned(report.summary?.totalAssets))}</div></div>
-        <div class="kpi-box" style="border-color:${RED}"><div class="lbl">Total Liabilities</div><div class="val" style="color:${RED}">KES ${escapeHtml(fmtSigned(report.summary?.totalLiabilities))}</div></div>
-        <div class="kpi-box" style="border-color:#15803d"><div class="lbl">Total Equity</div><div class="val" style="color:#15803d">KES ${escapeHtml(fmtSigned(report.summary?.totalEquity))}</div></div>
-        <div class="kpi-box" style="border-color:${bal ? GRN : RED}"><div class="lbl">Status</div><div class="val" style="color:${bal ? GRN : RED}">${bal ? "Balanced" : "Out of Balance"}</div></div>
-      </div>
-      <div class="two">
-        ${buildCard("Assets", report.assets?.sections || [], report.summary?.totalAssets || 0, GRN)}
-        <div class="stack">
-          ${buildCard("Liabilities", report.liabilities?.sections || [], report.summary?.totalLiabilities || 0, RED)}
-          ${buildCard("Equity", report.equity?.sections || [], report.summary?.totalEquity || 0, "#15803d")}
-        </div>
-      </div>
-      <div class="summary">
-        <div class="hdr">Statement Summary</div>
-        <div class="row"><span>Total Assets</span><span style="color:${GRN}">KES ${escapeHtml(fmtSigned(report.summary?.totalAssets))}</span></div>
-        <div class="row"><span>Total Liabilities</span><span style="color:${RED}">KES ${escapeHtml(fmtSigned(report.summary?.totalLiabilities))}</span></div>
-        <div class="row"><span>Total Equity</span><span style="color:#15803d">KES ${escapeHtml(fmtSigned(report.summary?.totalEquity))}</span></div>
-        <div class="row"><span>Liabilities + Equity</span><span>KES ${escapeHtml(fmtSigned(report.summary?.totalLiabilitiesAndEquity))}</span></div>
-        <div class="row diff" style="color:${bal ? GRN : RED}"><span>Difference</span><span>KES ${escapeHtml(fmtSigned(report.summary?.difference))}</span></div>
-      </div>
-    </body></html>`);
-    win.document.close();
-    win.focus();
-    setTimeout(() => win.print(), 400);
+    const sm = report.summary || {};
+    const block = (heading, sections, total) => [
+      { __group: heading },
+      ...(sections.length
+        ? sections.flatMap((sec) => [
+            { __group: sec.label },
+            ...sec.rows,
+            { __subtotal: ["", `Subtotal – ${sec.label}`, fmtSigned(sec.total)] },
+          ])
+        : [{ __subtotal: ["", "No accounts found.", ""] }]),
+      { __subtotal: ["", `Total ${heading}`, fmtSigned(total)] },
+    ];
+    const printed = printTabularList({
+      title: "Balance Sheet",
+      subtitle: `As at ${filters.asOfDate} · ${report.reportBasis || "Accrual basis"}`,
+      company: currentCompany,
+      orientation: "portrait",
+      summaryItems: [
+        ["Total assets", `KES ${fmtSigned(sm.totalAssets)}`],
+        ["Total liabilities", `KES ${fmtSigned(sm.totalLiabilities)}`],
+        ["Total equity", `KES ${fmtSigned(sm.totalEquity)}`],
+        ["Status", sm.balanced ? "Balanced" : "Out of balance"],
+      ],
+      columns: [
+        { label: "Code", value: (r) => r.code },
+        { label: "Account", value: (r) => r.name },
+        { label: "Amount (KES)", align: "right", value: (r) => fmtSigned(r.amount) },
+      ],
+      rows: [
+        ...block("Assets", report.assets?.sections || [], sm.totalAssets || 0),
+        ...block("Liabilities", report.liabilities?.sections || [], sm.totalLiabilities || 0),
+        ...block("Equity", report.equity?.sections || [], sm.totalEquity || 0),
+        { __group: "Statement summary" },
+        { __subtotal: ["", "Total assets", fmtSigned(sm.totalAssets)] },
+        { __subtotal: ["", "Liabilities + equity", fmtSigned(sm.totalLiabilitiesAndEquity)] },
+      ],
+      totalsRow: ["", "Difference", fmtSigned(sm.difference)],
+      signatures: [{ label: "Prepared by" }, { label: "Reviewed by" }],
+    });
+    if (!printed) toast.error("Popup blocked. Allow popups to print.");
   };
 
   const { summary = {} } = report;

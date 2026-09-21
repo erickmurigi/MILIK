@@ -6,6 +6,7 @@ import ImportModal from "../../components/Modals/ImportModal";
 import CwSmsModal from "../CarWash/CwSmsModal";
 import SaleEmailModal from "./SaleEmailModal";
 import { toast } from "react-toastify";
+import { printDocument } from "../../utils/printKit";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterSearch } from "./SaleFilterBar";
 import PaginationBar from "../../components/PaginationBar";
@@ -423,66 +424,23 @@ const SaleBuyers = () => {
   };
 
   const printBuyer = useCallback((row) => {
-    const co       = currentCompany || {};
-    const coName   = co.companyName || co.name || "MILIK";
-    const esc      = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-    // Only http(s) / data:image URLs may reach the <img src>; anything else falls back to the initial tile.
-    const logoSrc  = typeof co.logo === "string" && /^(https?:\/\/|data:image\/)/i.test(co.logo.trim()) ? co.logo.trim() : "";
-    const logoHtml = logoSrc
-      ? `<img src="${esc(logoSrc)}" alt="logo" style="width:72px;height:72px;object-fit:contain;border:1px solid #cbd5e1;" />`
-      : `<div style="width:72px;height:72px;background:#0B3B2E;color:#fff;font-size:26px;font-weight:900;display:flex;align-items:center;justify-content:center;">${esc(coName.slice(0, 1))}</div>`;
-    const coInfo   = [co.phoneNo || co.phone || co.phoneNumber, co.email || co.companyEmail].filter(Boolean).join(" • ");
-    const kycC     = { pending: "#92400e", verified: "#166534", rejected: "#9f1239" }[row.kycStatus] || "#334155";
-    const kycBg2   = { pending: "#fef3c7", verified: "#dcfce7", rejected: "#ffe4e6" }[row.kycStatus] || "#f1f5f9";
-    const printedOn= new Date().toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" });
-    const field    = (label, value) => `<div class="field"><div class="fl">${esc(label)}</div><div class="fv">${esc(value || "—")}</div></div>`;
-    const docsHtml = Array.isArray(row.kycDocuments) && row.kycDocuments.length
-      ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;margin-bottom:14px"><div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:6px">KYC Documents (${esc(row.kycDocuments.length)})</div>${row.kycDocuments.map((d) => `<div style="font-size:11px;color:#1e293b;padding:2px 0">&bull; ${esc(d)}</div>`).join("")}</div>`
-      : "";
-    const win = window.open("", "_blank", "width=900,height=720");
-    if (!win) return;
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-<title>${esc(T.saleBuyer)} Profile &mdash; ${esc(row.buyerNumber)}</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font-size:12px}
-.hdr{display:grid;grid-template-columns:80px 1fr 170px;align-items:start;border-bottom:3px solid #0B3B2E;padding-bottom:14px;margin-bottom:18px;gap:12px}
-.co-name{font-size:18px;font-weight:900;color:#0B3B2E}.co-sub{font-size:9px;color:#64748b;line-height:1.5}
-.doc-type{font-size:13px;font-weight:900;color:#0B3B2E;text-transform:uppercase;letter-spacing:.05em;text-align:right}
-.doc-no{font-family:monospace;font-size:15px;font-weight:700;text-align:right;margin-top:3px}
-.badge{display:inline-block;padding:3px 12px;font-size:10px;font-weight:800;float:right;margin-top:6px;background:${kycBg2};color:${kycC}}
-.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:#e2e8f0;border:1px solid #e2e8f0;overflow:hidden;margin-bottom:14px}
-.field{background:#fff;padding:9px 12px}.fl{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:2px}
-.fv{font-size:11px;font-weight:600;color:#1e293b}
-.notice{font-size:9px;color:#94a3b8;text-align:center;margin-top:20px;border-top:1px solid #f1f5f9;padding-top:10px}
-@media print{body{padding:14px 16px}@page{size:A4 portrait;margin:10mm}}
-</style></head><body>
-<div class="hdr">
-  <div>${logoHtml}</div>
-  <div><div class="co-name">${esc(coName)}</div>${coInfo ? `<div class="co-sub">${esc(coInfo)}</div>` : ""}</div>
-  <div>
-    <div class="doc-type">${esc(T.saleBuyer)} Profile</div>
-    <div class="doc-no">${esc(row.buyerNumber)}</div>
-    <div class="badge">KYC: ${esc(String(row.kycStatus || "").toUpperCase())}</div>
-  </div>
-</div>
-<div class="grid">
-  ${field(`${T.saleBuyer} No.`, row.buyerNumber)}
-  ${field("Full Name", row.fullName)}
-  ${field("ID / Passport", row.idNumber)}
-  ${field("Phone", row.phone)}
-  ${field("Email", row.email)}
-  ${field("Nationality", row.nationality)}
-  ${field("Source", String(row.source || "").replace(/_/g, " "))}
-  ${field("KYC Status", row.kycStatus)}
-  ${field("Address", row.address)}
-</div>
-${docsHtml}
-${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:11px;color:#334155;line-height:1.6"><div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:4px">Notes</div>${esc(row.notes)}</div>` : ""}
-<div class="notice">${esc(T.saleBuyer)} profile issued by ${esc(coName)} &bull; Printed: ${esc(printedOn)}</div>
-</body></html>`);
-    win.document.close();
-    setTimeout(() => { win.focus(); win.print(); }, 400);
+    const docs = Array.isArray(row.kycDocuments) ? row.kycDocuments : [];
+    const printed = printDocument({
+      company: currentCompany,
+      docType: `${T.saleBuyer} Profile`,
+      docNumber: row.buyerNumber || "",
+      status: { label: `KYC: ${row.kycStatus || "—"}`, tone: { verified: "success", pending: "warning", rejected: "danger" }[row.kycStatus] || "neutral" },
+      parties: [{ heading: `${T.saleBuyer} details`, name: row.fullName, lines: [row.phone, row.email, row.address] }],
+      details: {
+        heading: "Identification",
+        rows: [[`${T.saleBuyer} No.`, row.buyerNumber || "—"], ["ID / Passport", row.idNumber || "—"], ["Nationality", row.nationality || "—"], ["Source", String(row.source || "").replace(/_/g, " ") || "—"], ["KYC status", row.kycStatus || "—"]],
+      },
+      notes: [
+        ...(docs.length ? [{ heading: `KYC documents (${docs.length})`, items: docs }] : []),
+        ...(row.notes ? [{ heading: "Notes", text: row.notes }] : []),
+      ],
+    });
+    if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
   }, [currentCompany, T.saleBuyer]);
 
   const handleSelectRow = useCallback((row) => setSelected((prev) => (prev?._id === row._id ? null : row)), [setSelected]);

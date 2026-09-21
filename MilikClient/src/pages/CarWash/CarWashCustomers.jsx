@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSelector } from "react-redux";
 import {
   FaCar, FaCarSide, FaClock, FaCommentDots, FaEdit,
   FaExclamationTriangle, FaIdCard, FaMobileAlt, FaMoneyBillWave,
@@ -13,6 +14,8 @@ import { FaBalanceScale } from "react-icons/fa";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import { fmtDate } from "../../utils/dates";
+import { printDocument } from "../../utils/printKit";
+import { selectCurrentCompany } from "../../redux/selectors";
 import { inputClass, labelClass } from "../../utils/formStyles";
 import Modal from "../../components/common/Modal";
 import CwSmsModal from "./CwSmsModal";
@@ -89,43 +92,34 @@ const StampBar = React.memo(({ card, program }) => {
 });
 
 // ─── Print statement ───────────────────────────────────────────────────────────
-const printStatement = (customer, jobs, totals) => {
-  const fmtKES = (v) => `KES ${Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const fmtD   = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
-  const rows = jobs.map((j) => `
-    <tr>
-      <td>${fmtD(j.date)}</td><td>${j.jobNumber}</td><td><b>${j.plateNumber}</b></td>
-      <td>${j.serviceName}</td><td class="num">${fmtKES(j.charge)}</td>
-      <td class="num">${fmtKES(j.paid)}</td>
-      <td class="num ${j.balance > 0 ? "red" : "grn"}">${fmtKES(j.balance)}</td>
-    </tr>`).join("");
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Statement · ${customer.name}</title>
-  <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;padding:24px}
-  h1{font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#0B3B2E}.sub{font-size:10px;color:#666;margin-top:2px}
-  .meta{display:flex;gap:32px;margin:16px 0 12px;border-top:2px solid #0B3B2E;padding-top:10px}
-  .meta-item label{display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:#999;letter-spacing:.5px}
-  .meta-item span{font-size:11px;font-weight:600;color:#1a1a1a}table{width:100%;border-collapse:collapse;margin-top:8px}
-  thead tr{background:#0B3B2E;color:#fff}th{padding:6px 8px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
-  th.num,td.num{text-align:right}td{padding:5px 8px;border-bottom:1px solid #f0f0f0;font-size:10px}
-  tr:nth-child(even) td{background:#f8faf9}.red{color:#dc2626;font-weight:700}.grn{color:#16a34a;font-weight:600}
-  tfoot td{border-top:2px solid #0B3B2E;font-weight:700;padding:6px 8px;font-size:11px;background:#f4f7f5}
-  .footer{margin-top:24px;font-size:9px;color:#aaa;text-align:center}@media print{body{padding:12px}}</style>
-  </head><body><h1>Customer Statement</h1>
-  <div class="sub">${customer.name}${customer.phone ? " · " + customer.phone : ""}${(customer.plates||[]).length ? " · Plates: " + customer.plates.join(", ") : ""}</div>
-  <div class="meta">
-    <div class="meta-item"><label>Generated</label><span>${new Date().toLocaleDateString("en-KE",{day:"2-digit",month:"short",year:"numeric"})}</span></div>
-    <div class="meta-item"><label>Total Invoiced</label><span>${fmtKES(totals.invoiced)}</span></div>
-    <div class="meta-item"><label>Total Paid</label><span style="color:#16a34a">${fmtKES(totals.paid)}</span></div>
-    <div class="meta-item"><label>Outstanding</label><span style="color:${totals.outstanding>0?"#dc2626":"#16a34a"}">${fmtKES(totals.outstanding)}</span></div>
-  </div>
-  <table><thead><tr><th>Date</th><th>Job #</th><th>Plate</th><th>Service</th><th class="num">Charge</th><th class="num">Paid</th><th class="num">Balance</th></tr></thead>
-  <tbody>${rows||"<tr><td colspan='7' style='text-align:center;color:#999;padding:16px'>No jobs on record</td></tr>"}</tbody>
-  <tfoot><tr><td colspan="4">TOTALS</td><td class="num">${fmtKES(totals.invoiced)}</td><td class="num">${fmtKES(totals.paid)}</td>
-  <td class="num ${totals.outstanding>0?"red":"grn"}">${fmtKES(totals.outstanding)}</td></tr></tfoot></table>
-  <div class="footer">Computer-generated statement · ${window.location.hostname}</div>
-  <script>window.onload=()=>window.print()</script></body></html>`;
-  const win = window.open("", "_blank", "width=800,height=700");
-  if (win) { win.document.write(html); win.document.close(); }
+const printStatement = (company, customer, jobs, totals) => {
+  const fa = (v) => `KES ${fmt(v)}`;
+  const printed = printDocument({
+    company,
+    docType: "Customer Statement",
+    docNumber: "",
+    meta: [["Generated", fmtDate(new Date())]],
+    parties: [{ heading: "Customer", name: customer.name, lines: [customer.phone || "", (customer.plates || []).length ? `Plates: ${customer.plates.join(", ")}` : ""] }],
+    table: {
+      columns: [
+        { label: "Date", value: (j) => fmtDate(j.date) },
+        { label: "Job #", value: (j) => j.jobNumber },
+        { label: "Plate", value: (j) => j.plateNumber },
+        { label: "Service", value: (j) => j.serviceName },
+        { label: "Charge", align: "right", value: (j) => fmt(j.charge) },
+        { label: "Paid", align: "right", value: (j) => fmt(j.paid) },
+        { label: "Balance", align: "right", value: (j) => fmt(j.balance) },
+      ],
+      rows: jobs,
+      empty: "No jobs on record",
+    },
+    totals: [
+      { label: "Total invoiced", value: fa(totals.invoiced) },
+      { label: "Total paid", value: fa(totals.paid), tone: "pos" },
+      { label: "Outstanding", value: fa(totals.outstanding), hero: true },
+    ],
+  });
+  if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
 };
 
 const STMT_TH = "px-3 py-1.5 text-left text-[9px] font-bold uppercase tracking-widest text-white/80";
@@ -134,6 +128,7 @@ const FMT_DATE_OPTS = { day: "2-digit", month: "short", year: "numeric" };
 
 // ─── Expanded detail row ───────────────────────────────────────────────────────
 const CustomerDetail = React.memo(({ customer, program }) => {
+  const currentCompany = useSelector(selectCurrentCompany);
   const { data: stmtData, isLoading: loading, isError } = useQuery({
     queryKey: ["cw-customer-stmt", String(customer._id)],
     queryFn: () => carWashApi.getCustomerStatement(customer._id),
@@ -162,7 +157,7 @@ const CustomerDetail = React.memo(({ customer, program }) => {
               </span>
             )}
           </div>
-          <button onClick={() => printStatement(customer, jobs, totals)} disabled={loading || !jobs.length}
+          <button onClick={() => printStatement(currentCompany, customer, jobs, totals)} disabled={loading || !jobs.length}
             className="flex items-center gap-1.5 border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40">
             <FaPrint size={9} /> Print
           </button>

@@ -14,6 +14,8 @@ import { useTerms, prefixedTerm } from "../../hooks/useTerm";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
+import { printDocument } from "../../utils/printKit";
+import { money, shortDate } from "./salePrint";
 
 const STATUS_BADGE = {
   pending: "bg-amber-100 text-amber-700 border-amber-200",
@@ -529,104 +531,42 @@ const SaleOffers = () => {
 
   const printOffer = useCallback((offer) => {
     const co = currentCompany || {};
-    // Every dynamic value is HTML-escaped: the popup is same-origin (document.write), so raw
-    // interpolation of company/buyer/notes text would be stored XSS.
-    const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-    const logoSrc = typeof co.logo === "string" && /^(https?:\/\/|data:image\/)/i.test(co.logo.trim()) ? co.logo.trim() : "";
-    const fmtD = (d) => (d ? new Date(d).toLocaleDateString("en-KE") : "");
-    const askingPrice = esc(fmtKES(offer.listing?.askingPrice));
-    const html = `<!DOCTYPE html><html><head><title>${esc(T.saleOffer)} — ${esc(offer.offerNumber)}</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;background:#fff}
-.page{max-width:210mm;margin:0 auto;padding:18mm 18mm 14mm}
-.hdr{border-bottom:3px solid #0B3B2E;padding-bottom:10px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-start}
-.brand{font-size:22px;font-weight:900;color:#0B3B2E;letter-spacing:2px}
-.brand img{height:52px;object-fit:contain}
-.co-info{text-align:right;font-size:9.5px;color:#444;line-height:1.7}
-.doc-title{text-align:center;margin:16px 0 18px}
-.doc-title h1{font-size:18px;font-weight:900;letter-spacing:3px;color:#0B3B2E;text-transform:uppercase}
-.doc-title p{font-size:10px;color:#555;margin-top:3px}
-.ref-bar{display:flex;justify-content:space-between;background:#f8fafb;border:1px solid #e0e7ef;border-radius:6px;padding:10px 14px;margin-bottom:18px;font-size:10px}
-.ref-bar span{font-weight:700;color:#0B3B2E}
-.sec{font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#0B3B2E;border-bottom:1.5px solid #0B3B2E;padding-bottom:4px;margin:16px 0 10px}
-.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 14px}
-.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
-.f label{font-size:8.5px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:2px}
-.f span{font-size:11px;font-weight:600;color:#111;display:block;padding:5px 8px;border:1px solid #e5e7eb;border-radius:4px;background:#fafafa;min-height:26px}
-.price-box{background:#0B3B2E;color:#fff;border-radius:8px;padding:14px 20px;margin:16px 0;display:flex;justify-content:space-between;align-items:center}
-.price-box .lbl{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;opacity:.8}
-.price-box .amt{font-size:22px;font-weight:900;font-family:monospace}
-.counter-box{background:#5b21b6;color:#fff;border-radius:8px;padding:10px 20px;margin:-8px 0 16px;display:flex;justify-content:space-between;align-items:center}
-.notes{border:1px solid #e5e7eb;border-radius:6px;padding:10px;background:#fafafa;font-size:10.5px;line-height:1.6;min-height:40px}
-.sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin-top:32px}
-.sig{border-top:1.5px solid #333;padding-top:6px}
-.sig p{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#555;margin-top:2px}
-.footer{margin-top:24px;padding-top:10px;border-top:1.5px solid #0B3B2E;font-size:8.5px;color:#777;text-align:center}
-@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-</style></head><body><div class="page">
-<div class="hdr">
-  <div class="brand">${logoSrc ? `<img src="${esc(logoSrc)}" alt="logo"/>` : esc(co.companyName || "MILIK")}</div>
-  <div class="co-info"><strong>${esc(co.companyName)}</strong><br/>${esc(co.physicalAddress || co.postalAddress)}<br/>${esc([co.telephone, co.email].filter(Boolean).join(" | "))}<br/>${co.pinNumber ? "PIN: " + esc(co.pinNumber) : ""}</div>
-</div>
-<div class="doc-title"><h1>Purchase ${esc(T.saleOffer)} Document</h1><p>Formal Expression of Interest / ${esc(T.saleOffer)} to Purchase</p></div>
-<div class="ref-bar">
-  <div>${esc(T.saleOffer)} Ref: <span>${esc(offer.offerNumber)}</span></div>
-  <div>Status: <span>${esc((offer.status || "pending").toUpperCase())}</span></div>
-  <div>Dated: <span>${esc(fmtD(offer.createdAt || Date.now()))}</span></div>
-</div>
-<div class="price-box">
-  <div><div class="lbl">${esc(T.saleBuyer)}'s ${esc(T.saleOffer)} Price</div><div class="amt">${esc(fmtKES(offer.offerAmount))}</div></div>
-  <div style="text-align:right;font-size:10px;opacity:.8">Asking: ${askingPrice}</div>
-</div>
-${offer.counterOfferAmount ? `<div class="counter-box">
-  <div><div class="lbl">Counter ${esc(T.saleOffer)} (Seller)</div><div class="amt">${esc(fmtKES(offer.counterOfferAmount))}</div></div>
-  <div style="text-align:right;font-size:10px;opacity:.8">Delta vs ${esc(T.saleOffer.toLowerCase())}: ${esc(`${offer.counterOfferAmount > offer.offerAmount ? "+" : ""}${Math.round(((offer.counterOfferAmount - offer.offerAmount) / offer.offerAmount) * 100)}`)}%</div>
-</div>` : ""}
-<div class="sec">Property Details</div>
-<div class="g3">
-  <div class="f"><label>${esc(T.saleListing)} No.</label><span>${esc(offer.listing?.listingNumber || "-")}</span></div>
-  <div class="f"><label>Property Title</label><span>${esc(offer.listing?.title || "-")}</span></div>
-  <div class="f"><label>Asking Price</label><span>${askingPrice}</span></div>
-  <div class="f"><label>Type</label><span style="text-transform:capitalize">${esc(offer.listing?.propertyType || "-")}</span></div>
-  <div class="f"><label>Location</label><span>${esc([offer.listing?.location?.area, offer.listing?.location?.city].filter(Boolean).join(", ") || "-")}</span></div>
-</div>
-<div class="sec">${esc(T.saleBuyer)} Information</div>
-<div class="g3">
-  <div class="f"><label>${esc(T.saleBuyer)} No.</label><span>${esc(offer.buyer?.buyerNumber || "-")}</span></div>
-  <div class="f"><label>Full Name</label><span>${esc(offer.buyer?.fullName || "-")}</span></div>
-  <div class="f"><label>Phone</label><span>${esc(offer.buyer?.phone || "-")}</span></div>
-  <div class="f"><label>Email</label><span>${esc(offer.buyer?.email || "-")}</span></div>
-  <div class="f"><label>ID / Passport</label><span>${esc(offer.buyer?.idNumber || "-")}</span></div>
-</div>
-${offer.agent ? `<div class="sec">Sales ${esc(T.saleAgent)}</div><div class="g3">
-  <div class="f"><label>${esc(T.saleAgent)} No.</label><span>${esc(offer.agent?.agentNumber || "-")}</span></div>
-  <div class="f"><label>Name</label><span>${esc(offer.agent?.fullName || "-")}</span></div>
-  <div class="f"><label>Commission</label><span>${esc(offer.agent?.commissionRate || 0)}${offer.agent?.commissionType === "percentage" ? "%" : " KES (Flat)"}</span></div>
-</div>` : ""}
-<div class="sec">Terms</div>
-<div class="g2">
-  <div class="f"><label>Validity Date</label><span>${esc(fmtD(offer.validityDate) || "-")}</span></div>
-  <div class="f"><label>Current Status</label><span style="text-transform:capitalize">${esc(offer.status || "pending")}</span></div>
-</div>
-${offer.negotiationNotes ? `<div class="sec">Negotiation Notes</div><div class="notes">${esc(offer.negotiationNotes)}</div>` : ""}
-${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${esc(offer.notes)}</div>` : ""}
-<div class="sigs">
-  <div class="sig"><br/><p>${esc(T.saleBuyer)} Signature</p><p style="color:#111">${esc(offer.buyer?.fullName)}</p></div>
-  <div class="sig"><br/><p>Sales ${esc(T.saleAgent)}</p><p style="color:#111">${esc(offer.agent?.fullName || "Unassigned")}</p></div>
-  <div class="sig"><br/><p>Authorized Officer</p><p style="color:#111">${esc(co.companyName)}</p></div>
-</div>
-<div class="footer">
-  This document is a formal expression of interest and does not constitute a binding sale agreement until countersigned by all parties and a formal Sale Agreement is executed.
-  &nbsp;|&nbsp; Generated: ${esc(new Date().toLocaleString("en-KE"))} &nbsp;|&nbsp; MILIK ${esc(T.saleModule)} System
-</div>
-</div></body></html>`;
-    const w = window.open("", "_blank", "width=900,height=700");
-    if (!w) { toast.warn(`Allow pop-ups to print the ${T.saleOffer.toLowerCase()}`); return; }
-    w.document.write(html);
-    w.document.close();
-    w.onload = () => w.print();
-  }, [currentCompany, T.saleOffer, T.saleBuyer, T.saleListing, T.saleAgent, T.saleModule]);
+    const listing = offer.listing || {};
+    const buyer = offer.buyer || {};
+    const agent = offer.agent || null;
+    const kes = (v) => `KES ${money(v)}`;
+    const status = offer.status || "pending";
+    const printed = printDocument({
+      company: co,
+      docType: `Purchase ${T.saleOffer} Document`,
+      docNumber: offer.offerNumber || "",
+      status: { label: status, tone: { accepted: "success", rejected: "danger", negotiating: "info", pending: "warning" }[status] || "neutral" },
+      meta: [["Dated", shortDate(offer.createdAt || Date.now())], ["Valid until", offer.validityDate ? shortDate(offer.validityDate) : "—"]],
+      parties: [
+        { heading: `${T.saleBuyer} information`, name: buyer.fullName || "—", lines: [buyer.buyerNumber ? `${T.saleBuyer} No.: ${buyer.buyerNumber}` : "", buyer.phone, buyer.email, buyer.idNumber ? `ID / Passport: ${buyer.idNumber}` : ""] },
+        { heading: "Property details", name: listing.title || "—", lines: [listing.listingNumber ? `${T.saleListing} No.: ${listing.listingNumber}` : "", listing.propertyType, [listing.location?.area, listing.location?.city].filter(Boolean).join(", ")] },
+        ...(agent ? [{ heading: `Sales ${T.saleAgent}`, name: agent.fullName || "—", lines: [agent.agentNumber ? `${T.saleAgent} No.: ${agent.agentNumber}` : "", `Commission: ${agent.commissionRate || 0}${agent.commissionType === "percentage" ? "%" : " KES (Flat)"}`] }] : []),
+      ],
+      totals: [
+        { label: "Asking price", value: kes(listing.askingPrice) },
+        ...(offer.counterOfferAmount ? [{ label: `Counter ${T.saleOffer} (seller)`, value: kes(offer.counterOfferAmount), strong: true }] : []),
+        { label: `${T.saleBuyer}'s ${T.saleOffer} price`, value: kes(offer.offerAmount), hero: true },
+      ],
+      amountWords: { amount: offer.offerAmount, currency: "KES" },
+      notes: [
+        ...(offer.negotiationNotes ? [{ heading: "Negotiation notes", text: offer.negotiationNotes }] : []),
+        ...(offer.notes ? [{ heading: "Additional notes", text: offer.notes }] : []),
+        { heading: "Disclaimer", text: "This document is a formal expression of interest and does not constitute a binding sale agreement until countersigned by all parties and a formal Sale Agreement is executed." },
+      ],
+      signatures: [
+        { label: `${T.saleBuyer} signature`, name: buyer.fullName || "" },
+        { label: `Sales ${T.saleAgent}`, name: agent?.fullName || "Unassigned" },
+        { label: "Authorised officer", name: co.companyName || co.name || "" },
+      ],
+      stamp: true,
+    });
+    if (!printed) toast.warn(`Allow pop-ups to print the ${T.saleOffer.toLowerCase()}`);
+  }, [currentCompany, T.saleOffer, T.saleBuyer, T.saleListing, T.saleAgent]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 

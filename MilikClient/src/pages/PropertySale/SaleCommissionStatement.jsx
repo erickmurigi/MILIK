@@ -4,6 +4,9 @@ import { useSelector } from "react-redux";
 import { saleApi } from "../../services/propertySaleApi";
 import { useTerms } from "../../hooks/useTerm";
 import { fmtDate } from "../../utils/dates";
+import { printDocument } from "../../utils/printKit";
+import { toast } from "react-toastify";
+import { POPUP_BLOCKED, money } from "./salePrint";
 
 const fmtKES  = (n) => new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", minimumFractionDigits: 2 }).format(Number(n) || 0);
 const fmtLabel = (s) => String(s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -18,6 +21,49 @@ const PRINT_STYLES = `
     #sale-print-root { position: fixed !important; inset: 0 !important; background: white !important; }
   }
 `;
+
+const kes = (n) => `KES ${money(n)}`;
+const COMM_TONE = { paid: "success", pending: "warning", approved: "info", cancelled: "neutral", reversed: "danger" };
+
+const printCommissionStatement = (company, comm, T) => {
+  const agent = comm.agent || {};
+  const deal = comm.deal || {};
+  const listing = comm.listing || {};
+  const buyer = comm.buyer || {};
+  const grossAmt = Number(comm.commissionAmount) || 0;
+  const whtAmt = Number(comm.whtAmount) || 0;
+  const whtRate = Number(comm.whtRate) || 0;
+  const netAmt = comm.netAmount != null ? Number(comm.netAmount) || 0 : grossAmt - whtAmt;
+  const payLabel = comm.status === "paid" ? "paid" : "due";
+  const printed = printDocument({
+    company,
+    docType: "Commission Statement",
+    docNumber: comm.commissionNumber || "",
+    status: { label: comm.status || "", tone: COMM_TONE[comm.status] || "neutral" },
+    meta: comm.status === "paid" && comm.payoutDate ? [["Paid on", fmtDate(comm.payoutDate)]] : [],
+    parties: [
+      { heading: T.saleAgent, name: agent.fullName || "—", lines: [agent.agentNumber ? `ID: ${agent.agentNumber}` : "", agent.phone] },
+      { heading: `Property / ${T.saleDeal}`, name: (typeof listing === "object" ? listing.title || listing.listingNumber : listing) || "—", lines: [deal.dealNumber ? `${T.saleDeal}: ${deal.dealNumber}` : "", buyer.fullName ? `${T.saleBuyer}: ${buyer.fullName}` : ""] },
+    ],
+    details: {
+      heading: "Commission basis",
+      rows: [["Sale amount", kes(comm.saleAmount)], ["Commission type", fmtLabel(comm.commissionType)], ["Rate / basis", comm.commissionType === "percentage" ? `${comm.commissionRate}%` : kes(comm.commissionRate)]],
+    },
+    totals: [
+      { label: "Gross commission", value: kes(grossAmt) },
+      { label: `Less: WHT${whtRate > 0 ? ` (${whtRate}%)` : ""}`, value: whtAmt > 0 ? `- ${kes(whtAmt)}` : kes(0), tone: whtAmt > 0 ? "neg" : "" },
+      { label: `Net commission ${payLabel}`, value: kes(netAmt), hero: true },
+    ],
+    amountWords: { amount: netAmt, currency: "KES" },
+    notes: [
+      ...(comm.status === "paid" ? [{ heading: "Payout details", items: [`Date: ${fmtDate(comm.payoutDate)}`, `Method: ${fmtLabel(comm.payoutMethod)}`, ...(comm.payoutReference ? [`Reference: ${comm.payoutReference}`] : [])] }] : []),
+      ...(comm.notes ? [{ heading: "Notes", text: comm.notes }] : []),
+    ],
+    signatures: [{ label: "Authorised signature", name: company?.companyName || company?.name || "" }, { label: `${T.saleAgent} acknowledgement`, name: agent.fullName || "" }],
+    stamp: true,
+  });
+  if (!printed) toast.error(POPUP_BLOCKED);
+};
 
 const statusStyle = (s) => ({
   pending:   "border-amber-200 bg-amber-50 text-amber-700",
@@ -74,7 +120,7 @@ const SaleCommissionStatement = () => {
     <div className="min-h-screen bg-slate-100 p-6 print:bg-white print:p-0">
       <div id="sale-print-toolbar" className="mx-auto mb-4 flex max-w-[780px] items-center justify-between gap-3 print:hidden">
         <button onClick={() => navigate(-1)} className="border border-slate-300 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">← Back</button>
-        <button onClick={() => window.print()} className="bg-[#0B3B2E] px-5 py-1.5 text-xs font-black text-white hover:bg-[#07271e]">Print / Save PDF</button>
+        <button onClick={() => printCommissionStatement(company, comm, T)} className="bg-[#0B3B2E] px-5 py-1.5 text-xs font-black text-white hover:bg-[#07271e]">Print / Save PDF</button>
       </div>
 
       <div id="sale-print-root" className="mx-auto max-w-[780px] bg-white shadow-lg print:shadow-none">

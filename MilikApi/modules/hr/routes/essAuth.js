@@ -79,6 +79,15 @@ router.post('/login', essLoginLimiter, async (req, res) => {
         _id:         company._id,
         companyName: company.companyName,
         companyCode: company.companyCode,
+        // letterhead details for printed payslips / letters (logo only when it is a URL, to keep the stored session small)
+        logo:          /^https?:\/\//i.test(company.logo || '') ? company.logo : '',
+        postalAddress: company.postalAddress || '',
+        roadStreet:    company.roadStreet || '',
+        town:          company.town || '',
+        phoneNo:       company.phoneNo || '',
+        email:         company.email || '',
+        taxPIN:        company.taxPIN || '',
+        registrationNo: company.registrationNo || '',
       },
     });
   } catch (e) {

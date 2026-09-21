@@ -10,6 +10,8 @@ import { fmtKES, SALE_MONTHS, saleApi } from "../../services/propertySaleApi";
 import { fmtDate } from "../../utils/dates";
 import { listingAgentName } from "../../utils/saleAgent";
 import { useTerms } from "../../hooks/useTerm";
+import { printTabularList } from "../../utils/printKit";
+import { POPUP_BLOCKED, money } from "./salePrint";
 const fmtLabel = (s) => (s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
 const METHOD_BADGE = {
@@ -88,46 +90,54 @@ const SaleMonthlyDetail = () => {
   ];
 
   const printReport = useCallback(() => {
-    const co = currentCompany || {};
-    // Every dynamic value is HTML-escaped (incl. quotes): the popup is same-origin (document.write),
-    // so raw interpolation of company/deal/buyer text, the URL year param or a crafted logo URL would be stored XSS.
-    const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-    const name = co.companyName || co.name || co.businessName || 'Milik';
-    const logo = typeof co.logo === 'string' && /^(https?:\/\/|data:image\/)/i.test(co.logo.trim()) ? co.logo.trim() : '';
-    const win = window.open('', '_blank', 'width=1120,height=800');
-    if (!win) { toast.error('Pop-up blocked — allow pop-ups for this site'); return; }
-    const fmt = (v) => `KES ${Number(v || 0).toLocaleString()}`;
-    win.document.write(`<!DOCTYPE html><html><head><title>${esc(monthName)} ${esc(year)} Report</title><style>
-      @page{size:A4 landscape;margin:12mm 14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
-      .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
-      .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
-      .sub{font-size:10px;color:#475569;margin-top:2px}.meta{text-align:right;color:#64748b;font-size:8.5px;line-height:1.6}
-      .logo{max-height:40px;max-width:110px;object-fit:contain;margin-bottom:4px}
-      .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
-      .card{border:1px solid #dbe2ea;border-radius:6px;background:#f8fafc;padding:6px 8px}
-      .cl{font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:800}
-      .cv{font-size:12px;font-weight:900;color:#0f172a;margin-top:3px}
-      h3{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#0B3B2E;font-weight:900;margin:12px 0 5px;border-top:1px solid #dbe2ea;padding-top:8px}
-      table{width:100%;border-collapse:collapse;font-size:8.5px;margin-bottom:8px}
-      thead th{background:#0B3B2E;color:#fff;padding:4px 6px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:.1em}
-      thead th.r{text-align:right}tbody td{border-bottom:1px solid #dbe2ea;padding:3.5px 6px}
-      tbody td.r{text-align:right}tbody tr:nth-child(even){background:#f8fafc}
-      *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
-    </style></head><body>
-    <div class="hdr"><div>${logo ? `<img src="${esc(logo)}" class="logo" alt="">` : ''}<div class="co">${esc(name)}</div><div class="ttl">${esc(monthName)} ${esc(year)} — Monthly Detail</div><div class="sub">${esc(T.saleModule)} Report</div></div>
-    <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div></div></div>
-    <div class="cards">
-      <div class="card"><div class="cl">Payments</div><div class="cv">${payments.length}</div></div>
-      <div class="card"><div class="cl">Revenue</div><div class="cv" style="color:#0B3B2E">${fmt(summary.totalRevenue)}</div></div>
-      <div class="card"><div class="cl">${esc(T.saleDeals)}</div><div class="cv">${deals.length}</div></div>
-      <div class="card"><div class="cl">Commissions</div><div class="cv" style="color:#FF8C00">${fmt(summary.totalCommissions)}</div></div>
-    </div>
-    ${payments.length > 0 ? `<h3>Payments (${payments.length})</h3><table><thead><tr><th>Payment #</th><th>${esc(T.saleDeal)}</th><th>Type</th><th>Method</th><th class="r">Amount</th><th>Date</th><th>Status</th></tr></thead><tbody>${payments.map((p) => `<tr><td>${esc(p.paymentNumber || '—')}</td><td>${esc(p.deal?.dealNumber || (typeof p.deal === 'string' ? p.deal : '') || '—')}</td><td>${esc(fmtLabel(p.paymentType || p.type))}</td><td>${esc(fmtLabel(p.method || p.paymentMethod))}</td><td class="r"><strong>${fmt(p.amount)}</strong></td><td>${esc(fmtDate(p.paymentDate || p.date))}</td><td>${esc(fmtLabel(p.status))}</td></tr>`).join('')}</tbody></table>` : ''}
-    ${deals.length > 0 ? `<h3>${esc(T.saleDeals)} (${deals.length})</h3><table><thead><tr><th>${esc(T.saleDeal)} #</th><th>${esc(T.saleListing)}</th><th>${esc(T.saleBuyer)}</th><th>${esc(T.saleAgent)}</th><th class="r">Value</th><th>Date</th><th>Status</th></tr></thead><tbody>${deals.map((d) => `<tr><td>${esc(d.dealNumber || '—')}</td><td>${esc(d.listing?.title || d.listing?.property?.propertyName || '—')}</td><td>${esc(d.buyer?.fullName || '—')}</td><td>${esc(d.agent?.fullName || '—')}</td><td class="r">${fmt(d.agreedPrice || d.dealValue)}</td><td>${esc(fmtDate(d.closedAt || d.createdAt))}</td><td>${esc(fmtLabel(d.status))}</td></tr>`).join('')}</tbody></table>` : ''}
-    ${commissions.length > 0 ? `<h3>Commissions (${commissions.length})</h3><table><thead><tr><th>${esc(T.saleDeal)}</th><th>${esc(T.saleAgent)}</th><th class="r">Commission</th><th>Date</th><th>Status</th></tr></thead><tbody>${commissions.map((c) => `<tr><td>${esc(c.deal?.dealNumber || '—')}</td><td>${esc(c.agent?.fullName || '—')}</td><td class="r">${fmt(c.amount || c.commissionAmount)}</td><td>${esc(fmtDate(c.createdAt))}</td><td>${esc(fmtLabel(c.status))}</td></tr>`).join('')}</tbody></table>` : ''}
-    </body></html>`);
-    win.document.close();
-    win.onload = () => { win.focus(); win.print(); };
+    const fmt = (v) => `KES ${money(v)}`;
+    const printed = printTabularList({
+      title: `${monthName} ${year} — Monthly Detail`,
+      subtitle: `${T.saleModule} Report`,
+      company: currentCompany,
+      summaryItems: [["Payments", String(payments.length)], ["Revenue", fmt(summary.totalRevenue)], [T.saleDeals, String(deals.length)], ["Commissions", fmt(summary.totalCommissions)]],
+      columns: [],
+      sections: [
+        ...(payments.length > 0 ? [{
+          heading: `Payments (${payments.length})`,
+          columns: [
+            { label: "Payment #", value: (p) => p.paymentNumber || "—" },
+            { label: T.saleDeal, value: (p) => p.deal?.dealNumber || (typeof p.deal === "string" ? p.deal : "") || "—" },
+            { label: "Type", value: (p) => fmtLabel(p.paymentType || p.type) },
+            { label: "Method", value: (p) => fmtLabel(p.method || p.paymentMethod) },
+            { label: "Amount", align: "right", value: (p) => money(p.amount), bold: true },
+            { label: "Date", value: (p) => fmtDate(p.paymentDate || p.date) },
+            { label: "Status", value: (p) => fmtLabel(p.status) },
+          ],
+          rows: payments,
+        }] : []),
+        ...(deals.length > 0 ? [{
+          heading: `${T.saleDeals} (${deals.length})`,
+          columns: [
+            { label: `${T.saleDeal} #`, value: (d) => d.dealNumber || "—" },
+            { label: T.saleListing, value: (d) => d.listing?.title || d.listing?.property?.propertyName || "—" },
+            { label: T.saleBuyer, value: (d) => d.buyer?.fullName || "—" },
+            { label: T.saleAgent, value: (d) => d.agent?.fullName || "—" },
+            { label: "Value", align: "right", value: (d) => money(d.agreedPrice || d.dealValue) },
+            { label: "Date", value: (d) => fmtDate(d.closedAt || d.createdAt) },
+            { label: "Status", value: (d) => fmtLabel(d.status) },
+          ],
+          rows: deals,
+        }] : []),
+        ...(commissions.length > 0 ? [{
+          heading: `Commissions (${commissions.length})`,
+          columns: [
+            { label: T.saleDeal, value: (c) => c.deal?.dealNumber || "—" },
+            { label: T.saleAgent, value: (c) => c.agent?.fullName || "—" },
+            { label: "Commission", align: "right", value: (c) => money(c.amount || c.commissionAmount) },
+            { label: "Date", value: (c) => fmtDate(c.createdAt) },
+            { label: "Status", value: (c) => fmtLabel(c.status) },
+          ],
+          rows: commissions,
+        }] : []),
+      ],
+    });
+    if (!printed) toast.error(POPUP_BLOCKED);
   }, [currentCompany, monthName, year, payments, deals, commissions, summary, T]);
 
   return (

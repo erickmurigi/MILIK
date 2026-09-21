@@ -15,6 +15,7 @@ import AppSelect from "../../components/common/AppSelect";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useTabState } from "../../hooks/useTabState";
 import { fmtDate } from "../../utils/dates";
+import { printDocument } from "../../utils/printKit";
 
 const fmt = formatMoney;
 const fmtMonth = (v) => v ? new Date(v).toLocaleString("en-KE", { month: "long", year: "numeric" }) : "—";
@@ -70,52 +71,39 @@ const AgingBadge = ({ lastStatementAt, currentBalance }) => {
 };
 
 // ─── Print statement ───────────────────────────────────────────────────────────
-const printCreditStatement = (acc, s) => {
-  const fa  = (n) => `KES ${Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2 })}`;
-  const fd  = (d) => new Date(d).toLocaleDateString("en-KE");
+const printCreditStatement = (company, acc, s) => {
+  const fa  = (n) => `KES ${formatMoney(n)}`;
   const per = fmtMonth(s.periodStart);
   const who = acc.contactPerson || acc.customer?.name || "Customer";
-  const rows = (s.jobs || []).map((j) => `
-    <tr>
-      <td>${fd(j.jobDate)}</td><td>${j.jobNumber || "—"}</td><td>${j.plateNumber || "—"}</td>
-      <td>${j.serviceName || "—"}</td>
-      <td class="r">${fa(j.price)}</td><td class="r">${fa(j.paidAmount)}</td>
-      <td class="r" style="color:${j.outstanding > 0 ? "#dc2626" : "#16a34a"}">${fa(j.outstanding)}</td>
-    </tr>`).join("");
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${s.statementNumber}</title>
-    <style>
-      body{font-family:Arial,sans-serif;color:#1e293b;max-width:760px;margin:0 auto;padding:24px;font-size:13px}
-      .hdr{background:#0B3B2E;color:#fff;padding:16px 20px}
-      .hdr h2{margin:0;font-size:17px} .hdr p{margin:4px 0 0;opacity:.75;font-size:12px}
-      .bdy{border:1px solid #e2e8f0;border-top:none;padding:20px}
-      table{width:100%;border-collapse:collapse;margin-top:12px}
-      th{background:#f1f5f9;padding:7px 8px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
-      td{padding:6px 8px;border-bottom:1px solid #e2e8f0} .r{text-align:right}
-      .tot td{font-weight:bold;background:#f8fafc}
-      .due td{background:#0B3B2E;color:#fff;font-weight:bold;font-size:14px}
-      @media print{button{display:none}}
-    </style></head><body>
-    <div class="hdr"><h2>Car Wash Account Statement</h2><p>${per} · Ref: ${s.statementNumber}</p></div>
-    <div class="bdy">
-      <p><strong>To:</strong> ${who}</p>
-      <p><strong>Account:</strong> ${acc.accountNumber || ""}</p>
-      <p><strong>Period:</strong> ${per}</p>
-      <table>
-        <thead><tr><th>Date</th><th>Job #</th><th>Plate</th><th>Service</th><th class="r">Amount</th><th class="r">Paid</th><th class="r">Balance</th></tr></thead>
-        <tbody>${rows}</tbody>
-        <tfoot>
-          <tr class="tot"><td colspan="4">Opening Balance</td><td colspan="3" class="r">${fa(s.openingBalance)}</td></tr>
-          <tr class="tot"><td colspan="4">Total Invoiced</td><td colspan="3" class="r">${fa(s.totalInvoiced)}</td></tr>
-          <tr class="tot"><td colspan="4">Total Paid</td><td colspan="3" class="r">${fa(s.totalPaid)}</td></tr>
-          <tr class="due"><td colspan="4">Amount Due</td><td colspan="3" class="r">${fa(s.totalOutstanding)}</td></tr>
-        </tfoot>
-      </table>
-      <p style="margin-top:16px;font-size:11px;color:#64748b">Automatically generated statement. Contact us with any queries.</p>
-    </div>
-    <script>window.onload=()=>window.print();</script>
-  </body></html>`;
-  const w = window.open("", "_blank");
-  if (w) { w.document.write(html); w.document.close(); }
+  const printed = printDocument({
+    company,
+    docType: "Account Statement",
+    docNumber: s.statementNumber || "",
+    meta: [["Period", per], ["Account", acc.accountNumber || "—"]],
+    parties: [{ heading: "Statement to", name: who, lines: [acc.customer?.phone || "", acc.billingEmail || ""] }],
+    table: {
+      columns: [
+        { label: "Date", value: (j) => fmtDate(j.jobDate) },
+        { label: "Job #", value: (j) => j.jobNumber || "—" },
+        { label: "Plate", value: (j) => j.plateNumber || "—" },
+        { label: "Service", value: (j) => j.serviceName || "—" },
+        { label: "Amount", align: "right", value: (j) => fmt(j.price) },
+        { label: "Paid", align: "right", value: (j) => fmt(j.paidAmount) },
+        { label: "Balance", align: "right", value: (j) => fmt(j.outstanding) },
+      ],
+      rows: s.jobs || [],
+      empty: "No jobs in this period",
+    },
+    totals: [
+      { label: "Opening balance", value: fa(s.openingBalance) },
+      { label: "Total invoiced", value: fa(s.totalInvoiced) },
+      { label: "Total paid", value: fa(s.totalPaid) },
+      { label: "Amount due", value: fa(s.totalOutstanding), hero: true },
+    ],
+    notes: [{ text: "Automatically generated statement. Contact us with any queries." }],
+    footerNote: "Thank you for your business.",
+  });
+  if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
 };
 
 // ─── Modals ────────────────────────────────────────────────────────────────────
@@ -1069,7 +1057,7 @@ const CarWashAccounts = () => {
                                     <div className="flex items-center gap-2">
                                       <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${stmtPill[s.status] || stmtPill.draft}`}>{s.status}</span>
                                       <span className="font-black text-slate-900 text-[11px]">{fmt(s.totalOutstanding)}</span>
-                                      <button onClick={() => printCreditStatement(acc, s)} title="Print" className="text-[10px] text-slate-400 hover:text-slate-700"><FaPrint /></button>
+                                      <button onClick={() => printCreditStatement(currentCompany, acc, s)} title="Print" className="text-[10px] text-slate-400 hover:text-slate-700"><FaPrint /></button>
                                       {acc.customer?.phone && s.status !== "paid" && (
                                         <button
                                           onClick={() => setRemindTarget({ _id: acc._id, _stmtId: s._id, _customerId: acc.customer?._id, name: acc.customer?.name, phone: acc.customer?.phone })}

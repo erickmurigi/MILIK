@@ -4,9 +4,56 @@ import { useSelector } from "react-redux";
 import { saleApi } from "../../services/propertySaleApi";
 import { useTerms } from "../../hooks/useTerm";
 import { fmtDate } from "../../utils/dates";
+import { printDocument } from "../../utils/printKit";
+import { toast } from "react-toastify";
+import { POPUP_BLOCKED, money } from "./salePrint";
 
 const fmtKES  = (n) => new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", minimumFractionDigits: 2 }).format(Number(n) || 0);
 const fmtLabel = (s) => String(s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+const kes = (n) => `KES ${money(n)}`;
+
+const printReceipt = (company, payment, T) => {
+  const deal = payment.deal || {};
+  const buyer = deal.buyer || {};
+  const listing = deal.listing || {};
+  // Payment statuses: "pending" | "paid" | "cancelled" (voided). Only "paid" is a valid receipt.
+  const isVoid = payment.status === "cancelled";
+  const isPending = payment.status === "pending";
+  const propertyName = listing.title || listing.listingNumber || "Property";
+  const printed = printDocument({
+    company,
+    docType: "Payment Receipt",
+    docNumber: payment.paymentNumber || "",
+    status: isVoid ? { label: "Void", tone: "danger" } : isPending ? { label: "Pending", tone: "warning" } : { label: "Paid", tone: "success" },
+    watermark: isVoid ? "VOID" : isPending ? "NOT PAID" : "PAID",
+    meta: [["Date", fmtDate(payment.paymentDate)]],
+    parties: [
+      { heading: "Received from", name: buyer.fullName || "—", lines: [buyer.buyerNumber ? `Ref: ${buyer.buyerNumber}` : "", buyer.phone, buyer.email] },
+      { heading: `Property / ${T.saleDeal}`, name: propertyName, lines: [listing.listingNumber && listing.title ? listing.listingNumber : "", deal.dealNumber ? `${T.saleDeal}: ${deal.dealNumber}` : "", listing.location ? `${listing.location}${listing.town ? `, ${listing.town}` : ""}` : ""] },
+    ],
+    table: {
+      columns: [
+        { label: "Description", value: () => `Payment for ${propertyName}`, sub: (p) => p.notes || "" },
+        { label: "Type", value: (p) => fmtLabel(p.paymentType) },
+        { label: "Method", value: (p) => fmtLabel(p.paymentMethod), sub: (p) => (p.reference ? `Ref: ${p.reference}` : "") },
+        { label: "Amount (KES)", align: "right", value: (p) => money(p.amount) },
+      ],
+      rows: [payment],
+    },
+    totals: [
+      ...(deal.agreedPrice ? [{ label: "Agreed sale price", value: kes(deal.agreedPrice) }] : []),
+      { label: isVoid ? "Total received — VOIDED (Nil)" : isPending ? "Total — not yet received" : "Total received", value: kes(payment.amount), hero: true },
+    ],
+    amountWords: isVoid || isPending ? null : { amount: payment.amount, currency: "KES" },
+    notes: isVoid || isPending
+      ? [{ heading: "Not a valid receipt", text: isVoid ? "This payment has been cancelled. This receipt is not valid." : "Payment not yet confirmed. This is not a valid receipt." }]
+      : [],
+    signatures: [{ label: "Authorised signature", name: company?.companyName || company?.name || "" }, { label: "Received from (buyer)", name: "" }],
+    stamp: true,
+  });
+  if (!printed) toast.error(POPUP_BLOCKED);
+};
 
 const PRINT_STYLES = `
   @page { size: A4; margin: 18mm 16mm; }
@@ -66,7 +113,7 @@ const SalePaymentReceipt = () => {
       {/* Toolbar */}
       <div id="sale-print-toolbar" className="mx-auto mb-4 flex max-w-[780px] items-center justify-between gap-3 print:hidden">
         <button onClick={() => navigate(-1)} className="border border-slate-300 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">← Back</button>
-        <button onClick={() => window.print()} className="bg-[#0B3B2E] px-5 py-1.5 text-xs font-black text-white hover:bg-[#07271e]">Print / Save PDF</button>
+        <button onClick={() => printReceipt(company, payment, T)} className="bg-[#0B3B2E] px-5 py-1.5 text-xs font-black text-white hover:bg-[#07271e]">Print / Save PDF</button>
       </div>
 
       {/* A4 Document */}

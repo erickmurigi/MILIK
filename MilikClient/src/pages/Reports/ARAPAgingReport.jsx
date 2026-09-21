@@ -5,6 +5,7 @@ import { useTerms } from "../../hooks/useTerm";
 import {
   FaFileDownload, FaFilePdf, FaSyncAlt,
 } from "react-icons/fa";
+import { printTabularList } from "../../utils/printList";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getARAgingReport, getAPAgingReport } from "../../redux/apiCalls";
 
@@ -36,11 +37,6 @@ const BUCKET_COLORS = {
   d61_90:  "text-red-600 bg-red-50",
   d90plus: "text-red-800 bg-red-100 font-bold",
 };
-
-const escapeHtml = (v) =>
-  String(v ?? "")
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 // ─── Aging Table ─────────────────────────────────────────────────────────────
 const AgingTable = React.memo(({ rows, totals, type }) => {
@@ -216,61 +212,40 @@ const ARAPAgingReport = () => {
   const handlePrintPDF = useCallback(() => {
     const isAR = tab === "ar";
     const title = isAR ? "Arrears Aged Analysis" : "Payment Aged Analysis";
-    const headerRow = isAR
-      ? `<th>Invoice #</th><th>${termTenant}</th><th>${termProperty} / ${termUnit}</th><th>Due Date</th><th>Days Over</th><th>Bucket</th><th class="right">Outstanding (KES)</th>`
-      : `<th>Reference</th><th>Narration</th><th>${termProperty} / ${termLandlord}</th><th>Due Date</th><th>Days Over</th><th>Bucket</th><th class="right">Amount (KES)</th>`;
-
-    const bodyRows = rows.map((r) => {
-      const cells = isAR
-        ? [r.invoiceNumber, r.tenantName, `${escapeHtml(r.propertyName)} / ${escapeHtml(r.unitName)}`,
-            new Date(r.dueDate).toLocaleDateString("en-KE"), r.daysOverdue <= 0 ? "—" : r.daysOverdue,
-            BUCKETS.find((b) => b.key === r.bucket)?.label, `<span class="right">${fmt(r.outstanding)}</span>`]
-        : [r.reference, escapeHtml(r.narration), `${escapeHtml(r.propertyName)} / ${escapeHtml(r.landlordName)}`,
-            new Date(r.dueDate).toLocaleDateString("en-KE"), r.daysOverdue <= 0 ? "—" : r.daysOverdue,
-            BUCKETS.find((b) => b.key === r.bucket)?.label, `<span class="right">${fmt(r.amount)}</span>`];
-      return `<tr>${cells.map((c) => `<td>${c}</td>`).join("")}</tr>`;
-    }).join("");
-
-    const bucketBreakdown = BUCKETS.map((b) =>
-      `<tr><td>${b.label}</td><td class="right">${fmt(totals[b.key] || 0)}</td></tr>`
-    ).join("");
-
-    const html = `<!DOCTYPE html><html><head><title>${title}</title>
-<style>
-  body{font-family:Arial,sans-serif;font-size:10px;margin:20px}
-  h2{font-size:14px;color:#0B3B2E;margin-bottom:4px}
-  p.sub{font-size:9px;color:#6b7280;margin:0 0 12px}
-  table{width:100%;border-collapse:collapse;margin-bottom:12px}
-  th{background:#f1f5f9;padding:5px 6px;text-align:left;font-size:9px;border-bottom:2px solid #cbd5e1;text-transform:uppercase}
-  td{padding:4px 6px;border-bottom:1px solid #e2e8f0;vertical-align:middle}
-  .right{text-align:right}
-  tfoot td{font-weight:bold;border-top:2px solid #94a3b8;background:#f8fafc}
-  h3{font-size:11px;color:#374151;margin:12px 0 4px}
-  .badge{display:inline-block;padding:1px 6px;border-radius:999px;font-size:8px}
-</style></head>
-<body>
-  <h2>${escapeHtml(companyName)} — ${title}</h2>
-  <p class="sub">As of ${new Date(asOf).toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" })}</p>
-  <table>
-    <thead><tr>${headerRow}</tr></thead>
-    <tbody>${bodyRows}</tbody>
-    <tfoot><tr><td colspan="6" style="text-align:right;font-size:9px">TOTAL</td><td class="right">${fmt(totals.total)}</td></tr></tfoot>
-  </table>
-  <h3>Aging Breakdown</h3>
-  <table style="width:200px">
-    <thead><tr><th>Bucket</th><th class="right">Amount (KES)</th></tr></thead>
-    <tbody>${bucketBreakdown}</tbody>
-    <tfoot><tr><td>Total</td><td class="right">${fmt(totals.total)}</td></tr></tfoot>
-  </table>
-</body></html>`;
-
-    const w = window.open("", "_blank");
-    if (!w) return toast.error("Pop-ups blocked");
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    setTimeout(() => { w.print(); w.close(); }, 400);
-  }, [rows, totals, tab, asOf, companyName]);
+    const bucketLabel = (r) => BUCKETS.find((b) => b.key === r.bucket)?.label || "";
+    const dueDate = (r) => new Date(r.dueDate).toLocaleDateString("en-KE");
+    const days = (r) => (r.daysOverdue <= 0 ? "—" : r.daysOverdue);
+    const columns = isAR
+      ? [
+          { label: "Invoice #", bold: true, value: (r) => r.invoiceNumber },
+          { label: termTenant, value: (r) => r.tenantName },
+          { label: `${termProperty} / ${termUnit}`, value: (r) => `${r.propertyName} / ${r.unitName}` },
+          { label: "Due date", value: dueDate },
+          { label: "Days over", align: "right", value: days },
+          { label: "Bucket", value: bucketLabel },
+          { label: "Outstanding (KES)", align: "right", bold: true, value: (r) => fmt(r.outstanding) },
+        ]
+      : [
+          { label: "Reference", bold: true, value: (r) => r.reference },
+          { label: "Narration", value: (r) => r.narration },
+          { label: `${termProperty} / ${termLandlord}`, value: (r) => `${r.propertyName} / ${r.landlordName}` },
+          { label: "Due date", value: dueDate },
+          { label: "Days over", align: "right", value: days },
+          { label: "Bucket", value: bucketLabel },
+          { label: "Amount (KES)", align: "right", bold: true, value: (r) => fmt(r.amount) },
+        ];
+    const printed = printTabularList({
+      title,
+      subtitle: `As of ${new Date(asOf).toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" })}`,
+      company: currentCompany,
+      summaryItems: [["Total outstanding", fmt(totals.total || 0)], ...BUCKETS.map((b) => [b.label, fmt(totals[b.key] || 0)])],
+      columns,
+      rows,
+      totalsRow: ["TOTAL", "", "", "", "", "", fmt(totals.total || 0)],
+      signatures: [{ label: "Prepared by" }, { label: "Reviewed by" }],
+    });
+    if (!printed) toast.error("Pop-ups blocked");
+  }, [rows, totals, tab, asOf, currentCompany, termTenant, termProperty, termUnit, termLandlord]);
 
   // ── KPI strip ───────────────────────────────────────────────────────────────
   const kpiCells = useMemo(() => {

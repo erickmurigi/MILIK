@@ -25,6 +25,7 @@ import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from "../../components/PaginationBar";
 import MilikTable from "../../components/common/MilikTable";
 import { fmtDate, todayISO } from "../../utils/dates";
+import { openPrintWindow, printTabularList } from "../../utils/printKit";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const ic  = "h-7 border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
@@ -222,6 +223,8 @@ const CarWashStaffSavings = () => {
 
   const printStatement = async () => {
     if (!selectedStaff) return;
+    const win = openPrintWindow();
+    if (!win) { toast.error("Pop-up blocked — allow pop-ups for this site to print"); return; }
     setPrinting(true);
     try {
       const [savingsRes, payoutsRes] = await Promise.all([
@@ -230,72 +233,48 @@ const CarWashStaffSavings = () => {
       ]);
       const savings  = normalizeListPayload(savingsRes,  "records");
       const payouts  = normalizeListPayload(payoutsRes,  "payouts");
-      const business = currentCompany?.name || currentCompany?.companyName || "Milik Car Wash";
-      const fmt  = (v) => `KES ${Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-      const fmtD = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
-      const period = detailFrom ? `${fmtD(detailFrom)} – ${fmtD(detailTo)}` : `Up to ${fmtD(detailTo)}`;
+      const fmt  = (v) => `KES ${formatMoney(v)}`;
+      const period = detailFrom ? `${fmtDate(detailFrom)} – ${fmtDate(detailTo)}` : `Up to ${fmtDate(detailTo)}`;
       const totalDeducted  = savings.filter((r) => r.type === "deduction" && !r.isReversed).reduce((s, r) => s + Number(r.amount || 0), 0);
       const totalDisbursed = savings.filter((r) => r.type === "disbursement").reduce((s, r) => s + Number(r.amount || 0), 0);
-      const netBalance     = selectedStaff.balance;
-      const savingsRows = savings.map((r) => `
-        <tr>
-          <td>${fmtD(r.savingsDate || r.date)}</td>
-          <td><span class="pill ${r.type === 'disbursement' ? 'pill-green' : r.type === 'deduction' ? 'pill-orange' : 'pill-grey'}">${r.isReversed ? 'REVERSED' : r.type === 'deduction' ? 'DEDUCTION' : r.type.toUpperCase()}</span></td>
-          <td class="amount ${r.type === 'disbursement' ? 'neg' : 'pos'}">${r.type === 'disbursement' ? '−' : '+'}${fmt(r.amount)}</td>
-          <td>${r.type === 'deduction' && r.coveredFrom && r.coveredTo ? `${fmtD(r.coveredFrom)} – ${fmtD(r.coveredTo)}${r.daysCount ? ` · ${r.daysCount}d` : ''}` : (r.savingsPayoutNumber || r.notes || '—')}</td>
-          <td>${fmtD(r.date)}</td>
-        </tr>`).join("") || `<tr><td colspan="5" class="empty">No savings records in this period.</td></tr>`;
-      const payoutRows = payouts.map((p) => `
-        <tr>
-          <td>${p.payoutNumber || '—'}</td><td>${fmtD(p.payoutDate)}</td>
-          <td class="amount">${fmt(p.amount)}</td><td class="amount neg">−${fmt(p.savingsHeld || 0)}</td>
-          <td class="amount pos">${fmt(p.netCash ?? p.amount)}</td><td>${(p.method || 'cash').toUpperCase()}</td>
-        </tr>`).join("") || `<tr><td colspan="6" class="empty">No commission payouts in this period.</td></tr>`;
-      const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
-        <title>Statement — ${selectedStaff.staffName}</title>
-        <style>
-          *{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;padding:28px 32px}
-          .header{border-bottom:3px solid #0B3B2E;padding-bottom:12px;margin-bottom:16px}
-          .header h1{font-size:18px;font-weight:900;color:#0B3B2E;text-transform:uppercase;letter-spacing:1px}
-          .header h2{font-size:13px;font-weight:700;color:#444;margin-top:3px}
-          .meta{display:flex;gap:32px;margin-bottom:16px;font-size:10px;color:#555}.meta span strong{color:#0B3B2E;font-weight:800}
-          .summary{display:flex;gap:10px;margin-bottom:20px}
-          .card{flex:1;border:1.5px solid #B7C9C0;padding:10px 14px;background:#F1F6F3}
-          .card .label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#666;margin-bottom:4px}
-          .card .val{font-size:15px;font-weight:900;color:#0B3B2E}.card.hl .val{color:#C8511A}
-          section{margin-bottom:22px}
-          section h3{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.8px;color:#0B3B2E;background:#EDF5F1;border:1px solid #B7C9C0;padding:5px 8px;margin-bottom:0}
-          table{width:100%;border-collapse:collapse;font-size:10px}
-          th{background:#0B3B2E;color:#fff;font-weight:700;text-transform:uppercase;font-size:9px;letter-spacing:.5px;padding:5px 7px;text-align:left}
-          td{padding:4px 7px;border-bottom:1px solid #e5e7eb;vertical-align:middle}tr:nth-child(even) td{background:#f9fbfa}
-          .amount{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}.pos{color:#15803d}.neg{color:#C8511A}
-          .pill{display:inline-block;padding:1px 6px;border-radius:2px;font-size:8px;font-weight:800;letter-spacing:.5px}
-          .pill-orange{background:#ffedd5;color:#7c2d12;border:1px solid #fed7aa}
-          .pill-green{background:#d1fae5;color:#065f46;border:1px solid #6ee7b7}
-          .pill-grey{background:#f3f4f6;color:#9ca3af;border:1px solid #e5e7eb}
-          .empty{text-align:center;color:#9ca3af;padding:14px;font-style:italic}
-          .footer{margin-top:24px;border-top:1px solid #e5e7eb;padding-top:10px;font-size:9px;color:#9ca3af;display:flex;justify-content:space-between}
-          @media print{body{padding:10px 16px}@page{margin:15mm 12mm}}
-        </style></head><body>
-        <div class="header"><h1>${business}</h1><h2>Staff Savings &amp; Commissions Statement</h2></div>
-        <div class="meta"><span><strong>Staff:</strong> ${selectedStaff.staffName}</span><span><strong>Period:</strong> ${period}</span><span><strong>Printed:</strong> ${new Date().toLocaleString("en-KE")}</span></div>
-        <div class="summary">
-          <div class="card hl"><div class="label">Total Deducted</div><div class="val">${fmt(totalDeducted)}</div></div>
-          <div class="card"><div class="label">Paid Out</div><div class="val">${fmt(totalDisbursed)}</div></div>
-          <div class="card"><div class="label">In Savings Pot</div><div class="val">${fmt(netBalance)}</div></div>
-        </div>
-        <section><h3>Savings Transactions</h3>
-          <table><thead><tr><th>Date</th><th>Type</th><th style="text-align:right">Amount</th><th>Period / Notes</th><th>Recorded On</th></tr></thead>
-          <tbody>${savingsRows}</tbody></table></section>
-        <section><h3>Commission Payouts</h3>
-          <table><thead><tr><th>Payout #</th><th>Date</th><th style="text-align:right">Gross</th><th style="text-align:right">Savings</th><th style="text-align:right">Net Cash</th><th>Method</th></tr></thead>
-          <tbody>${payoutRows}</tbody></table></section>
-        <div class="footer"><span>Generated by Milik · ${business}</span><span>${new Date().toLocaleString("en-KE")}</span></div>
-      </body></html>`;
-      const win = window.open("", "_blank", "width=900,height=700");
-      win.document.write(html); win.document.close(); win.focus();
-      setTimeout(() => { win.print(); }, 400);
-    } catch { toast.error("Failed to generate statement"); }
+      const printed = printTabularList({
+        win,
+        title: "Staff Savings & Commissions Statement",
+        subtitle: `${selectedStaff.staffName} · ${period}`,
+        company: currentCompany,
+        orientation: "portrait",
+        summaryItems: [["Total deducted", fmt(totalDeducted)], ["Paid out", fmt(totalDisbursed)], ["In savings pot", fmt(selectedStaff.balance)]],
+        columns: [],
+        sections: [
+          {
+            heading: "Savings transactions",
+            columns: [
+              { label: "Date", value: (r) => fmtDate(r.savingsDate || r.date) },
+              { label: "Type", value: (r) => (r.isReversed ? "REVERSED" : r.type.toUpperCase()) },
+              { label: "Amount", align: "right", value: (r) => `${r.type === "disbursement" ? "−" : "+"}${fmt(r.amount)}`, tone: (r) => (r.type === "disbursement" ? "neg" : "pos") },
+              { label: "Period / Notes", value: (r) => (r.type === "deduction" && r.coveredFrom && r.coveredTo ? `${fmtDate(r.coveredFrom)} – ${fmtDate(r.coveredTo)}${r.daysCount ? ` · ${r.daysCount}d` : ""}` : (r.savingsPayoutNumber || r.notes || "—")) },
+              { label: "Recorded on", value: (r) => fmtDate(r.date) },
+            ],
+            rows: savings,
+            totalsRow: false,
+          },
+          {
+            heading: "Commission payouts",
+            columns: [
+              { label: "Payout #", value: (p) => p.payoutNumber || "—" },
+              { label: "Date", value: (p) => fmtDate(p.payoutDate) },
+              { label: "Gross", align: "right", value: (p) => fmt(p.amount) },
+              { label: "Savings", align: "right", value: (p) => `−${fmt(p.savingsHeld || 0)}`, tone: () => "neg" },
+              { label: "Net cash", align: "right", value: (p) => fmt(p.netCash ?? p.amount), tone: () => "pos" },
+              { label: "Method", value: (p) => (p.method || "cash").toUpperCase() },
+            ],
+            rows: payouts,
+            totalsRow: false,
+          },
+        ],
+      });
+      if (!printed) win.close();
+    } catch { win.close(); toast.error("Failed to generate statement"); }
     finally { setPrinting(false); }
   };
 

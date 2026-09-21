@@ -4,6 +4,7 @@ import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { FaChartLine, FaEdit, FaPlus, FaPrint, FaRedoAlt, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
+import { printDocument } from "../../utils/printKit";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterSearch } from "./SaleFilterBar";
 import PaginationBar from "../../components/PaginationBar";
@@ -206,66 +207,17 @@ const SaleAgents = () => {
   }, [confirm, invalidate, T.saleAgent]);
 
   const printAgent = useCallback((row) => {
-    const co        = currentCompany || {};
-    const coName    = co.companyName || co.name || "MILIK";
-    // Every dynamic value is HTML-escaped (incl. quotes): the popup is same-origin (document.write),
-    // so raw interpolation of company/agent text or a crafted logo URL would be stored XSS.
-    const esc       = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-    const logoSrc   = typeof co.logo === "string" && /^(https?:\/\/|data:image\/)/i.test(co.logo.trim()) ? co.logo.trim() : "";
-    const logoHtml  = logoSrc
-      ? `<img src="${esc(logoSrc)}" alt="logo" style="width:72px;height:72px;object-fit:contain;border:1px solid #cbd5e1;" />`
-      : `<div style="width:72px;height:72px;background:#0B3B2E;color:#fff;font-size:26px;font-weight:900;display:flex;align-items:center;justify-content:center;">${esc(coName.slice(0, 1))}</div>`;
-    const coInfo    = [co.phone || co.phoneNumber, co.email || co.companyEmail].filter(Boolean).join(" • ");
-    const statusBg  = row.status === "active" ? "#dcfce7" : "#f1f5f9";
-    const statusC   = row.status === "active" ? "#166534" : "#64748b";
     const commDisplay = row.commissionType === "percentage" ? `${row.commissionRate}%` : `${fmtKES(row.commissionRate)} flat`;
-    const printedOn = new Date().toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" });
-    const win = window.open("", "_blank", "width=900,height=680");
-    if (!win) { toast.warn(`Allow pop-ups to print the ${T.saleAgent.toLowerCase()} profile`); return; }
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-<title>${esc(T.saleAgent)} Profile — ${esc(row.agentNumber)}</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font-size:12px}
-.hdr{display:grid;grid-template-columns:80px 1fr 170px;align-items:start;border-bottom:3px solid #0B3B2E;padding-bottom:14px;margin-bottom:18px;gap:12px}
-.co-name{font-size:18px;font-weight:900;color:#0B3B2E}.co-sub{font-size:9px;color:#64748b;line-height:1.5}
-.doc-type{font-size:13px;font-weight:900;color:#0B3B2E;text-transform:uppercase;letter-spacing:.05em;text-align:right}
-.doc-no{font-family:monospace;font-size:15px;font-weight:700;text-align:right;margin-top:3px}
-.badge{display:inline-block;padding:3px 12px;font-size:10px;font-weight:800;float:right;margin-top:6px;background:${statusBg};color:${statusC}}
-.comm-box{border:2px solid #0B3B2E;padding:12px 16px;margin-bottom:16px;background:#f0fdf4;display:flex;align-items:center;justify-content:space-between}
-.comm-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#64748b}
-.comm-val{font-size:24px;font-weight:900;color:#0B3B2E;font-family:monospace}
-.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:#e2e8f0;border:1px solid #e2e8f0;overflow:hidden;margin-bottom:14px}
-.field{background:#fff;padding:9px 12px}.fl{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:2px}
-.fv{font-size:11px;font-weight:600;color:#1e293b}
-.notice{font-size:9px;color:#94a3b8;text-align:center;margin-top:20px;border-top:1px solid #f1f5f9;padding-top:10px}
-@media print{body{padding:14px 16px}@page{size:A4 portrait;margin:10mm}}
-</style></head><body>
-<div class="hdr">
-  <div>${logoHtml}</div>
-  <div><div class="co-name">${esc(coName)}</div>${coInfo ? `<div class="co-sub">${esc(coInfo)}</div>` : ""}</div>
-  <div>
-    <div class="doc-type">${esc(salesAgentLabel(T.saleAgent))}</div>
-    <div class="doc-no">${esc(row.agentNumber)}</div>
-    <div class="badge">${esc(String(row.status || "").toUpperCase())}</div>
-  </div>
-</div>
-<div class="comm-box">
-  <div><div class="comm-label">Commission Rate</div><div class="comm-val">${esc(commDisplay)}</div><div class="comm-label" style="margin-top:4px">Type: ${esc(row.commissionType)}</div></div>
-  <div style="text-align:right"><div class="comm-label">${esc(T.saleAgent)} Code</div><div style="font-size:18px;font-weight:900;font-family:monospace;color:#0f172a;margin-top:4px">${esc(row.agentNumber)}</div></div>
-</div>
-<div class="grid">
-  <div class="field"><div class="fl">Full Name</div><div class="fv">${esc(row.fullName)}</div></div>
-  <div class="field"><div class="fl">Phone</div><div class="fv">${esc(row.phone || "—")}</div></div>
-  <div class="field"><div class="fl">Email</div><div class="fv">${esc(row.email || "—")}</div></div>
-  <div class="field"><div class="fl">ID Number</div><div class="fv">${esc(row.idNumber || "—")}</div></div>
-  <div class="field"><div class="fl">Status</div><div class="fv">${esc(row.status)}</div></div>
-</div>
-${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:11px;color:#334155;line-height:1.6"><div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:4px">Notes</div>${esc(row.notes)}</div>` : ""}
-<div class="notice">${esc(T.saleAgent)} profile issued by ${esc(coName)} • Printed: ${esc(printedOn)}</div>
-</body></html>`);
-    win.document.close();
-    setTimeout(() => { win.focus(); win.print(); }, 400);
+    const printed = printDocument({
+      company: currentCompany,
+      docType: `${salesAgentLabel(T.saleAgent)} Profile`,
+      docNumber: row.agentNumber || "",
+      status: { label: row.status || "", tone: row.status === "active" ? "success" : "neutral" },
+      parties: [{ heading: `${T.saleAgent} details`, name: row.fullName, lines: [row.phone, row.email, row.idNumber ? `ID: ${row.idNumber}` : ""] }],
+      details: { heading: "Commission", rows: [["Rate", commDisplay], ["Type", row.commissionType || "—"], [`${T.saleAgent} code`, row.agentNumber || "—"], ["Status", row.status || "—"]] },
+      notes: row.notes ? [{ heading: "Notes", text: row.notes }] : [],
+    });
+    if (!printed) toast.warn(`Allow pop-ups to print the ${T.saleAgent.toLowerCase()} profile`);
   }, [currentCompany, T.saleAgent]);
 
   const handlePerformance = useCallback((id) => navigate(`/sale/agents/${id}/performance`), [navigate]);

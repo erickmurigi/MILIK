@@ -4,9 +4,63 @@ import { useSelector } from "react-redux";
 import { saleApi } from "../../services/propertySaleApi";
 import { useTerms } from "../../hooks/useTerm";
 import { fmtDate } from "../../utils/dates";
+import { printDocument } from "../../utils/printKit";
+import { toast } from "react-toastify";
+import { POPUP_BLOCKED, money } from "./salePrint";
 
 const fmtKES  = (n) => new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", minimumFractionDigits: 2 }).format(Number(n) || 0);
 const fmtLabel = (s) => String(s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+const kes = (n) => `KES ${money(n)}`;
+
+const printDealStatement = (company, { deal, payments, totalPaid, balance }, T) => {
+  const buyer = deal.buyer || {};
+  const listing = deal.listing || {};
+  const agent = deal.agent || null;
+  let running = 0;
+  const rows = payments.map((p) => {
+    if (p.status === "paid") running += Number(p.amount || 0);
+    return { ...p, cumulative: p.status === "paid" ? kes(running) : "—" };
+  });
+  const printed = printDocument({
+    company,
+    docType: `${T.saleDeal} Statement`,
+    docNumber: deal.dealNumber || "",
+    status: { label: deal.status || "", tone: deal.status === "closed" ? "success" : deal.status === "cancelled" ? "neutral" : "info" },
+    meta: [[`${T.saleDeal} date`, fmtDate(deal.dealDate)]],
+    parties: [
+      { heading: T.saleBuyer, name: buyer.fullName || "—", lines: [buyer.buyerNumber ? `ID: ${buyer.buyerNumber}` : "", buyer.phone, buyer.email] },
+      { heading: "Property", name: listing.title || "—", lines: [listing.listingNumber, [listing.location, listing.town].filter(Boolean).join(", "), listing.propertyType] },
+    ],
+    details: {
+      heading: `${T.saleDeal} details`,
+      rows: [[T.saleAgent, agent ? agent.fullName : `No ${T.saleAgent}`], ["Expected close", fmtDate(deal.expectedClosingDate)], ["Actual close", fmtDate(deal.actualClosingDate)]],
+    },
+    table: {
+      columns: [
+        { label: "No.", value: (p) => p.paymentNumber },
+        { label: "Date", value: (p) => fmtDate(p.paymentDate) },
+        { label: "Type", value: (p) => fmtLabel(p.paymentType) },
+        { label: "Method", value: (p) => fmtLabel(p.paymentMethod) },
+        { label: "Ref", value: (p) => p.reference || "—" },
+        { label: "Status", value: (p) => String(p.status || "").toUpperCase() },
+        { label: "Amount", align: "right", value: (p) => money(p.amount) },
+        { label: "Cumulative", align: "right", value: (p) => p.cumulative },
+      ],
+      rows,
+      empty: "No payments recorded.",
+    },
+    totals: [
+      { label: "Agreed price", value: kes(deal.agreedPrice) },
+      { label: "Total paid", value: kes(totalPaid), tone: "pos" },
+      { label: "Outstanding balance", value: kes(balance), hero: true },
+    ],
+    notes: deal.notes ? [{ heading: `${T.saleDeal} notes`, text: deal.notes }] : [],
+    signatures: [{ label: "Authorised signature", name: company?.companyName || company?.name || "" }],
+    stamp: true,
+  });
+  if (!printed) toast.error(POPUP_BLOCKED);
+};
 
 const PRINT_STYLES = `
   @page { size: A4; margin: 18mm 16mm; }
@@ -76,7 +130,7 @@ const SaleDealStatement = () => {
     <div className="min-h-screen bg-slate-100 p-6 print:bg-white print:p-0">
       <div id="sale-print-toolbar" className="mx-auto mb-4 flex max-w-[780px] items-center justify-between gap-3 print:hidden">
         <button onClick={() => navigate(-1)} className="border border-slate-300 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">← Back</button>
-        <button onClick={() => window.print()} className="bg-[#0B3B2E] px-5 py-1.5 text-xs font-black text-white hover:bg-[#07271e]">Print / Save PDF</button>
+        <button onClick={() => printDealStatement(company, { deal, payments, totalPaid, balance }, T)} className="bg-[#0B3B2E] px-5 py-1.5 text-xs font-black text-white hover:bg-[#07271e]">Print / Save PDF</button>
       </div>
 
       <div id="sale-print-root" className="mx-auto max-w-[780px] bg-white shadow-lg print:shadow-none">

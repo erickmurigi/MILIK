@@ -5,6 +5,9 @@ import { useSelector } from "react-redux";
 import { saleApi, fmtKES } from "../../services/propertySaleApi";
 import { fmtDate } from "../../utils/dates";
 import { useTerms } from "../../hooks/useTerm";
+import { toast } from "react-toastify";
+import { printTabularList } from "../../utils/printKit";
+import { POPUP_BLOCKED, money, shortDate } from "./salePrint";
 
 const fmtLabel = (s) => String(s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
@@ -21,6 +24,60 @@ const dealBadge = (s) => ({
   closed:    "border-emerald-200 bg-emerald-50 text-emerald-700",
   cancelled: "border-slate-200 bg-slate-50 text-slate-500",
 }[s] || "border-slate-200 bg-slate-50 text-slate-500");
+
+const kes = (n) => `KES ${money(n)}`;
+
+const printPerformance = (company, { agent, deals, commissions, totalCommEarned, totalCommPending, totalDealsValue, closedDeals, activeDeals, truncated }, T) => {
+  const printed = printTabularList({
+    title: `${T.saleAgent} Performance`,
+    subtitle: `${agent.fullName}${agent.agentNumber ? ` (${agent.agentNumber})` : ""}${agent.status ? ` · ${fmtLabel(agent.status)}` : ""}`,
+    company,
+    summaryItems: [
+      [`Total ${T.saleDeals}`, String(deals.length)],
+      [`Closed ${T.saleDeals}`, String(closedDeals.length)],
+      [`Active ${T.saleDeals}`, String(activeDeals.length)],
+      ["Total value", kes(totalDealsValue)],
+      ["Commissions paid", kes(totalCommEarned)],
+      ["Comm. pending", kes(totalCommPending)],
+      ["Close rate", deals.length > 0 ? `${Math.round((closedDeals.length / deals.length) * 100)}%` : "—"],
+      ["Commission rate", agent.commissionType === "percentage" ? `${agent.commissionRate}%` : kes(agent.commissionRate)],
+    ],
+    columns: [],
+    sections: [
+      {
+        heading: `${T.saleDeals} (${deals.length})`,
+        columns: [
+          { label: `${T.saleDeal} No.`, value: (d) => d.dealNumber },
+          { label: "Property", value: (d) => d.listing?.title || d.listing?.listingNumber || "—" },
+          { label: T.saleBuyer, value: (d) => d.buyer?.fullName || "—" },
+          { label: "Agreed price", align: "right", value: (d) => money(d.agreedPrice) },
+          { label: "Paid", align: "right", value: (d) => money(d.totalPaid), tone: () => "pos" },
+          { label: "Balance", align: "right", value: (d) => money(d.balance) },
+          { label: "Date", value: (d) => shortDate(d.dealDate) },
+          { label: "Status", value: (d) => fmtLabel(d.status) },
+        ],
+        rows: deals,
+        totalsRow: false,
+      },
+      {
+        heading: `Commissions (${commissions.length})`,
+        columns: [
+          { label: "Comm. No.", value: (c) => c.commissionNumber },
+          { label: T.saleDeal, value: (c) => c.deal?.dealNumber || "—" },
+          { label: "Sale amount", align: "right", value: (c) => money(c.saleAmount) },
+          { label: "Rate", value: (c) => (c.commissionType === "percentage" ? `${c.commissionRate}%` : kes(c.commissionRate)) },
+          { label: "Commission", align: "right", value: (c) => money(c.commissionAmount), bold: true },
+          { label: "Status", value: (c) => fmtLabel(c.status) },
+          { label: "Payout date", value: (c) => shortDate(c.payoutDate) },
+        ],
+        rows: commissions,
+        totalsRow: ["Total paid", "", "", "", money(totalCommEarned), totalCommPending > 0 ? `Pending ${money(totalCommPending)}` : "", ""],
+      },
+    ],
+    notes: truncated ? ["Data truncated: too many records to load in full. Figures in this report may be under-reported."] : [],
+  });
+  if (!printed) toast.error(POPUP_BLOCKED);
+};
 
 const PRINT_STYLES = `
   @page { size: A4; margin: 18mm 16mm; }
@@ -113,7 +170,7 @@ const SaleAgentPerformance = () => {
     <div className="min-h-screen bg-slate-100 p-6 print:bg-white print:p-0">
       <div id="sale-print-toolbar" className="mx-auto mb-4 flex max-w-[860px] items-center justify-between gap-3 print:hidden">
         <button onClick={() => navigate("/sale/agents")} className="border border-slate-300 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">← Back to {T.saleAgents}</button>
-        <button onClick={() => window.print()} className="bg-[#0B3B2E] px-5 py-1.5 text-xs font-black text-white hover:bg-[#07271e]">Print / Save PDF</button>
+        <button onClick={() => printPerformance(company, { agent, deals, commissions, totalCommEarned, totalCommPending, totalDealsValue, closedDeals, activeDeals, truncated }, T)} className="bg-[#0B3B2E] px-5 py-1.5 text-xs font-black text-white hover:bg-[#07271e]">Print / Save PDF</button>
       </div>
 
       <div id="sale-print-root" className="mx-auto max-w-[860px] bg-white shadow-lg print:shadow-none">

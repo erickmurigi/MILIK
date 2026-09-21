@@ -7,6 +7,7 @@ import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "..
 import { FaExclamationCircle, FaExclamationTriangle, FaFileDownload, FaFilePdf, FaInfoCircle, FaSyncAlt, FaTimes } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getTrialBalanceExceptions, getTrialBalanceReport } from "../../redux/apiCalls";
+import { printTabularList } from "../../utils/printList";
 import { formatMoney } from "../../utils/money";
 
 const MILIK_GREEN = "#0B3B2E";
@@ -14,14 +15,6 @@ const MILIK_ORANGE = "#FF8C00";
 const MILIK_RED = "#DC2626";
 
 const todayString = () => new Date().toISOString().split("T")[0];
-
-const escapeHtml = (value) =>
-  String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
 
 const TrialBalanceReport = () => {
   const currentUser = useSelector(selectCurrentUser);
@@ -181,285 +174,32 @@ const TrialBalanceReport = () => {
       return;
     }
 
-    const printWindow = window.open("", "_blank", "width=1200,height=900");
-    if (!printWindow) {
-      toast.error("Popup blocked. Please allow popups to print the report.");
-      return;
-    }
-
-    const rowsHtml = (report.rows || []).length
-      ? report.rows
-          .map(
-            (row) => `
-              <tr>
-                <td>${escapeHtml(row.code || "")}</td>
-                <td>${escapeHtml(row.name || "")}</td>
-                <td>${escapeHtml(row.type || "")}</td>
-                <td>${escapeHtml(row.group || "")}</td>
-                <td>${escapeHtml(row.subGroup || "-")}</td>
-                <td class="amount">${row.debitBalance ? `KES ${escapeHtml(formatMoney(row.debitBalance))}` : "-"}</td>
-                <td class="amount">${row.creditBalance ? `KES ${escapeHtml(formatMoney(row.creditBalance))}` : "-"}</td>
-              </tr>
-            `
-          )
-          .join("")
-      : `
-          <tr>
-            <td colspan="7" class="empty-row">No trial balance rows found for the selected date.</td>
-          </tr>
-        `;
-
-    const printableHtml = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Trial Balance - ${escapeHtml(filters.asOfDate)}</title>
-          <meta charset="utf-8" />
-          <style>
-            * { box-sizing: border-box; }
-            body {
-              font-family: Arial, Helvetica, sans-serif;
-              margin: 0;
-              padding: 24px;
-              color: #111827;
-              background: #ffffff;
-            }
-            .report-wrap {
-              width: 100%;
-              max-width: 1100px;
-              margin: 0 auto;
-            }
-            .report-header {
-              margin-bottom: 20px;
-              border-bottom: 2px solid ${MILIK_GREEN};
-              padding-bottom: 12px;
-            }
-            .report-title {
-              font-size: 30px;
-              font-weight: 800;
-              color: ${MILIK_GREEN};
-              margin: 0 0 6px 0;
-            }
-            .report-subtitle {
-              font-size: 14px;
-              font-weight: 600;
-              color: #4b5563;
-              margin: 0;
-            }
-            .meta-grid {
-              display: grid;
-              grid-template-columns: repeat(3, 1fr);
-              gap: 12px;
-              margin: 18px 0 20px 0;
-            }
-            .meta-box {
-              border: 1px solid #d1d5db;
-              border-radius: 8px;
-              padding: 12px 14px;
-              background: #f9fafb;
-            }
-            .meta-label {
-              font-size: 12px;
-              font-weight: 700;
-              color: #4b5563;
-              margin-bottom: 4px;
-              text-transform: uppercase;
-            }
-            .meta-value {
-              font-size: 16px;
-              font-weight: 800;
-              color: #111827;
-            }
-            .summary-grid {
-              display: grid;
-              grid-template-columns: repeat(4, 1fr);
-              gap: 12px;
-              margin-bottom: 20px;
-            }
-            .summary-card {
-              border: 1px solid #d1d5db;
-              border-radius: 8px;
-              padding: 12px 14px;
-              background: #ffffff;
-            }
-            .summary-label {
-              font-size: 12px;
-              font-weight: 700;
-              color: #4b5563;
-              margin-bottom: 4px;
-              text-transform: uppercase;
-            }
-            .summary-value {
-              font-size: 18px;
-              font-weight: 800;
-              color: #111827;
-            }
-            .summary-status-ok { color: ${MILIK_GREEN}; }
-            .summary-status-bad { color: ${MILIK_RED}; }
-
-            .print-card {
-              border: 1px solid #d1d5db;
-              border-radius: 8px;
-              overflow: hidden;
-              background: #ffffff;
-            }
-            .card-header {
-              background: ${MILIK_GREEN};
-              color: #ffffff;
-              padding: 12px 14px;
-              font-size: 16px;
-              font-weight: 800;
-            }
-            table {
-              width: 100%;
-              border-collapse: collapse;
-            }
-            thead th {
-              background: #f9fafb;
-              color: #1f2937;
-              text-align: left;
-              font-size: 12px;
-              font-weight: 800;
-              padding: 12px 14px;
-              border-bottom: 1px solid #d1d5db;
-            }
-            tbody td {
-              font-size: 13px;
-              font-weight: 600;
-              color: #374151;
-              padding: 12px 14px;
-              border-bottom: 1px solid #e5e7eb;
-            }
-            tbody td:first-child {
-              font-weight: 800;
-              color: #111827;
-            }
-            .amount {
-              text-align: right;
-              white-space: nowrap;
-              font-weight: 800;
-              color: #111827;
-            }
-            .empty-row {
-              text-align: center;
-              color: #6b7280;
-              font-weight: 600;
-              padding: 24px 14px;
-            }
-            tfoot td {
-              background: #f3f4f6;
-              font-size: 13px;
-              font-weight: 800;
-              color: #111827;
-              padding: 12px 14px;
-              border-top: 2px solid #d1d5db;
-            }
-            .tfoot-label {
-              text-align: right;
-            }
-
-            @media print {
-              body {
-                padding: 0;
-              }
-              .report-wrap {
-                max-width: none;
-              }
-              @page {
-                size: A4 landscape;
-                margin: 12mm;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="report-wrap">
-            <div class="report-header">
-              <h1 class="report-title">Trial Balance</h1>
-              <p class="report-subtitle">Built from chart accounts and ledger entries as one accounting source of truth.</p>
-            </div>
-
-            <div class="meta-grid">
-              <div class="meta-box">
-                <div class="meta-label">Business</div>
-                <div class="meta-value">${escapeHtml(businessName)}</div>
-              </div>
-              <div class="meta-box">
-                <div class="meta-label">As At Date</div>
-                <div class="meta-value">${escapeHtml(filters.asOfDate)}</div>
-              </div>
-              <div class="meta-box">
-                <div class="meta-label">Rows</div>
-                <div class="meta-value">${escapeHtml(report.count || 0)}</div>
-              </div>
-            </div>
-
-            <div class="summary-grid">
-              <div class="summary-card">
-                <div class="summary-label">Total Debits</div>
-                <div class="summary-value">KES ${escapeHtml(formatMoney(report.totals?.debit))}</div>
-              </div>
-              <div class="summary-card">
-                <div class="summary-label">Total Credits</div>
-                <div class="summary-value">KES ${escapeHtml(formatMoney(report.totals?.credit))}</div>
-              </div>
-              <div class="summary-card">
-                <div class="summary-label">Difference</div>
-                <div class="summary-value">KES ${escapeHtml(formatMoney(report.totals?.difference))}</div>
-              </div>
-              <div class="summary-card">
-                <div class="summary-label">Status</div>
-                <div class="summary-value ${report.totals?.balanced ? "summary-status-ok" : "summary-status-bad"}">
-                  ${escapeHtml(report.totals?.balanced ? "Balanced" : "Out of Balance")}
-                </div>
-              </div>
-            </div>
-
-            <div class="print-card">
-              <div class="card-header">Trial Balance Details</div>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Code</th>
-                    <th>Account Name</th>
-                    <th>Type</th>
-                    <th>Group</th>
-                    <th>Sub Group</th>
-                    <th style="text-align:right;">Debit</th>
-                    <th style="text-align:right;">Credit</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${rowsHtml}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td colspan="5" class="tfoot-label">TOTAL</td>
-                    <td class="amount">KES ${escapeHtml(formatMoney(report.totals?.debit))}</td>
-                    <td class="amount">KES ${escapeHtml(formatMoney(report.totals?.credit))}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.open();
-    printWindow.document.write(printableHtml);
-    printWindow.document.close();
-    printWindow.focus();
-
-    const triggerPrint = () => {
-      printWindow.print();
-    };
-
-    if (printWindow.document.readyState === "complete") {
-      setTimeout(triggerPrint, 300);
-    } else {
-      printWindow.onload = () => setTimeout(triggerPrint, 300);
-    }
+    const totals = report.totals || {};
+    const printed = printTabularList({
+      title: "Trial Balance",
+      subtitle: `As at ${filters.asOfDate}`,
+      company: currentCompany,
+      summaryItems: [
+        ["Total debits", `KES ${formatMoney(totals.debit)}`],
+        ["Total credits", `KES ${formatMoney(totals.credit)}`],
+        ["Difference", `KES ${formatMoney(totals.difference)}`],
+        ["Status", totals.balanced ? "Balanced" : "Out of balance"],
+        ["Accounts", String(report.count || 0)],
+      ],
+      columns: [
+        { label: "Code", bold: true, value: (row) => row.code || "" },
+        { label: "Account name", value: (row) => row.name || "" },
+        { label: "Type", value: (row) => row.type || "" },
+        { label: "Group", value: (row) => row.group || "" },
+        { label: "Sub group", value: (row) => row.subGroup || "-" },
+        { label: "Debit", align: "right", value: (row) => (row.debitBalance ? formatMoney(row.debitBalance) : "-") },
+        { label: "Credit", align: "right", value: (row) => (row.creditBalance ? formatMoney(row.creditBalance) : "-") },
+      ],
+      rows: report.rows || [],
+      totalsRow: ["TOTAL", "", "", "", "", formatMoney(totals.debit), formatMoney(totals.credit)],
+      signatures: [{ label: "Prepared by", name: currentUser?.name || currentUser?.username || currentUser?.email || "" }, { label: "Reviewed by" }],
+    });
+    if (!printed) toast.error("Popup blocked. Please allow popups to print the report.");
   };
 
   const preparedBy = currentUser?.name || currentUser?.username || currentUser?.email || "System";

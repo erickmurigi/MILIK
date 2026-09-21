@@ -6,6 +6,7 @@ import {
   FaCheck, FaCheckSquare, FaFileDownload, FaFilePdf, FaLock,
   FaPlus, FaSearch, FaSyncAlt, FaTimes, FaTrash, FaUndo,
 } from "react-icons/fa";
+import { printTabularList } from "../../utils/printList";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
 import {
@@ -29,7 +30,6 @@ const BankReconciliation = () => {
   const confirm     = useConfirm();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const businessId     = currentCompany?._id;
-  const companyName    = String(currentCompany?.companyName || currentCompany?.name || "").trim();
 
   // ── Global state ──────────────────────────────────────────────────────────
   const [view,     setView]     = useTabState("/accounts/bank-reconciliation:view", VIEW.LIST);
@@ -295,47 +295,32 @@ const BankReconciliation = () => {
   }, []);
 
   // ── Escaping for PDF ──────────────────────────────────────────────────────
-  const escHtml = (v) => String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-
-  // ── Print PDF ─────────────────────────────────────────────────────────────
+  // ── Print PDF ────────────────────────────────────────────────────────
   const handlePrintPDF = useCallback(() => {
-    const rows = entries.map((e) => {
-      const amt = Number(e.amount || 0);
-      return `<tr>
-        <td>${fmtDate(e.transactionDate)}</td>
-        <td>${escHtml(e.notes || e.category || "")}</td>
-        <td class="r">${e.direction === "debit"  ? fmt(amt) : ""}</td>
-        <td class="r">${e.direction === "credit" ? fmt(amt) : ""}</td>
-        <td class="c">${cleared.has(String(e._id)) ? "✓" : ""}</td>
-      </tr>`;
-    }).join("");
-    const html = `<!DOCTYPE html><html><head><title>Bank Reconciliation</title>
-<style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;color:#1e293b}
-h2{font-size:13px;color:#0B3B2E;margin-bottom:2px}p.sub{font-size:9px;color:#64748b;margin:0 0 10px}
-table{width:100%;border-collapse:collapse;margin-bottom:12px}
-th{background:#f1f5f9;padding:4px 6px;font-size:8px;border-bottom:2px solid #cbd5e1;text-transform:uppercase;text-align:left}
-td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
-.r{text-align:right}.c{text-align:center}
-.sum{font-weight:700;border-top:2px solid #94a3b8;background:#f8fafc}
-</style></head><body>
-<h2>${escHtml(companyName)} — Bank Reconciliation</h2>
-<p class="sub">${escHtml(activeRecon?.accountCode)} ${escHtml(activeRecon?.accountName)} · ${fmtDate(activeRecon?.periodStart)} to ${fmtDate(activeRecon?.periodEnd)}</p>
-<table><thead><tr><th>Date</th><th>Description</th><th class="r">Debit (In)</th><th class="r">Credit (Out)</th><th class="c">Cleared</th></tr></thead>
-<tbody>${rows}</tbody>
-<tfoot>
-<tr class="sum"><td colspan="2">Statement Opening Balance</td><td class="r" colspan="3">${fmt(summary.openBal)}</td></tr>
-<tr class="sum"><td colspan="2">Statement Closing Balance</td><td class="r" colspan="3">${fmt(summary.closeBal)}</td></tr>
-<tr class="sum"><td colspan="2">Cleared Balance</td><td class="r" colspan="3">${fmt(summary.clearedBalance)}</td></tr>
-<tr class="sum"><td colspan="2"><b>Difference</b></td><td class="r" colspan="3"><b>${fmt(summary.difference)}</b></td></tr>
-</tfoot></table>
-</body></html>`;
-    const w = window.open("", "_blank");
-    if (!w) return toast.error("Pop-ups blocked");
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    setTimeout(() => { w.print(); w.close(); }, 400);
-  }, [entries, cleared, summary, activeRecon, companyName]);
+    const printed = printTabularList({
+      title: "Bank Reconciliation",
+      subtitle: `${activeRecon?.accountCode || ""} ${activeRecon?.accountName || ""} · ${fmtDate(activeRecon?.periodStart)} to ${fmtDate(activeRecon?.periodEnd)}`,
+      company: currentCompany,
+      orientation: "portrait",
+      summaryItems: [
+        ["Opening balance", fmt(summary.openBal)],
+        ["Closing balance", fmt(summary.closeBal)],
+        ["Cleared balance", fmt(summary.clearedBalance)],
+        ["Difference", fmt(summary.difference)],
+      ],
+      columns: [
+        { label: "Date", value: (e) => fmtDate(e.transactionDate) },
+        { label: "Description", value: (e) => e.notes || e.category || "" },
+        { label: "Debit (in)", align: "right", value: (e) => (e.direction === "debit" ? fmt(Number(e.amount || 0)) : "") },
+        { label: "Credit (out)", align: "right", value: (e) => (e.direction === "credit" ? fmt(Number(e.amount || 0)) : "") },
+        { label: "Cleared", value: (e) => (cleared.has(String(e._id)) ? "✓" : "") },
+      ],
+      rows: entries,
+      totalsRow: ["Difference", "", "", fmt(summary.difference), ""],
+      signatures: [{ label: "Prepared by" }, { label: "Reviewed by" }],
+    });
+    if (!printed) toast.error("Pop-ups blocked");
+  }, [entries, cleared, summary, activeRecon, currentCompany]);
 
   const isLocked = activeRecon?.status === "reconciled";
 

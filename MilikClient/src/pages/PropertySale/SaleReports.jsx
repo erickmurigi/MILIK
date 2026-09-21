@@ -7,6 +7,8 @@ import { FaPrint } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
 import AppSelect from "../../components/common/AppSelect";
 import { useTerms } from "../../hooks/useTerm";
+import { printTabularList } from "../../utils/printKit";
+import { POPUP_BLOCKED, money } from "./salePrint";
 import { fmtKES, SALE_MONTHS as MONTHS, saleApi } from "../../services/propertySaleApi";
 const currentYear = new Date().getFullYear();
 const YEAR_OPTS   = Array.from({ length: 6 }, (_, i) => currentYear - i + 1)
@@ -42,118 +44,32 @@ const SaleReports = () => {
   };
 
   const printReport = () => {
-    const co   = currentCompany || {};
-    const coName = co.companyName || co.name || "MILIK";
-    // Every dynamic value is HTML-escaped (incl. quotes): the popup is same-origin (document.write),
-    // so raw interpolation of company text or a crafted logo URL would be stored XSS.
-    const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-    const logoSrc = typeof co.logo === "string" && /^(https?:\/\/|data:image\/)/i.test(co.logo.trim()) ? co.logo.trim() : "";
-
-    const rows = MONTHS.map((mName, idx) => {
-      const m = monthData[idx];
-      const hasActivity = (m.listings||0)+(m.offers||0)+(m.dealsActive||0)+(m.dealsClosed||0)+(m.revenue||0) > 0;
-      return `<tr class="${hasActivity ? "" : "muted"}">
-        <td>${mName}</td>
-        <td>${m.listings ?? 0}</td>
-        <td>${m.offers ?? 0}</td>
-        <td>${m.dealsActive ?? 0}</td>
-        <td>${m.dealsClosed ?? 0}</td>
-        <td class="num">${(m.revenue ?? 0) > 0 ? fmtKES(m.revenue) : "—"}</td>
-        <td class="num">${(m.commissionsApproved ?? 0) > 0 ? fmtKES(m.commissionsApproved) : "—"}</td>
-      </tr>`;
-    }).join("");
-
-    const html = `<!DOCTYPE html><html lang="en"><head>
-<meta charset="UTF-8"/>
-<title>${esc(T.saleModule)} Report — ${esc(year)}</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:"Helvetica Neue",Arial,sans-serif;font-size:10.5px;color:#111;background:#fff}
-.page{max-width:260mm;margin:0 auto;padding:14mm 16mm 12mm}
-.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0B3B2E;padding-bottom:10px;margin-bottom:14px}
-.brand-name{font-size:15px;font-weight:900;letter-spacing:2px;color:#0B3B2E;text-transform:uppercase}
-.brand-sub{font-size:8px;color:#888;margin-top:2px;letter-spacing:1px;text-transform:uppercase}
-.brand img{height:48px;object-fit:contain}
-.co-meta{text-align:right;font-size:9px;color:#555;line-height:1.7}
-.report-id{margin-bottom:14px}
-.report-id h1{font-size:12px;font-weight:900;letter-spacing:2.5px;text-transform:uppercase;color:#0B3B2E}
-.report-id p{font-size:9px;color:#666;margin-top:2px}
-.summary-row{display:flex;gap:0;border:1px solid #e5e7eb;margin-bottom:16px}
-.summary-cell{flex:1;padding:8px 12px;border-right:1px solid #e5e7eb}
-.summary-cell:last-child{border-right:none}
-.summary-cell .lbl{font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#888;margin-bottom:3px}
-.summary-cell .val{font-size:14px;font-weight:900;color:#0B3B2E;font-variant-numeric:tabular-nums}
-table{width:100%;border-collapse:collapse}
-thead tr{background:#0B3B2E;color:#fff}
-thead th{padding:7px 9px;font-size:8.5px;font-weight:900;letter-spacing:1px;text-transform:uppercase;text-align:right}
-thead th:first-child{text-align:left}
-tbody tr{border-bottom:1px solid #e5e7eb}
-tbody tr:nth-child(even){background:#f9fafb}
-tbody tr.muted td{color:#bbb}
-tbody td{padding:6px 9px;font-size:10px;text-align:right}
-tbody td:first-child{text-align:left;font-weight:600;color:#111}
-.num{font-variant-numeric:tabular-nums}
-tfoot tr{background:#0B3B2E;color:#fff}
-tfoot td{padding:8px 9px;font-size:10px;font-weight:900;text-align:right}
-tfoot td:first-child{text-align:left}
-.footer{margin-top:20px;padding-top:8px;border-top:1px solid #ddd;font-size:8px;color:#aaa;display:flex;justify-content:space-between}
-@media print{
-  body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  @page{size:A4 landscape;margin:10mm}
-}
-</style></head>
-<body><div class="page">
-<div class="hdr">
-  <div>${logoSrc
-    ? `<img src="${esc(logoSrc)}" alt=""/>`
-    : `<div class="brand-name">${esc(coName)}</div><div class="brand-sub">${esc(T.saleModule)}</div>`
-  }</div>
-  <div class="co-meta">
-    <strong>${esc(coName)}</strong><br/>
-    ${[co.physicalAddress||co.postalAddress, [co.telephone,co.email].filter(Boolean).join(" | "), co.pinNumber?"PIN: "+co.pinNumber:""].filter(Boolean).map(esc).join("<br/>")}
-  </div>
-</div>
-<div class="report-id">
-  <h1>Annual Sales Performance Report</h1>
-  <p>Financial Year: ${esc(year)} &nbsp;·&nbsp; Generated: ${new Date().toLocaleString("en-KE")}</p>
-</div>
-<div class="summary-row">
-  <div class="summary-cell"><div class="lbl">${esc(T.saleListings)} Created</div><div class="val">${totals.listings??0}</div></div>
-  <div class="summary-cell"><div class="lbl">${esc(T.saleOffers)} Received</div><div class="val">${totals.offers??0}</div></div>
-  <div class="summary-cell"><div class="lbl">Active ${esc(T.saleDeals)}</div><div class="val">${totals.dealsActive??0}</div></div>
-  <div class="summary-cell"><div class="lbl">${esc(T.saleDeals)} Closed</div><div class="val">${totals.dealsClosed??0}</div></div>
-  <div class="summary-cell"><div class="lbl">Total Revenue</div><div class="val">${fmtKES(totals.revenue??0)}</div></div>
-  <div class="summary-cell"><div class="lbl">Commissions</div><div class="val">${fmtKES(totals.commissionsApproved??0)}</div></div>
-</div>
-<table>
-  <thead>
-    <tr>
-      <th style="text-align:left">Month</th>
-      <th>${esc(T.saleListings)}</th><th>${esc(T.saleOffers)}</th><th>Active ${esc(T.saleDeals)}</th><th>Closed ${esc(T.saleDeals)}</th>
-      <th>Revenue (KES)</th><th>Commissions (KES)</th>
-    </tr>
-  </thead>
-  <tbody>${rows}</tbody>
-  <tfoot>
-    <tr>
-      <td>TOTALS — ${esc(year)}</td>
-      <td>${totals.listings??0}</td><td>${totals.offers??0}</td>
-      <td>${totals.dealsActive??0}</td><td>${totals.dealsClosed??0}</td>
-      <td>${fmtKES(totals.revenue??0)}</td><td>${fmtKES(totals.commissionsApproved??0)}</td>
-    </tr>
-  </tfoot>
-</table>
-<div class="footer">
-  <span>CONFIDENTIAL — MILIK ${esc(T.saleModule)} System</span>
-  <span>Page 1 of 1</span>
-</div>
-</div></body></html>`;
-
-    const w = window.open("", "_blank", "width=1100,height=720");
-    if (!w) { toast.error("Pop-up blocked — allow pop-ups for this site"); return; }
-    w.document.write(html);
-    w.document.close();
-    w.onload = () => w.print();
+    const kes = (v) => `KES ${money(v)}`;
+    const printed = printTabularList({
+      title: "Annual Sales Performance Report",
+      subtitle: `Financial Year: ${year}`,
+      company: currentCompany,
+      summaryItems: [
+        [`${T.saleListings} created`, String(totals.listings ?? 0)],
+        [`${T.saleOffers} received`, String(totals.offers ?? 0)],
+        [`Active ${T.saleDeals}`, String(totals.dealsActive ?? 0)],
+        [`${T.saleDeals} closed`, String(totals.dealsClosed ?? 0)],
+        ["Total revenue", kes(totals.revenue ?? 0)],
+        ["Commissions", kes(totals.commissionsApproved ?? 0)],
+      ],
+      columns: [
+        { label: "Month", value: (m) => m.label },
+        { label: T.saleListings, align: "right", value: (m) => m.listings ?? 0 },
+        { label: T.saleOffers, align: "right", value: (m) => m.offers ?? 0 },
+        { label: `Active ${T.saleDeals}`, align: "right", value: (m) => m.dealsActive ?? 0 },
+        { label: `Closed ${T.saleDeals}`, align: "right", value: (m) => m.dealsClosed ?? 0 },
+        { label: "Revenue (KES)", align: "right", value: (m) => ((m.revenue ?? 0) > 0 ? money(m.revenue) : "—") },
+        { label: "Commissions (KES)", align: "right", value: (m) => ((m.commissionsApproved ?? 0) > 0 ? money(m.commissionsApproved) : "—") },
+      ],
+      rows: monthData.map((m, idx) => ({ ...m, label: MONTHS[idx] })),
+      totalsRow: [`TOTALS — ${year}`, String(totals.listings ?? 0), String(totals.offers ?? 0), String(totals.dealsActive ?? 0), String(totals.dealsClosed ?? 0), money(totals.revenue ?? 0), money(totals.commissionsApproved ?? 0)],
+    });
+    if (!printed) toast.error(POPUP_BLOCKED);
   };
 
   // Bar chart values
