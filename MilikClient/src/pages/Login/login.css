@@ -74,20 +74,4 @@ input[type="password"]::-ms-clear {
   animation: gradient-shift 3s ease infinite;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-::-webkit-scrollbar-thumb {
-  background: linear-gradient(to bottom, #027333, #026227);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(to bottom, #026227, #014d1f);
-}
+/* Scrollbars are styled in one place: src/styles/scrollbar.css */

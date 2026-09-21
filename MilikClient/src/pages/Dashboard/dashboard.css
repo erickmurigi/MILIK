@@ -1,18 +1,6 @@
 /* dashboard.css */
 
-::-webkit-scrollbar {
-  width: 6px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: #f1f5f3;
-}
-::-webkit-scrollbar-thumb {
-  background: rgba(11, 59, 46, 0.25);
-}
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(11, 59, 46, 0.45);
-}
+/* Scrollbars are styled in one place: src/styles/scrollbar.css */
 
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(6px); }

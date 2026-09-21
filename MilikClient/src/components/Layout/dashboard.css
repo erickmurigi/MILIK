@@ -3,36 +3,7 @@
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-/* Windows-style scrollbar */
-.windows-scrollbar::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
-}
-
-.windows-scrollbar::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-
-.windows-scrollbar::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 6px;
-}
-
-.windows-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
-}
-
-.dark .windows-scrollbar::-webkit-scrollbar-track {
-  background: #374151;
-}
-
-.dark .windows-scrollbar::-webkit-scrollbar-thumb {
-  background: #4b5563;
-}
-
-.dark .windows-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #6b7280;
-}
+/* Scrollbars are styled in one place: src/styles/scrollbar.css */
 
 /* Menu animations */
 @keyframes slideDown {

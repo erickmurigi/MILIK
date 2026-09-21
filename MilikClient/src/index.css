@@ -63,14 +63,7 @@ body {
   display: none;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
+/* Scrollbars are styled in one place: src/styles/scrollbar.css */
 
 /* Print styles for landlord statements */
 .print-only-wrapper {
@@ -95,15 +88,6 @@ body {
   .no-print {
     display: none !important;
   }
-}
-
-::-webkit-scrollbar-thumb {
-  background: #027333;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #026227;
 }
 
 /* Animation classes */

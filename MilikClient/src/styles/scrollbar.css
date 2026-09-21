@@ -1,0 +1,130 @@
+/*
+ * The one scrollbar style for the whole app (imported once from main.jsx).
+ *
+ * Chromium browsers (Chrome, Edge, Opera) and Safari get a scrollbar with an ARROW BUTTON at each end (up / down on
+ * vertical bars, left / right on horizontal ones) so long tables and lists can be scrolled step by step with the mouse.
+ * Firefox does not allow styling scrollbar buttons and keeps its own default scrollbar.
+ *
+ * Do not set the standard `scrollbar-width` / `scrollbar-color` properties on `*` or `html`: Chromium then ignores
+ * every ::-webkit-scrollbar rule below. To hide a scrollbar on one element use `::-webkit-scrollbar { display: none }`
+ * on that element's class (see .filter-bar in index.css).
+ */
+
+:root {
+  --sb-size: 14px;
+  --sb-track: #f1f5f3;
+  --sb-button: #e3ece8;
+  --sb-button-hover: #c9dbd3;
+  --sb-button-active: #a9c3b8;
+  --sb-thumb: rgba(11, 59, 46, 0.4);
+  --sb-thumb-hover: rgba(11, 59, 46, 0.65);
+}
+
+::-webkit-scrollbar {
+  width: var(--sb-size);
+  height: var(--sb-size);
+}
+
+::-webkit-scrollbar-track {
+  background: var(--sb-track);
+}
+
+::-webkit-scrollbar-corner {
+  background: var(--sb-track);
+}
+
+/* The draggable part: inset from the track edges so it reads as a rounded bar, with a minimum size that is easy to grab */
+::-webkit-scrollbar-thumb {
+  background-color: var(--sb-thumb);
+  border: 3px solid var(--sb-track);
+  border-radius: 999px;
+  background-clip: padding-box;
+  min-height: 36px;
+  min-width: 36px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--sb-thumb-hover);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background-color: rgba(11, 59, 46, 0.85);
+}
+
+/* Arrow buttons at both ends of every scrollbar */
+::-webkit-scrollbar-button:single-button {
+  display: block;
+  width: var(--sb-size);
+  height: var(--sb-size);
+  background-color: var(--sb-button);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 8px 8px;
+}
+
+::-webkit-scrollbar-button:single-button:hover {
+  background-color: var(--sb-button-hover);
+}
+
+::-webkit-scrollbar-button:single-button:active {
+  background-color: var(--sb-button-active);
+}
+
+::-webkit-scrollbar-button:single-button:vertical:decrement {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath d='M1 6l3-4 3 4z' fill='%230B3B2E'/%3E%3C/svg%3E");
+}
+
+::-webkit-scrollbar-button:single-button:vertical:increment {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath d='M1 2l3 4 3-4z' fill='%230B3B2E'/%3E%3C/svg%3E");
+}
+
+::-webkit-scrollbar-button:single-button:horizontal:decrement {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath d='M6 1L2 4l4 3z' fill='%230B3B2E'/%3E%3C/svg%3E");
+}
+
+::-webkit-scrollbar-button:single-button:horizontal:increment {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath d='M2 1l4 3-4 3z' fill='%230B3B2E'/%3E%3C/svg%3E");
+}
+
+/* Dark mode (pages that put the "dark" class on the page or a container) */
+.dark ::-webkit-scrollbar-track,
+.dark::-webkit-scrollbar-track,
+.dark ::-webkit-scrollbar-corner {
+  background: #1f2937;
+}
+
+.dark ::-webkit-scrollbar-thumb,
+.dark::-webkit-scrollbar-thumb {
+  background-color: rgba(203, 213, 225, 0.35);
+  border-color: #1f2937;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(203, 213, 225, 0.6);
+}
+
+.dark ::-webkit-scrollbar-button:single-button,
+.dark::-webkit-scrollbar-button:single-button {
+  background-color: #374151;
+}
+
+.dark ::-webkit-scrollbar-button:single-button:hover {
+  background-color: #4b5563;
+}
+
+/* Light arrows on the dark buttons */
+.dark ::-webkit-scrollbar-button:single-button:vertical:decrement {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath d='M1 6l3-4 3 4z' fill='%23cbd5e1'/%3E%3C/svg%3E");
+}
+
+.dark ::-webkit-scrollbar-button:single-button:vertical:increment {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath d='M1 2l3 4 3-4z' fill='%23cbd5e1'/%3E%3C/svg%3E");
+}
+
+.dark ::-webkit-scrollbar-button:single-button:horizontal:decrement {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath d='M6 1L2 4l4 3z' fill='%23cbd5e1'/%3E%3C/svg%3E");
+}
+
+.dark ::-webkit-scrollbar-button:single-button:horizontal:increment {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath d='M2 1l4 3-4 3z' fill='%23cbd5e1'/%3E%3C/svg%3E");
+}
