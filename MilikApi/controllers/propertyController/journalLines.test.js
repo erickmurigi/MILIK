@@ -176,3 +176,59 @@ describe("multi-line journals", () => {
     expect(posted.payload.status).toBe("posted");
   });
 });
+
+describe("auto-reversing journals", () => {
+  const nextMonth = () => { const d = new Date(); d.setMonth(d.getMonth() + 1, 1); return d; };
+
+  it("posts a dated mirror journal so the accrual nets to zero, and refuses a second reversal", async () => {
+    const { call, acct, company } = await setup();
+    const expense = await acct("5100");
+    const payable = await acct("1200");
+    const date = new Date();
+    const created = (await call(createJournalEntry, { body: { date, autoReverseDate: nextMonth(), narration: "Accrue audit fee", lines: [
+      { account: expense, debit: 900 }, { account: payable, credit: 900 },
+    ] } })).payload;
+    expect(created.autoReverseDate).toBeTruthy();
+
+    const posted = (await call(postJournalEntry, { params: { id: created._id } })).payload;
+    expect(posted.status).toBe("posted");
+    expect(posted.autoReversal).toMatchObject({ posted: true });
+
+    const all = await FinancialLedgerEntry.find({ business: company._id, category: "ADJUSTMENT" }).lean();
+    expect(all).toHaveLength(4);
+    expect(totals(all).debit).toBe(totals(all).credit);
+    const net = (id) => all.filter((e) => String(e.accountId) === id).reduce((s, e) => s + e.debit - e.credit, 0);
+    expect(net(expense)).toBe(0);
+    expect(net(payable)).toBe(0);
+    // the mirror carries the later date
+    expect(all.filter((e) => new Date(e.transactionDate) > new Date(date.getFullYear(), date.getMonth() + 1, 0))).toHaveLength(2);
+
+    await expect(call(reverseJournalEntry, { params: { id: created._id }, body: { reason: "again" } })).rejects.toThrow(/already reversed automatically/);
+  });
+
+  it("rejects a reverse date that is not after the journal date", async () => {
+    const { call, acct } = await setup();
+    const lines = [{ account: await acct("5100"), debit: 5 }, { account: await acct("1100"), credit: 5 }];
+    await expect(call(createJournalEntry, { body: { date: new Date(), autoReverseDate: new Date(Date.now() - 86400000), lines } })).rejects.toThrow(/after the journal date/);
+  });
+
+  it("keeps the original posted and the mirror as a draft when the reverse date is in a locked period", async () => {
+    const { call, acct, company } = await setup();
+    const a = await acct("5100");
+    const b = await acct("1200");
+    const later = nextMonth();
+    await AccountingPeriod.create({
+      business: company._id, name: "Locked next month", status: "locked",
+      startDate: new Date(later.getFullYear(), later.getMonth(), 1), endDate: new Date(later.getFullYear(), later.getMonth() + 1, 0, 23, 59, 59),
+    });
+    const created = (await call(createJournalEntry, { body: { date: new Date(), autoReverseDate: later, lines: [{ account: a, debit: 40 }, { account: b, credit: 40 }] } })).payload;
+    const posted = (await call(postJournalEntry, { params: { id: created._id } })).payload;
+    expect(posted.status).toBe("posted");
+    expect(posted.autoReversal).toMatchObject({ posted: false });
+    expect(posted.autoReversal.message).toMatch(/locked period/);
+    expect(await FinancialLedgerEntry.countDocuments({ business: company._id, category: "ADJUSTMENT" })).toBe(2);
+    // the original can still be reversed by hand
+    const reversed = await call(reverseJournalEntry, { params: { id: created._id }, body: { reason: "manual" } });
+    expect(reversed.payload.status).toBe("reversed");
+  });
+});

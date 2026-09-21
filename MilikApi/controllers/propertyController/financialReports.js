@@ -68,7 +68,7 @@ const resolveInvoiceDueDateForReports = (invoice = {}) => {
 
 // isOperatingIncomeAccount / isOperatingExpenseAccount imported from accountClassifiers.js
 
-const buildLedgerMap = async ({ businessId, asOfDate = null, startDate = null, endDate = null, propertyId = null }) => {
+const buildLedgerMap = async ({ businessId, asOfDate = null, startDate = null, endDate = null, propertyId = null, dimensions = null }) => {
   // aggregate() does not auto-cast strings â†’ ObjectId the way find() does.
   const businessOid = new mongoose.Types.ObjectId(String(businessId));
   const match = {
@@ -80,6 +80,9 @@ const buildLedgerMap = async ({ businessId, asOfDate = null, startDate = null, e
   if (propertyId) {
     match.property = propertyId;
   }
+
+  // Optional journal-line tags (project / deal / unit / agent / cost centre), e.g. { "dimensions.saleProject": id }
+  if (dimensions) Object.assign(match, dimensions);
 
   if (startDate || endDate || asOfDate) {
     match.transactionDate = {};
@@ -317,6 +320,16 @@ export const getIncomeStatementReport = async (req, res, next) => {
     // Accounts remain generic; only entries tagged with this property are included.
     const scopePropertyId = req.query.propertyId ? toObjectId(req.query.propertyId) : null;
 
+    // Optional tag scope: a profit and loss for one project, unit, deal, agent or cost centre.
+    const tagScope = {};
+    for (const [param, field] of [["projectId", "dimensions.saleProject"], ["dealId", "dimensions.saleDeal"], ["listingId", "dimensions.saleListing"], ["agentId", "dimensions.saleAgent"]]) {
+      if (!req.query[param]) continue;
+      const oid = toObjectId(req.query[param]);
+      if (!oid) return next(createError(400, `Invalid ${param}.`));
+      tagScope[field] = oid;
+    }
+    if (typeof req.query.costCentre === "string" && req.query.costCentre.trim()) tagScope["dimensions.costCentre"] = req.query.costCentre.trim();
+
     const accountQuery = {
       business: businessId,
       isPosting: { $ne: false },
@@ -326,7 +339,7 @@ export const getIncomeStatementReport = async (req, res, next) => {
 
     const [accounts, ledgerMap, company] = await Promise.all([
       ChartOfAccount.find(accountQuery).sort({ code: 1 }).lean(),
-      buildLedgerMap({ businessId, startDate, endDate, propertyId: scopePropertyId }),
+      buildLedgerMap({ businessId, startDate, endDate, propertyId: scopePropertyId, dimensions: Object.keys(tagScope).length ? tagScope : null }),
       Company.findById(businessId, { modules: 1, companyMode: 1 }).lean(),
     ]);
 

@@ -20,12 +20,14 @@ import {
   getLiabilitySubledger,
   getRentalAgedAnalysisReport,
 } from "../../controllers/propertyController/financialReports.js";
+import { getTagSummaryReport } from "../../controllers/propertyController/tagReports.js";
 
 const router = express.Router();
 
 // All financial reports — read-only, accessible to any GL-posting module company
 router.get("/trial-balance", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getTrialBalanceReport);
 router.get("/income-statement", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getIncomeStatementReport);
+router.get("/tag-summary", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getTagSummaryReport);
 router.get("/balance-sheet", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getBalanceSheetReport);
 router.get("/cash-flow", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getCashFlowReport);
 router.get("/cash-monthly-summary", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getCashMonthlySummary);

@@ -85,6 +85,11 @@ const JournalEntrySchema = new mongoose.Schema(
       index: true,
     },
 
+    // Accrual-style journals: on posting, a mirror journal (debits and credits swapped) is posted dated autoReverseDate.
+    autoReverseDate: { type: Date, default: null },
+    autoReversalJournal: { type: mongoose.Schema.Types.ObjectId, ref: "JournalEntry", default: null },
+    autoReversalOf: { type: mongoose.Schema.Types.ObjectId, ref: "JournalEntry", default: null },
+
     // Multi-line journal: debits and credits that must balance. Each line may be tagged (module, sale project, deal,
     // listing, agent, property, cost centre). Validated by services/journalLinesService.js.
     lines: [

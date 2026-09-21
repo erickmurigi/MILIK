@@ -273,7 +273,15 @@ const buildLinesJournalFields = async ({ businessId, body, existing = null }) =>
   const sourceModule = String(body.sourceModule || existing?.sourceModule || "general");
   if (!JOURNAL_MODULES.includes(sourceModule)) throw createError(400, "Unknown module");
   const { lines, totalDebit } = await validateJournalLines({ businessId, lines: body.lines });
+  // Optional automatic reversal (accruals): the mirror journal is dated after the journal itself
+  let autoReverseDate = existing?.autoReverseDate ?? null;
+  if (body.autoReverseDate !== undefined) {
+    autoReverseDate = body.autoReverseDate ? new Date(body.autoReverseDate) : null;
+    if (autoReverseDate && Number.isNaN(autoReverseDate.getTime())) throw createError(400, "Auto-reverse date is not a valid date");
+    if (autoReverseDate && autoReverseDate <= new Date(date)) throw createError(400, "Auto-reverse date must be after the journal date");
+  }
   return {
+    autoReverseDate,
     date,
     journalType,
     sourceModule,
@@ -757,6 +765,40 @@ export const updateJournalEntry = async (req, res, next) => {
   }
 };
 
+// Posts the mirror of an accrual-style journal, dated journal.autoReverseDate. If the mirror cannot be posted (locked
+// period) the original stays posted and the mirror is left as a draft the user can post later; the message goes back.
+const postAutoReversal = async ({ journal, actorUserId }) => {
+  if (!journal.autoReverseDate || journal.autoReversalJournal || !journal.lines?.length) return null;
+  const lines = journal.toObject().lines.map((l) => ({
+    account: l.account, debit: l.credit, credit: l.debit, description: l.description, dimensions: l.dimensions,
+  }));
+  const mirror = await JournalEntry.create({
+    journalNo: await generateJournalNo(journal.business),
+    business: journal.business,
+    date: journal.autoReverseDate,
+    journalType: journal.journalType,
+    sourceModule: journal.sourceModule,
+    reference: journal.reference,
+    narration: `Auto-reversal of ${journal.journalNo}${journal.narration ? ` – ${journal.narration}` : ""}`.slice(0, 1000),
+    lines,
+    amount: journal.amount,
+    debitAccount: null,
+    creditAccount: null,
+    includeInLandlordStatement: false,
+    status: "draft",
+    createdBy: actorUserId,
+    autoReversalOf: journal._id,
+  });
+  journal.autoReversalJournal = mirror._id;
+  await journal.save();
+  try {
+    await postLinesJournalToLedger({ journal: mirror, actorUserId });
+    return { journalNo: mirror.journalNo, posted: true };
+  } catch (error) {
+    return { journalNo: mirror.journalNo, posted: false, message: error?.message };
+  }
+};
+
 export const postJournalEntry = async (req, res, next) => {
   try {
     const businessId = await resolveBusinessId(req);
@@ -782,10 +824,12 @@ export const postJournalEntry = async (req, res, next) => {
     if (journal.lines?.length) await postLinesJournalToLedger({ journal, actorUserId });
     else await postJournalToLedger({ journal, actorUserId });
 
+    const autoReversal = await postAutoReversal({ journal, actorUserId });
+
     emitToCompany(businessId, "journal:posted", { journalId: journal._id });
 
     const populated = await populateJournalQuery(JournalEntry.findById(journal._id)).lean();
-    return res.status(200).json(populated);
+    return res.status(200).json(autoReversal ? { ...populated, autoReversal } : populated);
   } catch (err) {
     next(err);
   }
@@ -813,6 +857,14 @@ export const reverseJournalEntry = async (req, res, next) => {
 
     if (journal.reversedAt) {
       return next(createError(400, "Journal is already reversed"));
+    }
+
+    // A journal that already has its automatic reversal posted must not be reversed a second time
+    if (journal.autoReversalJournal) {
+      const mirror = await JournalEntry.findOne({ _id: journal.autoReversalJournal, business: businessId }).select("status journalNo").lean();
+      if (mirror?.status === "posted") {
+        return next(createError(400, `Journal ${journal.journalNo} was already reversed automatically by ${mirror.journalNo}.`));
+      }
     }
 
     const actorUserId = await resolveActorUserId(req, businessId);
