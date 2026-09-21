@@ -139,6 +139,16 @@ const FinancialLedgerEntrySchema = new mongoose.Schema(
       index: true,
     },
 
+    // Tags from a multi-line journal line (module / sale project / deal / listing / agent / cost centre), so reports can
+    // slice the ledger by them. Empty for every entry the modules post themselves.
+    dimensions: {
+      module:      { type: String, default: null },
+      saleProject: { type: mongoose.Schema.Types.ObjectId, ref: "SaleProject", default: null },
+      saleDeal:    { type: mongoose.Schema.Types.ObjectId, ref: "SaleDeal", default: null },
+      saleListing: { type: mongoose.Schema.Types.ObjectId, ref: "SaleListing", default: null },
+      saleAgent:   { type: mongoose.Schema.Types.ObjectId, ref: "SaleAgent", default: null },
+      costCentre:  { type: String, default: "" },
+    },
     sourceTransactionType: {
       type: String,
       enum: SOURCE_TYPES,
@@ -303,6 +313,11 @@ FinancialLedgerEntrySchema.index({ business: 1, accountId: 1, transactionDate: 1
 // Optimized for liability subledger drill-down: account + status equality then date range
 FinancialLedgerEntrySchema.index({ business: 1, accountId: 1, status: 1, transactionDate: 1 });
 FinancialLedgerEntrySchema.index({ business: 1, journalGroupId: 1, status: 1 });
+// Sale-project reports (income and tagged costs per project)
+FinancialLedgerEntrySchema.index(
+  { business: 1, "dimensions.saleProject": 1, transactionDate: 1 },
+  { partialFilterExpression: { "dimensions.saleProject": { $type: "objectId" } } }
+);
 // Optimized for reversal/idempotency checks: business+sourceType+sourceId equality, then filter by status
 FinancialLedgerEntrySchema.index({ business: 1, sourceTransactionType: 1, sourceTransactionId: 1, status: 1 });
 

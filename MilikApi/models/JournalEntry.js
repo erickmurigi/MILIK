@@ -25,6 +25,12 @@ const JournalEntrySchema = new mongoose.Schema(
         "company_journal",
         "payroll_posting",
         "statutory_payment",
+        // multi-line journals
+        "adjustment",
+        "accrual",
+        "reclassification",
+        "opening_balance",
+        "allocation",
       ],
       required: true,
       default: "general_manual_journal",
@@ -32,7 +38,7 @@ const JournalEntrySchema = new mongoose.Schema(
 
     sourceModule: {
       type: String,
-      enum: ["propertyManagement", "hr", "carwash", "general", "accounts"],
+      enum: ["propertyManagement", "hr", "carwash", "general", "accounts", "propertySale", "inventory", "clients"],
       default: "general",
       index: true,
     },
@@ -63,19 +69,41 @@ const JournalEntrySchema = new mongoose.Schema(
       index: true,
     },
 
+    // Two-line journals (landlord / property journals and everything posted before multi-line journals) use these three
+    // fields. A multi-line journal leaves the two accounts empty and fills `lines`; `amount` is then its total debit.
     debitAccount: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "ChartOfAccount",
-      required: true,
+      required: function () { return !(this.lines && this.lines.length); },
       index: true,
     },
 
     creditAccount: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "ChartOfAccount",
-      required: true,
+      required: function () { return !(this.lines && this.lines.length); },
       index: true,
     },
+
+    // Multi-line journal: debits and credits that must balance. Each line may be tagged (module, sale project, deal,
+    // listing, agent, property, cost centre). Validated by services/journalLinesService.js.
+    lines: [
+      {
+        account:     { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", required: true },
+        debit:       { type: Number, default: 0, min: 0 },
+        credit:      { type: Number, default: 0, min: 0 },
+        description: { type: String, trim: true, default: "", maxlength: 200 },
+        dimensions: {
+          module:     { type: String, default: null },
+          project:    { type: mongoose.Schema.Types.ObjectId, ref: "SaleProject", default: null },
+          deal:       { type: mongoose.Schema.Types.ObjectId, ref: "SaleDeal", default: null },
+          listing:    { type: mongoose.Schema.Types.ObjectId, ref: "SaleListing", default: null },
+          agent:      { type: mongoose.Schema.Types.ObjectId, ref: "SaleAgent", default: null },
+          property:   { type: mongoose.Schema.Types.ObjectId, ref: "Property", default: null },
+          costCentre: { type: String, trim: true, default: "" },
+        },
+      },
+    ],
 
     amount: {
       type: Number,

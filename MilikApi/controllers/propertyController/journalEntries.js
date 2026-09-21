@@ -9,6 +9,7 @@ import { postEntry, postReversal } from "../../services/ledgerPostingService.js"
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { emitToCompany } from "../../utils/socketManager.js";
+import { JOURNAL_MODULES, LINE_JOURNAL_TYPES, postLinesJournalToLedger, validateJournalLines } from "../../services/journalLinesService.js";
 import { createError } from "../../utils/error.js";
 import {
   resolvePropertyAccountingContext,
@@ -261,8 +262,36 @@ const validateJournalPayload = async ({ businessId, payload = {} }) => {
   };
 };
 
+// Fields shared by creating and editing a multi-line journal (validated: balanced, real accounts, tags in this company)
+const buildLinesJournalFields = async ({ businessId, body, existing = null }) => {
+  const date = body.date ? new Date(body.date) : existing?.date;
+  if (!date || Number.isNaN(new Date(date).getTime())) throw createError(400, "Date is required");
+  const journalType = String(body.journalType || existing?.journalType || "general_manual_journal").trim().toLowerCase();
+  if (!LINE_JOURNAL_TYPES.includes(journalType)) {
+    throw createError(400, "Owner / landlord journals use the two-line form. Choose a general journal type for a journal with several lines.");
+  }
+  const sourceModule = String(body.sourceModule || existing?.sourceModule || "general");
+  if (!JOURNAL_MODULES.includes(sourceModule)) throw createError(400, "Unknown module");
+  const { lines, totalDebit } = await validateJournalLines({ businessId, lines: body.lines });
+  return {
+    date,
+    journalType,
+    sourceModule,
+    reference: String(body.reference ?? existing?.reference ?? "").trim().slice(0, 200),
+    narration: String(body.narration ?? existing?.narration ?? "").trim().slice(0, 1000),
+    lines,
+    amount: totalDebit,
+  };
+};
+
 const populateJournalQuery = (query) =>
   query
+    .populate("lines.account", "code name type group")
+    .populate("lines.dimensions.project", "name projectNumber")
+    .populate("lines.dimensions.deal", "dealNumber")
+    .populate("lines.dimensions.listing", "title listingNumber unitNumber")
+    .populate("lines.dimensions.agent", "fullName agentNumber")
+    .populate("lines.dimensions.property", "propertyName name")
     .populate("property", "propertyName name")
     .populate("landlord", "landlordName name")
     .populate("debitAccount", "code name type group")
@@ -526,6 +555,24 @@ export const createJournalEntry = async (req, res, next) => {
       return next(createError(400, "User must have a company context"));
     }
 
+    // Multi-line journal (any number of balanced lines, optionally tagged)
+    if (Array.isArray(req.body?.lines)) {
+      const fields = await buildLinesJournalFields({ businessId, body: req.body });
+      const [actorUserId, journalNo] = await Promise.all([resolveActorUserId(req, businessId), generateJournalNo(businessId)]);
+      const created = await JournalEntry.create({
+        journalNo,
+        ...fields,
+        debitAccount: null,
+        creditAccount: null,
+        includeInLandlordStatement: false,
+        status: "draft",
+        createdBy: actorUserId,
+        business: businessId,
+      });
+      emitToCompany(businessId, "journal:new", { journalId: created._id });
+      return res.status(201).json(await populateJournalQuery(JournalEntry.findById(created._id)).lean());
+    }
+
     const normalizedPayload = normalizeJournalPayload(req.body || {});
 
     const [actorUserId, { resolvedLandlordId, normalizedIncludeInStatement }, journalNo] = await Promise.all([
@@ -669,6 +716,15 @@ export const updateJournalEntry = async (req, res, next) => {
       return next(createError(400, "Only draft journals can be edited"));
     }
 
+    if (Array.isArray(req.body?.lines) || existing.lines?.length) {
+      const body = { ...(req.body || {}), lines: Array.isArray(req.body?.lines) ? req.body.lines : existing.toObject().lines };
+      const fields = await buildLinesJournalFields({ businessId, body, existing });
+      existing.set({ ...fields, debitAccount: null, creditAccount: null, includeInLandlordStatement: false });
+      await existing.save();
+      emitToCompany(businessId, "journal:updated", { journalId: existing._id });
+      return res.status(200).json(await populateJournalQuery(JournalEntry.findById(existing._id)).lean());
+    }
+
     const normalizedPayload = normalizeJournalPayload({
       ...existing.toObject(),
       ...(req.body || {}),
@@ -723,7 +779,8 @@ export const postJournalEntry = async (req, res, next) => {
 
     const actorUserId = await resolveActorUserId(req, businessId);
 
-    await postJournalToLedger({ journal, actorUserId });
+    if (journal.lines?.length) await postLinesJournalToLedger({ journal, actorUserId });
+    else await postJournalToLedger({ journal, actorUserId });
 
     emitToCompany(businessId, "journal:posted", { journalId: journal._id });
 
@@ -817,6 +874,11 @@ export const getJournalPostingPreview = async (req, res, next) => {
     const businessId = await resolveBusinessId(req);
     if (!businessId) {
       return next(createError(400, "User must have a company context"));
+    }
+
+    if (Array.isArray(req.body?.lines)) {
+      const { lines, totalDebit, totalCredit } = await validateJournalLines({ businessId, lines: req.body.lines });
+      return res.status(200).json({ balanced: true, totalDebit, totalCredit, lines });
     }
 
     await validateJournalPayload({

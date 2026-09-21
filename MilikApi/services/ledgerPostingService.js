@@ -191,6 +191,7 @@ export const postReversal = async ({ entryId, reason, userId, session = null }) 
   const reversalEntry = await postEntry({
     session,
     business:              originalEntry.business,
+    dimensions:            originalEntry.toObject().dimensions,
     property:              originalEntry.property,
     landlord:              originalEntry.landlord,
     tenant:                originalEntry.tenant,
