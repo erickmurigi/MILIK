@@ -5,6 +5,8 @@ import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar from "./SaleFilterBar";
 import { useTerms } from "../../hooks/useTerm";
 import { fmtKES, saleApi } from "../../services/propertySaleApi";
+import SalePrintButton from "./SalePrintButton";
+import { printNow, shortDate } from "./salePrint";
 
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ");
 
@@ -82,6 +84,38 @@ export default function SaleConversionFunnel() {
   const deals  = data?.deals  ?? {};
   const rates  = data?.rates  ?? {};
 
+  const company = useSelector((s) => s.company?.currentCompany);
+  const printReport = () => {
+    const stage = (name, count, note) => ({ name, count: String(count ?? 0), note });
+    const rows = [
+      stage(T.saleLeads, leads.total, "Starting point"),
+      stage(T.saleOffers, offers.total, `${rates.leadsToOffers ?? 0}% of ${T.saleLeads.toLowerCase()}`),
+      stage(T.saleDeals, deals.total, `${rates.offersToDeals ?? 0}% of ${T.saleOffers.toLowerCase()}`),
+      stage(`${T.saleDeals} closed`, deals.closed, `${rates.dealsToClose ?? 0}% of ${T.saleDeals.toLowerCase()}`),
+      ...LEAD_STATUSES.map(({ key }) => stage(`   ${T.saleLeads}: ${cap(key)}`, leadCount(leads, key), "")),
+      ...(leads.other > 0 ? [stage(`   ${T.saleLeads}: Custom stages`, leads.other, "")] : []),
+      ...OFFER_STATUSES.map(({ key }) => stage(`   ${T.saleOffers}: ${cap(key)}`, offers[key], "")),
+    ];
+    printNow({
+      title: "Conversion Funnel",
+      subtitle: `Pipeline from ${T.saleLeads.toLowerCase()} to closed ${T.saleDeals.toLowerCase()} as at ${shortDate(new Date())}`,
+      company,
+      summaryItems: [
+        [`${T.saleLeads} → ${T.saleOffers}`, `${rates.leadsToOffers ?? 0}%`],
+        [`${T.saleOffers} → ${T.saleDeals}`, `${rates.offersToDeals ?? 0}%`],
+        [`${T.saleDeals} closed`, `${rates.dealsToClose ?? 0}%`],
+        [`Active ${T.saleDeal.toLowerCase()} value`, fmtKES(deals.activeValue ?? 0)],
+        [`Closed ${T.saleDeal.toLowerCase()} value`, fmtKES(deals.closedValue ?? 0)],
+      ],
+      columns: [
+        { label: "Stage", value: (r) => r.name },
+        { label: "Count", align: "right", value: (r) => r.count },
+        { label: "Conversion", value: (r) => r.note },
+      ],
+      rows,
+    });
+  };
+
   const maxCount = Math.max(leads.total || 0, offers.total || 0, deals.total || 0, 1);
 
   return (
@@ -93,13 +127,16 @@ export default function SaleConversionFunnel() {
           </span>
         }
         trailing={
-          <button
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className="inline-flex items-center gap-1.5 border border-[#B7C9C0] bg-white px-3 py-1.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-50"
-          >
-            {isFetching ? "…" : "Refresh"}
-          </button>
+          <>
+            <SalePrintButton onClick={printReport} disabled={isLoading} />
+            <button
+              onClick={() => refetch()}
+              disabled={isFetching}
+              className="inline-flex items-center gap-1.5 border border-[#B7C9C0] bg-white px-3 py-1.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-50"
+            >
+              {isFetching ? "…" : "Refresh"}
+            </button>
+          </>
         }
       />
 

@@ -1,5 +1,6 @@
 import React, { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import {
@@ -7,6 +8,8 @@ import {
 } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
 import { EmbeddedReportContext } from "./EmbeddedReportContext";
+import SalePrintButton from "./SalePrintButton";
+import { printAfterFetch } from "./salePrint";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from "../../components/PaginationBar";
 import { fmtKES, saleApi } from "../../services/propertySaleApi";
@@ -71,6 +74,12 @@ const Grid = ({ columns, rows, loading, empty }) => (
   </div>
 );
 
+// what one cell prints as: an explicit print value, else the export value (money formatted), else the raw field
+const printCell = (c, r) => {
+  const v = c.xl ? c.xl(r) : c.render ? "" : r[c.key];
+  return typeof v === "number" && c.right ? n2(v) : v ?? "";
+};
+
 const exportExcel = async (columns, rows, name) => {
   const XLSX = await import("xlsx");
   const sheet = XLSX.utils.aoa_to_sheet([
@@ -98,8 +107,10 @@ const usePaged = (id, params, fetcher) => {
   return { query, page, setPage, pageSize, setPageSize, all: () => fetcher({ ...params, page: 1, limit: 5000 }) };
 };
 
-const ReportFrame = ({ toolbar, summary, columns, exportColumns, paged, exportName, empty, label }) => {
+const ReportFrame = ({ toolbar, summary, columns, exportColumns, paged, exportName, empty, label, printMeta }) => {
+  const company = useSelector((s) => s.company?.currentCompany);
   const [exporting, setExporting] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const { query, page, setPage, pageSize, setPageSize } = paged;
   const rows = query.data?.data || [];
   const runExport = async () => {
@@ -111,6 +122,17 @@ const ReportFrame = ({ toolbar, summary, columns, exportColumns, paged, exportNa
       toast.error(e?.response?.data?.message || "Could not export the report");
     } finally { setExporting(false); }
   };
+  const runPrint = async () => {
+    setPrinting(true);
+    const cols = exportColumns || columns;
+    await printAfterFetch(() => paged.all(), (all) => ({
+      ...printMeta,
+      company,
+      columns: cols.map((c) => ({ label: c.label, align: c.right ? "right" : "left", value: (r) => printCell(c, r) })),
+      rows: all.data || [],
+    }));
+    setPrinting(false);
+  };
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-none flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
@@ -119,6 +141,7 @@ const ReportFrame = ({ toolbar, summary, columns, exportColumns, paged, exportNa
           <button type="button" onClick={() => query.refetch()} disabled={query.isFetching} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
             <FaSyncAlt size={10} className={query.isFetching ? "animate-spin" : ""} /> Refresh
           </button>
+          <SalePrintButton onClick={runPrint} busy={printing} disabled={!rows.length} />
           <button type="button" onClick={runExport} disabled={exporting || !rows.length} className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127] disabled:opacity-50">
             <FaFileExcel size={11} /> {exporting ? "Preparing…" : "Excel"}
           </button>
@@ -154,7 +177,7 @@ const AgingBar = ({ totals }) => {
   );
 };
 
-const ReceivablesView = ({ filters, T }) => {
+const ReceivablesView = ({ filters, T, filterText }) => {
   const [overdueOnly, setOverdueOnly] = useState(false);
   const params = { projectId: filters.projectId, agentId: filters.agentId, asOf: filters.asOf, overdueOnly: overdueOnly ? "1" : undefined };
   const paged = usePaged("receivables", params, saleApi.getReceivables);
@@ -169,10 +192,18 @@ const ReceivablesView = ({ filters, T }) => {
     ...AGING.map((a) => ({ key: a.key, label: a.label, right: true, cls: a.text, render: (r) => (r[a.key] ? n2(r[a.key]) : "·"), xl: (r) => r[a.key] })),
     { key: "daysLate", label: "Oldest late", right: true, render: (r) => (r.daysLate ? `${r.daysLate} d` : "—"), xl: (r) => r.daysLate },
   ];
+  const t = paged.query.data?.totals;
+  const printMeta = {
+    title: "Receivables Aging",
+    subtitle: [`As of ${dt(filters.asOf || new Date())}`, overdueOnly && "Overdue only", filterText].filter(Boolean).join(" · "),
+    summaryItems: [["Owed", n2(t?.balance)], ["Overdue", n2(t?.overdue)], ["Not yet due", n2(t?.notDue)], ["No due date", n2(t?.unscheduled)], [`${T.saleDeal}s`, String(t?.deals ?? 0)]],
+    totalsRow: ["TOTAL", `${t?.deals ?? 0} ${T.saleDeal.toLowerCase()}s`, "", "", "", "", n2(t?.balance), ...AGING.map((a) => n2(t?.[a.key])), ""],
+  };
   return (
     <ReportFrame
       paged={paged}
       columns={columns}
+      printMeta={printMeta}
       exportName="receivables-aging"
       label="deals"
       empty="Nobody owes anything for this selection."
@@ -189,7 +220,7 @@ const ReceivablesView = ({ filters, T }) => {
   );
 };
 
-const OverdueView = ({ filters, T }) => {
+const OverdueView = ({ filters, T, filterText }) => {
   const [minDays, setMinDays] = useState(0);
   const params = { projectId: filters.projectId, agentId: filters.agentId, asOf: filters.asOf, minDays: minDays || undefined };
   const paged = usePaged("overdue", params, saleApi.getOverdueInstallments);
@@ -222,10 +253,17 @@ const OverdueView = ({ filters, T }) => {
   // the phone column is only for the export; the screen shows it under the buyer name
   const screenColumns = columns.filter((c) => c.key !== "buyerPhone");
   const exportColumns = columns.filter((c) => c.key !== "follow");
+  const printMeta = {
+    title: "Overdue Instalments",
+    subtitle: [`As of ${dt(filters.asOf || new Date())}`, minDays ? `${minDays}+ days late` : "", filterText].filter(Boolean).join(" · "),
+    summaryItems: [["Overdue", n2(totals?.amount)], ["Instalments", String(totals?.count ?? 0)], ...["d1_30", "d31_60", "d61_90", "d90plus"].map((k) => [AGING.find((a) => a.key === k).label, n2(totals?.buckets?.[k]?.amount)])],
+    totalsRow: ["TOTAL", "", "", "", `${totals?.count ?? 0} instalments`, "", "", n2(totals?.amount), ""],
+  };
   return (
     <ReportFrame
       paged={paged}
       columns={screenColumns}
+      printMeta={printMeta}
       exportName="overdue-instalments"
       label="instalments"
       empty="No instalment is overdue for this selection."
@@ -249,7 +287,7 @@ const OverdueView = ({ filters, T }) => {
   );
 };
 
-const RegisterView = ({ filters, T }) => {
+const RegisterView = ({ filters, T, filterText }) => {
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -276,10 +314,17 @@ const RegisterView = ({ filters, T }) => {
     },
     { key: "titleTransferDate", label: "Title transferred", render: (r) => dt(r.titleTransferDate), xl: (r) => (r.titleTransferDate ? dt(r.titleTransferDate) : "") },
   ];
+  const printMeta = {
+    title: "Sales Register",
+    subtitle: [`${dt(filters.dateFrom)} – ${dt(filters.dateTo)}`, status && `Status: ${status}`, debounced && `Search: ${debounced}`, filterText].filter(Boolean).join(" · "),
+    summaryItems: [[`${T.saleDeal}s`, String(totals?.deals ?? 0)], ["Cancelled", String(totals?.cancelled ?? 0)], ["Agreed", n2(totals?.agreed)], ["Paid", n2(totals?.paid)], ["Balance", n2(totals?.balance)]],
+    totalsRow: ["TOTAL", `${totals?.deals ?? 0} ${T.saleDeal.toLowerCase()}s`, "", "", "", "", "", "", n2(totals?.agreed), n2(totals?.paid), n2(totals?.balance), "", ""],
+  };
   return (
     <ReportFrame
       paged={paged}
       columns={columns}
+      printMeta={printMeta}
       exportName="sales-register"
       label="deals"
       empty="No deals match this selection."
@@ -365,6 +410,10 @@ export default function SaleReportsHub() {
     useQuery({ queryKey: ["sale-rep-cash"], queryFn: () => saleApi.getCashFlowForecast({}), staleTime: 60_000 }),
   ];
   const totals = pulse.data?.totals;
+  const filterText = [
+    (projects.data?.data || []).find((p) => p._id === filters.projectId)?.name,
+    (agents.data?.data || []).find((a) => a._id === filters.agentId)?.fullName,
+  ].filter(Boolean).join(" · ");
   const overduePct = totals?.balance > 0 ? Math.round((totals.overdue / totals.balance) * 100) : 0;
   const View = active.view;
 
@@ -439,7 +488,7 @@ export default function SaleReportsHub() {
               )}
             </div>
             {View ? (
-              <View key={active.id} filters={filters} T={T} />
+              <View key={active.id} filters={filters} T={T} filterText={filterText} />
             ) : (
               <EmbeddedReportContext.Provider value>
                 <Suspense fallback={<div className="p-6 text-center text-sm text-slate-500">Loading report…</div>}>

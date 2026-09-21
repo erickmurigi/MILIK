@@ -100,6 +100,7 @@ const BASE_CSS = `
   .print-date { font-size: 10px; color: #64748b; line-height: 1.6; }
   /* Summary line */
   .summary { font-size: 11px; font-weight: 700; color: #334155; margin-bottom: 12px; padding: 7px 10px; background: #f8fafc; border-left: 3px solid ${GRN}; border-radius: 0 4px 4px 0; }
+  .summary-bar { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 11px; color: #334155; margin-bottom: 12px; padding: 7px 10px; background: #f8fafc; border-left: 3px solid ${GRN}; border-radius: 0 4px 4px 0; }
   /* Table */
   table { width: 100%; border-collapse: collapse; font-size: 11px; }
   thead tr { background: ${GRN}; }
@@ -119,8 +120,11 @@ const BASE_CSS = `
   }
 `;
 
-export const printTabularList = ({ title, subtitle = "", company = {}, columns = [], rows = [], summary = "", totalsRow = null }) => {
-  const win = window.open("", "_blank", "width=1200,height=800");
+// summaryItems: [[label, value], ...] shown as a bar above the table (values are shown as given).
+// win: a window opened by the caller inside the click handler, for reports that fetch their rows first (a window opened
+// after an await is usually blocked as a pop-up).
+export const printTabularList = ({ title, subtitle = "", company = {}, columns = [], rows = [], summary = "", summaryItems = [], totalsRow = null, win: target = null }) => {
+  const win = target || window.open("", "_blank", "width=1200,height=800");
   if (!win) return null;
 
   const tableWithFoot = buildTableHtml({ columns, rows, totalsRow });
@@ -135,6 +139,7 @@ export const printTabularList = ({ title, subtitle = "", company = {}, columns =
 <body>
   ${buildHeaderHtml({ company, title, subtitle, metaLine: summary || `Printed: ${formatDateTime()}` })}
   ${summary ? `<div class="summary">${escapeHtml(summary)}</div>` : ""}
+  ${summaryItems.length ? `<div class="summary-bar">${summaryItems.map(([label, value]) => `<span>${escapeHtml(label)}: <b>${escapeHtml(value)}</b></span>`).join("")}</div>` : ""}
   ${tableWithFoot}
 </body>
 </html>`;

@@ -6,6 +6,8 @@ import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar from "./SaleFilterBar";
 import { fmtKES, saleApi } from "../../services/propertySaleApi";
 import { useTerms } from "../../hooks/useTerm";
+import SalePrintButton from "./SalePrintButton";
+import { money, printNow, shortDate } from "./salePrint";
 
 const fmt = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
@@ -39,6 +41,29 @@ export default function SaleCashFlow() {
 
   const total = data?.totalPipeline ?? 0;
 
+  const company = useSelector((s) => s.company?.currentCompany);
+  const printReport = () => {
+    const rows = BUCKET_META.flatMap(({ key, label }) => (data?.[key]?.items ?? []).map((item) => ({ period: label, item })));
+    const capped = BUCKET_META.some(({ key }) => data?.[key]?.hasMore);
+    printNow({
+      title: "Cash Flow Forecast",
+      subtitle: `Expected instalment collections as at ${shortDate(new Date())}${capped ? " · the longest periods list only their first items, totals cover all" : ""}`,
+      company,
+      summaryItems: [...BUCKET_META.map(({ key, label }) => [label, money(data?.[key]?.amount)]), ["Total pipeline", money(total)]],
+      columns: [
+        { label: "Period", value: (r) => r.period },
+        { label: "Due Date", value: (r) => shortDate(r.item.dueDate) },
+        { label: T.saleDeal, value: (r) => r.item.deal?.dealNumber ?? "—" },
+        { label: T.saleBuyer, value: (r) => r.item.deal?.buyer?.fullName ?? "—" },
+        { label: T.saleListing, value: (r) => r.item.deal?.listing?.title ?? "—" },
+        { label: "Expected (KES)", align: "right", value: (r) => money(r.item.expectedAmount) },
+        { label: "Label", value: (r) => r.item.label ?? r.item.description ?? "" },
+      ],
+      rows,
+      totalsRow: ["TOTAL", "", "", "", "", money(total), ""],
+    });
+  };
+
   const pct = (amount) => total > 0 ? Math.round((amount / total) * 100) : 0;
 
   return (
@@ -50,13 +75,16 @@ export default function SaleCashFlow() {
           </span>
         }
         trailing={
-          <button
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className="inline-flex items-center gap-1.5 border border-[#B7C9C0] bg-white px-3 py-1.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-50"
-          >
-            {isFetching ? "…" : "Refresh"}
-          </button>
+          <>
+            <SalePrintButton onClick={printReport} disabled={isLoading} />
+            <button
+              onClick={() => refetch()}
+              disabled={isFetching}
+              className="inline-flex items-center gap-1.5 border border-[#B7C9C0] bg-white px-3 py-1.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-50"
+            >
+              {isFetching ? "…" : "Refresh"}
+            </button>
+          </>
         }
       />
 

@@ -14,6 +14,8 @@ import { saleApi, fmtKES } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
 import { useTerms } from "../../hooks/useTerm";
+import SalePrintButton from "./SalePrintButton";
+import { fetchAllPages, money, printAfterFetch } from "./salePrint";
 import { useTabState } from "../../hooks/useTabState";
 import SaleProjectFormModal from "./SaleProjectFormModal";
 import SaleProjectPanel from "./SaleProjectPanel";
@@ -90,6 +92,46 @@ const SaleProjects = () => {
     placeholderData: (prev, prevQuery) => (prevQuery?.queryKey?.[1] === biz ? prev : undefined),
     staleTime: 30_000,
   });
+
+  const company = useSelector((s) => s.company?.currentCompany);
+  const [printing, setPrinting] = useState(false);
+  const printReport = async () => {
+    setPrinting(true);
+    await printAfterFetch(() => fetchAllPages(saleApi.listProjects, { search: debouncedSearch, status: statusFilt }), ({ rows }) => {
+      const units = (r, k) => Number(r.units?.[k] || 0);
+      const sum = (fn) => rows.reduce((s, r) => s + fn(r), 0);
+      const totalUnits = sum((r) => units(r, "total"));
+      const soldUnits = sum((r) => units(r, "sold"));
+      return {
+        title: `${T.saleProject} Summary`,
+        subtitle: [statusFilt === "archived" ? "Archived" : "Active", debouncedSearch && `Search: ${debouncedSearch}`].filter(Boolean).join(" · "),
+        company,
+        summaryItems: [
+          [T.saleProjects, String(rows.length)],
+          [T.saleUnits, String(totalUnits)],
+          ["Sold", String(soldUnits)],
+          ["Available", String(sum((r) => units(r, "available")))],
+          ["Total value", money(sum((r) => Number(r.value?.total || 0)))],
+        ],
+        columns: [
+          { label: `${T.saleProject} No.`, value: (r) => r.projectNumber },
+          { label: "Name", value: (r) => r.name },
+          { label: "Location", value: (r) => [r.town, r.county].filter(Boolean).join(", ") || r.location || "—" },
+          { label: "Sold", align: "right", value: (r) => units(r, "sold") },
+          { label: "Contract", align: "right", value: (r) => units(r, "under_contract") },
+          { label: "Reserved", align: "right", value: (r) => units(r, "reserved") },
+          { label: "Available", align: "right", value: (r) => units(r, "available") },
+          { label: T.saleUnits, align: "right", value: (r) => units(r, "total") },
+          { label: "Sell-through", align: "right", value: (r) => fmtPct(r.sellThrough) },
+          { label: "Total Value (KES)", align: "right", value: (r) => money(r.value?.total || 0) },
+          { label: "Status", value: (r) => r.status },
+        ],
+        rows,
+        totalsRow: ["TOTAL", `${rows.length} ${T.saleProjects.toLowerCase()}`, "", String(soldUnits), String(sum((r) => units(r, "under_contract"))), String(sum((r) => units(r, "reserved"))), String(sum((r) => units(r, "available"))), String(totalUnits), totalUnits ? fmtPct((soldUnits / totalUnits) * 100) : "—", money(sum((r) => Number(r.value?.total || 0))), ""],
+      };
+    });
+    setPrinting(false);
+  };
 
   const projects = useMemo(() => data?.data ?? [], [data?.data]);
   const total = data?.total ?? 0;
@@ -177,6 +219,7 @@ const SaleProjects = () => {
         activeCount={activeCount}
         trailing={
           <>
+            <SalePrintButton onClick={printReport} busy={printing} disabled={loading || total === 0} />
             <button
               type="button"
               onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-projects", biz] })}

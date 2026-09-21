@@ -11,6 +11,8 @@ import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import { useTerms } from "../../hooks/useTerm";
+import SalePrintButton from "./SalePrintButton";
+import { fetchAllPages, money, printAfterFetch } from "./salePrint";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
 import { fmtDate } from "../../utils/dates";
@@ -258,6 +260,53 @@ const SaleCommissions = () => {
     } finally { setActionKey(""); }
   }, [confirm, biz, invalidate, queryClient]);
 
+  const company = useSelector((s) => s.company?.currentCompany);
+  const [printing, setPrinting] = useState(false);
+  const printReport = async () => {
+    setPrinting(true);
+    const filters = {
+      business: biz,
+      ...(statusFilter && { status: statusFilter }),
+      ...(debouncedSearch && { search: debouncedSearch }),
+      ...(agentFilt && { agentId: agentFilt }),
+      ...(dealFilt && { dealId: dealFilt }),
+      ...(dateFrom && { dateFrom }),
+      ...(dateTo && { dateTo }),
+    };
+    const described = [
+      statusFilter && `Status: ${fmtLabel(statusFilter)}`,
+      agentFilt && agentFilterOptions.find((o) => o.value === agentFilt)?.label,
+      dealFilt && dealFilterOptions.find((o) => o.value === dealFilt)?.label,
+      (dateFrom || dateTo) && `${dateFrom ? fmtDate(dateFrom) : "…"} – ${dateTo ? fmtDate(dateTo) : "…"}`,
+      debouncedSearch && `Search: ${debouncedSearch}`,
+    ].filter(Boolean);
+    await printAfterFetch(() => fetchAllPages(saleApi.listCommissions, filters), ({ rows, last }) => {
+      const sum = (key) => rows.reduce((s, c) => s + Number(c[key] || 0), 0);
+      const stats = last?.stats || commStats;
+      return {
+        title: "Commissions",
+        subtitle: described.join(" · ") || "All commissions",
+        company,
+        summaryItems: ["pending", "approved", "paid", "cancelled"].map((k) => [fmtLabel(k), `${money(stats?.[k]?.amount)} (${stats?.[k]?.count ?? 0})`]),
+        columns: [
+          { label: "Comm. No.", value: (c) => c.commissionNumber },
+          { label: T.saleAgent, value: (c) => `${c.agent?.fullName || "—"}${c.splits?.length ? ` (+${c.splits.length} split)` : ""}` },
+          { label: T.saleDeal, value: (c) => c.deal?.dealNumber || "—" },
+          { label: "Property", value: (c) => c.deal?.listing?.title || c.deal?.listing?.listingNumber || "—" },
+          { label: "Rate", value: (c) => `${c.commissionRate}${c.commissionType === "percentage" ? "%" : " KES"}` },
+          { label: "Gross (KES)", align: "right", value: (c) => money(c.commissionAmount) },
+          { label: "WHT (KES)", align: "right", value: (c) => (c.whtAmount > 0 ? money(c.whtAmount) : "—") },
+          { label: "Net (KES)", align: "right", value: (c) => money(c.netAmount ?? c.commissionAmount) },
+          { label: "Payout Date", value: (c) => (c.payoutDate ? fmtDate(c.payoutDate) : "—") },
+          { label: "Status", value: (c) => c.status },
+        ],
+        rows,
+        totalsRow: ["TOTAL", `${rows.length} commissions`, "", "", "", money(sum("commissionAmount")), money(sum("whtAmount")), money(rows.reduce((s, c) => s + Number(c.netAmount ?? c.commissionAmount ?? 0), 0)), "", ""],
+      };
+    });
+    setPrinting(false);
+  };
+
   const resetFilters = () => { setSearch(""); setStatusFilter(""); setAgentFilt(""); setDealFilt(""); setDateFrom(""); setDateTo(""); setPage(1); };
   const activeFilterCount = [search, statusFilter, agentFilt, dealFilt, dateFrom, dateTo].filter(Boolean).length;
 
@@ -375,6 +424,8 @@ const SaleCommissions = () => {
               </span>
             )}
           </button>
+
+          <SalePrintButton onClick={printReport} busy={printing} disabled={loading || total === 0} />
 
           {/* Refresh */}
           <button

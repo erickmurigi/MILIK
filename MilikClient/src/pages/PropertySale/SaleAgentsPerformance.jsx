@@ -11,6 +11,8 @@ import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import SaleFilterBar from "./SaleFilterBar";
 import { useTerms } from "../../hooks/useTerm";
+import SalePrintButton from "./SalePrintButton";
+import { money, printNow, shortDate } from "./salePrint";
 
 const statusOpts = (T) => [
   { value: "",         label: `All ${T.saleAgents}` },
@@ -91,6 +93,35 @@ const SaleAgentsPerformance = () => {
     closedAll:    rows.reduce((s, r) => s + r.closedDeals, 0),
   }), [rows]);
 
+  const printReport = () => {
+    const status = STATUS_OPTS.find((o) => o.value === statusFilter)?.label;
+    printNow({
+      title: `${T.saleAgent} Performance`,
+      subtitle: `${status || `All ${T.saleAgents}`} · as at ${shortDate(new Date())}`,
+      company: currentCompany,
+      summaryItems: [
+        [T.saleAgents, String(agents.length)],
+        ["Closed", String(closedAll)],
+        ["Revenue", money(totalRevAll)],
+        ["Commission paid", money(totalCommAll)],
+      ],
+      columns: [
+        { label: "#", value: (r) => sorted.indexOf(r) + 1 },
+        { label: T.saleAgent, value: (r) => `${r.agent.fullName}${r.agent.agentNumber ? ` (${r.agent.agentNumber})` : ""}` },
+        { label: "Status", value: (r) => r.agent.status },
+        { label: "Total", align: "right", value: (r) => r.totalDeals },
+        { label: "Closed", align: "right", value: (r) => r.closedDeals },
+        { label: "Active", align: "right", value: (r) => r.activeDeals },
+        { label: "Close %", align: "right", value: (r) => (r.totalDeals > 0 ? `${r.closeRate}%` : "—") },
+        { label: "Revenue (KES)", align: "right", value: (r) => money(r.totalRevenue) },
+        { label: "Comm. Paid (KES)", align: "right", value: (r) => money(r.commPaid) },
+        { label: "Pending (KES)", align: "right", value: (r) => (r.commPending > 0 ? money(r.commPending) : "—") },
+      ],
+      rows: sorted,
+      totalsRow: ["", "TOTAL", "", String(rows.reduce((s, r) => s + r.totalDeals, 0)), String(closedAll), String(rows.reduce((s, r) => s + r.activeDeals, 0)), "", money(totalRevAll), money(totalCommAll), money(rows.reduce((s, r) => s + r.commPending, 0))],
+    });
+  };
+
   return (
     <PropertySaleShell>
       {/* Filter */}
@@ -110,6 +141,7 @@ const SaleAgentsPerformance = () => {
           </>
         }
         onReset={() => setStatusFilter("active")}
+        trailing={<SalePrintButton onClick={printReport} disabled={isLoading || !sorted.length} />}
         activeCount={statusFilter && statusFilter !== "active" ? 1 : 0}
       >
         <AppSelect
