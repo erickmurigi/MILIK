@@ -839,6 +839,26 @@ const TERM_GROUPS = [
   },
 ];
 
+// Plural word -> its singular, so a singular and plural word share one row on the Terminology screen
+const TERM_PLURAL_OF = {
+  ...SALE_PLURAL_OF,
+  tenants: "tenant", units: "unit", properties: "property", landlords: "landlord",
+  meters: "meter", utilities: "utility", invoices: "invoice", receipts: "receipt",
+};
+
+// [singular, plural | null] pairs for a group's keys
+const pairTerms = (keys) => {
+  const used = new Set();
+  const out = [];
+  keys.forEach((k) => {
+    if (used.has(k)) return;
+    const plural = keys.find((other) => TERM_PLURAL_OF[other] === k);
+    if (plural) used.add(plural);
+    out.push([k, plural || null]);
+  });
+  return out;
+};
+
 const TerminologyPanel = ({ currentCompany }) => {
   const dispatch = useDispatch();
   const companySettings = useSelector(selectCompanySettings);
@@ -855,6 +875,21 @@ const TerminologyPanel = ({ currentCompany }) => {
   const [form, setForm] = useState(() => readSaved(savedTerminology));
   const [saving, setSaving] = useState(false);
   const [activePreset, setActivePreset] = useState(null);
+
+  // Property-management words and Sales words are shown one section at a time, each with its own presets, so a preset's
+  // effect is visible right below it. A company with only one of the two modules sees only that section.
+  const hasSale = hasCompanyModule(currentCompany, "propertySale");
+  const hasPms = hasCompanyModule(currentCompany, "propertyManagement");
+  const [section, setSection] = useState(hasSale && !hasPms ? "sales" : "pms");
+  const showTabs = hasSale && hasPms;
+  const activeSection = showTabs ? section : hasSale ? "sales" : "pms";
+  const isSalesSection = activeSection === "sales";
+  const isSaleGroup = (g) => g.keys.every((k) => SALE_TERM_KEYS.includes(k));
+  const visibleGroups = TERM_GROUPS.filter((g) => isSaleGroup(g) === isSalesSection);
+  const visiblePresets = Object.entries(ALL_TERM_PRESETS).filter(([, p]) => (p.scope === "sales") === isSalesSection);
+  const savedWord = (k) => (savedTerminology instanceof Map ? (savedTerminology.get(k) || "") : (savedTerminology[k] || ""));
+  const sectionChanged = (id) =>
+    Object.keys(TERM_DEFAULTS).some((k) => (id === "sales") === SALE_TERM_KEYS.includes(k) && (form[k] ?? "") !== savedWord(k));
 
   useEffect(() => {
     setForm(readSaved(companySettings?.terminology ?? {}));
@@ -915,89 +950,137 @@ const TerminologyPanel = ({ currentCompany }) => {
     return form[k] !== saved;
   });
 
+  // What a word will read as: the typed word, else a regular plural of the typed singular, else the default
+  const previewWord = (k) =>
+    form[k] || (SALE_PLURAL_OF[k] && form[SALE_PLURAL_OF[k]] ? `${form[SALE_PLURAL_OF[k]]}s` : TERM_DEFAULTS[k]);
+
+  const renderTermRow = ([single, plural]) => {
+    const wordInput = (key, caption, placeholder) => (
+      <div key={key}>
+        <div className="mb-0.5 text-[10px] font-semibold text-slate-400">{caption}</div>
+        <input
+          type="text"
+          className={`${inputClass} ${form[key] ? "border-[#0B3B2E]/50 bg-[#F1F6F3]" : ""}`}
+          value={form[key]}
+          placeholder={placeholder}
+          maxLength={40}
+          onChange={(e) => handleChange(key, e.target.value)}
+        />
+      </div>
+    );
+    const auto = plural && SALE_PLURAL_OF[plural] && form[single] ? `Auto: ${form[single]}s` : null;
+    return (
+      <div key={single}>
+        <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-slate-600">{single === "saleModule" ? "Module name" : TERM_DEFAULTS[single]}</div>
+        <div className={`grid gap-2 ${plural ? "grid-cols-2" : "grid-cols-1"}`}>
+          {wordInput(single, plural ? "Singular" : "Name", `Default: ${TERM_DEFAULTS[single]}`)}
+          {plural && wordInput(plural, "Plural", auto || `Default: ${TERM_DEFAULTS[plural]}`)}
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="max-w-3xl space-y-6">
-      {/* Presets */}
-      <div>
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Quick Presets</p>
-        <div className="flex flex-wrap gap-2">
-          {Object.entries(ALL_TERM_PRESETS).map(([key, preset]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => applyPreset(key)}
-              className={`inline-flex flex-col items-start rounded border px-3 py-2 text-left transition-colors duration-150 ${
-                activePreset === key
-                  ? "border-[#0B3B2E] bg-[#0B3B2E] text-white"
-                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
-              }`}
-            >
-              <span className="text-[11px] font-semibold">{preset.label}</span>
-              <span className={`text-[10px] ${activePreset === key ? "text-slate-300" : "text-slate-400"}`}>
-                {preset.description}
-              </span>
-            </button>
+    <div className="flex min-h-full flex-col">
+      <div className="flex-1 space-y-5">
+        {/* Title and section tabs */}
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200">
+          <div className="pb-2">
+            <h2 className="text-sm font-extrabold text-slate-900">Terminology</h2>
+            <p className="text-[11px] text-slate-500">
+              Rename the words Milik uses for this company. Only what people read on screen changes: records, reports and permissions are unaffected.
+            </p>
+          </div>
+          {showTabs && (
+            <div className="flex gap-1">
+              {[["pms", "Property Management"], ["sales", "Sales"]].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setSection(id)}
+                  className={`-mb-px border border-b-0 px-4 py-1.5 text-[11px] font-bold ${section === id ? "border-slate-200 bg-white text-[#0B3B2E]" : "border-transparent text-slate-500 hover:text-[#0B3B2E]"}`}
+                >
+                  {label}
+                  {sectionChanged(id) && <span className="ml-1 text-amber-500" title="Unsaved changes">●</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Presets */}
+        <div>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Quick presets</p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            {visiblePresets.map(([key, preset]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => applyPreset(key)}
+                className={`flex w-full flex-col items-start rounded border px-3 py-2 text-left transition-colors duration-150 ${
+                  activePreset === key
+                    ? "border-[#0B3B2E] bg-[#0B3B2E] text-white"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
+                }`}
+              >
+                <span className="text-[11px] font-semibold">{preset.label}</span>
+                <span className={`text-[10px] ${activePreset === key ? "text-slate-300" : "text-slate-400"}`}>{preset.description}</span>
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-[10px] text-slate-400">A preset fills in the words below. Nothing changes until you press Save.</p>
+        </div>
+
+        {/* What the Sales menu will read */}
+        {isSalesSection && (
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border border-slate-200 bg-slate-50 px-3 py-2 text-[11px]">
+            <span className="font-bold uppercase tracking-wide text-slate-400">Preview</span>
+            <span className="font-extrabold text-[#0B3B2E]">{previewWord("saleModule")}</span>
+            {["saleListings", "saleProjects", "saleUnits", "saleLeads", "saleBuyers", "saleOffers", "saleDeals", "saleAgents"].map((k) => (
+              <span key={k} className="font-semibold text-slate-700">{previewWord(k)}</span>
+            ))}
+          </div>
+        )}
+
+        {/* Words, grouped */}
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+          {visibleGroups.map((group) => (
+            <section key={group.label} className="border border-slate-200 bg-white">
+              <div className="border-b border-slate-100 bg-slate-50 px-3 py-2">
+                <p className="text-[11px] font-black uppercase tracking-wide text-slate-700">{group.label}</p>
+                <p className="text-[10px] text-slate-400">{group.hint}</p>
+              </div>
+              <div className="space-y-3 p-3">{pairTerms(group.keys).map(renderTermRow)}</div>
+            </section>
           ))}
         </div>
       </div>
 
-      {/* Groups */}
-      {TERM_GROUPS.map((group) => (
-        <div key={group.label}>
-          <div className="mb-2 flex items-center gap-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">{group.label}</p>
-            <div className="h-px flex-1 bg-slate-200" />
-          </div>
-          <p className="mb-3 text-[11px] text-slate-400">{group.hint}</p>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {group.keys.map((key) => {
-              const custom = form[key];
-              const defaultVal = TERM_DEFAULTS[key];
-              return (
-                <div key={key}>
-                  <div className="mb-1 flex items-center justify-between">
-                    <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                      {key === "saleModule" ? "Sales module name" : key.startsWith("sale") ? `Sales ${defaultVal}` : defaultVal}
-                    </label>
-                    {custom && (
-                      <span className="text-[10px] text-[#0B3B2E] font-medium">→ {custom}</span>
-                    )}
-                  </div>
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={custom}
-                    placeholder={SALE_PLURAL_OF[key] && form[SALE_PLURAL_OF[key]] ? `Auto: ${form[SALE_PLURAL_OF[key]]}s` : `Default: ${defaultVal}`}
-                    maxLength={40}
-                    onChange={(e) => handleChange(key, e.target.value)}
-                  />
-                </div>
-              );
-            })}
-          </div>
+      {/* Actions stay in view while scrolling */}
+      <div className="sticky bottom-0 -mx-4 mt-4 flex items-center justify-between gap-3 border-t border-slate-200 bg-white/95 px-4 py-2.5 backdrop-blur">
+        <span className={`text-[11px] ${isDirty ? "font-semibold text-amber-600" : "text-slate-400"}`}>
+          {isDirty ? "You have unsaved changes." : "All changes saved."}
+        </span>
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={handleReset}
+            disabled={!isDirty}
+            className="text-[11px] text-slate-500 underline underline-offset-2 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Discard changes
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !isDirty}
+            className="inline-flex items-center gap-2 border border-transparent px-5 py-2 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ backgroundColor: MILIK_GREEN }}
+          >
+            <FaSave size={11} />
+            {saving ? "Saving..." : "Save Terminology"}
+          </button>
         </div>
-      ))}
-
-      {/* Actions */}
-      <div className="flex items-center justify-between border-t border-slate-200 pt-4">
-        <button
-          type="button"
-          onClick={handleReset}
-          disabled={!isDirty}
-          className="text-[11px] text-slate-500 underline underline-offset-2 disabled:cursor-not-allowed disabled:opacity-40 hover:text-slate-700"
-        >
-          Discard changes
-        </button>
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={saving || !isDirty}
-          className="inline-flex items-center gap-2 border border-transparent px-4 py-2 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
-          style={{ backgroundColor: MILIK_GREEN }}
-        >
-          <FaSave size={11} />
-          {saving ? "Saving..." : "Save Terminology"}
-        </button>
       </div>
     </div>
   );
