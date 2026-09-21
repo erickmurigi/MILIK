@@ -28,6 +28,11 @@ export const getJournalEntries = async (filters = {}) => {
   };
 };
 
+export const getJournalEntry = async (id) => {
+  const res = await adminRequests.get(`/journals/${id}`);
+  return res.data;
+};
+
 export const createJournalEntry = async (journalData) => {
   const res = await adminRequests.post("/journals", journalData);
   return res.data;

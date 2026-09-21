@@ -138,6 +138,7 @@ const ExpenseRequisition    = lazy(() => import("./pages/Financial/ExpenseRequis
 const ChartOfAccounts       = lazy(() => import("./pages/Financial/ChartOfAccounts"));
 const LedgerAccountActivity = lazy(() => import("./pages/Financial/LedgerAccountActivity"));
 const JournalEntries        = lazy(() => import("./pages/Financial/JournalEntries"));
+const JournalEntryForm      = lazy(() => import("./pages/Financial/JournalEntryForm"));
 
 // Reports
 const RentalCollectionReport      = lazy(() => import("./pages/Reports/RentalCollectionReport"));
@@ -705,6 +706,8 @@ function App() {
             <Route path="/accounts/chart-of-accounts"                      element={<Guard moduleKey="accounts" resource="chartOfAccounts"><ChartOfAccounts /></Guard>} />
             <Route path="/accounts/chart-of-accounts/:accountId/activity"  element={<Guard moduleKey="accounts" resource="chartOfAccounts"><LedgerAccountActivity /></Guard>} />
             <Route path="/accounts/journals"                               element={<Guard moduleKey="accounts" resource="journals"><JournalEntries /></Guard>} />
+            <Route path="/accounts/journals/new"                           element={<Guard moduleKey="accounts" resource="journals" action="create"><JournalEntryForm /></Guard>} />
+            <Route path="/accounts/journals/:id"                           element={<Guard moduleKey="accounts" resource="journals"><JournalEntryForm /></Guard>} />
             <Route path="/accounts/payment-vouchers"                       element={<Guard moduleKey="accounts" resource="paymentVouchers"><PaymentVouchers /></Guard>} />
             <Route path="/accounts/payment-vouchers/new"                   element={<Guard moduleKey="accounts" resource="paymentVouchers"><PaymentVouchers /></Guard>} />
             <Route path="/accounts/petty-cash"                             element={<Guard moduleKey="accounts" resource="pettyCash"><PettyCash /></Guard>} />
@@ -939,6 +942,8 @@ function App() {
             <Route path="/expenses/requisition"                    element={<Guard resource="expenses" moduleKey="accounts"><ExpenseRequisition /></Guard>} />
             <Route path="/expenses/payment-vouchers"               element={<Guard resource="paymentVouchers" moduleKey="accounts"><PaymentVouchers /></Guard>} />
             <Route path="/financial/journals"                      element={<Guard resource="journals" moduleKey={GL_ACCESS_MODULES}><JournalEntries /></Guard>} />
+            <Route path="/financial/journals/new"                  element={<Guard resource="journals" action="create" moduleKey={GL_ACCESS_MODULES}><JournalEntryForm /></Guard>} />
+            <Route path="/financial/journals/:id"                  element={<Guard resource="journals" moduleKey={GL_ACCESS_MODULES}><JournalEntryForm /></Guard>} />
             <Route path="/financial/chart-of-accounts"             element={<Guard resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><ChartOfAccounts /></Guard>} />
             <Route path="/financial/chart-of-accounts/:accountId/activity" element={<Guard resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><LedgerAccountActivity /></Guard>} />
             <Route path="/financial/ledger-entries"                element={<Navigate to="/financial/chart-of-accounts" replace />} />

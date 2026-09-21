@@ -1,6 +1,6 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import AppSelect from "../../components/common/AppSelect";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import useDebounce from "../../hooks/useDebounce";
 import {
   FaBook,
@@ -19,7 +19,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import JournalEntriesDrawer from "../../components/Accounting/JournalEntriesDrawer";
-import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
+import { hasCompanyModule, isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
 import { getProperties } from "../../redux/propertyRedux";
 import {
@@ -135,6 +135,7 @@ const JournalEntries = () => {
   const confirm = useConfirm();
   const dispatch = useDispatch();
   const location = useLocation();
+  const navigate = useNavigate();
   const { properties: termProperties } = useTerms("properties");
   const isAccountsWorkspace = location.pathname.startsWith("/accounts/");
   const currentCompany = useSelector(selectCurrentCompany);
@@ -360,6 +361,11 @@ const JournalEntries = () => {
     setForm(buildInitialForm());
   };
 
+  const journalBase = location.pathname.startsWith("/financial/") ? "/financial/journals" : "/accounts/journals";
+  const openJournalPage = (journal) => navigate(`${journalBase}/${journal?._id || "new"}`);
+  const hasOwnerJournals = hasCompanyModule(currentCompany, "propertyManagement");
+
+  // Owner / property journals (two lines, landlord statement rules) keep the small form
   const openCreateModal = () => {
     if (!canCreateJournal) {
       toast.warning("You do not have permission to create journals");
@@ -625,7 +631,10 @@ const JournalEntries = () => {
                   <FaFilter size={9} /> Reset
                 </button>
                 <button onClick={loadJournals} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
-                <button onClick={openCreateModal} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]"><FaPlus size={9} /> New Journal</button>
+                {hasOwnerJournals && canCreateJournal && (
+                  <button onClick={openCreateModal} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" title="Two-line journal for owner / property statements">Owner journal</button>
+                )}
+                <button onClick={() => (canCreateJournal ? openJournalPage() : toast.warning("You do not have permission to create journals"))} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]"><FaPlus size={9} /> New Journal</button>
               </div>
             </div>
 
@@ -636,8 +645,8 @@ const JournalEntries = () => {
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Journal #</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Debit Account</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Credit Account</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Debit Account / Lines</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Credit Account / Narration</th>
                     <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount (KES)</th>
                     <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
                     <th className="px-3 py-1 text-right font-bold">Actions</th>
@@ -654,12 +663,12 @@ const JournalEntries = () => {
                       const busyReverse = rowActionKey === `${journal._id}:reverse`;
                       const busyDelete = rowActionKey === `${journal._id}:delete`;
                       return (
-                        <tr key={journal._id} className={`cursor-pointer border-b border-gray-100 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                        <tr key={journal._id} onClick={() => openJournalPage(journal)} className={`cursor-pointer border-b border-gray-100 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
                           <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900 whitespace-nowrap" title={buildJournalTitle(journal)}>{journal.journalNo}</td>
                           <td className="px-3 py-1 border-r border-gray-100 text-slate-700 whitespace-nowrap">{journal.date ? new Date(journal.date).toLocaleDateString("en-GB") : "—"}</td>
                           <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[130px] truncate">{getJournalTypePresentation(journal.journalType)?.label || journal.journalType}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[200px] truncate" title={journal.debitAccount?.name}><span className="font-mono font-bold text-slate-400 mr-1">{journal.debitAccount?.code}</span>{journal.debitAccount?.name || "—"}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[200px] truncate" title={journal.creditAccount?.name}><span className="font-mono font-bold text-slate-400 mr-1">{journal.creditAccount?.code}</span>{journal.creditAccount?.name || "—"}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[200px] truncate" title={journal.debitAccount?.name}>{journal.lines?.length ? <span className="font-semibold text-slate-600">{journal.lines.length} lines</span> : <><span className="font-mono font-bold text-slate-400 mr-1">{journal.debitAccount?.code}</span>{journal.debitAccount?.name || "—"}</>}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[200px] truncate" title={journal.creditAccount?.name}>{journal.lines?.length ? <span className="text-slate-400">{journal.narration || journal.reference || "—"}</span> : <><span className="font-mono font-bold text-slate-400 mr-1">{journal.creditAccount?.code}</span>{journal.creditAccount?.name || "—"}</>}</td>
                           <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{Number(journal.amount || 0).toLocaleString()}</td>
                           <td className="px-3 py-1 border-r border-gray-100 text-center" title={journal.approvalStatus && journal.approvalStatus !== "not_required" ? (APPROVAL_LABELS[journal.approvalStatus] || journal.approvalStatus) : undefined}>
                             <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${STATUS_STYLES[journal.status] || STATUS_STYLES.draft}`}>{journal.status}</span>
@@ -670,7 +679,7 @@ const JournalEntries = () => {
                                 <button onClick={() => setGlJournal(journal)} className="rounded p-1 text-teal-600 hover:bg-teal-50 hover:text-teal-800" title="View GL Entries"><FaBook size={12} /></button>
                               )}
                               {journal.status === "draft" && canUpdateJournal && (
-                                <button onClick={() => openEditModal(journal)} disabled={!canUpdateJournal || !!rowActionKey} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800 disabled:opacity-40" title="Edit"><FaEdit size={12} /></button>
+                                <button onClick={() => (journal.lines?.length ? openJournalPage(journal) : openEditModal(journal))} disabled={!canUpdateJournal || !!rowActionKey} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800 disabled:opacity-40" title="Edit"><FaEdit size={12} /></button>
                               )}
                               {journal.status === "draft" && canPostJournal && (
                                 <button onClick={() => handlePostJournal(journal)} disabled={!canPostJournal || !!rowActionKey} className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-40" title={busyPost ? "Posting…" : "Post Journal"}><FaCheck size={12} /></button>
