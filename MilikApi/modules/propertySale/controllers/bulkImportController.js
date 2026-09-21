@@ -2,6 +2,7 @@ import { createError } from "../../../utils/error.js";
 import SaleListing from "../models/SaleListing.js";
 import SaleBuyer from "../models/SaleBuyer.js";
 import SaleSettings from "../models/SaleSettings.js";
+import { cleanAttributes } from "../services/listingAttributes.js";
 import { resolveActiveBusinessId, currentUserId, reserveSequentialNumberBlock } from "../services/businessScope.js";
 
 const LISTING_PROPERTY_TYPES = ["plot", "house", "apartment", "commercial", "land", "other"];
@@ -92,7 +93,13 @@ const bulkImportListingsHandler = async (req, res, next) => {
     if (rows.length > 1000)
       return next(createError(400, "Maximum 1000 listings per import"));
 
-    const allowedTypes = await allowedFrom(business, LISTING_PROPERTY_TYPES, "propertyTypes", typeValue);
+    // Property types: the built-ins plus the company's own; a type's extra fields come with it
+    const typeSettings = await SaleSettings.findOne({ business }).select("propertyTypes").lean();
+    const allowedTypes = new Set([
+      ...LISTING_PROPERTY_TYPES,
+      ...(typeSettings?.propertyTypes ?? []).filter((t) => t.isActive !== false).map((t) => typeValue(t.name)),
+    ]);
+    const fieldsByType = new Map((typeSettings?.propertyTypes ?? []).map((t) => [typeValue(t.name), t.fields ?? []]));
     const failed = [];
     const validRows = []; // { row, rowNo, key, deed }
 
@@ -109,6 +116,18 @@ const bulkImportListingsHandler = async (req, res, next) => {
           const pt = typeValue(row.propertyType);
           if (!allowedTypes.has(pt)) throw new Error(`Invalid Property Type: ${row.propertyType} (add it in Sale Settings first)`);
           row.propertyType = pt;
+        }
+        // Extra columns the file added (row.extra: { header: value }) are matched to the type's custom fields by name
+        // or key, then validated exactly like the form does. Columns that belong to other types are ignored.
+        const typeFields = fieldsByType.get(typeValue(row.propertyType) || "plot") ?? [];
+        if (typeFields.length) {
+          const extra = row.extra && typeof row.extra === "object" && !Array.isArray(row.extra) ? row.extra : {};
+          const byHeader = new Map(Object.entries(extra).map(([h, v]) => [typeValue(String(h).replace(/\*/g, "")), v]));
+          const input = {};
+          for (const f of typeFields) input[f.key] = byHeader.get(typeValue(f.label)) ?? byHeader.get(f.key);
+          const cleaned = cleanAttributes(typeFields, input);
+          if (cleaned.error) throw new Error(cleaned.error);
+          row.attributes = cleaned.attributes;
         }
         if (row.sizeUnit && !LISTING_SIZE_UNITS.includes(row.sizeUnit))
           throw new Error(`Invalid Size Unit: ${row.sizeUnit}`);
@@ -173,6 +192,7 @@ const bulkImportListingsHandler = async (req, res, next) => {
         listingNumber: listingNumbers[idx],
         title:              String(row.title).trim(),
         propertyType:       row.propertyType      || "plot",
+        attributes:         row.attributes         || {},
         size:               !isBlank(row.size) ? Number(row.size) : null,
         sizeUnit:           row.sizeUnit           || "sqm",
         location:           row.location           || "",

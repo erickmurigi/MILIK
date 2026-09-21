@@ -5,6 +5,7 @@ import { createTestCompany, createTestUser } from "../../../test/factories.js";
 import { addPropertyType, getSettings, updatePropertyType } from "./settingsController.js";
 import { createListing, getListing, updateListing } from "./listingsController.js";
 import { createProject, generateUnits } from "./projectsController.js";
+import { bulkImportListings } from "./bulkImportController.js";
 import SaleListing from "../models/SaleListing.js";
 import { cleanAttributes, sanitizeTypeConfig } from "../services/listingAttributes.js";
 
@@ -120,6 +121,29 @@ describe("listings with custom fields", () => {
     const moved = await call(updateListing, { params: { id }, body: { propertyType: "plot" } });
     expect(moved.payload.attributes ?? {}).toEqual({});
     expect(((await SaleListing.findById(id).lean()).attributes) ?? {}).toEqual({});
+  });
+
+  it("imports extra columns into the type's fields, validating them like the form", async () => {
+    const { call } = await setup();
+    const { payload } = await call(bulkImportListings, {
+      body: [
+        // header match ignores case and the "*" marker; a key also works
+        { title: "Prado A", propertyType: "Vehicle", askingPrice: 5000000, extra: { "Registration No. *": "KDA 1", YEAR: "2019", fuel: "Diesel", ignored: "x" } },
+        { title: "Prado B", propertyType: "vehicle", askingPrice: 4000000, extra: { registration_no: "KDB 2" } },
+        { title: "Prado C", propertyType: "vehicle", askingPrice: 3000000, extra: { Year: "2015" } },            // required missing
+        { title: "Prado D", propertyType: "vehicle", askingPrice: 3000000, extra: { "Registration No.": "K", Fuel: "Water" } }, // bad choice
+        { title: "Plot E", propertyType: "plot", askingPrice: 100, extra: { "Registration No.": "ignored" } },   // type without fields
+      ],
+    });
+    expect(payload.successful.map((s) => s.title).sort()).toEqual(["Plot E", "Prado A", "Prado B"]);
+    expect(payload.failed.map((f) => [f.title, f.error])).toEqual([
+      ["Prado C", "Registration No. is required"],
+      ["Prado D", expect.stringMatching(/Fuel must be one of/)],
+    ].sort((a, b) => a[0].localeCompare(b[0])));
+    const a = await SaleListing.findOne({ title: "Prado A" }).lean();
+    expect(a).toMatchObject({ propertyType: "vehicle", attributes: { registration_no: "KDA 1", year: 2019, fuel: "Diesel" } });
+    expect((await SaleListing.findOne({ title: "Prado B" }).lean()).attributes).toEqual({ registration_no: "KDB 2" });
+    expect((await SaleListing.findOne({ title: "Plot E" }).lean()).attributes ?? {}).toEqual({});
   });
 
   it("generated units can share values (required fields are not enforced for a batch)", async () => {
