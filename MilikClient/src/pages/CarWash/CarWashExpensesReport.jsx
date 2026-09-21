@@ -6,6 +6,8 @@ import { carWashApi, formatMoney, getActiveBranchId } from "../../services/carWa
 import { selectCurrentCompany } from "../../redux/selectors";
 import CarWashShell from "./CarWashShell";
 import { fmtDate, todayISO } from "../../utils/dates";
+import { printTabularList } from "../../utils/printList";
+import { toast } from "react-toastify";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -62,54 +64,55 @@ const CarWashExpensesReport = () => {
   }, [data, applied]);
 
   const handlePrint = useCallback(() => {
-    const co   = currentCompany || {};
-    const name = co.companyName || co.name || co.businessName || "Milik";
-    const logo = co.logo || "";
-    const win  = window.open("", "_blank", "width=900,height=800");
-    if (!win) return;
-    const fmtV   = (v) => `KES ${Number(v || 0).toLocaleString()}`;
-    const tot    = Number(data?.total || 0);
+    const fmtV = (v) => `KES ${Number(v || 0).toLocaleString()}`;
+    const tot = Number(data?.total || 0);
     const pctStr = (v) => (tot > 0 ? `${((v / tot) * 100).toFixed(1)}%` : "0%");
-
-    win.document.write(`<!DOCTYPE html><html><head><title>Car Wash Expenses Report</title><style>
-      @page{size:A4 portrait;margin:14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
-      .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
-      .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
-      .sub{font-size:10px;color:#475569;margin-top:2px}.meta{text-align:right;color:#64748b;font-size:8.5px;line-height:1.6}
-      .logo{max-height:40px;max-width:110px;object-fit:contain;margin-bottom:4px}
-      .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
-      .card{border:1px solid #dbe2ea;border-radius:4px;background:#f8fafc;padding:8px 10px}
-      .card.warn{border-color:#fde68a;background:#fffbeb}
-      .cl{font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:800}
-      .cv{font-size:14px;font-weight:900;color:#0B3B2E;margin-top:3px}
-      .cv.warn{color:#b45309}
-      h3{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#0B3B2E;font-weight:900;margin:12px 0 5px}
-      table{width:100%;border-collapse:collapse;font-size:9px;margin-bottom:10px}
-      thead th{background:#0B3B2E;color:#fff;padding:4px 8px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:.1em}
-      thead th.r{text-align:right}tbody td{border-bottom:1px solid #dbe2ea;padding:4px 8px}
-      tbody td.r{text-align:right}tbody tr:nth-child(even){background:#f8fafc}
-      tfoot td{border-top:2px solid #0B3B2E;padding:4px 8px;font-weight:900;background:#EDF5F1}tfoot td.r{text-align:right}
-      .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-      *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
-    </style></head><body>
-    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ""}<div class="co">${name}</div><div class="ttl">Car Wash Expenses Report</div><div class="sub">Period: ${applied.from} to ${applied.to}</div></div>
-    <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div></div></div>
-    <div class="cards">
-      <div class="card"><div class="cl">Total Paid</div><div class="cv">${fmtV(data?.total)}</div></div>
-      <div class="card"><div class="cl">Expense Count</div><div class="cv">${data?.count || 0}</div></div>
-      <div class="card warn"><div class="cl">Pending Obligations</div><div class="cv warn">${fmtV(data?.pending?.total)}</div></div>
-    </div>
-    ${(data?.byCategory || []).length > 0 ? `<h3>By Category</h3><table><thead><tr><th>Category</th><th class="r">Amount</th><th class="r">Count</th><th class="r">Share</th></tr></thead><tbody>${(data.byCategory || []).map((r) => `<tr><td>${r.category}</td><td class="r">${fmtV(r.amount)}</td><td class="r">${r.count}</td><td class="r">${pctStr(r.amount)}</td></tr>`).join("")}</tbody><tfoot><tr><td><strong>Total</strong></td><td class="r"><strong>${fmtV(tot)}</strong></td><td class="r"><strong>${data?.count || 0}</strong></td><td class="r">100%</td></tr></tfoot></table>` : ""}
-    <div class="two">
-      ${(data?.byMethod || []).length > 0 ? `<div><h3>By Payment Method</h3><table><thead><tr><th>Method</th><th class="r">Amount</th><th class="r">Count</th></tr></thead><tbody>${(data.byMethod || []).map((r) => `<tr><td>${r.method}</td><td class="r">${fmtV(r.amount)}</td><td class="r">${r.count}</td></tr>`).join("")}</tbody></table></div>` : ""}
-      ${(data?.byPayee || []).length > 0 ? `<div><h3>Top Payees</h3><table><thead><tr><th>Payee</th><th class="r">Amount</th><th class="r">Count</th></tr></thead><tbody>${(data.byPayee || []).map((r) => `<tr><td>${r.payee}</td><td class="r">${fmtV(r.amount)}</td><td class="r">${r.count}</td></tr>`).join("")}</tbody></table></div>` : ""}
-    </div>
-    ${isConsolidated && (data?.byBranch || []).length > 0 ? `<h3>By Branch</h3><table><thead><tr><th>Branch</th><th class="r">Amount</th><th class="r">Count</th></tr></thead><tbody>${(data.byBranch || []).map((r) => `<tr><td>${r.branchName}</td><td class="r">${fmtV(r.amount)}</td><td class="r">${r.count}</td></tr>`).join("")}</tbody></table>` : ""}
-    ${(data?.topExpenses || []).length > 0 ? `<h3>Top Individual Expenses</h3><table><thead><tr><th>Ref</th><th>Date</th><th>Category</th><th>Payee</th><th class="r">Amount</th></tr></thead><tbody>${(data.topExpenses || []).map((e) => `<tr><td>${e.expenseNumber}</td><td>${fmtDate(e.expenseDate)}</td><td>${e.category}</td><td>${e.payee || "—"}</td><td class="r">${fmtV(e.amount)}</td></tr>`).join("")}</tbody></table>` : ""}
-    ${(data?.byMonth || []).length > 0 ? `<h3>Monthly Trend</h3><table><thead><tr><th>Month</th><th class="r">Amount</th><th class="r">Count</th></tr></thead><tbody>${(data.byMonth || []).map((r) => `<tr><td>${MONTH_NAMES[(r.month||1)-1]} ${r.year}</td><td class="r">${fmtV(r.amount)}</td><td class="r">${r.count}</td></tr>`).join("")}</tbody></table>` : ""}
-    </body></html>`);
-    win.document.close();
-    win.onload = () => { win.focus(); win.print(); };
+    const amountCol = { label: "Amount", align: "right", value: (r) => fmtV(r.amount) };
+    const countCol = { label: "Count", align: "right", value: (r) => r.count };
+    const section = (heading, list, first, extra = {}) => (list || []).length > 0
+      ? [{ heading, columns: [first, amountCol, countCol], rows: list, half: true, ...extra }]
+      : [];
+    const printed = printTabularList({
+      title: "Car Wash Expenses Report",
+      subtitle: `Period: ${applied.from} to ${applied.to}`,
+      company: currentCompany,
+      orientation: "portrait",
+      summaryItems: [["Total paid", fmtV(data?.total)], ["Expense count", String(data?.count || 0)], ["Pending obligations", fmtV(data?.pending?.total)]],
+      columns: [],
+      sections: [
+        ...((data?.byCategory || []).length > 0
+          ? [{
+              heading: "By category",
+              columns: [
+                { label: "Category", value: (r) => r.category },
+                amountCol,
+                countCol,
+                { label: "Share", align: "right", value: (r) => pctStr(r.amount) },
+              ],
+              rows: data.byCategory,
+              totalsRow: ["Total", fmtV(tot), String(data?.count || 0), "100%"],
+            }]
+          : []),
+        ...section("By payment method", data?.byMethod, { label: "Method", value: (r) => r.method }),
+        ...section("Top payees", data?.byPayee, { label: "Payee", value: (r) => r.payee }),
+        ...(isConsolidated ? section("By branch", data?.byBranch, { label: "Branch", value: (r) => r.branchName }, { half: false }) : []),
+        ...((data?.topExpenses || []).length > 0
+          ? [{
+              heading: "Top individual expenses",
+              columns: [
+                { label: "Ref", value: (e) => e.expenseNumber },
+                { label: "Date", value: (e) => fmtDate(e.expenseDate) },
+                { label: "Category", value: (e) => e.category },
+                { label: "Payee", value: (e) => e.payee || "—" },
+                { label: "Amount", align: "right", value: (e) => fmtV(e.amount) },
+              ],
+              rows: data.topExpenses,
+            }]
+          : []),
+        ...section("Monthly trend", data?.byMonth, { label: "Month", value: (r) => `${MONTH_NAMES[(r.month || 1) - 1]} ${r.year}` }, { half: false }),
+      ],
+    });
+    if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
   }, [currentCompany, data, applied, isConsolidated]);
 
   const fmtPeriod = (iso) => new Date(iso).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" });

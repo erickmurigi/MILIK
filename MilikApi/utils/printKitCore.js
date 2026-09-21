@@ -397,8 +397,10 @@ const buildTableHtml = ({ columns = [], rows = [], totalsRow = null }) => {
     .join("");
 
   const dataCount = rows.filter((r) => r?.__group === undefined && !r?.__subtotal).length;
-  // totalsRow: array of pre-formatted strings aligned per column; falls back to a record count
-  const foot = totalsRow
+  // totalsRow: array of pre-formatted strings aligned per column; false = no footer; otherwise a record count
+  const foot = totalsRow === false
+    ? ""
+    : totalsRow
     ? `<tfoot><tr>${columns.map((col, i) => `<td class="${isNum(col) ? "num" : ""}">${escapeHtml(totalsRow[i] ?? "")}</td>`).join("")}</tr></tfoot>`
     : dataCount > 0
       ? `<tfoot><tr><td colspan="${Math.max(columns.length, 1)}">${dataCount.toLocaleString()} record${dataCount !== 1 ? "s" : ""}</td></tr></tfoot>`
@@ -426,7 +428,7 @@ export const listPageHtml = ({
   notes = [], signatures = [], orientation = "landscape", kicker = "Report", sections = [],
 }) => {
   const name = getCompanyDetails(company).name;
-  const sectionHtml = (sec) => `<div class="sec-block"><h3 class="sec-h">${escapeHtml(sec.heading || "")}</h3>${buildTableHtml({ columns: sec.columns || [], rows: sec.rows || [], totalsRow: sec.totalsRow || null })}</div>`;
+  const sectionHtml = (sec) => `<div class="sec-block"><h3 class="sec-h">${escapeHtml(sec.heading || "")}</h3>${buildTableHtml({ columns: sec.columns || [], rows: sec.rows || [], totalsRow: sec.totalsRow || false })}</div>`;
   const sectionsHtml = [];
   for (let i = 0; i < sections.length; i += 1) {
     if (sections[i].half && sections[i + 1]?.half) { sectionsHtml.push(`<div class="two-col">${sectionHtml(sections[i])}${sectionHtml(sections[i + 1])}</div>`); i += 1; } else sectionsHtml.push(sectionHtml(sections[i]));
