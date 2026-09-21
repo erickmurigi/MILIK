@@ -1,11 +1,12 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import {
-  FaArrowRight, FaCoins, FaFileExcel, FaChartLine, FaUserTie, FaCity, FaPhoneAlt, FaWhatsapp, FaSyncAlt, FaRegClock,
+  FaExternalLinkAlt, FaCoins, FaFileExcel, FaChartLine, FaUserTie, FaCity, FaPhoneAlt, FaWhatsapp, FaSyncAlt, FaRegClock,
 } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
+import { EmbeddedReportContext } from "./EmbeddedReportContext";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from "../../components/PaginationBar";
 import { fmtKES, saleApi } from "../../services/propertySaleApi";
@@ -14,6 +15,12 @@ import { useTerms } from "../../hooks/useTerm";
 // Report Center: every Property Sales report in one page, grouped by the question it answers. A live "pulse" strip sits
 // on top; the money-owed and register reports open inside the page, the older ones open as their own pages.
 const GREEN = "#0B3B2E";
+const SaleCashFlow = lazy(() => import("./SaleCashFlow"));
+const SaleMonthly = lazy(() => import("./SaleReports"));
+const SaleFunnel = lazy(() => import("./SaleConversionFunnel"));
+const SaleAgentsPerformance = lazy(() => import("./SaleAgentsPerformance"));
+const SaleCommissions = lazy(() => import("./SaleCommissions"));
+const SaleProjects = lazy(() => import("./SaleProjects"));
 const n2 = (v) => Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const dt = (v) => (v ? new Date(v).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -302,28 +309,28 @@ const buildGroups = (T) => [
     items: [
       { id: "receivables", label: "Receivables aging", desc: `What ${T.saleBuyer.toLowerCase()}s still owe, aged by how late`, view: ReceivablesView, filters: ["asOf"] },
       { id: "overdue", label: "Overdue instalments", desc: "The follow-up list, oldest first, with call and WhatsApp", view: OverdueView, filters: ["asOf"] },
-      { id: "cash-flow", label: "Cash flow forecast", desc: "Instalments due in the next 30, 60 and 90 days", to: "/sale/reports/cash-flow" },
+      { id: "cash-flow", label: "Cash flow forecast", desc: "Instalments due in the next 30, 60 and 90 days", to: "/sale/reports/cash-flow", page: SaleCashFlow },
     ],
   },
   {
     id: "sales", title: "Sales & pipeline", icon: FaChartLine, blurb: "What was sold and how it came about",
     items: [
       { id: "register", label: "Sales register", desc: `Every ${T.saleDeal.toLowerCase()} with discount, paid and balance`, view: RegisterView, filters: ["dates"] },
-      { id: "monthly", label: "Monthly sales", desc: "Sales and collections per month, with drill-down", to: "/sale/reports/sales" },
-      { id: "funnel", label: "Conversion funnel", desc: "Leads to viewings to offers to deals", to: "/sale/reports/funnel" },
+      { id: "monthly", label: "Monthly sales", desc: "Sales and collections per month, with drill-down", to: "/sale/reports/sales", page: SaleMonthly },
+      { id: "funnel", label: "Conversion funnel", desc: "Leads to viewings to offers to deals", to: "/sale/reports/funnel", page: SaleFunnel },
     ],
   },
   {
     id: "agents", title: `${T.saleAgent}s & commission`, icon: FaUserTie, blurb: "Who sells, and what they are owed",
     items: [
-      { id: "agent-performance", label: `${T.saleAgent} performance`, desc: "Deals, value and conversion per person", to: "/sale/agents/performance" },
-      { id: "commissions", label: "Commissions", desc: "Earned, payable and paid, with statements", to: "/sale/commissions" },
+      { id: "agent-performance", label: `${T.saleAgent} performance`, desc: "Deals, value and conversion per person", to: "/sale/agents/performance", page: SaleAgentsPerformance },
+      { id: "commissions", label: "Commissions", desc: "Earned, payable and paid, with statements", to: "/sale/commissions", page: SaleCommissions },
     ],
   },
   {
     id: "stock", title: "Projects & stock", icon: FaCity, blurb: "What is left to sell",
     items: [
-      { id: "projects", label: `${T.saleProject}s`, desc: "Units sold, reserved and left per project", to: "/sale/projects" },
+      { id: "projects", label: `${T.saleProject}s`, desc: "Units sold, reserved and left per project", to: "/sale/projects", page: SaleProjects },
       { id: "planned-stock", label: "Aging stock", desc: "Units unsold for 30, 60, 90+ days", planned: true },
       { id: "planned-title", label: "Title & transfer tracker", desc: "Fully paid but not yet transferred", planned: true },
       { id: "planned-pl", label: `${T.saleProject} profit & loss`, desc: "Sales against tagged costs", planned: true },
@@ -345,8 +352,8 @@ export default function SaleReportsHub() {
   const [params, setParams] = useSearchParams();
   const groups = useMemo(() => buildGroups(T), [T]);
   const items = useMemo(() => groups.flatMap((g) => g.items.map((i) => ({ ...i, group: g }))), [groups]);
-  const active = items.find((i) => i.id === params.get("r") && i.view) || items.find((i) => i.id === "receivables");
-  const select = (item) => (item.to ? navigate(item.to) : item.view ? setParams({ r: item.id }, { replace: true }) : null);
+  const active = items.find((i) => i.id === params.get("r") && (i.view || i.page)) || items.find((i) => i.id === "receivables");
+  const select = (item) => (item.view || item.page ? setParams({ r: item.id }, { replace: true }) : null);
 
   const [filters, setFilters] = useState({ projectId: "", agentId: "", asOf: "", dateFrom: ymd(new Date(new Date().getFullYear(), 0, 1)), dateTo: ymd(new Date()) });
   const setF = (k) => (v) => setFilters((f) => ({ ...f, [k]: v || "" }));
@@ -368,7 +375,7 @@ export default function SaleReportsHub() {
         <div className="grid flex-none grid-cols-2 gap-1.5 lg:grid-cols-4">
           <PulseTile label="Owed by buyers" value={fmtKES(totals?.balance)} sub={`${totals?.deals ?? 0} ${T.saleDeal.toLowerCase()}s with a balance`} onClick={() => setParams({ r: "receivables" }, { replace: true })} />
           <PulseTile label="Overdue now" tone="text-red-700" value={fmtKES(totals?.overdue)} sub={`${overduePct}% of what is owed`} onClick={() => setParams({ r: "overdue" }, { replace: true })} />
-          <PulseTile label="Due in 30 days" tone="text-emerald-700" value={fmtKES(cash.data?.next30?.amount)} sub={`${cash.data?.next30?.count ?? 0} instalments`} onClick={() => navigate("/sale/reports/cash-flow")} />
+          <PulseTile label="Due in 30 days" tone="text-emerald-700" value={fmtKES(cash.data?.next30?.amount)} sub={`${cash.data?.next30?.count ?? 0} instalments`} onClick={() => setParams({ r: "cash-flow" }, { replace: true })} />
           <PulseTile label="No due date" tone="text-amber-700" value={fmtKES(totals?.unscheduled)} sub="owed but not on any instalment plan" onClick={() => setParams({ r: "receivables" }, { replace: true })} />
         </div>
 
@@ -393,7 +400,6 @@ export default function SaleReportsHub() {
                         <div className={`text-xs ${on ? "font-black text-[#0B3B2E]" : "font-semibold text-slate-800"}`}>{item.label}</div>
                         <div className="text-[10px] leading-snug text-slate-500">{item.desc}</div>
                       </div>
-                      {item.to && <FaArrowRight size={9} className="mt-1 flex-none text-slate-300" />}
                       {item.planned && <span className="mt-0.5 flex-none rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-500"><FaRegClock className="mr-0.5 inline" size={8} />Soon</span>}
                     </button>
                   );
@@ -413,10 +419,10 @@ export default function SaleReportsHub() {
                 <AppSelect value={active.id} onChange={(v) => { const it = items.find((i) => i.id === v); if (it) select(it); }} size="sm"
                   options={items.filter((i) => !i.planned).map((i) => ({ value: i.id, label: i.label }))} />
               </div>
-              <AppSelect value={filters.projectId} onChange={setF("projectId")} size="sm" searchable clearable placeholder={`All ${T.saleProject.toLowerCase()}s`}
-                options={(projects.data?.data || []).map((p) => ({ value: p._id, label: [p.projectNumber, p.name].filter(Boolean).join(" · ") }))} />
-              <AppSelect value={filters.agentId} onChange={setF("agentId")} size="sm" searchable clearable placeholder={`All ${T.saleAgent.toLowerCase()}s`}
-                options={(agents.data?.data || []).map((a) => ({ value: a._id, label: a.fullName }))} />
+              {active.view && <AppSelect value={filters.projectId} onChange={setF("projectId")} size="sm" searchable clearable placeholder={`All ${T.saleProject.toLowerCase()}s`}
+                options={(projects.data?.data || []).map((p) => ({ value: p._id, label: [p.projectNumber, p.name].filter(Boolean).join(" · ") }))} />}
+              {active.view && <AppSelect value={filters.agentId} onChange={setF("agentId")} size="sm" searchable clearable placeholder={`All ${T.saleAgent.toLowerCase()}s`}
+                options={(agents.data?.data || []).map((a) => ({ value: a._id, label: a.fullName }))} />}
               {active.filters?.includes("asOf") && (
                 <label className="flex items-center gap-1.5 text-xs text-slate-500">As of <input type="date" value={filters.asOf} max={ymd(new Date())} onChange={(e) => setF("asOf")(e.target.value)} className={inputCls} /></label>
               )}
@@ -426,8 +432,21 @@ export default function SaleReportsHub() {
                   <input type="date" value={filters.dateTo} min={filters.dateFrom} onChange={(e) => setF("dateTo")(e.target.value)} className={inputCls} />
                 </span>
               )}
+              {active.to && (
+                <button type="button" onClick={() => navigate(active.to)} className="ml-auto inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50" title="Open this report on its own page">
+                  <FaExternalLinkAlt size={10} /> Own page
+                </button>
+              )}
             </div>
-            <View key={active.id} filters={filters} T={T} />
+            {View ? (
+              <View key={active.id} filters={filters} T={T} />
+            ) : (
+              <EmbeddedReportContext.Provider value>
+                <Suspense fallback={<div className="p-6 text-center text-sm text-slate-500">Loading report…</div>}>
+                  <active.page key={active.id} />
+                </Suspense>
+              </EmbeddedReportContext.Provider>
+            )}
           </section>
         </div>
       </div>
