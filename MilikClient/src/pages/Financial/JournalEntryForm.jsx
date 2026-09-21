@@ -11,7 +11,8 @@ import JournalEntriesDrawer from "../../components/Accounting/JournalEntriesDraw
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
 import { getProperties } from "../../redux/propertyRedux";
 import {
-  createJournalEntry, getChartOfAccounts, getJournalEntry, postJournalEntry, reverseJournalEntry, updateJournalEntry,
+  approveJournalEntry, createJournalEntry, getChartOfAccounts, getJournalEntry, postJournalEntry, rejectJournalEntry, reverseJournalEntry,
+  reviewJournalEntry, submitJournalForReview, updateJournalEntry,
 } from "../../redux/apiCalls";
 import { saleApi } from "../../services/propertySaleApi";
 import { hasCompanyModule } from "../../utils/companyModules";
@@ -45,7 +46,7 @@ const today = () => new Date().toISOString().split("T")[0];
 let lineSeq = 0;
 const newLine = (over = {}) => ({ key: `l${++lineSeq}`, account: "", description: "", debit: "", credit: "", tags: {}, tagsOpen: false, ...over });
 const blankDoc = () => ({
-  date: today(), journalType: "general_manual_journal", reference: "", narration: "",
+  date: today(), journalType: "general_manual_journal", reference: "", narration: "", autoReverseDate: "",
   lines: [newLine(), newLine()],
 });
 
@@ -67,6 +68,7 @@ const docFromJournal = (j) => ({
   journalType: j.journalType || "general_manual_journal",
   reference: j.reference || "",
   narration: j.narration || "",
+  autoReverseDate: j.autoReverseDate ? new Date(j.autoReverseDate).toISOString().split("T")[0] : "",
   lines: (j.lines || []).map((l) => newLine({
     account: idOf(l.account),
     description: l.description || "",
@@ -262,6 +264,7 @@ const JournalEntryForm = () => {
     journalType: doc.journalType,
     reference: doc.reference,
     narration: doc.narration,
+    autoReverseDate: doc.autoReverseDate || "",
     lines: filled.map((l) => ({
       account: l.account,
       description: l.description,
@@ -270,6 +273,27 @@ const JournalEntryForm = () => {
       dimensions: l.tags,
     })),
   });
+
+  const announcePosted = (j) => {
+    toast.success(`Journal ${j.journalNo} posted`);
+    if (j.autoReversal?.posted) toast.info(`Reversal ${j.autoReversal.journalNo} posted for ${new Date(j.autoReverseDate).toLocaleDateString("en-GB")}`);
+    else if (j.autoReversal) toast.warning(`Posted, but the automatic reversal ${j.autoReversal.journalNo} was left as a draft: ${j.autoReversal.message || "it could not be posted"}`);
+  };
+
+  // optional approval workflow: submit -> review -> approve (or reject with a reason)
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const approval = async (action) => {
+    setBusy(action);
+    try {
+      const fn = { submit: submitJournalForReview, review: reviewJournalEntry, approve: approveJournalEntry }[action];
+      const j = action === "reject" ? await rejectJournalEntry(saved._id, { reason: rejectReason }) : await fn(saved._id);
+      setSaved(j);
+      setRejecting(false);
+      setRejectReason("");
+      toast.success({ submit: "Submitted for review", review: "Marked as reviewed", approve: "Journal approved", reject: "Journal sent back" }[action]);
+    } catch (e) { toast.error(e?.response?.data?.message || "The approval step failed"); } finally { setBusy(""); }
+  };
 
   const save = async (andPost) => {
     if (!canEditNow) return toast.warning("You do not have permission to save this journal");
@@ -290,7 +314,7 @@ const JournalEntryForm = () => {
       if (isNew) clearDraft();
       if (andPost) {
         journal = await postJournalEntry(journal._id, { business: company._id, company: company._id });
-        toast.success(`Journal ${journal.journalNo} posted`);
+        announcePosted(journal);
         navigate(`${base}/${journal._id}`, { replace: true });
         setSaved(journal);
       } else {
@@ -314,7 +338,7 @@ const JournalEntryForm = () => {
     try {
       const j = await postJournalEntry(saved._id, { business: company._id, company: company._id });
       setSaved(j);
-      toast.success(`Journal ${j.journalNo} posted`);
+      announcePosted(j);
     } catch (e) { toast.error(e?.response?.data?.message || "Failed to post journal"); } finally { setBusy(""); }
   };
 
@@ -400,7 +424,32 @@ const JournalEntryForm = () => {
             )}
           </div>
           {!isNew && saved && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {status === "draft" && !legacy && can.update && (
+                <>
+                  {["pending_review", "reviewed"].includes(saved.approvalStatus) ? (
+                    rejecting ? (
+                      <>
+                        <input value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Reason for sending back" className={`${inputCls} w-56`} autoFocus />
+                        <button type="button" disabled={!!busy || !rejectReason.trim()} onClick={() => approval("reject")} className="inline-flex h-8 items-center rounded border border-red-300 bg-red-50 px-3 text-xs font-bold text-red-700 hover:bg-red-100 disabled:opacity-50">Send back</button>
+                        <button type="button" onClick={() => setRejecting(false)} className="text-xs font-bold text-slate-500 hover:underline">Cancel</button>
+                      </>
+                    ) : (
+                      <>
+                        {saved.approvalStatus === "pending_review" && (
+                          <button type="button" disabled={!!busy} onClick={() => approval("review")} className="inline-flex h-8 items-center rounded border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Mark reviewed</button>
+                        )}
+                        {can.post && <button type="button" disabled={!!busy} onClick={() => approval("approve")} className="inline-flex h-8 items-center rounded border border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50">Approve</button>}
+                        <button type="button" disabled={!!busy} onClick={() => setRejecting(true)} className="inline-flex h-8 items-center rounded border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Send back</button>
+                      </>
+                    )
+                  ) : saved.approvalStatus !== "approved" && (
+                    <button type="button" disabled={!!busy} onClick={() => approval("submit")} className="inline-flex h-8 items-center rounded border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50" title="Ask a colleague to review and approve before posting">
+                      {busy === "submit" ? "Submitting…" : "Submit for review"}
+                    </button>
+                  )}
+                </>
+              )}
               {status === "posted" && (
                 <button type="button" onClick={() => setLedgerOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
                   <FaBook size={11} /> Ledger entries
@@ -430,13 +479,23 @@ const JournalEntryForm = () => {
                 <span>This is a two-line owner / property journal. It can be viewed here; drafts of this kind are edited from the journal list.</span>
               </div>
             )}
+            {saved?.approvalStatus === "rejected" && saved.rejectionReason && status === "draft" && (
+              <div className="border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">Sent back for correction: {saved.rejectionReason}</div>
+            )}
+            {saved?.autoReverseDate && (
+              <div className="border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+                {saved.autoReversalOf
+                  ? "This journal is the automatic reversal of another journal."
+                  : `Reverses automatically on ${new Date(saved.autoReverseDate).toLocaleDateString("en-GB")}${status === "posted" ? "." : " once posted."}`}
+              </div>
+            )}
             {status === "reversed" && saved?.reversalReason && (
               <div className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">Reversed: {saved.reversalReason}</div>
             )}
 
             {/* details */}
             <div className="border border-slate-200 bg-white p-3 shadow-sm">
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div>
                   <label className={labelCls}>Journal date <span className="text-red-500">*</span></label>
                   <input type="date" disabled={readOnly} value={doc.date} onChange={(e) => patch({ date: e.target.value })}
@@ -454,7 +513,11 @@ const JournalEntryForm = () => {
                   <label className={labelCls}>Reference</label>
                   <input disabled={readOnly} value={doc.reference} maxLength={200} onChange={(e) => patch({ reference: e.target.value })} placeholder="Invoice, cheque or document no." className={inputCls} />
                 </div>
-                <div className="col-span-2 md:col-span-3">
+                <div>
+                  <label className={labelCls} title="For accruals: a mirror journal (debits and credits swapped) is posted on this date">Auto-reverse on</label>
+                  <input type="date" disabled={readOnly} min={doc.date} value={doc.autoReverseDate} onChange={(e) => patch({ autoReverseDate: e.target.value })} className={inputCls} />
+                </div>
+                <div className="col-span-2 md:col-span-4">
                   <label className={labelCls}>Narration</label>
                   <input disabled={readOnly} value={doc.narration} maxLength={1000} onChange={(e) => patch({ narration: e.target.value })} placeholder="What is this journal for?" className={inputCls} />
                 </div>

@@ -15,6 +15,11 @@ export const getTrialBalanceReport = async (params = {}) => {
   return res.data;
 };
 
+export const getTagSummaryReport = async (params = {}) => {
+  const res = await adminRequests.get("/financial-reports/tag-summary", { params, timeout: 120_000 });
+  return res.data;
+};
+
 export const getIncomeStatementReport = async (params = {}) => {
   const search = new URLSearchParams();
 

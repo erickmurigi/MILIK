@@ -152,6 +152,7 @@ const CommissionReports           = lazy(() => import("./pages/Reports/Commissio
 const ZoneVacancyReport           = lazy(() => import("./pages/Reports/ZoneVacancyReport"));
 const TrialBalanceReport          = lazy(() => import("./pages/Reports/TrialBalanceReport"));
 const IncomeStatementReport       = lazy(() => import("./pages/Reports/IncomeStatementReport"));
+const ProfitByTagReport           = lazy(() => import("./pages/Reports/ProfitByTagReport"));
 const BalanceSheetReport          = lazy(() => import("./pages/Reports/BalanceSheetReport"));
 const LiabilitySubledger          = lazy(() => import("./pages/Reports/LiabilitySubledger"));
 const TaxReports                  = lazy(() => import("./pages/Reports/TaxReports"));
@@ -715,6 +716,7 @@ function App() {
             <Route path="/accounts/service-providers"                      element={<Guard moduleKey="accounts" resource="expenses"><ServiceProviders /></Guard>} />
             <Route path="/accounts/trial-balance"                          element={<Guard moduleKey="accounts" resource="financialReports"><TrialBalanceReport /></Guard>} />
             <Route path="/accounts/income-statement"                       element={<Guard moduleKey="accounts" resource="financialReports"><IncomeStatementReport /></Guard>} />
+            <Route path="/accounts/profit-by-tag"                          element={<Guard moduleKey="accounts" resource="financialReports"><ProfitByTagReport /></Guard>} />
             <Route path="/accounts/balance-sheet"                          element={<Guard moduleKey="accounts" resource="financialReports"><BalanceSheetReport /></Guard>} />
             <Route path="/accounts/liability-subledger"                    element={<Guard moduleKey="accounts" resource="financialReports"><LiabilitySubledger /></Guard>} />
             <Route path="/accounts/tax-reports"                            element={<Guard moduleKey="accounts" resource="financialReports"><TaxReports /></Guard>} />

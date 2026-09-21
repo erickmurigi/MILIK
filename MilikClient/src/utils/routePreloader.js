@@ -82,6 +82,7 @@ const PRELOAD_ENTRIES = [
   ['/accounts/service-providers',         () => import('../pages/Financial/ServiceProviders')],
   ['/accounts/trial-balance',             () => import('../pages/Reports/TrialBalanceReport')],
   ['/accounts/income-statement',          () => import('../pages/Reports/IncomeStatementReport')],
+  ['/accounts/profit-by-tag',             () => import('../pages/Reports/ProfitByTagReport')],
   ['/accounts/balance-sheet',             () => import('../pages/Reports/BalanceSheetReport')],
   ['/accounts/cash-flow',                 () => import('../pages/Reports/CashFlowReport')],
   ['/accounts/tax-reports',               () => import('../pages/Reports/TaxReports')],

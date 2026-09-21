@@ -69,6 +69,7 @@ const routeNames = {
   '/accounts/service-providers': 'Service Providers',
   '/accounts/trial-balance': 'Trial Balance',
   '/accounts/income-statement': 'Income Statement',
+  '/accounts/profit-by-tag': 'Profit by Tag',
   '/accounts/balance-sheet': 'Balance Sheet',
   '/accounts/tax-reports': 'Tax Reports',
   '/accounts/cash-flow': 'Cash Flow Statement',

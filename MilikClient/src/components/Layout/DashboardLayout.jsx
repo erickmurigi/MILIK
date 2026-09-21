@@ -144,6 +144,7 @@ const MENU_PERMISSION_MAP = {
   "acc-service-providers": { resource: "expenses",        action: "view", moduleKey: "accounts" },
   "acc-trial-balance":        { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-income-statement":     { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-profit-by-tag":        { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-balance-sheet":        { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-liability-subledger":  { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-tax-reports":          { resource: "financialReports", action: "view", moduleKey: "accounts" },
@@ -881,6 +882,7 @@ const TopToolbar = ({
         "acc-service-providers": "/accounts/service-providers",
         "acc-trial-balance":     "/accounts/trial-balance",
         "acc-income-statement":  "/accounts/income-statement",
+        "acc-profit-by-tag":     "/accounts/profit-by-tag",
         "acc-balance-sheet":          "/accounts/balance-sheet",
         "acc-liability-subledger":    "/accounts/liability-subledger",
         "acc-tax-reports":       "/accounts/tax-reports",
@@ -1313,6 +1315,7 @@ const TopToolbar = ({
           submenu: [
             { id: "acc-trial-balance",    label: "Trial Balance",          icon: FaBook },
             { id: "acc-income-statement", label: "Income Statement (P&L)", icon: FaFileAlt },
+            { id: "acc-profit-by-tag",    label: "Profit by Tag",          icon: FaLayerGroup },
             { id: "acc-balance-sheet",       label: "Balance Sheet",          icon: FaBalanceScale },
             { id: "acc-liability-subledger", label: "Liability Sub-Ledger",   icon: FaLayerGroup },
             { id: "acc-cash-flow",           label: "Cash Flow Statement",    icon: FaExchangeAlt },

@@ -794,4 +794,33 @@ of choices, date, yes/no; each optionally required) and leave out standard field
   (the panel used to omit blank words and the server only changes words it receives), and a renamed singular gets a
   regular plural automatically.
 
-*Last updated: 2026-09-20 (Track H closed — PropertySale performance pass, see above). Track G note: PropertySale correctness pass, see above. Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C/E/F/G as items are actioned.*
+### Multi-line journals (accounting for every company)
+
+Journal entries are no longer only two-line landlord journals. A journal can have 2-100 balanced debit/credit lines and works
+the same for every company, whatever its modules. The old two-line journals (owner / property types) are untouched and
+keep their own path; the list shows multi-line ones as "N lines".
+
+- **Rules** (`services/journalLinesService.js`): every account is an active posting account of the company; each line has a
+  debit or a credit (not both); debits equal credits to the cent (integer cents, no floating-point drift); tags belong to the
+  company. Posting writes one balanced ledger group; a refused line (locked period) reverses the lines already posted, so a
+  journal is never half in the ledger.
+- **Tags** on each line: cost centre (everyone); project, unit, deal, agent (Property Sales) and property (Property
+  Management) are optional pickers shown only where those records exist. Stored on the ledger entry as `dimensions` (a
+  partial index serves project reports) and kept by reversals.
+- **Full page** (`pages/Financial/JournalEntryForm.jsx`, `/accounts|financial/journals/new` and `/:id`): grid entry,
+  running balance with "Balance it", duplicate/remove line, Enter in the last credit box adds a line, unsaved new journals
+  survive a refresh, Save draft / Save & post, posted journals are read-only with Ledger entries, Copy as new and Reverse.
+- **Auto-reverse** (accruals): an optional date after the journal date. On posting, a mirror journal (debits and credits
+  swapped, same tags) is created and posted dated that day. If the mirror cannot be posted (locked period) the original stays
+  posted and the mirror stays a draft, with a warning. A journal whose mirror is posted cannot also be reversed by hand.
+- **Approvals:** the existing submit / review / approve / send-back steps are on the page for drafts. They are optional: no
+  company setting enforces them yet, so a draft can still be posted directly.
+- **Reports by tag:** `GET /financial-reports/tag-summary?by=project|listing|deal|agent|property|costCentre` (page:
+  Accounts -> Reports -> Profit by Tag) and the income statement accepts `projectId`, `dealId`, `listingId`, `agentId`,
+  `costCentre`. The tag summary counts every income and expense account; the income statement keeps its own classification
+  (e.g. landlord-side rental accounts are excluded for a property manager), so the two can differ for such companies.
+- **Not covered:** entries the modules post themselves (sale payments, receipts) do not carry tags, so a project report only
+  reflects tagged journal lines; attachments on journals; enforcing approvals by company setting; templates for common
+  entries. Writing journals still requires the Accounting module (existing route rule).
+
+*Last updated: 2026-09-21 (multi-line journals added; Track H closed — PropertySale performance pass, see above). Track G note: PropertySale correctness pass, see above. Maintained alongside the work it describes — update Track A/B/D as commits land; update Track C/E/F/G as items are actioned.*
