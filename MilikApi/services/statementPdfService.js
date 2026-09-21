@@ -1,6 +1,8 @@
 import https from "https";
 import http from "http";
 import { createPage, resetBrowser } from "./browserService.js";
+import { COMPANY_PRINT_FIELDS } from "../utils/printCompanyFields.js";
+import { BASE_CSS, footerHtml, letterheadHtml } from "../utils/printKitCore.js";
 import LandlordStatement from "../models/LandlordStatement.js";
 import LandlordStatementLine from "../models/LandlordStatementLine.js";
 
@@ -605,7 +607,7 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
       "landlord",
       "firstName lastName landlordName email phone phoneNumber"
     )
-    .populate("business", "companyName name address phone phoneNo email slogan logo postalAddress roadStreet town country POBOX Street City")
+    .populate("business", `${COMPANY_PRINT_FIELDS} slogan POBOX Street City`)
     .lean();
 
   if (!statement) { const e = new Error("Statement not found or access denied"); e.status = 404; throw e; }
@@ -876,6 +878,7 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
         <meta charset="utf-8" />
         <title>${isSelfManaged ? "Property Performance Statement" : "Landlord Statement"}</title>
         <style>
+          ${BASE_CSS}
           @page { size: A4 landscape; margin: 8mm 6mm; }
           * { box-sizing: border-box; }
           body { margin: 0; padding: 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #111827; background: #ffffff; font-size: 9px; }
@@ -949,27 +952,15 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
       </head>
       <body>
         <div class="sheet">
-          <table class="header-table">
-            <tr>
-              <td class="brand-cell">
-                ${businessLogoEmbed ? `<img src="${esc(businessLogoEmbed)}" alt="logo" class="brand-logo" />` : `<div class="brand-fallback">${esc(String(businessName || "M").charAt(0).toUpperCase())}</div>`}
-              </td>
-              <td>
-                <div class="business-name">${esc(businessName)}</div>
-                ${businessSlogan ? `<div class="business-line">${esc(businessSlogan)}</div>` : ""}
-                ${businessPostalAddress ? `<div class="business-line">${esc(businessPostalAddress)}</div>` : ""}
-                ${businessLocation ? `<div class="business-line">${esc(businessLocation)}</div>` : ""}
-                <div class="business-line">${businessPhone ? `Tel: ${esc(businessPhone)}` : ""}${businessPhone && businessEmail ? " &bull; " : ""}${businessEmail ? esc(businessEmail) : ""}</div>
-              </td>
-              <td class="period-cell">
-                <div class="period-badge">${isSelfManaged ? "PROPERTY PERFORMANCE STATEMENT" : "LANDLORD STATEMENT"}</div>
-                <div>Ref: ${esc(statement.statementNumber || "-")}</div>
-                <div>Generated: ${formatDate(statement.generatedAt || statement.updatedAt || new Date())}</div>
-              </td>
-            </tr>
-          </table>
-
-          <div class="accent-bar"></div>
+          ${letterheadHtml(
+            { ...(statement.business || {}), logo: businessLogoEmbed || "" },
+            {
+              kicker: isSelfManaged ? "Property Performance Statement" : "Landlord Statement",
+              title: statement.statementNumber || "Statement",
+              meta: [["Generated", formatDate(statement.generatedAt || statement.updatedAt || new Date())], ["Period", statementPeriodLabel]],
+              printed: false,
+            }
+          )}
 
           <div class="statement-title">${esc(String(statement?.metadata?.statementType || statement?.metadata?.workspace?.statementType || statement?.statementType || "Provisional Statement").toUpperCase())}</div>
           <div class="statement-subtitle">${isSelfManaged ? "Monthly income, expenses and occupancy record" : "Property management schedule and settlement summary"}</div>
@@ -1216,6 +1207,7 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
           </div>` : ""}
 
           <div class="footnote">Generated from MILIK statement workspace. This print layout is kept compact and wide so schedule columns fit within the in-system print preview and downloaded PDF.</div>
+          ${footerHtml(statement.business || {}, { left: `${businessName} · ${statement.statementNumber || ""}` })}
         </div>
       </body>
     </html>`;

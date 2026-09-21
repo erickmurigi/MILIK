@@ -10,6 +10,7 @@ import { generateStatementPdf } from './statementPdfService.js';
 import { generateInvoicePdf } from './invoicePdfService.js';
 import { generateReceiptPdf } from './receiptPdfService.js';
 import { generateManagementFeeInvoicePdf } from './managementFeeInvoicePdfService.js';
+import { COMPANY_PRINT_FIELDS } from '../utils/printCompanyFields.js';
 import MeterReading from '../models/MeterReading.js';
 import ProcessedStatement from '../models/ProcessedStatement.js';
 import Property from '../models/Property.js';
@@ -1340,6 +1341,7 @@ const preBuildAttachments = async ({ contextType, items, businessId }) => {
     const statements = await ProcessedStatement.find({ _id: { $in: sendableIds }, business: businessId })
       .populate('landlord', 'landlordName email phoneNumber landlordCode')
       .populate('property', 'propertyName propertyCode commissionPaymentMode')
+      .populate('business', COMPANY_PRINT_FIELDS)
       .lean();
     const stmtMap = new Map(statements.map((s) => [String(s._id), s]));
 

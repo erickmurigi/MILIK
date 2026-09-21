@@ -15,6 +15,7 @@ import { getCompanyTaxConfiguration, resolveOutputVatAccount } from "../../servi
 import { generateLandlordStatement } from "../../services/landlordStatementService.js";
 import { writeStatementTenantBalanceSnapshots } from "../../services/statementSnapshotService.js";
 import { generateManagementFeeInvoicePdf } from "../../services/managementFeeInvoicePdfService.js";
+import { COMPANY_PRINT_FIELDS } from "../../utils/printCompanyFields.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { createError } from "../../utils/error.js";
 import { parsePagination } from "../../utils/pagination.js";
@@ -1627,7 +1628,7 @@ export const getManagementFeeInvoicePdf = async (req, res, next) => {
     const statement = await findScopedProcessedStatementById(req, statementId, [
       { path: "landlord", select: "landlordName firstName lastName email contact" },
       { path: "property", select: "propertyCode propertyName name commissionPaymentMode commissionPercentage" },
-      { path: "business", select: "companyName name address phone email" },
+      { path: "business", select: COMPANY_PRINT_FIELDS },
     ]);
 
     if (!statement) return next(createError(404, "Statement not found"));

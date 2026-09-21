@@ -15,6 +15,7 @@ import { generateStatementPdf, isPdfCached } from "../../services/statementPdfSe
 import { emitToCompany } from "../../utils/socketManager.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { createError } from "../../utils/error.js";
+import { COMPANY_PRINT_FIELDS } from "../../utils/printCompanyFields.js";
 import { parsePagination } from "../../utils/pagination.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
@@ -790,7 +791,7 @@ export const generatePdf = async (req, res, next) => {
       : await LandlordStatement.findOne({ _id: statementId, business: businessId })
           .populate("property", "propertyCode propertyName name address city commissionPercentage commissionRecognitionBasis commissionPaymentMode commissionFixedAmount totalUnits")
           .populate("landlord", "firstName lastName landlordName email phone phoneNumber")
-          .populate("business", "companyName name address phone phoneNo email slogan logo postalAddress roadStreet town country POBOX Street City")
+          .populate("business", `${COMPANY_PRINT_FIELDS} slogan POBOX Street City`)
           .lean();
 
     if (!statement) {
