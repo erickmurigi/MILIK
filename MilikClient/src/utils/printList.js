@@ -1,184 +1,112 @@
 // Standard printout for lists and reports: company letterhead, report title and filters, key figures, table with a totals
-// row, and a footer. A4 landscape. Every value is HTML-escaped (the print window is same-origin and written with
-// document.write), and a logo is only used when it is an http(s) or data:image URL.
-const GRN = "#0B3B2E";
-const GOLD = "#B8963E";
+// row, footer and the "Powered by Milik" stamp (see utils/printKit.js for the shared pieces). A4 landscape by default.
+//
+// Rows may be plain records, or these markers:
+//   { __group: "Kilimani Heights", meta: "12 tenants" }   a group heading row
+//   { __subtotal: ["Subtotal", "", "1,000.00"] }           a subtotal row (cells per column)
+// A column can colour a cell with tone(row): "neg" (red), "pos" (green), "muted" (grey) and make it bold with bold: true.
+import { BRAND, escapeHtml, footerHtml, getCompanyDetails, letterheadHtml, openPrintWindow, pageBoxCss, writeAndPrint } from "./printKit";
 
-const escapeHtml = (value) =>
-  String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+const LIST_CSS = `
+  .kpis { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .kpi { min-width: 120px; padding: 6px 12px 7px; background: #fff; border: 1px solid #e2e8f0; border-top: 3px solid ${BRAND.green}; border-radius: 2px; }
+  .kpi-label { font-size: 8.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: ${BRAND.muted}; }
+  .kpi-value { font-size: 13.5px; font-weight: 800; color: ${BRAND.ink}; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .summary { font-size: 11px; font-weight: 700; color: #334155; margin-bottom: 12px; padding: 7px 10px; background: #f8fafc; border-left: 3px solid ${BRAND.green}; border-radius: 0 4px 4px 0; }
 
-const formatDateTime = (value = new Date()) => {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("en-KE", {
-    day: "2-digit", month: "long", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
-};
-
-const getCompanyDetails = (company = {}) => {
-  const logo = typeof company?.logo === "string" ? company.logo.trim() : "";
-  const town = company?.town || company?.city || "";
-  const postal = company?.postalAddress || company?.address || company?.location || "";
-  return {
-    name: company?.companyName || company?.name || "MILIKPMS",
-    logo: /^(https?:\/\/|data:image\/)/i.test(logo) ? logo : "",
-    address: [postal, company?.roadStreet, town].filter((v, i, all) => v && all.indexOf(v) === i).join(", "),
-    contact: [
-      company?.phone || company?.phoneNo || company?.phoneNumber || company?.mobile || company?.contactPhone || "",
-      company?.email || company?.companyEmail || company?.contactEmail || "",
-      company?.website || "",
-    ].filter(Boolean).join("  ·  "),
-    ids: [
-      company?.taxPIN ? `PIN: ${company.taxPIN}` : "",
-      company?.registrationNo ? `Reg. No: ${company.registrationNo}` : "",
-    ].filter(Boolean).join("  ·  "),
-  };
-};
-
-// Letterhead: logo and company details on the left, the report's title and filters on the right, under a brand rule.
-const buildHeaderHtml = ({ company, title, subtitle }) => {
-  const d = getCompanyDetails(company);
-  return `
-    <header class="lh">
-      <div class="lh-brand">
-        ${d.logo
-          ? `<img src="${escapeHtml(d.logo)}" alt="" class="lh-logo" />`
-          : `<div class="lh-mark">${escapeHtml(d.name.slice(0, 1).toUpperCase())}</div>`}
-        <div class="lh-co">
-          <div class="lh-name">${escapeHtml(d.name)}</div>
-          ${d.address ? `<div class="lh-line">${escapeHtml(d.address)}</div>` : ""}
-          ${d.contact ? `<div class="lh-line">${escapeHtml(d.contact)}</div>` : ""}
-          ${d.ids ? `<div class="lh-line lh-ids">${escapeHtml(d.ids)}</div>` : ""}
-        </div>
-      </div>
-      <div class="lh-doc">
-        <div class="lh-kicker">Report</div>
-        <div class="lh-title">${escapeHtml(title)}</div>
-        ${subtitle ? `<div class="lh-sub">${escapeHtml(subtitle)}</div>` : ""}
-        <div class="lh-meta">Printed ${escapeHtml(formatDateTime())}</div>
-      </div>
-    </header>
-    <div class="lh-rule"><span></span></div>
-  `;
-};
+  table.list { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+  table.list thead { display: table-header-group; }
+  table.list tfoot { display: table-footer-group; }
+  table.list tr { page-break-inside: avoid; }
+  table.list thead th { background: ${BRAND.green}; color: #fff; padding: 8px 9px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; text-align: left; border: 1px solid rgba(255,255,255,.14); }
+  table.list td.num, table.list th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.list tbody td { padding: 7px 9px; border: 1px solid #e2e8f0; vertical-align: top; color: #1e293b; }
+  table.list tbody tr.alt td { background: #f8fafc; }
+  table.list td.neg { color: #b91c1c; font-weight: 700; } table.list td.pos { color: #15803d; font-weight: 700; } table.list td.muted { color: #94a3b8; }
+  table.list td.bold { font-weight: 800; }
+  table.list tr.grp td { background: #eef7f2; border-top: 2px solid ${BRAND.green}; border-bottom: 1px solid #cfe3d9; padding: 6px 9px; font-weight: 800; color: ${BRAND.green}; text-transform: uppercase; letter-spacing: .06em; font-size: 9.5px; }
+  table.list tr.grp td span { font-weight: 600; color: ${BRAND.muted}; text-transform: none; letter-spacing: 0; margin-left: 10px; }
+  table.list tr.sub td { background: #f1f5f9; font-weight: 800; border-top: 1px solid #94a3b8; }
+  table.list .empty-cell { text-align: center; color: #94a3b8; padding: 22px; font-style: italic; }
+  table.list tfoot td { padding: 8px 9px; font-weight: 800; font-size: 10.5px; border: 1px solid #cfe3d9; border-top: 2px solid ${BRAND.green}; background: #eef7f2; color: ${BRAND.green}; }
+  .notes-list { margin-top: 10px; font-size: 9.5px; color: #64748b; }
+  .notes-list p { margin-bottom: 2px; }
+  .sigs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 26px; margin: 28px 0 4px; page-break-inside: avoid; }
+  .sig { border-top: 1px solid #94a3b8; padding-top: 5px; font-size: 9.5px; color: ${BRAND.muted}; }
+`;
 
 const buildTableHtml = ({ columns = [], rows = [], totalsRow = null }) => {
-  const align = (col) => (col.align === "right" ? "right" : "left");
+  const isNum = (col) => col.align === "right";
   const headerCells = columns
-    .map((col) => `<th class="${col.align === "right" ? "num" : ""}">${escapeHtml(col.label)}</th>`)
+    .map((col) => `<th class="${isNum(col) ? "num" : ""}" ${col.width ? `style="width:${escapeHtml(col.width)}"` : ""}>${escapeHtml(col.label)}</th>`)
     .join("");
 
+  let dataIndex = 0;
   const bodyRows = rows
-    .map((row, idx) => {
+    .map((row) => {
+      if (row?.__group !== undefined) {
+        dataIndex = 0;
+        return `<tr class="grp"><td colspan="${Math.max(columns.length, 1)}">${escapeHtml(row.__group)}${row.meta ? `<span>${escapeHtml(row.meta)}</span>` : ""}</td></tr>`;
+      }
+      if (row?.__subtotal) {
+        return `<tr class="sub">${columns.map((col, i) => `<td class="${isNum(col) ? "num" : ""}">${escapeHtml(row.__subtotal[i] ?? "")}</td>`).join("")}</tr>`;
+      }
+      const idx = dataIndex++;
       const cells = columns
         .map((col) => {
           const raw = typeof col.value === "function" ? col.value(row, idx) : row?.[col.key];
-          return `<td class="${col.align === "right" ? "num" : ""}">${escapeHtml(raw ?? "-")}</td>`;
+          const tone = typeof col.tone === "function" ? col.tone(row) : "";
+          const cls = [isNum(col) ? "num" : "", tone, col.bold ? "bold" : ""].filter(Boolean).join(" ");
+          return `<td class="${cls}">${escapeHtml(raw ?? "-")}</td>`;
         })
         .join("");
       return `<tr class="${idx % 2 === 1 ? "alt" : ""}">${cells}</tr>`;
     })
     .join("");
 
+  const dataCount = rows.filter((r) => r?.__group === undefined && !r?.__subtotal).length;
   // totalsRow: array of pre-formatted strings aligned per column; falls back to a record count
   const foot = totalsRow
-    ? `<tfoot><tr>${columns.map((col, i) => `<td class="${align(col) === "right" ? "num" : ""}">${escapeHtml(totalsRow[i] ?? "")}</td>`).join("")}</tr></tfoot>`
-    : rows.length > 0
-      ? `<tfoot><tr><td colspan="${Math.max(columns.length, 1)}">${rows.length.toLocaleString()} record${rows.length !== 1 ? "s" : ""}</td></tr></tfoot>`
+    ? `<tfoot><tr>${columns.map((col, i) => `<td class="${isNum(col) ? "num" : ""}">${escapeHtml(totalsRow[i] ?? "")}</td>`).join("")}</tr></tfoot>`
+    : dataCount > 0
+      ? `<tfoot><tr><td colspan="${Math.max(columns.length, 1)}">${dataCount.toLocaleString()} record${dataCount !== 1 ? "s" : ""}</td></tr></tfoot>`
       : "";
 
   return `
-    <table>
+    <table class="list">
       <thead><tr>${headerCells}</tr></thead>
       <tbody>${bodyRows || `<tr><td colspan="${Math.max(columns.length, 1)}" class="empty-cell">No records found</td></tr>`}</tbody>
       ${foot}
-    </table>
-  `;
+    </table>`;
 };
 
-const BASE_CSS = `
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: "Segoe UI", Arial, Helvetica, sans-serif; color: #0f172a; background: #fff; padding: 26px 30px 20px; font-size: 11px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-
-  /* Letterhead */
-  .lh { display: flex; justify-content: space-between; align-items: flex-start; gap: 28px; padding-bottom: 14px; }
-  .lh-brand { display: flex; align-items: center; gap: 16px; min-width: 0; }
-  .lh-logo { max-height: 68px; max-width: 170px; object-fit: contain; }
-  .lh-mark { width: 60px; height: 60px; flex: none; background: ${GRN}; color: #fff; font-size: 26px; font-weight: 800; display: flex; align-items: center; justify-content: center; border-radius: 12px; }
-  .lh-name { font-size: 21px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: ${GRN}; line-height: 1.15; }
-  .lh-line { font-size: 10px; color: #475569; line-height: 1.55; margin-top: 1px; }
-  .lh-ids { color: #64748b; font-size: 9.5px; letter-spacing: .02em; }
-  .lh-doc { text-align: right; flex: none; max-width: 46%; }
-  .lh-kicker { font-size: 9px; font-weight: 700; letter-spacing: .28em; text-transform: uppercase; color: ${GOLD}; }
-  .lh-title { font-size: 22px; font-weight: 800; color: #0f172a; line-height: 1.15; margin-top: 3px; }
-  .lh-sub { font-size: 10.5px; color: #475569; margin-top: 4px; line-height: 1.45; }
-  .lh-meta { font-size: 9.5px; color: #94a3b8; margin-top: 6px; }
-  .lh-rule { position: relative; height: 3px; background: ${GRN}; margin-bottom: 14px; }
-  .lh-rule span { position: absolute; left: 0; top: 0; width: 96px; height: 3px; background: ${GOLD}; }
-
-  /* Key figures */
-  .kpis { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-  .kpi { min-width: 120px; padding: 6px 12px 7px; background: #fff; border: 1px solid #e2e8f0; border-top: 3px solid ${GRN}; border-radius: 2px; }
-  .kpi-label { font-size: 8.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #64748b; }
-  .kpi-value { font-size: 13.5px; font-weight: 800; color: #0f172a; margin-top: 2px; font-variant-numeric: tabular-nums; }
-  .summary { font-size: 11px; font-weight: 700; color: #334155; margin-bottom: 12px; padding: 7px 10px; background: #f8fafc; border-left: 3px solid ${GRN}; border-radius: 0 4px 4px 0; }
-
-  /* Table */
-  table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
-  thead { display: table-header-group; }
-  tfoot { display: table-footer-group; }
-  tr { page-break-inside: avoid; }
-  thead th { background: ${GRN}; color: #fff; padding: 8px 9px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; text-align: left; border: 1px solid rgba(255,255,255,.14); }
-  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  tbody td { padding: 7px 9px; border: 1px solid #e2e8f0; vertical-align: top; color: #1e293b; }
-  tbody tr.alt td { background: #f8fafc; }
-  .empty-cell { text-align: center; color: #94a3b8; padding: 22px; font-style: italic; }
-  tfoot td { padding: 8px 9px; font-weight: 800; font-size: 10.5px; border: 1px solid #cfe3d9; border-top: 2px solid ${GRN}; background: #eef7f2; color: ${GRN}; }
-
-  /* Footer */
-  .foot { display: flex; justify-content: space-between; gap: 16px; margin-top: 18px; padding-top: 8px; border-top: 1px solid #cbd5e1; font-size: 9px; color: #94a3b8; }
-
-  @media print {
-    body { padding: 0; }
-    @page { size: A4 landscape; margin: 11mm 11mm 13mm; @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 9px "Segoe UI", Arial, sans-serif; color: #94a3b8; } }
-  }
-`;
-
 // summaryItems: [[label, value], ...] shown as key-figure cards above the table (values are shown as given).
+// notes: extra lines under the table. signatures: [{ label, name }] adds sign-off lines (prepared / checked / approved).
 // win: a window opened by the caller inside the click handler, for reports that fetch their rows first (a window opened
 // after an await is usually blocked as a pop-up). It is cleared before the report is written into it.
-export const printTabularList = ({ title, subtitle = "", company = {}, columns = [], rows = [], summary = "", summaryItems = [], totalsRow = null, win: target = null }) => {
-  const win = target || window.open("", "_blank", "width=1200,height=800");
+export const printTabularList = ({
+  title, subtitle = "", company = {}, columns = [], rows = [], summary = "", summaryItems = [], totalsRow = null,
+  notes = [], signatures = [], orientation = "landscape", kicker = "Report", win: target = null,
+}) => {
+  const win = openPrintWindow(target);
   if (!win) return null;
 
   const name = getCompanyDetails(company).name;
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8" />
-  <title>${escapeHtml(title || "List")}</title>
-  <style>${BASE_CSS}</style>
-</head>
-<body>
-  ${buildHeaderHtml({ company, title, subtitle })}
-  ${summary ? `<div class="summary">${escapeHtml(summary)}</div>` : ""}
-  ${summaryItems.length ? `<div class="kpis">${summaryItems.map(([label, value]) => `<div class="kpi"><div class="kpi-label">${escapeHtml(label)}</div><div class="kpi-value">${escapeHtml(value)}</div></div>`).join("")}</div>` : ""}
-  ${buildTableHtml({ columns, rows, totalsRow })}
-  <div class="foot"><span>${escapeHtml(name)} · generated by MILIKPMS</span><span>Confidential — for internal use</span></div>
-</body>
-</html>`;
+  const body = `
+    ${letterheadHtml(company, { kicker, title, subtitle })}
+    ${summary ? `<div class="summary">${escapeHtml(summary)}</div>` : ""}
+    ${summaryItems.length ? `<div class="kpis">${summaryItems.map(([label, value]) => `<div class="kpi"><div class="kpi-label">${escapeHtml(label)}</div><div class="kpi-value">${escapeHtml(value)}</div></div>`).join("")}</div>` : ""}
+    ${buildTableHtml({ columns, rows, totalsRow })}
+    ${notes.length ? `<div class="notes-list">${notes.map((n) => `<p>${escapeHtml(n)}</p>`).join("")}</div>` : ""}
+    ${signatures.length ? `<div class="sigs">${signatures.map((s) => `<div class="sig">${escapeHtml(s.label)}${s.name ? ` — ${escapeHtml(s.name)}` : ""}</div>`).join("")}</div>` : ""}
+    ${footerHtml(company, { left: name })}`;
 
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
-  setTimeout(() => { win.focus(); win.print(); }, 450);
-  return win;
+  return writeAndPrint(win, {
+    title: title || "Report",
+    css: LIST_CSS,
+    body,
+    pageCss: pageBoxCss({ size: orientation === "portrait" ? "A4" : "A4 landscape", left: name }),
+  });
 };
 
 export default printTabularList;
