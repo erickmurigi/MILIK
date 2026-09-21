@@ -5,6 +5,7 @@ import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import { toast } from "react-toastify";
 import { printReceipt } from "../../utils/posReceipt";
+import { printTabularList } from "../../utils/printKit";
 import {
   FaBarcode, FaCheck, FaMinus, FaPlus, FaSearch,
   FaTimes, FaTrash, FaCashRegister, FaPrint, FaChevronDown, FaChevronUp,
@@ -595,6 +596,58 @@ const POSTerminal = () => {
     }
   };
 
+  const printXRead = () => {
+    if (!xReadData) return;
+    const { session: s, summary: sm, movements = [] } = xReadData;
+    const amt = (v) => formatMoney(v);
+    const printed = printTabularList({
+      title: `X-Read — ${s.sessionNumber || session.sessionNumber}`,
+      subtitle: [s.location?.name, s.till?.name, s.openedBy?.name, s.openedAt ? `Opened ${fmtDateTime(s.openedAt)}` : ""].filter(Boolean).join(" · "),
+      kicker: "Point of Sale",
+      company,
+      orientation: "portrait",
+      summaryItems: [["Total Sales", amt(sm.totalSales)], ["Expected Cash", amt(sm.expectedCash)], ["Sales Count", sm.salesCount], ["Voids", sm.voidCount || 0]],
+      sections: [
+        {
+          heading: "Cash Summary",
+          half: true,
+          columns: [{ label: "Item", key: "label" }, { label: "Amount", align: "right", key: "value", bold: true }],
+          rows: [
+            { label: "Opening Float", value: amt(sm.openingFloat) },
+            { label: "Cash Sales", value: amt(sm.cashSales) },
+            ...(sm.totalCashIn > 0 ? [{ label: "(+) Cash In", value: amt(sm.totalCashIn) }] : []),
+            ...(sm.totalCashOut > 0 ? [{ label: "(−) Cash Out", value: `−${amt(sm.totalCashOut)}` }] : []),
+            { __subtotal: ["Expected Cash", amt(sm.expectedCash)] },
+          ],
+        },
+        {
+          heading: "Sales Summary",
+          half: true,
+          columns: [{ label: "Method", key: "label" }, { label: "Amount", align: "right", key: "value", bold: true }],
+          rows: [
+            ...(sm.cashSales > 0 ? [{ label: "Cash", value: amt(sm.cashSales) }] : []),
+            ...(sm.mpesaSales > 0 ? [{ label: "M-Pesa", value: amt(sm.mpesaSales) }] : []),
+            ...(sm.cardSales > 0 ? [{ label: "Card", value: amt(sm.cardSales) }] : []),
+            ...(sm.creditSales > 0 ? [{ label: "Credit", value: amt(sm.creditSales) }] : []),
+            { __subtotal: ["Total Sales", amt(sm.totalSales)] },
+          ],
+        },
+        ...(movements.length ? [{
+          heading: "Movements Log",
+          columns: [
+            { label: "Type", value: (m) => m.type.replace(/_/g, " ") },
+            { label: "Amount", align: "right", value: (m) => `${m.type === "cash_out" ? "−" : ""}${amt(m.amount)}`, tone: (m) => (m.type === "cash_out" ? "neg" : "pos") },
+            { label: "Reason", value: (m) => m.reason || "—" },
+            { label: "Time", value: (m) => fmtDateTime(m.createdAt) },
+          ],
+          rows: movements,
+        }] : []),
+      ],
+      signatures: [{ label: "Cashier" }, { label: "Supervisor" }],
+    });
+    if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
+  };
+
   /* Checkout */
   const handleCheckout = async () => {
     if (!cart.length) return;
@@ -1182,7 +1235,7 @@ const POSTerminal = () => {
             <div className="flex justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
               <button
                 type="button"
-                onClick={() => window.print()}
+                onClick={printXRead}
                 className="flex items-center gap-1.5 border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100"
               >
                 <FaPrint className="text-[10px]" /> Print Report

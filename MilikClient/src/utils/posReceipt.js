@@ -1,3 +1,5 @@
+import { escapeHtml as esc, getCompanyDetails } from "./printKitCore";
+
 const fmt = (n) =>
   Number(n || 0).toLocaleString("en-KE", {
     minimumFractionDigits: 2,
@@ -16,25 +18,22 @@ const fmtDate = (iso) =>
       })
     : "";
 
-const esc = (str) =>
-  String(str ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
 
 /**
  * Opens a print-ready receipt in a new window.
- * Compatible with 80mm thermal printers (set printer paper size to 80mm roll).
+ * Roll-paper layout: deliberately NOT the A4 print kit. Compatible with 80mm thermal printers (set printer paper size to 80mm roll).
  *
  * @param {object} sale      - POSSale document returned by the API
  * @param {object} company   - currentCompany from Redux (name, phone, email, etc.)
  * @param {object} ctx       - { locationName, tillName } from terminal state (fallback if not populated on sale)
  */
 export function printReceipt(sale, company = {}, ctx = {}) {
-  const bizName     = esc(company?.name       || "POS Terminal");
-  const bizPhone    = esc(company?.phone      || company?.phoneNumber || "");
-  const bizEmail    = esc(company?.email      || "");
-  const bizAddress  = esc(company?.address    || company?.physicalAddress || "");
+  // Same company identity as the A4 documents (name, address, phone, email, PIN), laid out for roll paper.
+  const co          = getCompanyDetails(company);
+  const [bizPhone, bizEmail] = [company?.phone || company?.phoneNo || company?.phoneNumber || company?.mobile || "", company?.email || company?.companyEmail || ""].map(esc);
+  const bizName     = esc(company?.companyName || company?.name ? co.name : "POS Terminal");
+  const bizAddress  = esc(co.address || company?.physicalAddress || "");
+  const bizPin      = esc(company?.taxPIN || "");
 
   const receiptNo   = esc(sale.receiptNumber  || "");
   const saleDate    = fmtDate(sale.createdAt);
@@ -60,7 +59,7 @@ export function printReceipt(sale, company = {}, ctx = {}) {
       return `
         <tr class="item-row">
           <td class="product-name">${esc(l.productName)}</td>
-          <td class="r qty-cell">×${l.qty}</td>
+          <td class="r qty-cell">×${esc(l.qty)}</td>
           <td class="r amount-cell">${fmt(l.lineTotal)}</td>
         </tr>
         ${discLine}`;
@@ -92,8 +91,8 @@ export function printReceipt(sale, company = {}, ctx = {}) {
 
   const paymentsHtml = payments
     .map((p) => {
-      const label = p.method === "mpesa" ? "M-Pesa"
-        : p.method.charAt(0).toUpperCase() + p.method.slice(1);
+      const method = String(p.method || "");
+      const label = esc(method === "mpesa" ? "M-Pesa" : method.charAt(0).toUpperCase() + method.slice(1));
       return `<tr>
         <td colspan="2">${label}</td>
         <td class="r">${fmt(p.amount)}</td>
@@ -197,8 +196,9 @@ export function printReceipt(sale, company = {}, ctx = {}) {
     .powered {
       text-align: center;
       font-size: 9px;
-      opacity: 0.55;
+      opacity: 0.8;
       margin-top: 2px;
+      font-weight: bold;
     }
     /* Extra whitespace at bottom so thermal paper feeds past the cutter */
     .feed { height: 20mm; }
@@ -211,6 +211,7 @@ export function printReceipt(sale, company = {}, ctx = {}) {
   ${bizAddress ? `<div class="biz-sub">${bizAddress}</div>` : ""}
   ${bizPhone   ? `<div class="biz-sub">Tel: ${bizPhone}</div>` : ""}
   ${bizEmail   ? `<div class="biz-sub">${bizEmail}</div>` : ""}
+  ${bizPin     ? `<div class="biz-sub">PIN: ${bizPin}</div>` : ""}
 
   <hr class="double">
 

@@ -7,6 +7,8 @@ import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { selectCurrentCompany } from '../../redux/selectors';
 import { adminRequests } from '../../utils/requestMethods';
+import { printTabularList } from '../../utils/printKit';
+import { toast } from 'react-toastify';
 
 const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
@@ -63,86 +65,31 @@ export default function HRReportAttendance() {
 
   const handlePrint = useCallback(() => {
     if (!rows.length) return;
-    const { companyName = '', logo = '', roadStreet = '', town = '' } = company;
-    const addr = [roadStreet, town].filter(Boolean).join(', ');
-
-    const tbody = filtered.map((r, i) => `
-      <tr class="${i % 2 === 0 ? 'even' : 'odd'}">
-        <td class="bold">${r.employee?.surname || ''} ${r.employee?.otherNames || ''}<br>
-          <span class="sub">${r.employee?.employeeNumber || ''} · ${r.employee?.department?.name || '—'}</span></td>
-        <td class="r">${workingDays}</td>
-        <td class="r bold ${r.daysPresent === 0 ? 'red' : ''}">${r.daysPresent}</td>
-        <td class="r ${r.daysAbsent > 0 ? 'red' : ''}">${r.daysAbsent}</td>
-        <td class="r">${r.totalHours.toFixed(1)}</td>
-        <td class="r">${r.avgHours.toFixed(1)}</td>
-        <td class="r bold ${pctColor(r.attendancePct).replace('text-', '')}">${r.attendancePct}%</td>
-      </tr>`).join('');
-
-    const win = window.open('', '_blank', 'width=900,height=1200');
-    if (!win) return;
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>Attendance Report — ${monthLabel}</title>
-<style>
-  @page{size:A4;margin:12mm 14mm;}
-  *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:Arial,sans-serif;font-size:9pt;color:#1a1a1a;background:#fff;}
-  .lh{display:flex;align-items:flex-start;justify-content:space-between;padding-bottom:8px;border-bottom:2.5px solid #027333;margin-bottom:10px;}
-  .lh-logo{height:38px;width:auto;border-radius:3px;}
-  .lh-co{font-size:14pt;font-weight:900;color:#0f172a;}
-  .lh-addr{font-size:7pt;color:#64748b;margin-top:2px;}
-  .doc-bar{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:1.5px solid #0f172a;padding-bottom:5px;margin-bottom:10px;}
-  .doc-label{font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.18em;color:#64748b;}
-  .doc-title{font-size:13pt;font-weight:900;color:#0f172a;}
-  .kpis{display:flex;gap:10px;margin-bottom:10px;}
-  .kpi{flex:1;border:1px solid #e2e8f0;border-radius:4px;padding:6px 10px;}
-  .kl{font-size:6.5pt;font-weight:900;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;}
-  .kv{font-size:13pt;font-weight:900;}
-  table{width:100%;border-collapse:collapse;}
-  thead tr{background:#1B3D2F;color:#fff;}
-  th{padding:5px 6px;text-align:left;font-size:7pt;font-weight:900;text-transform:uppercase;letter-spacing:.1em;}
-  th.r{text-align:right;}
-  td{padding:4px 6px;font-size:8.5pt;border-bottom:1px solid #f1f5f9;}
-  tr.even td{background:#fff;} tr.odd td{background:#f8fafc;}
-  td.bold{font-weight:700;} td.r{text-align:right;font-family:monospace;}
-  td.red{color:#dc2626;} td.emerald-700{color:#047857;} td.amber-600{color:#d97706;}
-  .sub{font-size:7pt;color:#94a3b8;font-weight:400;}
-  .footer{margin-top:8px;font-size:7pt;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:5px;}
-</style></head><body>
-<div class="lh">
-  <div>${logo ? `<img src="${logo}" class="lh-logo"><br>` : ''}
-    <div class="lh-co">${companyName}</div>${addr ? `<div class="lh-addr">${addr}</div>` : ''}
-  </div>
-</div>
-<div class="doc-bar">
-  <div>
-    <div class="doc-label">Human Resource · Attendance Report</div>
-    <div class="doc-title">${monthLabel}</div>
-  </div>
-  <div style="font-size:8pt;color:#64748b">${workingDays} working days · ${filtered.length} employees · Printed ${new Date().toLocaleDateString('en-KE')}</div>
-</div>
-<div class="kpis">
-  <div class="kpi"><div class="kl">Working Days</div><div class="kv">${workingDays}</div></div>
-  <div class="kpi"><div class="kl">Avg Attendance</div><div class="kv" style="color:#047857">${avgAttPct}%</div></div>
-  <div class="kpi"><div class="kl">Total Hours Worked</div><div class="kv">${totalHours.toFixed(0)}h</div></div>
-  <div class="kpi"><div class="kl">Absence Days (total)</div><div class="kv" style="color:#dc2626">${totalAbsent}</div></div>
-</div>
-<table>
-  <thead><tr>
-    <th>Employee</th>
-    <th class="r">Working Days</th>
-    <th class="r">Present</th>
-    <th class="r">Absent</th>
-    <th class="r">Total Hours</th>
-    <th class="r">Avg Hours/Day</th>
-    <th class="r">Attendance %</th>
-  </tr></thead>
-  <tbody>${tbody}</tbody>
-</table>
-<div class="footer">Computer-generated attendance report. ${companyName}</div>
-</body></html>`);
-    win.document.close();
-    win.onload = () => { win.focus(); win.print(); };
-  }, [filtered, company, monthLabel, workingDays, avgAttPct, totalHours, totalAbsent]);
+    const printed = printTabularList({
+      title: `Attendance Report — ${monthLabel}`,
+      subtitle: `Human Resource · ${workingDays} working days · ${filtered.length} employees`,
+      company,
+      orientation: 'portrait',
+      summaryItems: [
+        ['Working Days', workingDays],
+        ['Avg Attendance', `${avgAttPct}%`],
+        ['Total Hours Worked', `${totalHours.toFixed(0)}h`],
+        ['Absence Days (total)', totalAbsent],
+      ],
+      columns: [
+        { label: 'Employee', bold: true, value: (r) => `${r.employee?.surname || ''} ${r.employee?.otherNames || ''} (${r.employee?.employeeNumber || ''} · ${r.employee?.department?.name || '—'})`.trim() },
+        { label: 'Working Days', align: 'right', value: () => workingDays },
+        { label: 'Present', align: 'right', bold: true, value: (r) => r.daysPresent, tone: (r) => (r.daysPresent === 0 ? 'neg' : '') },
+        { label: 'Absent', align: 'right', value: (r) => r.daysAbsent, tone: (r) => (r.daysAbsent > 0 ? 'neg' : '') },
+        { label: 'Total Hours', align: 'right', value: (r) => r.totalHours.toFixed(1) },
+        { label: 'Avg Hours/Day', align: 'right', value: (r) => r.avgHours.toFixed(1) },
+        { label: 'Attendance %', align: 'right', bold: true, value: (r) => `${r.attendancePct}%`, tone: (r) => (r.attendancePct >= 90 ? 'pos' : r.attendancePct < 70 ? 'neg' : '') },
+      ],
+      rows: filtered,
+      totalsRow: false,
+    });
+    if (!printed) toast.error('Pop-up blocked — allow pop-ups for this site to print');
+  }, [rows.length, filtered, company, monthLabel, workingDays, avgAttPct, totalHours, totalAbsent]);
 
   return (
     <DashboardLayout lockContentScroll>

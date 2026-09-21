@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { essRequests } from '../../utils/essRequests';
 import { useESS } from '../../context/ESSContext';
 import { useTabState } from '../../hooks/useTabState';
+import { printPayslipDocument } from '../../utils/printPayslip';
 import './ESS.css';
 
 const fmtC = (n) => `KES ${Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
@@ -14,14 +15,13 @@ const STATUS_BADGE = {
 };
 
 export default function ESSPayslips() {
-  const { employee } = useESS();
+  const { employee, company: essCompany } = useESS();
   const [payslips,  setPayslips]  = useState([]);
   const [total,     setTotal]     = useState(0);
   const [totalPages,setTotalPages]= useState(1);
   const [page,      setPage]      = useTabState("/ess/payslips:page", 1);
   const [loading,   setLoading]   = useState(true);
   const [selected,  setSelected]  = useState(null);
-  const printRef = useRef(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -46,29 +46,24 @@ export default function ESSPayslips() {
     }
   }, []);
 
-  const printPayslip = useCallback(() => {
-    if (!printRef.current) return;
-    const w = window.open('', '_blank', 'width=800,height=900');
-    w.document.write(`<!DOCTYPE html><html><head>
-      <title>Payslip</title>
-      <style>
-        body{font-family:Arial,sans-serif;font-size:12px;color:#111;padding:30px;}
-        h2{text-align:center;margin:0 0 4px;font-size:16px;}
-        .sub{text-align:center;color:#555;margin:0 0 16px;font-size:12px;}
-        table{width:100%;border-collapse:collapse;margin-bottom:12px;}
-        th{background:#1a237e;color:#fff;padding:6px 8px;text-align:left;font-size:11px;}
-        td{padding:5px 8px;border-bottom:1px solid #eee;}
-        .right{text-align:right;}
-        .total-row td{font-weight:700;background:#f5f5f5;}
-        .net-row td{font-weight:700;font-size:13px;background:#e8eaf6;color:#1a237e;}
-      </style>
-    </head><body>${printRef.current.innerHTML}</body></html>`);
-    w.document.close();
-    w.focus();
-    setTimeout(() => { w.print(); w.close(); }, 300);
-  }, []);
-
   const snap = selected?.snapshot ?? {};
+
+  const printPayslip = useCallback(() => {
+    if (!selected) return;
+    const printed = printPayslipDocument({
+      company: essCompany || {},
+      payslip: selected,
+      snapshot: {
+        ...selected.snapshot,
+        name: selected.snapshot?.name || `${employee?.surname || ''} ${employee?.otherNames || ''}`.trim(),
+        employeeNumber: selected.snapshot?.employeeNumber || employee?.employeeNumber,
+      },
+      periodLabel: selected.payrollPeriod?.label || '',
+      periodStatus: selected.payrollPeriod?.status || '',
+    });
+    if (!printed) window.alert('Pop-up blocked — allow pop-ups for this site to print');
+  }, [selected, employee, essCompany]);
+
   const earnings = [
     { name: 'Basic Salary', amount: selected?.basicSalary || 0 },
     ...(selected?.allowances || []),
@@ -148,7 +143,7 @@ export default function ESSPayslips() {
               <button className="ess-modal-close" onClick={() => setSelected(null)}>✕</button>
             </div>
             <div className="ess-modal-body">
-              <div ref={printRef}>
+              <div>
                 <h2 style={{ textAlign: 'center', marginBottom: 4 }}>PAYSLIP</h2>
                 <p style={{ textAlign: 'center', color: '#666', marginBottom: 16, fontSize: '0.85rem' }}>
                   Period: {selected.payrollPeriod?.label}

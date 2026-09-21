@@ -14,6 +14,7 @@ import { selectCurrentCompany } from '../../redux/selectors';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 import { fmtDate } from '../../utils/dates';
+import { openPrintWindow, letterheadHtml, footerHtml, wrapPage, pageBoxCss, escapeHtml, formatMoney, getCompanyDetails, BRAND } from '../../utils/printKit';
 
 const fmtCurrency = (n) =>
   n != null && n !== '' && n !== 0
@@ -231,139 +232,100 @@ export default function EmployeeProfile() {
 
   const printProfile = useCallback(() => {
     if (!emp) return;
-    const { companyName = '', logo = '', roadStreet = '', town = '', phoneNo = '', email: coEmail = '', taxPIN = '' } = company;
-    const addr = [roadStreet, town].filter(Boolean).join(', ');
+    const win = openPrintWindow(null, 'width=980,height=1100');
+    if (!win) { toast.error('Pop-up blocked — allow pop-ups for this site to print'); return; }
+    const co = getCompanyDetails(company);
     const basic = Number(emp.basicSalary) || 0;
-    const fmtC = (n) => n > 0 ? `KES ${Number(n).toLocaleString('en-KE', { minimumFractionDigits: 2 })}` : '—';
-    const f = (v) => v || '—';
+    const fmtC = (n) => (n > 0 ? `KES ${formatMoney(n)}` : '—');
+    const e = escapeHtml;
+    const fullName = `${emp.surname} ${emp.otherNames}`;
+    const fld = (label, value, mono) => `<div><div class="fl">${e(label)}</div><div class="fv${mono ? ' mono' : ''}">${e(value || '—')}</div></div>`;
+    const opt = (label, value, mono) => (value ? fld(label, value, mono) : '');
 
     const componentRows = (emp.salaryComponents || []).map((c) => {
       const amt = c.isPercentage ? (basic * Number(c.amount)) / 100 : Number(c.amount);
-      return `<tr><td>${c.name}</td><td>${c.type}</td><td style="text-align:right;color:${c.type==='Deduction'?'#dc2626':'#059669'}">${c.isPercentage?c.amount+'% · ':''}${c.type==='Deduction'?'−':'+'}${fmtC(amt)}</td></tr>`;
+      const ded = c.type === 'Deduction';
+      return `<tr><td>${e(c.name)}</td><td>${e(c.type)}</td><td style="text-align:right;color:${ded ? '#b91c1c' : '#15803d'}">${c.isPercentage ? `${e(c.amount)}% · ` : ''}${ded ? '−' : '+'}${e(fmtC(amt))}</td></tr>`;
     }).join('');
 
-    const win = window.open('', '_blank', 'width=840,height=1200');
-    if (!win) { toast.error('Allow pop-ups to print'); return; }
-    win.document.write(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
-<title>Employee Profile — ${emp.surname} ${emp.otherNames}</title>
-<style>
-  @page{size:A4;margin:14mm 16mm;}
-  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-  html,body{background:#fff;font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#1a1a1a;}
-  .lh{display:flex;align-items:flex-start;justify-content:space-between;padding-bottom:8px;border-bottom:2.5px solid #027333;margin-bottom:12px;}
-  .lh-logo{height:38px;width:auto;border-radius:3px;}
-  .lh-company{font-size:14pt;font-weight:900;color:#0f172a;}
-  .lh-addr{font-size:7pt;color:#64748b;margin-top:2px;}
-  .lh-meta{text-align:right;font-size:7pt;color:#64748b;line-height:1.7;}
-  .doc-bar{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:1.5px solid #0f172a;padding-bottom:5px;margin-bottom:10px;}
-  .doc-label{font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.18em;color:#64748b;}
-  .doc-title{font-size:13pt;font-weight:900;color:#0f172a;margin-top:1px;}
-  .emp-hero{display:flex;align-items:flex-start;gap:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:10px 14px;margin-bottom:12px;}
-  .emp-avatar{width:64px;height:64px;border-radius:6px;object-fit:cover;flex-shrink:0;background:#e2e8f0;}
-  .emp-name{font-size:14pt;font-weight:900;color:#0f172a;line-height:1.1;}
-  .emp-num{font-family:monospace;font-size:9pt;color:#64748b;margin-top:2px;}
-  .badge{display:inline-block;border-radius:20px;padding:1px 7px;font-size:7.5pt;font-weight:900;margin-top:4px;margin-right:4px;}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
-  .card{border:1px solid #e2e8f0;border-radius:4px;padding:10px 12px;}
-  .card-head{font-size:7pt;font-weight:900;text-transform:uppercase;letter-spacing:.15em;color:#64748b;border-bottom:1px solid #f1f5f9;padding-bottom:4px;margin-bottom:7px;}
-  .fields{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;}
-  .fl{font-size:7pt;font-weight:900;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;}
-  .fv{font-size:8.5pt;font-weight:700;color:#1a1a1a;margin-top:1px;}
-  .fv.mono{font-family:monospace;}
-  table.comp{width:100%;border-collapse:collapse;margin-top:6px;}
-  table.comp th{text-align:left;font-size:7pt;font-weight:900;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;padding:3px 0;border-bottom:1px solid #f1f5f9;}
-  table.comp td{padding:3px 0;font-size:8.5pt;border-bottom:1px solid #f8fafc;}
-  tfoot.gross td{font-weight:900;border-top:1.5px solid #e2e8f0;padding-top:5px;font-size:9pt;}
-  .footer{margin-top:10px;display:flex;justify-content:space-between;font-size:7pt;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:5px;}
-  @media print{html,body{background:#fff;}}
-</style></head><body>
-<div class="lh">
-  <div>${logo?`<img src="${logo}" class="lh-logo" alt="${companyName}"><br>`:''}
-    <div class="lh-company">${companyName}</div>${addr?`<div class="lh-addr">${addr}</div>`:''}
-  </div>
-  <div class="lh-meta">${coEmail?coEmail+'<br>':''}${phoneNo?phoneNo+'<br>':''}${taxPIN?'KRA PIN: '+taxPIN:''}</div>
-</div>
-<div class="doc-bar">
-  <div><div class="doc-label">Human Resource · Employee Record</div><div class="doc-title">${emp.surname} ${emp.otherNames}</div></div>
-  <div style="font-size:8pt;color:#64748b">Printed: ${new Date().toLocaleDateString('en-KE',{day:'numeric',month:'long',year:'numeric'})}</div>
-</div>
-<div class="emp-hero">
-  ${emp.profilePicture?`<img src="${emp.profilePicture}" class="emp-avatar" alt="${emp.surname}">`:
-    `<div class="emp-avatar" style="display:flex;align-items:center;justify-content:center;font-size:22pt;font-weight:900;color:#fff;background:#1B3D2F">${(emp.surname?.charAt(0)||'')}${(emp.otherNames?.charAt(0)||'')}</div>`}
-  <div>
-    <div class="emp-name">${emp.surname} ${emp.otherNames}</div>
-    <div class="emp-num">${emp.employeeNumber||'—'}</div>
-    <span class="badge" style="border:1px solid #bbf7d0;color:#059669;background:#f0fdf4">${emp.status||'Active'}</span>
-    <span class="badge" style="background:#dbeafe;color:#2563eb">${emp.employmentType||'—'}</span>
-    ${emp.designation?.name?`<span class="badge" style="background:#f8fafc;color:#475569;border:1px solid #e2e8f0">${emp.designation.name}</span>`:''}
-    ${emp.department?.name?`<span class="badge" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa">${emp.department.name}</span>`:''}
-  </div>
-</div>
-<div class="grid2">
-  <div class="card">
-    <div class="card-head">Personal Information</div>
-    <div class="fields">
-      <div><div class="fl">Gender</div><div class="fv">${f(emp.gender)}</div></div>
-      <div><div class="fl">Date of Birth</div><div class="fv">${fmtDate(emp.dateOfBirth)}</div></div>
-      <div><div class="fl">National ID</div><div class="fv mono">${f(emp.nationalId)}</div></div>
-      <div><div class="fl">KRA PIN</div><div class="fv mono">${f(emp.kraPin)}</div></div>
-      <div><div class="fl">NHIF / SHA No.</div><div class="fv mono">${f(emp.nhifNo)}</div></div>
-      <div><div class="fl">NSSF No.</div><div class="fv mono">${f(emp.nssfNo)}</div></div>
-      ${emp.helbNo?`<div><div class="fl">HELB No.</div><div class="fv mono">${emp.helbNo}</div></div>`:''}
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-head">Contact Details</div>
-    <div class="fields">
-      <div><div class="fl">Phone</div><div class="fv">${f(emp.phoneNumber)}</div></div>
-      <div><div class="fl">Email</div><div class="fv">${f(emp.email)}</div></div>
-      <div><div class="fl">Physical Address</div><div class="fv">${f(emp.physicalAddress)}</div></div>
-      <div><div class="fl">Postal Address</div><div class="fv">${f(emp.postalAddress)}</div></div>
-    </div>
-    ${emp.nextOfKinName||emp.nextOfKinPhone?`
-    <div style="border-top:1px solid #f1f5f9;margin-top:7px;padding-top:7px;">
-      <div class="card-head" style="margin-bottom:6px;border-bottom:none">Emergency Contact</div>
-      <div class="fields">
-        <div><div class="fl">Name</div><div class="fv">${f(emp.nextOfKinName)}</div></div>
-        <div><div class="fl">Relationship</div><div class="fv">${f(emp.nextOfKinRelationship)}</div></div>
-        <div><div class="fl">Phone</div><div class="fv">${f(emp.nextOfKinPhone)}</div></div>
+    const pic = /^(https?:\/\/|data:image\/)/i.test(emp.profilePicture || '') ? emp.profilePicture : '';
+    const css = `
+      .emp-hero { display: flex; align-items: flex-start; gap: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 10px 14px; margin-bottom: 12px; }
+      .emp-avatar { width: 64px; height: 64px; border-radius: 6px; object-fit: cover; flex: none; background: ${BRAND.green}; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800; }
+      .emp-name { font-size: 16px; font-weight: 800; line-height: 1.15; }
+      .emp-num { font-family: Consolas, monospace; font-size: 10.5px; color: ${BRAND.muted}; margin-top: 2px; }
+      .badge { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 9px; font-weight: 800; margin: 5px 4px 0 0; background: #e2e8f0; color: #334155; }
+      .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+      .pcard { border: 1px solid #e2e8f0; border-radius: 4px; padding: 10px 12px; page-break-inside: avoid; }
+      .card-head { font-size: 8.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .16em; color: ${BRAND.gold}; border-bottom: 1px solid #f1f5f9; padding-bottom: 4px; margin-bottom: 7px; }
+      .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
+      .fl { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #94a3b8; }
+      .fv { font-size: 11px; font-weight: 700; margin-top: 1px; word-break: break-word; }
+      .fv.mono { font-family: Consolas, monospace; }
+      table.comp { width: 100%; border-collapse: collapse; margin-top: 8px; }
+      table.comp th { text-align: left; font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: #94a3b8; padding: 3px 0; border-bottom: 1px solid #e2e8f0; }
+      table.comp td { padding: 3px 0; font-size: 10.5px; border-bottom: 1px solid #f1f5f9; }
+      table.comp tfoot td { font-weight: 800; border-top: 1.5px solid #cfe3d9; border-bottom: 0; padding-top: 5px; color: ${BRAND.green}; }`;
+    const body = `
+      ${letterheadHtml(company, { kicker: 'Human Resource · Employee Record', title: fullName })}
+      <div class="emp-hero">
+        ${pic ? `<img src="${e(pic)}" class="emp-avatar" alt="" />` : `<div class="emp-avatar">${e(`${emp.surname?.charAt(0) || ''}${emp.otherNames?.charAt(0) || ''}`)}</div>`}
+        <div>
+          <div class="emp-name">${e(fullName)}</div>
+          <div class="emp-num">${e(emp.employeeNumber || '—')}</div>
+          <span class="badge" style="background:#dcfce7;color:#166534">${e(emp.status || 'Active')}</span>
+          <span class="badge" style="background:#dbeafe;color:#1e40af">${e(emp.employmentType || '—')}</span>
+          ${emp.designation?.name ? `<span class="badge">${e(emp.designation.name)}</span>` : ''}
+          ${emp.department?.name ? `<span class="badge" style="background:#ffedd5;color:#9a3412">${e(emp.department.name)}</span>` : ''}
+        </div>
       </div>
-    </div>`:''}
-  </div>
-  <div class="card">
-    <div class="card-head">Employment Details</div>
-    <div class="fields">
-      <div><div class="fl">Department</div><div class="fv">${f(emp.department?.name)}</div></div>
-      <div><div class="fl">Designation</div><div class="fv">${f(emp.designation?.name)}</div></div>
-      <div><div class="fl">Type</div><div class="fv">${f(emp.employmentType)}</div></div>
-      <div><div class="fl">Date Joined</div><div class="fv">${fmtDate(emp.dateJoined)}</div></div>
-      ${emp.probationEndDate?`<div><div class="fl">Probation Ends</div><div class="fv">${fmtDate(emp.probationEndDate)}</div></div>`:''}
-      ${emp.contractEndDate?`<div><div class="fl">Contract End</div><div class="fv">${fmtDate(emp.contractEndDate)}</div></div>`:''}
-      ${emp.reportsTo?`<div><div class="fl">Reports To</div><div class="fv">${emp.reportsTo.surname} ${emp.reportsTo.otherNames}</div></div>`:''}
-      ${emp.status==='Terminated'?`<div><div class="fl">Terminated</div><div class="fv">${fmtDate(emp.terminationDate)}</div></div>`:''}
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-head">Compensation</div>
-    <div class="fields">
-      <div><div class="fl">Basic Salary</div><div class="fv">${fmtC(emp.basicSalary)}</div></div>
-      <div><div class="fl">Gross Salary</div><div class="fv">${fmtC(grossSalary)}</div></div>
-      <div><div class="fl">Payment Method</div><div class="fv">${f(emp.paymentMethod)}</div></div>
-      ${emp.bankName?`<div><div class="fl">Bank</div><div class="fv">${emp.bankName}</div></div>`:''}
-      ${emp.bankAccountNumber?`<div><div class="fl">Account No.</div><div class="fv mono">${emp.bankAccountNumber}</div></div>`:''}
-      ${emp.mpesaNumber?`<div><div class="fl">M-Pesa</div><div class="fv mono">${emp.mpesaNumber}</div></div>`:''}
-    </div>
-    ${componentRows?`<table class="comp">
-      <thead><tr><th>Component</th><th>Type</th><th style="text-align:right">Amount</th></tr></thead>
-      <tbody>${componentRows}</tbody>
-      <tfoot class="gross"><tr><td colspan="2">Gross Salary</td><td style="text-align:right">${fmtC(grossSalary)}</td></tr></tfoot>
-    </table>`:''}
-  </div>
-</div>
-<div class="footer"><span>Confidential — Human Resource · Employee Record.</span><span>${companyName}</span></div>
-</body></html>`);
+      <div class="grid2">
+        <div class="pcard">
+          <div class="card-head">Personal Information</div>
+          <div class="fields">
+            ${fld('Gender', emp.gender)}${fld('Date of Birth', fmtDate(emp.dateOfBirth))}${fld('National ID', emp.nationalId, true)}
+            ${fld('KRA PIN', emp.kraPin, true)}${fld('NHIF / SHA No.', emp.nhifNo, true)}${fld('NSSF No.', emp.nssfNo, true)}${opt('HELB No.', emp.helbNo, true)}
+          </div>
+        </div>
+        <div class="pcard">
+          <div class="card-head">Contact Details</div>
+          <div class="fields">
+            ${fld('Phone', emp.phoneNumber)}${fld('Email', emp.email)}${fld('Physical Address', emp.physicalAddress)}${fld('Postal Address', emp.postalAddress)}
+          </div>
+          ${emp.nextOfKinName || emp.nextOfKinPhone ? `
+          <div style="border-top:1px solid #f1f5f9;margin-top:8px;padding-top:8px;">
+            <div class="card-head" style="border-bottom:0;margin-bottom:5px">Emergency Contact</div>
+            <div class="fields">${fld('Name', emp.nextOfKinName)}${fld('Relationship', emp.nextOfKinRelationship)}${fld('Phone', emp.nextOfKinPhone)}</div>
+          </div>` : ''}
+        </div>
+        <div class="pcard">
+          <div class="card-head">Employment Details</div>
+          <div class="fields">
+            ${fld('Department', emp.department?.name)}${fld('Designation', emp.designation?.name)}${fld('Type', emp.employmentType)}${fld('Date Joined', fmtDate(emp.dateJoined))}
+            ${emp.probationEndDate ? fld('Probation Ends', fmtDate(emp.probationEndDate)) : ''}
+            ${emp.contractEndDate ? fld('Contract End', fmtDate(emp.contractEndDate)) : ''}
+            ${emp.reportsTo ? fld('Reports To', `${emp.reportsTo.surname} ${emp.reportsTo.otherNames}`) : ''}
+            ${emp.status === 'Terminated' ? fld('Terminated', fmtDate(emp.terminationDate)) : ''}
+          </div>
+        </div>
+        <div class="pcard">
+          <div class="card-head">Compensation</div>
+          <div class="fields">
+            ${fld('Basic Salary', fmtC(emp.basicSalary))}${fld('Gross Salary', fmtC(grossSalary))}${fld('Payment Method', emp.paymentMethod)}
+            ${opt('Bank', emp.bankName)}${opt('Account No.', emp.bankAccountNumber, true)}${opt('M-Pesa', emp.mpesaNumber, true)}
+          </div>
+          ${componentRows ? `<table class="comp">
+            <thead><tr><th>Component</th><th>Type</th><th style="text-align:right">Amount</th></tr></thead>
+            <tbody>${componentRows}</tbody>
+            <tfoot><tr><td colspan="2">Gross Salary</td><td style="text-align:right">${e(fmtC(grossSalary))}</td></tr></tfoot>
+          </table>` : ''}
+        </div>
+      </div>
+      ${footerHtml(company, { left: `${co.name} · Employee Record`, right: 'Confidential — Human Resource' })}`;
+    win.document.open();
+    win.document.write(wrapPage({ title: `Employee Profile — ${fullName}`, css, body, pageCss: pageBoxCss({ size: 'A4', left: co.name }) }));
     win.document.close();
-    win.onload = () => { win.focus(); win.print(); };
+    setTimeout(() => { win.focus(); win.print(); }, 450);
   }, [emp, company, grossSalary]);
 
   const status    = emp?.status || 'Active';

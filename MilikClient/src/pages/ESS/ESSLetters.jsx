@@ -2,10 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import DOMPurify from 'dompurify';
 import { essRequests } from '../../utils/essRequests';
 import { useTabState } from '../../hooks/useTabState';
+import { useESS } from '../../context/ESSContext';
+import { printLetterDocument } from '../../utils/printLetter';
 import './ESS.css';
 import { fmtDate } from '../../utils/dates';
 
 export default function ESSLetters() {
+  const { employee, company: essCompany } = useESS();
   const [letters,    setLetters]    = useState([]);
   const [total,      setTotal]      = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -35,18 +38,16 @@ export default function ESSLetters() {
 
   const printLetter = useCallback(() => {
     if (!selected?.body) return;
-    const w = window.open('', '_blank', 'width=800,height=900');
-    w.document.write(`<!DOCTYPE html><html><head>
-      <title>${selected.subject}</title>
-      <style>
-        @media print { body { margin: 0; } }
-        body { font-family: Arial, sans-serif; }
-      </style>
-    </head><body>${DOMPurify.sanitize(selected.body)}</body></html>`);
-    w.document.close();
-    w.focus();
-    setTimeout(() => { w.print(); w.close(); }, 400);
-  }, [selected]);
+    const printed = printLetterDocument({
+      company: essCompany || {},
+      kicker: selected.letterType?.replace(/_/g, ' ') || 'Letter',
+      title: selected.subject,
+      body: selected.body,
+      issuedDate: selected.issuedDate,
+      footerLeft: `${employee?.surname || ''} ${employee?.otherNames || ''}`.trim(),
+    });
+    if (!printed) window.alert('Pop-up blocked — allow pop-ups for this site to print');
+  }, [selected, essCompany, employee]);
 
   return (
     <div>

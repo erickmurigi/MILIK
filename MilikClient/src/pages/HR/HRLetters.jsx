@@ -10,7 +10,8 @@ import {
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import PrintLetterhead from '../../components/HR/PrintLetterhead';
 import EmailSendModal from '../../components/HR/EmailSendModal';
-import { selectCurrentUser } from '../../redux/selectors';
+import { selectCurrentUser, selectCurrentCompany } from '../../redux/selectors';
+import { printLetterDocument } from '../../utils/printLetter';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 import AppSelect from "../../components/common/AppSelect";
@@ -261,6 +262,7 @@ export default function HRLetters() {
   const [showEmail, setShowEmail]   = useState(false);
   const [revokeDialog, setRevokeDialog] = useState({ isOpen: false, reason: '', busy: false });
   const currentUser = useSelector(selectCurrentUser);
+  const company = useSelector(selectCurrentCompany);
   const printRef = useRef();
   const debouncedSearch = useDebounce(search, 300);
 
@@ -268,126 +270,18 @@ export default function HRLetters() {
     if (!selected) return;
     const emp = selected.employee;
     const empName = emp ? `${emp.surname} ${emp.otherNames}` : 'Employee';
-    const type = TYPE_LABELS[selected.letterType] || selected.letterType;
     const isIssued = selected.status === 'issued';
-    const issuedOn = isIssued
-      ? new Date(selected.issuedDate).toLocaleDateString('en-KE', { day: 'numeric', month: 'long', year: 'numeric' })
-      : '';
-
-    const win = window.open('', '_blank', 'width=840,height=1080');
-    if (!win) { toast.error('Allow pop-ups to print letters'); return; }
-
-    win.document.write(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>${type} — ${empName}</title>
-  <style>
-    @page { size: A4; margin: 16mm 22mm 20mm; }
-    *, *::before, *::after { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; background: #fff; }
-
-    /* ── Print header ── */
-    .ph-bar {
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      padding-bottom: 10px;
-      margin-bottom: 24px;
-      border-bottom: 2.5px solid #027333;
-    }
-    .ph-badge {
-      display: inline-block;
-      background: #027333;
-      color: #fff;
-      font-family: Arial, sans-serif;
-      font-size: 7pt;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      padding: 2px 9px;
-      border-radius: 20px;
-      margin-bottom: 4px;
-    }
-    .ph-title {
-      font-family: Arial, sans-serif;
-      font-size: 13pt;
-      font-weight: 900;
-      color: #0f172a;
-      letter-spacing: -0.2px;
-      line-height: 1.2;
-    }
-    .ph-status {
-      text-align: right;
-      font-family: Arial, sans-serif;
-      font-size: 8pt;
-      line-height: 1.5;
-    }
-    .ph-issued {
-      display: inline-block;
-      border: 1.5px solid #027333;
-      color: #027333;
-      font-size: 7pt;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      padding: 2px 8px;
-      border-radius: 3px;
-    }
-    .ph-draft {
-      display: inline-block;
-      border: 1.5px solid #d97706;
-      color: #d97706;
-      font-size: 7pt;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      padding: 2px 8px;
-      border-radius: 3px;
-    }
-
-    /* ── Footer ── */
-    .pf-bar {
-      margin-top: 32px;
-      padding-top: 8px;
-      border-top: 1px solid #e2e8f0;
-      display: flex;
-      justify-content: space-between;
-      font-family: Arial, sans-serif;
-      font-size: 7pt;
-      color: #94a3b8;
-    }
-
-    @media print {
-      html, body { background: #fff; }
-    }
-  </style>
-</head>
-<body>
-  <div class="ph-bar">
-    <div>
-      <div class="ph-badge">${type}</div>
-      <div class="ph-title">${selected.subject || empName}</div>
-    </div>
-    <div class="ph-status">
-      ${isIssued
-        ? `<span class="ph-issued">Issued</span><br><span style="color:#64748b">${issuedOn}</span>`
-        : '<span class="ph-draft">Draft — Not Issued</span>'}
-    </div>
-  </div>
-
-  ${DOMPurify.sanitize(selected.body || '')}
-
-  <div class="pf-bar">
-    <span>Private &amp; Confidential</span>
-    <span>${empName}</span>
-    <span>Printed ${new Date().toLocaleDateString('en-KE', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-  </div>
-</body>
-</html>`);
-    win.document.close();
-    win.onload = () => { win.focus(); win.print(); };
-  }, [selected]);
+    const printed = printLetterDocument({
+      company,
+      kicker: TYPE_LABELS[selected.letterType] || selected.letterType,
+      title: selected.subject || empName,
+      body: selected.body || '',
+      issuedDate: isIssued ? selected.issuedDate : null,
+      status: isIssued ? { label: 'Issued', tone: 'success' } : { label: 'Draft — Not Issued', tone: 'warning' },
+      footerLeft: empName,
+    });
+    if (!printed) toast.error('Pop-up blocked — allow pop-ups for this site to print');
+  }, [selected, company]);
 
   const loadLetters = useCallback(async () => {
     setLoading(true);
