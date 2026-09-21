@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { printDocument } from "../../utils/printKit";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
@@ -1071,67 +1072,49 @@ const CarWashJobs = () => {
   }, []);
 
   const printJobReceipt = useCallback((job) => {
-    const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const fmtAmt = (n) => Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-    const co = currentCompany?.name || "";
     const branch = settingsAndBranch?.branch?.name || "";
     const isCarpet = job.jobType === "carpet";
     const price = Number(job.price || 0);
     const discount = Number(job.discountAmount || 0);
     const total = Math.max(0, price - discount);
     const taxAmt = Number(job.taxAmount || 0);
+    const paid = job.paymentStatus === "paid";
     const staff = Array.isArray(job.assignedStaff) && job.assignedStaff.length
       ? job.assignedStaff.map((s) => s?.name || s).join(", ")
-      : "—";
+      : "";
+    const lines = Array.isArray(job.serviceLines) && job.serviceLines.length > 1
+      ? job.serviceLines.map((l) => ({ name: l.serviceName || "—", amount: l.price }))
+      : [{ name: Array.isArray(job.serviceLines) && job.serviceLines.length === 1 ? job.serviceLines[0].serviceName : (job.serviceName || "—"), amount: price }];
 
-    const serviceRows = Array.isArray(job.serviceLines) && job.serviceLines.length > 1
-      ? job.serviceLines.map((l) => `<tr><td>${esc(l.serviceName || "—")}</td><td class="amt">${fmtAmt(l.price)}</td></tr>`).join("")
-      : `<tr><td>${esc(Array.isArray(job.serviceLines) && job.serviceLines.length === 1 ? job.serviceLines[0].serviceName : (job.serviceName || "—"))}</td><td class="amt">${fmtAmt(price)}</td></tr>`;
-
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Receipt ${esc(job.jobNumber)}</title>
-<style>
-@page{size:A5;margin:12mm}
-*{box-sizing:border-box}
-body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:0;padding:0;print-color-adjust:exact;-webkit-print-color-adjust:exact}
-.c{text-align:center}.h1{font-size:18px;font-weight:bold;margin:0 0 2px}.sub{font-size:11px;color:#555;margin:0}
-hr{border:none;margin:8px 0}.s{border-top:1px solid #ccc}.d{border-top:1px dashed #ccc}
-.title{font-size:13px;font-weight:bold;text-align:center;text-transform:uppercase;letter-spacing:1px;margin:6px 0}
-.row{display:flex;justify-content:space-between;margin:4px 0}.lbl{font-weight:bold;color:#555}
-table{width:100%;border-collapse:collapse;margin:4px 0}
-th{text-align:left;font-size:11px;color:#555;border-bottom:1px solid #ccc;padding:3px 4px}
-td{padding:3px 4px}.amt{text-align:right}
-.tot td{font-weight:bold;border-top:2px solid #111;padding-top:5px}
-.dis td{color:#b45309}.vat td{color:#1d4ed8;font-size:11px}
-.badge{display:inline-block;padding:2px 8px;font-size:11px;font-weight:bold;border-radius:2px}
-.paid{background:#d1fae5;color:#065f46}.unpaid{background:#fee2e2;color:#991b1b}
-.ft{text-align:center;font-size:10px;color:#888;margin-top:12px}
-</style></head><body>
-<div class="c"><div class="h1">${esc(co)}</div>${branch ? `<div class="sub">${esc(branch)}</div>` : ""}</div>
-<hr class="s"/><div class="title">Car Wash Receipt</div><hr class="s"/>
-<div class="row"><span class="lbl">Job No.:</span><span><strong>${esc(job.jobNumber)}</strong></span></div>
-<div class="row"><span class="lbl">Date:</span><span>${fmtDateTime(job.createdAt)}</span></div>
-<div class="row"><span class="lbl">${isCarpet ? "Item:" : "Plate No.:"}</span><span>${esc(isCarpet ? (job.itemDescription || "—") : (job.plateNumber || "—"))}</span></div>
-${job.customerName ? `<div class="row"><span class="lbl">Customer:</span><span>${esc(job.customerName)}</span></div>` : ""}
-${job.phone ? `<div class="row"><span class="lbl">Phone:</span><span>${esc(job.phone)}</span></div>` : ""}
-<hr class="d"/>
-<table><thead><tr><th>Service</th><th class="amt">KES</th></tr></thead><tbody>
-${serviceRows}
-${discount > 0 ? `<tr class="dis"><td>Discount</td><td class="amt">- ${fmtAmt(discount)}</td></tr>` : ""}
-${taxAmt > 0 ? `<tr class="vat"><td>VAT (incl.)</td><td class="amt">${fmtAmt(taxAmt)}</td></tr>` : ""}
-<tr class="tot"><td>TOTAL</td><td class="amt">${fmtAmt(total)}</td></tr>
-</tbody></table>
-<hr class="s"/>
-<div class="row"><span class="lbl">Staff:</span><span>${esc(staff)}</span></div>
-<div class="row"><span class="lbl">Payment:</span><span><span class="badge ${job.paymentStatus === "paid" ? "paid" : "unpaid"}">${(job.paymentStatus || "unpaid").toUpperCase()}</span></span></div>
-<hr class="s"/><div class="ft">Thank you for visiting us!</div>
-</body></html>`;
-
-    const w = window.open("", "_blank", "width=600,height=800");
-    if (!w) return;
-    w.onload = () => { w.focus(); w.print(); };
-    w.document.write(html);
-    w.document.close();
+    const printed = printDocument({
+      company: currentCompany,
+      docType: "Receipt",
+      docNumber: job.jobNumber || "",
+      status: paid ? { label: "Paid", tone: "success" } : { label: "Unpaid", tone: "danger" },
+      watermark: paid ? "PAID" : "",
+      meta: [["Date", fmtDateTime(job.createdAt)], ...(branch ? [["Branch", branch]] : [])],
+      parties: [
+        { heading: "Customer", name: job.customerName || "Walk-in customer", lines: [job.phone || ""] },
+        { heading: isCarpet ? "Item" : "Vehicle", name: isCarpet ? (job.itemDescription || "—") : (job.plateNumber || "—"), lines: [staff ? `Staff: ${staff}` : ""] },
+      ],
+      table: {
+        columns: [
+          { label: "Service", value: (l) => l.name },
+          { label: "Amount (KES)", align: "right", value: (l) => fmtAmt(l.amount) },
+        ],
+        rows: lines,
+      },
+      totals: [
+        ...(discount > 0 ? [{ label: "Discount", value: `- KES ${fmtAmt(discount)}` }] : []),
+        ...(taxAmt > 0 ? [{ label: "VAT (incl.)", value: `KES ${fmtAmt(taxAmt)}` }] : []),
+        { label: "Total", value: `KES ${fmtAmt(total)}`, hero: true },
+      ],
+      amountWords: { amount: total, currency: currentCompany?.baseCurrency || "KES" },
+      stamp: true,
+      footerNote: "Thank you for visiting us!",
+    });
+    if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
   }, [currentCompany, settingsAndBranch]);
 
   const downloadJobPdf = useCallback(async (job) => {
