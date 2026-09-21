@@ -51,6 +51,9 @@ const MODULE_SCOPE_OPTIONS = [
   { value: "hr",                 label: "HR & Payroll" },
   { value: "propertyManagement", label: "Property Management" },
   { value: "carwash",            label: "Car Wash" },
+  { value: "propertySale",       label: "Property Sales" },
+  { value: "inventory",          label: "Inventory & POS" },
+  { value: "clients",            label: "Clients" },
   { value: "general",            label: "General" },
 ];
 

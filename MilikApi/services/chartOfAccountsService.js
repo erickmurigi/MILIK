@@ -114,6 +114,15 @@ export const moduleScopesForAccount = (account = {}) => {
   return ["propertyManagement"];
 };
 
+// Module tags for an account a user adds without choosing one. The tag is guessed from the code / name / class, but a
+// guess that points only at modules the company does not have would make the account invisible in its own chart
+// (a Property Sales company adding a plain liability used to get "propertyManagement"). Then it is tagged "general",
+// which every company has.
+export const defaultScopesForNewAccount = (account, activeScopes = []) => {
+  const inferred = moduleScopesForAccount(account);
+  return inferred.some((scope) => activeScopes.includes(scope)) ? inferred : ["general"];
+};
+
 const normalizeModuleScopes = (value = []) => {
   const list = Array.isArray(value) ? value : [value];
   return [...new Set(list.map((item) => String(item || "").trim()).filter((item) => VALID_MODULE_SCOPES.has(item)))];
@@ -130,7 +139,7 @@ const getActiveModuleScopes = (modules = {}) => {
   return [...scopes];
 };
 
-const getCompanyActiveScopes = async (businessId) => {
+export const getCompanyActiveScopes = async (businessId) => {
   const company = await Company.findById(businessId).select("modules").lean();
   if (!company) return ["general", "propertyManagement"];
   return getActiveModuleScopes(company.modules || {});
@@ -228,6 +237,10 @@ export const findChartOfAccounts = async ({
   await ensureSystemChartOfAccounts(normalizedBusinessId, { force: scopes.includes("carwash") || scopes.includes("hr") || scopes.includes("inventory") || scopes.includes("clients") });
 
   const query = { business: normalizedBusinessId };
+  // In the all-modules view an account a user added is always listed, whatever its module tag says: hiding an account
+  // (which may already carry a balance) because it is tagged for a module the company does not use is never right.
+  // An explicit module filter still filters strictly.
+  const userAccounts = moduleScope ? [] : [{ isSystem: { $ne: true } }];
 
   if (code) query.code = String(code).trim().toUpperCase();
   if (type) query.type = String(type).trim().toLowerCase();
@@ -243,6 +256,7 @@ export const findChartOfAccounts = async ({
             scopedMatch,
             { subGroup: { $regex: "car wash|cashbook", $options: "i" } },
             { name: { $regex: "car wash", $options: "i" } },
+            ...userAccounts,
           ],
         },
       ];
@@ -253,6 +267,7 @@ export const findChartOfAccounts = async ({
           $or: [
             scopedMatch,
             { subGroup: { $regex: "hr.*payroll|payroll.*hr", $options: "i" } },
+            ...userAccounts,
           ],
         },
       ];
@@ -264,6 +279,7 @@ export const findChartOfAccounts = async ({
             { moduleScopes: { $in: scopes } },
             { moduleScopes: { $size: 0 } },
             { moduleScopes: { $exists: false } },
+            ...userAccounts,
           ],
         },
       ];

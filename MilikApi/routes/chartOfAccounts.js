@@ -13,7 +13,8 @@ import {
   ensureSystemChartOfAccounts,
   findChartOfAccounts,
   normalizeChartAccountPayload,
-  moduleScopesForAccount,
+  defaultScopesForNewAccount,
+  getCompanyActiveScopes,
 } from "../services/chartOfAccountsService.js";
 import { aggregateChartOfAccountBalances, invalidateBalanceCache } from "../services/chartAccountAggregationService.js";
 import { clearInvoiceAccountCache } from "../controllers/propertyController/tenantInvoices.js";
@@ -457,7 +458,9 @@ router.post("/", verifyUser, requireCompanyModule("accounts"), async (req, res) 
       isHeader: payload.isHeader,
       isPosting: payload.isHeader ? false : payload.isPosting,
       isSystem: false,
-      moduleScopes: payload.moduleScopes?.length > 0 ? payload.moduleScopes : moduleScopesForAccount(payload),
+      moduleScopes: payload.moduleScopes?.length > 0
+        ? payload.moduleScopes
+        : defaultScopesForNewAccount(payload, await getCompanyActiveScopes(business)),
       balance: 0,
     });
 
