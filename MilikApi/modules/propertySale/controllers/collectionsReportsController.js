@@ -102,18 +102,22 @@ const paidByDeal = async (business, dealIds) => {
 const bucketOf = (daysLate) =>
   daysLate <= 0 ? "notDue" : daysLate <= 30 ? "d1_30" : daysLate <= 60 ? "d31_60" : daysLate <= 90 ? "d61_90" : "d90plus";
 
-const daysLateExpr = (asOf) => ({ $floor: { $divide: [{ $subtract: [asOf, "$dueDate"] }, DAY] } });
-const bucketExpr = (asOf) => ({
-  $switch: {
-    branches: [
-      { case: { $lte: [daysLateExpr(asOf), 0] }, then: "notDue" },
-      { case: { $lte: [daysLateExpr(asOf), 30] }, then: "d1_30" },
-      { case: { $lte: [daysLateExpr(asOf), 60] }, then: "d31_60" },
-      { case: { $lte: [daysLateExpr(asOf), 90] }, then: "d61_90" },
-    ],
-    default: "d90plus",
-  },
-});
+// Same buckets as bucketOf, expressed as plain date comparisons against thresholds worked out once here:
+// floor((asOf - due) / day) <= N  <=>  due > asOf - (N + 1) days.
+const bucketExpr = (asOf) => {
+  const after = (days) => new Date(asOf.getTime() - days * DAY);
+  return {
+    $switch: {
+      branches: [
+        { case: { $gt: ["$dueDate", after(1)] }, then: "notDue" },
+        { case: { $gt: ["$dueDate", after(31)] }, then: "d1_30" },
+        { case: { $gt: ["$dueDate", after(61)] }, then: "d31_60" },
+        { case: { $gt: ["$dueDate", after(91)] }, then: "d61_90" },
+      ],
+      default: "d90plus",
+    },
+  };
+};
 
 /** Balance owed per deal (agreed price - paid), split into not-yet-due and overdue buckets by unpaid instalment. */
 export const getReceivables = async (req, res, next) => {
@@ -143,7 +147,6 @@ export const getReceivables = async (req, res, next) => {
       perDeal.set(key, entry);
     }
 
-    const names = await loadNames(business, deals);
     const totalsC = { balance: 0, unscheduled: 0, overdue: 0, ...Object.fromEntries(BUCKETS.map((b) => [b, 0])) };
     const rows = [];
     for (const deal of deals) {
@@ -156,7 +159,7 @@ export const getReceivables = async (req, res, next) => {
       const overdueC = BUCKETS.filter((b) => b !== "notDue").reduce((s, b) => s + (entry.buckets[b] || 0), 0);
       const row = {
         _id: deal._id,
-        ...dealLabels(deal, names),
+        _deal: deal,
         dealDate: deal.dealDate,
         status: deal.status,
         agreedPrice: deal.agreedPrice,
@@ -175,8 +178,12 @@ export const getReceivables = async (req, res, next) => {
     }
     rows.sort((a, b) => b.overdue - a.overdue || b.balance - a.balance);
 
+    const pageRows = rows.slice((page - 1) * limit, page * limit);
+    const names = await loadNames(business, pageRows.map((r) => r._deal));
+    const data = pageRows.map(({ _deal, ...row }) => ({ ...dealLabels(_deal, names), ...row }));
+
     res.status(200).json({
-      data: rows.slice((page - 1) * limit, page * limit),
+      data,
       total: rows.length,
       page,
       pages: Math.max(Math.ceil(rows.length / limit), 1),
@@ -263,25 +270,45 @@ export const getSalesRegister = async (req, res, next) => {
       filter.$or = [{ dealNumber: rx }, { buyer: { $in: buyers } }, { listing: { $in: listings } }];
     }
 
-    const [deals, total, allIds] = await Promise.all([
+    // Totals cover the whole filter, not just this page, and are worked out in the database: each deal's paid amount
+    // comes from an indexed lookup (business + deal + status), then deals are grouped by status. Paid money on a
+    // cancelled deal is not a receivable, so cancelled deals add to "paid" but not to "agreed" or "balance".
+    const [deals, total, totalsByStatus] = await Promise.all([
       SaleDeal.find(filter).sort({ dealDate: -1, _id: -1 }).skip((page - 1) * limit).limit(limit)
         .select("dealNumber buyer listing agent agreedPrice dealDate status actualClosingDate titleTransferDate").lean(),
       SaleDeal.countDocuments(filter),
-      SaleDeal.find(filter).select("_id agreedPrice status").lean(),
+      SaleDeal.aggregate([
+        { $match: filter },
+        {
+          $lookup: {
+            from: SalePayment.collection.name,
+            let: { dealId: "$_id" },
+            pipeline: [
+              { $match: { business: oid(business), $expr: { $and: [{ $eq: ["$deal", "$$dealId"] }, { $eq: ["$status", "paid"] }] } } },
+              { $group: { _id: null, paid: { $sum: "$amount" } } },
+            ],
+            as: "pay",
+          },
+        },
+        { $addFields: { paidAmount: { $ifNull: [{ $arrayElemAt: ["$pay.paid", 0] }, 0] } } },
+        {
+          $group: {
+            _id: "$status",
+            deals: { $sum: 1 },
+            agreed: { $sum: "$agreedPrice" },
+            paid: { $sum: "$paidAmount" },
+            balance: { $sum: { $max: [0, { $subtract: ["$agreedPrice", "$paidAmount"] }] } },
+          },
+        },
+      ]),
     ]);
-
-    // totals cover the whole filter, not just this page; paid money on a cancelled deal is not a receivable
-    const [pagePaid, allPaid] = await Promise.all([
-      paidByDeal(business, deals.map((d) => d._id)),
-      paidByDeal(business, allIds.map((d) => d._id)),
-    ]);
-    const names = await loadNames(business, deals);
+    const [pagePaid, names] = await Promise.all([paidByDeal(business, deals.map((d) => d._id)), loadNames(business, deals)]);
 
     const totalsC = { agreed: 0, paid: 0, balance: 0, cancelled: 0 };
-    for (const d of allIds) {
-      const p = cents(allPaid.get(String(d._id)));
-      if (d.status === "cancelled") { totalsC.cancelled += 1; totalsC.paid += p; continue; }
-      totalsC.agreed += cents(d.agreedPrice); totalsC.paid += p; totalsC.balance += Math.max(cents(d.agreedPrice) - p, 0);
+    for (const row of totalsByStatus) {
+      totalsC.paid += cents(row.paid);
+      if (row._id === "cancelled") { totalsC.cancelled += row.deals; continue; }
+      totalsC.agreed += cents(row.agreed); totalsC.balance += cents(row.balance);
     }
 
     const data = deals.map((d) => {

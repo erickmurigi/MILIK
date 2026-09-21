@@ -115,3 +115,17 @@ describe("sales register", () => {
     await expect(call(getSalesRegister, { projectId: "nope" })).rejects.toThrow(/Invalid project/);
   });
 });
+
+describe("aging bucket boundaries", () => {
+  it("puts 30/31, 60/61 and 90/91 days late in the right bucket, in the report and in its totals", async () => {
+    const { call, deal } = await setup();
+    for (const late of [30, 31, 60, 61, 90, 91]) await deal({ price: 1000, installments: [[late, 1000]] });
+    const { payload } = await call(getOverdueInstallments);
+    const byLate = Object.fromEntries(payload.data.map((r) => [r.daysLate, r.bucket]));
+    expect(byLate).toMatchObject({ 30: "d1_30", 31: "d31_60", 60: "d31_60", 61: "d61_90", 90: "d61_90", 91: "d90plus" });
+    // the totals are grouped in the database with date thresholds; they must agree with the rows
+    expect(Object.fromEntries(Object.entries(payload.totals.buckets).map(([k, v]) => [k, v.count]))).toEqual({ d1_30: 1, d31_60: 2, d61_90: 2, d90plus: 1 });
+    const recv = (await call(getReceivables)).payload.totals;
+    expect(recv).toMatchObject({ d1_30: 1000, d31_60: 2000, d61_90: 2000, d90plus: 1000 });
+  });
+});
