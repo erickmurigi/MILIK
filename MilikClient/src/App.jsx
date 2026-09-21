@@ -5,7 +5,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { clearCurrentCompany, getCompanySuccess, setCurrentCompany } from "./redux/companiesRedux";
 import { initializeAuth, tokenRefreshed, logoutSuccess } from "./redux/authSlice";
 import { getAccessibleCompanies, refreshAccessToken } from "./redux/apiCalls";
-import { fetchCompanySettings } from "./redux/companySettingsRedux";
+import { refreshCompanySettings } from "./redux/companySettingsRedux";
 import useInactivityLogout from "./hooks/useInactivityLogout";
 import { clearClientSessionStorage } from "./utils/sessionCleanup";
 import { hasSessionTimedOut } from "./utils/sessionTimeout";
@@ -660,7 +660,9 @@ function App() {
   useEffect(() => {
     if (!currentCompany?._id) return;
     localStorage.setItem("milik_active_company_id", currentCompany._id);
-    dispatch(fetchCompanySettings(currentCompany._id));
+    // Refresh from the server on every load (not just when nothing is stored) so terminology and other settings
+    // changed elsewhere are picked up
+    dispatch(refreshCompanySettings(currentCompany._id));
   }, [currentCompany?._id, dispatch]);
 
   return (

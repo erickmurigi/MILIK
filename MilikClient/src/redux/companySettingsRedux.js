@@ -19,6 +19,22 @@ export const fetchCompanySettings = createAsyncThunk(
   }
 );
 
+// Always asks the server. The store is persisted in the browser and fetchCompanySettings trusts that copy, so on its own
+// a change made by another user, browser or device (renamed terminology, for example) would never reach this one.
+// The persisted copy still shows instantly; this replaces it as soon as the server answers, and a failed request
+// leaves it untouched.
+export const refreshCompanySettings = createAsyncThunk(
+  "companySettings/refresh",
+  async (companyId, { rejectWithValue }) => {
+    try {
+      const res = await adminRequests.get(`/company-settings/${companyId}`);
+      return res.data;
+    } catch (err) {
+      return rejectWithValue(err?.response?.data?.message || "Failed to refresh settings");
+    }
+  }
+);
+
 const initialState = {
   companySettings: null,
   isFetching: false,
@@ -33,6 +49,11 @@ const companySettingsSlice = createSlice({
     builder
       .addCase(fetchCompanySettings.pending, (state) => { state.isFetching = true; state.error = false; })
       .addCase(fetchCompanySettings.fulfilled, (state, action) => { state.isFetching = false; state.companySettings = action.payload; })
+      .addCase(refreshCompanySettings.pending, (state, action) => { state.refreshFor = String(action.meta.arg); })
+      .addCase(refreshCompanySettings.fulfilled, (state, action) => {
+        // ignore an answer for a company the user has since switched away from
+        if (state.refreshFor === String(action.meta.arg)) state.companySettings = action.payload;
+      })
       .addCase(fetchCompanySettings.rejected, (state, action) => { state.isFetching = false; state.error = true; state.errorMessage = action.payload; });
   },
   reducers: {

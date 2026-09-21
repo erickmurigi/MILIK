@@ -891,9 +891,12 @@ const TerminologyPanel = ({ currentCompany }) => {
   const sectionChanged = (id) =>
     Object.keys(TERM_DEFAULTS).some((k) => (id === "sales") === SALE_TERM_KEYS.includes(k) && (form[k] ?? "") !== savedWord(k));
 
+  // Re-sync the form only when the SAVED words change (after Save, or a refresh from the server), not on every unrelated
+  // settings update, which would silently wipe edits that are not saved yet.
+  const savedKey = JSON.stringify(companySettings?.terminology ?? {});
   useEffect(() => {
-    setForm(readSaved(companySettings?.terminology ?? {}));
-  }, [companySettings, readSaved]);
+    setForm(readSaved(JSON.parse(savedKey)));
+  }, [savedKey, readSaved]);
 
   const applyPreset = (presetKey) => {
     const preset = ALL_TERM_PRESETS[presetKey];
