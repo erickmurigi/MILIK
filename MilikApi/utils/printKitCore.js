@@ -359,6 +359,8 @@ const LIST_CSS = `
   table.list tr.sub td { background: #f1f5f9; font-weight: 800; border-top: 1px solid #94a3b8; }
   table.list .empty-cell { text-align: center; color: #94a3b8; padding: 22px; font-style: italic; }
   table.list tfoot td { padding: 8px 9px; font-weight: 800; font-size: 10.5px; border: 1px solid #cfe3d9; border-top: 2px solid ${BRAND.green}; background: #eef7f2; color: ${BRAND.green}; }
+  h3.sec-h { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .14em; color: ${BRAND.green}; margin: 16px 0 6px; padding-bottom: 3px; border-bottom: 1px solid #cfe3d9; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
   .notes-list { margin-top: 10px; font-size: 9.5px; color: #64748b; }
   .notes-list p { margin-bottom: 2px; }
   .sigs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 26px; margin: 28px 0 4px; page-break-inside: avoid; }
@@ -416,17 +418,25 @@ const buildTableHtml = ({ columns = [], rows = [], totalsRow = null }) => {
  *         orientation: "landscape"|"portrait", kicker }
  * Rows may be plain records or markers { __group, meta } / { __subtotal: [cells] }; a column can colour a cell with tone(row)
  * ("neg" | "pos" | "muted") and bold it with bold: true.
+ * sections: [{ heading, columns, rows, totalsRow, half }] more tables under the main one (or instead of it when `columns` is
+ * empty); consecutive `half: true` sections sit side by side.
  */
 export const listPageHtml = ({
   title, subtitle = "", company = {}, columns = [], rows = [], summary = "", summaryItems = [], totalsRow = null,
-  notes = [], signatures = [], orientation = "landscape", kicker = "Report",
+  notes = [], signatures = [], orientation = "landscape", kicker = "Report", sections = [],
 }) => {
   const name = getCompanyDetails(company).name;
+  const sectionHtml = (sec) => `<div class="sec-block"><h3 class="sec-h">${escapeHtml(sec.heading || "")}</h3>${buildTableHtml({ columns: sec.columns || [], rows: sec.rows || [], totalsRow: sec.totalsRow || null })}</div>`;
+  const sectionsHtml = [];
+  for (let i = 0; i < sections.length; i += 1) {
+    if (sections[i].half && sections[i + 1]?.half) { sectionsHtml.push(`<div class="two-col">${sectionHtml(sections[i])}${sectionHtml(sections[i + 1])}</div>`); i += 1; } else sectionsHtml.push(sectionHtml(sections[i]));
+  }
   const body = `
     ${letterheadHtml(company, { kicker, title, subtitle })}
     ${summary ? `<div class="summary">${escapeHtml(summary)}</div>` : ""}
     ${summaryItems.length ? `<div class="kpis">${summaryItems.map(([label, value]) => `<div class="kpi"><div class="kpi-label">${escapeHtml(label)}</div><div class="kpi-value">${escapeHtml(value)}</div></div>`).join("")}</div>` : ""}
-    ${buildTableHtml({ columns, rows, totalsRow })}
+    ${columns.length ? buildTableHtml({ columns, rows, totalsRow }) : ""}
+    ${sectionsHtml.join("")}
     ${notes.length ? `<div class="notes-list">${notes.map((n) => `<p>${escapeHtml(n)}</p>`).join("")}</div>` : ""}
     ${signatures.length ? `<div class="sigs">${signatures.map((s) => `<div class="sig">${escapeHtml(s.label)}${s.name ? ` — ${escapeHtml(s.name)}` : ""}</div>`).join("")}</div>` : ""}
     ${footerHtml(company, { left: name })}`;
