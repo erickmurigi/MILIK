@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { callController } from "../../test/callController.js";
 import { createTestCompany, createTestUser } from "../../test/factories.js";
-import { updateTerminology } from "./companySettings.js";
+import { getCompanySettings, updateTerminology } from "./companySettings.js";
 
 const setup = async () => {
   const company = await createTestCompany();
@@ -29,6 +29,23 @@ describe("updateTerminology", () => {
     // a word that is not in the request is never changed
     const other = await save({ saleAgent: "Salesperson" });
     expect(other.payload.terminology).toEqual({ tenant: "Client", saleAgent: "Salesperson" });
+  });
+
+  it("comes back on the next load: the settings a fresh page reads include the saved words (cache included)", async () => {
+    const { company, user, save } = await setup();
+    const load = () => callController(getCompanySettings, { user, params: { businessId: String(company._id) } });
+
+    // the settings are read (and cached) BEFORE the words are saved...
+    expect((await load()).payload.terminology ?? {}).toEqual({});
+    await save({ saleListing: "Vehicle", saleListings: "Vehicles", saleModule: "Vehicle Sales" });
+
+    // ...and the very next read must already contain them, as plain JSON that survives a round trip
+    const after = (await load()).payload;
+    expect(JSON.parse(JSON.stringify(after.terminology))).toEqual({ saleListing: "Vehicle", saleListings: "Vehicles", saleModule: "Vehicle Sales" });
+
+    // clearing them (a preset returning words to defaults) is remembered too
+    await save({ saleListing: "", saleListings: "", saleModule: "" });
+    expect((await load()).payload.terminology ?? {}).toEqual({});
   });
 
   it("ignores unknown words and trims / caps the value", async () => {
