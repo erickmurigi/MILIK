@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import React, { lazy, memo, Suspense, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useQuery } from "@tanstack/react-query";
@@ -47,7 +47,7 @@ const toWhatsApp = (phone) => {
 };
 
 // ── a small shared table: columns give the cell, and the raw value used for the Excel export ───────────────────────
-const Grid = ({ columns, rows, loading, empty }) => (
+const Grid = memo(({ columns, rows, loading, empty }) => (
   <div className="min-h-0 flex-1 overflow-auto">
     <table className="w-full min-w-[900px] border-collapse text-[11px]">
       <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
@@ -72,7 +72,7 @@ const Grid = ({ columns, rows, loading, empty }) => (
       </tbody>
     </table>
   </div>
-);
+));
 
 // what one cell prints as: an explicit print value, else the export value (money formatted), else the raw field
 const printCell = (c, r) => {
@@ -103,6 +103,7 @@ const usePaged = (id, params, fetcher) => {
     queryKey: ["sale-report", id, params, page, pageSize],
     queryFn: () => fetcher({ ...params, page, limit: pageSize }),
     staleTime: 30_000,
+    placeholderData: (previous) => previous, // keep the old rows on screen while the next page or filter loads
   });
   return { query, page, setPage, pageSize, setPageSize, all: () => fetcher({ ...params, page: 1, limit: 5000 }) };
 };
@@ -181,7 +182,7 @@ const ReceivablesView = ({ filters, T, filterText }) => {
   const [overdueOnly, setOverdueOnly] = useState(false);
   const params = { projectId: filters.projectId, agentId: filters.agentId, asOf: filters.asOf, overdueOnly: overdueOnly ? "1" : undefined };
   const paged = usePaged("receivables", params, saleApi.getReceivables);
-  const columns = [
+  const columns = useMemo(() => [
     { key: "dealNumber", label: T.saleDeal, cls: "font-bold text-slate-900 whitespace-nowrap" },
     { key: "buyerName", label: T.saleBuyer, render: (r) => <div><div className="font-semibold text-slate-800">{r.buyerName}</div><div className="text-[10px] text-slate-400">{r.buyerPhone}</div></div>, xl: (r) => r.buyerName },
     { key: "unit", label: `${T.saleListing} · ${T.saleProject}`, render: (r) => <div><div>{r.unit}</div><div className="text-[10px] text-slate-400">{r.project}</div></div>, xl: (r) => `${r.unit} ${r.project}`.trim() },
@@ -191,7 +192,7 @@ const ReceivablesView = ({ filters, T, filterText }) => {
     { key: "balance", label: "Balance", right: true, cls: "font-bold text-slate-900", render: (r) => n2(r.balance), xl: (r) => r.balance },
     ...AGING.map((a) => ({ key: a.key, label: a.label, right: true, cls: a.text, render: (r) => (r[a.key] ? n2(r[a.key]) : "·"), xl: (r) => r[a.key] })),
     { key: "daysLate", label: "Oldest late", right: true, render: (r) => (r.daysLate ? `${r.daysLate} d` : "—"), xl: (r) => r.daysLate },
-  ];
+  ], [T]);
   const t = paged.query.data?.totals;
   const printMeta = {
     title: "Receivables Aging",
@@ -225,7 +226,7 @@ const OverdueView = ({ filters, T, filterText }) => {
   const params = { projectId: filters.projectId, agentId: filters.agentId, asOf: filters.asOf, minDays: minDays || undefined };
   const paged = usePaged("overdue", params, saleApi.getOverdueInstallments);
   const totals = paged.query.data?.totals;
-  const columns = [
+  const columns = useMemo(() => [
     { key: "buyerName", label: T.saleBuyer, render: (r) => <div><div className="font-semibold text-slate-800">{r.buyerName}</div><div className="text-[10px] text-slate-400">{r.buyerPhone}</div></div>, xl: (r) => r.buyerName },
     { key: "buyerPhone", label: "Phone", render: () => null, xl: (r) => r.buyerPhone },
     { key: "dealNumber", label: T.saleDeal, cls: "font-bold text-slate-900 whitespace-nowrap" },
@@ -249,10 +250,10 @@ const OverdueView = ({ filters, T, filterText }) => {
       },
       xl: () => "",
     },
-  ];
+  ], [T]);
   // the phone column is only for the export; the screen shows it under the buyer name
-  const screenColumns = columns.filter((c) => c.key !== "buyerPhone");
-  const exportColumns = columns.filter((c) => c.key !== "follow");
+  const screenColumns = useMemo(() => columns.filter((c) => c.key !== "buyerPhone"), [columns]);
+  const exportColumns = useMemo(() => columns.filter((c) => c.key !== "follow"), [columns]);
   const printMeta = {
     title: "Overdue Instalments",
     subtitle: [`As of ${dt(filters.asOf || new Date())}`, minDays ? `${minDays}+ days late` : "", filterText].filter(Boolean).join(" · "),
@@ -295,7 +296,7 @@ const RegisterView = ({ filters, T, filterText }) => {
   const params = { projectId: filters.projectId, agentId: filters.agentId, dateFrom: filters.dateFrom, dateTo: filters.dateTo, status: status || undefined, search: debounced || undefined };
   const paged = usePaged("register", params, saleApi.getSalesRegister);
   const totals = paged.query.data?.totals;
-  const columns = [
+  const columns = useMemo(() => [
     { key: "dealDate", label: "Date", render: (r) => dt(r.dealDate), xl: (r) => dt(r.dealDate), cls: "whitespace-nowrap" },
     { key: "dealNumber", label: T.saleDeal, cls: "font-bold text-slate-900 whitespace-nowrap" },
     { key: "buyerName", label: T.saleBuyer },
@@ -313,7 +314,7 @@ const RegisterView = ({ filters, T, filterText }) => {
       xl: (r) => r.status,
     },
     { key: "titleTransferDate", label: "Title transferred", render: (r) => dt(r.titleTransferDate), xl: (r) => (r.titleTransferDate ? dt(r.titleTransferDate) : "") },
-  ];
+  ], [T]);
   const printMeta = {
     title: "Sales Register",
     subtitle: [`${dt(filters.dateFrom)} – ${dt(filters.dateTo)}`, status && `Status: ${status}`, debounced && `Search: ${debounced}`, filterText].filter(Boolean).join(" · "),
