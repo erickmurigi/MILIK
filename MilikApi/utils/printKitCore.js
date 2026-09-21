@@ -7,6 +7,8 @@
 //
 // Rules: every dynamic value is HTML-escaped; a logo is used only when it is an http(s) or data:image URL.
 
+import { MILIK_STAMP_LOGO } from "./printKitLogo.js";
+
 export const BRAND = { green: "#0B3B2E", gold: "#B8963E", orange: "#F58220", ink: "#0f172a", muted: "#64748b" };
 
 export const escapeHtml = (value) =>
@@ -99,14 +101,11 @@ export const getCompanyDetails = (company = {}) => {
 };
 
 // ── shared building blocks ──────────────────────────────────────────────────────────────────────────────────────────────
-/** The "Powered by Milik" stamp: the Milik mark (two overlapping squares) and wordmark in a rounded badge. */
+/** The "Powered by Milik" stamp: the Milik logo in a small rounded badge at the foot of every printout. */
 export const poweredByHtml = () => `
   <div class="pb" aria-label="Powered by Milik">
-    <svg class="pb-mark" viewBox="0 0 30 26" width="24" height="21" aria-hidden="true">
-      <rect x="1.5" y="1.5" width="15" height="15" fill="none" stroke="${BRAND.orange}" stroke-width="3"/>
-      <rect x="9.5" y="8.5" width="17" height="15" fill="none" stroke="${BRAND.green}" stroke-width="3"/>
-    </svg>
-    <div class="pb-text"><span>Powered by</span><b>Milik</b></div>
+    <span class="pb-label">Powered by</span>
+    <img class="pb-logo" src="${MILIK_STAMP_LOGO}" alt="Milik" />
   </div>`;
 
 /** Letterhead: logo and company details on the left, document label / title / number on the right, under a brand rule. */
@@ -179,10 +178,9 @@ export const BASE_CSS = `
   /* Footer and the Powered by Milik stamp */
   .foot { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 22px; padding-top: 10px; border-top: 1px solid #cbd5e1; page-break-inside: avoid; }
   .foot-text { display: flex; flex-direction: column; gap: 2px; font-size: 9px; color: #94a3b8; }
-  .pb { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 9px; border: 1px solid #d5dfda; border-radius: 8px; background: #f8fbf9; flex: none; }
-  .pb-text { display: flex; flex-direction: column; line-height: 1; }
-  .pb-text span { font-size: 7px; letter-spacing: .2em; text-transform: uppercase; color: ${BRAND.muted}; }
-  .pb-text b { font-size: 15px; font-weight: 800; color: ${BRAND.green}; letter-spacing: -.01em; margin-top: 2px; }
+  .pb { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 5px 11px 6px; border: 1px solid #d5dfda; border-radius: 8px; background: #fff; flex: none; }
+  .pb-label { font-size: 6.5px; letter-spacing: .22em; text-transform: uppercase; color: ${BRAND.muted}; line-height: 1; }
+  .pb-logo { height: 17px; width: auto; display: block; }
 `;
 
 /** A complete HTML page from a body and its styles. */

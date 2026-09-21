@@ -11,7 +11,9 @@ const clientCopy = path.resolve(here, "../../MilikClient/src/utils/printKitCore.
 describe("print kit core", () => {
   it.skipIf(!fs.existsSync(clientCopy))("is identical to the client copy", () => {
     const norm = (p) => fs.readFileSync(p, "utf8").replace(/\r\n/g, "\n");
-    expect(norm(path.join(here, "printKitCore.js"))).toBe(norm(clientCopy));
+    for (const file of ["printKitCore.js", "printKitLogo.js"]) {
+      expect(norm(path.join(here, file))).toBe(norm(path.resolve(path.dirname(clientCopy), file)));
+    }
   });
 
   it("writes amounts in words", () => {
