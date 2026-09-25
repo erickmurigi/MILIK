@@ -47,6 +47,43 @@ import MilikTable from '../../components/common/MilikTable';
 const DEFAULT_PAGE_SIZE = 50;
 const isRawObjectId = (s) => /^[a-f\d]{24}$/i.test(String(s || ""));
 
+const VOUCHER_LABEL = "mb-0.5 block text-[11px] font-semibold text-slate-600";
+const VOUCHER_INPUT = "mt-0.5 w-full border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-900 outline-none placeholder:text-slate-300 focus:border-[#0B3B2E]";
+const WHT_PRESETS = ["3", "5", "10", "15", "20"];
+const whtFor = (gross, rate) => Math.round(Number(gross || 0) * Number(rate || 0)) / 100;
+/** The preset rate an existing WHT amount corresponds to, otherwise "custom" (or "" when there is none). */
+const deriveWhtRate = (amount, wht) => {
+  const w = Number(wht || 0);
+  if (!(w > 0)) return "";
+  return WHT_PRESETS.find((rate) => Math.abs(whtFor(amount, rate) - w) < 0.01) || "custom";
+};
+const formatKes = (value) => `KES ${Number(value || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const ONES = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+const TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+const wordsBelowThousand = (n) => {
+  const parts = [];
+  if (n >= 100) { parts.push(`${ONES[Math.floor(n / 100)]} Hundred`); n %= 100; if (n) parts.push("and"); }
+  if (n >= 20) { parts.push(TENS[Math.floor(n / 10)] + (n % 10 ? `-${ONES[n % 10]}` : "")); }
+  else if (n > 0) parts.push(ONES[n]);
+  return parts.join(" ");
+};
+/** 1250.5 -> "Kenya Shillings One Thousand Two Hundred and Fifty and Fifty Cents Only" (printed on a voucher so the figure can't be altered unnoticed) */
+const amountInWords = (value) => {
+  const total = Math.round(Number(value) * 100);
+  if (!Number.isFinite(total) || total <= 0) return "";
+  let shillings = Math.floor(total / 100);
+  const cents = total % 100;
+  const scales = ["", "Thousand", "Million", "Billion", "Trillion"];
+  const groups = [];
+  for (let i = 0; shillings > 0 && i < scales.length; i += 1, shillings = Math.floor(shillings / 1000)) {
+    const chunk = shillings % 1000;
+    if (chunk) groups.unshift(`${wordsBelowThousand(chunk)}${scales[i] ? ` ${scales[i]}` : ""}`);
+  }
+  const shillingWords = groups.join(" ") || "Zero";
+  return `Kenya Shillings ${shillingWords}${cents ? ` and ${wordsBelowThousand(cents)} Cents` : ""} Only`;
+};
+
 const PMS_CATEGORIES = [
   { value: "landlord_maintenance", label: "Accounts Payable – Maintenance", landlordLabel: "Accounts Payable – Maintenance", propertyRequired: true,  explicitDebitAccount: false, pmsOnly: true },
   { value: "deposit_refund",       label: "Deposit Refund (Liability Release)", landlordLabel: "Deposit Refund (Liability Release)", propertyRequired: true,  explicitDebitAccount: false, pmsOnly: true },
@@ -80,6 +117,8 @@ const blankForm = {
   settlementAccountId: "",
   amount: "",
   whtAmount: "",
+  whtRate: "",
+  whtAccountId: "",
   serviceProviderId: "",
   payeeName: "",
   dueDate: new Date().toISOString().split("T")[0],
@@ -150,6 +189,7 @@ const PaymentVouchers = () => {
   const [editingVoucherId, setEditingVoucherId] = useState("");
   const [glVoucher, setGlVoucher] = useState(null);
   const [form, setForm] = useState(blankForm);
+  const editingVoucher = useMemo(() => (editingVoucherId ? vouchers.find((row) => row._id === editingVoucherId) : null), [editingVoucherId, vouchers]);
   const selectedCategoryMeta = useMemo(
     () => categories.find((category) => category.value === form.category) || categories[0] || BASE_CATEGORIES[0],
     [categories, form.category]
@@ -164,6 +204,14 @@ const PaymentVouchers = () => {
     if (!gross) return 0;
     return Math.round(gross * Number(selectedServiceProvider.whtRate) / 100 * 100) / 100;
   }, [selectedServiceProvider, form.amount]);
+
+  const selectWhtRate = (rate) => setForm((prev) => ({
+    ...prev,
+    whtRate: rate,
+    whtAmount: rate === "" ? "" : rate === "custom" ? prev.whtAmount : String(whtFor(prev.amount, rate)),
+    whtAccountId: rate === "" ? "" : prev.whtAccountId,
+  }));
+  const defaultWhtAccount = useMemo(() => liabilityAccounts.find((a) => String(a.code) === "2141"), [liabilityAccounts]);
 
   const normalizeVoucher = (voucher) => ({
     ...voucher,
@@ -191,6 +239,7 @@ const PaymentVouchers = () => {
       voucher?.serviceProvider?.name  || voucher?.serviceProviderName ||
       voucher?.payeeName || "",
     whtAmount: voucher?.whtAmount != null ? String(voucher.whtAmount) : "",
+    whtAccountId: voucher?.whtAccountId?._id || voucher?.whtAccountId || "",
   });
 
   useEffect(() => {
@@ -352,6 +401,8 @@ const PaymentVouchers = () => {
       settlementAccountId: voucher.settlementAccountId || "",
       amount: voucher.amount || "",
       whtAmount: voucher.whtAmount != null ? String(voucher.whtAmount) : "",
+      whtRate: deriveWhtRate(voucher.amount, voucher.whtAmount),
+      whtAccountId: voucher.whtAccountId?._id || voucher.whtAccountId || "",
       serviceProviderId: voucher.serviceProviderId || "",
       payeeName: voucher.payeeName || "",
       dueDate: voucher.dueDate ? new Date(voucher.dueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
@@ -390,6 +441,7 @@ const PaymentVouchers = () => {
       settlementAccount: form.settlementAccountId || undefined,
       amount: Number(form.amount),
       whtAmount: Number(form.whtAmount || 0),
+      whtAccountId: Number(form.whtAmount || 0) > 0 ? (form.whtAccountId || "") : "",
       serviceProvider: form.serviceProviderId || undefined,
       payeeName: form.serviceProviderId ? undefined : (form.payeeName || undefined),
       dueDate: form.dueDate,
@@ -578,25 +630,32 @@ const PaymentVouchers = () => {
           {/* ── Body ── */}
           <div className="flex flex-1 min-h-0 overflow-hidden">
 
-            {/* LEFT: Form (scrollable) */}
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 min-w-0">
+            {/* LEFT: Form — laid out in cards so it fits one screen */}
+            <div className="flex-1 overflow-y-auto bg-slate-50/60 px-4 py-3 space-y-3 min-w-0">
 
               {form.sourceRequisitionNo && (
-                <div className="flex items-start gap-3 border border-violet-200 bg-violet-50 px-4 py-2.5">
-                  <FaFileInvoiceDollar size={13} className="mt-0.5 shrink-0 text-violet-400" />
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-wider text-violet-500">Linked from Requisition</p>
-                    <p className="mt-0.5 text-sm font-bold text-violet-800">{form.sourceRequisitionNo}</p>
-                  </div>
+                <div className="flex items-center gap-3 border border-violet-200 bg-violet-50 px-4 py-2">
+                  <FaFileInvoiceDollar size={13} className="shrink-0 text-violet-400" />
+                  <p className="text-[10px] font-black uppercase tracking-wider text-violet-500">Linked from requisition</p>
+                  <p className="text-sm font-bold text-violet-800">{form.sourceRequisitionNo}</p>
                 </div>
               )}
 
-              <section>
-                <div className="mb-3 flex items-center gap-2">
-                  <div className="h-4 w-0.5 bg-[#0B3B2E]" />
-                  <h2 className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Voucher Details</h2>
+              {/* ── Voucher header ── */}
+              <section className="border border-slate-200 bg-white p-3 shadow-sm">
+                <div className="mb-2 flex items-center gap-2">
+                  <div className="h-3.5 w-0.5 bg-[#0B3B2E]" />
+                  <h2 className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Voucher details</h2>
                 </div>
-                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2 lg:grid-cols-6">
+                  <label className="block">
+                    <span className={VOUCHER_LABEL}>Voucher No.</span>
+                    <input
+                      readOnly
+                      value={editingVoucher?.voucherNo || "Auto-assigned on save"}
+                      className={`${VOUCHER_INPUT} bg-slate-50 font-mono text-slate-500`}
+                    />
+                  </label>
                   <div className="lg:col-span-2">
                     <AppSelect
                       label="Category *"
@@ -606,224 +665,277 @@ const PaymentVouchers = () => {
                     />
                   </div>
                   <label className="block">
-                    <span className="mb-0.5 block text-xs font-semibold text-slate-700">Reference / Cheque No.</span>
+                    <span className={VOUCHER_LABEL}>Reference / Cheque No.</span>
                     <input
                       value={form.reference}
                       maxLength={100}
                       onChange={(e) => setForm((prev) => ({ ...prev, reference: e.target.value }))}
-                      placeholder="e.g. CHQ-001, INV-2024-05"
-                      className="mt-1 w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none placeholder:text-slate-300 focus:border-[#0B3B2E]"
+                      placeholder="e.g. CHQ-001"
+                      title="Each payment voucher needs its own reference"
+                      className={VOUCHER_INPUT}
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-0.5 block text-xs font-semibold text-slate-700">Due Date <span className="text-red-500">*</span></span>
+                    <span className={VOUCHER_LABEL}>Due date <span className="text-red-500">*</span></span>
                     <input
                       type="date"
                       value={form.dueDate}
                       onChange={(e) => setForm((prev) => ({ ...prev, dueDate: e.target.value }))}
-                      className="mt-1 w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none focus:border-[#0B3B2E]"
+                      className={VOUCHER_INPUT}
                     />
                   </label>
+                  {!editingVoucherId ? (
+                    <div>
+                      <AppSelect
+                        label="Save as"
+                        value={form.status}
+                        onChange={(val) => setForm((prev) => ({ ...prev, status: val ?? "draft" }))}
+                        options={[
+                          { value: "draft",    label: "Draft" },
+                          { value: "approved", label: "Approved" },
+                          { value: "paid",     label: "Paid now" },
+                        ]}
+                      />
+                    </div>
+                  ) : (
+                    <label className="block">
+                      <span className={VOUCHER_LABEL}>Status</span>
+                      <input readOnly value={editingVoucher?.status || "draft"} className={`${VOUCHER_INPUT} bg-slate-50 capitalize text-slate-500`} />
+                    </label>
+                  )}
                 </div>
-                {!editingVoucherId && (
-                  <div className="mt-3">
-                    <AppSelect
-                      label="Save as Status"
-                      value={form.status}
-                      onChange={(val) => setForm((prev) => ({ ...prev, status: val ?? "draft" }))}
-                      options={[
-                        { value: "draft",    label: "Draft — awaiting approval" },
-                        { value: "approved", label: "Approved — ready to pay" },
-                        { value: "paid",     label: "Paid — settle immediately" },
-                      ]}
-                    />
-                    {form.status === "paid" && (
-                      <p className="mt-1 text-[10px] font-semibold text-amber-600">Paid will immediately post both the accrual and settlement entries.</p>
-                    )}
-                  </div>
+                {form.status === "paid" && !editingVoucherId && (
+                  <p className="mt-1.5 text-[10px] font-semibold text-amber-600">Paid posts both the accrual and the settlement entries straight away, so a settlement account is required.</p>
                 )}
               </section>
 
-              {hasPMS && (
-                <section>
-                  <div className="mb-3 flex items-center gap-2">
-                    <div className="h-4 w-0.5 bg-orange-400" />
-                    <h2 className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Property Linkage</h2>
-                  </div>
-                  <AppSelect
-                    label={selectedCategoryMeta?.propertyRequired ? "Property *" : "Property (optional)"}
-                    value={form.propertyId}
-                    onChange={(val) => setForm((prev) => ({ ...prev, propertyId: val ?? "" }))}
-                    options={propertyOptions}
-                    placeholder={selectedCategoryMeta?.propertyRequired ? "Select property…" : "No property — company level"}
-                    searchable
-                    clearable
-                  />
-                  {selectedCategoryMeta?.propertyRequired && (
-                    <p className="mt-1 text-[10px] text-slate-400">Required for this category.</p>
-                  )}
-                </section>
-              )}
+              <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
 
-              <section>
-                <div className="mb-3 flex items-center gap-2">
-                  <div className="h-4 w-0.5 bg-blue-500" />
-                  <h2 className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Accounting Entries</h2>
-                </div>
-                <div className="space-y-3 border border-blue-100 bg-blue-50/40 p-4">
-                  <div>
-                    <AppSelect
-                      label="Credit — Liability / Payable Account *"
-                      value={form.liabilityAccountId}
-                      onChange={(val) => setForm((prev) => ({ ...prev, liabilityAccountId: val ?? "" }))}
-                      options={liabilityAccountOptions}
-                      placeholder="Search liability / payable account…"
-                      searchable
-                    />
-                    <p className="mt-1 text-[10px] text-slate-400">Credited on accrual, debited when settled.</p>
+                {/* ── Payee & amount ── */}
+                <section className="border border-slate-200 bg-white p-3 shadow-sm xl:col-span-7">
+                  <div className="mb-2 flex items-center gap-2">
+                    <div className="h-3.5 w-0.5 bg-emerald-500" />
+                    <h2 className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Payee &amp; amount</h2>
                   </div>
-                  {selectedCategoryMeta?.explicitDebitAccount && (
+
+                  <div className="grid grid-cols-1 gap-x-3 gap-y-2 sm:grid-cols-2">
                     <div>
                       <AppSelect
-                        label={form.category === "petty_cash_float" ? "Debit — Petty Cash Asset Account *" : "Debit — Expense Account *"}
-                        value={form.debitAccountId}
-                        onChange={(val) => setForm((prev) => ({ ...prev, debitAccountId: val ?? "" }))}
-                        options={debitAccountOptions}
-                        placeholder="Search expense / asset account…"
+                        label="Service provider"
+                        value={form.serviceProviderId}
+                        onChange={(v) => {
+                          const spId = v ?? "";
+                          const sp = serviceProvidersList.find((s) => String(s._id) === spId);
+                          setForm((prev) => {
+                            if (sp?.subjectToWht && Number(sp?.whtRate) > 0) {
+                              const rate = WHT_PRESETS.includes(String(sp.whtRate)) ? String(sp.whtRate) : "custom";
+                              return { ...prev, serviceProviderId: spId, whtRate: rate, whtAmount: String(whtFor(prev.amount, sp.whtRate)) };
+                            }
+                            // moving off a vendor that carried tax takes its tax with it; a hand-entered tax stays
+                            return selectedServiceProvider?.subjectToWht
+                              ? { ...prev, serviceProviderId: spId, whtRate: "", whtAmount: "", whtAccountId: "" }
+                              : { ...prev, serviceProviderId: spId };
+                          });
+                        }}
+                        options={serviceProvidersList.map((sp) => ({ value: sp._id, label: `${sp.name}${sp.subjectToWht ? ` (WHT ${sp.whtRate}%)` : ""}` }))}
+                        placeholder={serviceProvidersList.length > 0 ? "— None —" : "No registered vendors yet"}
+                        size="md"
                         searchable
                         clearable
+                        disabled={serviceProvidersList.length === 0}
                       />
-                      <p className="mt-1 text-[10px] text-slate-400">
-                        {form.category === "petty_cash_float" ? "Receives the float top-up." : "Debited on approval."}
-                      </p>
                     </div>
-                  )}
-                  {!selectedCategoryMeta?.explicitDebitAccount && (
-                    <div className="flex items-start gap-2 border border-slate-200 bg-white px-3 py-2">
-                      <FaFileInvoiceDollar size={11} className="mt-0.5 shrink-0 text-slate-400" />
-                      <p className="text-[11px] text-slate-500">Debit account is determined automatically from the selected category.</p>
-                    </div>
-                  )}
-                  <div>
-                    <AppSelect
-                      label="Settlement — Cashbook / Petty Cash"
-                      value={form.settlementAccountId}
-                      onChange={(val) => setForm((prev) => ({ ...prev, settlementAccountId: val ?? "" }))}
-                      options={settlementAccountOptions}
-                      placeholder="Search cashbook / petty cash…"
-                      searchable
-                      clearable
-                    />
-                    <p className="mt-1 text-[10px] text-slate-400">Required to mark as Paid.</p>
-                  </div>
-                </div>
-              </section>
-
-              <section>
-                <div className="mb-3 flex items-center gap-2">
-                  <div className="h-4 w-0.5 bg-emerald-500" />
-                  <h2 className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Amount & Notes</h2>
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <AppSelect
-                      label="Service Provider (optional)"
-                      value={form.serviceProviderId}
-                      onChange={(v) => {
-                        const spId = v ?? "";
-                        const sp = serviceProvidersList.find((s) => String(s._id) === spId);
-                        const newWht = sp?.subjectToWht && sp?.whtRate && Number(form.amount || 0) > 0
-                          ? String(Math.round(Number(form.amount) * sp.whtRate / 100 * 100) / 100)
-                          : "";
-                        setForm((prev) => ({ ...prev, serviceProviderId: spId, whtAmount: newWht }));
-                      }}
-                      options={serviceProvidersList.map((sp) => ({ value: sp._id, label: `${sp.name}${sp.subjectToWht ? ` (WHT ${sp.whtRate}%)` : ""}` }))}
-                      placeholder={serviceProvidersList.length > 0 ? "— None —" : "No registered vendors yet"}
-                      size="md"
-                      searchable
-                      clearable
-                      disabled={serviceProvidersList.length === 0}
-                    />
-                    {serviceProvidersList.length === 0 && (
-                      <p className="mt-1 text-[10px] text-slate-400">
-                        No registered vendors yet —{" "}
-                        <a href="/accounts/service-providers" target="_blank" rel="noreferrer" className="font-semibold text-[#0B3B2E] hover:underline">
-                          add one in Service Providers
-                        </a>{" "}
-                        or enter a payee name below for a one-off payment.
-                      </p>
+                    <label className="block">
+                      <span className={VOUCHER_LABEL}>Payee name {form.serviceProviderId ? "" : "(one-off payee)"}</span>
+                      <input
+                        value={form.serviceProviderId ? (selectedServiceProvider?.name || "") : form.payeeName}
+                        disabled={Boolean(form.serviceProviderId)}
+                        maxLength={150}
+                        onChange={(e) => setForm((prev) => ({ ...prev, payeeName: e.target.value }))}
+                        placeholder="Who is being paid?"
+                        className={`${VOUCHER_INPUT} h-9 disabled:bg-slate-50 disabled:text-slate-500`}
+                      />
+                    </label>
+                    {hasPMS && (
+                      <div className="sm:col-span-2">
+                        <AppSelect
+                          label={selectedCategoryMeta?.propertyRequired ? "Property *" : "Property (optional)"}
+                          value={form.propertyId}
+                          onChange={(val) => setForm((prev) => ({ ...prev, propertyId: val ?? "" }))}
+                          options={propertyOptions}
+                          placeholder={selectedCategoryMeta?.propertyRequired ? "Select property…" : "No property — company level"}
+                          searchable
+                          clearable
+                        />
+                      </div>
                     )}
                   </div>
-                  {!form.serviceProviderId && (
+
+                  <div className="mt-2 grid grid-cols-1 gap-x-3 gap-y-2 sm:grid-cols-2">
                     <label className="block">
-                      <span className="text-xs font-bold text-slate-600">Payee Name (optional)</span>
-                      <input
-                        value={form.payeeName}
-                        onChange={(e) => setForm((prev) => ({ ...prev, payeeName: e.target.value }))}
-                        placeholder="Who is this payment to? e.g. an individual or one-off vendor"
-                        className="mt-1 w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none placeholder:text-slate-300 focus:border-[#0B3B2E]"
-                      />
-                      <p className="mt-1 text-[10px] text-slate-400">Shown as the Payee on this voucher's list and GL detail. Leave blank if not applicable (e.g. a petty cash float top-up).</p>
-                    </label>
-                  )}
-                  <label className="block">
-                    <span className="text-xs font-bold text-slate-600">Amount (KES) *</span>
-                    <div className="relative mt-1">
-                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-slate-400">KES</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={form.amount}
-                        onChange={(e) => {
-                          const gross = Number(e.target.value || 0);
-                          const sp = selectedServiceProvider;
-                          const newWht = sp?.subjectToWht && sp?.whtRate && gross > 0
-                            ? String(Math.round(gross * sp.whtRate / 100 * 100) / 100)
-                            : form.whtAmount;
-                          setForm((prev) => ({ ...prev, amount: e.target.value, whtAmount: newWht }));
-                        }}
-                        placeholder="0.00"
-                        className="w-full border-2 border-slate-200 pl-12 pr-4 py-2.5 text-xl font-black text-slate-900 placeholder:text-slate-200 focus:border-[#0B3B2E] focus:outline-none"
-                      />
-                    </div>
-                  </label>
-                  {(selectedServiceProvider?.subjectToWht || Number(form.whtAmount || 0) > 0) && (
-                    <div className="border border-amber-200 bg-amber-50 p-3 space-y-2">
-                      <p className="text-[10px] font-black uppercase tracking-wide text-amber-700">Withholding Tax Deduction</p>
-                      <label className="block">
-                        <span className="text-xs font-semibold text-amber-800">WHT Amount (KES)</span>
+                      <span className={VOUCHER_LABEL}>Amount (KES) <span className="text-red-500">*</span></span>
+                      <div className="relative mt-0.5">
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400">KES</span>
                         <input
                           type="number"
                           min="0"
                           step="0.01"
-                          value={form.whtAmount}
-                          onChange={(e) => setForm((prev) => ({ ...prev, whtAmount: e.target.value }))}
-                          placeholder={autoWhtAmount > 0 ? String(autoWhtAmount) : "0.00"}
-                          className="mt-1 w-full border border-amber-200 bg-white px-3 py-1.5 text-sm font-bold text-amber-900 outline-none focus:border-amber-500"
+                          value={form.amount}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setForm((prev) => ({
+                              ...prev,
+                              amount: value,
+                              whtAmount: WHT_PRESETS.includes(prev.whtRate) ? String(whtFor(value, prev.whtRate)) : prev.whtAmount,
+                            }));
+                          }}
+                          placeholder="0.00"
+                          className="w-full border-2 border-slate-200 pl-11 pr-3 py-1.5 text-lg font-black tabular-nums text-slate-900 placeholder:text-slate-200 focus:border-[#0B3B2E] focus:outline-none"
                         />
-                      </label>
-                      {Number(form.amount || 0) > 0 && Number(form.whtAmount || 0) > 0 && (
-                        <div className="flex justify-between text-[10px] font-semibold text-amber-700">
-                          <span>Gross: KES {Number(form.amount).toLocaleString("en-KE", { minimumFractionDigits: 2 })}</span>
-                          <span>Net paid: KES {(Number(form.amount) - Number(form.whtAmount)).toLocaleString("en-KE", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    </label>
+                    <div className="flex flex-col justify-end">
+                      <span className={VOUCHER_LABEL}>Net payable</span>
+                      <div className="flex h-[42px] items-center justify-between border border-slate-200 bg-slate-50 px-3">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{Number(form.whtAmount || 0) > 0 ? "after WHT" : "no WHT"}</span>
+                        <span className="text-lg font-black tabular-nums text-slate-900">
+                          {Number(form.amount || 0) > 0 ? formatKes(Number(form.amount) - Number(form.whtAmount || 0)) : "—"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Withholding tax ── */}
+                  <div className={`mt-2 border p-2 ${Number(form.whtAmount || 0) > 0 ? "border-amber-300 bg-amber-50/70" : "border-slate-200 bg-slate-50/60"}`}>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="mr-1 text-[11px] font-semibold text-slate-600">Withholding tax</span>
+                      {[["", "None"], ...WHT_PRESETS.map((rate) => [rate, `${rate}%`]), ["custom", "Custom"]].map(([rate, label]) => (
+                        <button
+                          key={rate || "none"}
+                          type="button"
+                          onClick={() => selectWhtRate(rate)}
+                          className={`px-2.5 py-1 text-[11px] font-bold transition ${form.whtRate === rate
+                            ? (rate === "" ? "bg-slate-600 text-white" : "bg-amber-500 text-white")
+                            : "border border-slate-200 bg-white text-slate-600 hover:border-amber-300 hover:text-amber-700"}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                      {selectedServiceProvider?.subjectToWht && Number(selectedServiceProvider?.whtRate) > 0 && (
+                        <span className="ml-auto text-[10px] text-slate-400">{selectedServiceProvider.name} is subject to {selectedServiceProvider.whtRate}% WHT</span>
+                      )}
+                    </div>
+                    {form.whtRate !== "" && (
+                      <div className="mt-2 grid grid-cols-1 gap-x-3 gap-y-2 sm:grid-cols-2">
+                        <label className="block">
+                          <span className={VOUCHER_LABEL}>{form.whtRate === "custom" ? "WHT amount (KES)" : `WHT at ${form.whtRate}% (KES)`}</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={form.whtAmount}
+                            readOnly={form.whtRate !== "custom"}
+                            onChange={(e) => setForm((prev) => ({ ...prev, whtAmount: e.target.value }))}
+                            placeholder="0.00"
+                            className={`${VOUCHER_INPUT} h-9 text-sm font-bold tabular-nums text-amber-900 ${form.whtRate !== "custom" ? "bg-white/70" : ""} ${Number(form.whtAmount || 0) >= Number(form.amount || 0) && Number(form.whtAmount || 0) > 0 ? "border-red-400" : ""}`}
+                          />
+                          {Number(form.whtAmount || 0) > 0 && Number(form.whtAmount || 0) >= Number(form.amount || 0) && (
+                            <span className="mt-0.5 block text-[10px] font-semibold text-red-600">Withholding tax must be less than the voucher amount.</span>
+                          )}
+                        </label>
+                        <div>
+                          <AppSelect
+                            label="WHT payable account"
+                            value={form.whtAccountId}
+                            onChange={(val) => setForm((prev) => ({ ...prev, whtAccountId: val ?? "" }))}
+                            options={liabilityAccountOptions}
+                            placeholder={defaultWhtAccount ? `Default — ${defaultWhtAccount.code} ${defaultWhtAccount.name}` : "Default — 2141 Withholding Tax Payable"}
+                            searchable
+                            clearable
+                          />
                         </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {Number(form.amount || 0) > 0 && (
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px]">
+                      <span className="italic text-slate-500">{amountInWords(form.amount)}</span>
+                      {Number(form.whtAmount || 0) > 0 && (
+                        <span className="font-semibold tabular-nums text-slate-600">
+                          Gross {formatKes(form.amount)} · WHT {formatKes(form.whtAmount)}
+                        </span>
                       )}
                     </div>
                   )}
-                  <label className="block">
-                    <span className="text-xs font-bold text-slate-600">Narration / Description</span>
+
+                  <label className="mt-2 block">
+                    <span className={VOUCHER_LABEL}>Narration / description</span>
                     <textarea
-                      rows={3}
+                      rows={2}
+                      maxLength={1000}
                       value={form.narration}
                       onChange={(e) => setForm((prev) => ({ ...prev, narration: e.target.value }))}
-                      placeholder="Brief description of this payment…"
-                      className="mt-1 w-full resize-none border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none placeholder:text-slate-300 focus:border-[#0B3B2E]"
+                      placeholder="What is this payment for?"
+                      className={`${VOUCHER_INPUT} resize-none`}
                     />
                   </label>
-                </div>
-              </section>
-              <div className="h-4 shrink-0" />
+                </section>
+
+                {/* ── Accounting entries ── */}
+                <section className="border border-blue-100 bg-blue-50/40 p-3 shadow-sm xl:col-span-5">
+                  <div className="mb-2 flex items-center gap-2">
+                    <div className="h-3.5 w-0.5 bg-blue-500" />
+                    <h2 className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Accounting entries</h2>
+                  </div>
+                  <div className="space-y-2">
+                    <div>
+                      <AppSelect
+                        label="Credit — liability / payable account *"
+                        value={form.liabilityAccountId}
+                        onChange={(val) => setForm((prev) => ({ ...prev, liabilityAccountId: val ?? "" }))}
+                        options={liabilityAccountOptions}
+                        placeholder="Search liability / payable account…"
+                        searchable
+                      />
+                      <p className="mt-0.5 text-[10px] text-slate-400">Credited on accrual, debited when settled.</p>
+                    </div>
+                    {selectedCategoryMeta?.explicitDebitAccount ? (
+                      <div>
+                        <AppSelect
+                          label={form.category === "petty_cash_float" ? "Debit — petty cash asset account *" : "Debit — expense account *"}
+                          value={form.debitAccountId}
+                          onChange={(val) => setForm((prev) => ({ ...prev, debitAccountId: val ?? "" }))}
+                          options={debitAccountOptions}
+                          placeholder="Search expense / asset account…"
+                          searchable
+                          clearable
+                        />
+                        <p className="mt-0.5 text-[10px] text-slate-400">
+                          {form.category === "petty_cash_float" ? "Receives the float top-up." : "Debited on approval."}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex items-start gap-2 border border-slate-200 bg-white px-3 py-2">
+                        <FaFileInvoiceDollar size={11} className="mt-0.5 shrink-0 text-slate-400" />
+                        <p className="text-[11px] text-slate-500">Debit account is set automatically from the category.</p>
+                      </div>
+                    )}
+                    <div>
+                      <AppSelect
+                        label={form.status === "paid" ? "Settlement — cashbook / petty cash *" : "Settlement — cashbook / petty cash"}
+                        value={form.settlementAccountId}
+                        onChange={(val) => setForm((prev) => ({ ...prev, settlementAccountId: val ?? "" }))}
+                        options={settlementAccountOptions}
+                        placeholder="Search cashbook / petty cash…"
+                        searchable
+                        clearable
+                      />
+                      <p className="mt-0.5 text-[10px] text-slate-400">Where the money is paid from. Needed to mark the voucher paid.</p>
+                    </div>
+                  </div>
+                </section>
+              </div>
             </div>
 
             {/* RIGHT: Live Preview */}
@@ -887,7 +999,7 @@ const PaymentVouchers = () => {
                         <div className="flex items-start gap-1.5 bg-amber-50 border border-amber-100 px-2 py-1.5">
                           <span className="mt-0.5 shrink-0 bg-amber-100 px-1 py-0.5 text-[8px] font-black text-amber-700">CR</span>
                           <span className="min-w-0 flex-1 text-[10px] font-semibold text-amber-800 break-words">
-                            2141 – WHT Payable
+                            {form.whtAccountId ? (() => { const w = liabilityAccounts.find((a) => String(a._id) === form.whtAccountId); return w ? `${w.code} – ${w.name}` : "WHT Payable"; })() : `${defaultWhtAccount?.code || "2141"} – ${defaultWhtAccount?.name || "WHT Payable"}`}
                             <span className="block text-[9px] text-amber-600 font-normal">KES {Number(form.whtAmount).toLocaleString("en-KE", { minimumFractionDigits: 2 })}</span>
                           </span>
                         </div>

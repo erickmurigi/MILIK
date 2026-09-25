@@ -1124,6 +1124,9 @@ const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate =
       throw createError(400, "The withholding tax payable account (2141) could not be found. Add it to the chart of accounts, or choose a withholding tax account on the voucher.");
     }
     assertAccountActive(whtAccount, "Withholding tax account");
+    if (String(whtAccount.type || "").toLowerCase() !== "liability") {
+      throw createError(400, "The withholding tax account must be a liability account (tax held for the tax authority).");
+    }
   }
 
   let debitLeg, creditLeg, whtLeg;
