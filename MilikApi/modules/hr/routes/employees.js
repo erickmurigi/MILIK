@@ -10,6 +10,7 @@ import HRLeaveApplication from '../models/HRLeaveApplication.js';
 import HRPayrollPeriod from '../models/HRPayrollPeriod.js';
 import HRPayslip from '../models/HRPayslip.js';
 import { resolveCompanyId, currentUserId, parsePage, parseLimit } from '../services/hrScope.js';
+import { employeeSearchFilter } from '../services/hrSearch.js';
 import Company from '../../../models/Company.js';
 import { buildSmtpTransporter, hasSmtpConfig, resolveMailSender } from '../../../utils/smtpMailer.js';
 import { buildESSInviteEmail } from '../utils/hrEmailTemplates.js';
@@ -185,12 +186,12 @@ router.get('/', verifyUser, async (req, res) => {
     if (status && status !== 'all') query.status = status;
     if (department && department !== 'all') query.department = department;
     if (employmentType && employmentType !== 'all') query.employmentType = employmentType;
-    if (search) {
-      query.$text = { $search: search };
-    }
+    const searchFilter = search ? await employeeSearchFilter(companyId, search) : null;
+    if (searchFilter) query.$and = [searchFilter];
 
     const [employees, total] = await Promise.all([
       HREmployee.find(query)
+        .select('-essPassword')
         .populate(POPULATE_OPTS)
         .sort({ surname: 1, otherNames: 1 })
         .skip((safePage - 1) * safeLimit)
@@ -210,6 +211,7 @@ router.get('/:id', verifyUser, async (req, res) => {
   try {
     const companyId = resolveCompanyId(req);
     const emp = await HREmployee.findOne({ _id: req.params.id, company: companyId })
+      .select('-essPassword')
       .populate(POPULATE_OPTS)
       .lean();
     if (!emp) return res.status(404).json({ message: 'Employee not found' });
@@ -252,7 +254,8 @@ router.put('/:id', verifyUser, async (req, res) => {
     const emp = await HREmployee.findOne({ _id: req.params.id, company: companyId });
     if (!emp) return res.status(404).json({ message: 'Employee not found' });
 
-    const forbidden = ['company', 'employeeNumber', 'createdBy', '_id'];
+    // essPassword / essEnabled are changed only by the dedicated ESS routes (a plain PUT would store an unhashed password)
+    const forbidden = ['company', 'employeeNumber', 'createdBy', '_id', 'essPassword', 'essEnabled'];
     const updates = Object.fromEntries(
       Object.entries(req.body).filter(([k]) => !forbidden.includes(k))
     );

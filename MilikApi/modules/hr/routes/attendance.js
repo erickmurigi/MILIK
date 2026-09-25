@@ -4,24 +4,40 @@ import { verifyUser, requireCompanyModule } from '../../../controllers/verifyTok
 import HRAttendance from '../models/HRAttendance.js';
 import HREmployee from '../models/HREmployee.js';
 import { resolveCompanyId, currentUserId, parsePage, parseLimit, requireOid, toOid } from '../services/hrScope.js';
+import { matchEmployeeIds } from '../services/hrSearch.js';
 
 const router = express.Router();
 router.use(verifyUser, requireCompanyModule('hr'));
 
-// GET /api/hr/attendance?employee=&month=&year=&date=&page=&limit=
+// GET /api/hr/attendance?employee=&search=&month=&year=&date=&from=&to=&page=&limit=
+//   date        exact YYYY-MM-DD (the UTC day stored on the record)
+//   from / to   ISO timestamps bounding checkIn, from inclusive, to exclusive (a local "day" for callers not on UTC, e.g. the mobile app in Kenya)
+//   search      the employee's name / number / phone / department
 router.get('/', async (req, res) => {
   try {
     const companyId = resolveCompanyId(req);
-    const { employee, month, year, date, page, limit } = req.query;
+    const { employee, month, year, date, from: fromQ, to: toQ, search, page, limit } = req.query;
     const safePage  = parsePage(page);
     const safeLimit = parseLimit(limit, 50);
 
     const query = { company: companyId };
     const empOid = toOid(employee);
     if (empOid) query.employee = empOid;
+    const matchedIds = search ? await matchEmployeeIds(companyId, search) : null;
+    if (matchedIds) {
+      query.employee = { $in: empOid ? matchedIds.filter((id) => String(id) === String(empOid)) : matchedIds };
+    }
+
+    const fromDate = fromQ ? new Date(fromQ) : null;
+    const toDate   = toQ ? new Date(toQ) : null;
+    if ((fromDate && isNaN(fromDate.getTime())) || (toDate && isNaN(toDate.getTime()))) {
+      return res.status(400).json({ message: 'from / to must be valid dates' });
+    }
 
     if (date) {
       query.date = date; // exact YYYY-MM-DD
+    } else if (fromDate || toDate) {
+      query.checkIn = { ...(fromDate && { $gte: fromDate }), ...(toDate && { $lt: toDate }) };
     } else if (month && year) {
       const y = Number(year);
       const m = Number(month) - 1;

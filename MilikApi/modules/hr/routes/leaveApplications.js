@@ -5,6 +5,7 @@ import HRLeaveApplication from '../models/HRLeaveApplication.js';
 import HRLeaveType from '../models/HRLeaveType.js';
 import HREmployee from '../models/HREmployee.js';
 import { resolveCompanyId, currentUserId, escapeRegex, parsePage, parseLimit, requireOid, toOid } from '../services/hrScope.js';
+import { matchEmployeeIds } from '../services/hrSearch.js';
 
 const router = express.Router();
 router.use(verifyUser, requireCompanyModule('hr'));
@@ -58,7 +59,7 @@ router.get('/stats', verifyUser, async (req, res) => {
 router.get('/', verifyUser, async (req, res) => {
   try {
     const companyId = resolveCompanyId(req);
-    const { employee, leaveType, status, page, limit } = req.query;
+    const { employee, leaveType, status, search, page, limit } = req.query;
     const safePage  = parsePage(page);
     const safeLimit = parseLimit(limit);
 
@@ -66,6 +67,13 @@ router.get('/', verifyUser, async (req, res) => {
     if (employee)  query.employee  = employee;
     if (leaveType) query.leaveType = leaveType;
     if (status && status !== 'all') query.status = status;
+    // search = the employee's name / number / phone / department
+    const matchedIds = search ? await matchEmployeeIds(companyId, search) : null;
+    if (matchedIds) {
+      query.employee = employee
+        ? { $in: matchedIds.filter((id) => String(id) === String(employee)) }
+        : { $in: matchedIds };
+    }
 
     const [applications, total] = await Promise.all([
       HRLeaveApplication.find(query)
