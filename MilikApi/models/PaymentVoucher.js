@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { voucherReferenceKey } from "../utils/voucherReference.js";
 
 const PaymentVoucherSchema = new mongoose.Schema(
   {
@@ -34,7 +35,11 @@ const PaymentVoucherSchema = new mongoose.Schema(
     payeeName: { type: String, trim: true, default: "" },
     dueDate: { type: Date, required: true },
     paidDate: { type: Date },
-    reference: { type: String },
+    reference: { type: String, trim: true, maxlength: 100 },
+    // reference compared ignoring case/spaces; unique per company among live vouchers, cleared when the voucher is reversed
+    referenceKey: { type: String, default: null },
+    // set while a status change / edit / removal is running, so two clicks (or two users) can't post the same voucher twice
+    processingAt: { type: Date, default: null },
     sourceProcessedStatement: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "ProcessedStatement",
@@ -92,6 +97,15 @@ const PaymentVoucherSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Only touched when a reference is entered or edited, or the voucher is reversed: vouchers saved before this existed keep
+// working (and stay editable) even where two of them share a reference.
+PaymentVoucherSchema.pre("validate", function (next) {
+  if (this.status === "reversed") this.referenceKey = null;
+  else if (this.isNew || this.isModified("reference")) this.referenceKey = voucherReferenceKey(this.reference);
+  next();
+});
+
+PaymentVoucherSchema.index({ business: 1, referenceKey: 1 }, { unique: true, partialFilterExpression: { referenceKey: { $type: "string" } } });
 PaymentVoucherSchema.index({ business: 1, createdAt: -1 });
 PaymentVoucherSchema.index({ business: 1, voucherNo: 1 }, { unique: true });
 PaymentVoucherSchema.index({ business: 1, status: 1 });

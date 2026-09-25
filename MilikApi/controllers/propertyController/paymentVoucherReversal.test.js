@@ -10,7 +10,7 @@ import { createTestCompany, createTestChartOfAccounts, createTestUser } from "..
 import { getAccountByCode } from "../../test/factories.financial.js";
 
 const setup = async () => {
-  const company = await createTestCompany();
+  const company = await createTestCompany({ modules: { accounts: true } });
   await createTestChartOfAccounts(company._id);
   const user = await createTestUser({ company });
   const debit = await getAccountByCode(company._id, "5200");

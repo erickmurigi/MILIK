@@ -137,7 +137,7 @@ const JournalEntryForm = () => {
     if (!company?._id) return;
     let live = true;
     getChartOfAccounts({ business: company._id })
-      .then((rows) => live && setAccounts((Array.isArray(rows) ? rows : []).filter((r) => r?.isPosting !== false && r?.isHeader !== true && r?.active !== false)))
+      .then((rows) => live && setAccounts((Array.isArray(rows) ? rows : []).filter((r) => r?.isPosting !== false && r?.isHeader !== true && r?.active !== false && r?.isActive !== false)))
       .catch((e) => toast.error(e?.response?.data?.message || "Failed to load chart of accounts"));
     if (hasPM) dispatch(getProperties({ business: company._id }));
     return () => { live = false; };

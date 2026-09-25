@@ -240,7 +240,7 @@ const PaymentVouchers = () => {
           getChartOfAccounts({ business: currentCompany._id }),
           getServiceProviders({ business: currentCompany._id, active: "true", limit: 200 }).catch(() => null),
         ]);
-        const postingAccounts = Array.isArray(rows) ? rows.filter((row) => row?.isPosting !== false) : [];
+        const postingAccounts = Array.isArray(rows) ? rows.filter((row) => row?.isPosting !== false && row?.isActive !== false) : [];
         setLiabilityAccounts(postingAccounts.filter((row) => String(row?.type || "").toLowerCase() === "liability"));
         setDebitAccounts(
           postingAccounts.filter(
@@ -395,7 +395,7 @@ const PaymentVouchers = () => {
       dueDate: form.dueDate,
       narration: form.narration,
       status: form.status,
-      reference: form.reference || undefined,
+      reference: String(form.reference || "").trim(), // '' clears it on an edit; the server refuses one already used by another voucher
       sourceRequisition: form.sourceRequisitionId || undefined,
     };
 
@@ -609,6 +609,7 @@ const PaymentVouchers = () => {
                     <span className="mb-0.5 block text-xs font-semibold text-slate-700">Reference / Cheque No.</span>
                     <input
                       value={form.reference}
+                      maxLength={100}
                       onChange={(e) => setForm((prev) => ({ ...prev, reference: e.target.value }))}
                       placeholder="e.g. CHQ-001, INV-2024-05"
                       className="mt-1 w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none placeholder:text-slate-300 focus:border-[#0B3B2E]"

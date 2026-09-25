@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import PaymentVoucher from "../../models/PaymentVoucher.js";
+import Company from "../../models/Company.js";
 import ExpenseRequisition from "../../models/ExpenseRequisition.js";
 import ExpenseProperty from "../../models/ExpenseProperty.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
@@ -24,9 +25,129 @@ import {
 } from "../../services/propertyAccountingService.js";
 import { syncProcessedStatementSettlementState } from "../../services/processedStatementSettlementService.js";
 import { createError } from "../../utils/error.js";
+import { hasCompanyActionPermission } from "../../utils/permissionControl.js";
+import { escapeRegex } from "../../utils/escapeRegex.js";
+import { assertVoucherReferenceUnused } from "../../services/voucherReference.js";
+import { cleanVoucherReference, voucherReferenceKey } from "../../utils/voucherReference.js";
 import { parsePagination } from "../../utils/pagination.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
+
+const VOUCHER_CATEGORIES = PaymentVoucher.schema.path("category").enumValues;
+const OBJECT_ID = /^[0-9a-fA-F]{24}$/;
+const MAX_VOUCHER_AMOUNT = 1e12;
+const roundMoney = (value) => Math.round(Number(value) * 100) / 100;
+
+const optionalId = (value, label) => {
+  if (value === undefined || value === null || value === "") return null;
+  const raw = typeof value === "object" && value?._id ? value._id : value;
+  if (!OBJECT_ID.test(String(raw))) throw createError(400, `Invalid ${label}.`);
+  return String(raw);
+};
+
+const optionalDate = (value, label) => {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value === "object" && !(value instanceof Date)) throw createError(400, `${label} is not a valid date.`);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime()) || date.getFullYear() < 2000 || date.getFullYear() > 2100) throw createError(400, `${label} is not a valid date.`);
+  return date;
+};
+
+// a payment can't have been made tomorrow (a day of slack for time zones)
+const assertNotFuture = (date, label) => {
+  if (date && date.getTime() > Date.now() + 24 * 60 * 60 * 1000) throw createError(400, `${label} cannot be in the future.`);
+};
+
+const cleanText = (value, max, label) => {
+  if (value === undefined || value === null) return "";
+  if (typeof value !== "string" && typeof value !== "number") throw createError(400, `${label} is not valid.`);
+  const text = String(value).trim();
+  if (text.length > max) throw createError(400, `${label} is too long (at most ${max} characters).`);
+  return text;
+};
+
+/** Validates and normalises the voucher fields present in a request body. Only fields that were sent are returned. */
+const sanitizeVoucherFields = (body = {}) => {
+  const has = (key) => Object.prototype.hasOwnProperty.call(body, key);
+  const out = {};
+
+  if (has("category")) {
+    const category = String(body.category || "").trim();
+    if (category && !VOUCHER_CATEGORIES.includes(category)) throw createError(400, "Invalid voucher category");
+    out.category = category;
+  }
+  for (const [key, label] of [
+    ["property", "property"], ["landlord", "landlord"], ["liabilityAccount", "liability account"], ["debitAccount", "debit account"],
+    ["settlementAccount", "settlement account"], ["whtAccountId", "withholding tax account"], ["sourceRequisition", "source requisition"],
+    ["serviceProvider", "service provider"],
+  ]) {
+    if (has(key)) out[key] = optionalId(body[key], label);
+  }
+  if (has("amount")) {
+    const amount = Number(body.amount);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > MAX_VOUCHER_AMOUNT) throw createError(400, "Valid voucher amount is required");
+    out.amount = roundMoney(amount);
+  }
+  if (has("whtAmount")) {
+    const wht = Number(body.whtAmount || 0);
+    if (!Number.isFinite(wht) || wht < 0 || wht > MAX_VOUCHER_AMOUNT) throw createError(400, "Withholding tax amount is not valid");
+    out.whtAmount = roundMoney(wht);
+  }
+  if (has("dueDate")) {
+    out.dueDate = optionalDate(body.dueDate, "Due date");
+    if (!out.dueDate) throw createError(400, "Due date is required");
+  }
+  if (has("paidDate")) {
+    out.paidDate = optionalDate(body.paidDate, "Paid date");
+    assertNotFuture(out.paidDate, "Paid date");
+  }
+  if (has("reference")) {
+    cleanText(body.reference, 100, "Reference");
+    out.reference = cleanVoucherReference(body.reference);
+  }
+  if (has("narration")) out.narration = cleanText(body.narration, 1000, "Narration");
+  if (has("payeeName")) out.payeeName = cleanText(body.payeeName, 150, "Payee name");
+  return out;
+};
+
+/**
+ * Runs a voucher edit / status change / removal while holding a short "processing" claim on the voucher, so a double click
+ * (or two users) can't post the same voucher, or reverse it, twice at the same moment.
+ */
+const withVoucherLock = (handler) => async (req, res, next) => {
+  let claimedId = null;
+  try {
+    if (!OBJECT_ID.test(String(req.params?.id || ""))) return next(createError(404, "Payment voucher not found"));
+    const business = await resolveBusinessId(req);
+    if (business) {
+      const claimed = await PaymentVoucher.findOneAndUpdate(
+        { _id: req.params.id, business, $or: [{ processingAt: null }, { processingAt: { $lt: new Date(Date.now() - 60 * 1000) } }] },
+        { $set: { processingAt: new Date() } },
+        { new: true, timestamps: false }
+      ).select("_id").lean();
+      if (claimed) claimedId = claimed._id;
+      else if (await PaymentVoucher.exists({ _id: req.params.id, business })) {
+        return next(createError(409, "This voucher is being processed by another request. Wait a moment and try again."));
+      }
+    }
+  } catch (err) {
+    return next(err);
+  }
+  // the claim is let go BEFORE the response goes out, so a follow-up request sent the moment this one returns never finds it held
+  let released = false;
+  const release = async () => {
+    if (released || !claimedId) return;
+    released = true;
+    await PaymentVoucher.updateOne({ _id: claimedId }, { $set: { processingAt: null } }, { timestamps: false }).catch(() => null);
+  };
+  const sendJson = res.json.bind(res);
+  res.json = (body) => { release().then(() => sendJson(body)); return res; };
+  try {
+    await handler(req, res, (err) => release().then(() => next(err)));
+  } finally {
+    await release();
+  }
+};
 
 const normalizeDate = (value, fallback = new Date()) => {
   const date = value ? new Date(value) : new Date(fallback);
@@ -992,6 +1113,19 @@ const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate =
     status: "approved",
   };
 
+  // Tax withheld is a credit leg too: without its account the entry would not balance, so refuse before posting anything.
+  let whtAccount = null;
+  if (whtAmount > 0) {
+    if (whtAmount >= amount) throw createError(400, "Withholding tax must be less than the voucher amount.");
+    whtAccount = voucher.whtAccountId
+      ? await ChartOfAccount.findOne({ _id: voucher.whtAccountId, business: voucher.business, isPosting: { $ne: false } }).lean()
+      : await findSystemAccountByCode(String(accountingContext.businessId), "2141").catch(() => null);
+    if (!whtAccount) {
+      throw createError(400, "The withholding tax payable account (2141) could not be found. Add it to the chart of accounts, or choose a withholding tax account on the voucher.");
+    }
+    assertAccountActive(whtAccount, "Withholding tax account");
+  }
+
   let debitLeg, creditLeg, whtLeg;
   try {
     debitLeg = await postEntry({
@@ -1025,28 +1159,20 @@ const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate =
     // Cr WHT Payable — tax withheld from vendor
     whtLeg = null;
     const touchedAccounts = [String(liabilityAccount._id), String(settlementAccount._id)];
-    if (whtAmount > 0) {
-      const whtAccount = voucher.whtAccountId
-        ? await ChartOfAccount.findById(voucher.whtAccountId).lean()
-        : await findSystemAccountByCode(String(accountingContext.businessId), "2141").catch(() => null);
-
-      if (whtAccount) {
-        whtLeg = await postEntry({
-          ...baseEntry,
-          amount: whtAmount,
-          direction: "credit",
-          accountId: whtAccount._id,
-          metadata: {
-            voucherNo: voucher.voucherNo,
-            voucherCategory: voucher.category,
-            postingRole: "wht_payable",
-            includeInLandlordStatement: false,
-          },
-        });
-        touchedAccounts.push(String(whtAccount._id));
-      } else {
-        console.warn("[PaymentVoucher] WHT Payable account (2141) not found for business=%s — WHT leg skipped", accountingContext.businessId);
-      }
+    if (whtAccount) {
+      whtLeg = await postEntry({
+        ...baseEntry,
+        amount: whtAmount,
+        direction: "credit",
+        accountId: whtAccount._id,
+        metadata: {
+          voucherNo: voucher.voucherNo,
+          voucherCategory: voucher.category,
+          postingRole: "wht_payable",
+          includeInLandlordStatement: false,
+        },
+      });
+      touchedAccounts.push(String(whtAccount._id));
     }
 
     voucher.journalGroupId = journalGroupId;
@@ -1082,73 +1208,115 @@ export const createPaymentVoucher = async (req, res, next) => {
       return next(createError(400, "User must have a company context"));
     }
 
-    const voucherCategory = String(req.body?.category || "").trim();
+    const fields = sanitizeVoucherFields(req.body || {});
+    const input = { ...(req.body || {}), ...fields };
+
+    const status = input.status === undefined || input.status === null || input.status === "" ? "draft" : input.status;
+    if (!["draft", "approved", "paid"].includes(status)) {
+      return next(createError(400, "A new voucher can only be saved as draft, approved or paid."));
+    }
+
+    const voucherCategory = String(input.category || "").trim();
     if (!voucherCategory) {
       return next(createError(400, "Voucher category is required"));
     }
 
-    if (voucherRequiresProperty(voucherCategory) && (!req.body?.property || !isValidObjectId(req.body.property))) {
+    if (voucherRequiresProperty(voucherCategory) && (!input.property || !isValidObjectId(input.property))) {
       return next(createError(400, "Property is required for this voucher category"));
     }
 
-    if (!voucherRequiresProperty(voucherCategory) && req.body?.property && !isValidObjectId(req.body.property)) {
+    if (!voucherRequiresProperty(voucherCategory) && input.property && !isValidObjectId(input.property)) {
       return next(createError(400, "Invalid property supplied"));
     }
 
-    if (voucherRequiresExplicitDebitAccount(voucherCategory) && (!req.body?.debitAccount || !isValidObjectId(req.body.debitAccount))) {
+    if (voucherRequiresExplicitDebitAccount(voucherCategory) && (!input.debitAccount || !isValidObjectId(input.debitAccount))) {
       return next(createError(400, "Debit posting account is required for this voucher category"));
     }
 
-    if (!req.body?.liabilityAccount || !isValidObjectId(req.body.liabilityAccount)) {
+    if (!input.liabilityAccount || !isValidObjectId(input.liabilityAccount)) {
       return next(createError(400, "Liability posting account is required"));
     }
 
-    const amount = Number(req.body?.amount || 0);
+    const amount = Number(input.amount || 0);
     if (!Number.isFinite(amount) || amount <= 0) {
       return next(createError(400, "Valid voucher amount is required"));
     }
 
+    if (!input.dueDate) {
+      return next(createError(400, "Due date is required"));
+    }
+
     const sourceRequisition = await resolveVoucherSourceRequisition({
       businessId,
-      requisitionId: req.body?.sourceRequisition || null,
-      propertyId: req.body?.property || null,
+      requisitionId: input.sourceRequisition || null,
+      propertyId: input.property || null,
     });
 
-    const voucherNo = await generateVoucherNo(businessId);
     const accountingContext = await resolveVoucherLandlordContext({
       businessId,
-      propertyId: req.body?.property || null,
-      landlordId: req.body?.landlord || null,
+      propertyId: input.property || null,
+      landlordId: input.landlord || null,
       voucherCategory,
     });
 
-    const whtAmt = Math.max(0, Math.round(Number(req.body?.whtAmount || 0) * 100) / 100);
+    const whtAmt = Math.max(0, Math.round(Number(input.whtAmount || 0) * 100) / 100);
     const payload = {
       category: voucherCategory,
-      property: req.body?.property || null,
+      property: input.property || null,
       landlord: accountingContext.landlordId || null,
-      liabilityAccount: req.body.liabilityAccount,
-      debitAccount: req.body?.debitAccount || null,
-      settlementAccount: req.body?.settlementAccount || null,
+      liabilityAccount: input.liabilityAccount,
+      debitAccount: input.debitAccount || null,
+      settlementAccount: input.settlementAccount || null,
       amount,
       whtAmount:    whtAmt,
       whtNetAmount: Math.max(0, Math.round((amount - whtAmt) * 100) / 100),
-      whtAccountId: req.body?.whtAccountId || null,
-      serviceProvider: req.body?.serviceProvider && isValidObjectId(req.body.serviceProvider) ? req.body.serviceProvider : null,
+      whtAccountId: input.whtAccountId || null,
+      serviceProvider: input.serviceProvider && isValidObjectId(input.serviceProvider) ? input.serviceProvider : null,
       // Only kept when there's no registered service provider — that name is the
       // source of truth for the Payee display once one is linked.
-      payeeName: req.body?.serviceProvider && isValidObjectId(req.body.serviceProvider) ? "" : String(req.body?.payeeName || "").trim(),
-      dueDate: req.body.dueDate,
-      paidDate: req.body.paidDate || null,
-      reference: req.body.reference,
-      narration: req.body.narration,
-      status: req.body.status || "draft",
-      voucherNo,
+      payeeName: input.serviceProvider && isValidObjectId(input.serviceProvider) ? "" : String(input.payeeName || "").trim(),
+      dueDate: input.dueDate,
+      paidDate: input.paidDate || null,
+      narration: input.narration,
+      status,
+      reference: input.reference || "",
       business: businessId,
       sourceRequisition: sourceRequisition?._id || null,
     };
 
-    const voucher = await new PaymentVoucher(payload).save();
+    const whtLimit = Number(payload.whtAmount || 0);
+    if (whtLimit > 0 && whtLimit >= amount) {
+      return next(createError(400, "Withholding tax must be less than the voucher amount."));
+    }
+
+    // a voucher that will be posted needs usable accounts: say so now, before it is saved
+    if (status === "approved" || status === "paid") {
+      await ensureLiabilityAccount({ businessId, liabilityAccountId: payload.liabilityAccount });
+      if (voucherRequiresExplicitDebitAccount(voucherCategory)) {
+        await ensureExplicitDebitAccount({ businessId, debitAccountId: payload.debitAccount, voucherCategory });
+      }
+      if (status === "paid") {
+        await ensureSettlementAccount({ businessId, settlementAccountId: payload.settlementAccount });
+      }
+    }
+
+    await assertVoucherReferenceUnused({ business: businessId, reference: payload.reference });
+
+    // two people saving at once can be handed the same next number: the unique index refuses the second, which simply asks for another
+    let voucher = null;
+    for (let attempt = 0; attempt < 5 && !voucher; attempt += 1) {
+      const voucherNo = await generateVoucherNo(businessId);
+      try {
+        voucher = await new PaymentVoucher({ ...payload, voucherNo }).save();
+      } catch (saveError) {
+        if (saveError?.code !== 11000) throw saveError;
+        if (saveError?.keyPattern?.referenceKey) {
+          throw createError(409, `Reference "${payload.reference}" is already used by another payment voucher. Each payment voucher must have its own reference.`);
+        }
+        if (!saveError?.keyPattern?.voucherNo) throw saveError;
+      }
+    }
+    if (!voucher) throw createError(503, "Could not allocate a voucher number. Please try again.");
     const actorUserId = await resolveActorUserId(req, businessId);
 
     if (sourceRequisition) {
@@ -1219,18 +1387,28 @@ export const getPaymentVouchers = async (req, res, next) => {
     const { category, status, property, landlord, search } = req.query;
     const filter = { business };
 
-    if (category) filter.category = category;
-    if (status) filter.status = status;
-    if (property) filter.property = property;
-    if (landlord) filter.landlord = landlord;
+    // filters arrive from the query string: only plain, valid values are accepted (no objects, no malformed ids)
+    if (category) {
+      if (typeof category !== "string" || !VOUCHER_CATEGORIES.includes(category)) return next(createError(400, "Invalid category filter"));
+      filter.category = category;
+    }
+    if (status) {
+      if (typeof status !== "string" || !["draft", "approved", "paid", "reversed"].includes(status)) return next(createError(400, "Invalid status filter"));
+      filter.status = status;
+    }
+    if (property) {
+      if (typeof property !== "string" || !OBJECT_ID.test(property)) return next(createError(400, "Invalid property filter"));
+      filter.property = property;
+    }
+    if (landlord) {
+      if (typeof landlord !== "string" || !OBJECT_ID.test(landlord)) return next(createError(400, "Invalid landlord filter"));
+      filter.landlord = landlord;
+    }
 
-    if (search) {
-      const term = String(search).trim();
-      filter.$or = [
-        { voucherNo: { $regex: term, $options: "i" } },
-        { reference: { $regex: term, $options: "i" } },
-        { narration: { $regex: term, $options: "i" } },
-      ];
+    const term = typeof search === "string" ? search.trim().slice(0, 100) : "";
+    if (term) {
+      const re = new RegExp(escapeRegex(term), "i");
+      filter.$or = [{ voucherNo: re }, { reference: re }, { narration: re }, { payeeName: re }];
     }
 
     const { page: pageNum, limit: limitNum, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 200 });
@@ -1255,6 +1433,8 @@ export const getPaymentVoucher = async (req, res, next) => {
       return next(createError(400, "User must have a company context"));
     }
 
+    if (!OBJECT_ID.test(String(req.params.id || ""))) return next(createError(404, "Payment voucher not found"));
+
     const row = await populateVoucherQuery(
       PaymentVoucher.findOne({ _id: req.params.id, business })
     ).lean();
@@ -1266,33 +1446,21 @@ export const getPaymentVoucher = async (req, res, next) => {
   }
 };
 
-export const updatePaymentVoucher = async (req, res, next) => {
+const updatePaymentVoucherHandler = async (req, res, next) => {
   try {
     const business = await resolveBusinessId(req);
     if (!business) {
       return next(createError(400, "User must have a company context"));
     }
 
-    const allowedFields = [
-      "category",
-      "property",
-      "landlord",
-      "liabilityAccount",
-      "debitAccount",
-      "settlementAccount",
-      "amount",
-      "dueDate",
-      "paidDate",
-      "reference",
-      "narration",
-      "sourceRequisition",
-      "serviceProvider",
-      "payeeName",
-    ];
-
-    const payload = Object.fromEntries(
-      Object.entries(req.body || {}).filter(([key]) => allowedFields.includes(key))
-    );
+    // sanitizeVoucherFields only ever returns the editable fields (status, ledger links and audit fields can't be set from here)
+    const payload = sanitizeVoucherFields(req.body || {});
+    if (Object.prototype.hasOwnProperty.call(payload, "category") && !payload.category) {
+      return next(createError(400, "Voucher category is required"));
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, "liabilityAccount") && !payload.liabilityAccount) {
+      return next(createError(400, "Liability posting account is required"));
+    }
 
     if (Object.prototype.hasOwnProperty.call(payload, "landlord") && !payload.landlord) {
       payload.landlord = null;
@@ -1312,6 +1480,23 @@ export const updatePaymentVoucher = async (req, res, next) => {
 
     if (existing.status !== "draft") {
       return next(createError(400, "Only draft vouchers can be edited."));
+    }
+
+    const effectiveAmount = payload.amount ?? Number(existing.amount || 0);
+    const effectiveWht = payload.whtAmount ?? Number(existing.whtAmount || 0);
+    if (effectiveWht > 0 && effectiveWht >= effectiveAmount) {
+      return next(createError(400, "Withholding tax must be less than the voucher amount."));
+    }
+    if (payload.amount !== undefined || payload.whtAmount !== undefined) {
+      payload.whtNetAmount = Math.max(0, roundMoney(effectiveAmount - effectiveWht));
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, "reference")) {
+      const key = voucherReferenceKey(payload.reference);
+      if (key !== (existing.referenceKey || voucherReferenceKey(existing.reference))) {
+        await assertVoucherReferenceUnused({ business, reference: payload.reference, excludeId: existing._id });
+      }
+      payload.referenceKey = key;
     }
 
     const requestedSourceRequisitionId = Object.prototype.hasOwnProperty.call(payload, "sourceRequisition")
@@ -1356,7 +1541,7 @@ export const updatePaymentVoucher = async (req, res, next) => {
       PaymentVoucher.findOneAndUpdate(
         { _id: req.params.id, business },
         { $set: payload },
-        { new: true }
+        { new: true, runValidators: true }
       )
     ).lean();
 
@@ -1376,14 +1561,15 @@ export const updatePaymentVoucher = async (req, res, next) => {
   }
 };
 
-export const updatePaymentVoucherStatus = async (req, res, next) => {
+const updatePaymentVoucherStatusHandler = async (req, res, next) => {
   try {
     const business = await resolveBusinessId(req);
     if (!business) {
       return next(createError(400, "User must have a company context"));
     }
 
-    const { status, reason } = req.body || {};
+    const { status } = req.body || {};
+    const reason = cleanText(req.body?.reason, 500, "Reason");
     if (!["draft", "approved", "paid", "reversed"].includes(status)) {
       return next(createError(400, "Invalid status"));
     }
@@ -1437,7 +1623,8 @@ export const updatePaymentVoucherStatus = async (req, res, next) => {
         return next(createError(400, "Select a settlement cashbook account on the voucher before marking it as paid."));
       }
 
-      const paidDate = normalizeDate(req.body?.paidDate || new Date());
+      const paidDate = optionalDate(req.body?.paidDate, "Paid date") || new Date();
+      assertNotFuture(paidDate, "Paid date");
       voucher.approvedAt = voucher.approvedAt || paidDate;
       voucher.approvedBy = voucher.approvedBy || actorUserId;
       voucher.paidAt = paidDate;
@@ -1495,7 +1682,7 @@ export const updatePaymentVoucherStatus = async (req, res, next) => {
   }
 };
 
-export const deletePaymentVoucher = async (req, res, next) => {
+const deletePaymentVoucherHandler = async (req, res, next) => {
   try {
     const business = await resolveBusinessId(req);
     if (!business) {
@@ -1506,6 +1693,11 @@ export const deletePaymentVoucher = async (req, res, next) => {
     if (!row) return next(createError(404, "Payment voucher not found"));
 
     if (row.status !== "draft") {
+      // removing a posted voucher reverses it, so it needs the same permission as an explicit reversal
+      const company = req.companyContext || await Company.findById(business).select("modules").lean();
+      if (!hasCompanyActionPermission({ user: req.user, company, moduleKey: "accounts", resource: "paymentVouchers", action: "reverse" })) {
+        return next(createError(403, "You do not have permission to reverse payment vouchers."));
+      }
       const actorUserId = await resolveActorUserId(req, business);
 
       if (row.status === "reversed") {
@@ -1555,3 +1747,7 @@ export const deletePaymentVoucher = async (req, res, next) => {
     next(err);
   }
 };
+
+export const updatePaymentVoucher = withVoucherLock(updatePaymentVoucherHandler);
+export const updatePaymentVoucherStatus = withVoucherLock(updatePaymentVoucherStatusHandler);
+export const deletePaymentVoucher = withVoucherLock(deletePaymentVoucherHandler);

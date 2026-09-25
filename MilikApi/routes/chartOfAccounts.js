@@ -651,6 +651,24 @@ router.delete("/:id", verifyUser, requireCompanyModule("accounts"), async (req, 
       if (account.isActive === false) {
         return res.status(400).json({ error: "Account is already deactivated." });
       }
+
+      // A deactivated account takes no new postings, so switching one off that still holds money (or that Milik itself
+      // posts to) would make vouchers, receipts and journals start failing.
+      if (account.isSystem) {
+        return res.status(400).json({
+          error: `${account.code} ${account.name} is a system account that Milik posts to, and it has transaction history, so it cannot be deleted.`,
+        });
+      }
+      const [held] = await FinancialLedgerEntry.aggregate([
+        { $match: { accountId: account._id } },
+        { $group: { _id: null, debit: { $sum: "$debit" }, credit: { $sum: "$credit" } } },
+      ]);
+      const balance = Math.round(((held?.debit || 0) - (held?.credit || 0)) * 100) / 100;
+      if (Math.abs(balance) >= 0.01) {
+        return res.status(400).json({
+          error: `${account.code} ${account.name} still has a balance of ${balance.toLocaleString("en-KE", { minimumFractionDigits: 2 })}. Move it to another account with a journal before deleting.`,
+        });
+      }
       account.isActive = false;
       account.deletedAt = new Date();
       account.deletedBy = await resolveAuditActorUserId({ req, businessId: business }).catch(() => null);
@@ -678,6 +696,33 @@ router.delete("/:id", verifyUser, requireCompanyModule("accounts"), async (req, 
     return res.status(500).json({
       error: err?.message || "Failed to delete ChartOfAccount",
     });
+  }
+});
+
+// Undo a "delete" of an account that had history (it was only deactivated): it takes postings again.
+router.post("/:id/reactivate", verifyUser, requireCompanyModule("accounts"), async (req, res) => {
+  try {
+    const business = resolveBusiness(req);
+    const { id } = req.params;
+
+    if (!business) return res.status(400).json({ error: "business is required" });
+    if (!isValidObjectId(id)) return res.status(400).json({ error: "Invalid chart account id" });
+
+    const account = await ChartOfAccount.findOne({ _id: id, business });
+    if (!account) return res.status(404).json({ error: "Chart account not found" });
+    if (account.isActive !== false) return res.status(400).json({ error: "Account is already active." });
+
+    account.isActive = true;
+    account.deletedAt = null;
+    account.deletedBy = null;
+    await account.save();
+    clearInvoiceAccountCache();
+    invalidateBalanceCache(business);
+
+    return res.status(200).json(serializeAccount(account.toObject()));
+  } catch (err) {
+    console.error("Failed to reactivate ChartOfAccount:", err);
+    return res.status(500).json({ error: err?.message || "Failed to reactivate ChartOfAccount" });
   }
 });
 

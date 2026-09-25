@@ -406,28 +406,37 @@ const ChartOfAccounts = () => {
     if (!canDeleteCOA)            { toast.warning("No permission to delete accounts."); return; }
     const names = selectedAccounts.map((a) => `${a.code} ${a.name}`).join(", ");
     const ok = await confirm({
-      title: "Delete Accounts", message: `Delete: ${names}?`, confirmText: "Delete", isDangerous: true,
+      title: "Delete Accounts",
+      message: `Delete: ${names}? An account that already has transactions is not removed: it is switched off (shown as Inactive) and takes no new postings, so payments and journals using it will be refused until it is reactivated.`,
+      confirmText: "Delete", isDangerous: true,
     });
     if (!ok) return;
     setSaving(true);
+    let removed = 0, switchedOff = 0;
+    const failures = [];
+    for (const a of selectedAccounts) {
+      try {
+        const { data } = await adminRequests.delete(`/chart-of-accounts/${a._id}`, { data: { business: businessId } });
+        if (data?.softDeleted) switchedOff += 1; else removed += 1;
+      } catch (error) {
+        failures.push(`${a.code}: ${error?.response?.data?.error || error?.response?.data?.message || error?.message || "failed"}`);
+      }
+    }
+    if (removed) toast.success(`${removed} account${removed === 1 ? "" : "s"} deleted.`);
+    if (switchedOff) toast.warning(`${switchedOff} account${switchedOff === 1 ? " has" : "s have"} transactions, so ${switchedOff === 1 ? "it was" : "they were"} switched off (Inactive) instead of deleted.`);
+    failures.forEach((message) => toast.error(message));
+    setSelectedIds([]);
+    await loadAccounts();
+    setSaving(false);
+  };
+
+  const handleReactivate = async (account) => {
     try {
-      await Promise.all(
-        selectedAccounts.map((a) =>
-          adminRequests.delete(`/chart-of-accounts/${a._id}`, { data: { business: businessId } })
-        )
-      );
-      toast.success("Deleted successfully.");
-      setSelectedIds([]);
+      await adminRequests.post(`/chart-of-accounts/${account._id}/reactivate`, { business: businessId });
+      toast.success(`${account.code} ${account.name} is active again.`);
       await loadAccounts();
     } catch (error) {
-      toast.error(
-        error?.response?.data?.error ||
-        error?.response?.data?.message ||
-        error?.message ||
-        "Failed to delete"
-      );
-    } finally {
-      setSaving(false);
+      toast.error(error?.response?.data?.error || error?.response?.data?.message || "Failed to reactivate the account");
     }
   };
 
@@ -631,7 +640,7 @@ const ChartOfAccounts = () => {
                                       key={account._id}
                                       className={`border-b border-gray-100 hover:bg-blue-50/40 cursor-pointer transition-colors ${
                                         selected ? "bg-emerald-50 hover:bg-emerald-50" : ""
-                                      }`}
+                                      } ${account.isActive === false ? "opacity-60" : ""}`}
                                       onDoubleClick={() => {
                                         if (account?.isPosting !== false && !account?.isHeader)
                                           navigate(`${activityBase}/${account._id}/activity`);
@@ -688,7 +697,20 @@ const ChartOfAccounts = () => {
                                               System
                                             </span>
                                           )}
-                                          {account.isHeader ? (
+                                          {account.isActive === false && canUpdateCOA && (
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); handleReactivate(account); }}
+                                              title="Switch this account back on so it can take postings again"
+                                              className="px-1.5 py-0.5 text-[9px] bg-amber-100 text-amber-800 hover:bg-amber-200 font-bold uppercase"
+                                            >
+                                              Reactivate
+                                            </button>
+                                          )}
+                                          {account.isActive === false ? (
+                                            <span className="px-1.5 py-0.5 text-[9px] bg-red-100 text-red-700 font-bold uppercase" title="Deleted: kept for its history, but it takes no new postings">
+                                              Inactive
+                                            </span>
+                                          ) : account.isHeader ? (
                                             <span className="px-1.5 py-0.5 text-[9px] bg-blue-100 text-blue-700 font-bold uppercase">
                                               Header
                                             </span>

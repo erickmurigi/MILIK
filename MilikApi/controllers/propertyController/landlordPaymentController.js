@@ -11,6 +11,7 @@ import { resolveConfiguredAccountingDefaultAccount } from "../../services/compan
 import { getCompanyTaxConfiguration, resolveOutputVatAccount } from "../../services/taxCalculationService.js";
 import { ensurePropertyControlAccount, resolveLandlordRemittancePayableAccount } from "../../services/propertyAccountingService.js";
 import { parsePagination } from "../../utils/pagination.js";
+import { assertVoucherReferenceUnused } from "../../services/voucherReference.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
@@ -540,6 +541,9 @@ export const payLandlord = async (req, res, next) => {
         )
       );
     }
+
+    // checked before anything is posted: a payment voucher's reference can only be used once
+    await assertVoucherReferenceUnused({ business: statement.business, reference: referenceNumber });
 
     const actorUserId = await resolveActorUserId(req, String(statement.business || businessId || ""));
 

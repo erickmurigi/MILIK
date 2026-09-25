@@ -262,8 +262,8 @@ const PettyCash = () => {
     () => coas.filter((a) => String(a.type).toLowerCase() === "asset" && /cash|bank|m-?pesa|mobile|wallet|till/i.test(`${a.name} ${a.subGroup || ""}`)),
     [coas]
   );
-  const expenseAccounts = useMemo(() => coas.filter((a) => String(a.type).toLowerCase() === "expense"), [coas]);
-  const assetAccounts = useMemo(() => coas.filter((a) => String(a.type).toLowerCase() === "asset"), [coas]);
+  const expenseAccounts = useMemo(() => coas.filter((a) => a.isActive !== false && String(a.type).toLowerCase() === "expense"), [coas]);
+  const assetAccounts = useMemo(() => coas.filter((a) => a.isActive !== false && String(a.type).toLowerCase() === "asset"), [coas]);
 
   // ── Totals
   const activeDisbTotal = useMemo(
