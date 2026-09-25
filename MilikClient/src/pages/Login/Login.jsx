@@ -212,6 +212,15 @@ function Login() {
 
       {/* ── Sign-in ── */}
       <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#f3f7f5] px-5 py-10 sm:px-10 lg:min-h-0">
+        {/* outlined squares (the mark) on the corners the clouds leave free: green top right, orange bottom left */}
+        <svg aria-hidden="true" viewBox="0 0 200 200" className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 select-none sm:h-44 sm:w-44" fill="none">
+          <rect x="30" y="30" width="150" height="150" stroke="#0B3B2E" strokeWidth="6" />
+          <rect x="-10" y="70" width="150" height="150" stroke="#0B3B2E" strokeOpacity="0.22" strokeWidth="6" />
+        </svg>
+        <svg aria-hidden="true" viewBox="0 0 200 200" className="pointer-events-none absolute -bottom-10 -left-10 h-36 w-36 select-none sm:h-44 sm:w-44" fill="none">
+          <rect x="20" y="20" width="150" height="150" stroke="#FF8C00" strokeWidth="6" />
+          <rect x="60" y="-20" width="150" height="150" stroke="#FF8C00" strokeOpacity="0.28" strokeWidth="6" />
+        </svg>
         {/* soft clouds of colour: orange at the top left, green at the bottom right */}
         <div aria-hidden="true" className="pointer-events-none absolute -left-32 -top-32 h-[26rem] w-[26rem] rounded-full bg-[#FF8C00]/20 blur-3xl sm:h-[34rem] sm:w-[34rem]" />
         <div aria-hidden="true" className="pointer-events-none absolute -bottom-32 -right-32 h-[26rem] w-[26rem] rounded-full bg-[#0B3B2E]/20 blur-3xl sm:h-[34rem] sm:w-[34rem]" />
