@@ -5,6 +5,7 @@ import Company from "../../models/Company.js";
 import MpesaCollection from "../../models/MpesaCollection.js";
 import RentPayment from "../../models/RentPayment.js";
 import Tenant from "../../models/Tenant.js";
+import { matchTenantIds, phoneSearchRegex } from "../../utils/listSearch.js";
 import User from "../../models/User.js";
 import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig } from "../../utils/companyModules.js";
 import { createAutoReceipt } from "./rentPayment.js";
@@ -576,13 +577,16 @@ export const listMpesaCollections = async (req, res, next) => {
     }
     if (search) {
       const regex = new RegExp(escapeRegExp(search), "i");
+      // a notification is also found by the tenant it was assigned to, and a phone number in any format
+      const tenantIds = await matchTenantIds(businessId, search);
       filters.$or = [
         { transactionCode: regex },
         { accountReference: regex },
         { billRefNumber: regex },
         { payerName: regex },
-        { msisdn: regex },
+        { msisdn: phoneSearchRegex(search) || regex },
         { rawLine: regex },
+        ...(tenantIds.length ? [{ tenant: { $in: tenantIds } }] : []),
       ];
     }
 

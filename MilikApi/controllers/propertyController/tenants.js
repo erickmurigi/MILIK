@@ -3,6 +3,7 @@ import { getFieldOfficerPropertyIds } from "../../utils/fieldOfficerScope.js";
 import Tenant from "../../models/Tenant.js";
 import Unit from "../../models/Unit.js";
 import Property from "../../models/Property.js";
+import { matchUnitIds, phoneSearchRegex } from "../../utils/listSearch.js";
 import RentPayment from "../../models/RentPayment.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
 import TenantInvoiceNote from "../../models/TenantInvoiceNote.js";
@@ -1054,12 +1055,15 @@ export const getTenants = async (req, res, next) => {
 
     if (search) {
       const re = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+      // also find a tenant by the unit they live in or its property, and by a phone number typed in any format
+      const searchUnitIds = await matchUnitIds(businessId, search);
       filter.$or = [
         { name: re },
-        { phone: re },
+        { phone: phoneSearchRegex(search) || re },
         { email: re },
         { tenantCode: re },
         { idNumber: re },
+        ...(searchUnitIds.length ? [{ unit: { $in: searchUnitIds } }] : []),
       ];
     } else if (tenantName) {
       filter.name = { $regex: tenantName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };

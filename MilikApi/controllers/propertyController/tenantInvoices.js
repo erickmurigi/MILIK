@@ -5,6 +5,7 @@ import TenantInvoiceNote, { TENANT_NOTE_TYPES } from "../../models/TenantInvoice
 import Tenant from "../../models/Tenant.js";
 import Unit from "../../models/Unit.js";
 import Property from "../../models/Property.js";
+import { matchTenantIds, matchUnitIds } from "../../utils/listSearch.js";
 import Company from "../../models/Company.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import RentPayment from "../../models/RentPayment.js";
@@ -2505,6 +2506,24 @@ const buildTenantInvoiceListQuery = async ({ businessId, requestQuery = {} }) =>
     }
 
     query.tenant = explicitTenantId || { $in: matchingTenantIds };
+  }
+
+  // One search box: an invoice is found by its number or description, by the tenant (name, code, phone), or by its unit / property.
+  const freeText = String(requestQuery?.search || "").trim();
+  if (freeText) {
+    const re = new RegExp(escapeRegExp(freeText), "i");
+    const [tenantIds, unitIds] = await Promise.all([matchTenantIds(businessId, freeText), matchUnitIds(businessId, freeText)]);
+    query.$and = [
+      ...(Array.isArray(query.$and) ? query.$and : []),
+      {
+        $or: [
+          { invoiceNumber: re },
+          { description: re },
+          ...(tenantIds.length ? [{ tenant: { $in: tenantIds } }] : []),
+          ...(unitIds.length ? [{ unit: { $in: unitIds } }] : []),
+        ],
+      },
+    ];
   }
 
   Object.assign(query, buildInvoiceDateRangeQuery({ fromDate, toDate }));

@@ -32,6 +32,7 @@ import { logAuditEvent } from "../../utils/auditLogger.js";
 import SequenceCounter from "../../models/SequenceCounter.js";
 import { resolveBusinessId } from "../../utils/requestContext.js";
 import { escapeRegex } from "../../utils/escapeRegex.js";
+import { matchTenantIds, matchUnitIds } from "../../utils/listSearch.js";
 import { createError } from "../../utils/error.js";
 import { round2 } from "../../utils/math.js";
 
@@ -3160,6 +3161,10 @@ export const getPayments = async (req, res, next) => {
         const matchedTenants = await Tenant.find({ business, $or: tenantOr }).select("_id").lean();
         tenantIdsForSearch.push(...matchedTenants.map((row) => row._id));
       }
+      // the free-text search also finds a receipt by the tenant's code / phone, and by its unit or property
+      if (search) {
+        tenantIdsForSearch.push(...(await matchTenantIds(business, search)));
+      }
     }
 
     const orFilters = [];
@@ -3167,6 +3172,8 @@ export const getPayments = async (req, res, next) => {
       orFilters.push({ receiptNumber: searchRegex });
       orFilters.push({ referenceNumber: searchRegex });
       orFilters.push({ description: searchRegex });
+      const searchUnitIds = await matchUnitIds(business, search);
+      if (searchUnitIds.length > 0) orFilters.push({ unit: { $in: searchUnitIds } });
     }
     if (tenantIdsForSearch.length > 0) {
       orFilters.push({ tenant: { $in: tenantIdsForSearch } });

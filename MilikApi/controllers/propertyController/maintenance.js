@@ -6,6 +6,7 @@ import { emitToCompany } from "../../utils/socketManager.js";
 import { getFieldOfficerPropertyIds } from "../../utils/fieldOfficerScope.js";
 import { resolveBusinessId } from "../../utils/requestContext.js";
 import { createError } from "../../utils/error.js";
+import { matchTenantIds, matchUnitIds } from "../../utils/listSearch.js";
 
 const scopedMaintenanceQuery = (req, id) => {
   const business = resolveBusinessId(req);
@@ -42,10 +43,14 @@ export const getMaintenances = async (req, res, next) => {
     if (tenant) filter.tenant = tenant;
     if (search && search.trim()) {
       const term = search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      // a request is also found by its unit, its property, or the tenant who raised it
+      const [unitIds, tenantIds] = await Promise.all([matchUnitIds(business, search), matchTenantIds(business, search)]);
       filter.$or = [
         { title: { $regex: term, $options: "i" } },
         { description: { $regex: term, $options: "i" } },
         { assignedTo: { $regex: term, $options: "i" } },
+        ...(unitIds.length ? [{ unit: { $in: unitIds } }] : []),
+        ...(tenantIds.length ? [{ tenant: { $in: tenantIds } }] : []),
       ];
     }
 
