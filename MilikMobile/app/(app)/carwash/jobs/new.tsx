@@ -1,43 +1,48 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TextInput,
-  TouchableOpacity, ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
+  TouchableOpacity, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
-
-const CW  = '#1E3A8A';
-const CWL = '#EEF2FF';
+import { ErrorState } from '../../../../components/ui/PmsStates';
+import { cleanDecimal, fmtKES, todayISO } from '../../../../utils/pmsFormat';
+import { CW, CWL, cwError, listOf, normalizePlate, round2, toMsisdn } from '../../../../utils/carwash';
 
 const VEHICLE_TYPES = [
-  { label: 'Sedan / Saloon',      icon: 'car-outline'           },
-  { label: 'Hatchback',           icon: 'car-sport-outline'     },
-  { label: 'SUV',                 icon: 'car-outline'           },
-  { label: 'Mini SUV / Crossover',icon: 'car-outline'           },
-  { label: 'Van / Minivan',       icon: 'bus-outline'           },
-  { label: 'Pickup / 4x4',        icon: 'car-outline'           },
-  { label: 'Motorbike / Bike',    icon: 'bicycle-outline'       },
-  { label: 'Tuk-tuk',             icon: 'car-outline'           },
-  { label: 'Bus / Matatu',        icon: 'bus-outline'           },
+  { label: 'Sedan / Saloon',       icon: 'car-outline'       },
+  { label: 'Hatchback',            icon: 'car-sport-outline' },
+  { label: 'SUV',                  icon: 'car-outline'       },
+  { label: 'Mini SUV / Crossover', icon: 'car-outline'       },
+  { label: 'Van / Minivan',        icon: 'bus-outline'       },
+  { label: 'Pickup / 4x4',         icon: 'car-outline'       },
+  { label: 'Motorbike / Bike',     icon: 'bicycle-outline'   },
+  { label: 'Tuk-tuk',              icon: 'car-outline'       },
+  { label: 'Bus / Matatu',         icon: 'bus-outline'       },
 ];
+
+const MAX_STAFF = 5;   // the server keeps at most five staff per job
 
 type PricingTier = { vehicleType: string; price: number };
 type Service = {
   _id: string; name: string; defaultPrice: number;
   vehicleType?: string; category?: string;
   pricingTiers?: PricingTier[];
+  jobType?: 'both' | 'vehicle' | 'carpet';
+  pricingType?: 'flat' | 'per_sqft';
+  isTaxable?: boolean; taxRate?: number;
 };
-type Staff = { _id: string; name: string };
+type Staff = { _id: string; name: string; role?: string };
+type Lookup = { name: string; phone: string; credit: number; rewards: number } | null;
 
-const getServicePrice = (svc: Service, vType: string): number => {
-  if (vType && svc.pricingTiers?.length) {
-    const tier = svc.pricingTiers.find(t => t.vehicleType === vType);
-    if (tier) return tier.price;
-  }
-  return svc.defaultPrice || 0;
+const hasTiers = (s: Service) => !!s.pricingTiers?.length;
+
+const servicePrice = (svc: Service, vType: string): number => {
+  const tier = vType ? svc.pricingTiers?.find(t => t.vehicleType === vType) : undefined;
+  return tier ? tier.price : (svc.defaultPrice || 0);
 };
 
 export default function NewCarWashJobScreen() {
@@ -45,100 +50,198 @@ export default function NewCarWashJobScreen() {
 
   const [plate,         setPlate]         = useState('');
   const [lookingUp,     setLookingUp]     = useState(false);
+  const [known,         setKnown]         = useState<Lookup>(null);
   const [customerName,  setCustomerName]  = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lookupSeq   = useRef(0);
+  const nameTouched  = useRef(false);
+  const phoneTouched = useRef(false);
 
   const [vehicleType,       setVehicleType]       = useState('');
   const [showVehiclePicker, setShowVehiclePicker] = useState(false);
 
   const [services,       setServices]       = useState<Service[]>([]);
+  const [svcSearch,      setSvcSearch]      = useState('');
   const [selectedSvcIds, setSelectedSvcIds] = useState<Set<string>>(new Set());
-  const [svcLoading,     setSvcLoading]     = useState(false);
-
   const [staffList,       setStaffList]       = useState<Staff[]>([]);
   const [selectedStaff,   setSelectedStaff]   = useState<string[]>([]);
   const [showStaffPicker, setShowStaffPicker] = useState(false);
+  const [loading,   setLoading]   = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [discountOn,  setDiscountOn]  = useState(false);
+  const [discount,    setDiscount]    = useState('');
+  const [discountCfg, setDiscountCfg] = useState({ minPrice: 0, maxPct: 0 });
 
   const [notes,      setNotes]      = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const submitLock = useRef(false);
 
-  useEffect(() => {
-    setSvcLoading(true);
-    Promise.all([
-      api.get('/carwash/services', { params: { limit: 100 } }),
-      api.get('/carwash/staff',    { params: { limit: 100, status: 'active' } }),
-    ])
-      .then(([svcRes, stfRes]) => {
-        const svcRaw = svcRes.data?.data ?? svcRes.data;
-        setServices(Array.isArray(svcRaw) ? svcRaw : (svcRaw?.services ?? []));
-        const stfRaw = stfRes.data?.data ?? stfRes.data;
-        setStaffList(Array.isArray(stfRaw) ? stfRaw : (stfRaw?.staff ?? []));
-      })
-      .catch(() => {})
-      .finally(() => setSvcLoading(false));
+  const loadRefs = useCallback(async () => {
+    setLoading(true); setLoadError(null);
+    const [svcRes, stfRes, cfgRes] = await Promise.allSettled([
+      api.get('/carwash/services', { params: { active: true, limit: 500 } }),
+      api.get('/carwash/staff',    { params: { active: true, limit: 100 } }),
+      api.get('/carwash/settings'),                       // optional: discount rules (needs settings access)
+    ]);
+    if (svcRes.status === 'rejected') {
+      setLoadError(cwError(svcRes.reason, 'Could not load the service list.'));
+    } else {
+      // Carpets are priced per square foot and belong to a different form; this screen books vehicles.
+      setServices(listOf<Service>(svcRes.value.data, 'services').filter(s => s.jobType !== 'carpet' && s.pricingType !== 'per_sqft'));
+    }
+    if (stfRes.status === 'fulfilled') setStaffList(listOf<Staff>(stfRes.value.data, 'staff'));
+    if (cfgRes.status === 'fulfilled') {
+      const c = cfgRes.value.data?.data ?? {};
+      setDiscountCfg({ minPrice: Number(c.discountMinJobPrice ?? 0), maxPct: Number(c.discountMaxPercent ?? 0) });
+    }
+    setLoading(false);
   }, []);
 
-  const lookupPlate = useCallback((val: string) => {
-    const p = val.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-    if (p.length < 3) { setCustomerName(''); setCustomerPhone(''); return; }
-    clearTimeout(lookupTimer.current);
-    lookupTimer.current = setTimeout(async () => {
-      setLookingUp(true);
-      try {
-        const { data } = await api.get('/carwash/customers/lookup', { params: { plate: p } });
-        const c = data?.data?.customer ?? data?.customer;
-        if (c) { setCustomerName(c.name || ''); setCustomerPhone(c.phone || ''); }
-      } catch {}
-      finally { setLookingUp(false); }
-    }, 600);
-  }, []);
+  useEffect(() => { loadRefs(); }, [loadRefs]);
+  useEffect(() => () => { if (lookupTimer.current) clearTimeout(lookupTimer.current); }, []);
 
   const handlePlateChange = (val: string) => {
     const up = val.toUpperCase();
     setPlate(up);
-    lookupPlate(up);
+    if (lookupTimer.current) clearTimeout(lookupTimer.current);
+    const p = normalizePlate(up);
+    const seq = ++lookupSeq.current;
+    if (p.length < 3) { setKnown(null); setLookingUp(false); return; }
+    lookupTimer.current = setTimeout(async () => {
+      setLookingUp(true);
+      try {
+        const { data } = await api.get(`/carwash/loyalty/plate/${encodeURIComponent(p)}`);
+        if (seq !== lookupSeq.current) return;              // the plate changed while we were waiting
+        const d = data?.data ?? data ?? {};
+        const c = d.customer;
+        if (c) {
+          setKnown({ name: c.name || '', phone: c.phone || '', credit: Number(d.creditBalance || 0), rewards: Number(d.loyaltyCard?.pendingRewards || 0) });
+          // never overwrite what the cashier has already typed
+          if (!nameTouched.current)  setCustomerName(c.name || '');
+          if (!phoneTouched.current) setCustomerPhone(c.phone || '');
+        } else setKnown(null);
+      } catch {
+        if (seq === lookupSeq.current) setKnown(null);      // lookup is a convenience; never block the form on it
+      } finally {
+        if (seq === lookupSeq.current) setLookingUp(false);
+      }
+    }, 500);
   };
 
   const toggleService = (id: string) =>
     setSelectedSvcIds(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
 
   const toggleStaff = (id: string) =>
-    setSelectedStaff(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
+    setSelectedStaff(prev => {
+      if (prev.includes(id)) return prev.filter(s => s !== id);
+      if (prev.length >= MAX_STAFF) { Alert.alert('Staff limit', `A job can have at most ${MAX_STAFF} staff.`); return prev; }
+      return [...prev, id];
+    });
 
-  const totalAmount = services
-    .filter(s => selectedSvcIds.has(s._id))
-    .reduce((sum, s) => sum + getServicePrice(s, vehicleType), 0);
+  const chosen = useMemo(() => services.filter(s => selectedSvcIds.has(s._id)), [services, selectedSvcIds]);
+  const needsVehicleType = chosen.filter(s => hasTiers(s) && !vehicleType);
+
+  const gross = round2(chosen.reduce((sum, s) => sum + servicePrice(s, vehicleType), 0));
+  const vat   = round2(chosen.reduce((sum, s) => {
+    const rate = s.isTaxable ? Number(s.taxRate) : 0;
+    return rate > 0 ? sum + servicePrice(s, vehicleType) * rate / (100 + rate) : sum;
+  }, 0));
+  const discountNum   = discountOn ? Math.max(0, Number(discount) || 0) : 0;
+  const discountEligible = discountCfg.minPrice <= 0 || gross > discountCfg.minPrice;
+  const discountMax   = discountCfg.maxPct > 0 ? round2(gross * discountCfg.maxPct / 100) : gross;
+  const net           = Math.max(0, round2(gross - discountNum));
+
+  const shownServices = useMemo(() => {
+    const q = svcSearch.trim().toLowerCase();
+    return q ? services.filter(s => `${s.name} ${s.category || ''}`.toLowerCase().includes(q)) : services;
+  }, [services, svcSearch]);
+
+  const release = () => { submitLock.current = false; setSubmitting(false); };
+
+  const create = async () => {
+    try {
+      const { data } = await api.post('/carwash/jobs', {
+        jobType:      'vehicle',
+        plateNumber:  normalizePlate(plate),
+        serviceLines: chosen.map(s => ({
+          service:     s._id,
+          serviceName: s.name,
+          vehicleType: vehicleType || s.vehicleType || '',
+          price:       servicePrice(s, vehicleType),
+        })),
+        assignedStaff:  selectedStaff,
+        customerName:   customerName.trim(),
+        phone:          customerPhone.trim(),
+        discountAmount: discountNum,
+        notes:          notes.trim(),
+      });
+      const job = data?.data ?? data?.job;
+      // Open the new job so it can be moved along / paid straight away.
+      if (job?._id) router.replace(`/carwash/jobs/${job._id}` as any); else router.back();
+    } catch (err) {
+      Alert.alert('Could not create job', cwError(err, 'Failed to create the job.'));
+    } finally {
+      release();
+    }
+  };
 
   const handleSubmit = async () => {
-    if (!plate.trim())           { Alert.alert('Required', 'Enter the plate number.');      return; }
-    if (selectedSvcIds.size === 0) { Alert.alert('Required', 'Select at least one service.'); return; }
+    if (submitLock.current) return;
+    const p = normalizePlate(plate);
+    if (!p)                    { Alert.alert('Required', 'Enter the plate number.'); return; }
+    if (chosen.length === 0)   { Alert.alert('Required', 'Select at least one service.'); return; }
+    if (needsVehicleType.length) {
+      Alert.alert('Choose the vehicle type', `${needsVehicleType.map(s => s.name).join(', ')} ${needsVehicleType.length > 1 ? 'are' : 'is'} priced by vehicle type.`);
+      return;
+    }
+    if (gross <= 0)            { Alert.alert('Invalid price', 'The total price must be greater than zero.'); return; }
+    if (customerPhone.trim() && !toMsisdn(customerPhone)) {
+      Alert.alert('Check the phone number', 'Enter a valid Kenyan number (07XXXXXXXX) or leave it blank.');
+      return;
+    }
+    if (discountOn && discountNum > 0) {
+      if (!discountEligible) { Alert.alert('Discount not allowed', `Discounts are only allowed on jobs above ${fmtKES(discountCfg.minPrice)}.`); return; }
+      if (discountNum > discountMax + 0.009) {
+        Alert.alert('Discount too high', discountCfg.maxPct > 0 ? `The maximum discount is ${discountCfg.maxPct}% (${fmtKES(discountMax)}).` : 'The discount cannot exceed the job price.');
+        return;
+      }
+    }
+
+    submitLock.current = true;
     setSubmitting(true);
+    // Same plate already booked today? Ask before creating a second job (web does the same).
     try {
-      await api.post('/carwash/jobs', {
-        plateNumber:  plate.trim().toUpperCase().replace(/\s/g, ''),
-        serviceLines: services
-          .filter(s => selectedSvcIds.has(s._id))
-          .map(s => ({
-            service:     s._id,
-            serviceName: s.name,
-            vehicleType: vehicleType || s.vehicleType || '',
-            price:       getServicePrice(s, vehicleType),
-          })),
-        assignedStaff: selectedStaff.length > 0 ? selectedStaff : undefined,
-        customerName:  customerName.trim() || undefined,
-        phone:         customerPhone.trim() || undefined,
-        notes:         notes.trim() || undefined,
-      });
-      router.back();
-    } catch (err: any) {
-      Alert.alert('Error', err?.response?.data?.message ?? 'Failed to create job.');
-    } finally { setSubmitting(false); }
+      const { data } = await api.get('/carwash/jobs', { params: { search: p, date: todayISO(), limit: 1 } });
+      const existing = listOf<{ jobNumber?: string; status?: string }>(data, 'jobs')[0];
+      if (existing) {
+        Alert.alert(
+          'Plate already booked today',
+          `${p} already has job ${existing.jobNumber || ''} today (${existing.status || 'open'}). Create another job only if this is a separate visit.`,
+          [
+            { text: 'Cancel', style: 'cancel', onPress: release },
+            { text: 'Create anyway', onPress: () => { create(); } },
+          ],
+        );
+        return;
+      }
+    } catch { /* the check is advisory: carry on and create the job */ }
+    create();
   };
+
+  if (loading) return <MilikLoader fullscreen />;
+  if (loadError) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['bottom']}>
+        <ErrorState message={loadError} onRetry={loadRefs} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <>
@@ -148,11 +251,12 @@ export default function NewCarWashJobScreen() {
           <ScrollView
             contentContainerStyle={styles.scroll}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
           >
             {/* ── Plate ── */}
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>VEHICLE</Text>
+              <Text style={styles.sectionLabel}>VEHICLE <Text style={{ color: '#DC2626' }}>*</Text></Text>
               <View style={styles.plateInputRow}>
                 <View style={styles.platePrefix}>
                   <Text style={styles.platePrefixTxt}>KE</Text>
@@ -164,17 +268,21 @@ export default function NewCarWashJobScreen() {
                   value={plate}
                   onChangeText={handlePlateChange}
                   autoCapitalize="characters"
+                  autoCorrect={false}
+                  maxLength={12}
                   returnKeyType="done"
                 />
                 {lookingUp && <ActivityIndicator size="small" color={CW} style={{ position: 'absolute', right: 14 }} />}
               </View>
 
-              {(customerName || customerPhone) ? (
+              {known ? (
                 <View style={styles.customerFound}>
-                  <Ionicons name="person-circle" size={18} color={CW} />
-                  <View>
-                    {customerName ? <Text style={styles.customerFoundName}>{customerName}</Text> : null}
-                    {customerPhone ? <Text style={styles.customerFoundPhone}>{customerPhone}</Text> : null}
+                  <Ionicons name="person-circle" size={18} color="#065F46" />
+                  <View style={{ flex: 1 }}>
+                    {known.name  ? <Text style={styles.customerFoundName}>{known.name}</Text>   : null}
+                    {known.phone ? <Text style={styles.customerFoundPhone}>{known.phone}</Text> : null}
+                    {known.credit > 0 ? <Text style={styles.customerFoundPhone}>Credit on account: {fmtKES(known.credit)}</Text> : null}
+                    {known.rewards > 0 ? <Text style={styles.customerFoundPhone}>{known.rewards} loyalty reward{known.rewards > 1 ? 's' : ''} available</Text> : null}
                   </View>
                   <View style={styles.customerFoundBadge}>
                     <Text style={styles.customerFoundBadgeTxt}>Known</Text>
@@ -185,8 +293,8 @@ export default function NewCarWashJobScreen() {
               {/* Vehicle type */}
               <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowVehiclePicker(v => !v)}>
                 <Ionicons name="car-outline" size={16} color={vehicleType ? CW : '#94A3B8'} />
-                <Text style={[styles.pickerBtnTxt, vehicleType && { color: '#0F172A' }]}>
-                  {vehicleType || 'Vehicle type (optional)'}
+                <Text style={[styles.pickerBtnTxt, !!vehicleType && { color: '#0F172A' }]}>
+                  {vehicleType || 'Vehicle type (needed for tiered prices)'}
                 </Text>
                 <Ionicons name={showVehiclePicker ? 'chevron-up' : 'chevron-down'} size={16} color="#94A3B8" />
               </TouchableOpacity>
@@ -198,7 +306,7 @@ export default function NewCarWashJobScreen() {
                       <TouchableOpacity
                         key={vt.label}
                         style={[styles.dropItem, sel && styles.dropItemActive]}
-                        onPress={() => { setVehicleType(vt.label); setShowVehiclePicker(false); }}
+                        onPress={() => { setVehicleType(sel ? '' : vt.label); setShowVehiclePicker(false); }}
                       >
                         <Ionicons name={vt.icon as any} size={15} color={sel ? CW : '#64748B'} />
                         <Text style={[styles.dropItemTxt, sel && { color: CW, fontWeight: '700' }]}>{vt.label}</Text>
@@ -219,14 +327,14 @@ export default function NewCarWashJobScreen() {
                   placeholder="Name (optional)"
                   placeholderTextColor="#94A3B8"
                   value={customerName}
-                  onChangeText={setCustomerName}
+                  onChangeText={t => { nameTouched.current = true; setCustomerName(t); }}
                 />
                 <TextInput
                   style={[styles.input, { flex: 1 }]}
                   placeholder="07XX..."
                   placeholderTextColor="#94A3B8"
                   value={customerPhone}
-                  onChangeText={setCustomerPhone}
+                  onChangeText={t => { phoneTouched.current = true; setCustomerPhone(t); }}
                   keyboardType="phone-pad"
                 />
               </View>
@@ -235,14 +343,26 @@ export default function NewCarWashJobScreen() {
             {/* ── Services ── */}
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>SERVICES <Text style={{ color: '#DC2626' }}>*</Text></Text>
-              {svcLoading ? (
-                <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-                  <MilikLoader size="small" />
-                </View>
+              {services.length > 8 ? (
+                <TextInput
+                  style={styles.input}
+                  placeholder="Search services"
+                  placeholderTextColor="#94A3B8"
+                  value={svcSearch}
+                  onChangeText={setSvcSearch}
+                  autoCorrect={false}
+                />
+              ) : null}
+              {services.length === 0 ? (
+                <Text style={styles.hint}>No active services are set up yet. Add them in Car Wash → Services on the web.</Text>
+              ) : shownServices.length === 0 ? (
+                <Text style={styles.hint}>No service matches “{svcSearch}”.</Text>
               ) : (
                 <View style={styles.servicesGrid}>
-                  {services.map(svc => {
+                  {shownServices.map(svc => {
                     const sel = selectedSvcIds.has(svc._id);
+                    const tiered = hasTiers(svc);
+                    const tierHit = !!vehicleType && !!svc.pricingTiers?.some(t => t.vehicleType === vehicleType);
                     return (
                       <TouchableOpacity
                         key={svc._id}
@@ -257,11 +377,9 @@ export default function NewCarWashJobScreen() {
                         )}
                         <Text style={[styles.svcName, sel && { color: CW }]} numberOfLines={2}>{svc.name}</Text>
                         <Text style={[styles.svcPrice, sel && { color: CW }]}>
-                          KES {getServicePrice(svc, vehicleType).toLocaleString()}
+                          {tiered && !vehicleType ? 'Priced by vehicle' : fmtKES(servicePrice(svc, vehicleType))}
                         </Text>
-                        {vehicleType && svc.pricingTiers?.length && svc.pricingTiers.find(t => t.vehicleType === vehicleType) ? (
-                          <Text style={styles.tierBadge}>{vehicleType}</Text>
-                        ) : null}
+                        {tierHit ? <Text style={styles.tierBadge}>{vehicleType}</Text> : null}
                       </TouchableOpacity>
                     );
                   })}
@@ -272,10 +390,10 @@ export default function NewCarWashJobScreen() {
             {/* ── Staff ── */}
             {staffList.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionLabel}>STAFF</Text>
+                <Text style={styles.sectionLabel}>STAFF (SHARE THE COMMISSION)</Text>
                 <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowStaffPicker(v => !v)}>
                   <Ionicons name="people-outline" size={16} color={selectedStaff.length ? CW : '#94A3B8'} />
-                  <Text style={[styles.pickerBtnTxt, selectedStaff.length > 0 && { color: '#0F172A' }]}>
+                  <Text style={[styles.pickerBtnTxt, selectedStaff.length > 0 && { color: '#0F172A' }]} numberOfLines={1}>
                     {selectedStaff.length > 0
                       ? staffList.filter(s => selectedStaff.includes(s._id)).map(s => s.name).join(', ')
                       : 'Assign staff (optional)'}
@@ -307,6 +425,39 @@ export default function NewCarWashJobScreen() {
               </View>
             )}
 
+            {/* ── Discount ── */}
+            {gross > 0 && (
+              <View style={styles.section}>
+                <View style={styles.discountRow}>
+                  <Text style={styles.sectionLabel}>DISCOUNT</Text>
+                  <Switch
+                    value={discountOn && discountEligible}
+                    disabled={!discountEligible}
+                    onValueChange={on => {
+                      setDiscountOn(on);
+                      if (on && discountCfg.maxPct > 0 && !discount) setDiscount(String(discountMax));
+                    }}
+                    trackColor={{ true: CW }}
+                  />
+                </View>
+                {!discountEligible ? (
+                  <Text style={styles.hint}>Discounts are only allowed on jobs above {fmtKES(discountCfg.minPrice)}.</Text>
+                ) : discountOn ? (
+                  <>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Amount (KES)"
+                      placeholderTextColor="#94A3B8"
+                      value={discount}
+                      onChangeText={t => setDiscount(cleanDecimal(t))}
+                      keyboardType="decimal-pad"
+                    />
+                    {discountCfg.maxPct > 0 ? <Text style={styles.hint}>At most {discountCfg.maxPct}% of the price ({fmtKES(discountMax)}).</Text> : null}
+                  </>
+                ) : null}
+              </View>
+            )}
+
             {/* ── Notes ── */}
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>NOTES <Text style={{ fontSize: 10, color: '#94A3B8', fontWeight: '400' }}>(OPTIONAL)</Text></Text>
@@ -325,11 +476,14 @@ export default function NewCarWashJobScreen() {
 
           {/* ── Fixed footer ── */}
           <View style={styles.footer}>
-            {selectedSvcIds.size > 0 && (
-              <View style={styles.footerTotalRow}>
-                <Text style={styles.footerTotalLabel}>{selectedSvcIds.size} service{selectedSvcIds.size > 1 ? 's' : ''}</Text>
-                <Text style={styles.footerTotalAmt}>KES {totalAmount.toLocaleString('en-KE')}</Text>
-              </View>
+            {chosen.length > 0 && (
+              <>
+                <View style={styles.footerTotalRow}>
+                  <Text style={styles.footerTotalLabel}>{chosen.length} service{chosen.length > 1 ? 's' : ''}{discountNum > 0 ? ` · discount ${fmtKES(discountNum)}` : ''}</Text>
+                  <Text style={styles.footerTotalAmt}>{needsVehicleType.length ? 'Pick vehicle type' : fmtKES(net)}</Text>
+                </View>
+                {vat > 0 && !needsVehicleType.length ? <Text style={styles.vat}>includes VAT of {fmtKES(vat)}</Text> : null}
+              </>
             )}
             <TouchableOpacity
               style={[styles.submitBtn, submitting && { opacity: 0.6 }]}
@@ -358,6 +512,8 @@ const styles = StyleSheet.create({
 
   section:      { gap: 8 },
   sectionLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, color: '#94A3B8' },
+  hint:         { fontSize: 12, color: '#64748B', lineHeight: 17 },
+  discountRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
 
   plateInputRow: {
     flexDirection: 'row', alignItems: 'center',
@@ -426,8 +582,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff', padding: 16, gap: 10,
   },
   footerTotalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  footerTotalLabel: { fontSize: 13, fontWeight: '600', color: '#64748B' },
+  footerTotalLabel: { fontSize: 13, fontWeight: '600', color: '#64748B', flex: 1 },
   footerTotalAmt:   { fontSize: 16, fontWeight: '900', color: CW },
+  vat:              { fontSize: 11, color: '#94A3B8', marginTop: -6 },
   submitBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     backgroundColor: CW, borderRadius: 14, paddingVertical: 15,

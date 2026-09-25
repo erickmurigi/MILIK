@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   RefreshControl, ActivityIndicator,
@@ -8,66 +8,44 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import api from '../../../services/api';
 import MilikLoader from '../../../components/ui/MilikLoader';
-
-const CW  = '#1E3A8A';
-const CWL = '#EEF2FF';
-const ACC = '#C8511A';
-
-const fmt = (n: number) =>
-  `KES ${Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-const todayISO = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
-
-const stepDate = (iso: string, n: number) => {
-  const d = new Date(iso + 'T00:00:00');
-  d.setDate(d.getDate() + n);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
-
-const fmtDateLabel = (iso: string) =>
-  new Date(iso + 'T00:00:00').toLocaleDateString('en-KE', { weekday: 'short', day: '2-digit', month: 'short' });
-
-const fmtTime = (d: string) =>
-  new Date(d).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' });
+import { ErrorBanner, ErrorState } from '../../../components/ui/PmsStates';
+import { useReloadOnFocus } from '../../../hooks/usePmsList';
+import { fmtDate, fmtKES, todayISO } from '../../../utils/pmsFormat';
+import {
+  ACC, CW, CWL, JOB_STATUS_STYLE, PAY_STATUS_STYLE, cwError, fmtTime, jobNet, jobStatusLabel, listOf, stepDate,
+} from '../../../utils/carwash';
 
 type Summary = {
-  totalRevenue: number;
-  cashTotal:    number;
-  mpesaTotal:   number;
-  statusCounts: Record<string, number>;
-  revenueByMethod?: Record<string, number>;
+  jobsCount?:    number;
+  totalRevenue:  number;
+  cashTotal:     number;
+  mpesaTotal:    number;
+  statusCounts:  Record<string, number>;
 };
 
 type Job = {
-  _id:          string;
-  jobNumber?:   string;
-  plateNumber:  string;
-  vehicleType?: string;
-  serviceName?: string;
-  status:       string;
-  price:        number;
+  _id:            string;
+  jobNumber?:     string;
+  jobType?:       string;
+  plateNumber?:   string;
+  itemDescription?: string;
+  vehicleType?:   string;
+  serviceName?:   string;
+  status:         string;
+  price:          number;
   discountAmount?: number;
   paymentStatus?: string;
-  createdAt:    string;
-  customerName?: string;
+  createdAt:      string;
+  customerName?:  string;
 };
 
-const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
-  waiting:   { bg: '#FEF3C7', color: '#D97706' },
-  washing:   { bg: '#DBEAFE', color: '#1D4ED8' },
-  done:      { bg: '#EDE9FE', color: '#7C3AED' },
-  paid:      { bg: '#D1FAE5', color: '#065F46' },
-  cancelled: { bg: '#F1F5F9', color: '#64748B' },
-};
-
+// The five stages a job spends time in. "Paid" is not a stage (it follows the payment) and is shown on each job instead.
 const QUEUE_ITEMS = [
-  { key: 'waiting', label: 'Waiting', icon: 'time-outline',             borderColor: '#D97706' },
-  { key: 'washing', label: 'Washing', icon: 'water-outline',            borderColor: '#1D4ED8' },
-  { key: 'done',    label: 'Done',    icon: 'checkmark-circle-outline', borderColor: '#7C3AED' },
-  { key: 'paid',    label: 'Paid',    icon: 'cash-outline',             borderColor: '#065F46' },
+  { key: 'waiting', label: 'Waiting', icon: 'time-outline'             },
+  { key: 'washing', label: 'Washing', icon: 'water-outline'            },
+  { key: 'drying',  label: 'Drying',  icon: 'sunny-outline'            },
+  { key: 'ready',   label: 'Ready',   icon: 'checkmark-done-outline'   },
+  { key: 'done',    label: 'Done',    icon: 'checkmark-circle-outline' },
 ] as const;
 
 export default function CarWashDashboard() {
@@ -77,77 +55,112 @@ export default function CarWashDashboard() {
   const [jobs,             setJobs]             = useState<Job[]>([]);
   const [mpesaUnallocated, setMpesaUnallocated] = useState(0);
   const [loading,          setLoading]          = useState(true);
+  const [busy,             setBusy]             = useState(false);
   const [refreshing,       setRefreshing]       = useState(false);
+  const [error,            setError]            = useState<string | null>(null);
+  const [partialError,     setPartialError]     = useState<string | null>(null);
+  const reqRef = useRef(0);
 
-  const load = useCallback(async (isRefresh = false) => {
-    isRefresh ? setRefreshing(true) : setLoading(true);
+  const load = useCallback(async (mode: 'initial' | 'refresh' | 'silent' = 'silent') => {
+    const id = ++reqRef.current;
+    if (mode === 'refresh') setRefreshing(true); else if (mode === 'silent') setBusy(true);
     const [sumRes, jobsRes, mpesaRes] = await Promise.allSettled([
       api.get('/carwash/reports/daily-summary', { params: { date } }),
       api.get('/carwash/jobs', { params: { date, limit: 20 } }),
-      api.get('/carwash/mpesa-collections', { params: { allocated: 'false', limit: 1 } }),
+      api.get('/carwash/mpesa/notifications', { params: { status: 'unmatched', limit: 1 } }),
     ]);
-    if (sumRes.status === 'fulfilled') setSummary(sumRes.value.data?.data ?? sumRes.value.data ?? null);
-    if (jobsRes.status === 'fulfilled') {
-      const raw = jobsRes.value.data?.data ?? jobsRes.value.data;
-      setJobs(Array.isArray(raw) ? raw : (raw?.jobs ?? []));
-    }
+    if (id !== reqRef.current) return;   // a newer request (another date) owns the screen now
+
+    if (sumRes.status === 'fulfilled') {
+      const s = sumRes.value.data?.data ?? sumRes.value.data;
+      setSummary(s && typeof s === 'object' ? s : null);
+    } else setSummary(null);
+
+    if (jobsRes.status === 'fulfilled') setJobs(listOf<Job>(jobsRes.value.data, 'jobs'));
+    else setJobs([]);
+
     if (mpesaRes.status === 'fulfilled') {
-      const d = mpesaRes.value.data;
-      setMpesaUnallocated(d?.total ?? d?.data?.total ?? 0);
+      const rows: { _id: string; count: number }[] = mpesaRes.value.data?.data?.summary ?? [];
+      setMpesaUnallocated(Number(rows.find(r => r._id === 'unmatched')?.count ?? 0));
+    } else setMpesaUnallocated(0);     // the M-Pesa alert is optional (needs payments access)
+
+    if (sumRes.status === 'rejected' && jobsRes.status === 'rejected') {
+      setError(cwError(sumRes.reason, 'Could not load the dashboard.'));
+      setPartialError(null);
+    } else {
+      setError(null);
+      const failed = sumRes.status === 'rejected' ? sumRes.reason : jobsRes.status === 'rejected' ? jobsRes.reason : null;
+      setPartialError(failed ? cwError(failed, 'Part of the dashboard could not be loaded.') : null);
     }
-    setLoading(false); setRefreshing(false);
+    setLoading(false); setRefreshing(false); setBusy(false);
   }, [date]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load('silent'); }, [load]);
+  useReloadOnFocus(() => load('silent'));
 
-  const counts      = summary?.statusCounts ?? {};
-  const revenue     = Number(summary?.totalRevenue ?? 0);
-  const cashTotal   = Number(summary?.cashTotal    ?? 0);
-  const mpesaTotal  = Number(summary?.mpesaTotal   ?? 0);
-  const isToday     = date === todayISO();
+  const counts     = summary?.statusCounts ?? {};
+  const revenue    = Number(summary?.totalRevenue ?? 0);
+  const cashTotal  = Number(summary?.cashTotal    ?? 0);
+  const mpesaTotal = Number(summary?.mpesaTotal   ?? 0);
+  const isToday    = date === todayISO();
+  const dayLabel   = fmtDate(date);
 
   if (loading) return <MilikLoader fullscreen />;
+
+  if (error && !summary && jobs.length === 0) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['bottom']}>
+        <ErrorState message={error} onRetry={() => { setLoading(true); load('initial'); }} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={CW} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load('refresh')} tintColor={CW} />}
       >
         {/* Date stepper */}
         <View style={styles.dateStepper}>
-          <TouchableOpacity style={styles.stepBtn} onPress={() => setDate(d => stepDate(d, -1))}>
+          <TouchableOpacity style={styles.stepBtn} onPress={() => setDate(d => stepDate(d, -1))} accessibilityLabel="Previous day">
             <Ionicons name="chevron-back" size={18} color={CW} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.dateLabel} onPress={() => setDate(todayISO())}>
-            <Text style={styles.dateLabelText}>{fmtDateLabel(date)}</Text>
+          <TouchableOpacity style={styles.dateLabel} onPress={() => setDate(todayISO())} disabled={isToday}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={styles.dateLabelText}>{isToday ? `Today · ${dayLabel}` : dayLabel}</Text>
+              {busy ? <ActivityIndicator size="small" color={CW} /> : null}
+            </View>
             {!isToday && <Text style={styles.dateLabelSub}>tap to go to today</Text>}
           </TouchableOpacity>
-          <TouchableOpacity style={styles.stepBtn} onPress={() => setDate(d => stepDate(d, 1))}>
+          <TouchableOpacity style={styles.stepBtn} onPress={() => setDate(d => stepDate(d, 1))} accessibilityLabel="Next day">
             <Ionicons name="chevron-forward" size={18} color={CW} />
           </TouchableOpacity>
         </View>
 
+        {partialError ? <ErrorBanner message={partialError} onRetry={() => load('silent')} /> : null}
+
         {/* Revenue hero */}
         <View style={styles.revenueCard}>
-          <Text style={styles.revenueLabel}>{isToday ? "TODAY'S REVENUE" : fmtDateLabel(date).toUpperCase() + ' REVENUE'}</Text>
-          <Text style={styles.revenueAmount}>{fmt(revenue)}</Text>
+          <Text style={styles.revenueLabel}>{isToday ? "TODAY'S COLLECTIONS" : `${dayLabel.toUpperCase()} COLLECTIONS`}</Text>
+          <Text style={styles.revenueAmount}>{fmtKES(revenue)}</Text>
+          <Text style={styles.revenueSub}>{summary?.jobsCount ?? 0} job{(summary?.jobsCount ?? 0) === 1 ? '' : 's'} booked</Text>
           <View style={styles.revenueBreakdown}>
             <View style={styles.revItem}>
               <View style={[styles.revDot, { backgroundColor: '#4ADE80' }]} />
               <Text style={styles.revItemLabel}>Cash</Text>
-              <Text style={styles.revItemVal}>{fmt(cashTotal)}</Text>
+              <Text style={styles.revItemVal} numberOfLines={1} adjustsFontSizeToFit>{fmtKES(cashTotal)}</Text>
             </View>
             <View style={[styles.revItem, styles.revItemBorder]}>
               <View style={[styles.revDot, { backgroundColor: '#FCD34D' }]} />
               <Text style={styles.revItemLabel}>M-Pesa</Text>
-              <Text style={styles.revItemVal}>{fmt(mpesaTotal)}</Text>
+              <Text style={styles.revItemVal} numberOfLines={1} adjustsFontSizeToFit>{fmtKES(mpesaTotal)}</Text>
             </View>
             <View style={styles.revItem}>
               <View style={[styles.revDot, { backgroundColor: '#93C5FD' }]} />
               <Text style={styles.revItemLabel}>Other</Text>
-              <Text style={styles.revItemVal}>{fmt(Math.max(0, revenue - cashTotal - mpesaTotal))}</Text>
+              <Text style={styles.revItemVal} numberOfLines={1} adjustsFontSizeToFit>{fmtKES(Math.max(0, revenue - cashTotal - mpesaTotal))}</Text>
             </View>
           </View>
         </View>
@@ -155,19 +168,17 @@ export default function CarWashDashboard() {
         {/* Queue status row */}
         <View style={styles.queueRow}>
           {QUEUE_ITEMS.map(q => {
-            const sc    = STATUS_STYLE[q.key];
+            const sc    = JOB_STATUS_STYLE[q.key];
             const count = counts[q.key] ?? 0;
             return (
               <TouchableOpacity
                 key={q.key}
-                style={[styles.queueCard, { borderLeftColor: q.borderColor }]}
-                onPress={() => router.push(`/carwash/jobs?status=${q.key}` as any)}
+                style={[styles.queueCard, { borderLeftColor: sc.color }]}
+                onPress={() => router.push(`/carwash/jobs?status=${q.key}&date=${date}` as any)}
                 activeOpacity={0.75}
               >
-                <Ionicons name={q.icon} size={18} color={sc.color} />
-                <Text style={[styles.queueCount, { color: count > 0 ? sc.color : '#CBD5E1' }]}>
-                  {count}
-                </Text>
+                <Ionicons name={q.icon} size={16} color={sc.color} />
+                <Text style={[styles.queueCount, { color: count > 0 ? sc.color : '#CBD5E1' }]}>{count}</Text>
                 <Text style={styles.queueLabel}>{q.label}</Text>
               </TouchableOpacity>
             );
@@ -208,8 +219,8 @@ export default function CarWashDashboard() {
         {/* Recent jobs */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{isToday ? "TODAY'S JOBS" : `${fmtDateLabel(date).toUpperCase()} JOBS`}</Text>
-            <TouchableOpacity onPress={() => router.push('/carwash/jobs' as any)}>
+            <Text style={styles.sectionTitle}>{isToday ? "TODAY'S JOBS" : `${dayLabel.toUpperCase()} JOBS`}</Text>
+            <TouchableOpacity onPress={() => router.push(`/carwash/jobs?date=${date}` as any)}>
               <Text style={[styles.seeAll, { color: CW }]}>See all</Text>
             </TouchableOpacity>
           </View>
@@ -217,12 +228,14 @@ export default function CarWashDashboard() {
           {jobs.length === 0 ? (
             <View style={styles.emptyWrap}>
               <Ionicons name="car-outline" size={44} color="#CBD5E1" />
-              <Text style={styles.emptyText}>No jobs recorded yet</Text>
+              <Text style={styles.emptyText}>{isToday ? 'No jobs recorded yet today' : 'No jobs on this day'}</Text>
             </View>
           ) : (
             <View style={styles.jobsList}>
               {jobs.slice(0, 10).map((job, i, arr) => {
-                const sc = STATUS_STYLE[job.status] ?? STATUS_STYLE.cancelled;
+                const sc = JOB_STATUS_STYLE[job.status] ?? JOB_STATUS_STYLE.cancelled;
+                const ps = PAY_STATUS_STYLE[job.paymentStatus ?? 'unpaid'] ?? PAY_STATUS_STYLE.unpaid;
+                const isCarpet = job.jobType === 'carpet';
                 return (
                   <TouchableOpacity
                     key={job._id}
@@ -231,21 +244,28 @@ export default function CarWashDashboard() {
                     activeOpacity={0.7}
                   >
                     <View style={[styles.jobPlateBox, { backgroundColor: CWL }]}>
-                      <Text style={[styles.jobPlate, { color: CW }]}>{job.plateNumber || '—'}</Text>
+                      <Text style={[styles.jobPlate, { color: CW }]} numberOfLines={1}>
+                        {isCarpet ? 'CARPET' : (job.plateNumber || '—')}
+                      </Text>
                     </View>
                     <View style={styles.jobMeta}>
                       <Text style={styles.jobVehicle} numberOfLines={1}>
-                        {job.customerName || job.vehicleType || job.serviceName || 'Walk-in'}
+                        {(isCarpet ? job.itemDescription : '') || job.customerName || job.vehicleType || job.serviceName || 'Walk-in'}
                       </Text>
-                      <Text style={styles.jobTime}>{fmtTime(job.createdAt)}</Text>
+                      <Text style={styles.jobTime}>{fmtTime(job.createdAt)}{job.jobNumber ? ` · #${job.jobNumber}` : ''}</Text>
                     </View>
                     <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                      <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
-                        <Text style={[styles.statusBadgeText, { color: sc.color }]}>
-                          {job.status.replace('_', ' ').toUpperCase()}
-                        </Text>
+                      <View style={{ flexDirection: 'row', gap: 4 }}>
+                        <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
+                          <Text style={[styles.statusBadgeText, { color: sc.color }]}>{jobStatusLabel(job.status, job.jobType).toUpperCase()}</Text>
+                        </View>
+                        {job.status !== 'cancelled' && job.paymentStatus !== 'unpaid' ? (
+                          <View style={[styles.statusBadge, { backgroundColor: ps.bg }]}>
+                            <Text style={[styles.statusBadgeText, { color: ps.color }]}>{ps.label.toUpperCase()}</Text>
+                          </View>
+                        ) : null}
                       </View>
-                      <Text style={styles.jobAmount}>{fmt(Math.max(0, Number(job.price || 0) - Number(job.discountAmount || 0)))}</Text>
+                      <Text style={styles.jobAmount}>{fmtKES(jobNet(job))}</Text>
                     </View>
                   </TouchableOpacity>
                 );
@@ -260,6 +280,7 @@ export default function CarWashDashboard() {
         style={styles.fab}
         onPress={() => router.push('/carwash/jobs/new' as any)}
         activeOpacity={0.85}
+        accessibilityLabel="New job"
       >
         <Ionicons name="add" size={26} color="#fff" />
       </TouchableOpacity>
@@ -283,27 +304,28 @@ const styles = StyleSheet.create({
   dateLabelSub:  { fontSize: 10, color: '#94A3B8', marginTop: 2 },
 
   revenueCard: {
-    backgroundColor: CW, borderRadius: 18, padding: 20, gap: 6,
+    backgroundColor: CW, borderRadius: 18, padding: 20, gap: 4,
   },
   revenueLabel:  { fontSize: 10, fontWeight: '700', letterSpacing: 1.2, color: 'rgba(255,255,255,0.65)' },
-  revenueAmount: { fontSize: 32, fontWeight: '900', color: '#fff' },
+  revenueAmount: { fontSize: 30, fontWeight: '900', color: '#fff' },
+  revenueSub:    { fontSize: 11, color: 'rgba(255,255,255,0.6)' },
   revenueBreakdown: { flexDirection: 'row', marginTop: 12, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 10 },
   revItem:       { flex: 1, gap: 3 },
   revItemBorder: { borderLeftWidth: 1, borderRightWidth: 1, borderColor: 'rgba(255,255,255,0.12)', paddingHorizontal: 10 },
   revDot:        { width: 6, height: 6, borderRadius: 3, marginBottom: 2 },
   revItemLabel:  { fontSize: 10, color: 'rgba(255,255,255,0.55)', fontWeight: '600' },
-  revItemVal:    { fontSize: 12, color: '#fff', fontWeight: '800' },
+  revItemVal:    { fontSize: 11, color: '#fff', fontWeight: '800' },
 
-  queueRow: { flexDirection: 'row', gap: 10 },
+  queueRow: { flexDirection: 'row', gap: 6 },
   queueCard: {
-    flex: 1, alignItems: 'center', gap: 4,
-    backgroundColor: '#fff', borderRadius: 14,
+    flex: 1, alignItems: 'center', gap: 3,
+    backgroundColor: '#fff', borderRadius: 12,
     borderWidth: 1, borderColor: '#E2E8F0',
     borderLeftWidth: 3,
-    paddingVertical: 14,
+    paddingVertical: 12,
   },
-  queueCount: { fontSize: 24, fontWeight: '900' },
-  queueLabel: { fontSize: 10, fontWeight: '600', color: '#64748B' },
+  queueCount: { fontSize: 20, fontWeight: '900' },
+  queueLabel: { fontSize: 9, fontWeight: '600', color: '#64748B' },
 
   actionsRow: { flexDirection: 'row', gap: 10 },
   actionBtn: {
@@ -328,7 +350,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 12,
     padding: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
   },
-  jobPlateBox: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  jobPlateBox: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, maxWidth: 96 },
   jobPlate:    { fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
   jobMeta:     { flex: 1 },
   jobVehicle:  { fontSize: 13, fontWeight: '600', color: '#0F172A' },

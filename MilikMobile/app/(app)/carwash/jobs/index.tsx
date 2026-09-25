@@ -1,26 +1,26 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Alert,
+  ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
-
-const CW  = '#1E3A8A';
-const CWL = '#EEF2FF';
-
-const todayISO = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
+import { ErrorBanner, ErrorState } from '../../../../components/ui/PmsStates';
+import { useDebounced, usePmsList, useReloadOnFocus } from '../../../../hooks/usePmsList';
+import { fmtDate, fmtKES, todayISO } from '../../../../utils/pmsFormat';
+import {
+  CW, CWL, JOB_STATUS_STYLE, PAY_STATUS_STYLE, RANGE_CHIPS, cwMessage, fmtTime, jobNet, jobStatusLabel, listOf, paginationOf,
+  rangeParams, type Range,
+} from '../../../../utils/carwash';
 
 type Job = {
   _id:          string;
   jobNumber?:   string;
-  plateNumber:  string;
+  jobType?:     string;
+  plateNumber?: string;
+  itemDescription?: string;
   vehicleType?: string;
   serviceName?: string;
   status:       string;
@@ -29,80 +29,79 @@ type Job = {
   paymentStatus?: string;
   createdAt:    string;
   customerName?: string;
+  phone?:       string;
   serviceLines?: { serviceName?: string }[];
+  assignedStaff?: { name?: string }[];
 };
 
-const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
-  waiting:   { bg: '#FEF3C7', color: '#D97706' },
-  washing:   { bg: '#DBEAFE', color: '#1D4ED8' },
-  done:      { bg: '#EDE9FE', color: '#7C3AED' },
-  paid:      { bg: '#D1FAE5', color: '#065F46' },
-  cancelled: { bg: '#F1F5F9', color: '#64748B' },
-};
-
-const TABS = [
+const STATUS_TABS = [
   { key: '',          label: 'All'       },
   { key: 'waiting',   label: 'Waiting'   },
   { key: 'washing',   label: 'Washing'   },
+  { key: 'drying',    label: 'Drying'    },
+  { key: 'ready',     label: 'Ready'     },
   { key: 'done',      label: 'Done'      },
-  { key: 'paid',      label: 'Paid'      },
   { key: 'cancelled', label: 'Cancelled' },
 ] as const;
 
-const fmt = (n: number) =>
-  `KES ${Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+const PAY_TABS = [
+  { key: '',        label: 'Any payment' },
+  { key: 'unpaid',  label: 'Unpaid'      },
+  { key: 'partial', label: 'Partial'     },
+  { key: 'paid',    label: 'Paid'        },
+] as const;
 
-const fmtTime = (d: string) =>
-  new Date(d).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' });
+const VALID_STATUS = new Set(STATUS_TABS.map(t => t.key));
+
+const parse = (data: any) => {
+  const p = paginationOf(data);
+  return { rows: listOf<Job>(data, 'jobs'), pages: p.pages, total: p.total };
+};
+
+function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={[styles.chip, active && styles.chipActive]} onPress={onPress} activeOpacity={0.8}>
+      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
 
 export default function CarWashJobsScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ status?: string }>();
+  const params = useLocalSearchParams<{ status?: string; date?: string }>();
 
-  const [statusFilter, setStatusFilter] = useState(params.status ?? '');
+  // The dashboard hands over a stage and the day it was looking at.
+  const dayFromDashboard = /^\d{4}-\d{2}-\d{2}$/.test(String(params.date || '')) && params.date !== todayISO() ? String(params.date) : '';
+  const [statusFilter, setStatusFilter] = useState(VALID_STATUS.has(params.status as any) ? String(params.status) : '');
+  const [payFilter,    setPayFilter]    = useState('');
+  const [range,        setRange]        = useState<Range | 'day'>(dayFromDashboard ? 'day' : 'today');
   const [search,       setSearch]       = useState('');
-  const [jobs,         setJobs]         = useState<Job[]>([]);
-  const [loading,      setLoading]      = useState(true);
-  const [refreshing,   setRefreshing]   = useState(false);
-  const [loadingMore,  setLoadingMore]  = useState(false);
-  const [page,         setPage]         = useState(1);
-  const [hasMore,      setHasMore]      = useState(true);
+  const debouncedSearch = useDebounced(search.trim(), 400);
 
-  const LIMIT    = 30;
-  const searchRef = useRef(search);
-  searchRef.current = search;
+  const dateParams = range === 'day' ? { date: dayFromDashboard } : rangeParams(range);
+  const listParams = useMemo(() => ({
+    status:        statusFilter || undefined,
+    paymentStatus: payFilter    || undefined,
+    search:        debouncedSearch || undefined,
+    ...dateParams,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [statusFilter, payFilter, debouncedSearch, range, dayFromDashboard]);
 
-  const load = useCallback(async (pg = 1, isRefresh = false) => {
-    if (pg === 1) isRefresh ? setRefreshing(true) : setLoading(true);
-    else setLoadingMore(true);
-    try {
-      const p: Record<string, string> = { page: String(pg), limit: String(LIMIT) };
-      if (statusFilter === 'paid') p.paymentStatus = 'paid';
-      else if (statusFilter)       p.status = statusFilter;
-      if (searchRef.current.trim()) p.search = searchRef.current.trim();
-      const { data } = await api.get('/carwash/jobs', { params: p });
-      const raw  = data?.data ?? data;
-      const rows: Job[] = Array.isArray(raw) ? raw : (raw?.jobs ?? []);
-      setJobs(prev => pg === 1 ? rows : [...prev, ...rows]);
-      setHasMore(rows.length === LIMIT);
-      setPage(pg);
-    } catch (err: any) {
-      if (pg === 1) setJobs([]);
-      if (pg === 1) Alert.alert('Error', err?.response?.data?.message ?? 'Failed to load jobs.');
-    }
-    finally { setLoading(false); setRefreshing(false); setLoadingMore(false); }
-  }, [statusFilter]);
+  const list = usePmsList<Job>({ path: '/carwash/jobs', params: listParams, limit: 30, parse });
+  useReloadOnFocus(list.reload);
 
-  useEffect(() => { load(1); }, [load]);
-  useEffect(() => {
-    const t = setTimeout(() => load(1), 400);
-    return () => clearTimeout(t);
-  }, [search]);
+  const clearFilters = useCallback(() => {
+    setStatusFilter(''); setPayFilter(''); setSearch(''); setRange('all');
+  }, []);
+  const filtered = !!(statusFilter || payFilter || debouncedSearch || range !== 'all');
 
   const renderItem = ({ item }: { item: Job }) => {
-    const sc       = STATUS_STYLE[item.status] ?? STATUS_STYLE.cancelled;
-    const svcText  = item.serviceLines?.map(s => s.serviceName).filter(Boolean).join(' · ') || item.serviceName || item.vehicleType || '';
-    const svcCount = item.serviceLines?.length ?? 0;
+    const sc       = JOB_STATUS_STYLE[item.status] ?? JOB_STATUS_STYLE.cancelled;
+    const ps       = PAY_STATUS_STYLE[item.paymentStatus ?? 'unpaid'] ?? PAY_STATUS_STYLE.unpaid;
+    const isCarpet = item.jobType === 'carpet';
+    const svcNames = (item.serviceLines ?? []).map(s => s.serviceName).filter(Boolean);
+    const svcText  = svcNames.length ? svcNames.join(' · ') : (item.serviceName || item.vehicleType || '');
+    const net      = jobNet(item);
     return (
       <TouchableOpacity
         style={[styles.card, { borderLeftColor: sc.color }]}
@@ -110,27 +109,35 @@ export default function CarWashJobsScreen() {
         activeOpacity={0.75}
       >
         <View style={[styles.plateBox, { backgroundColor: CWL }]}>
-          <Text style={[styles.plate, { color: CW }]}>{item.plateNumber || '—'}</Text>
-          {item.jobNumber ? <Text style={styles.jobNum}>#{item.jobNumber}</Text> : null}
+          <Text style={[styles.plate, { color: CW }]} numberOfLines={1}>{isCarpet ? 'CARPET' : (item.plateNumber || '—')}</Text>
+          {item.jobNumber ? <Text style={styles.jobNum} numberOfLines={1}>#{item.jobNumber.replace(/^CW-/, '')}</Text> : null}
         </View>
         <View style={styles.cardBody}>
           <View style={styles.cardTop}>
             <Text style={styles.customerName} numberOfLines={1}>
-              {item.customerName || 'Walk-in'}
+              {(isCarpet ? item.itemDescription : '') || item.customerName || 'Walk-in'}
             </Text>
-            <Text style={styles.amount}>{fmt(Math.max(0, Number(item.price || 0) - Number(item.discountAmount || 0)))}</Text>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={styles.amount}>{fmtKES(net)}</Text>
+              {Number(item.discountAmount) > 0 ? <Text style={styles.strike}>{fmtKES(item.price)}</Text> : null}
+            </View>
           </View>
           {svcText ? (
             <Text style={styles.services} numberOfLines={1}>
-              {svcCount > 0 ? `${svcCount} service${svcCount > 1 ? 's' : ''} · ` : ''}{svcText}
+              {svcNames.length > 1 ? `${svcNames.length} services · ` : ''}{svcText}
             </Text>
           ) : null}
           <View style={styles.cardBottom}>
-            <Text style={styles.time}>{fmtTime(item.createdAt)}</Text>
-            <View style={[styles.badge, { backgroundColor: sc.bg }]}>
-              <Text style={[styles.badgeText, { color: sc.color }]}>
-                {item.status.toUpperCase()}
-              </Text>
+            <Text style={styles.time}>{fmtDate(item.createdAt)}, {fmtTime(item.createdAt)}</Text>
+            <View style={{ flexDirection: 'row', gap: 4 }}>
+              <View style={[styles.badge, { backgroundColor: sc.bg }]}>
+                <Text style={[styles.badgeText, { color: sc.color }]}>{jobStatusLabel(item.status, item.jobType).toUpperCase()}</Text>
+              </View>
+              {item.status !== 'cancelled' ? (
+                <View style={[styles.badge, { backgroundColor: ps.bg }]}>
+                  <Text style={[styles.badgeText, { color: ps.color }]}>{ps.label.toUpperCase()}</Text>
+                </View>
+              ) : null}
             </View>
           </View>
         </View>
@@ -146,58 +153,85 @@ export default function CarWashJobsScreen() {
         <Ionicons name="search-outline" size={18} color="#94A3B8" />
         <TextInput
           style={styles.searchInput}
-          placeholder="Plate, customer, job #..."
+          placeholder="Plate, customer, phone or job #"
           placeholderTextColor="#94A3B8"
           value={search}
           onChangeText={setSearch}
           returnKeyType="search"
+          autoCorrect={false}
+          autoCapitalize="characters"
         />
-        {loading && !refreshing
+        {list.loading && !list.refreshing
           ? <ActivityIndicator size="small" color={CW} />
-          : search ? <TouchableOpacity onPress={() => setSearch('')}><Ionicons name="close-circle" size={18} color="#94A3B8" /></TouchableOpacity>
+          : search ? <TouchableOpacity onPress={() => setSearch('')} accessibilityLabel="Clear search"><Ionicons name="close-circle" size={18} color="#94A3B8" /></TouchableOpacity>
           : null}
       </View>
 
-      {/* Status filter tabs */}
-      <FlatList
-        horizontal
-        data={TABS as any}
-        keyExtractor={t => t.key}
-        showsHorizontalScrollIndicator={false}
-        style={{ flexGrow: 0 }}
-        contentContainerStyle={styles.tabsRow}
-        renderItem={({ item: t }) => (
-          <TouchableOpacity
-            style={[styles.tab, statusFilter === t.key && styles.tabActive]}
-            onPress={() => setStatusFilter(t.key)}
-          >
-            <Text style={[styles.tabText, statusFilter === t.key && styles.tabTextActive]}>
-              {t.label}
-            </Text>
-          </TouchableOpacity>
-        )}
-      />
+      {/* Filters */}
+      <View style={styles.filters}>
+        <FlatList
+          horizontal
+          data={dayFromDashboard ? [{ key: 'day', label: fmtDate(dayFromDashboard) }, ...RANGE_CHIPS] : RANGE_CHIPS}
+          keyExtractor={c => c.key}
+          showsHorizontalScrollIndicator={false}
+          style={{ flexGrow: 0 }}
+          contentContainerStyle={styles.chipsRow}
+          renderItem={({ item: c }) => <Chip label={c.label} active={range === c.key} onPress={() => setRange(c.key as Range | 'day')} />}
+        />
+        <FlatList
+          horizontal
+          data={STATUS_TABS as unknown as { key: string; label: string }[]}
+          keyExtractor={t => t.key || 'all'}
+          showsHorizontalScrollIndicator={false}
+          style={{ flexGrow: 0 }}
+          contentContainerStyle={styles.chipsRow}
+          renderItem={({ item: t }) => <Chip label={t.label} active={statusFilter === t.key} onPress={() => setStatusFilter(t.key)} />}
+        />
+        <FlatList
+          horizontal
+          data={PAY_TABS as unknown as { key: string; label: string }[]}
+          keyExtractor={t => t.key || 'any'}
+          showsHorizontalScrollIndicator={false}
+          style={{ flexGrow: 0 }}
+          contentContainerStyle={styles.chipsRow}
+          renderItem={({ item: t }) => <Chip label={t.label} active={payFilter === t.key} onPress={() => setPayFilter(t.key)} />}
+        />
+      </View>
 
-      {loading ? (
+      {list.loading ? (
         <MilikLoader fullscreen />
+      ) : list.error && list.items.length === 0 ? (
+        <ErrorState message={cwMessage(list.error)} onRetry={list.retry} />
       ) : (
         <FlatList
-          data={jobs}
+          data={list.items}
           keyExtractor={j => j._id}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(1, true)} tintColor={CW} />}
-          onEndReached={() => { if (!loadingMore && hasMore) load(page + 1); }}
+          refreshControl={<RefreshControl refreshing={list.refreshing} onRefresh={list.refresh} tintColor={CW} />}
+          onEndReached={list.loadMore}
           onEndReachedThreshold={0.3}
+          ListHeaderComponent={
+            <>
+              {list.error ? <ErrorBanner message={cwMessage(list.error)} onRetry={list.refresh} /> : null}
+              {list.items.length > 0 ? (
+                <Text style={styles.count}>{list.total} job{list.total === 1 ? '' : 's'}</Text>
+              ) : null}
+            </>
+          }
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
               <Ionicons name="car-outline" size={48} color="#CBD5E1" />
-              <Text style={styles.emptyText}>No jobs found</Text>
+              <Text style={styles.emptyText}>{filtered ? 'No jobs match these filters' : 'No jobs found'}</Text>
+              {filtered ? (
+                <TouchableOpacity onPress={clearFilters}><Text style={styles.clear}>Show all jobs</Text></TouchableOpacity>
+              ) : null}
             </View>
           }
-          ListFooterComponent={loadingMore ? (
+          ListFooterComponent={list.loadingMore ? (
             <View style={{ padding: 20, alignItems: 'center' }}>
               <ActivityIndicator size="small" color={CW} />
             </View>
@@ -205,7 +239,7 @@ export default function CarWashJobsScreen() {
         />
       )}
 
-      <TouchableOpacity style={styles.fab} onPress={() => router.push('/carwash/jobs/new' as any)}>
+      <TouchableOpacity style={styles.fab} onPress={() => router.push('/carwash/jobs/new' as any)} accessibilityLabel="New job">
         <Ionicons name="add" size={26} color="#fff" />
       </TouchableOpacity>
     </SafeAreaView>
@@ -217,26 +251,29 @@ const styles = StyleSheet.create({
 
   searchWrap: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    margin: 16, marginBottom: 10,
+    margin: 16, marginBottom: 8,
     backgroundColor: '#fff', borderRadius: 14,
     borderWidth: 1.5, borderColor: '#E2E8F0',
-    paddingHorizontal: 14, height: 50,
+    paddingHorizontal: 14, height: 48,
   },
   searchInput: { flex: 1, fontSize: 15, color: '#0F172A' },
 
-  tabsRow: { paddingHorizontal: 16, paddingBottom: 10, gap: 8 },
-  tab: {
-    paddingHorizontal: 14, paddingVertical: 7,
+  filters:  { gap: 6, paddingBottom: 6 },
+  chipsRow: { paddingHorizontal: 16, gap: 8 },
+  chip: {
+    paddingHorizontal: 13, paddingVertical: 6,
     borderRadius: 20, backgroundColor: '#fff',
     borderWidth: 1, borderColor: '#E2E8F0',
   },
-  tabActive:     { backgroundColor: CW, borderColor: CW },
-  tabText:       { fontSize: 12, fontWeight: '600', color: '#475569' },
-  tabTextActive: { color: '#fff' },
+  chipActive:     { backgroundColor: CW, borderColor: CW },
+  chipText:       { fontSize: 12, fontWeight: '600', color: '#475569' },
+  chipTextActive: { color: '#fff' },
 
   list:      { paddingHorizontal: 16, paddingBottom: 100 },
-  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingTop: 60 },
+  count:     { fontSize: 11, fontWeight: '700', color: '#64748B', marginBottom: 8, marginTop: 2 },
+  emptyWrap: { alignItems: 'center', justifyContent: 'center', gap: 12, paddingTop: 60 },
   emptyText: { fontSize: 15, color: '#94A3B8' },
+  clear:     { fontSize: 13, fontWeight: '700', color: CW },
 
   card: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
@@ -245,19 +282,20 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     padding: 12,
   },
-  plateBox: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, alignItems: 'center' },
+  plateBox: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, alignItems: 'center', maxWidth: 92 },
   plate:    { fontSize: 14, fontWeight: '900', letterSpacing: 0.5 },
   jobNum:   { fontSize: 9, color: '#64748B', marginTop: 2 },
 
   cardBody:     { flex: 1 },
-  cardTop:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
+  cardTop:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2 },
   customerName: { fontSize: 14, fontWeight: '700', color: '#0F172A', flex: 1, marginRight: 8 },
   amount:       { fontSize: 14, fontWeight: '800', color: '#0F172A' },
+  strike:       { fontSize: 10, color: '#94A3B8', textDecorationLine: 'line-through' },
   services:     { fontSize: 11, color: '#64748B', marginBottom: 4 },
   cardBottom:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   time:         { fontSize: 11, color: '#94A3B8' },
 
-  badge:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  badge:     { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
   badgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.4 },
 
   fab: {
