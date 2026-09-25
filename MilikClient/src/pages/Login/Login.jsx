@@ -72,6 +72,7 @@ function Login() {
     password: '',
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [capsLock, setCapsLock] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState('');
@@ -192,135 +193,148 @@ function Login() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-[#eef5f1] via-[#e7f1eb] to-[#f4efe7] flex items-center justify-center p-4">
-      <img
-        src="/logo.png"
-        alt="Milik watermark"
-        className="pointer-events-none select-none absolute inset-0 m-auto h-[65vh] w-auto opacity-[0.13]"
-      />
+    <div className="min-h-screen bg-white lg:grid lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
 
-      <div className="relative w-full max-w-md">
-        <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl overflow-hidden border border-[#0B3B2E]/20">
-          <div className="bg-gradient-to-r from-[#0B3B2E] to-[#0A3127] p-8 text-center">
-            <div className="flex items-center justify-center gap-3 mb-2">
-              <img
-                src="/MIIK CUBES.png"
-                alt="Milik logo"
-                className="w-12 h-12 md:w-14 md:h-14 object-contain drop-shadow-md"
-              />
-              <h1 className="text-4xl font-extrabold tracking-wide text-white">Milik</h1>
-            </div>
-            <p className="text-[#DDEFE1] text-sm font-semibold">MILIK System</p>
-          </div>
+      {/* ── Brand panel (large screens) ── */}
+      <aside className="relative hidden overflow-hidden bg-gradient-to-br from-[#0B3B2E] via-[#0A3127] to-[#06231b] text-white lg:flex lg:flex-col lg:justify-between lg:p-12 xl:p-16">
+        <div className="pointer-events-none absolute -right-24 -top-24 h-96 w-96 border-[36px] border-[#FF8C00]/10" />
+        <div className="pointer-events-none absolute -bottom-32 -left-20 h-[28rem] w-[28rem] border-[36px] border-white/5" />
 
-          <div className="p-8">
-            <div className="mb-6 text-center">
-              <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#FF8C00]">Existing user sign in</p>
-              <h2 className="mt-2 text-2xl font-extrabold text-[#0B3B2E] mb-1 text-center">Welcome Back</h2>
-              <p className="text-center text-sm font-semibold text-slate-600">Sign in to continue to your live workspace</p>
-              <Link to="/" className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-[#0B3B2E] transition-colors hover:text-[#FF8C00]">
-                ← Back to public overview
-              </Link>
-            </div>
-
-            {serverError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-300 rounded-lg">
-                <p className="text-sm font-semibold text-red-700 flex items-start gap-2">
-                  <span>⚠️</span>
-                  <span>{serverError}</span>
-                </p>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div>
-                <label htmlFor="email" className="block text-sm font-extrabold text-[#0B3B2E] mb-2 tracking-wide">
-                  Email Address
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <FaEnvelope className="text-[#0B3B2E]" />
-                  </div>
-                  <input
-                    type="email"
-                    id="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    className={[
-                      "w-full pl-10 pr-4 py-3 border-2 rounded-lg outline-none transition-all text-[#0B3B2E] font-bold placeholder:text-slate-500",
-                      "focus:ring-2 focus:ring-[#0B3B2E]/20 focus:border-[#0B3B2E]",
-                      errors.email ? "border-red-400 bg-red-50" : "border-[#b9d3c7] bg-white",
-                    ].join(" ")}
-                    placeholder="Enter your email"
-                    disabled={loading}
-                  />
-                </div>
-                {errors.email && <p className="mt-1 text-sm font-bold text-red-600">{errors.email}</p>}
-              </div>
-
-              <div>
-                <label htmlFor="password" className="block text-sm font-extrabold text-[#0B3B2E] mb-2 tracking-wide">
-                  Password
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <FaLock className="text-[#0B3B2E]" />
-                  </div>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    id="password"
-                    name="password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    className={[
-                      "w-full pl-10 pr-12 py-3 border-2 rounded-lg outline-none transition-all text-[#0B3B2E] font-bold placeholder:text-slate-500",
-                      "focus:ring-2 focus:ring-[#0B3B2E]/20 focus:border-[#0B3B2E]",
-                      errors.password ? "border-red-400 bg-red-50" : "border-[#b9d3c7] bg-white",
-                    ].join(" ")}
-                    placeholder="Enter your password"
-                    disabled={loading}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#0B3B2E] hover:text-[#FF8C00]"
-                    disabled={loading}
-                  >
-                    {showPassword ? <FaEyeSlash /> : <FaEye />}
-                  </button>
-                </div>
-                {errors.password && <p className="mt-1 text-sm font-bold text-red-600">{errors.password}</p>}
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-gradient-to-r from-[#0B3B2E] to-[#0A3127] text-white py-3 px-4 rounded-lg font-extrabold tracking-wide hover:shadow-lg hover:from-[#0A3127] hover:to-[#0B3B2E] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <Spinner size="sm" />
-                    Signing in...
-                  </>
-                ) : (
-                  'Sign In'
-                )}
-              </button>
-            </form>
-
-            <div className="mt-6 text-center">
-              <p className="text-sm font-semibold text-slate-600">
-                New to Milik?{' '}
-                <Link to="/" className="font-extrabold text-[#0B3B2E] hover:text-[#FF8C00] transition-colors">
-                  Explore the public overview
-                </Link>
-              </p>
-            </div>
-
+        <div className="relative">
+          <div className="inline-block rounded-xl bg-white px-6 py-4 shadow-xl">
+            <img src="/milik-logo-trim.png" alt="Milik System — One Platform. Every Business." className="h-14 w-auto xl:h-16" />
           </div>
         </div>
-      </div>
+
+        <div className="relative max-w-xl">
+          <p className="text-xs font-bold uppercase tracking-[0.28em] text-[#FF8C00]">Milik System</p>
+          <h1 className="mt-4 text-3xl font-extrabold leading-tight xl:text-4xl">
+            Every part of your business, in one place.
+          </h1>
+          <p className="mt-4 max-w-md text-base leading-relaxed text-emerald-100/80">
+            Properties, accounts, people, stock and sales share one set of books, so what you see is always the same everywhere.
+          </p>
+          <ul className="mt-8 grid max-w-md grid-cols-2 gap-x-6 gap-y-3 text-sm font-semibold text-emerald-50">
+            {['Property management', 'Accounts & ledger', 'Human resources', 'Inventory & POS', 'Property sales', 'Car wash'].map((label) => (
+              <li key={label} className="flex items-center gap-2.5">
+                <span className="h-2 w-2 shrink-0 bg-[#FF8C00]" />
+                {label}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <p className="relative text-xs text-emerald-100/60">© {new Date().getFullYear()} Milik System. All rights reserved.</p>
+      </aside>
+
+      {/* ── Sign-in ── */}
+      <main className="flex min-h-screen flex-col justify-center bg-white px-6 py-10 sm:px-12 lg:min-h-0">
+        <div className="mx-auto w-full max-w-md">
+
+          <div className="mb-8 lg:hidden">
+            <img src="/milik-logo-trim.png" alt="Milik System" className="mx-auto h-12 w-auto sm:h-14" />
+          </div>
+
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#FF8C00]">Existing user sign in</p>
+          <h2 className="mt-2 text-3xl font-extrabold text-[#0B3B2E]">Welcome back</h2>
+          <p className="mt-1.5 text-sm font-medium text-slate-500">Sign in to continue to your workspace.</p>
+
+          {serverError && (
+            <div role="alert" className="mt-6 flex items-start gap-2.5 border-l-4 border-red-500 bg-red-50 px-4 py-3">
+              <span aria-hidden="true">⚠️</span>
+              <p className="text-sm font-semibold text-red-700">{serverError}</p>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="mt-7 space-y-5" noValidate>
+            <div>
+              <label htmlFor="email" className="mb-1.5 block text-sm font-bold text-[#0B3B2E]">Email address</label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
+                  <FaEnvelope className="text-slate-400" />
+                </div>
+                <input
+                  type="email"
+                  id="email"
+                  name="email"
+                  autoComplete="username"
+                  autoFocus
+                  value={formData.email}
+                  onChange={handleChange}
+                  className={[
+                    'w-full rounded-lg border bg-white py-3 pl-10 pr-4 text-[15px] font-semibold text-[#0B3B2E] outline-none transition placeholder:font-normal placeholder:text-slate-400',
+                    'focus:border-[#0B3B2E] focus:ring-4 focus:ring-[#0B3B2E]/10',
+                    errors.email ? 'border-red-400 bg-red-50' : 'border-slate-300',
+                  ].join(' ')}
+                  placeholder="you@company.com"
+                  disabled={loading}
+                />
+              </div>
+              {errors.email && <p className="mt-1 text-sm font-semibold text-red-600">{errors.email}</p>}
+            </div>
+
+            <div>
+              <label htmlFor="password" className="mb-1.5 block text-sm font-bold text-[#0B3B2E]">Password</label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
+                  <FaLock className="text-slate-400" />
+                </div>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  id="password"
+                  name="password"
+                  autoComplete="current-password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  onKeyUp={(e) => setCapsLock(e.getModifierState?.('CapsLock') === true)}
+                  onBlur={() => setCapsLock(false)}
+                  className={[
+                    'w-full rounded-lg border bg-white py-3 pl-10 pr-12 text-[15px] font-semibold text-[#0B3B2E] outline-none transition placeholder:font-normal placeholder:text-slate-400',
+                    'focus:border-[#0B3B2E] focus:ring-4 focus:ring-[#0B3B2E]/10',
+                    errors.password ? 'border-red-400 bg-red-50' : 'border-slate-300',
+                  ].join(' ')}
+                  placeholder="Enter your password"
+                  disabled={loading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-slate-400 hover:text-[#0B3B2E]"
+                  disabled={loading}
+                >
+                  {showPassword ? <FaEyeSlash /> : <FaEye />}
+                </button>
+              </div>
+              {capsLock && <p className="mt-1 text-xs font-bold text-amber-600">Caps Lock is on</p>}
+              {errors.password && <p className="mt-1 text-sm font-semibold text-red-600">{errors.password}</p>}
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#0B3B2E] px-4 py-3.5 text-[15px] font-extrabold tracking-wide text-white shadow-md transition hover:bg-[#0A3127] hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-[#0B3B2E]/25 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading ? (
+                <>
+                  <Spinner size="sm" />
+                  Signing in…
+                </>
+              ) : (
+                'Sign in'
+              )}
+            </button>
+          </form>
+
+          <p className="mt-8 text-center text-sm font-medium text-slate-500">
+            New to Milik?{' '}
+            <Link to="/" className="font-bold text-[#0B3B2E] transition-colors hover:text-[#FF8C00]">
+              Explore the public overview
+            </Link>
+          </p>
+          <p className="mt-10 text-center text-xs text-slate-400 lg:hidden">© {new Date().getFullYear()} Milik System</p>
+        </div>
+      </main>
     </div>
   );
 }
