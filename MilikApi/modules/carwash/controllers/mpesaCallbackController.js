@@ -24,6 +24,8 @@ import { normalizePlate, buildPlateRegex } from "../utils/plateUtils.js";
 import { resolveActiveBusinessId, resolveActiveBranchId, parseDateRange } from "../services/businessScope.js";
 import { createError } from "../../../utils/error.js";
 import { round2 } from "../../../utils/math.js";
+import { escapeRegex } from "../../../utils/escapeRegex.js";
+import { phoneSearchRegex, searchRegex } from "../../../utils/listSearch.js";
 
 const normalizeText = (v = "") => String(v || "").trim();
 const normalizeUpper = (v = "") => normalizeText(v).toUpperCase();
@@ -484,7 +486,7 @@ export const handleStkCallback = async (req, res) => {
     autoEnrollPlate({ business: businessId, plate: job.plateNumber, customerName: job.customerName, phone: phone || null })
       .catch(() => {});
 
-    const newPaidAmount = round2(alreadyPaid + payAmount);
+    const newPaidAmount = round2(alreadyPaid + appliedAmount);
     const updatedJob = await refreshJobPaymentStatus(businessId, job._id, { job, paidAmount: newPaidAmount });
     await postCarWashPaymentLedger({ businessId, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: null, taxAmount: Number((updatedJob || job)?.taxAmount || 0), jobPrice: Number((updatedJob || job)?.price || 0) });
 
@@ -1060,8 +1062,16 @@ export const listMpesaNotifications = async (req, res, next) => {
       if (p) filter.plate = buildPlateRegex(p);
     }
     if (req.query.search) {
-      const re = new RegExp(String(req.query.search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-      filter.$or = [{ transactionCode: re }, { senderName: re }];
+      // Find a payment by what the cashier has in hand: the receipt code, the payer's name, the plate (however it was typed),
+      // the account reference the payer entered, or the payer's phone in any format.
+      const re = searchRegex(req.query.search);
+      const plate = normalizePlate(String(req.query.search));
+      const phone = phoneSearchRegex(req.query.search);
+      filter.$or = [
+        { transactionCode: re }, { senderName: re }, { billRefNumber: re },
+        ...(plate ? [{ plate: new RegExp(escapeRegex(plate)) }] : []),
+        ...(phone ? [{ msisdn: phone }] : [{ msisdn: re }]),
+      ];
     }
     if (req.query.date) {
       const { start, end } = parseDateRange(req.query.date);
