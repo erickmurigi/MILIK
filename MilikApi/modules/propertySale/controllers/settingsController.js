@@ -4,6 +4,7 @@ import SaleSettings from "../models/SaleSettings.js";
 import { resolveActiveBusinessId } from "../services/businessScope.js";
 import { invalidateAgentVisibilityCache } from "../middleware/agentScope.js";
 import { sanitizeTypeConfig } from "../services/listingAttributes.js";
+import { WHT_MAX_RATE } from "../../../utils/withholdingTax.js";
 
 const ensureSettings = async (business) => {
   let s = await SaleSettings.findOne({ business });
@@ -135,7 +136,13 @@ export const updateCommissionDefaults = async (req, res, next) => {
     const { rate, commissionType, whtRate } = req.body;
     if (rate           != null) settings.commissionDefaults.rate           = Number(rate);
     if (commissionType != null) settings.commissionDefaults.commissionType = commissionType;
-    if (whtRate        != null) settings.commissionDefaults.whtRate        = Number(whtRate);
+    if (whtRate != null) {
+      const rateNumber = Number(whtRate);
+      if (whtRate === "" || !Number.isFinite(rateNumber) || rateNumber < 0 || rateNumber > WHT_MAX_RATE) {
+        return next(createError(400, `Withholding tax rate must be between 0 and ${WHT_MAX_RATE}%.`));
+      }
+      settings.commissionDefaults.whtRate = rateNumber;
+    }
     await settings.save();
     res.json({ settings });
   } catch (err) { next(err); }

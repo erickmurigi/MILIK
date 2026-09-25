@@ -164,6 +164,23 @@ export const postEntry = async (payload = {}) => {
   return entry.save(session ? { session } : undefined);
 };
 
+/**
+ * Posts the legs of one journal in order. If a leg fails, the legs already posted are reversed and the error is rethrown,
+ * so a journal is never left half-posted (a retry would otherwise find "something already posted" and stop).
+ */
+export const postEntries = async (payloads = []) => {
+  const posted = [];
+  try {
+    for (const payload of payloads) posted.push(await postEntry(payload));
+    return posted;
+  } catch (error) {
+    for (const entry of posted) {
+      await postReversal({ entryId: entry._id, reason: "Auto-reversal: the journal could not be completed", userId: entry.createdBy }).catch(() => null);
+    }
+    throw error;
+  }
+};
+
 export const postReversal = async ({ entryId, reason, userId, session = null }) => {
   if (!entryId) {
     throw createError(400, "postReversal requires entryId");

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { WHT_MAX_RATE } from "../utils/withholdingTax.js";
 
 const ServiceProviderSchema = new mongoose.Schema(
   {
@@ -20,7 +21,7 @@ const ServiceProviderSchema = new mongoose.Schema(
     bankName: { type: String, trim: true, default: "" },
     accountName: { type: String, trim: true, default: "" },
     subjectToWht: { type: Boolean, default: false },
-    whtRate:      { type: Number, min: 0, max: 30, default: 0 },
+    whtRate:      { type: Number, min: 0, max: WHT_MAX_RATE, default: 0 },
     whtCategory:  { type: String, trim: true, default: "" },
     isActive: { type: Boolean, default: true },
     notes: { type: String, trim: true, default: "" },

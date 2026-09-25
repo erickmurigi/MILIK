@@ -7,6 +7,7 @@ import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import { resolveBusinessId } from "../../utils/requestContext.js";
 import { parsePagination } from "../../utils/pagination.js";
 import { createError } from "../../utils/error.js";
+import { clampWhtRate } from "../../utils/withholdingTax.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
@@ -29,7 +30,7 @@ export const createServiceProvider = async (req, res, next) => {
     const name = String(req.body?.name || "").trim();
     if (!name) return next(createError(400, "Service provider name is required"));
 
-    const whtRate = Math.min(30, Math.max(0, Number(req.body?.whtRate || 0)));
+    const whtRate = clampWhtRate(req.body?.whtRate);
     const doc = await ServiceProvider.create({
       business: businessId,
       providerCode: await generateProviderCode(businessId),
@@ -118,7 +119,7 @@ export const updateServiceProvider = async (req, res, next) => {
       return next(createError(400, "Service provider name is required"));
     }
     // Normalize WHT fields: clamp rate, clear subjectToWht if rate is effectively zero
-    row.whtRate = Math.min(30, Math.max(0, Number(row.whtRate || 0)));
+    row.whtRate = clampWhtRate(row.whtRate);
     if (row.subjectToWht && row.whtRate <= 0) row.subjectToWht = false;
     if (!row.subjectToWht) row.whtRate = 0;
     await row.save();

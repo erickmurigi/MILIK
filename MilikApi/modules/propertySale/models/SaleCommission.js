@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { round2 } from "../../../utils/math.js";
+import { WHT_MAX_RATE } from "../../../utils/withholdingTax.js";
 
 const COMMISSION_STATUSES = ["pending", "approved", "paid", "cancelled", "reversed"];
 const PAYOUT_METHODS = ["cash", "mpesa", "bank_transfer", "cheque", "other"];
@@ -20,7 +21,7 @@ const saleCommissionSchema = new mongoose.Schema(
     payoutDate: { type: Date, default: null },
     payoutMethod: { type: String, enum: PAYOUT_METHODS, default: null },
     payoutReference: { type: String, trim: true, default: "" },
-    whtRate:   { type: Number, default: 5, min: 0, max: 100 },
+    whtRate:   { type: Number, default: 5, min: 0, max: WHT_MAX_RATE },
     whtAmount: { type: Number, default: 0, min: 0 },
     netAmount: { type: Number, default: 0, min: 0 },
     splits: [{

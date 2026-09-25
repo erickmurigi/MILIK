@@ -14,10 +14,7 @@ import { emitToCompany } from "../../utils/socketManager.js";
 import { postEntry, postReversal } from "../../services/ledgerPostingService.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
-import {
-  ensureSystemChartOfAccounts,
-  findSystemAccountByCode,
-} from "../../services/chartOfAccountsService.js";
+import { ensureSystemChartOfAccounts } from "../../services/chartOfAccountsService.js";
 import {
   resolvePropertyAccountingContext,
   resolveLandlordRemittancePayableAccount,
@@ -27,6 +24,7 @@ import { syncProcessedStatementSettlementState } from "../../services/processedS
 import { createError } from "../../utils/error.js";
 import { hasCompanyActionPermission } from "../../utils/permissionControl.js";
 import { escapeRegex } from "../../utils/escapeRegex.js";
+import { resolveWhtPayableAccount } from "../../services/withholdingTaxService.js";
 import { assertVoucherReferenceUnused } from "../../services/voucherReference.js";
 import { cleanVoucherReference, voucherReferenceKey } from "../../utils/voucherReference.js";
 import { parsePagination } from "../../utils/pagination.js";
@@ -1117,16 +1115,7 @@ const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate =
   let whtAccount = null;
   if (whtAmount > 0) {
     if (whtAmount >= amount) throw createError(400, "Withholding tax must be less than the voucher amount.");
-    whtAccount = voucher.whtAccountId
-      ? await ChartOfAccount.findOne({ _id: voucher.whtAccountId, business: voucher.business, isPosting: { $ne: false } }).lean()
-      : await findSystemAccountByCode(String(accountingContext.businessId), "2141").catch(() => null);
-    if (!whtAccount) {
-      throw createError(400, "The withholding tax payable account (2141) could not be found. Add it to the chart of accounts, or choose a withholding tax account on the voucher.");
-    }
-    assertAccountActive(whtAccount, "Withholding tax account");
-    if (String(whtAccount.type || "").toLowerCase() !== "liability") {
-      throw createError(400, "The withholding tax account must be a liability account (tax held for the tax authority).");
-    }
+    whtAccount = await resolveWhtPayableAccount({ businessId: voucher.business, accountId: voucher.whtAccountId });
   }
 
   let debitLeg, creditLeg, whtLeg;

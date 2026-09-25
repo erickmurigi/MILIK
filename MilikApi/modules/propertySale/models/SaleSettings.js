@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { WHT_MAX_RATE } from "../../../utils/withholdingTax.js";
 
 const stageSchema = new mongoose.Schema(
   { _id: mongoose.Schema.Types.ObjectId, name: { type: String, required: true, trim: true }, order: { type: Number, default: 0 }, isActive: { type: Boolean, default: true } }
@@ -54,7 +55,7 @@ const saleSettingsSchema = new mongoose.Schema(
     commissionDefaults: {
       rate:           { type: Number, default: 3,           min: 0 },
       commissionType: { type: String, enum: ["percentage", "flat"], default: "percentage" },
-      whtRate:        { type: Number, default: 5,           min: 0, max: 100 },
+      whtRate:        { type: Number, default: 5,           min: 0, max: WHT_MAX_RATE },
     },
   },
   { timestamps: true }

@@ -16,6 +16,8 @@ import {
   forfeitDepositIncome,
   postStampDutyEntry,
 } from "../services/propertySaleAccountingService.js";
+import SaleSettings from "../models/SaleSettings.js";
+import { calcWithholding, clampWhtRate } from "../../../utils/withholdingTax.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import Company from "../../../models/Company.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
@@ -27,11 +29,11 @@ import { round2 } from "../../../utils/math.js";
 const fillPlaceholders = (text, vars) =>
   String(text || "").replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => vars[k] ?? `{${k}}`);
 
-const calcWHT = (commissionAmount, whtRate = 5) => {
-  const rate = Math.min(Math.max(Number(whtRate) || 5, 0), 100);
-  const gross = round2(commissionAmount);
-  const whtAmount = round2((gross * rate) / 100);
-  return { whtRate: rate, whtAmount, netAmount: round2(gross - whtAmount) };
+// Rate used when the deal doesn't set one: the company's default from Property Sale settings, else the statutory 5%
+const DEFAULT_COMMISSION_WHT_RATE = 5;
+const defaultWhtRate = async (business) => {
+  const settings = await SaleSettings.findOne({ business }).select("commissionDefaults.whtRate").lean();
+  return clampWhtRate(settings?.commissionDefaults?.whtRate, DEFAULT_COMMISSION_WHT_RATE);
 };
 
 const createCommissionForDeal = async ({ business, dealId, agent, listingId, buyerId, agreedPrice, overrides, userId }) => {
@@ -45,8 +47,11 @@ const createCommissionForDeal = async ({ business, dealId, agent, listingId, buy
         ? (saleAmount * commissionRate) / 100
         : commissionRate
   );
-  // Store the rate calcWHT actually applied so whtRate always agrees with whtAmount
-  const { whtRate, whtAmount, netAmount } = calcWHT(commissionAmount, overrides.whtRate != null ? Number(overrides.whtRate) : 5);
+  // Store the rate actually applied so whtRate always agrees with whtAmount
+  const { whtRate, whtAmount, netAmount } = calcWithholding(
+    commissionAmount,
+    overrides.whtRate != null && overrides.whtRate !== "" ? overrides.whtRate : await defaultWhtRate(business)
+  );
   const commissionNumber = await generateSequentialNumber(SaleCommission, business, "COM");
   return SaleCommission.create({
     business, commissionNumber, deal: dealId, agent: agent._id,
@@ -325,7 +330,7 @@ export const updateDeal = async (req, res, next) => {
           Math.abs(c.commissionAmount - round2((priceChange.old * c.commissionRate) / 100)) <= 0.01;
         if (derivedFromOldPrice) {
           const commissionAmount = round2((priceChange.new * c.commissionRate) / 100);
-          const { whtAmount, netAmount } = calcWHT(commissionAmount, c.whtRate);
+          const { whtAmount, netAmount } = calcWithholding(commissionAmount, c.whtRate);
           Object.assign(patch, { commissionAmount, whtAmount, netAmount });
         }
         return SaleCommission.updateOne({ _id: c._id, business, status: "pending" }, { $set: { ...patch, updatedBy: userId } });

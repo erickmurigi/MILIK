@@ -2679,9 +2679,9 @@ const CompanySettings = () => {
           </div>
           <div>
             <label className="mb-1 block text-xs font-bold text-slate-700">Default WHT Rate (%)</label>
-            <Input type="number" min="0" max="100" step="0.1" value={saleCommForm.whtRate}
+            <Input type="number" min="0" max="30" step="0.1" value={saleCommForm.whtRate}
               onChange={(e) => setSaleCommForm((p) => ({ ...p, whtRate: Number(e.target.value || 0) }))} />
-            <p className="mt-1 text-[10px] text-slate-400">Withholding tax deducted from commission payouts (Kenya statutory rate: 5%).</p>
+            <p className="mt-1 text-[10px] text-slate-400">Withholding tax deducted from commission payouts (0–30%; Kenya rate for agent commission is 5%). It is posted to 2141 Withholding Tax Payable when a commission is paid. New deals start with this rate.</p>
           </div>
         </div>
       </Card>

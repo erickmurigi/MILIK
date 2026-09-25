@@ -6,6 +6,7 @@
  *   1311 — Property Sale Receipts Control   (asset)    fallback Dr when no cashbook provided
  *   2150 — Buyer Deposit Held               (liability) Dr/Cr for deposit staging; moves to 4410 on deal close
  *   2180 — Agent Commission Payable          (liability) accrued commission owed to agents
+ *   2141 — Withholding Tax Payable           (liability) tax held back from the commission at payout (Cr)
  *   4410 — Property Sale Revenue             (income)   credit side for non-deposit payments; recognised from 2150 at close
  *   4420 — Forfeited Deposit Income          (income)   Cr when a non-refundable deposit is retained on deal cancel
  *   5220 — Stamp Duty / Transfer Costs       (expense)  Dr when stamp duty is paid at deal close
@@ -16,7 +17,8 @@
 import mongoose from "mongoose";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import FinancialLedgerEntry from "../../../models/FinancialLedgerEntry.js";
-import { postEntry, postReversal } from "../../../services/ledgerPostingService.js";
+import { postEntry, postEntries, postReversal } from "../../../services/ledgerPostingService.js";
+import { resolveWhtPayableAccount } from "../../../services/withholdingTaxService.js";
 import { round2 } from "../../../utils/math.js";
 
 const PS_ACCOUNT_TEMPLATES = {
@@ -345,9 +347,9 @@ export const postPropertySaleCommissionAccrual = async ({ businessId, commission
     allowUnscoped: true,
   };
 
-  await Promise.all([
-    postEntry({ ...base, accountId: expenseAcc._id, direction: "debit",  amount, notes: `Agent commission accrued — ${ref}` }),
-    postEntry({ ...base, accountId: payableAcc._id, direction: "credit", amount, notes: `Agent commission payable — ${ref}` }),
+  await postEntries([
+    { ...base, accountId: expenseAcc._id, direction: "debit",  amount, notes: `Agent commission accrued — ${ref}` },
+    { ...base, accountId: payableAcc._id, direction: "credit", amount, notes: `Agent commission payable — ${ref}` },
   ]);
 };
 
@@ -381,6 +383,11 @@ export const postPropertySaleCommissionPayout = async ({ businessId, commission,
 
   if (!creditAcc) throw new Error("Commission payout cashbook account not found — GL posting aborted");
 
+  // The agent is paid the commission less the tax withheld: the cashbook only loses the net, and the tax is owed to KRA (2141).
+  const whtAmount = round2(Number(commission.whtAmount || 0));
+  if (whtAmount >= amount) throw new Error("Withholding tax must be less than the commission — GL posting aborted");
+  const whtAcc = whtAmount > 0 ? await resolveWhtPayableAccount({ businessId }) : null;
+
   const ref = commission.commissionNumber || String(commission._id);
 
   const base = {
@@ -396,9 +403,12 @@ export const postPropertySaleCommissionPayout = async ({ businessId, commission,
     allowUnscoped: true,
   };
 
-  await Promise.all([
-    postEntry({ ...base, accountId: payableAcc._id, direction: "debit",  amount, notes: `Agent commission payable cleared — ${ref}` }),
-    postEntry({ ...base, accountId: creditAcc._id,  direction: "credit", amount, notes: `Agent commission disbursed — ${ref}` }),
+  await postEntries([
+    { ...base, accountId: payableAcc._id, direction: "debit",  amount, notes: `Agent commission payable cleared — ${ref}` },
+    { ...base, accountId: creditAcc._id,  direction: "credit", amount: round2(amount - whtAmount), notes: `Agent commission disbursed — ${ref}` },
+    ...(whtAcc
+      ? [{ ...base, accountId: whtAcc._id, direction: "credit", amount: whtAmount, notes: `Withholding tax on agent commission — ${ref}`, metadata: { postingRole: "wht_payable", whtRate: commission.whtRate } }]
+      : []),
   ]);
 };
 
