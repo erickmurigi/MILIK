@@ -224,6 +224,7 @@ export const getOverdueInstallments = async (req, res, next) => {
       const daysLate = Math.max(Math.floor((asOf - i.dueDate) / DAY), 0);
       return {
         _id: i._id,
+        dealId: i.deal,
         ...(deal ? dealLabels(deal, names) : {}),
         installmentNumber: i.installmentNumber,
         description: i.description,

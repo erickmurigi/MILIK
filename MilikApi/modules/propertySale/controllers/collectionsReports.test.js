@@ -81,6 +81,7 @@ describe("overdue instalments", () => {
     expect(payload.total).toBe(2);
     expect(payload.data.map((r) => r.bucket)).toEqual(["d61_90", "d1_30"]);
     expect(payload.data[0]).toMatchObject({ amount: 100_000, installmentNumber: 1 });
+    expect(String(payload.data[0].dealId)).toBeTruthy();
     expect(payload.data[0].buyerName).toMatch(/^Anna/);
     expect(payload.data[0].buyerPhone).toBeTruthy();
     expect(payload.totals).toMatchObject({ count: 2, amount: 200_000 });

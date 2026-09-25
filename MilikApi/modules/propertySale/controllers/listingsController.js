@@ -7,8 +7,9 @@ import SaleProject from "../models/SaleProject.js";
 import SaleSettings from "../models/SaleSettings.js";
 import { cleanAttributes, typeValue } from "../services/listingAttributes.js";
 import { PROJECT_WITH_AGENT, withEffectiveAgent } from "../services/listingAgent.js";
-import { currentUserId, escapeRegex, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
+import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { deleteImageFile } from "../middleware/listingImageUpload.js";
+import { andInto, wordsSearchFilter } from "../services/saleSearch.js";
 
 const CREATE_STATUSES = ["available", "withdrawn"];
 
@@ -90,17 +91,9 @@ export const listListings = async (req, res, next) => {
       scope = aggScope = { project: null };
     }
     Object.assign(filter, scope);
-    const unitView = Boolean(projectId) || project === "any";
 
-    if (search.trim()) {
-      if (unitView) {
-        // Unit lists are searched by unit number / title (the text index does not cover unit numbers)
-        const rx = new RegExp(escapeRegex(search.trim()), "i");
-        filter.$or = [{ unitNumber: rx }, { title: rx }, { listingNumber: rx }];
-      } else {
-        filter.$text = { $search: search.trim() };
-      }
-    }
+    // Substring search over what a person remembers about a listing: title, number, unit, location, type, title deed
+    andInto(filter, wordsSearchFilter(search, ["title", "listingNumber", "unitNumber", "location", "town", "county", "propertyType", "titleDeedNumber"]));
     const [listings, total, statsRaw] = await Promise.all([
       withUnitOrdering(SaleListing.find(filter), Boolean(projectId))
         .populate("assignedAgent", "fullName agentNumber phone")

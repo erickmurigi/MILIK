@@ -9,6 +9,7 @@ import SaleActivity from "../models/SaleActivity.js";
 import Company from "../../../models/Company.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { agentFilter } from "../middleware/agentScope.js";
+import { andInto, wordsSearchFilter } from "../services/saleSearch.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
 
 // Stage names from Sale Settings become status values the same way the client builds them (lowercase, spaces -> _)
@@ -62,7 +63,7 @@ export const listLeads = async (req, res, next) => {
       if (createdFrom) filter.createdAt.$gte = new Date(createdFrom);
       if (createdTo)   filter.createdAt.$lte = new Date(new Date(createdTo).setHours(23, 59, 59, 999));
     }
-    if (search.trim()) filter.$text = { $search: search.trim() };
+    andInto(filter, wordsSearchFilter(search, ["fullName", "email", "leadNumber", "phone"], { phoneFields: ["phone"] }));
 
     const [leads, total] = await Promise.all([
       SaleLead.find(filter)
