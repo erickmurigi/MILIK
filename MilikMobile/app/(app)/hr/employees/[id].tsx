@@ -1,42 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Alert, Linking,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Linking, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
-
-const HC = '#4C1D95';
-
-type Employee = {
-  _id:              string;
-  employeeId?:      string;
-  surname:          string;
-  otherNames:       string;
-  phone?:           string;
-  email?:           string;
-  nationalId?:      string;
-  gender?:          string;
-  dob?:             string;
-  department?:      { name?: string } | string;
-  designation?:     { name?: string } | string;
-  employmentType?:  string;
-  status:           string;
-  joinDate?:        string;
-  contractEndDate?: string;
-  grossSalary?:     number;
-  bankName?:        string;
-  bankAccount?:     string;
-  nhifNo?:          string;
-  nssfNo?:          string;
-  kraPin?:          string;
-  nextOfKin?:       string;
-  nextOfKinPhone?:  string;
-  address?:         string;
-};
+import { ErrorState } from '../../../../components/ui/PmsStates';
+import { fmtDate, fmtKES } from '../../../../utils/pmsFormat';
+import { HC, grossSalary, hrError, initialsOf, personName, refLabel, type HrEmployee } from '../../../../utils/hr';
 
 const STATUS_CFG: Record<string, { bg: string; color: string }> = {
   Active:     { bg: '#D1FAE5', color: '#065F46' },
@@ -45,139 +18,167 @@ const STATUS_CFG: Record<string, { bg: string; color: string }> = {
   Terminated: { bg: '#FEE2E2', color: '#DC2626' },
 };
 
-const fmt = (d: string) =>
-  new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' });
-
-const fmtKES = (n: number) =>
-  `KES ${Number(n).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
-
-const getName = (e: Employee) => `${e.surname} ${e.otherNames}`.trim();
-const getDept = (d: Employee['department']) =>
-  typeof d === 'object' ? (d?.name ?? '') : (d ?? '');
-const getDesig = (d: Employee['designation']) =>
-  typeof d === 'object' ? (d?.name ?? '') : (d ?? '');
-
-const initials = (s = '', o = '') => `${s.charAt(0)}${o.charAt(0)}`.toUpperCase() || '?';
+const dateOrUndef = (d?: string | null) => (d ? fmtDate(d) : undefined);
 
 export default function EmployeeProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router  = useRouter();
 
-  const [emp,     setEmp]     = useState<Employee | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [emp,        setEmp]        = useState<HrEmployee | null>(null);
+  const [loading,    setLoading]    = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error,      setError]      = useState<string | null>(null);
+  const reqRef = useRef(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (mode: 'initial' | 'refresh' = 'initial') => {
+    const req = ++reqRef.current;
+    if (mode === 'refresh') setRefreshing(true); else setLoading(true);
     try {
       const { data } = await api.get(`/hr/employees/${id}`);
-      setEmp(data?.data ?? data?.employee ?? data);
-    } catch { Alert.alert('Error', 'Could not load employee.'); router.back(); }
-    finally { setLoading(false); }
+      if (req !== reqRef.current) return;
+      setEmp(data && typeof data === 'object' && data._id ? (data as HrEmployee) : null);
+      setError(data?._id ? null : 'Employee not found.');
+    } catch (err) {
+      if (req !== reqRef.current) return;
+      setError(hrError(err, 'Could not load this employee.'));
+    } finally {
+      if (req === reqRef.current) { setLoading(false); setRefreshing(false); }
+    }
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
 
-  if (loading) return <MilikLoader fullscreen />;
-  if (!emp)    return null;
+  const dial = (url: string) => Linking.openURL(url).catch(() => Alert.alert('Not available', 'This device cannot open that link.'));
 
-  const sc = STATUS_CFG[emp.status] ?? STATUS_CFG.Active;
+  if (loading) return <MilikLoader fullscreen />;
+  if (!emp) return <ErrorState message={error ?? 'Employee not found.'} onRetry={() => load()} />;
+
+  const sc         = STATUS_CFG[emp.status] ?? STATUS_CFG.Active;
+  const desig      = refLabel(emp.designation);
+  const phone      = emp.phoneNumber?.replace(/\s+/g, '');
+  const components = emp.salaryComponents ?? [];
+  const basic      = Number(emp.basicSalary) || 0;
+  const hasPay     = basic > 0 || components.length > 0;
+  const reportsTo  = emp.reportsTo ? personName(emp.reportsTo) : '';
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load('refresh')} tintColor={HC} />}
+      >
+        {error ? (
+          <TouchableOpacity style={styles.banner} onPress={() => load()} activeOpacity={0.8}>
+            <Ionicons name="alert-circle-outline" size={16} color="#DC2626" />
+            <Text style={styles.bannerTxt} numberOfLines={2}>{error}</Text>
+            <Text style={styles.bannerRetry}>Retry</Text>
+          </TouchableOpacity>
+        ) : null}
 
         {/* Hero */}
         <View style={styles.hero}>
           <View style={[styles.avatar, { backgroundColor: HC + '30' }]}>
-            <Text style={[styles.avatarTxt, { color: HC }]}>
-              {initials(emp.surname, emp.otherNames)}
-            </Text>
+            <Text style={[styles.avatarTxt, { color: HC }]}>{initialsOf(emp)}</Text>
           </View>
-          <Text style={styles.heroName}>{getName(emp)}</Text>
-          {getDesig(emp.designation) ? (
-            <Text style={styles.heroDesig}>{getDesig(emp.designation)}</Text>
-          ) : null}
+          <Text style={styles.heroName}>{personName(emp)}</Text>
+          {desig ? <Text style={styles.heroDesig}>{desig}</Text> : null}
           <View style={styles.heroRow}>
             <View style={[styles.badge, { backgroundColor: sc.bg }]}>
               <Text style={[styles.badgeTxt, { color: sc.color }]}>{emp.status}</Text>
             </View>
-            {emp.employmentType && (
+            {emp.employmentType ? (
               <View style={styles.typePill}>
                 <Text style={styles.typePillTxt}>{emp.employmentType}</Text>
               </View>
-            )}
+            ) : null}
           </View>
-          {/* Contact shortcuts */}
           <View style={styles.contactRow}>
-            {emp.phone && (
-              <TouchableOpacity
-                style={styles.contactBtn}
-                onPress={() => Linking.openURL(`tel:${emp.phone}`)}
-              >
+            {phone ? (
+              <TouchableOpacity style={styles.contactBtn} onPress={() => dial(`tel:${phone}`)}>
                 <Ionicons name="call-outline" size={18} color="#fff" />
                 <Text style={styles.contactBtnTxt}>Call</Text>
               </TouchableOpacity>
-            )}
-            {emp.email && (
-              <TouchableOpacity
-                style={styles.contactBtn}
-                onPress={() => Linking.openURL(`mailto:${emp.email}`)}
-              >
+            ) : null}
+            {emp.email ? (
+              <TouchableOpacity style={styles.contactBtn} onPress={() => dial(`mailto:${emp.email}`)}>
                 <Ionicons name="mail-outline" size={18} color="#fff" />
                 <Text style={styles.contactBtnTxt}>Email</Text>
               </TouchableOpacity>
-            )}
+            ) : null}
           </View>
         </View>
 
-        {/* Personal */}
         <InfoCard title="PERSONAL DETAILS">
-          <FieldRow label="Employee ID"  value={emp.employeeId}  />
-          <FieldRow label="National ID"  value={emp.nationalId}  />
-          <FieldRow label="Gender"       value={emp.gender}      />
-          <FieldRow label="Date of Birth" value={emp.dob ? fmt(emp.dob) : undefined} />
-          <FieldRow label="Phone"        value={emp.phone}       />
-          <FieldRow label="Email"        value={emp.email}       />
-          <FieldRow label="Address"      value={emp.address}     />
+          <FieldRow label="Employee No." value={emp.employeeNumber} />
+          <FieldRow label="National ID"  value={emp.nationalId} />
+          <FieldRow label="Gender"       value={emp.gender ?? undefined} />
+          <FieldRow label="Date of Birth" value={dateOrUndef(emp.dateOfBirth)} />
+          <FieldRow label="Phone"        value={emp.phoneNumber} />
+          <FieldRow label="Email"        value={emp.email} />
+          <FieldRow label="Address"      value={emp.physicalAddress} />
+          <FieldRow label="Postal"       value={emp.postalAddress} />
         </InfoCard>
 
-        {/* Employment */}
         <InfoCard title="EMPLOYMENT">
-          <FieldRow label="Department"   value={getDept(emp.department)}   />
-          <FieldRow label="Designation"  value={getDesig(emp.designation)} />
-          <FieldRow label="Type"         value={emp.employmentType}        />
-          <FieldRow label="Join Date"    value={emp.joinDate ? fmt(emp.joinDate) : undefined} />
-          {emp.contractEndDate && (
-            <FieldRow label="Contract End" value={fmt(emp.contractEndDate)} />
-          )}
-          {emp.grossSalary != null && (
-            <FieldRow label="Gross Salary" value={fmtKES(emp.grossSalary)} />
-          )}
+          <FieldRow label="Department"   value={refLabel(emp.department)} />
+          <FieldRow label="Designation"  value={desig} />
+          <FieldRow label="Type"         value={emp.employmentType} />
+          <FieldRow label="Reports to"   value={reportsTo === '—' ? '' : reportsTo} />
+          <FieldRow label="Date joined"  value={dateOrUndef(emp.dateJoined)} />
+          <FieldRow label="Probation ends" value={dateOrUndef(emp.probationEndDate)} />
+          <FieldRow label="Contract start" value={dateOrUndef(emp.contractStartDate)} />
+          <FieldRow label="Contract end" value={dateOrUndef(emp.contractEndDate)} />
+          {emp.status === 'Terminated' ? (
+            <>
+              <FieldRow label="Terminated" value={dateOrUndef(emp.terminationDate)} />
+              <FieldRow label="Reason"     value={emp.terminationReason} />
+            </>
+          ) : null}
         </InfoCard>
 
-        {/* Statutory */}
-        {(emp.kraPin || emp.nhifNo || emp.nssfNo) && (
+        {(emp.kraPin || emp.nhifNo || emp.nssfNo || emp.helbNo) ? (
           <InfoCard title="STATUTORY">
-            <FieldRow label="KRA PIN"   value={emp.kraPin}  />
-            <FieldRow label="NHIF No."  value={emp.nhifNo}  />
-            <FieldRow label="NSSF No."  value={emp.nssfNo}  />
+            <FieldRow label="KRA PIN"  value={emp.kraPin} />
+            <FieldRow label="NHIF / SHA" value={emp.nhifNo} />
+            <FieldRow label="NSSF No." value={emp.nssfNo} />
+            <FieldRow label="HELB No." value={emp.helbNo} />
           </InfoCard>
-        )}
+        ) : null}
 
-        {/* Bank */}
-        {(emp.bankName || emp.bankAccount) && (
-          <InfoCard title="BANKING">
-            <FieldRow label="Bank"    value={emp.bankName}    />
-            <FieldRow label="Account" value={emp.bankAccount} />
+        {hasPay ? (
+          <InfoCard title="PAY">
+            <FieldRow label="Basic salary" value={fmtKES(basic)} />
+            <FieldRow label="Gross salary" value={fmtKES(grossSalary(emp))} />
+            {components.map((c, i) => {
+              const amt = c.isPercentage ? (basic * Number(c.amount)) / 100 : Number(c.amount);
+              const sign = c.type === 'Deduction' ? '−' : '+';
+              return (
+                <FieldRow
+                  key={`${c.name}-${i}`}
+                  label={c.name}
+                  value={`${sign}${fmtKES(amt || 0)}${c.isPercentage ? `  (${c.amount}%)` : ''}`}
+                />
+              );
+            })}
+            <FieldRow label="Payment method" value={emp.paymentMethod} />
+            {emp.paymentMethod === 'M-Pesa' ? <FieldRow label="M-Pesa No." value={emp.mpesaNumber} /> : null}
+            {emp.paymentMethod === 'Bank Transfer' ? (
+              <>
+                <FieldRow label="Bank"    value={emp.bankName} />
+                <FieldRow label="Account" value={emp.bankAccountNumber} />
+                <FieldRow label="Branch"  value={emp.bankBranch} />
+              </>
+            ) : null}
           </InfoCard>
-        )}
+        ) : null}
 
-        {/* Next of kin */}
-        {emp.nextOfKin && (
+        {(emp.nextOfKinName || emp.nextOfKinPhone) ? (
           <InfoCard title="NEXT OF KIN">
-            <FieldRow label="Name"  value={emp.nextOfKin}      />
-            <FieldRow label="Phone" value={emp.nextOfKinPhone}  />
+            <FieldRow label="Name"         value={emp.nextOfKinName} />
+            <FieldRow label="Relationship" value={emp.nextOfKinRelationship} />
+            <FieldRow label="Phone"        value={emp.nextOfKinPhone} />
           </InfoCard>
-        )}
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -206,15 +207,16 @@ const styles = StyleSheet.create({
   safe:   { flex: 1, backgroundColor: '#F5F3FF' },
   scroll: { padding: 16, gap: 14, paddingBottom: 40 },
 
+  banner:      { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, backgroundColor: '#FEF2F2', borderRadius: 10, borderWidth: 1, borderColor: '#FECACA' },
+  bannerTxt:   { flex: 1, fontSize: 12, color: '#DC2626' },
+  bannerRetry: { fontSize: 12, fontWeight: '800', color: '#DC2626' },
+
   hero: {
     backgroundColor: '#fff', borderRadius: 20,
     borderWidth: 1, borderColor: '#E2E8F0',
     padding: 20, alignItems: 'center', gap: 8,
   },
-  avatar: {
-    width: 72, height: 72, borderRadius: 36,
-    alignItems: 'center', justifyContent: 'center',
-  },
+  avatar: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center' },
   avatarTxt: { fontSize: 28, fontWeight: '900' },
   heroName:  { fontSize: 20, fontWeight: '900', color: '#0F172A', textAlign: 'center' },
   heroDesig: { fontSize: 13, color: '#64748B', fontWeight: '500', textAlign: 'center' },
@@ -240,6 +242,6 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, color: '#94A3B8', marginBottom: 2 },
 
   fieldRow:   { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  fieldLabel: { fontSize: 12, color: '#94A3B8', width: 100 },
+  fieldLabel: { fontSize: 12, color: '#94A3B8', width: 104 },
   fieldValue: { flex: 1, fontSize: 13, fontWeight: '600', color: '#0F172A' },
 });

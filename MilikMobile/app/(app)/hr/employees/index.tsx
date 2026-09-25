@@ -1,29 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Alert,
+  View, Text, StyleSheet, FlatList, ScrollView, TextInput, TouchableOpacity,
+  ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import api from '../../../../services/api';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import MilikLoader from '../../../../components/ui/MilikLoader';
-
-const HC = '#4C1D95';
-
-type Employee = {
-  _id:          string;
-  employeeId?:  string;
-  surname:      string;
-  otherNames:   string;
-  phone?:       string;
-  email?:       string;
-  department?:  string | { name?: string };
-  designation?: string | { name?: string };
-  employmentType?: string;
-  status:       string;
-  joinDate?:    string;
-};
+import { ErrorBanner, ErrorState } from '../../../../components/ui/PmsStates';
+import { useDebounced, usePmsList } from '../../../../hooks/usePmsList';
+import { fmtDate } from '../../../../utils/pmsFormat';
+import {
+  EMPLOYEE_STATUSES, EMPLOYMENT_TYPES, HC, employeesOf, initialsOf, personName, refLabel, type HrEmployee,
+} from '../../../../utils/hr';
 
 const STATUS_CFG: Record<string, { bg: string; color: string }> = {
   Active:     { bg: '#D1FAE5', color: '#065F46' },
@@ -39,69 +28,32 @@ const TYPE_COLOR: Record<string, string> = {
   Intern:    '#7C3AED',
 };
 
-const TABS = [
-  { key: '',           label: 'All'        },
-  { key: 'Active',     label: 'Active'     },
-  { key: 'Probation',  label: 'Probation'  },
-  { key: 'Suspended',  label: 'Suspended'  },
-  { key: 'Terminated', label: 'Terminated' },
-] as const;
-
-const initials = (s = '', o = '') => `${s.charAt(0)}${o.charAt(0)}`.toUpperCase() || '?';
-
-const getName = (e: Employee) => `${e.surname} ${e.otherNames}`.trim();
-const getDept = (d: Employee['department']) =>
-  typeof d === 'object' ? (d?.name ?? '') : (d ?? '');
-const getDesig = (d: Employee['designation']) =>
-  typeof d === 'object' ? (d?.name ?? '') : (d ?? '');
-
-const LIMIT = 30;
+const parse = (data: any) => employeesOf(data);
 
 export default function EmployeesScreen() {
   const router = useRouter();
+  const routeParams = useLocalSearchParams<{ status?: string }>();
+  const initialStatus = (EMPLOYEE_STATUSES as readonly string[]).includes(String(routeParams.status)) ? String(routeParams.status) : '';
 
-  const [statusFilter, setStatusFilter] = useState('Active');
+  const [statusFilter, setStatusFilter] = useState(initialStatus);   // '' = every status, like the web list
+  const [typeFilter,   setTypeFilter]   = useState('');
   const [search,       setSearch]       = useState('');
-  const [items,        setItems]        = useState<Employee[]>([]);
-  const [loading,      setLoading]      = useState(true);
-  const [refreshing,   setRefreshing]   = useState(false);
-  const [loadingMore,  setLoadingMore]  = useState(false);
-  const [page,         setPage]         = useState(1);
-  const [hasMore,      setHasMore]      = useState(true);
+  const debouncedSearch = useDebounced(search.trim(), 400);
 
-  const searchRef = useRef(search);
-  searchRef.current = search;
+  const listParams = useMemo(() => ({
+    status:         statusFilter || undefined,
+    employmentType: typeFilter || undefined,
+    search:         debouncedSearch || undefined,
+  }), [statusFilter, typeFilter, debouncedSearch]);
 
-  const load = useCallback(async (pg = 1, isRefresh = false) => {
-    if (pg === 1) isRefresh ? setRefreshing(true) : setLoading(true);
-    else setLoadingMore(true);
-    try {
-      const p: Record<string, string> = { page: String(pg), limit: String(LIMIT) };
-      if (statusFilter) p.status = statusFilter;
-      if (searchRef.current.trim()) p.search = searchRef.current.trim();
-      const { data } = await api.get('/hr/employees', { params: p });
-      const rows: Employee[] = data?.data ?? data?.employees ?? (Array.isArray(data) ? data : []);
-      setItems(prev => pg === 1 ? rows : [...prev, ...rows]);
-      setHasMore(rows.length === LIMIT);
-      setPage(pg);
-    } catch (err: any) {
-      if (pg === 1) setItems([]);
-      if (pg === 1) Alert.alert('Error', err?.response?.data?.message ?? 'Failed to load employees.');
-    }
-    finally { setLoading(false); setRefreshing(false); setLoadingMore(false); }
-  }, [statusFilter]);
+  const list = usePmsList<HrEmployee>({ path: '/hr/employees', params: listParams, limit: 30, parse });
+  const filtered = !!(statusFilter || typeFilter || debouncedSearch);
 
-  useEffect(() => { load(1); }, [load]);
-  useEffect(() => {
-    const t = setTimeout(() => load(1), 400);
-    return () => clearTimeout(t);
-  }, [search]);
-
-  const renderItem = ({ item }: { item: Employee }) => {
+  const renderItem = ({ item }: { item: HrEmployee }) => {
     const sc    = STATUS_CFG[item.status] ?? STATUS_CFG.Active;
-    const dept  = getDept(item.department);
-    const desig = getDesig(item.designation);
-    const tc    = item.employmentType ? TYPE_COLOR[item.employmentType] : '#64748B';
+    const dept  = refLabel(item.department);
+    const desig = refLabel(item.designation);
+    const tc    = (item.employmentType && TYPE_COLOR[item.employmentType]) || '#64748B';
 
     return (
       <TouchableOpacity
@@ -110,13 +62,11 @@ export default function EmployeesScreen() {
         activeOpacity={0.75}
       >
         <View style={[styles.avatar, { backgroundColor: HC + '20' }]}>
-          <Text style={[styles.avatarTxt, { color: HC }]}>
-            {initials(item.surname, item.otherNames)}
-          </Text>
+          <Text style={[styles.avatarTxt, { color: HC }]}>{initialsOf(item)}</Text>
         </View>
         <View style={{ flex: 1 }}>
           <View style={styles.nameRow}>
-            <Text style={styles.name} numberOfLines={1}>{getName(item)}</Text>
+            <Text style={styles.name} numberOfLines={1}>{personName(item)}</Text>
             <View style={[styles.badge, { backgroundColor: sc.bg }]}>
               <Text style={[styles.badgeTxt, { color: sc.color }]}>{item.status}</Text>
             </View>
@@ -124,19 +74,16 @@ export default function EmployeesScreen() {
           {desig ? <Text style={styles.desig} numberOfLines={1}>{desig}</Text> : null}
           <View style={styles.metaRow}>
             {dept ? (
-              <View style={styles.pill}>
-                <Text style={styles.pillTxt}>{dept}</Text>
-              </View>
+              <View style={styles.pill}><Text style={styles.pillTxt}>{dept}</Text></View>
             ) : null}
             {item.employmentType ? (
               <View style={[styles.pill, { backgroundColor: tc + '15' }]}>
                 <Text style={[styles.pillTxt, { color: tc }]}>{item.employmentType}</Text>
               </View>
             ) : null}
-            {item.employeeId ? (
-              <Text style={styles.empId}>{item.employeeId}</Text>
-            ) : null}
+            {item.employeeNumber ? <Text style={styles.empId}>{item.employeeNumber}</Text> : null}
           </View>
+          {item.dateJoined ? <Text style={styles.joined}>Joined {fmtDate(item.dateJoined)}</Text> : null}
         </View>
       </TouchableOpacity>
     );
@@ -148,10 +95,12 @@ export default function EmployeesScreen() {
         <Ionicons name="search-outline" size={18} color="#94A3B8" />
         <TextInput
           style={styles.searchInput}
-          placeholder="Name, ID, department..."
+          placeholder="Name, number, phone, department..."
           placeholderTextColor="#94A3B8"
           value={search}
           onChangeText={setSearch}
+          returnKeyType="search"
+          autoCorrect={false}
         />
         {search ? (
           <TouchableOpacity onPress={() => setSearch('')}>
@@ -160,39 +109,58 @@ export default function EmployeesScreen() {
         ) : null}
       </View>
 
-      <FlatList
-        horizontal data={TABS as any} keyExtractor={t => t.key}
-        showsHorizontalScrollIndicator={false}
-        style={{ flexGrow: 0 }}
-        contentContainerStyle={styles.tabsRow}
-        renderItem={({ item: t }) => (
-          <TouchableOpacity
-            style={[styles.tab, statusFilter === t.key && styles.tabActive]}
-            onPress={() => setStatusFilter(t.key)}
-          >
-            <Text style={[styles.tabTxt, statusFilter === t.key && styles.tabTxtActive]}>{t.label}</Text>
-          </TouchableOpacity>
-        )}
-      />
+      <View style={{ flexGrow: 0 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsRow} keyboardShouldPersistTaps="handled">
+          {[{ key: '', label: 'All' }, ...EMPLOYEE_STATUSES.map(s => ({ key: s as string, label: s as string }))].map(t => (
+            <TouchableOpacity
+              key={t.key || 'all'}
+              style={[styles.tab, statusFilter === t.key && styles.tabActive]}
+              onPress={() => setStatusFilter(t.key)}
+            >
+              <Text style={[styles.tabTxt, statusFilter === t.key && styles.tabTxtActive]}>{t.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.tabsRow, { paddingTop: 0 }]} keyboardShouldPersistTaps="handled">
+          {[{ key: '', label: 'Any type' }, ...EMPLOYMENT_TYPES.map(s => ({ key: s as string, label: s as string }))].map(t => (
+            <TouchableOpacity
+              key={t.key || 'any'}
+              style={[styles.tab, styles.tabSmall, typeFilter === t.key && styles.tabActive]}
+              onPress={() => setTypeFilter(t.key)}
+            >
+              <Text style={[styles.tabTxt, typeFilter === t.key && styles.tabTxtActive]}>{t.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
-      {loading ? <MilikLoader fullscreen /> : (
-        <FlatList
-          data={items}
-          keyExtractor={e => e._id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.list}
-          ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: '#F1F5F9', marginLeft: 72 }} />}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(1, true)} tintColor={HC} />}
-          onEndReached={() => { if (!loadingMore && hasMore) load(page + 1); }}
-          onEndReachedThreshold={0.3}
-          ListEmptyComponent={
-            <View style={styles.emptyWrap}>
-              <Ionicons name="people-outline" size={48} color="#CBD5E1" />
-              <Text style={styles.emptyTxt}>No employees found</Text>
-            </View>
-          }
-          ListFooterComponent={loadingMore ? <ActivityIndicator color={HC} style={{ padding: 20 }} /> : null}
-        />
+      {list.loading ? <MilikLoader fullscreen /> : list.error && list.items.length === 0 ? (
+        <ErrorState message={list.error} onRetry={list.retry} />
+      ) : (
+        <>
+          {list.error ? <ErrorBanner message={list.error} onRetry={list.retry} /> : null}
+          {list.total > 0 ? (
+            <Text style={styles.count}>{list.total} employee{list.total !== 1 ? 's' : ''}</Text>
+          ) : null}
+          <FlatList
+            data={list.items}
+            keyExtractor={e => e._id}
+            renderItem={renderItem}
+            contentContainerStyle={styles.list}
+            ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: '#F1F5F9', marginLeft: 72 }} />}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={<RefreshControl refreshing={list.refreshing} onRefresh={list.refresh} tintColor={HC} />}
+            onEndReached={list.loadMore}
+            onEndReachedThreshold={0.3}
+            ListEmptyComponent={
+              <View style={styles.emptyWrap}>
+                <Ionicons name="people-outline" size={48} color="#CBD5E1" />
+                <Text style={styles.emptyTxt}>{filtered ? 'No employees match your filters' : 'No employees yet'}</Text>
+              </View>
+            }
+            ListFooterComponent={list.loadingMore ? <ActivityIndicator color={HC} style={{ padding: 20 }} /> : null}
+          />
+        </>
       )}
     </SafeAreaView>
   );
@@ -209,24 +177,23 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 15, color: '#0F172A' },
 
-  tabsRow: { paddingHorizontal: 16, paddingBottom: 8, gap: 8 },
+  tabsRow: { paddingHorizontal: 16, paddingBottom: 8, gap: 8, alignItems: 'center' },
   tab:         { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E2E8F0' },
+  tabSmall:    { paddingVertical: 5 },
   tabActive:   { backgroundColor: HC, borderColor: HC },
   tabTxt:      { fontSize: 12, fontWeight: '600', color: '#475569' },
   tabTxtActive:{ color: '#fff' },
 
+  count:     { fontSize: 11, fontWeight: '600', color: '#94A3B8', paddingHorizontal: 16, paddingBottom: 6 },
   list:      { paddingBottom: 40 },
-  emptyWrap: { alignItems: 'center', justifyContent: 'center', gap: 12, paddingTop: 60 },
-  emptyTxt:  { fontSize: 15, color: '#94A3B8' },
+  emptyWrap: { alignItems: 'center', justifyContent: 'center', gap: 12, paddingTop: 60, paddingHorizontal: 24 },
+  emptyTxt:  { fontSize: 15, color: '#94A3B8', textAlign: 'center' },
 
   card: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 12,
   },
-  avatar: {
-    width: 44, height: 44, borderRadius: 22,
-    alignItems: 'center', justifyContent: 'center',
-  },
+  avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   avatarTxt: { fontSize: 15, fontWeight: '900' },
 
   nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
@@ -239,4 +206,5 @@ const styles = StyleSheet.create({
   pill:    { backgroundColor: '#F1F5F9', borderRadius: 5, paddingHorizontal: 7, paddingVertical: 2 },
   pillTxt: { fontSize: 10, fontWeight: '600', color: '#64748B' },
   empId:   { fontSize: 10, color: '#94A3B8', fontWeight: '500' },
+  joined:  { fontSize: 10, color: '#94A3B8', marginTop: 3 },
 });
