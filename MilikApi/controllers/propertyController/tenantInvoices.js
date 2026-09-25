@@ -28,6 +28,7 @@ import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { COMPANY_OPERATING_MODES, normalizeCompanyOperatingMode } from "../../utils/companyModules.js";
 import LatePenaltyBatch from "../../models/LatePenaltyBatch.js";
 import { round2 } from "../../utils/math.js";
+import { createError } from "../../utils/error.js";
 
 const TENANT_INVOICE_NOTE_SOURCE_TYPE = "invoice_note";
 
@@ -2145,11 +2146,15 @@ export const getTenantInvoiceNotes = async (req, res, next) => {
     const { tenant, business } = req.query;
     const query = {};
     if (tenant) query.tenant = tenant;
-    if (business) query.business = business;
 
     if (!tenant && !business) {
       return next(createError(400, "At least tenant or business query parameter is required"));
     }
+
+    // Always scope to the caller's company (only system admins may pick another one). Previously a
+    // bare ?tenant=<id> returned that tenant's notes whichever company owned them.
+    const scopedBusiness = resolveAuthorizedBusinessId(req, business);
+    if (scopedBusiness) query.business = scopedBusiness;
 
     const notes = await TenantInvoiceNote.find(query)
       .sort({ noteDate: 1, createdAt: 1 })
@@ -2762,6 +2767,48 @@ export const getTenantInvoicesList = async (req, res, next) => {
         summary,
       })
     );
+  } catch (err) {
+    return next(err);
+  }
+};
+
+// GET /tenant-invoices/:id — one invoice with the same hydrated fields the list returns
+// (outstanding, appliedAmount, computedStatus, receiptApplications). Delegates to the list
+// pipeline scoped to this invoice's tenant so the numbers can never drift from the list, and
+// so business / field-officer scoping is enforced by the same code.
+export const getTenantInvoiceById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!isValidObjectId(id)) return next(createError(400, "Invalid invoice id."));
+
+    const businessId = ensureBusinessAccess(req, resolveAuthorizedBusinessId(req, req.query?.business));
+    const base = await TenantInvoice.findOne({ _id: id, business: businessId })
+      .select("tenant invoiceNumber")
+      .lean();
+    if (!base) return next(createError(404, "Invoice not found."));
+
+    let captured = null;
+    const innerRes = {
+      status() { return this; },
+      json(payload) { captured = payload; return this; },
+    };
+    // Express 5 exposes req.query as a getter without a setter, so shadow it on a child object.
+    const innerReq = Object.create(req);
+    Object.defineProperty(innerReq, "query", {
+      value: {
+        business: String(businessId),
+        tenant: String(base.tenant),
+        invoiceNumber: base.invoiceNumber,
+        includeSnapshots: "1",
+      },
+    });
+    await getTenantInvoicesList(innerReq, innerRes, next);
+    if (captured === null) return undefined; // the list already called next(err)
+
+    const rows = Array.isArray(captured) ? captured : captured?.data || [];
+    const invoice = rows.find((row) => String(row?._id) === String(id));
+    if (!invoice) return next(createError(404, "Invoice not found."));
+    return res.status(200).json(invoice);
   } catch (err) {
     return next(err);
   }

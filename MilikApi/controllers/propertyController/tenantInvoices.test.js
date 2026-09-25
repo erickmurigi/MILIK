@@ -5,6 +5,8 @@ import {
   getTakeOnBalances,
   createTenantInvoiceNote,
   getTenantInvoicesList,
+  getTenantInvoiceById,
+  getTenantInvoiceNotes,
 } from "./tenantInvoices.js";
 import { callController } from "../../test/callController.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
@@ -257,5 +259,97 @@ describe("debit notes", () => {
     const noteItem = items.find((item) => item.noteType === "DEBIT_NOTE");
     expect(noteItem).toBeTruthy();
     expect(noteItem.outstanding).toBe(15000);
+  });
+});
+
+describe("getTenantInvoiceById", () => {
+  const buildInvoice = async () => {
+    const { tenant, unit, property, company, landlord } = await createTestLease({});
+    await createTestChartOfAccounts(company._id);
+    const user = await createTestUser({ company });
+    const invoice = await createTenantInvoiceRecord({
+      req: { user, body: {} },
+      payload: {
+        business: String(company._id),
+        property: String(property._id),
+        landlord: String(landlord._id),
+        tenant: String(tenant._id),
+        unit: String(unit._id),
+        category: "RENT_CHARGE",
+        amount: 18000,
+        invoiceDate: new Date(),
+        dueDate: new Date(),
+      },
+    });
+    return { invoice, user, company, tenant };
+  };
+
+  it("returns the single invoice with snapshot fields (outstanding / computedStatus)", async () => {
+    const { invoice, user } = await buildInvoice();
+
+    const { statusCode, payload } = await callController(getTenantInvoiceById, {
+      params: { id: String(invoice._id) },
+      user,
+    });
+
+    expect(statusCode).toBe(200);
+    expect(String(payload._id)).toBe(String(invoice._id));
+    expect(payload.invoiceNumber).toBe(invoice.invoiceNumber);
+    expect(payload.outstanding).toBe(18000);
+    expect(payload.appliedAmount).toBe(0);
+    expect(Array.isArray(payload.receiptApplications)).toBe(true);
+  });
+
+  it("does not expose an invoice that belongs to another company", async () => {
+    const { invoice } = await buildInvoice();
+    const other = await createTestUser({});
+
+    await expect(
+      callController(getTenantInvoiceById, { params: { id: String(invoice._id) }, user: other })
+    ).rejects.toThrow(/not found/i);
+  });
+
+  it("rejects a malformed id with a 400 instead of a 500", async () => {
+    const { user } = await buildInvoice();
+
+    await expect(
+      callController(getTenantInvoiceById, { params: { id: "not-an-id" }, user })
+    ).rejects.toMatchObject({ status: 400 });
+  });
+});
+
+describe("getTenantInvoiceNotes — validation", () => {
+  // Regression: createError was used without being imported, so this validation path
+  // surfaced as a ReferenceError (HTTP 500) instead of a clean 400.
+  it("returns a 400 when neither tenant nor business is supplied", async () => {
+    const user = await createTestUser({});
+
+    await expect(
+      callController(getTenantInvoiceNotes, { query: {}, user })
+    ).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/tenant or business/i) });
+  });
+
+  it("does not return another company's notes when only ?tenant= is supplied", async () => {
+    const { tenant, property, company } = await createTestLease({});
+    await createTestChartOfAccounts(company._id);
+    const owner = await createTestUser({ company });
+    await callController(createTenantInvoiceNote, {
+      body: {
+        noteType: "DEBIT_NOTE",
+        tenantId: String(tenant._id),
+        propertyId: String(property._id),
+        category: "RENT_CHARGE",
+        amount: 900,
+        description: "Extra",
+      },
+      user: owner,
+    });
+
+    const ownerView = await callController(getTenantInvoiceNotes, { query: { tenant: String(tenant._id) }, user: owner });
+    expect(ownerView.payload).toHaveLength(1);
+
+    const outsider = await createTestUser({});
+    const outsiderView = await callController(getTenantInvoiceNotes, { query: { tenant: String(tenant._id) }, user: outsider });
+    expect(outsiderView.payload).toHaveLength(0);
   });
 });

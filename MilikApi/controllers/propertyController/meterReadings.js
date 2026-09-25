@@ -185,12 +185,12 @@ const computeConsumption = ({ previousReading, currentReading, isMeterReset }) =
   const curr = normalizeAmount(currentReading, 0);
 
   if (curr < prev && !isMeterReset) {
-    throw new Error("Current reading cannot be less than previous reading unless meter reset is enabled.");
+    throw createError(400, "Current reading cannot be less than previous reading unless meter reset is enabled.");
   }
 
   const unitsConsumed = isMeterReset ? curr : curr - prev;
   if (unitsConsumed < 0) {
-    throw new Error("Units consumed cannot be negative.");
+    throw createError(400, "Units consumed cannot be negative.");
   }
 
   return {
@@ -211,15 +211,15 @@ const ensureReadingContext = async ({ businessId, propertyId, unitId, tenantId =
   ]);
 
   if (!propertyDoc) {
-    throw new Error("Property not found for this business.");
+    throw createError(400, "Property not found for this business.");
   }
 
   if (!unitDoc) {
-    throw new Error("Unit not found for this business.");
+    throw createError(400, "Unit not found for this business.");
   }
 
   if (String(unitDoc.property) !== String(propertyDoc._id)) {
-    throw new Error("Selected unit does not belong to the selected property.");
+    throw createError(400, "Selected unit does not belong to the selected property.");
   }
 
   let tenantDoc = null;
@@ -255,7 +255,7 @@ const checkDuplicateReading = async ({ businessId, unitId, utilityType, billingP
 
   const existing = await MeterReading.findOne(query).select("_id status billedInvoice").lean();
   if (existing) {
-    throw new Error("A meter reading already exists for this unit, utility, and billing period.");
+    throw createError(400, "A meter reading already exists for this unit, utility, and billing period.");
   }
 };
 
@@ -277,7 +277,7 @@ const buildReadingPayload = async ({ req, existingReading = null }) => {
       : Boolean(existingReading?.isMeterReset || false);
 
   if (!propertyId || !unitId || !utilityType) {
-    throw new Error("Property, unit, and utility type are required.");
+    throw createError(400, "Property, unit, and utility type are required.");
   }
 
   const { propertyDoc, unitDoc, tenantDoc } = await ensureReadingContext({
@@ -413,7 +413,7 @@ const resolveBillableTenantForReading = async (reading) => {
       return linkedTenant;
     }
 
-    throw new Error(
+    throw createError(400,
       "The linked tenant on this draft meter reading is no longer active on the unit. Edit the draft reading and attach the correct current tenant before billing."
     );
   }
@@ -427,7 +427,7 @@ const resolveBillableTenantForReading = async (reading) => {
     return activeTenant;
   }
 
-  throw new Error(
+  throw createError(400,
     "No active tenant is linked to this meter reading's unit. Attach the correct tenant before billing."
   );
 };

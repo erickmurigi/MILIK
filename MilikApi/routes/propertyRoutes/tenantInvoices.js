@@ -11,6 +11,7 @@ import {
   getCreditableTenantInvoices,
   getTenantInvoiceNoteChargeTypes,
   getTenantInvoicesList,
+  getTenantInvoiceById,
   getTakeOnBalances,
   updateTakeOnBalance,
   bulkImportInvoiceNotes,
@@ -35,6 +36,7 @@ router.post("/notes/bulk-import", verifyUser, bulkImportInvoiceNotes);
 router.post("/notes/:id/reverse", verifyUser, reverseTenantInvoiceNote);
 
 // Parameterised routes
+router.get("/:id", verifyUser, getTenantInvoiceById);
 router.get("/:id/pdf", verifyUser, async (req, res, next) => {
   try {
     const businessId = String(

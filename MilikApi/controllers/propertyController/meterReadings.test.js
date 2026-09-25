@@ -131,7 +131,7 @@ describe("billMeterReading — vacant unit guard", () => {
         params: { id: String(reading._id) },
         body: {},
       })
-    ).rejects.toThrow(/no active tenant/i);
+    ).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/no active tenant/i) });
 
     const unchanged = await MeterReading.findById(reading._id).lean();
     expect(unchanged.status).toBe("draft");
