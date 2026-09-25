@@ -192,6 +192,35 @@ describe("autoApplyPrepayments — targets the chronologically earliest outstand
   }, 60000);
 });
 
+describe("createPayment — receipt period", () => {
+  it("takes the month and year from the payment date when the client sends none (older mobile builds)", async () => {
+    const { tenant, unit, company } = await createTestLease({});
+    const user = await createTestUser({ company });
+    const { statusCode, payload } = await callController(createPayment, {
+      user,
+      body: {
+        tenant: String(tenant._id), unit: String(unit._id), amount: 1000,
+        referenceNumber: `REF-${Date.now()}-noperiod`, cashbook: "Main Cashbook", paymentMethod: "cash",
+        paymentDate: new Date(2026, 8, 25),
+      },
+    });
+    expect(statusCode).toBe(200);
+    expect(payload.month).toBe(9);
+    expect(payload.year).toBe(2026);
+  }, 60000);
+
+  it("keeps a month and year the client does send, and repairs an invalid one", async () => {
+    const { tenant, unit, company } = await createTestLease({});
+    const user = await createTestUser({ company });
+    const send = (extra) => callController(createPayment, {
+      user,
+      body: { tenant: String(tenant._id), unit: String(unit._id), amount: 500, referenceNumber: `REF-${Date.now()}-${Math.random()}`, cashbook: "Main Cashbook", paymentMethod: "cash", paymentDate: new Date(2026, 8, 25), ...extra },
+    });
+    expect((await send({ month: 3, year: 2026 })).payload).toMatchObject({ month: 3, year: 2026 });
+    expect((await send({ month: 13, year: "abc" })).payload).toMatchObject({ month: 9, year: 2026 });
+  }, 60000);
+});
+
 describe("createPayment — manual receipt confirmation policy", () => {
   // A caller that explicitly sends isConfirmed is always respected, regardless of the
   // company's manualReceiptConfirmation setting — only when the New Receipt / Add

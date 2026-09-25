@@ -2534,8 +2534,19 @@ export const createPayment = async (req, res, next) => {
 
     const _manualAllocationLabel = buildReceiptAllocationLabel(allocationData.allocationSummary);
 
+    // The receipt period (month / year) defaults to the payment date when the client does not send one (older mobile app builds
+    // did not), so a receipt is never rejected for a missing period.
+    const periodDate = new Date(req.body?.paymentDate || Date.now());
+    const validPeriodDate = Number.isNaN(periodDate.getTime()) ? new Date() : periodDate;
+    const requestedMonth = Number(req.body?.month);
+    const requestedYear = Number(req.body?.year);
+    const receiptMonth = Number.isInteger(requestedMonth) && requestedMonth >= 1 && requestedMonth <= 12 ? requestedMonth : validPeriodDate.getMonth() + 1;
+    const receiptYear = Number.isInteger(requestedYear) && requestedYear >= 2000 ? requestedYear : validPeriodDate.getFullYear();
+
     const payment = new RentPayment({
       ...req.body,
+      month: receiptMonth,
+      year: receiptYear,
       tenant: tenantId,
       unit: unitId,
       cashbook: normalizedCashbook,
