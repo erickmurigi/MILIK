@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
-import { ErrorState } from '../../../../components/ui/PmsStates';
+import { ErrorBanner, ErrorState } from '../../../../components/ui/PmsStates';
 import { useSaleSettings } from '../../../../hooks/useSaleSettings';
 import { fmtDate, fmtKES, fmtNumber } from '../../../../utils/pmsFormat';
 import { LISTING_STATUS_STYLE, SBG, SC, humanize, refName, saleError } from '../../../../utils/sales';
@@ -90,6 +90,9 @@ export default function ListingDetailScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load('refresh')} tintColor={SC} />}
       >
+        {/* a refresh that failed keeps the old data on screen, so say so */}
+        {error ? <View style={{ marginHorizontal: -16 }}><ErrorBanner message={error} onRetry={() => load('refresh')} /></View> : null}
+
         <View style={styles.hero}>
           <View style={styles.heroTop}>
             <View style={{ flex: 1 }}>
@@ -102,7 +105,7 @@ export default function ListingDetailScreen() {
             </View>
           </View>
           <Text style={styles.heroLbl}>Asking price</Text>
-          <Text style={styles.heroPrice}>{fmtKES(listing.askingPrice)}</Text>
+          <Text style={styles.heroPrice} numberOfLines={1} adjustsFontSizeToFit>{fmtKES(listing.askingPrice)}</Text>
           {listing.negotiable ? <Text style={styles.heroLoc}>Negotiable</Text> : null}
         </View>
 

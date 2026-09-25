@@ -10,11 +10,11 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
 import { DateField } from '../../../../components/ui/DateField';
-import { ErrorState } from '../../../../components/ui/PmsStates';
+import { ErrorBanner, ErrorState } from '../../../../components/ui/PmsStates';
 import { useSaleSettings } from '../../../../hooks/useSaleSettings';
 import { fmtDate, fmtMoney, todayISO } from '../../../../utils/pmsFormat';
 import {
-  ACTIVITY_OUTCOMES, ACTIVITY_TYPES, SBG, SC, followUpOverdue, humanize, leadStatusStyle, refName, saleError,
+  ACTIVITY_OUTCOMES, ACTIVITY_TYPES, SBG, SC, activityDate, followUpOverdue, humanize, leadStatusStyle, refName, saleError,
 } from '../../../../utils/sales';
 
 type Icon = React.ComponentProps<typeof Ionicons>['name'];
@@ -64,9 +64,6 @@ const budgetText = (min?: number, max?: number) => {
   if (min && max) return `KES ${fmtMoney(min)} – ${fmtMoney(max)}`;
   return max ? `Up to KES ${fmtMoney(max)}` : `From KES ${fmtMoney(min)}`;
 };
-
-/** A date picked without a time: today keeps the current time, another day is stored at midday (no day shift in any zone). */
-const activityDate = (day: string) => (day === todayISO() ? new Date() : new Date(`${day}T12:00:00`)).toISOString();
 
 export default function LeadDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -204,6 +201,7 @@ export default function LeadDetailScreen() {
   const converted = !!lead.convertedBuyer || lead.status === 'converted';
   const overdue   = followUpOverdue(lead.nextFollowUpDate, lead.status);
   const agent     = refName(lead.assignedAgent, 'fullName');
+  const phone     = lead.phone;
   const statusChoices = stages.filter(s => s.value !== 'converted');
 
   return (
@@ -213,6 +211,9 @@ export default function LeadDetailScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load('refresh')} tintColor={SC} />}
       >
+        {/* a refresh that failed keeps the old data on screen, so say so */}
+        {error ? <View style={{ marginHorizontal: -16 }}><ErrorBanner message={error} onRetry={() => load('refresh')} /></View> : null}
+
         {/* Hero */}
         <View style={styles.hero}>
           <View style={styles.heroTop}>
@@ -225,10 +226,10 @@ export default function LeadDetailScreen() {
             </View>
           </View>
           <View style={styles.heroContacts}>
-            {lead.phone ? (
-              <TouchableOpacity style={styles.heroContactRow} onPress={() => Linking.openURL(`tel:${lead.phone}`).catch(() => {})} activeOpacity={0.7}>
+            {phone ? (
+              <TouchableOpacity style={styles.heroContactRow} onPress={() => Linking.openURL(`tel:${phone.replace(/[^\d+]/g, '')}`).catch(() => {})} activeOpacity={0.7}>
                 <Ionicons name="call-outline" size={13} color="rgba(255,255,255,0.7)" />
-                <Text style={styles.heroContactTxt}>{lead.phone}</Text>
+                <Text style={styles.heroContactTxt}>{phone}</Text>
               </TouchableOpacity>
             ) : null}
             {lead.email ? (

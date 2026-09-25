@@ -140,12 +140,12 @@ export default function SalesDashboardScreen() {
           <Text style={styles.heroTitle}>Sales Pipeline</Text>
           <View style={styles.heroRow}>
             <View style={styles.heroStat}>
-              <Text style={styles.heroStatVal}>{fmtKES(dash.payments?.totalCollected)}</Text>
+              <Text style={styles.heroStatVal} numberOfLines={1} adjustsFontSizeToFit>{fmtKES(dash.payments?.totalCollected)}</Text>
               <Text style={styles.heroStatLbl}>Total collected · {n(dash.payments?.count)} payments</Text>
             </View>
             <View style={styles.heroDivider} />
             <View style={styles.heroStat}>
-              <Text style={styles.heroStatVal}>{receivable ? fmtKES(receivable.balance) : '—'}</Text>
+              <Text style={styles.heroStatVal} numberOfLines={1} adjustsFontSizeToFit>{receivable ? fmtKES(receivable.balance) : '—'}</Text>
               <Text style={styles.heroStatLbl}>
                 {receivable ? `Still owed · ${fmtKES(receivable.overdue)} overdue` : 'Still owed'}
               </Text>

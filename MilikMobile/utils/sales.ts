@@ -1,7 +1,7 @@
 // Shared constants + helpers for the Property Sales screens (dashboard, leads, deals, listings).
 // Money / date formatting lives in ./pmsFormat; the list hooks in ../hooks/usePmsList.
 
-import { apiError } from './pmsFormat';
+import { apiError, todayISO } from './pmsFormat';
 import { cwMessage } from './carwash';
 
 export const SC  = '#7C2D12';   // Sales brown
@@ -96,6 +96,10 @@ export const leadStatusStyle = (status: string) => LEAD_STATUS_STYLE[status] ?? 
 
 export const ACTIVITY_TYPES = ['call', 'email', 'meeting', 'site_visit', 'whatsapp', 'note', 'follow_up'] as const;
 export const ACTIVITY_OUTCOMES = ['positive', 'neutral', 'negative', 'no_answer', 'not_applicable'] as const;
+
+/** A date picked without a time: today keeps the current time, another day is stored at midday (no day shift in any zone). */
+export const activityDate = (day: string): string =>
+  (day === todayISO() ? new Date() : new Date(`${day}T12:00:00`)).toISOString();
 
 /** A follow-up date in the past on a lead that is still open. */
 export const followUpOverdue = (date?: string | null, status?: string): boolean =>

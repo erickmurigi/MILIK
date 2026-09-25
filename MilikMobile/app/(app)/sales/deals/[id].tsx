@@ -10,7 +10,7 @@ import { useLocalSearchParams } from 'expo-router';
 import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
 import { DateField } from '../../../../components/ui/DateField';
-import { ErrorState } from '../../../../components/ui/PmsStates';
+import { ErrorBanner, ErrorState } from '../../../../components/ui/PmsStates';
 import { useSaleSettings } from '../../../../hooks/useSaleSettings';
 import { cleanDecimal, fmtDate, fmtKES, fmtMoney, todayISO } from '../../../../utils/pmsFormat';
 import { preferredCashbook, round2, type Cashbook } from '../../../../utils/carwash';
@@ -265,6 +265,9 @@ export default function DealDetailScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load('refresh')} tintColor={SC} />}
       >
+        {/* a refresh that failed keeps the old data on screen, so say so */}
+        {error ? <View style={{ marginHorizontal: -16 }}><ErrorBanner message={error} onRetry={() => load('refresh')} /></View> : null}
+
         {/* Hero */}
         <View style={styles.hero}>
           <View style={styles.heroTop}>
@@ -279,7 +282,7 @@ export default function DealDetailScreen() {
           </View>
 
           <Text style={styles.heroLbl}>Agreed price</Text>
-          <Text style={styles.heroPrice}>{fmtKES(deal.agreedPrice)}</Text>
+          <Text style={styles.heroPrice} numberOfLines={1} adjustsFontSizeToFit>{fmtKES(deal.agreedPrice)}</Text>
 
           <View style={styles.progressWrap}>
             <View style={styles.progressBg}>
@@ -290,12 +293,12 @@ export default function DealDetailScreen() {
 
           <View style={styles.heroAmounts}>
             <View style={styles.heroAmt}>
-              <Text style={styles.heroAmtVal}>{fmtKES(paid)}</Text>
+              <Text style={styles.heroAmtVal} numberOfLines={1} adjustsFontSizeToFit>{fmtKES(paid)}</Text>
               <Text style={styles.heroAmtLbl}>Paid</Text>
             </View>
             <View style={styles.heroDivider} />
             <View style={styles.heroAmt}>
-              <Text style={[styles.heroAmtVal, { color: balance > 0 ? '#FCA5A5' : '#6EE7B7' }]}>{fmtKES(deal.status === 'cancelled' ? 0 : balance)}</Text>
+              <Text style={[styles.heroAmtVal, { color: balance > 0 ? '#FCA5A5' : '#6EE7B7' }]} numberOfLines={1} adjustsFontSizeToFit>{fmtKES(deal.status === 'cancelled' ? 0 : balance)}</Text>
               <Text style={styles.heroAmtLbl}>Balance</Text>
             </View>
           </View>
@@ -306,7 +309,7 @@ export default function DealDetailScreen() {
           <Text style={styles.sectionLabel}>DETAILS</Text>
           <InfoRow icon="person-outline" label={T.saleBuyer} value={refName(deal.buyer, 'fullName') || '—'} />
           {phone ? (
-            <TouchableOpacity onPress={() => Linking.openURL(`tel:${phone}`).catch(() => {})} activeOpacity={0.7}>
+            <TouchableOpacity onPress={() => Linking.openURL(`tel:${phone.replace(/[^\d+]/g, '')}`).catch(() => {})} activeOpacity={0.7}>
               <InfoRow icon="call-outline" label="Phone" value={phone} link />
             </TouchableOpacity>
           ) : null}

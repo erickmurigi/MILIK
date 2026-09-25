@@ -58,13 +58,21 @@ export function DateField({ label, value, onChange, required, optional }: Props)
           {required ? <Text style={{ color: Colors.danger }}> *</Text> : null}
           {optional ? <Text style={{ color: Colors.textMuted }}> (optional)</Text> : null}
         </Text>
-        <TouchableOpacity style={styles.trigger} onPress={() => setOpen(true)} activeOpacity={0.75}>
-          <Ionicons name="calendar-outline" size={17} color={value ? Colors.primary : Colors.textMuted} />
-          <Text style={[styles.triggerText, value && styles.triggerTextFilled]}>
-            {displayDate || 'Select date'}
-          </Text>
-          <Ionicons name="chevron-down" size={15} color={Colors.textMuted} />
-        </TouchableOpacity>
+        <View>
+          <TouchableOpacity style={styles.trigger} onPress={() => setOpen(true)} activeOpacity={0.75}>
+            <Ionicons name="calendar-outline" size={17} color={value ? Colors.primary : Colors.textMuted} />
+            <Text style={[styles.triggerText, value && styles.triggerTextFilled]}>
+              {displayDate || 'Select date'}
+            </Text>
+            <Ionicons name="chevron-down" size={15} color={Colors.textMuted} />
+          </TouchableOpacity>
+          {/* an optional date that was picked by mistake can be taken back out */}
+          {optional && value ? (
+            <TouchableOpacity style={styles.clearBtn} onPress={() => onChange('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
       </View>
 
       <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
@@ -115,6 +123,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: Colors.border,
     paddingHorizontal: 14, height: 50,
   },
+  clearBtn:   { position: 'absolute', right: 38, top: 0, bottom: 0, justifyContent: 'center' },
   triggerText:       { flex: 1, fontSize: 14, color: Colors.textMuted },
   triggerTextFilled: { color: Colors.text, fontWeight: '600' },
 
