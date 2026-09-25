@@ -3,6 +3,7 @@ import FinancialLedgerEntry from "../models/FinancialLedgerEntry.js";
 import ChartOfAccount from "../models/ChartOfAccount.js";
 import AccountingPeriod from "../models/AccountingPeriod.js";
 import { resolvePropertyAccountingContext } from "./propertyAccountingService.js";
+import { createError } from "../utils/error.js";
 
 const flipDirection = (direction) => (direction === "credit" ? "debit" : "credit");
 
@@ -35,17 +36,17 @@ const validatePayload = (payload) => {
   );
 
   if (missing.length > 0) {
-    throw new Error(`Missing ledger payload fields: ${missing.join(", ")}`);
+    throw createError(400, `Missing ledger payload fields: ${missing.join(", ")}`);
   }
 
   const amount = Number(payload.amount || 0);
   if (!Number.isFinite(amount) || Math.abs(amount) <= 0) {
-    throw new Error("Ledger entry amount must be greater than zero.");
+    throw createError(400, "Ledger entry amount must be greater than zero.");
   }
 
   const direction = String(payload.direction || "").toLowerCase();
   if (!["debit", "credit"].includes(direction)) {
-    throw new Error("Ledger entry direction must be debit or credit.");
+    throw createError(400, "Ledger entry direction must be debit or credit.");
   }
 };
 
@@ -56,11 +57,11 @@ const validatePostingAccount = async (payload = {}) => {
   const accountId = toObjectIdString(payload.accountId);
 
   if (!accountId) {
-    throw new Error("A valid posting account is required before saving a ledger entry.");
+    throw createError(400, "A valid posting account is required before saving a ledger entry.");
   }
 
   if (!businessId) {
-    throw new Error("A valid business id is required before saving a ledger entry.");
+    throw createError(400, "A valid business id is required before saving a ledger entry.");
   }
 
   const account = await ChartOfAccount.findOne({
@@ -69,15 +70,16 @@ const validatePostingAccount = async (payload = {}) => {
   }).select("_id code name type active isActive isPosting isHeader").lean();
 
   if (!account) {
-    throw new Error("Selected posting account was not found in this company chart of accounts.");
+    throw createError(400, "Selected posting account was not found in this company chart of accounts.");
   }
 
   if (account.isPosting === false || account.isHeader === true) {
-    throw new Error(`Account ${account.code || account.name || accountId} is a header/non-posting account and cannot receive ledger entries.`);
+    throw createError(400, `Account ${account.code || account.name || accountId} is a header/non-posting account and cannot receive ledger entries.`);
   }
 
-  if (account.active === false || account.isActive === false) {
-    throw new Error(`Account ${account.code || account.name || accountId} is inactive and cannot receive new ledger entries.`);
+  // An inactive account takes no NEW postings, but a reversal must always be able to undo what was posted before it was switched off.
+  if (!payload.allowInactiveAccount && (account.active === false || account.isActive === false)) {
+    throw createError(400, `Account ${account.code || account.name || accountId} is inactive and cannot receive new ledger entries.`);
   }
 
   return account;
@@ -122,7 +124,7 @@ const checkPeriodLock = async (businessId, transactionDate) => {
     endDate: { $gte: date },
   }).select("name status startDate endDate").lean();
   if (blocked) {
-    throw new Error(
+    throw createError(400, 
       `Cannot post to a ${blocked.status} period "${blocked.name}" ` +
       `(${blocked.startDate.toISOString().slice(0, 10)} – ${blocked.endDate.toISOString().slice(0, 10)}). ` +
       `Reopen the period or post to a different date.`
@@ -164,16 +166,16 @@ export const postEntry = async (payload = {}) => {
 
 export const postReversal = async ({ entryId, reason, userId, session = null }) => {
   if (!entryId) {
-    throw new Error("postReversal requires entryId");
+    throw createError(400, "postReversal requires entryId");
   }
 
   const originalEntry = await FinancialLedgerEntry.findById(entryId).session(session || null);
   if (!originalEntry) {
-    throw new Error("Ledger entry not found");
+    throw createError(404, "Ledger entry not found");
   }
 
   if (originalEntry.reversedByEntry || originalEntry.status === "reversed") {
-    throw new Error("Ledger entry already reversed");
+    throw createError(400, "Ledger entry already reversed");
   }
 
   // Guarantee the original has a journalGroupId before reversing.
@@ -190,6 +192,7 @@ export const postReversal = async ({ entryId, reason, userId, session = null }) 
 
   const reversalEntry = await postEntry({
     session,
+    allowInactiveAccount:  true,
     business:              originalEntry.business,
     dimensions:            originalEntry.toObject().dimensions,
     property:              originalEntry.property,
@@ -234,7 +237,7 @@ export const postReversal = async ({ entryId, reason, userId, session = null }) 
 
 export const postCorrection = async ({ entryId, correctedPayload, reason, userId, session = null }) => {
   if (!entryId || !correctedPayload || !userId) {
-    throw new Error("postCorrection requires entryId, correctedPayload, and userId");
+    throw createError(400, "postCorrection requires entryId, correctedPayload, and userId");
   }
 
   const { originalEntry, reversalEntry } = await postReversal({

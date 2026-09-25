@@ -3,6 +3,11 @@ import PaymentVoucher from "../../models/PaymentVoucher.js";
 import ExpenseRequisition from "../../models/ExpenseRequisition.js";
 import ExpenseProperty from "../../models/ExpenseProperty.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
+// models this controller populates: imported here so the refs are always registered, whatever else has been loaded
+import "../../models/Property.js";
+import "../../models/Landlord.js";
+import "../../models/User.js";
+import "../../models/ServiceProvider.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import { emitToCompany } from "../../utils/socketManager.js";
 import { postEntry, postReversal } from "../../services/ledgerPostingService.js";
@@ -133,9 +138,17 @@ const generateVoucherNo = async (businessId) => {
   return `${prefix}${String(seq).padStart(4, "0")}`;
 };
 
+// A switched-off account takes no new postings: say so up front, before any leg of the voucher is written.
+const assertAccountActive = (account, label) => {
+  if (account?.active === false || account?.isActive === false) {
+    throw createError(400, `${label} ${account.code || ""} ${account.name || ""} is inactive. Reactivate it in Chart of Accounts or choose another account.`.replace(/s+/g, " "));
+  }
+  return account;
+};
+
 const ensureLiabilityAccount = async ({ businessId, liabilityAccountId }) => {
   if (!liabilityAccountId || !isValidObjectId(liabilityAccountId)) {
-    throw new Error("A valid liability posting account is required.");
+    throw createError(400, "A valid liability posting account is required.");
   }
 
   const account = await ChartOfAccount.findOne({
@@ -155,15 +168,15 @@ const ensureLiabilityAccount = async ({ businessId, liabilityAccountId }) => {
   }).lean();
 
   if (!account) {
-    throw new Error("Selected liability posting account was not found for this business.");
+    throw createError(400, "Selected liability posting account was not found for this business.");
   }
 
-  return account;
+  return assertAccountActive(account, "Liability account");
 };
 
 const ensureExplicitDebitAccount = async ({ businessId, debitAccountId, voucherCategory }) => {
   if (!debitAccountId || !isValidObjectId(debitAccountId)) {
-    throw new Error("A valid debit posting account is required for this voucher category.");
+    throw createError(400, "A valid debit posting account is required for this voucher category.");
   }
 
   const account = await ChartOfAccount.findOne({
@@ -173,27 +186,27 @@ const ensureExplicitDebitAccount = async ({ businessId, debitAccountId, voucherC
   }).lean();
 
   if (!account) {
-    throw new Error("Selected debit posting account was not found for this business.");
+    throw createError(400, "Selected debit posting account was not found for this business.");
   }
 
   const normalizedCategory = String(voucherCategory || "");
   if (normalizedCategory === "petty_cash_float") {
     if (account.type !== "asset" || !isCashbookLikeAccount(account)) {
-      throw new Error("Petty cash float vouchers must debit a petty-cash or cashbook asset account.");
+      throw createError(400, "Petty cash float vouchers must debit a petty-cash or cashbook asset account.");
     }
-    return account;
+    return assertAccountActive(account, "Debit account");
   }
 
   if (account.type !== "expense") {
-    throw new Error("Selected debit posting account must be an expense account for this voucher category.");
+    throw createError(400, "Selected debit posting account must be an expense account for this voucher category.");
   }
 
-  return account;
+  return assertAccountActive(account, "Expense account");
 };
 
 const ensureSettlementAccount = async ({ businessId, settlementAccountId }) => {
   if (!settlementAccountId || !isValidObjectId(settlementAccountId)) {
-    throw new Error("A valid settlement cashbook account is required to mark a voucher as paid.");
+    throw createError(400, "A valid settlement cashbook account is required to mark a voucher as paid.");
   }
 
   const account = await ChartOfAccount.findOne({
@@ -204,14 +217,14 @@ const ensureSettlementAccount = async ({ businessId, settlementAccountId }) => {
   }).lean();
 
   if (!account) {
-    throw new Error("Selected settlement account was not found for this business.");
+    throw createError(400, "Selected settlement account was not found for this business.");
   }
 
   if (!isCashbookLikeAccount(account)) {
-    throw new Error("Settlement account must be a cash, bank, M-Pesa, wallet, till, or petty-cash asset account.");
+    throw createError(400, "Settlement account must be a cash, bank, M-Pesa, wallet, till, or petty-cash asset account.");
   }
 
-  return account;
+  return assertAccountActive(account, "Settlement account");
 };
 
 const findAccountByFlexibleShape = async ({
@@ -367,7 +380,7 @@ const resolveVoucherDebitAccount = async ({ voucher, businessId, accountingConte
     });
 
     if (!controlAccount?._id) {
-      throw new Error("Property control account could not be resolved for this voucher.");
+      throw createError(400, "Property control account could not be resolved for this voucher.");
     }
 
     return controlAccount;
@@ -426,7 +439,7 @@ const resolveVoucherDebitAccount = async ({ voucher, businessId, accountingConte
   }
 
   if (!account?._id) {
-    throw new Error(
+    throw createError(400, 
       "A posting expense account could not be resolved for this voucher. Please create at least one posting expense account in Chart of Accounts for this business."
     );
   }
@@ -568,15 +581,15 @@ const resolveVoucherSourceRequisition = async ({
   });
 
   if (!requisition) {
-    throw new Error("Source expense requisition was not found.");
+    throw createError(400, "Source expense requisition was not found.");
   }
 
   if (!["approved", "converted"].includes(String(requisition.status || ""))) {
-    throw new Error("Only approved expense requisitions can be converted into payment vouchers.");
+    throw createError(400, "Only approved expense requisitions can be converted into payment vouchers.");
   }
 
   if (propertyId && String(requisition.property || "") !== String(propertyId || "")) {
-    throw new Error("Selected property must match the approved source requisition.");
+    throw createError(400, "Selected property must match the approved source requisition.");
   }
 
   if (requisition.linkedVoucher) {
@@ -590,7 +603,7 @@ const resolveVoucherSourceRequisition = async ({
         .lean();
 
       if (linkedVoucher && linkedVoucher.status !== "reversed") {
-        throw new Error(`Expense requisition ${requisition.requisitionNo || requisition.referenceNo} is already linked to voucher ${linkedVoucher.voucherNo}.`);
+        throw createError(400, `Expense requisition ${requisition.requisitionNo || requisition.referenceNo} is already linked to voucher ${linkedVoucher.voucherNo}.`);
       }
     }
   }
@@ -689,6 +702,53 @@ const reverseVoucherLedgerEntries = async ({ voucher, userId, reason }) => {
   }
 
   return reversalResults;
+};
+
+const liveVoucherEntries = (voucher) => FinancialLedgerEntry.find({
+  business: voucher.business,
+  sourceTransactionType: "payment_voucher",
+  sourceTransactionId: String(voucher._id),
+  $or: [{ reversalOf: { $exists: false } }, { reversalOf: null }],
+  status: "approved",
+}).select("_id accountId").lean();
+
+/**
+ * Runs a posting step (accrual and/or settlement) so that a failure part-way leaves nothing behind: whatever legs this step
+ * wrote are reversed and the voucher goes back to the fields it had, instead of sitting "paid" with half its entries.
+ */
+const withPostingRollback = async ({ voucher, actorUserId, work }) => {
+  const before = voucher.toObject();
+  const keep = new Set((await liveVoucherEntries(voucher)).map((e) => String(e._id)));
+  try {
+    return await work();
+  } catch (error) {
+    try {
+      const fresh = (await liveVoucherEntries(voucher)).filter((e) => !keep.has(String(e._id)));
+      for (const entry of fresh) {
+        await postReversal({ entryId: entry._id, reason: `Auto-reversal: posting of voucher ${voucher.voucherNo} failed`, userId: actorUserId }).catch(() => null);
+      }
+      if (fresh.length) {
+        await aggregateChartOfAccountBalances(voucher.business, [...new Set(fresh.map((e) => String(e.accountId)).filter(Boolean))]).catch(() => null);
+      }
+      if (keep.size === 0) await deleteExpenseRecordForVoucher(voucher).catch(() => null);
+      await PaymentVoucher.updateOne({ _id: voucher._id }, {
+        $set: {
+          status: before.status,
+          ledgerEntries: before.ledgerEntries || [],
+          journalGroupId: before.journalGroupId || null,
+          expenseRecord: before.expenseRecord || null,
+          approvedAt: before.approvedAt || null,
+          approvedBy: before.approvedBy || null,
+          paidAt: before.paidAt || null,
+          paidBy: before.paidBy || null,
+          paidDate: before.paidDate || null,
+        },
+      });
+    } catch (rollbackError) {
+      console.error("[PaymentVoucher] rollback after failed posting also failed for %s:", voucher.voucherNo, rollbackError?.message);
+    }
+    throw error;
+  }
 };
 
 const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate = null }) => {
@@ -1117,11 +1177,28 @@ export const createPaymentVoucher = async (req, res, next) => {
         voucher.paidDate = voucher.paidDate || postingDate;
       }
 
-      await ensureVoucherAccrualPosting({ voucher, actorUserId, statementDate: postingDate });
-      if (voucher.status === "paid") {
-        await ensureVoucherSettlementPosting({ voucher, actorUserId, paidDate: postingDate });
+      try {
+        await withPostingRollback({
+          voucher,
+          actorUserId,
+          work: async () => {
+            if (voucher.status === "paid") {
+              await ensureSettlementAccount({ businessId, settlementAccountId: voucher.settlementAccount });
+              await ensureLiabilityAccount({ businessId, liabilityAccountId: voucher.liabilityAccount });
+            }
+            await ensureVoucherAccrualPosting({ voucher, actorUserId, statementDate: postingDate });
+            if (voucher.status === "paid") {
+              await ensureVoucherSettlementPosting({ voucher, actorUserId, paidDate: postingDate });
+            }
+            await voucher.save();
+          },
+        });
+      } catch (postingError) {
+        // posting failed: don't leave a saved voucher that claims to be approved/paid with no (or half) its entries
+        await releaseSourceRequisitionFromVoucher({ voucher, businessId }).catch(() => null);
+        await PaymentVoucher.deleteOne({ _id: voucher._id }).catch(() => null);
+        throw postingError;
       }
-      await voucher.save();
     }
 
     emitToCompany(businessId, "voucher:new", { voucherId: voucher._id });
@@ -1334,8 +1411,15 @@ export const updatePaymentVoucherStatus = async (req, res, next) => {
       const approvalDate = new Date();
       voucher.approvedAt = approvalDate;
       voucher.approvedBy = actorUserId;
-      await ensureVoucherAccrualPosting({ voucher, actorUserId, statementDate: approvalDate });
-      voucher.status = "approved";
+      await withPostingRollback({
+        voucher,
+        actorUserId,
+        work: async () => {
+          await ensureVoucherAccrualPosting({ voucher, actorUserId, statementDate: approvalDate });
+          voucher.status = "approved";
+          await voucher.save();
+        },
+      });
     }
 
     if (status === "paid") {
@@ -1359,9 +1443,18 @@ export const updatePaymentVoucherStatus = async (req, res, next) => {
       voucher.paidAt = paidDate;
       voucher.paidBy = actorUserId;
       voucher.paidDate = paidDate;
-      await ensureVoucherAccrualPosting({ voucher, actorUserId, statementDate: voucher.approvedAt || paidDate });
-      await ensureVoucherSettlementPosting({ voucher, actorUserId, paidDate });
-      voucher.status = "paid";
+      await withPostingRollback({
+        voucher,
+        actorUserId,
+        work: async () => {
+          await ensureSettlementAccount({ businessId: business, settlementAccountId: voucher.settlementAccount });
+          await ensureLiabilityAccount({ businessId: business, liabilityAccountId: voucher.liabilityAccount });
+          await ensureVoucherAccrualPosting({ voucher, actorUserId, statementDate: voucher.approvedAt || paidDate });
+          await ensureVoucherSettlementPosting({ voucher, actorUserId, paidDate });
+          voucher.status = "paid";
+          await voucher.save();
+        },
+      });
     }
 
     if (status === "reversed") {

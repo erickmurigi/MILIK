@@ -523,14 +523,19 @@ const PaymentVouchers = () => {
   const bulkDeleteSelected = async () => {
     if (selectedRows.length === 0) return toast.info("Select vouchers first");
     if (!await confirm({ title: "Delete Vouchers", message: `Delete ${selectedRows.length} selected vouchers?`, confirmText: "Delete", isDangerous: true })) return;
-    await Promise.all(
-      selectedRows.map((voucher) =>
-        deletePaymentVoucher(voucher._id, { business: currentCompany?._id, company: currentCompany?._id }).catch(() => null)
-      )
-    );
+    // one at a time: reversing posted vouchers touches the same accounts, and two reversals at once would fight over them
+    const failed = [];
+    for (const voucher of selectedRows) {
+      try {
+        await deletePaymentVoucher(voucher._id, { business: currentCompany?._id, company: currentCompany?._id });
+      } catch (error) {
+        failed.push(`${voucher.voucherNo || "voucher"}: ${error?.response?.data?.message || "failed"}`);
+      }
+    }
     await loadVouchers();
     setSelectedIds([]);
-    toast.success("Selected vouchers deleted where allowed");
+    if (failed.length) toast.error(`${selectedRows.length - failed.length} removed, ${failed.length} failed — ${failed[0]}`);
+    else toast.success("Selected vouchers removed");
   };
 
   return (
