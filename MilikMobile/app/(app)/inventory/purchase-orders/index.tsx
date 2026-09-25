@@ -1,100 +1,43 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Alert,
+  ActivityIndicator, RefreshControl, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
+import { ErrorBanner, ErrorState } from '../../../../components/ui/PmsStates';
+import { useDebounced, usePmsList, useReloadOnFocus } from '../../../../hooks/usePmsList';
+import { fmtDate, fmtKES } from '../../../../utils/pmsFormat';
+import { pageOf } from '../../../../utils/sales';
+import {
+  INV, INVBG, PO_FILTERS, PO_STATUS, fmtQty, nameOf, type PurchaseOrder,
+} from '../../../../utils/inventory';
 
-const INV = '#92400E';
-
-const fmt = (n: number) =>
-  `KES ${Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' });
-
-type PurchaseOrder = {
-  _id:           string;
-  poNumber:      string;
-  supplier?:     { name?: string } | string;
-  location?:     { name?: string } | string;
-  status:        string;
-  totalAmount:   number;
-  orderDate?:    string;
-  expectedDate?: string;
-  lines?:        { qtyOrdered: number; qtyReceived: number }[];
-};
-
-const STATUS_CFG: Record<string, { bg: string; color: string; label: string }> = {
-  draft:              { bg: '#F1F5F9', color: '#64748B', label: 'Draft'             },
-  sent:               { bg: '#DBEAFE', color: '#1D4ED8', label: 'Sent'              },
-  partially_received: { bg: '#FEF3C7', color: '#D97706', label: 'Partial Receipt'   },
-  received:           { bg: '#D1FAE5', color: '#065F46', label: 'Received'          },
-  cancelled:          { bg: '#FEE2E2', color: '#DC2626', label: 'Cancelled'         },
-};
-
-const TABS = [
-  { key: '',                  label: 'All'      },
-  { key: 'draft',             label: 'Draft'    },
-  { key: 'sent',              label: 'Sent'     },
-  { key: 'partially_received',label: 'Partial'  },
-  { key: 'received',          label: 'Received' },
-] as const;
-
-const getSupplier = (s: PurchaseOrder['supplier']) =>
-  typeof s === 'object' ? (s?.name ?? '—') : (s ?? '—');
-const getLocation = (l: PurchaseOrder['location']) =>
-  typeof l === 'object' ? (l?.name ?? '') : (l ?? '');
-
-const LIMIT = 30;
+const parse = (data: any) => pageOf<PurchaseOrder>(data);
 
 export default function PurchaseOrdersScreen() {
   const router = useRouter();
 
   const [statusFilter, setStatusFilter] = useState('');
   const [search,       setSearch]       = useState('');
-  const [items,        setItems]        = useState<PurchaseOrder[]>([]);
-  const [loading,      setLoading]      = useState(true);
-  const [refreshing,   setRefreshing]   = useState(false);
-  const [loadingMore,  setLoadingMore]  = useState(false);
-  const [page,         setPage]         = useState(1);
-  const [hasMore,      setHasMore]      = useState(true);
+  const debounced = useDebounced(search.trim(), 400);
 
-  const searchRef = useRef(search);
-  searchRef.current = search;
+  const params = useMemo(() => ({
+    status: statusFilter || undefined,
+    search: debounced || undefined,
+  }), [statusFilter, debounced]);
 
-  const load = useCallback(async (pg = 1, isRefresh = false) => {
-    if (pg === 1) isRefresh ? setRefreshing(true) : setLoading(true);
-    else setLoadingMore(true);
-    try {
-      const p: Record<string, string> = { page: String(pg), limit: String(LIMIT) };
-      if (statusFilter)             p.status = statusFilter;
-      if (searchRef.current.trim()) p.search = searchRef.current.trim();
-      const { data } = await api.get('/inventory/purchase-orders', { params: p });
-      const rows: PurchaseOrder[] = Array.isArray(data) ? data : data?.data ?? data?.items ?? [];
-      setItems(prev => pg === 1 ? rows : [...prev, ...rows]);
-      setHasMore(rows.length === LIMIT);
-      setPage(pg);
-    } catch (e: any) {
-      const msg = e?.response?.data?.message ?? e?.message ?? 'Failed to load purchase orders';
-      Alert.alert('Error', msg);
-      if (pg === 1) setItems([]);
-    }
-    finally { setLoading(false); setRefreshing(false); setLoadingMore(false); }
-  }, [statusFilter]);
-
-  useEffect(() => { load(1); }, [load]);
-  useEffect(() => { const t = setTimeout(() => load(1), 400); return () => clearTimeout(t); }, [search]);
+  const list = usePmsList<PurchaseOrder>({ path: '/inventory/purchase-orders', params, limit: 30, parse });
+  // received / cancelled on the detail screen -> the row's status is fresh when we come back
+  useReloadOnFocus(useCallback(() => { list.reload(); }, [list.reload]));
 
   const renderItem = ({ item }: { item: PurchaseOrder }) => {
-    const sc  = STATUS_CFG[item.status] ?? STATUS_CFG.draft;
-    const loc = getLocation(item.location);
-    const totalQty     = item.lines?.reduce((s, l) => s + l.qtyOrdered, 0) ?? 0;
-    const receivedQty  = item.lines?.reduce((s, l) => s + l.qtyReceived, 0) ?? 0;
+    const sc  = PO_STATUS[item.status] ?? PO_STATUS.draft;
+    const loc = nameOf(item.location);
+    const totalQty    = (item.lines ?? []).reduce((s, l) => s + Number(l.qtyOrdered || 0), 0);
+    const receivedQty = (item.lines ?? []).reduce((s, l) => s + Number(l.qtyReceived || 0), 0);
     return (
       <TouchableOpacity
         style={[styles.card, { borderLeftColor: sc.color }]}
@@ -104,24 +47,24 @@ export default function PurchaseOrdersScreen() {
         <View style={styles.cardTop}>
           <View style={{ flex: 1 }}>
             <Text style={styles.poNum}>{item.poNumber}</Text>
-            <Text style={styles.supplier} numberOfLines={1}>{getSupplier(item.supplier)}</Text>
-            {loc ? <Text style={styles.location} numberOfLines={1}>{loc}</Text> : null}
+            <Text style={styles.supplier} numberOfLines={1}>{nameOf(item.supplier) || 'No supplier'}</Text>
+            {loc ? <Text style={styles.location} numberOfLines={1}>Receiving at {loc}</Text> : null}
           </View>
           <View style={{ alignItems: 'flex-end', gap: 6 }}>
             <View style={[styles.badge, { backgroundColor: sc.bg }]}>
               <Text style={[styles.badgeTxt, { color: sc.color }]}>{sc.label}</Text>
             </View>
-            <Text style={styles.amount}>{fmt(item.totalAmount)}</Text>
+            <Text style={styles.amount}>{fmtKES(item.totalAmount)}</Text>
           </View>
         </View>
         <View style={styles.cardBottom}>
           <Text style={styles.dateTxt}>
-            {item.orderDate ? fmtDate(item.orderDate) : ''}
+            {fmtDate(item.orderDate)}
             {item.expectedDate ? `  ·  Expected ${fmtDate(item.expectedDate)}` : ''}
           </Text>
-          {totalQty > 0 && (
-            <Text style={styles.qtyTxt}>{receivedQty}/{totalQty} received</Text>
-          )}
+          {totalQty > 0 && item.status !== 'cancelled' ? (
+            <Text style={styles.qtyTxt}>{fmtQty(receivedQty)}/{fmtQty(totalQty)} received</Text>
+          ) : null}
         </View>
       </TouchableOpacity>
     );
@@ -137,54 +80,61 @@ export default function PurchaseOrdersScreen() {
           placeholderTextColor="#94A3B8"
           value={search}
           onChangeText={setSearch}
+          returnKeyType="search"
+          autoCorrect={false}
         />
         {search ? (
-          <TouchableOpacity onPress={() => setSearch('')}>
+          <TouchableOpacity onPress={() => setSearch('')} hitSlop={8}>
             <Ionicons name="close-circle" size={18} color="#94A3B8" />
           </TouchableOpacity>
         ) : null}
       </View>
 
-      <FlatList
-        horizontal data={TABS as any} keyExtractor={t => t.key}
-        showsHorizontalScrollIndicator={false}
-        style={{ flexGrow: 0 }}
-        contentContainerStyle={styles.tabsRow}
-        renderItem={({ item: t }) => (
-          <TouchableOpacity
-            style={[styles.tab, statusFilter === t.key && styles.tabActive]}
-            onPress={() => setStatusFilter(t.key)}
-          >
-            <Text style={[styles.tabTxt, statusFilter === t.key && styles.tabTxtActive]}>{t.label}</Text>
-          </TouchableOpacity>
-        )}
-      />
+      <View style={{ flexGrow: 0 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsRow} keyboardShouldPersistTaps="handled">
+          {PO_FILTERS.map(t => (
+            <TouchableOpacity
+              key={t.key || 'all'}
+              style={[styles.tab, statusFilter === t.key && styles.tabActive]}
+              onPress={() => setStatusFilter(t.key)}
+            >
+              <Text style={[styles.tabTxt, statusFilter === t.key && styles.tabTxtActive]}>{t.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
-      {loading ? <MilikLoader fullscreen /> : (
-        <FlatList
-          data={items}
-          keyExtractor={po => po._id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.list}
-          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(1, true)} tintColor={INV} />}
-          onEndReached={() => { if (!loadingMore && hasMore) load(page + 1); }}
-          onEndReachedThreshold={0.3}
-          ListEmptyComponent={
-            <View style={styles.emptyWrap}>
-              <Ionicons name="document-text-outline" size={48} color="#CBD5E1" />
-              <Text style={styles.emptyTxt}>No purchase orders</Text>
-            </View>
-          }
-          ListFooterComponent={loadingMore ? <ActivityIndicator color={INV} style={{ padding: 20 }} /> : null}
-        />
+      {list.loading ? <MilikLoader fullscreen /> : list.error && list.items.length === 0 ? (
+        <ErrorState message={list.error} onRetry={list.retry} />
+      ) : (
+        <>
+          {list.error ? <ErrorBanner message={list.error} onRetry={list.retry} /> : null}
+          <FlatList
+            data={list.items}
+            keyExtractor={po => po._id}
+            renderItem={renderItem}
+            contentContainerStyle={styles.list}
+            ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={<RefreshControl refreshing={list.refreshing} onRefresh={list.refresh} tintColor={INV} />}
+            onEndReached={list.loadMore}
+            onEndReachedThreshold={0.4}
+            ListEmptyComponent={
+              <View style={styles.emptyWrap}>
+                <Ionicons name="document-text-outline" size={48} color="#CBD5E1" />
+                <Text style={styles.emptyTxt}>{statusFilter || debounced ? 'No purchase orders match' : 'No purchase orders yet'}</Text>
+              </View>
+            }
+            ListFooterComponent={list.loadingMore ? <ActivityIndicator color={INV} style={{ padding: 20 }} /> : null}
+          />
+        </>
       )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#FFFBEB' },
+  safe: { flex: 1, backgroundColor: INVBG },
 
   searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, margin: 16, marginBottom: 10, backgroundColor: '#fff', borderRadius: 14, borderWidth: 1.5, borderColor: '#E2E8F0', paddingHorizontal: 14, height: 50 },
   searchInput: { flex: 1, fontSize: 15, color: '#0F172A' },

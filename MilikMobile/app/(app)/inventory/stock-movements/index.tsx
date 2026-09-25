@@ -1,114 +1,51 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  ActivityIndicator, RefreshControl, ScrollView, Alert,
+  ActivityIndicator, RefreshControl, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
+import { ErrorBanner, ErrorState } from '../../../../components/ui/PmsStates';
+import { useDebounced, usePmsList, useReloadOnFocus } from '../../../../hooks/usePmsList';
+import { fmtDateTime, fmtKES } from '../../../../utils/pmsFormat';
+import { pageOf } from '../../../../utils/sales';
+import {
+  INV, INVBG, MOVEMENT_FILTERS, MOVEMENT_STYLE, fmtQty, nameOf, userName, type StockMovement,
+} from '../../../../utils/inventory';
 
-const INV = '#92400E';
-
-const fmt = (n: number) =>
-  `KES ${Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' });
-
-type StockMovement = {
-  _id:         string;
-  product?:    { name?: string; sku?: string; unitOfMeasure?: string } | string;
-  location?:   { name?: string } | string;
-  type:        string;
-  quantity:    number;
-  costPrice?:  number;
-  reference?:  string;
-  notes?:      string;
-  createdAt:   string;
-  createdBy?:  { name?: string };
-};
-
-const TYPE_CFG: Record<string, { bg: string; color: string; label: string; icon: string }> = {
-  purchase:    { bg: '#D1FAE5', color: '#065F46', label: 'Purchase',    icon: 'arrow-down-circle-outline'   },
-  sale:        { bg: '#DBEAFE', color: '#1D4ED8', label: 'Sale',        icon: 'arrow-up-circle-outline'     },
-  adjustment:  { bg: '#EDE9FE', color: '#7C3AED', label: 'Adjustment',  icon: 'swap-horizontal-outline'     },
-  transfer:    { bg: '#FEF3C7', color: '#D97706', label: 'Transfer',    icon: 'git-compare-outline'         },
-  return:      { bg: '#FEE2E2', color: '#DC2626', label: 'Return',      icon: 'refresh-outline'             },
-  writeoff:    { bg: '#F1F5F9', color: '#64748B', label: 'Write-off',   icon: 'trash-outline'               },
-  opening:     { bg: '#FEF3C7', color: '#D97706', label: 'Opening',     icon: 'albums-outline'              },
-};
-
-const TYPES = [
-  { key: '',           label: 'All'        },
-  { key: 'purchase',   label: 'Purchase'   },
-  { key: 'sale',       label: 'Sale'       },
-  { key: 'adjustment', label: 'Adjustment' },
-  { key: 'transfer',   label: 'Transfer'   },
-  { key: 'return',     label: 'Return'     },
-  { key: 'writeoff',   label: 'Write-off'  },
-  { key: 'opening',    label: 'Opening'    },
-] as const;
-
-const getProd = (p: StockMovement['product']) =>
-  typeof p === 'object' ? { name: p?.name ?? '—', sku: p?.sku ?? '', uom: p?.unitOfMeasure ?? '' } : { name: p ?? '—', sku: '', uom: '' };
-const getLoc = (l: StockMovement['location']) =>
-  typeof l === 'object' ? (l?.name ?? '—') : (l ?? '—');
-
-const LIMIT = 30;
+const parse = (data: any) => pageOf<StockMovement>(data);
 
 export default function StockMovementsScreen() {
   const [typeFilter, setTypeFilter] = useState('');
   const [search,     setSearch]     = useState('');
-  const [items,      setItems]      = useState<StockMovement[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [loadingMore,setLoadingMore]= useState(false);
-  const [page,       setPage]       = useState(1);
-  const [hasMore,    setHasMore]    = useState(true);
+  const debounced = useDebounced(search.trim(), 400);
 
-  const searchRef = useRef(search);
-  searchRef.current = search;
+  const params = useMemo(() => ({
+    type: typeFilter || undefined,
+    search: debounced || undefined,
+  }), [typeFilter, debounced]);
 
-  const load = useCallback(async (pg = 1, isRefresh = false) => {
-    if (pg === 1) isRefresh ? setRefreshing(true) : setLoading(true);
-    else setLoadingMore(true);
-    try {
-      const p: Record<string, string> = { page: String(pg), limit: String(LIMIT) };
-      if (typeFilter)             p.type   = typeFilter;
-      if (searchRef.current.trim()) p.search = searchRef.current.trim();
-      const { data } = await api.get('/inventory/stock-movements', { params: p });
-      const rows: StockMovement[] = Array.isArray(data) ? data : data?.data ?? data?.items ?? [];
-      setItems(prev => pg === 1 ? rows : [...prev, ...rows]);
-      setHasMore(rows.length === LIMIT);
-      setPage(pg);
-    } catch (e: any) {
-      const msg = e?.response?.data?.message ?? e?.message ?? 'Failed to load stock movements';
-      Alert.alert('Error', msg);
-      if (pg === 1) setItems([]);
-    }
-    finally { setLoading(false); setRefreshing(false); setLoadingMore(false); }
-  }, [typeFilter]);
-
-  useEffect(() => { load(1); }, [load]);
-  useEffect(() => { const t = setTimeout(() => load(1), 400); return () => clearTimeout(t); }, [search]);
+  const list = usePmsList<StockMovement>({ path: '/inventory/stock-movements', params, limit: 30, parse });
+  useReloadOnFocus(useCallback(() => { list.reload(); }, [list.reload]));
 
   const renderItem = ({ item }: { item: StockMovement }) => {
-    const tc   = TYPE_CFG[item.type] ?? TYPE_CFG.adjustment;
-    const prod = getProd(item.product);
-    const loc  = getLoc(item.location);
-    const isIn = item.type === 'purchase' || item.type === 'return' || item.type === 'opening';
+    const tc   = MOVEMENT_STYLE[item.type] ?? MOVEMENT_STYLE.adjustment;
+    const qty  = Number(item.qty) || 0;
+    const isIn = qty > 0;               // the sign is the direction (an adjustment can go either way)
+    const uom  = item.product?.unitOfMeasure || 'pcs';
+    const by   = userName(item.createdBy);
     return (
       <View style={styles.card}>
         <View style={styles.cardTop}>
           <View style={[styles.typeIcon, { backgroundColor: tc.bg }]}>
-            <Ionicons name={tc.icon as any} size={18} color={tc.color} />
+            <Ionicons name={tc.icon} size={18} color={tc.color} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.prodName} numberOfLines={1}>{prod.name}</Text>
+            <Text style={styles.prodName} numberOfLines={1}>{item.product?.name ?? 'Deleted product'}</Text>
             <View style={styles.metaRow}>
-              {prod.sku ? <Text style={styles.sku}>{prod.sku}</Text> : null}
-              <Text style={styles.loc}>{loc}</Text>
+              {item.product?.sku ? <Text style={styles.sku}>{item.product.sku}</Text> : null}
+              {nameOf(item.location) ? <Text style={styles.loc}>{nameOf(item.location)}</Text> : null}
             </View>
           </View>
           <View style={{ alignItems: 'flex-end', gap: 5 }}>
@@ -116,16 +53,17 @@ export default function StockMovementsScreen() {
               <Text style={[styles.badgeTxt, { color: tc.color }]}>{tc.label}</Text>
             </View>
             <Text style={[styles.qty, { color: isIn ? '#065F46' : '#DC2626' }]}>
-              {isIn ? '+' : '−'}{Math.abs(item.quantity)} {prod.uom || 'units'}
+              {isIn ? '+' : '−'}{fmtQty(Math.abs(qty))} {uom}
             </Text>
           </View>
         </View>
         <View style={styles.cardBottom}>
-          <Text style={styles.dateTxt}>{fmtDate(item.createdAt)}</Text>
-          {item.reference ? <Text style={styles.ref}>Ref: {item.reference}</Text> : null}
-          {item.costPrice ? <Text style={styles.costTxt}>{fmt(item.costPrice)} / unit</Text> : null}
+          <Text style={styles.dateTxt}>{fmtDateTime(item.createdAt)}</Text>
+          {item.reference ? <Text style={styles.ref} numberOfLines={1}>{item.reference}</Text> : null}
+          {item.unitCost ? <Text style={styles.costTxt}>{fmtKES(item.unitCost)} / unit</Text> : null}
         </View>
-        {item.notes ? <Text style={styles.notes} numberOfLines={1}>{item.notes}</Text> : null}
+        {item.notes ? <Text style={styles.notes} numberOfLines={2}>{item.notes}</Text> : null}
+        {by ? <Text style={styles.by}>by {by}</Text> : null}
       </View>
     );
   };
@@ -136,60 +74,65 @@ export default function StockMovementsScreen() {
         <Ionicons name="search-outline" size={18} color="#94A3B8" />
         <TextInput
           style={styles.searchInput}
-          placeholder="Product, reference..."
+          placeholder="Product, SKU, reference..."
           placeholderTextColor="#94A3B8"
           value={search}
           onChangeText={setSearch}
+          returnKeyType="search"
+          autoCorrect={false}
         />
         {search ? (
-          <TouchableOpacity onPress={() => setSearch('')}>
+          <TouchableOpacity onPress={() => setSearch('')} hitSlop={8}>
             <Ionicons name="close-circle" size={18} color="#94A3B8" />
           </TouchableOpacity>
         ) : null}
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.tabsRow}
-        style={{ flexGrow: 0 }}
-      >
-        {TYPES.map(t => (
-          <TouchableOpacity
-            key={t.key}
-            style={[styles.tab, typeFilter === t.key && styles.tabActive]}
-            onPress={() => setTypeFilter(t.key)}
-          >
-            <Text style={[styles.tabTxt, typeFilter === t.key && styles.tabTxtActive]}>{t.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      <View style={{ flexGrow: 0 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsRow} keyboardShouldPersistTaps="handled">
+          {MOVEMENT_FILTERS.map(t => (
+            <TouchableOpacity
+              key={t.key || 'all'}
+              style={[styles.tab, typeFilter === t.key && styles.tabActive]}
+              onPress={() => setTypeFilter(t.key)}
+            >
+              <Text style={[styles.tabTxt, typeFilter === t.key && styles.tabTxtActive]}>{t.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
-      {loading ? <MilikLoader fullscreen /> : (
-        <FlatList
-          data={items}
-          keyExtractor={m => m._id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.list}
-          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(1, true)} tintColor={INV} />}
-          onEndReached={() => { if (!loadingMore && hasMore) load(page + 1); }}
-          onEndReachedThreshold={0.3}
-          ListEmptyComponent={
-            <View style={styles.emptyWrap}>
-              <Ionicons name="swap-vertical-outline" size={48} color="#CBD5E1" />
-              <Text style={styles.emptyTxt}>No stock movements</Text>
-            </View>
-          }
-          ListFooterComponent={loadingMore ? <ActivityIndicator color={INV} style={{ padding: 20 }} /> : null}
-        />
+      {list.loading ? <MilikLoader fullscreen /> : list.error && list.items.length === 0 ? (
+        <ErrorState message={list.error} onRetry={list.retry} />
+      ) : (
+        <>
+          {list.error ? <ErrorBanner message={list.error} onRetry={list.retry} /> : null}
+          <FlatList
+            data={list.items}
+            keyExtractor={m => m._id}
+            renderItem={renderItem}
+            contentContainerStyle={styles.list}
+            ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={<RefreshControl refreshing={list.refreshing} onRefresh={list.refresh} tintColor={INV} />}
+            onEndReached={list.loadMore}
+            onEndReachedThreshold={0.4}
+            ListEmptyComponent={
+              <View style={styles.emptyWrap}>
+                <Ionicons name="swap-vertical-outline" size={48} color="#CBD5E1" />
+                <Text style={styles.emptyTxt}>{typeFilter || debounced ? 'No movements match' : 'No stock movements yet'}</Text>
+              </View>
+            }
+            ListFooterComponent={list.loadingMore ? <ActivityIndicator color={INV} style={{ padding: 20 }} /> : null}
+          />
+        </>
       )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#FFFBEB' },
+  safe: { flex: 1, backgroundColor: INVBG },
 
   searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, margin: 16, marginBottom: 10, backgroundColor: '#fff', borderRadius: 14, borderWidth: 1.5, borderColor: '#E2E8F0', paddingHorizontal: 14, height: 50 },
   searchInput: { flex: 1, fontSize: 15, color: '#0F172A' },
@@ -217,8 +160,9 @@ const styles = StyleSheet.create({
 
   cardBottom: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   dateTxt:    { fontSize: 11, color: '#94A3B8' },
-  ref:        { fontSize: 11, fontWeight: '600', color: '#64748B', fontVariant: ['tabular-nums'] },
+  ref:        { fontSize: 11, fontWeight: '600', color: '#64748B', fontVariant: ['tabular-nums'], flexShrink: 1 },
   costTxt:    { fontSize: 11, color: '#94A3B8', marginLeft: 'auto' },
 
   notes: { fontSize: 12, color: '#94A3B8', fontStyle: 'italic' },
+  by:    { fontSize: 10, color: '#94A3B8' },
 });
