@@ -14,6 +14,7 @@ import { postStockEntry, getMultiProductBalances } from "../services/stockLedger
 import { nextSequenceNumber } from "../../../utils/sequenceService.js";
 import { postPosSaleLedger, reversePosSaleLedger } from "../services/inventoryAccountingService.js";
 import InvPaymentMethod from "../models/InvPaymentMethod.js";
+import { andInto, saleSearchFilter } from "../services/inventorySearch.js";
 
 const BUILT_IN_PAYMENT_CODES = new Set(["cash", "mpesa", "card", "credit"]);
 
@@ -22,8 +23,8 @@ const populateSale = (q) =>
   q
     .populate("location", "name type")
     .populate("session", "sessionNumber openedAt")
-    .populate("cashier", "name username")
-    .populate("voidedBy", "name username");
+    .populate("cashier", "name username surname otherNames")
+    .populate("voidedBy", "name username surname otherNames");
 
 export const listSales = async (req, res, next) => {
   try {
@@ -47,6 +48,8 @@ export const listSales = async (req, res, next) => {
       const rx = new RegExp(escapeRegex(String(req.query.customer).trim()), "i");
       filter.$or = [{ customerName: rx }, { customerPhone: rx }];
     }
+    // free-text search: receipt number, customer name / phone, notes
+    andInto(filter, saleSearchFilter(req.query.search));
     if (req.query.date) {
       const { start, end } = parseDateRange(req.query.date);
       filter.createdAt = { $gte: start, $lt: end };
@@ -317,13 +320,15 @@ export const voidSale = async (req, res, next) => {
 export const salesSummary = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const filter = { business, status: "completed" };
+    // aggregate() does not cast $match values the way find() does: ids must be real ObjectIds or nothing matches
+    // (the summary showed 0 sales / KES 0.00 for every day).
+    const filter = { business: new mongoose.Types.ObjectId(String(business)), status: "completed" };
 
     if (req.query.session && mongoose.Types.ObjectId.isValid(String(req.query.session))) {
-      filter.session = String(req.query.session);
+      filter.session = new mongoose.Types.ObjectId(String(req.query.session));
     }
     if (req.query.location && mongoose.Types.ObjectId.isValid(String(req.query.location))) {
-      filter.location = String(req.query.location);
+      filter.location = new mongoose.Types.ObjectId(String(req.query.location));
     }
     if (req.query.date) {
       const { start, end } = parseDateRange(req.query.date);

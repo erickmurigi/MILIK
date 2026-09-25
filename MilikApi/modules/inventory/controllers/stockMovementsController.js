@@ -8,6 +8,7 @@ import {
   escapeRegex,
   parseDateRange,
 } from "../services/inventoryScope.js";
+import { andInto, movementSearchFilter } from "../services/inventorySearch.js";
 import { postStockEntry, getStockBalance as computeBalance } from "../services/stockLedger.js";
 import { postStockAdjustmentLedger } from "../services/inventoryAccountingService.js";
 
@@ -39,6 +40,8 @@ export const listStockMovements = async (req, res, next) => {
       if (req.query.from) filter.createdAt.$gte = new Date(req.query.from);
       if (req.query.to) filter.createdAt.$lte = new Date(req.query.to);
     }
+    // free-text search: reference / notes, or the product's name / SKU / barcode
+    andInto(filter, await movementSearchFilter(business, req.query.search));
 
     const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
     const page = Math.max(Number(req.query.page || 1), 1);
@@ -48,7 +51,7 @@ export const listStockMovements = async (req, res, next) => {
       InvStockEntry.find(filter)
         .populate("location", "name type")
         .populate("product", "name sku unitOfMeasure")
-        .populate("createdBy", "name username")
+        .populate("createdBy", "name username surname otherNames")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)

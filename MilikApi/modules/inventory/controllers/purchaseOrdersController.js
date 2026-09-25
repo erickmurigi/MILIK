@@ -5,10 +5,10 @@ import { createError } from "../../../utils/error.js";
 import {
   resolveActiveBusinessId,
   currentUserId,
-  escapeRegex,
 } from "../services/inventoryScope.js";
 import InvStockEntry from "../models/InvStockEntry.js";
 import { postStockEntry } from "../services/stockLedger.js";
+import { andInto, purchaseOrderSearchFilter } from "../services/inventorySearch.js";
 import { nextSequenceNumber } from "../../../utils/sequenceService.js";
 import { postPurchaseReceiptLedger, reversePurchaseReceiptLedger } from "../services/inventoryAccountingService.js";
 import User from "../../../models/User.js";
@@ -120,8 +120,8 @@ const populatePO = (q) =>
     .populate("location", "name type")
     .populate("lines.product", "name sku unitOfMeasure costPrice")
     .populate("receipts.lines.product", "name sku")
-    .populate("createdBy", "name username")
-    .populate("updatedBy", "name username");
+    .populate("createdBy", "name username surname otherNames")
+    .populate("updatedBy", "name username surname otherNames");
 
 export const listPurchaseOrders = async (req, res, next) => {
   try {
@@ -135,9 +135,8 @@ export const listPurchaseOrders = async (req, res, next) => {
     if (req.query.location && mongoose.Types.ObjectId.isValid(String(req.query.location))) {
       filter.location = String(req.query.location);
     }
-    if (req.query.search) {
-      filter.poNumber = new RegExp(escapeRegex(String(req.query.search).trim()), "i");
-    }
+    // PO number or supplier (name / contact / phone), every word must match
+    andInto(filter, await purchaseOrderSearchFilter(business, req.query.search));
     if (req.query.from || req.query.to) {
       filter.orderDate = {};
       if (req.query.from) filter.orderDate.$gte = new Date(req.query.from);
@@ -308,12 +307,16 @@ export const receiveGoods = async (req, res, next) => {
       const line = order.lines.id(recv.lineId);
       if (!line) throw createError(400, `Line ${recv.lineId} not found on this PO`);
       const pending = Number(line.qtyOrdered) - Number(line.qtyReceived);
-      const qty = Math.min(Number(recv.qtyReceived || 0), pending);
+      const requested = Number(recv.qtyReceived || 0);
+      if (!Number.isFinite(requested)) throw createError(400, "Received quantity must be a number");
+      const qty = Math.min(requested, pending);
       if (qty <= 0) continue;
       const unitCost = Number(recv.unitCost ?? line.unitCost ?? 0);
       if (unitCost < 0) throw createError(400, "Unit cost cannot be negative");
       workItems.push({ line, qty, unitCost, hasNewCost: recv.unitCost !== undefined });
     }
+
+    if (!workItems.length) throw createError(400, "Nothing to receive - enter a quantity above zero for at least one line");
 
     // userId fallback: use the PO's creator if the current request token lacks a user id
     const effectiveUserId = userId || String(order.updatedBy || order.createdBy || "");

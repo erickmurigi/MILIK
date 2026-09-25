@@ -9,6 +9,7 @@ import {
   parseBoolean,
 } from "../services/inventoryScope.js";
 import { getMultiLocationBalances } from "../services/stockLedger.js";
+import { andInto, productSearchFilter } from "../services/inventorySearch.js";
 
 export const listProducts = async (req, res, next) => {
   try {
@@ -21,9 +22,8 @@ export const listProducts = async (req, res, next) => {
       filter.category = String(req.query.category);
     }
     if (req.query.trackStock !== undefined) filter.trackStock = parseBoolean(req.query.trackStock);
-    if (req.query.search) {
-      filter.$text = { $search: String(req.query.search).trim() };
-    }
+    // substring, every word must match (name / SKU / barcode / description) - $text only found whole words
+    andInto(filter, productSearchFilter(req.query.search));
 
     const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
     const page = Math.max(Number(req.query.page || 1), 1);
@@ -39,13 +39,20 @@ export const listProducts = async (req, res, next) => {
       InvProduct.countDocuments(filter),
     ]);
 
-    // Optionally attach per-location balances when a locationId is provided
-    if (req.query.location && mongoose.Types.ObjectId.isValid(String(req.query.location))) {
-      const locationId = String(req.query.location);
+    // Attach stock on hand: the balance at one location when ?location= is given, otherwise (?withStock=true) the total
+    // across every location - the same figure the low-stock report compares with the reorder level.
+    const hasLocation = req.query.location && mongoose.Types.ObjectId.isValid(String(req.query.location));
+    if (hasLocation || req.query.withStock === "true") {
       const productIds = products.map((p) => p._id);
       const balanceMap = await getMultiLocationBalances(business, productIds);
-      const locBalances = balanceMap[locationId] || {};
-      for (const p of products) p.stockBalance = locBalances[String(p._id)] ?? 0;
+      if (hasLocation) {
+        const locBalances = balanceMap[String(req.query.location)] || {};
+        for (const p of products) p.stockBalance = locBalances[String(p._id)] ?? 0;
+      } else {
+        for (const p of products) {
+          p.stockBalance = Object.values(balanceMap).reduce((sum, byProduct) => sum + (byProduct[String(p._id)] ?? 0), 0);
+        }
+      }
     }
 
     res.json({ success: true, data: products, total, page, pages: Math.ceil(total / limit) });
@@ -66,6 +73,8 @@ export const getProduct = async (req, res, next) => {
     if (req.query.withStock === "true") {
       const locations = await InvLocation.find({ business, active: true }).lean();
       const balanceMap = await getMultiLocationBalances(business, [product._id]);
+      // total over every location (inactive ones included) = what the low-stock report and the product list show
+      product.stockBalance = Object.values(balanceMap).reduce((sum, byProduct) => sum + (byProduct[String(product._id)] ?? 0), 0);
       product.stockByLocation = locations.map((loc) => ({
         location: loc._id,
         locationName: loc.name,
