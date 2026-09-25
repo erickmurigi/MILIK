@@ -193,18 +193,18 @@ function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-white lg:grid lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+    <div className="min-h-screen bg-white lg:grid lg:grid-cols-[minmax(0,4fr)_minmax(0,7fr)]">
 
       {/* ── Brand panel (large screens) ── */}
       <aside className="relative hidden items-center justify-center overflow-hidden bg-gradient-to-br from-[#0B3B2E] via-[#0A3127] to-[#06231b] lg:flex">
         {/* The two overlapping squares of the Milik mark, large and faint, centred behind the logo */}
-        <svg aria-hidden="true" viewBox="0 0 400 400" className="pointer-events-none absolute inset-0 m-auto h-[92%] max-h-[820px] w-auto select-none" fill="none" strokeWidth="10">
+        <svg aria-hidden="true" viewBox="0 0 400 400" className="pointer-events-none absolute inset-0 m-auto aspect-square h-auto w-[86%] max-w-[520px] select-none" fill="none" strokeWidth="10">
           <rect x="30" y="30" width="230" height="230" stroke="#FF8C00" strokeOpacity="0.22" />
           <rect x="140" y="110" width="230" height="230" stroke="#ffffff" strokeOpacity="0.12" />
         </svg>
 
-        <div className="relative rounded-2xl bg-white px-9 py-6 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.55)]">
-          <img src="/milik-logo-trim.png" alt="Milik System — One Platform. Every Business." className="h-14 w-auto xl:h-[4.25rem]" />
+        <div className="relative rounded-2xl bg-white px-7 py-5 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.55)]">
+          <img src="/milik-logo-trim.png" alt="Milik System — One Platform. Every Business." className="h-11 w-auto xl:h-14" />
         </div>
 
         <p className="absolute bottom-6 left-0 right-0 text-center text-xs text-emerald-100/50">© {new Date().getFullYear()} Milik System</p>
