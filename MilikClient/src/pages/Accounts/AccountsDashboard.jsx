@@ -1,90 +1,97 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { selectCurrentCompany } from "../../redux/selectors";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell,
 } from "recharts";
 import {
-  FaBook, FaCreditCard, FaLayerGroup,
-  FaFileInvoice, FaCog, FaUniversity, FaCoins, FaFileContract,
-  FaPlusCircle, FaExclamationTriangle, FaCheckCircle, FaCircle,
-  FaCalendarAlt, FaArchive, FaShieldAlt, FaChartPie,
+  FaArchive, FaArrowDown, FaArrowUp, FaBalanceScale, FaBook, FaCalendarAlt, FaChartLine, FaChartPie,
+  FaCoins, FaCreditCard, FaExclamationTriangle, FaFileContract, FaFileInvoice, FaFileInvoiceDollar, FaHourglassHalf,
+  FaLayerGroup, FaPlus, FaRedoAlt, FaReceipt, FaShieldAlt, FaTruck, FaUniversity, FaUsers,
 } from "react-icons/fa";
-import Spinner from "../../components/common/Spinner";
-import DashboardLayout from "../../components/Layout/DashboardLayout";
-import { getJournalEntries, getChartOfAccounts, getIncomeMonthlySummary, getCashMonthlySummary, getAccountingPeriods } from "../../redux/apiCalls";
+import { selectCurrentCompany } from "../../redux/selectors";
+import ModuleShell from "../../components/Layout/ModuleShell";
+import DashboardCard, {
+  DashboardStatCard, DashboardLinkButton, DashboardQuickAccess, DashboardSummaryRows,
+} from "../../components/Dashboard/DashboardCard";
+import { formatMoney } from "../../utils/money";
+import {
+  getJournalEntries, getChartOfAccounts, getIncomeMonthlySummary, getCashMonthlySummary, getAccountingPeriods, getPaymentVouchers,
+} from "../../redux/apiCalls";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
 const GRN  = "#0B3B2E";
 const ORG  = "#FF8C00";
 const ROSE = "#E11D48";
 
-const SECTIONS = [
+// ─── Where everything lives ───────────────────────────────────────────────────
+const QUICK_GROUPS = [
   {
-    id: "gl", label: "General Ledger", accent: GRN,
-    items: [
-      { label: "Chart of Accounts",   icon: FaLayerGroup, route: "/accounts/chart-of-accounts",  desc: "Account structure & GL hierarchy" },
-      { label: "Journal Entries",     icon: FaBook,       route: "/accounts/journals",            desc: "Manual & auto-generated postings" },
-      { label: "Bank Reconciliation", icon: FaUniversity, route: "/accounts/bank-reconciliation", desc: "Match books against bank statements" },
+    title: "General Ledger",
+    links: [
+      { label: "Chart of Accounts",   to: "/accounts/chart-of-accounts",  Icon: FaLayerGroup },
+      { label: "Journal Entries",     to: "/accounts/journals",           Icon: FaBook },
+      { label: "Bank Reconciliation", to: "/accounts/bank-reconciliation", Icon: FaUniversity },
     ],
   },
   {
-    id: "payables", label: "Payables & Expenses", accent: "#92400E",
-    items: [
-      { label: "Creditors Ledger",     icon: FaFileContract, route: "/accounts/creditor-ledger",    desc: "Per-vendor invoices & balances" },
-      { label: "Payment Vouchers",     icon: FaCreditCard,   route: "/accounts/payment-vouchers",   desc: "Outgoing payment documentation" },
-      { label: "Petty Cash",           icon: FaCoins,        route: "/accounts/petty-cash",         desc: "Cash disbursements & float" },
-      { label: "Expense Requisitions", icon: FaFileInvoice,  route: "/accounts/expenses",           desc: "Requests & approvals" },
-      { label: "Service Providers",    icon: FaCog,          route: "/accounts/service-providers",  desc: "Vendor & supplier register" },
+    title: "Payables & Expenses",
+    links: [
+      { label: "Creditors Ledger",     to: "/accounts/creditor-ledger",   Icon: FaFileContract },
+      { label: "Payment Vouchers",     to: "/accounts/payment-vouchers",  Icon: FaCreditCard },
+      { label: "Petty Cash",           to: "/accounts/petty-cash",        Icon: FaCoins },
+      { label: "Expense Requisitions", to: "/accounts/expenses",          Icon: FaFileInvoice },
+      { label: "Service Providers",    to: "/accounts/service-providers", Icon: FaUsers },
     ],
   },
   {
-    id: "period", label: "Period Management", accent: "#6D28D9",
-    items: [
-      { label: "Accounting Periods", icon: FaCalendarAlt, route: "/accounts/accounting-periods", desc: "Open, close & lock fiscal periods" },
-      { label: "Year-End Close",     icon: FaArchive,     route: "/accounts/year-end-close",     desc: "Close P&L to retained earnings" },
-      { label: "GL Integrity",       icon: FaShieldAlt,   route: "/accounts/gl-integrity",       desc: "Detect unbalanced & orphaned entries" },
-      { label: "Financial Ratios",   icon: FaChartPie,    route: "/accounts/financial-ratios",   desc: "Current ratio, ROA, margins & more" },
+    title: "Period Management",
+    links: [
+      { label: "Accounting Periods", to: "/accounts/accounting-periods", Icon: FaCalendarAlt },
+      { label: "Year-End Close",     to: "/accounts/year-end-close",     Icon: FaArchive },
+      { label: "GL Integrity",       to: "/accounts/gl-integrity",       Icon: FaShieldAlt },
+      { label: "Financial Ratios",   to: "/accounts/financial-ratios",   Icon: FaChartPie },
     ],
   },
-];
-
-const MORE_MODULES = [
-  { label: "Fixed Assets",       route: "/accounts/fixed-assets" },
-  { label: "Depreciation",       route: "/accounts/fixed-assets/depreciation" },
-  { label: "Budget Plans",       route: "/accounts/budget" },
-  { label: "Budget vs Actual",   route: "/accounts/budget/analysis" },
-  { label: "Trial Balance",      route: "/accounts/trial-balance" },
-  { label: "Income Statement",   route: "/accounts/income-statement" },
-  { label: "Balance Sheet",      route: "/accounts/balance-sheet" },
-  { label: "Cash Flow",          route: "/accounts/cash-flow" },
-  { label: "Financial Ratios",   route: "/accounts/financial-ratios" },
-  { label: "Tax Reports",        route: "/accounts/tax-reports" },
-  { label: "GL Integrity",       route: "/accounts/gl-integrity" },
-  { label: "Year-End Close",     route: "/accounts/year-end-close" },
-];
-
-const QUICK_ACTIONS = [
-  { label: "New Journal Entry", route: "/accounts/journals",            icon: FaBook },
-  { label: "Payment Voucher",   route: "/accounts/payment-vouchers",    icon: FaCreditCard },
-  { label: "Expense Request",   route: "/accounts/expenses",            icon: FaFileInvoice },
-  { label: "Petty Cash Entry",  route: "/accounts/petty-cash",          icon: FaCoins },
-  { label: "Manage Periods",    route: "/accounts/accounting-periods",  icon: FaCalendarAlt },
+  {
+    title: "Reports & Assets",
+    links: [
+      { label: "Trial Balance",    to: "/accounts/trial-balance",           Icon: FaBalanceScale },
+      { label: "Income Statement", to: "/accounts/income-statement",        Icon: FaChartLine },
+      { label: "Balance Sheet",    to: "/accounts/balance-sheet",           Icon: FaFileInvoiceDollar },
+      { label: "Cash Flow",        to: "/accounts/cash-flow",               Icon: FaReceipt },
+      { label: "Tax Reports",      to: "/accounts/tax-reports",             Icon: FaFileInvoice },
+      { label: "Budget Plans",     to: "/accounts/budget",                  Icon: FaChartPie },
+      { label: "Budget vs Actual", to: "/accounts/budget/analysis",         Icon: FaChartLine },
+      { label: "Fixed Assets",     to: "/accounts/fixed-assets",            Icon: FaTruck },
+      { label: "Depreciation",     to: "/accounts/fixed-assets/depreciation", Icon: FaArrowDown },
+    ],
+  },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const fmtMonth  = () => new Date().toLocaleDateString("en-GB", { month: "long", year: "numeric" }).toUpperCase();
-const shortKES  = (v) => {
-  const n = Number(v || 0);
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000)     return `${(n / 1_000).toFixed(0)}K`;
-  return n.toFixed(0);
+const shortKES = (v) => {
+  const n = Math.abs(Number(v || 0));
+  const sign = Number(v) < 0 ? "-" : "";
+  if (n >= 1_000_000) return `${sign}${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000)     return `${sign}${(n / 1_000).toFixed(0)}K`;
+  return `${sign}${n.toFixed(0)}`;
 };
-const fullKES = (v) => `KES ${Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 0 })}`;
+const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—");
+const lastOf = (rows) => (Array.isArray(rows) && rows.length ? rows[rows.length - 1] : {});
 
+const statusBadge = (status) => ({
+  draft:    "border-slate-200 bg-slate-50 text-slate-600",
+  approved: "border-blue-200 bg-blue-50 text-blue-700",
+  paid:     "border-emerald-200 bg-emerald-50 text-emerald-700",
+  posted:   "border-emerald-200 bg-emerald-50 text-emerald-700",
+  reversed: "border-amber-200 bg-amber-50 text-amber-700",
+}[status] || "border-slate-200 bg-slate-50 text-slate-500");
 
-// ─── Custom tooltip ───────────────────────────────────────────────────────────
+const payeeOf = (v) =>
+  v?.serviceProvider?.name || v?.payeeName || v?.landlord?.landlordName || v?.landlord?.name || v?.narration || "—";
+
+// ─── Chart tooltips ───────────────────────────────────────────────────────────
 const ChartTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
@@ -94,7 +101,7 @@ const ChartTooltip = ({ active, payload, label }) => {
         <div key={p.name} className="flex items-center gap-2 text-[10px]">
           <div className="h-2 w-2 shrink-0" style={{ backgroundColor: p.fill || p.color }} />
           <span className="text-slate-500">{p.name}:</span>
-          <span className="font-bold text-slate-900">{fullKES(p.value)}</span>
+          <span className="font-bold text-slate-900">{formatMoney(p.value, 0)}</span>
         </div>
       ))}
     </div>
@@ -110,292 +117,284 @@ const NetTooltip = ({ active, payload, label }) => {
       <div className="flex items-center gap-2 text-[10px]">
         <div className="h-2 w-2 shrink-0" style={{ backgroundColor: val >= 0 ? GRN : ROSE }} />
         <span className="text-slate-500">{val >= 0 ? "Net Profit" : "Net Loss"}:</span>
-        <span className="font-bold" style={{ color: val >= 0 ? GRN : ROSE }}>{fullKES(Math.abs(val))}</span>
+        <span className="font-bold" style={{ color: val >= 0 ? GRN : ROSE }}>{formatMoney(Math.abs(val), 0)}</span>
       </div>
     </div>
   );
 };
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-const SidebarStatRow = ({ label, value, loading, alert }) => (
-  <div className={`flex items-center justify-between px-2 py-1.5 ${alert && value > 0 ? "bg-amber-500/20" : "bg-white/5"}`}>
-    <div className="flex items-center gap-2">
-      {alert && value > 0
-        ? <FaExclamationTriangle size={8} className="shrink-0 text-amber-400" />
-        : <FaCheckCircle size={8} className="shrink-0 text-emerald-400/60" />}
-      <span className="text-[10px] font-semibold text-white/55">{label}</span>
-    </div>
-    <span className={`text-[11px] font-black ${alert && value > 0 ? "text-amber-300" : "text-white"}`}>
-      {loading ? <Spinner size="sm" /> : (value ?? "—")}
-    </span>
-  </div>
-);
+const TH = "px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white";
 
-const ModuleTile = ({ label, icon: Icon, route, desc, accent, navigate }) => (
-  <button
-    onClick={() => navigate(route)}
-    className="group flex flex-col bg-white transition-all hover:shadow-md"
-    style={{ borderTop: `3px solid ${accent}` }}
-  >
-    <div className="flex flex-1 flex-col gap-2 border border-t-0 border-slate-200 px-3 py-3 group-hover:border-slate-300 group-hover:bg-slate-50/60">
-      <span style={{ color: accent }}><Icon size={13} /></span>
-      <div>
-        <div className="text-[11px] font-extrabold leading-tight text-slate-800">{label}</div>
-        <div className="mt-0.5 text-[10px] leading-snug text-slate-400">{desc}</div>
-      </div>
-    </div>
-  </button>
-);
-
-const SectionBlock = ({ section, navigate }) => {
-  const n = section.items.length;
-  const cols = n <= 3 ? "grid-cols-3" : n === 4 ? "grid-cols-4" : "grid-cols-5";
-  return (
-    <div>
-      <div className="mb-1.5 flex items-center gap-2">
-        <FaCircle size={5} style={{ color: section.accent }} className="shrink-0" />
-        <span className="text-[10px] font-black uppercase tracking-[0.15em]" style={{ color: section.accent }}>{section.label}</span>
-        <div className="h-px flex-1 bg-slate-200" />
-        <span className="text-[9px] font-semibold text-slate-400">{section.items.length}</span>
-      </div>
-      <div className={`grid gap-2 ${cols}`}>
-        {section.items.map((item) => (
-          <ModuleTile key={item.route} {...item} accent={section.accent} navigate={navigate} />
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const ChartCard = ({ title, subtitle, children, loading }) => (
-  <div className="flex flex-col border border-slate-200 bg-white">
-    <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5" style={{ borderLeftWidth: "3px", borderLeftColor: GRN }}>
-      <div>
-        <div className="text-[11px] font-extrabold text-slate-800">{title}</div>
-        <div className="text-[10px] text-slate-400">{subtitle}</div>
-      </div>
-      {loading && <Spinner size="sm" />}
-    </div>
-    <div className="flex-1 px-2 py-3">
-      {children}
-    </div>
-  </div>
-);
-
-// ─── Main ─────────────────────────────────────────────────────────────────────
+// ─── Page ─────────────────────────────────────────────────────────────────────
 const AccountsDashboard = () => {
   const navigate = useNavigate();
-  const currentCompany = useSelector(selectCurrentCompany);
+  const queryClient = useQueryClient();
+  const biz = useSelector(selectCurrentCompany)?._id || "";
 
-  const [stats, setStats]               = useState({ accounts: null, draftJournals: null, postedJournals: null });
-  const [statsLoading, setStatsLoading] = useState(true);
-  const [cashData, setCashData]         = useState([]);
-  const [monthlyData, setMonthlyData]   = useState([]);
-  const [chartsLoading, setChartsLoading] = useState(true);
-  const [currentPeriod, setCurrentPeriod] = useState(null);
-  const businessId = currentCompany?._id || "";
-  const companyName = String(currentCompany?.companyName || currentCompany?.name || "").trim();
+  const { data: stats, isFetching: statsLoading } = useQuery({
+    queryKey: ["acc-dashboard-stats", biz],
+    enabled: Boolean(biz),
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+    queryFn: async () => {
+      const now = new Date();
+      const startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+      const endDate = now.toISOString().split("T")[0];
+      const journals = (status) => getJournalEntries({ business: biz, company: biz, status, startDate, endDate, limit: 1 });
+      const vouchers = (status) => getPaymentVouchers({ business: biz, company: biz, status, limit: 1 }).catch(() => ({ total: 0 }));
+      const [coa, draftJournals, postedJournals, periods, draftVouchers, approvedVouchers] = await Promise.all([
+        getChartOfAccounts({ business: biz }),
+        journals("draft"),
+        journals("posted"),
+        getAccountingPeriods({ business: biz }).catch(() => []),
+        vouchers("draft"),
+        vouchers("approved"),
+      ]);
+      const today = new Date();
+      return {
+        accounts: Array.isArray(coa) ? coa.filter((a) => a?.isActive !== false).length : 0,
+        draftJournals: draftJournals.total ?? 0,
+        postedJournals: postedJournals.total ?? 0,
+        draftVouchers: draftVouchers.total ?? 0,
+        approvedVouchers: approvedVouchers.total ?? 0,
+        period: Array.isArray(periods) ? periods.find((p) => new Date(p.startDate) <= today && new Date(p.endDate) >= today) || null : null,
+      };
+    },
+  });
 
-  useEffect(() => {
-    if (!businessId) return;
+  const { data: charts, isFetching: chartsLoading } = useQuery({
+    queryKey: ["acc-dashboard-charts", biz],
+    enabled: Boolean(biz),
+    staleTime: 5 * 60_000,
+    placeholderData: (prev) => prev,
+    queryFn: async () => {
+      const [cash, income] = await Promise.all([
+        getCashMonthlySummary({ business: biz, months: 6 }).then((d) => d?.data ?? []).catch(() => []),
+        getIncomeMonthlySummary({ business: biz, months: 6 }).catch(() => []),
+      ]);
+      return { cash, income: Array.isArray(income) ? income : [] };
+    },
+  });
 
-    const now = new Date();
-    const startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-    const endDate   = now.toISOString().split("T")[0];
+  const { data: recent, isFetching: recentLoading } = useQuery({
+    queryKey: ["acc-dashboard-recent", biz],
+    enabled: Boolean(biz),
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+    queryFn: async () => {
+      const [vouchers, journals] = await Promise.all([
+        getPaymentVouchers({ business: biz, company: biz, limit: 6 }).catch(() => ({ data: [] })),
+        getJournalEntries({ business: biz, company: biz, limit: 6 }).catch(() => ({ data: [] })),
+      ]);
+      return { vouchers: vouchers.data ?? [], journals: journals.data ?? [] };
+    },
+  });
 
-    // KPI stats + current period — all in parallel
-    Promise.all([
-      getChartOfAccounts({ business: businessId }),
-      getJournalEntries({ business: businessId, company: businessId, status: "draft",  startDate, endDate }),
-      getJournalEntries({ business: businessId, company: businessId, status: "posted", startDate, endDate }),
-      getAccountingPeriods({ business: businessId }).catch(() => []),
-    ])
-      .then(([coa, dr, po, periods]) => {
-        setStats({
-          accounts:      Array.isArray(coa) ? coa.length : 0,
-          draftJournals: dr.total ?? dr.data?.length  ?? 0,
-          postedJournals:po.total ?? po.data?.length  ?? 0,
-        });
-        // Find the period that contains today
-        const today = new Date();
-        const active = Array.isArray(periods)
-          ? periods.find((p) => new Date(p.startDate) <= today && new Date(p.endDate) >= today)
-          : null;
-        setCurrentPeriod(active || null);
-      })
-      .catch(() => {})
-      .finally(() => setStatsLoading(false));
+  const s = stats || {};
+  const cashData = charts?.cash ?? [];
+  const netData = charts?.income ?? [];
+  const thisMonthCash = lastOf(cashData);
+  const thisMonthNet = Number(lastOf(netData).net || 0);
+  const pendingVouchers = (s.draftVouchers ?? 0) + (s.approvedVouchers ?? 0);
+  const loading = statsLoading && !stats;
+  const period = s.period;
 
-    // Chart data — cash summary + income monthly totals, both as single batch calls
-    Promise.all([
-      getCashMonthlySummary({ business: businessId, months: 6 })
-        .then((d) => d?.data ?? [])
-        .catch(() => []),
-      getIncomeMonthlySummary({ business: businessId, months: 6 })
-        .catch(() => []),
-    ])
-      .then(([cash, income]) => { setCashData(cash); setMonthlyData(Array.isArray(income) ? income : []); })
-      .finally(() => setChartsLoading(false));
-  }, [businessId]);
+  const refresh = () => ["acc-dashboard-stats", "acc-dashboard-charts", "acc-dashboard-recent"].forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
+
+  const periodTone = useMemo(() => {
+    if (!period) return "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100";
+    return period.status === "open"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+      : period.status === "closed"
+        ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+        : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100";
+  }, [period]);
 
   return (
-    <DashboardLayout>
-      <div className="flex h-full overflow-hidden bg-slate-100">
+    <ModuleShell
+      moduleLabel="MILIK Accounting"
+      title="Dashboard"
+      action={
+        <>
+          <button
+            type="button"
+            onClick={() => navigate("/accounts/accounting-periods")}
+            className={`inline-flex h-7 items-center gap-1.5 border px-2.5 text-[10px] font-bold transition ${periodTone}`}
+          >
+            <FaCalendarAlt size={9} />
+            {loading ? "…" : period ? `${period.name} · ${String(period.status).toUpperCase()}` : "No active period"}
+          </button>
+          <button
+            type="button"
+            onClick={refresh}
+            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+          >
+            <FaRedoAlt size={9} className={statsLoading || chartsLoading || recentLoading ? "animate-spin" : ""} /> Refresh
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/accounts/journals")}
+            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+          >
+            <FaPlus size={9} /> Journal
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/accounts/payment-vouchers/new")}
+            className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
+          >
+            <FaPlus size={9} /> Voucher
+          </button>
+        </>
+      }
+    >
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5">
 
-        {/* ── SIDEBAR ─────────────────────────────────────────────────────── */}
-        <aside className="flex w-[200px] shrink-0 flex-col overflow-y-auto bg-[#0B3B2E]">
-          {/* Identity */}
-          <div className="border-b border-white/10 px-4 pt-5 pb-4">
-            <div className="mb-3 flex h-9 w-9 items-center justify-center bg-white/10">
-              <FaBook className="text-white/50" size={13} />
+        {/* ── Needs attention ─────────────────────────────────────────────── */}
+        {!loading && !period && (
+          <div className="flex items-start gap-3 border border-amber-200 bg-amber-50 px-4 py-3">
+            <FaExclamationTriangle className="mt-0.5 flex-shrink-0 text-amber-600" size={14} />
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-black text-amber-800">No accounting period covers today</div>
+              <div className="mt-0.5 text-[11px] text-amber-700">Postings dated today are not held to a fiscal period until one is set up.</div>
             </div>
-            <div className="text-[9px] font-black uppercase tracking-[0.2em] text-[#7FB89A]">Financial Accounts</div>
-            <div className="mt-0.5 text-[13px] font-black leading-snug text-white">{companyName || "Accounting"}</div>
-            <div className="mt-2 inline-block border border-white/20 bg-white/10 px-2 py-0.5 text-[9px] font-bold text-white/55">
-              {fmtMonth()}
+            <button type="button" onClick={() => navigate("/accounts/accounting-periods")} className="flex-shrink-0 border border-amber-300 bg-white px-3 py-1 text-[11px] font-bold text-amber-800 hover:bg-amber-50">
+              Manage Periods
+            </button>
+          </div>
+        )}
+
+        {/* ── KPI stat cards ──────────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-5">
+          <DashboardStatCard label="Cash In · this month"  value={chartsLoading && !charts ? "…" : formatMoney(thisMonthCash.cashIn, 0)}  icon={FaArrowDown} tone="green"  sub="Cashbook receipts" />
+          <DashboardStatCard label="Cash Out · this month" value={chartsLoading && !charts ? "…" : formatMoney(thisMonthCash.cashOut, 0)} icon={FaArrowUp}   tone="orange" sub="Cashbook payments" />
+          <DashboardStatCard label={thisMonthNet >= 0 ? "Net Profit · this month" : "Net Loss · this month"} value={chartsLoading && !charts ? "…" : formatMoney(Math.abs(thisMonthNet), 0)} icon={FaChartLine} tone={thisMonthNet >= 0 ? "green" : "red"} sub="Income less expenses" />
+          <DashboardStatCard label="Vouchers Pending" value={loading ? "…" : pendingVouchers} icon={FaCreditCard} tone="orange" sub={loading ? "" : `${s.draftVouchers ?? 0} draft · ${s.approvedVouchers ?? 0} approved`} onClick={() => navigate("/accounts/payment-vouchers")} />
+          <DashboardStatCard label="Draft Journals" value={loading ? "…" : (s.draftJournals ?? 0)} icon={FaHourglassHalf} tone="green" sub={loading ? "" : `${s.postedJournals ?? 0} posted this month`} onClick={() => navigate("/accounts/journals")} />
+        </div>
+
+        {/* ── Main two-column area ────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 items-start gap-1.5 xl:grid-cols-[1fr_280px]">
+
+          {/* Left */}
+          <div className="flex flex-col gap-1.5">
+
+            <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-2">
+              <DashboardCard title="Cash In / Cash Out" right={<span className="text-[10px] font-bold text-slate-400">last 6 months</span>}>
+                <div className="px-2 py-3">
+                  <ResponsiveContainer width="100%" height={210}>
+                    <BarChart data={cashData} barCategoryGap="30%" barGap={3}>
+                      <CartesianGrid strokeDasharray="2 2" stroke="#f1f5f9" vertical={false} />
+                      <XAxis dataKey="month" tick={{ fontSize: 9, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                      <YAxis tickFormatter={shortKES} tick={{ fontSize: 9, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={38} />
+                      <Tooltip content={<ChartTooltip />} cursor={{ fill: "#f8fafc" }} />
+                      <Legend iconType="square" iconSize={8} wrapperStyle={{ fontSize: "9px", paddingTop: "8px" }} />
+                      <Bar dataKey="cashIn"  name="Cash In"  fill={GRN} radius={0} />
+                      <Bar dataKey="cashOut" name="Cash Out" fill={ORG} radius={0} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </DashboardCard>
+
+              <DashboardCard title="Net Profit / Loss" right={<span className="text-[10px] font-bold text-slate-400">last 6 months</span>}>
+                <div className="px-2 py-3">
+                  <ResponsiveContainer width="100%" height={210}>
+                    <BarChart data={netData} barCategoryGap="40%">
+                      <CartesianGrid strokeDasharray="2 2" stroke="#f1f5f9" vertical={false} />
+                      <XAxis dataKey="month" tick={{ fontSize: 9, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                      <YAxis tickFormatter={shortKES} tick={{ fontSize: 9, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={38} />
+                      <Tooltip content={<NetTooltip />} cursor={{ fill: "#f8fafc" }} />
+                      <Bar dataKey="net" name="Net" radius={0}>
+                        {netData.map((entry) => <Cell key={entry.month} fill={entry.net >= 0 ? GRN : ROSE} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </DashboardCard>
             </div>
+
+            <DashboardCard title="Recent Payment Vouchers" right={<DashboardLinkButton onClick={() => navigate("/accounts/payment-vouchers")} />}>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[560px] text-xs">
+                  <thead>
+                    <tr className="bg-[#0B3B2E]">
+                      <th className={`${TH} text-left`}>Voucher No.</th>
+                      <th className={`${TH} text-left`}>Payee</th>
+                      <th className={`${TH} text-left`}>Due</th>
+                      <th className={`${TH} text-left`}>Status</th>
+                      <th className={`${TH} text-right`}>Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(recent?.vouchers ?? []).length ? recent.vouchers.map((v) => (
+                      <tr key={v._id} className="cursor-pointer border-b border-slate-100 hover:bg-slate-50" onClick={() => navigate("/accounts/payment-vouchers")}>
+                        <td className="px-3 py-2 font-mono font-bold text-[#0B3B2E]">{v.voucherNo}</td>
+                        <td className="max-w-[220px] truncate px-3 py-2 font-semibold text-slate-800">{payeeOf(v)}</td>
+                        <td className="px-3 py-2 text-slate-500">{fmtDate(v.dueDate)}</td>
+                        <td className="px-3 py-2"><span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${statusBadge(v.status)}`}>{v.status}</span></td>
+                        <td className="px-3 py-2 text-right font-bold text-slate-900">{formatMoney(v.amount, 0)}</td>
+                      </tr>
+                    )) : (
+                      <tr><td colSpan={5} className="px-3 py-8 text-center text-xs font-semibold text-slate-400">{recentLoading && !recent ? "Loading…" : "No payment vouchers yet."}</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </DashboardCard>
+
+            <DashboardCard title="Recent Journal Entries" right={<DashboardLinkButton onClick={() => navigate("/accounts/journals")} />}>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[560px] text-xs">
+                  <thead>
+                    <tr className="bg-slate-800">
+                      <th className={`${TH} text-left`}>Journal No.</th>
+                      <th className={`${TH} text-left`}>Date</th>
+                      <th className={`${TH} text-left`}>Narration</th>
+                      <th className={`${TH} text-left`}>Status</th>
+                      <th className={`${TH} text-right`}>Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(recent?.journals ?? []).length ? recent.journals.map((j) => (
+                      <tr key={j._id} className="cursor-pointer border-b border-slate-100 hover:bg-slate-50" onClick={() => navigate("/accounts/journals")}>
+                        <td className="px-3 py-2 font-mono font-bold text-slate-600">{j.journalNo}</td>
+                        <td className="px-3 py-2 text-slate-500">{fmtDate(j.date)}</td>
+                        <td className="max-w-[260px] truncate px-3 py-2 font-semibold text-slate-800">{j.narration || j.reference || "—"}</td>
+                        <td className="px-3 py-2"><span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${statusBadge(j.status)}`}>{j.status}</span></td>
+                        <td className="px-3 py-2 text-right font-bold text-slate-900">{formatMoney(j.amount, 0)}</td>
+                      </tr>
+                    )) : (
+                      <tr><td colSpan={5} className="px-3 py-8 text-center text-xs font-semibold text-slate-400">{recentLoading && !recent ? "Loading…" : "No journal entries yet."}</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </DashboardCard>
           </div>
 
-          {/* Status */}
-          <div className="border-b border-white/10 px-3 py-3">
-            <div className="mb-2 px-2 text-[9px] font-black uppercase tracking-[0.15em] text-white/25">Status</div>
-            <div className="space-y-1">
-              <SidebarStatRow label="GL Accounts"    value={stats.accounts}       loading={statsLoading} />
-              <SidebarStatRow label="Draft Journals" value={stats.draftJournals}  loading={statsLoading} alert />
-              <SidebarStatRow label="Posted (Month)" value={stats.postedJournals} loading={statsLoading} />
-            </div>
-          </div>
+          {/* Right */}
+          <div className="flex flex-col gap-1.5">
+            <DashboardCard title="Ledger Summary">
+              <DashboardSummaryRows
+                loading={loading}
+                rows={[
+                  { label: "GL Accounts", note: "active in the chart", value: s.accounts ?? 0 },
+                  { label: "Draft Journals", note: "this month", value: s.draftJournals ?? 0, tone: (s.draftJournals ?? 0) > 0 ? "warn" : undefined },
+                  { label: "Posted Journals", note: "this month", value: s.postedJournals ?? 0, tone: "good" },
+                  { label: "Vouchers Awaiting Payment", note: "draft + approved", value: pendingVouchers, tone: pendingVouchers > 0 ? "warn" : undefined },
+                ]}
+              />
+            </DashboardCard>
 
-          {/* Quick actions */}
-          <div className="border-b border-white/10 px-3 py-3">
-            <div className="mb-2 px-2 text-[9px] font-black uppercase tracking-[0.15em] text-white/25">Quick Actions</div>
-            <div className="space-y-0.5">
-              {QUICK_ACTIONS.map(({ label, route, icon: Icon }) => (
-                <button key={route} onClick={() => navigate(route)}
-                  className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-[10px] font-semibold text-white/55 transition hover:bg-white/10 hover:text-white">
-                  <Icon size={9} className="shrink-0" />
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* More modules */}
-          <div className="flex-1 px-3 py-3">
-            <div className="mb-2 px-2 text-[9px] font-black uppercase tracking-[0.15em] text-white/25">More Modules</div>
-            <div className="space-y-0.5">
-              {MORE_MODULES.map(({ label, route }) => (
-                <button key={route} onClick={() => navigate(route)}
-                  className="flex w-full items-center gap-2 px-2 py-1 text-left text-[10px] text-white/40 transition hover:bg-white/10 hover:text-white/75">
-                  <span className="h-1 w-1 shrink-0 bg-white/20" />
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </aside>
-
-        {/* ── MAIN ────────────────────────────────────────────────────────── */}
-        <div className="flex flex-1 flex-col overflow-hidden">
-
-          {/* Top bar */}
-          <div className="shrink-0 flex items-center gap-3 border-b border-slate-200 bg-white px-5 py-2.5">
-            <span className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#0B3B2E]">
-              Accounting Dashboard
-            </span>
-
-            {/* Active period pill */}
-            {!statsLoading && (
-              currentPeriod ? (
-                <button
-                  onClick={() => navigate("/accounts/accounting-periods")}
-                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-bold transition
-                    ${currentPeriod.status === "open"
-                      ? "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                      : currentPeriod.status === "closed"
-                        ? "border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                        : "border border-red-200 bg-red-50 text-red-700 hover:bg-red-100"}`}
-                >
-                  <FaCalendarAlt size={8} />
-                  {currentPeriod.name} · {currentPeriod.status.toUpperCase()}
-                </button>
-              ) : (
-                <button
-                  onClick={() => navigate("/accounts/accounting-periods")}
-                  className="inline-flex items-center gap-1.5 border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-bold text-slate-400 hover:bg-slate-100 transition"
-                >
-                  <FaCalendarAlt size={8} /> No active period
-                </button>
-              )
-            )}
-
-            <div className="ml-auto flex items-center gap-2">
-              <button onClick={() => navigate("/accounts/journals")}
-                className="inline-flex items-center gap-1.5 border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-bold text-slate-600 transition hover:bg-slate-50">
-                <FaPlusCircle size={9} /> Journal
-              </button>
-              <button onClick={() => navigate("/accounts/payment-vouchers")}
-                className="inline-flex items-center gap-1.5 bg-[#FF8C00] px-3 py-1.5 text-[10px] font-bold text-white transition hover:bg-[#E67E00]">
-                <FaPlusCircle size={9} /> Voucher
-              </button>
-            </div>
-          </div>
-
-          {/* Scrollable content */}
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-
-            {/* Module sections */}
-            {SECTIONS.map((section) => (
-              <SectionBlock key={section.id} section={section} navigate={navigate} />
+            {QUICK_GROUPS.map(({ title, links }) => (
+              <DashboardCard key={title} title={title}>
+                <DashboardQuickAccess links={links} onNavigate={navigate} />
+              </DashboardCard>
             ))}
-
-            {/* Charts */}
-            <div className="grid grid-cols-2 gap-4">
-
-              {/* Chart 1: Cash In / Cash Out */}
-              <ChartCard
-                title="Cash In / Cash Out"
-                subtitle="Cashbook movements — last 6 months"
-                loading={chartsLoading}
-              >
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={cashData} barCategoryGap="30%" barGap={3}>
-                    <CartesianGrid strokeDasharray="2 2" stroke="#f1f5f9" vertical={false} />
-                    <XAxis dataKey="month" tick={{ fontSize: 9, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                    <YAxis tickFormatter={shortKES} tick={{ fontSize: 9, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={38} />
-                    <Tooltip content={<ChartTooltip />} cursor={{ fill: "#f8fafc" }} />
-                    <Legend iconType="square" iconSize={8} wrapperStyle={{ fontSize: "9px", paddingTop: "8px" }} />
-                    <Bar dataKey="cashIn"  name="Cash In"  fill={GRN} radius={0} />
-                    <Bar dataKey="cashOut" name="Cash Out" fill={ORG} radius={0} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
-
-              {/* Chart 2: Net Profit / Loss */}
-              <ChartCard
-                title="Net Profit / Loss"
-                subtitle="Monthly bottom line — last 6 months"
-                loading={chartsLoading}
-              >
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={monthlyData} barCategoryGap="40%">
-                    <CartesianGrid strokeDasharray="2 2" stroke="#f1f5f9" vertical={false} />
-                    <XAxis dataKey="month" tick={{ fontSize: 9, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                    <YAxis tickFormatter={(v) => (v >= 0 ? shortKES(v) : `-${shortKES(Math.abs(v))}`)} tick={{ fontSize: 9, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={38} />
-                    <Tooltip content={<NetTooltip />} cursor={{ fill: "#f8fafc" }} />
-                    <Bar dataKey="net" name="Net" radius={0}>
-                      {monthlyData.map((entry, i) => (
-                        <Cell key={entry.month} fill={entry.net >= 0 ? GRN : ROSE} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
-            </div>
           </div>
         </div>
       </div>
-    </DashboardLayout>
+    </ModuleShell>
   );
 };
 
