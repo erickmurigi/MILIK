@@ -21,7 +21,7 @@ import Company from "../../../models/Company.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
 import { deleteDocumentFile } from "../middleware/dealDocumentUpload.js";
 import { agentFilter } from "../middleware/agentScope.js";
-import { andInto, wordsSearchFilter } from "../services/saleSearch.js";
+import { andInto, searchWords, wordsSearchFilter } from "../services/saleSearch.js";
 import { round2 } from "../../../utils/math.js";
 
 const fillPlaceholders = (text, vars) =>
@@ -144,14 +144,18 @@ export const listDeals = async (req, res, next) => {
       if (dateFrom) filter.dealDate.$gte = new Date(dateFrom);
       if (dateTo)   filter.dealDate.$lte = new Date(dateTo + "T23:59:59.999Z");
     }
-    if (search.trim()) {
-      // A deal is found by its number, its buyer (name / number / phone) or its listing (title / number / unit / location)
-      const [buyerIds, listingIds] = await Promise.all([
-        SaleBuyer.distinct("_id", { business, ...wordsSearchFilter(search, ["fullName", "buyerNumber", "phone", "email"], { phoneFields: ["phone"] }) }),
-        SaleListing.distinct("_id", { business, ...wordsSearchFilter(search, ["title", "listingNumber", "unitNumber", "location", "town"]) }),
-      ]);
-      const rx = new RegExp(escapeRegex(search.trim()), "i");
-      andInto(filter, { $or: [{ dealNumber: rx }, { buyer: { $in: buyerIds } }, { listing: { $in: listingIds } }] });
+    // A deal is found by its number, its buyer (name / number / phone) or its listing (title / number / unit / location);
+    // every word typed must be found, each in any of those (so "karen wanjiru" = listing word + buyer word)
+    const words = searchWords(String(search));
+    if (words.length) {
+      const clauses = await Promise.all(words.map(async (word) => {
+        const [buyerIds, listingIds] = await Promise.all([
+          SaleBuyer.distinct("_id", { business, ...wordsSearchFilter(word, ["fullName", "buyerNumber", "phone", "email"], { phoneFields: ["phone"] }) }),
+          SaleListing.distinct("_id", { business, ...wordsSearchFilter(word, ["title", "listingNumber", "unitNumber", "location", "town"]) }),
+        ]);
+        return { $or: [{ dealNumber: new RegExp(escapeRegex(word), "i") }, { buyer: { $in: buyerIds } }, { listing: { $in: listingIds } }] };
+      }));
+      clauses.forEach((clause) => andInto(filter, clause));
     }
     const [deals, total] = await Promise.all([
       // documents are loaded per deal via getDeal (detail panel) — omitted from list rows

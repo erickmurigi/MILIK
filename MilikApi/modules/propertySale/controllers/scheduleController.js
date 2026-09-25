@@ -42,9 +42,11 @@ export const listSchedule = async (req, res, next) => {
     const { dealId } = req.query;
     if (!dealId) return next(createError(400, "dealId is required"));
 
-    await recomputeStatuses(business, dealId);
-
+    // Check the deal is the caller's (and exists in this business) before touching its rows
+    if (!mongoose.isValidObjectId(String(dealId))) return next(createError(400, "Invalid deal"));
     if (req.saleAgentId && !(await SaleDeal.exists({ _id: dealId, business, agent: req.saleAgentId }))) return next(createError(404, "Deal not found"));
+
+    await recomputeStatuses(business, dealId);
 
     const items = await SalePaymentSchedule.find({ business, deal: dealId })
       .populate("linkedPayment", "paymentNumber amount paymentDate status")

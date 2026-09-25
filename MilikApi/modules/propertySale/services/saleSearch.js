@@ -22,6 +22,16 @@ export const wordsSearchFilter = (term, fields, { phoneFields = [] } = {}) => {
   return clauses.length === 1 ? clauses[0] : { $and: clauses };
 };
 
+/**
+ * The words of a search box, at most 6; a phone-like term ("0712 345 678") stays one piece. Used where every word may be
+ * found in a different record (a deal: one word in the buyer, another in the listing).
+ */
+export const searchWords = (term) => {
+  const clean = cleanTerm(term);
+  if (!clean) return [];
+  return phoneSearchRegex(clean) ? [clean] : clean.split(/\s+/).slice(0, 6);
+};
+
 /** Adds `clause` to `filter` without clobbering an existing $and. */
 export const andInto = (filter, clause) => {
   if (clause) filter.$and = [...(filter.$and || []), clause];
