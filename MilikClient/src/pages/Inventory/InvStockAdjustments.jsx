@@ -181,7 +181,7 @@ const InvStockAdjustments = () => {
                     </td>
                     <td className="px-3 py-2 text-right text-slate-600">{formatMoney(entry.unitCost)}</td>
                     <td className="px-3 py-2 text-slate-500">{entry.notes || "—"}</td>
-                    <td className="px-3 py-2 text-slate-500">{entry.createdBy?.name || "—"}</td>
+                    <td className="px-3 py-2 text-slate-500">{[entry.createdBy?.otherNames, entry.createdBy?.surname].filter(Boolean).join(" ") || entry.createdBy?.name || "—"}</td>
                   </tr>
                 );
               })}

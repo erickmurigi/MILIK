@@ -163,7 +163,7 @@ const InvStockMovements = () => {
                     <td className="px-3 py-2 text-right text-slate-600">{formatMoney(entry.unitCost)}</td>
                     <td className="px-3 py-2 text-right font-bold text-slate-700">{formatMoney(entry.totalCost)}</td>
                     <td className="px-3 py-2 font-mono text-[10px] text-slate-400">{entry.reference || "—"}</td>
-                    <td className="px-3 py-2 text-slate-500">{entry.createdBy?.name || "—"}</td>
+                    <td className="px-3 py-2 text-slate-500">{[entry.createdBy?.otherNames, entry.createdBy?.surname].filter(Boolean).join(" ") || entry.createdBy?.name || "—"}</td>
                   </tr>
                 );
               })}

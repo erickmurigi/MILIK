@@ -280,7 +280,7 @@ const InventoryDashboard = () => {
                           {s.status}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-slate-500">{s.cashier?.name || "—"}</td>
+                      <td className="px-3 py-2 text-slate-500">{[s.cashier?.otherNames, s.cashier?.surname].filter(Boolean).join(" ") || s.cashier?.name || "—"}</td>
                       <td className="px-3 py-2 text-right font-bold text-slate-900">{formatMoney(s.grandTotal)}</td>
                     </tr>
                   )) : (

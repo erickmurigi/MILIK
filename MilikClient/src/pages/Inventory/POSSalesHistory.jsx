@@ -267,7 +267,7 @@ const POSSalesHistory = () => {
                       {s.payments?.map((p) => p.method).join(", ") || "—"}
                     </td>
                     <td className="px-3 py-2"><StatusBadge status={s.status} map={STATUS_BADGE} /></td>
-                    <td className="px-3 py-2 text-slate-500">{s.cashier?.name || "—"}</td>
+                    <td className="px-3 py-2 text-slate-500">{[s.cashier?.otherNames, s.cashier?.surname].filter(Boolean).join(" ") || s.cashier?.name || "—"}</td>
                     <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
                       {s.status === "completed" && (
                         <button
