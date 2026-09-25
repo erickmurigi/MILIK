@@ -478,7 +478,7 @@ const PaymentVouchers = () => {
       watermark: paid ? "PAID" : voucher.status === "reversed" ? "VOID" : "",
       meta: [["Due date", fmtDate(voucher.dueDate)]],
       parties: [
-        { heading: "Pay to", name: voucher.landlordName || voucher.payeeName || "—", lines: [voucher.propertyName ? `Property: ${voucher.propertyName}` : ""] },
+        { heading: "Pay to", name: voucher.payeeDisplay || voucher.landlordName || voucher.payeeName || "—", lines: [voucher.propertyName ? `Property: ${voucher.propertyName}` : ""] },
         { heading: "Purpose", name: catLabel, lines: [isRawObjectId(voucher.reference) ? "" : (voucher.reference ? `Reference: ${voucher.reference}` : ""), voucher.narration || ""] },
       ],
       table: {
