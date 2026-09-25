@@ -1,22 +1,24 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Alert,
+  ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import api from '../../../../services/api';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import MilikLoader from '../../../../components/ui/MilikLoader';
-
-const SC = '#7C2D12';
+import { ErrorBanner, ErrorState } from '../../../../components/ui/PmsStates';
+import { useDebounced, usePmsList, useReloadOnFocus } from '../../../../hooks/usePmsList';
+import { useSaleSettings } from '../../../../hooks/useSaleSettings';
+import { fmtDate, fmtKES } from '../../../../utils/pmsFormat';
+import { DEAL_STATUS_STYLE, SBG, SC, dealBalance, dealPct, pageOf, refName } from '../../../../utils/sales';
 
 type Deal = {
   _id:                  string;
   dealNumber?:          string;
-  listing?:             { title?: string; propertyName?: string } | string;
-  buyer?:               { fullName?: string } | string;
-  agent?:               { name?: string } | string;
+  listing?:             { title?: string; listingNumber?: string };
+  buyer?:               { fullName?: string; phone?: string };
+  agent?:               { fullName?: string };
   agreedPrice:          number;
   totalPaid?:           number;
   balance?:             number;
@@ -25,76 +27,39 @@ type Deal = {
   expectedClosingDate?: string;
 };
 
-const STATUS_CFG: Record<string, { bg: string; color: string; label: string }> = {
-  active:    { bg: '#FEF3C7', color: '#92400E', label: 'Active'    },
-  closed:    { bg: '#D1FAE5', color: '#065F46', label: 'Closed'    },
-  cancelled: { bg: '#F1F5F9', color: '#64748B', label: 'Cancelled' },
-};
-
 const TABS = [
   { key: '',          label: 'All'       },
   { key: 'active',    label: 'Active'    },
   { key: 'closed',    label: 'Closed'    },
   { key: 'cancelled', label: 'Cancelled' },
 ] as const;
+const VALID_STATUS = new Set<string>(TABS.map(t => t.key));
 
-const fmt = (n: number) =>
-  `KES ${Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-const getListingName = (l: Deal['listing']) =>
-  typeof l === 'object' ? (l?.title ?? l?.propertyName ?? '—') : (l ?? '—');
-
-const getBuyerName = (b: Deal['buyer']) =>
-  typeof b === 'object' ? (b?.fullName ?? '—') : (b ?? '—');
-
-const LIMIT = 30;
+const parse = (data: any) => pageOf<Deal>(data);
 
 export default function DealsScreen() {
   const router = useRouter();
+  const { terms: T } = useSaleSettings();
+  const params = useLocalSearchParams<{ status?: string }>();
 
-  const [statusFilter, setStatusFilter] = useState('active');
-  const [search,       setSearch]       = useState('');
-  const [items,        setItems]        = useState<Deal[]>([]);
-  const [loading,      setLoading]      = useState(true);
-  const [refreshing,   setRefreshing]   = useState(false);
-  const [loadingMore,  setLoadingMore]  = useState(false);
-  const [page,         setPage]         = useState(1);
-  const [hasMore,      setHasMore]      = useState(true);
+  // The dashboard hands over a status; otherwise open on the deals still in progress.
+  const [statusFilter, setStatusFilter] = useState(params.status !== undefined && VALID_STATUS.has(String(params.status)) ? String(params.status) : 'active');
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounced(search.trim(), 400);
 
-  const searchRef = useRef(search);
-  searchRef.current = search;
-
-  const load = useCallback(async (pg = 1, isRefresh = false) => {
-    if (pg === 1) isRefresh ? setRefreshing(true) : setLoading(true);
-    else setLoadingMore(true);
-    try {
-      const p: Record<string, string> = { page: String(pg), limit: String(LIMIT) };
-      if (statusFilter) p.status = statusFilter;
-      if (searchRef.current.trim()) p.search = searchRef.current.trim();
-      const { data } = await api.get('/sale/deals', { params: p });
-      const rows: Deal[] = Array.isArray(data) ? data : data?.data ?? data?.items ?? data?.deals ?? [];
-      setItems(prev => pg === 1 ? rows : [...prev, ...rows]);
-      setHasMore(rows.length === LIMIT);
-      setPage(pg);
-    } catch (e: any) {
-      const msg = e?.response?.data?.message ?? e?.message ?? 'Failed to load deals';
-      Alert.alert('Error', msg);
-      if (pg === 1) setItems([]);
-    }
-    finally { setLoading(false); setRefreshing(false); setLoadingMore(false); }
-  }, [statusFilter]);
-
-  useEffect(() => { load(1); }, [load]);
-  useEffect(() => {
-    const t = setTimeout(() => load(1), 400);
-    return () => clearTimeout(t);
-  }, [search]);
+  const listParams = useMemo(
+    () => ({ status: statusFilter || undefined, search: debouncedSearch || undefined }),
+    [statusFilter, debouncedSearch],
+  );
+  const list = usePmsList<Deal>({ path: '/sale/deals', params: listParams, limit: 30, parse });
+  useReloadOnFocus(list.reload);
 
   const renderItem = ({ item }: { item: Deal }) => {
-    const sc      = STATUS_CFG[item.status] ?? STATUS_CFG.active;
-    const paid    = item.totalPaid ?? 0;
-    const balance = item.balance  ?? (item.agreedPrice - paid);
-    const pct     = item.agreedPrice > 0 ? Math.min(100, (paid / item.agreedPrice) * 100) : 0;
+    const sc      = DEAL_STATUS_STYLE[item.status] ?? DEAL_STATUS_STYLE.active;
+    const paid    = Number(item.totalPaid || 0);
+    const balance = item.status === 'cancelled' ? 0 : dealBalance(item);
+    const pct     = dealPct(item);
+    const agent   = refName(item.agent, 'fullName');
 
     return (
       <TouchableOpacity
@@ -104,30 +69,34 @@ export default function DealsScreen() {
       >
         <View style={styles.cardTop}>
           <View style={{ flex: 1 }}>
-            {item.dealNumber && <Text style={styles.dealNum}>{item.dealNumber}</Text>}
-            <Text style={styles.listing} numberOfLines={1}>{getListingName(item.listing)}</Text>
-            <Text style={styles.buyer} numberOfLines={1}>{getBuyerName(item.buyer)}</Text>
+            {item.dealNumber ? <Text style={styles.dealNum}>{item.dealNumber}</Text> : null}
+            <Text style={styles.listing} numberOfLines={1}>{refName(item.listing, 'title', 'listingNumber') || '—'}</Text>
+            <Text style={styles.buyer} numberOfLines={1}>
+              {refName(item.buyer, 'fullName') || '—'}{agent ? `  ·  ${agent}` : ''}
+            </Text>
           </View>
           <View style={{ alignItems: 'flex-end', gap: 6 }}>
             <View style={[styles.badge, { backgroundColor: sc.bg }]}>
               <Text style={[styles.badgeTxt, { color: sc.color }]}>{sc.label}</Text>
             </View>
-            <Text style={styles.price}>{fmt(item.agreedPrice)}</Text>
+            <Text style={styles.price}>{fmtKES(item.agreedPrice)}</Text>
           </View>
         </View>
 
-        {/* Progress bar */}
         <View style={styles.progressWrap}>
           <View style={styles.progressBg}>
-            <View style={[styles.progressFill, { width: `${pct}%` as any }]} />
+            <View style={[styles.progressFill, { width: `${pct}%` }]} />
           </View>
           <Text style={styles.progressTxt}>{pct.toFixed(0)}% collected</Text>
         </View>
 
         <View style={styles.cardBottom}>
-          <Text style={styles.paidTxt}>Paid: <Text style={{ fontWeight: '800', color: '#065F46' }}>{fmt(paid)}</Text></Text>
-          <Text style={styles.balTxt}>Balance: <Text style={{ fontWeight: '800', color: balance > 0 ? '#DC2626' : '#065F46' }}>{fmt(balance)}</Text></Text>
+          <Text style={styles.paidTxt}>Paid: <Text style={{ fontWeight: '800', color: '#065F46' }}>{fmtKES(paid)}</Text></Text>
+          <Text style={styles.balTxt}>Balance: <Text style={{ fontWeight: '800', color: balance > 0 ? '#DC2626' : '#065F46' }}>{fmtKES(balance)}</Text></Text>
         </View>
+        {item.status === 'active' && item.expectedClosingDate ? (
+          <Text style={styles.closing}>Expected closing {fmtDate(item.expectedClosingDate)}</Text>
+        ) : null}
       </TouchableOpacity>
     );
   };
@@ -138,10 +107,12 @@ export default function DealsScreen() {
         <Ionicons name="search-outline" size={18} color="#94A3B8" />
         <TextInput
           style={styles.searchInput}
-          placeholder="Deal number, property, buyer..."
+          placeholder={`${T.saleDeal} no., ${T.saleListing.toLowerCase()}, ${T.saleBuyer.toLowerCase()}, phone...`}
           placeholderTextColor="#94A3B8"
           value={search}
           onChangeText={setSearch}
+          returnKeyType="search"
+          autoCorrect={false}
         />
         {search ? (
           <TouchableOpacity onPress={() => setSearch('')}>
@@ -150,46 +121,54 @@ export default function DealsScreen() {
         ) : null}
       </View>
 
-      <FlatList
-        horizontal data={TABS as any} keyExtractor={t => t.key}
-        showsHorizontalScrollIndicator={false}
-        style={{ flexGrow: 0 }}
-        contentContainerStyle={styles.tabsRow}
-        renderItem={({ item: t }) => (
+      <View style={styles.tabsRow}>
+        {TABS.map(t => (
           <TouchableOpacity
+            key={t.key}
             style={[styles.tab, statusFilter === t.key && styles.tabActive]}
             onPress={() => setStatusFilter(t.key)}
           >
             <Text style={[styles.tabTxt, statusFilter === t.key && styles.tabTxtActive]}>{t.label}</Text>
           </TouchableOpacity>
-        )}
-      />
+        ))}
+      </View>
 
-      {loading ? <MilikLoader fullscreen /> : (
-        <FlatList
-          data={items}
-          keyExtractor={d => d._id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.list}
-          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(1, true)} tintColor={SC} />}
-          onEndReached={() => { if (!loadingMore && hasMore) load(page + 1); }}
-          onEndReachedThreshold={0.3}
-          ListEmptyComponent={
-            <View style={styles.emptyWrap}>
-              <Ionicons name="briefcase-outline" size={48} color="#CBD5E1" />
-              <Text style={styles.emptyTxt}>No deals found</Text>
-            </View>
-          }
-          ListFooterComponent={loadingMore ? <ActivityIndicator color={SC} style={{ padding: 20 }} /> : null}
-        />
+      {list.loading ? <MilikLoader fullscreen /> : list.error && list.items.length === 0 ? (
+        <ErrorState message={list.error} onRetry={list.retry} />
+      ) : (
+        <>
+          {list.error ? <ErrorBanner message={list.error} onRetry={list.retry} /> : null}
+          <FlatList
+            data={list.items}
+            keyExtractor={d => d._id}
+            renderItem={renderItem}
+            contentContainerStyle={styles.list}
+            ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={<RefreshControl refreshing={list.refreshing} onRefresh={list.refresh} tintColor={SC} />}
+            onEndReached={list.loadMore}
+            onEndReachedThreshold={0.3}
+            ListHeaderComponent={list.total > 0 ? (
+              <Text style={styles.count}>{list.total} {(list.total === 1 ? T.saleDeal : T.saleDeals).toLowerCase()}</Text>
+            ) : null}
+            ListEmptyComponent={
+              <View style={styles.emptyWrap}>
+                <Ionicons name="briefcase-outline" size={48} color="#CBD5E1" />
+                <Text style={styles.emptyTxt}>
+                  {debouncedSearch || statusFilter ? `No ${T.saleDeals.toLowerCase()} match your filters` : `No ${T.saleDeals.toLowerCase()} yet`}
+                </Text>
+              </View>
+            }
+            ListFooterComponent={list.loadingMore ? <ActivityIndicator color={SC} style={{ padding: 20 }} /> : null}
+          />
+        </>
       )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#FFF7ED' },
+  safe: { flex: 1, backgroundColor: SBG },
 
   searchWrap: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
@@ -199,15 +178,16 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 15, color: '#0F172A' },
 
-  tabsRow: { paddingHorizontal: 16, paddingBottom: 8, gap: 8 },
+  tabsRow: { flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 8, gap: 8 },
   tab:         { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E2E8F0' },
   tabActive:   { backgroundColor: SC, borderColor: SC },
   tabTxt:      { fontSize: 12, fontWeight: '600', color: '#475569' },
   tabTxtActive:{ color: '#fff' },
 
   list:      { paddingHorizontal: 16, paddingBottom: 40 },
+  count:     { fontSize: 11, fontWeight: '700', color: '#94A3B8', marginBottom: 8 },
   emptyWrap: { alignItems: 'center', justifyContent: 'center', gap: 12, paddingTop: 60 },
-  emptyTxt:  { fontSize: 15, color: '#94A3B8' },
+  emptyTxt:  { fontSize: 15, color: '#94A3B8', textAlign: 'center' },
 
   card: {
     backgroundColor: '#fff', borderRadius: 14,
@@ -230,4 +210,5 @@ const styles = StyleSheet.create({
   cardBottom: { flexDirection: 'row', justifyContent: 'space-between' },
   paidTxt:    { fontSize: 12, color: '#64748B' },
   balTxt:     { fontSize: 12, color: '#64748B' },
+  closing:    { fontSize: 11, color: '#94A3B8', marginTop: -4 },
 });

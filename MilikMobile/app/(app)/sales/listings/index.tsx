@@ -1,122 +1,112 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Alert,
+  View, Text, StyleSheet, FlatList, ScrollView, TextInput, TouchableOpacity,
+  ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import api from '../../../../services/api';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import MilikLoader from '../../../../components/ui/MilikLoader';
-
-const SC = '#7C2D12';
+import { ErrorBanner, ErrorState } from '../../../../components/ui/PmsStates';
+import { useDebounced, usePmsList, useReloadOnFocus } from '../../../../hooks/usePmsList';
+import { useSaleSettings } from '../../../../hooks/useSaleSettings';
+import { fmtKES, fmtNumber } from '../../../../utils/pmsFormat';
+import { LISTING_STATUS_STYLE, SBG, SC, humanize, pageOf, refName } from '../../../../utils/sales';
 
 type Listing = {
-  _id:          string;
-  listingRef?:  string;
-  title:        string;
-  propertyType?:string;
-  location?:    string;
-  price:        number;
-  status:       string;
-  bedrooms?:    number;
-  bathrooms?:   number;
-  size?:        number;
-  sizeUnit?:    string;
+  _id:            string;
+  listingNumber?: string;
+  title:          string;
+  propertyType?:  string;
+  location?:      string;
+  town?:          string;
+  size?:          number | null;
+  sizeUnit?:      string;
+  askingPrice:    number;
+  negotiable?:    boolean;
+  status:         string;
+  unitNumber?:    string;
+  block?:         string;
+  titleDeedAvailable?: boolean;
+  project?:       { name?: string } | null;
+  effectiveAgent?: { fullName?: string } | null;
 };
 
-const STATUS_CFG: Record<string, { bg: string; color: string; label: string }> = {
-  available: { bg: '#D1FAE5', color: '#065F46', label: 'Available' },
-  reserved:  { bg: '#FEF3C7', color: '#D97706', label: 'Reserved'  },
-  sold:      { bg: '#F1F5F9', color: '#64748B', label: 'Sold'      },
-  withdrawn: { bg: '#FEE2E2', color: '#DC2626', label: 'Withdrawn' },
-};
+type Stats = Record<string, { count?: number }>;
 
 const TABS = [
-  { key: '',          label: 'All'       },
-  { key: 'available', label: 'Available' },
-  { key: 'reserved',  label: 'Reserved'  },
-  { key: 'sold',      label: 'Sold'      },
+  { key: '',               label: 'All'            },
+  { key: 'available',      label: 'Available'      },
+  { key: 'reserved',       label: 'Reserved'       },
+  { key: 'under_contract', label: 'Under Contract' },
+  { key: 'sold',           label: 'Sold'           },
+  { key: 'withdrawn',      label: 'Withdrawn'      },
 ] as const;
+const VALID_STATUS = new Set<string>(TABS.map(t => t.key));
 
-const fmt = (n: number) =>
-  `KES ${Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-const LIMIT = 30;
+const parse = (data: any) => ({ ...pageOf<Listing>(data), extra: (data?.stats ?? {}) as Stats });
 
 export default function ListingsScreen() {
-  const [statusFilter, setStatusFilter] = useState('available');
-  const [search,       setSearch]       = useState('');
-  const [items,        setItems]        = useState<Listing[]>([]);
-  const [loading,      setLoading]      = useState(true);
-  const [refreshing,   setRefreshing]   = useState(false);
-  const [loadingMore,  setLoadingMore]  = useState(false);
-  const [page,         setPage]         = useState(1);
-  const [hasMore,      setHasMore]      = useState(true);
+  const router = useRouter();
+  const { terms: T } = useSaleSettings();
+  const params = useLocalSearchParams<{ status?: string }>();
 
-  const searchRef = useRef(search);
-  searchRef.current = search;
+  const [statusFilter, setStatusFilter] = useState(params.status !== undefined && VALID_STATUS.has(String(params.status)) ? String(params.status) : 'available');
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounced(search.trim(), 400);
 
-  const load = useCallback(async (pg = 1, isRefresh = false) => {
-    if (pg === 1) isRefresh ? setRefreshing(true) : setLoading(true);
-    else setLoadingMore(true);
-    try {
-      const p: Record<string, string> = { page: String(pg), limit: String(LIMIT) };
-      if (statusFilter) p.status = statusFilter;
-      if (searchRef.current.trim()) p.search = searchRef.current.trim();
-      const { data } = await api.get('/sale/listings', { params: p });
-      const rows: Listing[] = Array.isArray(data) ? data : data?.data ?? data?.items ?? data?.listings ?? [];
-      setItems(prev => pg === 1 ? rows : [...prev, ...rows]);
-      setHasMore(rows.length === LIMIT);
-      setPage(pg);
-    } catch (e: any) {
-      const msg = e?.response?.data?.message ?? e?.message ?? 'Failed to load listings';
-      Alert.alert('Error', msg);
-      if (pg === 1) setItems([]);
-    }
-    finally { setLoading(false); setRefreshing(false); setLoadingMore(false); }
-  }, [statusFilter]);
+  const listParams = useMemo(
+    () => ({ status: statusFilter || undefined, search: debouncedSearch || undefined }),
+    [statusFilter, debouncedSearch],
+  );
+  const list = usePmsList<Listing, Stats>({ path: '/sale/listings', params: listParams, limit: 30, parse });
+  useReloadOnFocus(list.reload);
 
-  useEffect(() => { load(1); }, [load]);
-  useEffect(() => {
-    const t = setTimeout(() => load(1), 400);
-    return () => clearTimeout(t);
-  }, [search]);
+  const stats = list.extra;
+  const totalCount = stats ? Object.values(stats).reduce((a, s) => a + Number(s?.count || 0), 0) : 0;
 
   const renderItem = ({ item }: { item: Listing }) => {
-    const sc = STATUS_CFG[item.status] ?? STATUS_CFG.available;
-    const specs = [
-      item.bedrooms  ? `${item.bedrooms} bd`   : null,
-      item.bathrooms ? `${item.bathrooms} ba`   : null,
-      item.size      ? `${item.size} ${item.sizeUnit ?? 'sqm'}` : null,
-    ].filter(Boolean).join(' · ');
+    const sc = LISTING_STATUS_STYLE[item.status] ?? LISTING_STATUS_STYLE.available;
+    const place = [item.location, item.town].filter(Boolean).join(', ');
+    const unit  = [item.project?.name, item.unitNumber ? `${T.saleUnit} ${item.unitNumber}` : '', item.block ? `Block ${item.block}` : ''].filter(Boolean).join(' · ');
+    const specs = [item.size ? `${fmtNumber(item.size)} ${item.sizeUnit ?? 'sqm'}` : null, item.titleDeedAvailable ? 'Title deed' : null].filter(Boolean).join(' · ');
+    const agent = refName(item.effectiveAgent, 'fullName');
 
     return (
-      <View style={[styles.card, { borderLeftColor: sc.color }]}>
+      <TouchableOpacity
+        style={[styles.card, { borderLeftColor: sc.color }]}
+        onPress={() => router.push(`/sales/listings/${item._id}` as any)}
+        activeOpacity={0.75}
+      >
         <View style={styles.cardTop}>
           <View style={{ flex: 1 }}>
-            {item.listingRef && <Text style={styles.refTxt}>{item.listingRef}</Text>}
+            {item.listingNumber ? <Text style={styles.refTxt}>{item.listingNumber}</Text> : null}
             <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
-            {item.location && (
+            {unit ? <Text style={styles.unit} numberOfLines={1}>{unit}</Text> : null}
+            {place ? (
               <View style={styles.locRow}>
                 <Ionicons name="location-outline" size={12} color="#94A3B8" />
-                <Text style={styles.location}>{item.location}</Text>
+                <Text style={styles.location} numberOfLines={1}>{place}</Text>
               </View>
-            )}
+            ) : null}
           </View>
           <View style={{ alignItems: 'flex-end', gap: 6 }}>
             <View style={[styles.badge, { backgroundColor: sc.bg }]}>
               <Text style={[styles.badgeTxt, { color: sc.color }]}>{sc.label}</Text>
             </View>
-            <Text style={styles.price}>{fmt(item.price)}</Text>
+            <Text style={styles.price}>{fmtKES(item.askingPrice)}</Text>
+            {item.negotiable ? <Text style={styles.negotiable}>Negotiable</Text> : null}
           </View>
         </View>
-        {(item.propertyType || specs) && (
+        {item.propertyType || specs || agent ? (
           <View style={styles.cardBottom}>
-            {item.propertyType && <View style={styles.pill}><Text style={styles.pillTxt}>{item.propertyType}</Text></View>}
+            {item.propertyType ? <View style={styles.pill}><Text style={styles.pillTxt}>{humanize(item.propertyType)}</Text></View> : null}
             {specs ? <Text style={styles.specs}>{specs}</Text> : null}
+            <View style={{ flex: 1 }} />
+            {agent ? <Text style={styles.agent} numberOfLines={1}>{agent}</Text> : null}
           </View>
-        )}
-      </View>
+        ) : null}
+      </TouchableOpacity>
     );
   };
 
@@ -126,10 +116,12 @@ export default function ListingsScreen() {
         <Ionicons name="search-outline" size={18} color="#94A3B8" />
         <TextInput
           style={styles.searchInput}
-          placeholder="Title, location, type..."
+          placeholder={`Title, ${T.saleUnit.toLowerCase()}, location, type...`}
           placeholderTextColor="#94A3B8"
           value={search}
           onChangeText={setSearch}
+          returnKeyType="search"
+          autoCorrect={false}
         />
         {search ? (
           <TouchableOpacity onPress={() => setSearch('')}>
@@ -138,46 +130,55 @@ export default function ListingsScreen() {
         ) : null}
       </View>
 
-      <FlatList
-        horizontal data={TABS as any} keyExtractor={t => t.key}
-        showsHorizontalScrollIndicator={false}
-        style={{ flexGrow: 0 }}
-        contentContainerStyle={styles.tabsRow}
-        renderItem={({ item: t }) => (
-          <TouchableOpacity
-            style={[styles.tab, statusFilter === t.key && styles.tabActive]}
-            onPress={() => setStatusFilter(t.key)}
-          >
-            <Text style={[styles.tabTxt, statusFilter === t.key && styles.tabTxtActive]}>{t.label}</Text>
-          </TouchableOpacity>
-        )}
-      />
+      <View style={{ flexGrow: 0 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsRow} keyboardShouldPersistTaps="handled">
+          {TABS.map(t => {
+            const active = statusFilter === t.key;
+            const count = t.key ? stats?.[t.key]?.count : totalCount;
+            return (
+              <TouchableOpacity key={t.key || 'all'} style={[styles.tab, active && styles.tabActive]} onPress={() => setStatusFilter(t.key)}>
+                <Text style={[styles.tabTxt, active && styles.tabTxtActive]}>
+                  {t.label}{stats && Object.keys(stats).length ? ` · ${count ?? 0}` : ''}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
 
-      {loading ? <MilikLoader fullscreen /> : (
-        <FlatList
-          data={items}
-          keyExtractor={l => l._id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.list}
-          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(1, true)} tintColor={SC} />}
-          onEndReached={() => { if (!loadingMore && hasMore) load(page + 1); }}
-          onEndReachedThreshold={0.3}
-          ListEmptyComponent={
-            <View style={styles.emptyWrap}>
-              <Ionicons name="home-outline" size={48} color="#CBD5E1" />
-              <Text style={styles.emptyTxt}>No listings found</Text>
-            </View>
-          }
-          ListFooterComponent={loadingMore ? <ActivityIndicator color={SC} style={{ padding: 20 }} /> : null}
-        />
+      {list.loading ? <MilikLoader fullscreen /> : list.error && list.items.length === 0 ? (
+        <ErrorState message={list.error} onRetry={list.retry} />
+      ) : (
+        <>
+          {list.error ? <ErrorBanner message={list.error} onRetry={list.retry} /> : null}
+          <FlatList
+            data={list.items}
+            keyExtractor={l => l._id}
+            renderItem={renderItem}
+            contentContainerStyle={styles.list}
+            ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={<RefreshControl refreshing={list.refreshing} onRefresh={list.refresh} tintColor={SC} />}
+            onEndReached={list.loadMore}
+            onEndReachedThreshold={0.3}
+            ListEmptyComponent={
+              <View style={styles.emptyWrap}>
+                <Ionicons name="home-outline" size={48} color="#CBD5E1" />
+                <Text style={styles.emptyTxt}>
+                  {debouncedSearch || statusFilter ? `No ${T.saleListings.toLowerCase()} match your filters` : `No ${T.saleListings.toLowerCase()} yet`}
+                </Text>
+              </View>
+            }
+            ListFooterComponent={list.loadingMore ? <ActivityIndicator color={SC} style={{ padding: 20 }} /> : null}
+          />
+        </>
       )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#FFF7ED' },
+  safe: { flex: 1, backgroundColor: SBG },
 
   searchWrap: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
@@ -195,24 +196,27 @@ const styles = StyleSheet.create({
 
   list:      { paddingHorizontal: 16, paddingBottom: 40 },
   emptyWrap: { alignItems: 'center', justifyContent: 'center', gap: 12, paddingTop: 60 },
-  emptyTxt:  { fontSize: 15, color: '#94A3B8' },
+  emptyTxt:  { fontSize: 15, color: '#94A3B8', textAlign: 'center' },
 
   card: {
     backgroundColor: '#fff', borderRadius: 14,
     borderWidth: 1, borderColor: '#E2E8F0', borderLeftWidth: 3,
-    padding: 14, gap: 8,
+    padding: 14, gap: 10,
   },
-  cardTop:   { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
-  refTxt:    { fontSize: 10, fontWeight: '700', color: '#94A3B8', letterSpacing: 0.5, marginBottom: 2 },
-  title:     { fontSize: 14, fontWeight: '800', color: '#0F172A' },
-  locRow:    { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
-  location:  { fontSize: 12, color: '#94A3B8' },
-  badge:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  badgeTxt:  { fontSize: 10, fontWeight: '800' },
-  price:     { fontSize: 14, fontWeight: '900', color: '#0F172A' },
+  cardTop:    { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  refTxt:     { fontSize: 10, fontWeight: '700', color: '#94A3B8', letterSpacing: 0.5, marginBottom: 2 },
+  title:      { fontSize: 15, fontWeight: '800', color: '#0F172A' },
+  unit:       { fontSize: 12, fontWeight: '600', color: SC, marginTop: 2 },
+  locRow:     { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3 },
+  location:   { fontSize: 12, color: '#94A3B8', flexShrink: 1 },
+  badge:      { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  badgeTxt:   { fontSize: 10, fontWeight: '800' },
+  price:      { fontSize: 14, fontWeight: '900', color: '#0F172A' },
+  negotiable: { fontSize: 10, color: '#94A3B8', fontWeight: '600' },
 
-  cardBottom:{ flexDirection: 'row', alignItems: 'center', gap: 8 },
-  pill:      { backgroundColor: '#F1F5F9', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  pillTxt:   { fontSize: 10, fontWeight: '600', color: '#64748B' },
-  specs:     { fontSize: 11, color: '#94A3B8', fontWeight: '500' },
+  cardBottom: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pill:       { backgroundColor: '#F1F5F9', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  pillTxt:    { fontSize: 10, fontWeight: '600', color: '#64748B' },
+  specs:      { fontSize: 11, color: '#94A3B8' },
+  agent:      { fontSize: 11, color: '#94A3B8', maxWidth: 120 },
 });
