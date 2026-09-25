@@ -134,7 +134,7 @@ export default function TenantSearchScreen() {
           <Ionicons name="search-outline" size={18} color={Colors.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Name, phone, email, code or ID no..."
+            placeholder="Name, phone, unit, code or ID no..."
             placeholderTextColor={Colors.textMuted}
             value={query}
             onChangeText={setQuery}

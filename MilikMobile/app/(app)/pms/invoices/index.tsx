@@ -87,7 +87,7 @@ export default function InvoicesScreen() {
     if (from) params.fromDate = from;
     if (to)   params.toDate   = to;
     // The API searches by invoice number OR tenant name (not both): numbers contain digits, names rarely do.
-    if (q) params[/\d/.test(q) ? 'invoiceNumber' : 'tenantName'] = q;
+    if (q) params.search = q; // invoice no., description, tenant (name, code, phone), unit or property
 
     const { data } = await api.get('/tenant-invoices', { params });
     let items = rowsOf<Invoice>(data);
@@ -182,7 +182,7 @@ export default function InvoicesScreen() {
           <Ionicons name="search-outline" size={16} color={Colors.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Invoice no. or tenant name..."
+            placeholder="Invoice no., tenant, unit or property..."
             placeholderTextColor={Colors.textMuted}
             value={search}
             onChangeText={setSearch}

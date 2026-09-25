@@ -104,7 +104,7 @@ export default function MaintenanceScreen() {
           <Ionicons name="search-outline" size={16} color={Colors.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search maintenance..."
+            placeholder="Title, unit, property or tenant..."
             placeholderTextColor={Colors.textMuted}
             value={search}
             onChangeText={setSearch}

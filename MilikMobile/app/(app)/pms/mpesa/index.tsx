@@ -353,7 +353,7 @@ export default function MpesaNotificationsScreen() {
           <Ionicons name="search-outline" size={16} color={Colors.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search code, payer, phone, reference..."
+            placeholder="Code, payer, phone, tenant or reference..."
             placeholderTextColor={Colors.textMuted}
             value={search}
             onChangeText={setSearch}

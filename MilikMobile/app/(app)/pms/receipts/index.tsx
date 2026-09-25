@@ -79,7 +79,7 @@ export default function ReceiptsScreen() {
     const { from, to } = periodRange(period);   // receipts API takes from / to
     if (from) params.from = from;
     if (to)   params.to   = to;
-    if (q)    params.search = q;                 // receipt no., reference, description or tenant name
+    if (q)    params.search = q;                 // receipt no., reference, description, tenant (name, code, phone) or unit
 
     const { data } = await api.get('/rent-payments', { params });
     const items = rowsOf<Receipt>(data);
@@ -145,7 +145,7 @@ export default function ReceiptsScreen() {
           <Ionicons name="search-outline" size={16} color={Colors.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Receipt no., reference or tenant..."
+            placeholder="Receipt no., reference, tenant or unit..."
             placeholderTextColor={Colors.textMuted}
             value={search}
             onChangeText={setSearch}
