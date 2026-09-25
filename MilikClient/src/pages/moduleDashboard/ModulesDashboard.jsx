@@ -39,7 +39,7 @@ const moduleRegistry = [
     status: "active",
     route: "/dashboard",
     icon: FaCity,
-    color: "#0b3b2e",
+    color: "#0B3B2E",
     category: "Core",
   },
   {
@@ -50,7 +50,7 @@ const moduleRegistry = [
     status: "active",
     route: "/accounts/dashboard",
     icon: FaChartLine,
-    color: "#b45309",
+    color: "#C2570C",
     category: "Finance",
   },
   {
@@ -61,7 +61,7 @@ const moduleRegistry = [
     status: "active",
     route: "/inventory/dashboard",
     icon: FaWarehouse,
-    color: "#0e7490",
+    color: "#0F766E",
     category: "Operations",
   },
   {
@@ -72,7 +72,7 @@ const moduleRegistry = [
     status: "active",
     route: "/sale/dashboard",
     icon: FaBuilding,
-    color: "#0f766e",
+    color: "#14532D",
     category: "Sales",
   },
   {
@@ -82,7 +82,7 @@ const moduleRegistry = [
     subtitle: "Point of Sale",
     status: "coming",
     icon: FaStore,
-    color: "#c2410c",
+    color: "#B45309",
     category: "Sales",
   },
   {
@@ -93,7 +93,7 @@ const moduleRegistry = [
     status: "active",
     route: "/carwash/dashboard",
     icon: FaCar,
-    color: "#0369a1",
+    color: "#155E75",
     category: "Operations",
   },
   {
@@ -104,7 +104,7 @@ const moduleRegistry = [
     status: "active",
     route: "/hr/dashboard",
     icon: FaUsers,
-    color: "#7c3aed",
+    color: "#3F6212",
     category: "People",
   },
   {
@@ -115,7 +115,7 @@ const moduleRegistry = [
     status: "active",
     route: "/clients/dashboard",
     icon: FaAddressBook,
-    color: "#065f46",
+    color: "#065F46",
     category: "Sales",
   },
   {
@@ -125,7 +125,7 @@ const moduleRegistry = [
     subtitle: "Vendor Management",
     status: "coming",
     icon: FaHandshake,
-    color: "#1d4ed8",
+    color: "#1E3A5F",
     category: "Operations",
   },
 ];
@@ -150,6 +150,12 @@ const ModulesDashboard = () => {
     const name = String(activeCompanyContext?.companyName || activeCompanyContext?.name || "").trim();
     document.title = name ? `Apps | ${name} | Milik` : "Apps | Milik";
   }, [activeCompanyContext]);
+
+  const firstName = String(currentUser?.otherNames || currentUser?.surname || "").trim().split(/\s+/)[0];
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  }, []);
 
   const visibleModules = useMemo(() => {
     if (!activeCompanyContext) return [];
@@ -204,6 +210,7 @@ const ModulesDashboard = () => {
       {/* ── Top bar ── */}
       <header className="odoo-topbar">
         <div className="odoo-topbar-left">
+          <StartMenu darkMode={false} variant="corner" />
           <img
             src={activeCompanyContext?.logo || "/MIIK CUBES.png"}
             alt={activeCompanyContext?.companyName || "Milik"}
@@ -226,7 +233,8 @@ const ModulesDashboard = () => {
         </div>
       </header>
 
-      {/* ── Category tab strip ── */}
+      {/* ── Category tab strip (only worth having with a handful of apps) ── */}
+      {visibleModules.length >= 5 && (
       <div className="odoo-tabs-bar">
         <div className="odoo-tabs">
           {availableCategories.map((cat) => (
@@ -245,9 +253,14 @@ const ModulesDashboard = () => {
           ))}
         </div>
       </div>
+      )}
 
       {/* ── App grid ── */}
       <main className="odoo-main">
+        <div className="odoo-greeting">
+          <h1 className="odoo-greeting-title">{greeting}{firstName ? `, ${firstName}` : ""}</h1>
+          <p className="odoo-greeting-sub">Choose an app to get started.</p>
+        </div>
         {isFetchingCompany && filteredModules.length === 0 ? (
           <div className="odoo-grid">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -270,8 +283,7 @@ const ModulesDashboard = () => {
                 onClick={() => handleOpen(m)}
                 aria-label={`${m.title} — ${m.subtitle}`}
               >
-                {/* Status dot */}
-                <span className={`odoo-dot ${m.status === "active" ? "odoo-dot-live" : "odoo-dot-soon"}`} title={m.status === "active" ? "Live" : "Coming soon"} />
+                {m.status !== "active" && <span className="odoo-soon-pill">Soon</span>}
 
                 {/* Icon panel — top half of card */}
                 <div className="odoo-icon-panel" style={{ background: m.color }}>
@@ -307,7 +319,6 @@ const ModulesDashboard = () => {
         )}
       </main>
 
-      <StartMenu darkMode={false} />
     </div>
   );
 };

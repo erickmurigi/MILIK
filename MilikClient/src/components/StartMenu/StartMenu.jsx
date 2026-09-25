@@ -85,6 +85,7 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
   const presetLabel       = useTermPresetLabel();
   const saleModuleName    = useTerm("saleModule");
   const isHeader          = variant === "header";
+  const isCorner          = variant === "corner"; // the MENU button at the top left of a dark top bar (module dashboard)
 
   useEffect(() => {
     const onDown = (e) => {
@@ -218,16 +219,18 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
       ref={anchorRef}
       onClick={() => setOpen((v) => !v)}
       className={[
-        isHeader
+        isCorner
+          ? "group flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-white transition hover:bg-white/20 active:bg-white/25"
+          : isHeader
           ? "group flex h-full items-center gap-2 border-r border-white/10 px-3 text-white transition hover:bg-white/10 active:bg-white/20"
           : "group flex items-center gap-2 rounded-2xl border border-emerald-100 bg-white/85 px-4 py-2 shadow-lg backdrop-blur-xl transition hover:shadow-xl active:scale-[0.98]",
       ].join(" ")}
       aria-label="Open Menu"
     >
-      <span className={`flex items-center justify-center rounded-lg text-white ${isHeader ? "h-[22px] w-[22px] bg-white/15 text-[11px]" : "h-8 w-8 bg-gradient-to-br from-[#F97316] to-[#16A34A] text-sm shadow"}`}>
+      <span className={`flex items-center justify-center rounded-lg text-white ${isCorner ? "h-6 w-6 bg-[#FF8C00] text-[11px]" : isHeader ? "h-[22px] w-[22px] bg-white/15 text-[11px]" : "h-8 w-8 bg-gradient-to-br from-[#F97316] to-[#16A34A] text-sm shadow"}`}>
         <FaThLarge />
       </span>
-      <span className={`font-black tracking-widest ${isHeader ? "hidden text-[11px] sm:inline" : "text-[13px] text-slate-900"}`}>MENU</span>
+      <span className={`font-black tracking-widest ${isCorner ? "hidden text-[11px] sm:inline" : isHeader ? "hidden text-[11px] sm:inline" : "text-[13px] text-slate-900"}`}>MENU</span>
     </button>
   );
 
@@ -236,7 +239,9 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
     <div
       ref={menuRef}
       className={
-        isHeader
+        isCorner
+          ? "absolute left-0 top-full z-[130] mt-2 w-[min(96vw,780px)]"
+          : isHeader
           ? "absolute left-0 top-full z-[130] w-[min(96vw,780px)]"
           : "absolute bottom-[56px] left-1/2 z-[130] w-[min(96vw,780px)] -translate-x-1/2"
       }
@@ -398,7 +403,7 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
         </div>
 
         {/* Bottom pointer arrow (floating variant) */}
-        {!isHeader && (
+        {!isHeader && !isCorner && (
           <div className="absolute -bottom-2 left-1/2 h-4 w-4 -translate-x-1/2 rotate-45 border-b border-r border-slate-200 bg-white" />
         )}
       </div>
@@ -407,7 +412,9 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
 
   return (
     <>
-      <div className={isHeader
+      <div className={isCorner
+        ? "relative z-[120]"
+        : isHeader
         ? "relative z-[120] flex min-h-[34px] items-center border-r border-white/10"
         : "fixed bottom-4 left-1/2 z-[120] -translate-x-1/2 sm:bottom-12"
       }>
