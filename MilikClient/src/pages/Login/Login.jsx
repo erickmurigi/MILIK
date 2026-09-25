@@ -196,43 +196,26 @@ function Login() {
     <div className="min-h-screen bg-white lg:grid lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
 
       {/* ── Brand panel (large screens) ── */}
-      <aside className="relative hidden overflow-hidden bg-gradient-to-br from-[#0B3B2E] via-[#0A3127] to-[#06231b] text-white lg:flex lg:flex-col lg:justify-between lg:p-12 xl:p-16">
-        <div className="pointer-events-none absolute -right-24 -top-24 h-96 w-96 border-[36px] border-[#FF8C00]/10" />
-        <div className="pointer-events-none absolute -bottom-32 -left-20 h-[28rem] w-[28rem] border-[36px] border-white/5" />
+      <aside className="relative hidden items-center justify-center overflow-hidden bg-gradient-to-br from-[#0B3B2E] via-[#0A3127] to-[#06231b] lg:flex">
+        {/* The two overlapping squares of the Milik mark, large and faint, centred behind the logo */}
+        <svg aria-hidden="true" viewBox="0 0 400 400" className="pointer-events-none absolute inset-0 m-auto h-[92%] max-h-[820px] w-auto select-none" fill="none" strokeWidth="10">
+          <rect x="30" y="30" width="230" height="230" stroke="#FF8C00" strokeOpacity="0.22" />
+          <rect x="140" y="110" width="230" height="230" stroke="#ffffff" strokeOpacity="0.12" />
+        </svg>
 
-        <div className="relative">
-          <div className="inline-block rounded-xl bg-white px-6 py-4 shadow-xl">
-            <img src="/milik-logo-trim.png" alt="Milik System — One Platform. Every Business." className="h-14 w-auto xl:h-16" />
-          </div>
+        <div className="relative rounded-2xl bg-white px-9 py-6 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.55)]">
+          <img src="/milik-logo-trim.png" alt="Milik System — One Platform. Every Business." className="h-14 w-auto xl:h-[4.25rem]" />
         </div>
 
-        <div className="relative max-w-xl">
-          <p className="text-xs font-bold uppercase tracking-[0.28em] text-[#FF8C00]">Milik System</p>
-          <h1 className="mt-4 text-3xl font-extrabold leading-tight xl:text-4xl">
-            Every part of your business, in one place.
-          </h1>
-          <p className="mt-4 max-w-md text-base leading-relaxed text-emerald-100/80">
-            Properties, accounts, people, stock and sales share one set of books, so what you see is always the same everywhere.
-          </p>
-          <ul className="mt-8 grid max-w-md grid-cols-2 gap-x-6 gap-y-3 text-sm font-semibold text-emerald-50">
-            {['Property management', 'Accounts & ledger', 'Human resources', 'Inventory & POS', 'Property sales', 'Car wash'].map((label) => (
-              <li key={label} className="flex items-center gap-2.5">
-                <span className="h-2 w-2 shrink-0 bg-[#FF8C00]" />
-                {label}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <p className="relative text-xs text-emerald-100/60">© {new Date().getFullYear()} Milik System. All rights reserved.</p>
+        <p className="absolute bottom-6 left-0 right-0 text-center text-xs text-emerald-100/50">© {new Date().getFullYear()} Milik System</p>
       </aside>
 
       {/* ── Sign-in ── */}
-      <main className="flex min-h-screen flex-col justify-center bg-white px-6 py-10 sm:px-12 lg:min-h-0">
-        <div className="mx-auto w-full max-w-md">
+      <main className="flex min-h-screen flex-col items-center justify-center bg-[#f3f7f5] px-5 py-10 sm:px-10 lg:min-h-0">
+        <div className="w-full max-w-[26rem] rounded-2xl border border-slate-200/80 bg-white p-7 shadow-[0_20px_50px_-20px_rgba(11,59,46,0.25)] sm:p-9">
 
-          <div className="mb-8 lg:hidden">
-            <img src="/milik-logo-trim.png" alt="Milik System" className="mx-auto h-12 w-auto sm:h-14" />
+          <div className="mb-7 lg:hidden">
+            <img src="/milik-logo-trim.png" alt="Milik System" className="mx-auto h-11 w-auto sm:h-12" />
           </div>
 
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#FF8C00]">Existing user sign in</p>
@@ -326,13 +309,12 @@ function Login() {
             </button>
           </form>
 
-          <p className="mt-8 text-center text-sm font-medium text-slate-500">
+          <p className="mt-7 border-t border-slate-100 pt-5 text-center text-sm font-medium text-slate-500">
             New to Milik?{' '}
             <Link to="/" className="font-bold text-[#0B3B2E] transition-colors hover:text-[#FF8C00]">
               Explore the public overview
             </Link>
           </p>
-          <p className="mt-10 text-center text-xs text-slate-400 lg:hidden">© {new Date().getFullYear()} Milik System</p>
         </div>
       </main>
     </div>
