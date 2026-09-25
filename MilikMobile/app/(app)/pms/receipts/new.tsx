@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  ScrollView, ActivityIndicator, Alert,
+  ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,12 +10,15 @@ import { Colors } from '../../../../constants/colors';
 import api from '../../../../services/api';
 import { Dropdown, DropdownItem } from '../../../../components/ui/Dropdown';
 import { DateField } from '../../../../components/ui/DateField';
+import { useDebounced } from '../../../../hooks/usePagedList';
+import { apiError, cleanDecimal, fmtDate, fmtMoney, todayISO } from '../../../../utils/pmsFormat';
+import { INVOICE_CATEGORY_LABEL, rowsOf } from '../../../../utils/pmsBilling';
 
 type TenantOption = {
-  _id:      string;
-  name:     string;
-  unitId?:  string;
-  unitNum?: string;
+  _id:       string;
+  name:      string;
+  unitId?:   string;
+  unitNum?:  string;
   propName?: string;
 };
 
@@ -23,7 +26,6 @@ type OpenInvoice = {
   _id:           string;
   invoiceNumber: string;
   category:      string;
-  amount:        number;
   outstanding:   number;
   dueDate?:      string;
 };
@@ -34,41 +36,33 @@ type TenantBalance = {
   depositAmount:  number;
 };
 
+// `value` is what the server stores (RentPayment.paymentMethod enum).
 const PAYMENT_METHODS = [
-  { value: 'MPESA',         label: 'M-Pesa',        schema: 'mobile_money'  },
-  { value: 'CASH',          label: 'Cash',          schema: 'cash'          },
-  { value: 'BANK_TRANSFER', label: 'Bank Transfer', schema: 'bank_transfer' },
-  { value: 'CHEQUE',        label: 'Cheque',        schema: 'check'         },
-];
+  { value: 'mobile_money',  label: 'M-Pesa',        refLabel: 'M-Pesa transaction code', refHint: 'e.g. QJZ7HK3P2T' },
+  { value: 'cash',          label: 'Cash',          refLabel: 'Reference / slip no.',    refHint: 'Receipt book or slip number' },
+  { value: 'bank_transfer', label: 'Bank Transfer', refLabel: 'Bank reference',          refHint: 'EFT reference / slip no.' },
+  { value: 'check',         label: 'Cheque',        refLabel: 'Cheque number',           refHint: 'Cheque number' },
+  { value: 'credit_card',   label: 'Card',          refLabel: 'Card auth. reference',    refHint: 'Authorisation code' },
+] as const;
 
-const INVOICE_CAT_LABELS: Record<string, string> = {
-  RENT_CHARGE:    'Rent',
-  UTILITY_CHARGE: 'Utility',
-  DEPOSIT_CHARGE: 'Deposit',
-  PENALTY_CHARGE: 'Penalty',
-  DEBIT_NOTE:     'Debit Note',
-  TAKE_ON_DEBIT:  'Take-on',
-};
+// Same test the web uses to decide which asset accounts are cashbooks.
+const CASHBOOK_RE = /cash|bank|m-?pesa|mobile money|wallet|petty|till|collection/i;
+const isCashbookAccount = (a: Record<string, any>) =>
+  String(a?.type || '').toLowerCase() === 'asset' &&
+  !a.isHeader && a.isPosting !== false && !a.isControl &&
+  CASHBOOK_RE.test(`${a?.name || ''} ${a?.group || ''} ${a?.subGroup || ''}`);
 
-const pad2 = (n: number) => String(n).padStart(2, '0');
-const today = new Date();
-const todayStr = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
+const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
-const fmt = (n: number) =>
-  Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' });
-
-function parseTenant(t: Record<string, unknown>): TenantOption {
-  const unit = t.unit as Record<string, unknown> | undefined;
-  const prop = unit?.property as Record<string, unknown> | undefined;
+function parseTenant(t: Record<string, any>): TenantOption {
+  const unit = t.unit as Record<string, any> | undefined;
+  const prop = unit?.property as Record<string, any> | undefined;
   return {
     _id:      String(t._id ?? ''),
-    name:     String(t.name ?? ''),
-    unitId:   unit?._id as string | undefined,
-    unitNum:  unit?.unitNumber as string | undefined,
-    propName: (prop?.propertyName ?? prop?.name) as string | undefined,
+    name:     String(t.name ?? '') || 'Unnamed tenant',
+    unitId:   unit?._id ? String(unit._id) : undefined,
+    unitNum:  unit?.unitNumber,
+    propName: prop?.propertyName ?? prop?.name,
   };
 }
 
@@ -90,15 +84,17 @@ export default function NewReceiptScreen() {
   // Tenant selection
   const [selectedTenant,   setSelectedTenant]   = useState<TenantOption | null>(null);
   const [tenantSearch,     setTenantSearch]     = useState('');
+  const [includePast,      setIncludePast]      = useState(false);
   const [tenantResults,    setTenantResults]    = useState<TenantOption[]>([]);
   const [tenantSearching,  setTenantSearching]  = useState(false);
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedSearch = useDebounced(tenantSearch.trim(), 400);
 
   // Tenant data
   const [balance,        setBalance]        = useState<TenantBalance | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [openInvoices,   setOpenInvoices]   = useState<OpenInvoice[]>([]);
   const [invLoading,     setInvLoading]     = useState(false);
+  const [selectedInv,    setSelectedInv]    = useState<string[]>([]);
 
   // Cashbook
   const [cashbooks,        setCashbooks]        = useState<DropdownItem[]>([]);
@@ -108,21 +104,25 @@ export default function NewReceiptScreen() {
   const [cashbookOpen,     setCashbookOpen]     = useState(false);
 
   // Form
-  const [paymentMethod,    setPaymentMethod]    = useState('MPESA');
+  const [paymentMethod,    setPaymentMethod]    = useState<typeof PAYMENT_METHODS[number]['value']>('mobile_money');
   const [amount,           setAmount]           = useState('');
   const [refNumber,        setRefNumber]        = useState('');
-  const [paymentDate,      setPaymentDate]      = useState(todayStr);
+  const [paymentDate,      setPaymentDate]      = useState(todayISO());
   const [description,      setDescription]      = useState('');
   const [directToLandlord, setDirectToLandlord] = useState(false);
   const [submitting,       setSubmitting]       = useState(false);
+  const submittingRef = useRef(false);
+  const invoicePreselected = useRef(false);
+
+  const method = PAYMENT_METHODS.find(m => m.value === paymentMethod) ?? PAYMENT_METHODS[0];
 
   // Load properties
   useEffect(() => {
     setPropsLoading(true);
-    api.get('/properties', { params: { limit: 100 } })
+    api.get('/properties', { params: { limit: 200, status: 'active' } })
       .then(({ data }) =>
         setProperties(
-          (data.data ?? []).map((p: Record<string, unknown>) => ({
+          (Array.isArray(data?.data) ? data.data : []).map((p: Record<string, any>) => ({
             _id:      String(p._id ?? ''),
             label:    String((p.propertyName ?? p.name) ?? ''),
             sublabel: String(p.propertyCode ?? ''),
@@ -136,66 +136,62 @@ export default function NewReceiptScreen() {
   // Pre-fill from params on mount
   useEffect(() => {
     if (!prefilledTenantId) return;
-    setSelectedTenant({
-      _id:  prefilledTenantId,
-      name: prefilledTenantName ?? prefilledTenantId,
-    });
+    setSelectedTenant({ _id: prefilledTenantId, name: prefilledTenantName || 'Tenant' });
     api.get(`/tenants/${prefilledTenantId}`)
       .then(({ data }) => {
         const t = data?.data ?? data;
-        if (t?._id) setSelectedTenant(parseTenant(t as Record<string, unknown>));
+        if (t?._id) setSelectedTenant(parseTenant(t));
       })
       .catch(() => {});
   }, [prefilledTenantId, prefilledTenantName]);
 
-  // Load cashbooks once — accounts are type "asset"; filter by name for cashbook-like accounts
+  // Load cashbooks once (asset accounts that look like cashbooks — same rule as the web)
   useEffect(() => {
     setCashbooksLoading(true);
     api.get('/chart-of-accounts', { params: { type: 'asset' } })
       .then(({ data }) => {
-        const all: Record<string, unknown>[] = Array.isArray(data) ? data : [];
-        const cashbookRe = /cash|bank|m-?pesa|mobile|wallet|petty|till|collection/i;
-        const banks: DropdownItem[] = all
-          .filter(a => cashbookRe.test(`${a.name ?? ''} ${a.accountName ?? ''} ${a.group ?? ''} ${a.subGroup ?? ''}`))
-          .map(a => ({
-            _id:      String(a._id ?? ''),
-            label:    String(a.name ?? a.accountName ?? ''),
-            sublabel: String(a.code ?? ''),
-          }));
+        const all: Record<string, any>[] = Array.isArray(data) ? data : [];
+        const banks: DropdownItem[] = all.filter(isCashbookAccount).map(a => ({
+          _id:      String(a._id ?? ''),
+          label:    String(a.name ?? a.accountName ?? ''),
+          sublabel: String(a.code ?? ''),
+        }));
         setCashbooks(banks);
-        if (banks.length > 0) { setCashbookId(banks[0]._id); setCashbookLabel(banks[0].label); }
+        const preferred = banks.find(b => b.label === 'Main Cashbook') ?? banks[0];
+        if (preferred) { setCashbookId(preferred._id); setCashbookLabel(preferred.label); }
       })
       .catch(() => {})
       .finally(() => setCashbooksLoading(false));
   }, []);
 
-  // Debounced live tenant search (filtered by property when one is selected)
+  // Live tenant search (filtered by property when one is selected)
   useEffect(() => {
     if (selectedTenant) return;
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    if (tenantSearch.length < 2) { setTenantResults([]); return; }
-    searchTimer.current = setTimeout(() => {
-      setTenantSearching(true);
-      const params: Record<string, string | number> = { search: tenantSearch, limit: 20, status: 'active' };
-      if (selectedPropId) params.property = selectedPropId;
-      api.get('/tenants', { params })
-        .then(({ data }) => {
-          const list: Record<string, unknown>[] = Array.isArray(data?.data) ? data.data : [];
-          setTenantResults(list.map(parseTenant));
-        })
-        .catch(() => setTenantResults([]))
-        .finally(() => setTenantSearching(false));
-    }, 400);
-    return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
-  }, [tenantSearch, selectedTenant, selectedPropId]);
+    if (debouncedSearch.length < 2 && !selectedPropId) { setTenantResults([]); return; }
+    let cancelled = false;
+    setTenantSearching(true);
+    const params: Record<string, string | number> = { limit: 20 };
+    if (debouncedSearch) params.search = debouncedSearch;
+    if (!includePast) params.status = 'active';
+    if (selectedPropId) params.property = selectedPropId;
+    api.get('/tenants', { params })
+      .then(({ data }) => {
+        if (cancelled) return;
+        setTenantResults((Array.isArray(data?.data) ? data.data : []).map(parseTenant));
+      })
+      .catch(() => { if (!cancelled) setTenantResults([]); })
+      .finally(() => { if (!cancelled) setTenantSearching(false); });
+    return () => { cancelled = true; };
+  }, [debouncedSearch, selectedTenant, selectedPropId, includePast]);
 
-  // Load balance + open invoices when tenant selected
+  // Load balance + open invoices when a tenant is selected
   const loadTenantData = useCallback(async (tenantId: string) => {
     setBalanceLoading(true);
     setInvLoading(true);
     const [balRes, invRes] = await Promise.allSettled([
       api.get(`/tenants/balance/${tenantId}`),
-      api.get('/tenant-invoices', { params: { tenant: tenantId, status: 'unpaid', limit: 20 } }),
+      // No paginate/limit -> plain array, oldest first, with outstanding amounts computed by the server
+      api.get('/tenant-invoices', { params: { tenant: tenantId, includeSnapshots: 'true' } }),
     ]);
     if (balRes.status === 'fulfilled') {
       const b = balRes.value.data?.data ?? balRes.value.data;
@@ -204,24 +200,42 @@ export default function NewReceiptScreen() {
         totalPaid:      Number(b?.totalPaid ?? 0),
         depositAmount:  Number(b?.depositAmount ?? 0),
       });
+    } else {
+      setBalance(null);
     }
     setBalanceLoading(false);
     if (invRes.status === 'fulfilled') {
-      const invs: Record<string, unknown>[] = Array.isArray(invRes.value.data?.data)
-        ? invRes.value.data.data : [];
-      setOpenInvoices(invs.map(inv => ({
-        _id:           String(inv._id ?? ''),
-        invoiceNumber: String(inv.invoiceNumber ?? ''),
-        category:      String(inv.category ?? ''),
-        amount:        Number(inv.amount ?? 0),
-        outstanding:   Number(inv.outstanding ?? inv.balance ?? 0),
-        dueDate:       inv.dueDate ? String(inv.dueDate) : undefined,
-      })));
+      const open = rowsOf<Record<string, any>>(invRes.value.data)
+        .filter(inv => {
+          const st = String(inv.computedStatus || inv.status || '').toLowerCase();
+          return st !== 'cancelled' && st !== 'reversed' && Number(inv.outstanding ?? 0) > 0.009;
+        })
+        .map((inv): OpenInvoice => ({
+          _id:           String(inv._id ?? ''),
+          invoiceNumber: String(inv.invoiceNumber ?? ''),
+          category:      String(inv.category ?? ''),
+          outstanding:   round2(Number(inv.outstanding ?? 0)),
+          dueDate:       inv.dueDate ? String(inv.dueDate) : undefined,
+        }));
+      setOpenInvoices(open);
+
+      // Arrived from an invoice: pre-select it and suggest its outstanding amount
+      if (prefilledInvoiceId && !invoicePreselected.current) {
+        const target = open.find(o => o._id === prefilledInvoiceId);
+        if (target) {
+          invoicePreselected.current = true;
+          setSelectedInv([target._id]);
+          setAmount(prev => prev || String(target.outstanding));
+        }
+      }
+    } else {
+      setOpenInvoices([]);
     }
     setInvLoading(false);
-  }, []);
+  }, [prefilledInvoiceId]);
 
   useEffect(() => {
+    setSelectedInv([]);
     if (selectedTenant?._id) {
       loadTenantData(selectedTenant._id);
     } else {
@@ -240,73 +254,140 @@ export default function NewReceiptScreen() {
     setSelectedTenant(null);
     setBalance(null);
     setOpenInvoices([]);
+    setSelectedInv([]);
   };
 
+  const toggleInvoice = (id: string) =>
+    setSelectedInv(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+
+  // Allocation preview: with invoices ticked the amount is applied to them in list order (oldest first),
+  // otherwise the server settles the oldest open invoices first. Anything above that is kept as prepayment.
+  const preview = useMemo(() => {
+    const value = Number(amount);
+    const chosen = openInvoices.filter(i => selectedInv.includes(i._id));
+    const scope  = chosen.length ? chosen : openInvoices;
+    const scopeTotal = round2(scope.reduce((s, i) => s + i.outstanding, 0));
+    const valid  = Number.isFinite(value) && value > 0;
+    return {
+      chosen,
+      scopeTotal,
+      excess: valid ? round2(Math.max(0, value - scopeTotal)) : 0,
+    };
+  }, [amount, openInvoices, selectedInv]);
+
   const submit = async () => {
-    if (!selectedTenant)               { Alert.alert('Missing', 'Please select a tenant.'); return; }
-    if (!selectedTenant.unitId)        { Alert.alert('Missing', 'Tenant has no unit assigned.'); return; }
-    if (!amount || Number(amount) <= 0){ Alert.alert('Missing', 'Enter a valid amount.'); return; }
-    if (!refNumber.trim())             { Alert.alert('Missing', 'Reference number is required.'); return; }
-    if (!directToLandlord && !cashbookId) { Alert.alert('Missing', 'Select a cashbook.'); return; }
+    if (submittingRef.current) return;
+    const value = Number(amount);
 
-    setSubmitting(true);
-    try {
-      const schemaMethod = PAYMENT_METHODS.find(pm => pm.value === paymentMethod)?.schema ?? 'cash';
-      const body: Record<string, unknown> = {
-        tenant:               selectedTenant._id,
-        unit:                 selectedTenant.unitId,
-        amount:               Number(amount),
-        referenceNumber:      refNumber.trim(),
-        paymentMethod:        schemaMethod,
-        paymentDate:          new Date(paymentDate).toISOString(),
-        paidDirectToLandlord: directToLandlord,
-        description:          description.trim() || undefined,
-      };
-      if (!directToLandlord && cashbookId) body.cashbook = cashbookLabel;
+    if (!selectedTenant)                        { Alert.alert('Select a tenant', 'Choose the tenant who paid.'); return; }
+    if (!selectedTenant.unitId)                 { Alert.alert('No unit', 'This tenant has no unit assigned, so a receipt cannot be recorded.'); return; }
+    if (!Number.isFinite(value) || value <= 0)  { Alert.alert('Enter an amount', 'The amount must be greater than zero.'); return; }
+    if (!refNumber.trim())                      { Alert.alert('Reference required', `Enter the ${method.refLabel.toLowerCase()}.`); return; }
+    if (!paymentDate)                           { Alert.alert('Select a date', 'Choose the payment date.'); return; }
+    if (!directToLandlord && !cashbookId)       { Alert.alert('Select a cashbook', 'Choose the cashbook that received the money, or tick "Paid directly to landlord".'); return; }
 
-      await api.post('/rent-payments', body);
-      Alert.alert('Success', 'Receipt recorded successfully.', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      Alert.alert('Error', msg ?? 'Failed to record receipt.');
-    } finally { setSubmitting(false); }
+    const post = async () => {
+      submittingRef.current = true;
+      setSubmitting(true);
+      try {
+        const [y, m] = paymentDate.split('-');
+        const body: Record<string, unknown> = {
+          tenant:               selectedTenant._id,
+          unit:                 selectedTenant.unitId,
+          amount:               round2(value),
+          referenceNumber:      refNumber.trim(),
+          paymentMethod,
+          paymentDate,
+          bankingDate:          paymentDate,
+          dueDate:              `${y}-${m}-01`,
+          month:                Number(m),          // required by the receipt schema
+          year:                 Number(y),          // required by the receipt schema
+          ledgerType:           'receipts',
+          paidDirectToLandlord: directToLandlord,
+          cashbook:             directToLandlord ? '' : cashbookLabel,
+          description:          description.trim() || undefined,
+        };
+
+        // Invoices ticked -> manual allocation in list (oldest-first) order, capped at each outstanding.
+        if (preview.chosen.length) {
+          let remaining = round2(value);
+          const allocations: { invoiceId: string; appliedAmount: number }[] = [];
+          for (const inv of preview.chosen) {
+            if (remaining <= 0.009) break;
+            const applied = round2(Math.min(inv.outstanding, remaining));
+            allocations.push({ invoiceId: inv._id, appliedAmount: applied });
+            remaining = round2(remaining - applied);
+          }
+          body.allocations    = allocations;
+          body.allocationMode = 'manual';
+        }
+
+        const { data } = await api.post('/rent-payments', body);
+        const label = data?.receiptNumber || data?.referenceNumber || '';
+        const posted = data?.isConfirmed === true;
+        Alert.alert(
+          'Receipt recorded',
+          `${label ? `Receipt ${label} ` : 'Receipt '}was saved${posted ? ' and posted to the ledger.' : ' and is pending confirmation.'}`,
+          [
+            { text: 'Done', onPress: () => router.back() },
+            ...(data?._id ? [{ text: 'View receipt', onPress: () => router.replace(`/pms/receipts/${data._id}` as any) }] : []),
+          ],
+        );
+      } catch (err) {
+        Alert.alert('Could not record receipt', apiError(err, 'Failed to record receipt.'));
+      } finally {
+        submittingRef.current = false;
+        setSubmitting(false);
+      }
+    };
+
+    if (preview.excess > 0.009) {
+      Alert.alert(
+        'Amount is more than owed',
+        `KES ${fmtMoney(preview.excess)} is above the ${preview.chosen.length ? 'selected' : 'open'} invoices (KES ${fmtMoney(preview.scopeTotal)}). The excess will be kept as a rent prepayment on the tenant's account.`,
+        [{ text: 'Cancel', style: 'cancel' }, { text: 'Record anyway', onPress: post }],
+      );
+      return;
+    }
+    await post();
   };
 
   return (
     <>
       <Stack.Screen options={{ title: 'Record Payment' }} />
       <SafeAreaView style={styles.safe} edges={['bottom']}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           {/* Property filter */}
-          <Dropdown
-            label="PROPERTY"
-            placeholder="All properties"
-            selectedId={selectedPropId}
-            selectedLabel={selectedPropLabel}
-            items={properties}
-            onSelect={(item) => {
-              setSelectedPropId(item._id);
-              setSelectedPropLabel(item.label);
-              setTenantSearch('');
-              setTenantResults([]);
-              setPropOpen(false);
-            }}
-            onClear={() => {
-              setSelectedPropId('');
-              setSelectedPropLabel('');
-              setTenantSearch('');
-              setTenantResults([]);
-            }}
-            loading={propsLoading}
-            open={propOpen}
-            onToggle={() => setPropOpen(o => !o)}
-          />
+          {!prefilledTenantId && (
+            <Dropdown
+              label="PROPERTY"
+              placeholder="All properties"
+              selectedId={selectedPropId}
+              selectedLabel={selectedPropLabel}
+              items={properties}
+              onSelect={(item) => {
+                setSelectedPropId(item._id);
+                setSelectedPropLabel(item.label);
+                setTenantSearch('');
+                setTenantResults([]);
+                setPropOpen(false);
+              }}
+              onClear={() => {
+                setSelectedPropId('');
+                setSelectedPropLabel('');
+                setTenantSearch('');
+                setTenantResults([]);
+              }}
+              loading={propsLoading}
+              open={propOpen}
+              onToggle={() => setPropOpen(o => !o)}
+            />
+          )}
 
           {/* Tenant selection */}
           <View style={styles.field}>
@@ -337,7 +418,7 @@ export default function NewReceiptScreen() {
                   <Ionicons name="search-outline" size={17} color={Colors.textMuted} />
                   <TextInput
                     style={[styles.inputText, { flex: 1 }]}
-                    placeholder="Search tenant name…"
+                    placeholder="Search tenant name, phone or unit…"
                     placeholderTextColor={Colors.textMuted}
                     value={tenantSearch}
                     onChangeText={setTenantSearch}
@@ -345,6 +426,13 @@ export default function NewReceiptScreen() {
                   />
                   {tenantSearching && <ActivityIndicator size="small" color={Colors.primary} />}
                 </View>
+
+                <TouchableOpacity style={styles.inlineToggle} onPress={() => setIncludePast(v => !v)} activeOpacity={0.7}>
+                  <View style={[styles.toggleBoxSm, includePast && styles.toggleBoxActive]}>
+                    {includePast && <Ionicons name="checkmark" size={11} color={Colors.white} />}
+                  </View>
+                  <Text style={styles.inlineToggleText}>Include past tenants (balances stay collectible)</Text>
+                </TouchableOpacity>
 
                 {tenantResults.length > 0 && (
                   <View style={styles.searchResults}>
@@ -368,8 +456,10 @@ export default function NewReceiptScreen() {
                   </View>
                 )}
 
-                {tenantSearch.length >= 2 && !tenantSearching && tenantResults.length === 0 && (
-                  <Text style={styles.noResults}>No tenants found for "{tenantSearch}"</Text>
+                {(debouncedSearch.length >= 2 || selectedPropId) && !tenantSearching && tenantResults.length === 0 && (
+                  <Text style={styles.noResults}>
+                    {debouncedSearch ? `No tenants found for "${debouncedSearch}"` : 'No tenants found'}
+                  </Text>
                 )}
               </>
             )}
@@ -384,50 +474,64 @@ export default function NewReceiptScreen() {
               ) : balance ? (
                 <View style={styles.balanceRow}>
                   <View style={styles.balanceStat}>
-                    <Text style={styles.balanceStatLabel}>Outstanding</Text>
+                    <Text style={styles.balanceStatLabel}>{balance.currentBalance < -0.009 ? 'Credit' : 'Outstanding'}</Text>
                     <Text style={[styles.balanceStatValue, {
-                      color: balance.currentBalance > 0 ? Colors.danger : Colors.success,
+                      color: balance.currentBalance > 0.009 ? Colors.danger : Colors.success,
                     }]}>
-                      KES {fmt(balance.currentBalance)}
+                      KES {fmtMoney(Math.abs(balance.currentBalance))}
                     </Text>
                   </View>
                   <View style={styles.balanceDivider} />
                   <View style={styles.balanceStat}>
                     <Text style={styles.balanceStatLabel}>Total Paid</Text>
                     <Text style={[styles.balanceStatValue, { color: Colors.success }]}>
-                      KES {fmt(balance.totalPaid)}
+                      KES {fmtMoney(balance.totalPaid)}
                     </Text>
                   </View>
                 </View>
-              ) : null}
+              ) : (
+                <Text style={styles.noResults}>Balance unavailable</Text>
+              )}
             </View>
           )}
 
-          {/* Open invoices (when selected and available) */}
+          {/* Open invoices — tick to apply the payment to specific invoices */}
           {selectedTenant && (invLoading || openInvoices.length > 0) && (
             <View style={styles.invoicesCard}>
               <Text style={styles.cardTitle}>OPEN INVOICES</Text>
               {invLoading ? (
                 <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 8 }} />
               ) : (
-                openInvoices.map(inv => (
-                  <View
-                    key={inv._id}
-                    style={[
-                      styles.openInvRow,
-                      inv._id === prefilledInvoiceId && styles.openInvRowHighlighted,
-                    ]}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.openInvNum}>{inv.invoiceNumber}</Text>
-                      <Text style={styles.openInvCat}>
-                        {INVOICE_CAT_LABELS[inv.category] ?? inv.category}
-                        {inv.dueDate ? ` · Due ${fmtDate(inv.dueDate)}` : ''}
-                      </Text>
-                    </View>
-                    <Text style={styles.openInvAmt}>KES {fmt(inv.outstanding)}</Text>
-                  </View>
-                ))
+                <>
+                  {openInvoices.map(inv => {
+                    const on = selectedInv.includes(inv._id);
+                    return (
+                      <TouchableOpacity
+                        key={inv._id}
+                        style={[styles.openInvRow, on && styles.openInvRowHighlighted]}
+                        onPress={() => toggleInvoice(inv._id)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.toggleBoxSm, on && styles.toggleBoxActive, { marginRight: 10 }]}>
+                          {on && <Ionicons name="checkmark" size={11} color={Colors.white} />}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.openInvNum}>{inv.invoiceNumber || 'Invoice'}</Text>
+                          <Text style={styles.openInvCat}>
+                            {INVOICE_CATEGORY_LABEL[inv.category] ?? inv.category}
+                            {inv.dueDate ? ` · Due ${fmtDate(inv.dueDate)}` : ''}
+                          </Text>
+                        </View>
+                        <Text style={styles.openInvAmt}>KES {fmtMoney(inv.outstanding)}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                  <Text style={styles.helperText}>
+                    {selectedInv.length
+                      ? `Payment goes to the ${selectedInv.length} selected invoice${selectedInv.length > 1 ? 's' : ''}, oldest first.`
+                      : 'Nothing ticked: the payment settles the oldest open invoices first.'}
+                  </Text>
+                </>
               )}
             </View>
           )}
@@ -452,33 +556,49 @@ export default function NewReceiptScreen() {
 
           {/* Amount */}
           <View style={styles.field}>
-            <Text style={styles.label}>AMOUNT (KES) <Text style={{ color: Colors.danger }}>*</Text></Text>
+            <View style={styles.labelRow}>
+              <Text style={styles.label}>AMOUNT (KES) <Text style={{ color: Colors.danger }}>*</Text></Text>
+              {selectedTenant && preview.scopeTotal > 0.009 ? (
+                <TouchableOpacity onPress={() => setAmount(String(preview.scopeTotal))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.fillLink}>
+                    Use {preview.chosen.length ? 'selected' : 'total open'}: {fmtMoney(preview.scopeTotal)}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
             <View style={styles.inputBox}>
               <Text style={styles.prefix}>KES</Text>
               <TextInput
                 style={[styles.inputText, { flex: 1 }]}
-                keyboardType="numeric"
+                keyboardType="decimal-pad"
                 placeholder="0.00"
                 placeholderTextColor={Colors.textMuted}
                 value={amount}
-                onChangeText={setAmount}
+                onChangeText={t => setAmount(cleanDecimal(t))}
               />
             </View>
+            {preview.excess > 0.009 ? (
+              <Text style={styles.warnText}>
+                KES {fmtMoney(preview.excess)} is more than the {preview.chosen.length ? 'selected' : 'open'} invoices and will be kept as a rent prepayment.
+              </Text>
+            ) : null}
           </View>
 
           {/* Reference number */}
           <View style={styles.field}>
-            <Text style={styles.label}>REFERENCE NUMBER <Text style={{ color: Colors.danger }}>*</Text></Text>
+            <Text style={styles.label}>{method.refLabel.toUpperCase()} <Text style={{ color: Colors.danger }}>*</Text></Text>
             <View style={styles.inputBox}>
               <TextInput
                 style={[styles.inputText, { flex: 1 }]}
-                placeholder="M-Pesa code, bank ref, cheque no…"
+                placeholder={method.refHint}
                 placeholderTextColor={Colors.textMuted}
                 value={refNumber}
                 onChangeText={setRefNumber}
                 autoCapitalize="characters"
+                autoCorrect={false}
               />
             </View>
+            <Text style={styles.helperText}>Must be unique in your company; a duplicate is rejected.</Text>
           </View>
 
           {/* Payment date */}
@@ -538,6 +658,7 @@ export default function NewReceiptScreen() {
               : <Text style={styles.submitText}>Record Payment</Text>}
           </TouchableOpacity>
         </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </>
   );
@@ -549,6 +670,9 @@ const styles = StyleSheet.create({
 
   field: { gap: 6 },
   label: { fontSize: 10, fontWeight: '700', letterSpacing: 1, color: Colors.textMuted },
+  labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  fillLink: { fontSize: 11, fontWeight: '700', color: Colors.primary },
+  warnText: { fontSize: 12, color: Colors.warning, fontWeight: '600', lineHeight: 17 },
 
   tenantChip: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
@@ -558,6 +682,9 @@ const styles = StyleSheet.create({
   },
   tenantChipName: { fontSize: 14, fontWeight: '700', color: Colors.primary },
   tenantChipSub:  { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+
+  inlineToggle:     { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 },
+  inlineToggleText: { fontSize: 12, color: Colors.textSecondary },
 
   searchResults: {
     backgroundColor: Colors.white, borderRadius: 12,
@@ -585,7 +712,7 @@ const styles = StyleSheet.create({
 
   invoicesCard: {
     backgroundColor: Colors.white, borderRadius: 14,
-    borderWidth: 1, borderColor: Colors.border, padding: 16,
+    borderWidth: 1, borderColor: Colors.border, padding: 16, gap: 4,
   },
   openInvRow: {
     flexDirection: 'row', alignItems: 'center',
@@ -634,6 +761,11 @@ const styles = StyleSheet.create({
     width: 22, height: 22, borderRadius: 6,
     borderWidth: 2, borderColor: Colors.border,
     alignItems: 'center', justifyContent: 'center', marginTop: 1,
+  },
+  toggleBoxSm: {
+    width: 18, height: 18, borderRadius: 5,
+    borderWidth: 2, borderColor: Colors.border,
+    alignItems: 'center', justifyContent: 'center',
   },
   toggleBoxActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   toggleLabel:     { fontSize: 14, fontWeight: '600', color: Colors.text },

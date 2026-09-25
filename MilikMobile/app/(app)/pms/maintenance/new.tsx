@@ -1,6 +1,6 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TextInput,
+  View, Text, StyleSheet, ScrollView, TextInput, Switch,
   TouchableOpacity, ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,43 +9,48 @@ import { Stack, useRouter } from 'expo-router';
 import { Colors } from '../../../../constants/colors';
 import api from '../../../../services/api';
 import { Dropdown } from '../../../../components/ui/Dropdown';
+import { apiError } from '../../../../utils/pmsFormat';
 
 type DropItem = { _id: string; label: string; sublabel?: string };
+type UnitOption = DropItem & { tenantId?: string; tenantName?: string };
 
+// Priorities the server accepts: low | medium | high | emergency (Maintenance model enum).
 const PRIORITY_STYLES: Record<string, { backgroundColor: string; color: string; borderColor: string }> = {
-  low:    { backgroundColor: Colors.borderLight,  color: Colors.textMuted, borderColor: Colors.border },
-  medium: { backgroundColor: Colors.warningLight, color: Colors.warning,   borderColor: Colors.warning + '40' },
-  high:   { backgroundColor: Colors.dangerLight,  color: Colors.danger,    borderColor: Colors.danger + '40' },
-  urgent: { backgroundColor: '#FFF1F0',            color: '#CF1322',        borderColor: '#CF132240' },
+  low:       { backgroundColor: Colors.borderLight,  color: Colors.textMuted, borderColor: Colors.border },
+  medium:    { backgroundColor: Colors.warningLight, color: Colors.warning,   borderColor: Colors.warning + '40' },
+  high:      { backgroundColor: Colors.dangerLight,  color: Colors.danger,    borderColor: Colors.danger + '40' },
+  emergency: { backgroundColor: '#FFF1F0',            color: '#CF1322',        borderColor: '#CF132240' },
 };
 
 const PRIORITIES = [
-  { _id: 'low',    label: 'Low',    sublabel: 'No rush' },
-  { _id: 'medium', label: 'Medium', sublabel: 'Within a week' },
-  { _id: 'high',   label: 'High',   sublabel: 'Within 48 hours' },
-  { _id: 'urgent', label: 'Urgent', sublabel: 'Immediate attention' },
+  { _id: 'low',       label: 'Low',       sublabel: 'No rush' },
+  { _id: 'medium',    label: 'Medium',    sublabel: 'Within a week' },
+  { _id: 'high',      label: 'High',      sublabel: 'Within 48 hours' },
+  { _id: 'emergency', label: 'Emergency', sublabel: 'Immediate attention' },
 ];
 
 export default function NewMaintenanceScreen() {
   const router = useRouter();
 
   // Property dropdown
-  const [properties,       setProperties]       = useState<DropItem[]>([]);
-  const [selectedPropId,   setSelectedPropId]   = useState('');
-  const [selectedPropLabel,setSelectedPropLabel] = useState('');
-  const [propsLoading,     setPropsLoading]     = useState(false);
-  const [propOpen,         setPropOpen]         = useState(false);
+  const [properties,        setProperties]        = useState<DropItem[]>([]);
+  const [selectedPropId,    setSelectedPropId]    = useState('');
+  const [selectedPropLabel, setSelectedPropLabel] = useState('');
+  const [propsLoading,      setPropsLoading]      = useState(false);
+  const [propOpen,          setPropOpen]          = useState(false);
 
-  // Tenant dropdown
-  const [tenants,          setTenants]          = useState<DropItem[]>([]);
-  const [selectedTenantId, setSelectedTenantId] = useState('');
-  const [selectedTenantLabel, setSelectedTenantLabel] = useState('');
-  const [tenantsLoading,   setTenantsLoading]   = useState(false);
-  const [tenantOpen,       setTenantOpen]       = useState(false);
+  // Unit dropdown (the server requires a unit)
+  const [units,             setUnits]             = useState<UnitOption[]>([]);
+  const [selectedUnitId,    setSelectedUnitId]    = useState('');
+  const [selectedUnitLabel, setSelectedUnitLabel] = useState('');
+  const [selectedUnit,      setSelectedUnit]      = useState<UnitOption | null>(null);
+  const [unitsLoading,      setUnitsLoading]      = useState(false);
+  const [unitOpen,          setUnitOpen]          = useState(false);
+  const [linkTenant,        setLinkTenant]        = useState(true);
 
   // Priority dropdown
-  const [priorityOpen,     setPriorityOpen]     = useState(false);
-  const [selectedPriority, setSelectedPriority] = useState('medium');
+  const [priorityOpen,          setPriorityOpen]          = useState(false);
+  const [selectedPriority,      setSelectedPriority]      = useState('medium');
   const [selectedPriorityLabel, setSelectedPriorityLabel] = useState('Medium');
 
   // Form fields
@@ -53,54 +58,73 @@ export default function NewMaintenanceScreen() {
   const [description, setDescription] = useState('');
   const [assignedTo,  setAssignedTo]  = useState('');
   const [submitting,  setSubmitting]  = useState(false);
+  const submittingRef = useRef(false);
 
-  // Load properties on mount
+  // Load properties on mount (the server's default page size is 10, so ask for more)
   useEffect(() => {
     setPropsLoading(true);
-    api.get('/properties', { params: { limit: 100 } })
+    api.get('/properties', { params: { limit: 500 } })
       .then(({ data }) =>
-        setProperties((data.data ?? []).map((p: any) => ({ _id: p._id, label: p.propertyName })))
+        setProperties((data.data ?? []).map((p: any) => ({ _id: p._id, label: p.propertyName, sublabel: p.propertyCode })))
       )
-      .catch(() => {})
+      .catch((err) => Alert.alert('Could not load properties', apiError(err, 'Failed to load properties.')))
       .finally(() => setPropsLoading(false));
   }, []);
 
-  // Load tenants when property changes
-  const loadTenants = useCallback(async (propId?: string) => {
-    setTenantsLoading(true);
-    try {
-      const params: any = { limit: 100, status: 'active' };
-      if (propId) params.property = propId;
-      const { data } = await api.get('/tenants', { params });
-      setTenants((data.data ?? []).map((t: any) => ({
-        _id:      t._id,
-        label:    t.name,
-        sublabel: [t.unit?.unitNumber, t.unit?.property?.propertyName].filter(Boolean).join(' · '),
-      })));
-    } catch { setTenants([]); }
-    finally  { setTenantsLoading(false); }
-  }, []);
-
-  useEffect(() => { loadTenants(selectedPropId || undefined); }, [selectedPropId]);
+  // Load units whenever the property changes
+  useEffect(() => {
+    setUnits([]); setSelectedUnitId(''); setSelectedUnitLabel(''); setSelectedUnit(null);
+    if (!selectedPropId) return;
+    let cancelled = false;
+    setUnitsLoading(true);
+    api.get('/units', { params: { property: selectedPropId, limit: 1000 } })
+      .then(({ data }) => {
+        if (cancelled) return;
+        setUnits((data.data ?? []).map((u: any) => ({
+          _id:        u._id,
+          label:      `Unit ${u.unitNumber}`,
+          sublabel:   u.currentTenant?.name ?? 'Vacant',
+          tenantId:   u.currentTenant?._id,
+          tenantName: u.currentTenant?.name,
+        })));
+      })
+      .catch((err) => { if (!cancelled) Alert.alert('Could not load units', apiError(err, 'Failed to load units.')); })
+      .finally(() => { if (!cancelled) setUnitsLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedPropId]);
 
   const handleSubmit = async () => {
+    if (submittingRef.current) return;
+    if (!selectedUnitId) {
+      Alert.alert('Required', 'Please select the property and unit the request is for.');
+      return;
+    }
     if (!title.trim()) {
       Alert.alert('Required', 'Please enter a title for the maintenance request.');
       return;
     }
+    if (!description.trim()) {
+      Alert.alert('Required', 'Please describe the issue.');
+      return;
+    }
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       await api.post('/maintenances', {
+        unit:        selectedUnitId,
+        tenant:      linkTenant && selectedUnit?.tenantId ? selectedUnit.tenantId : undefined,
         title:       title.trim(),
         description: description.trim(),
         priority:    selectedPriority,
         assignedTo:  assignedTo.trim() || undefined,
-        tenant:      selectedTenantId  || undefined,
       });
       router.back();
-    } catch (err: any) {
-      Alert.alert('Error', err?.response?.data?.message ?? 'Failed to submit request.');
-    } finally { setSubmitting(false); }
+    } catch (err) {
+      Alert.alert('Error', apiError(err, 'Failed to submit request.'));
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -119,57 +143,75 @@ export default function NewMaintenanceScreen() {
             {/* Property */}
             <Dropdown
               label="Property"
-              placeholder="All properties"
+              placeholder="Select property"
               selectedId={selectedPropId}
               selectedLabel={selectedPropLabel}
               items={properties}
               loading={propsLoading}
               open={propOpen}
+              required
               onToggle={() => {
                 setPropOpen(v => !v);
-                setTenantOpen(false);
+                setUnitOpen(false);
                 setPriorityOpen(false);
               }}
               onSelect={(item) => {
                 setSelectedPropId(item._id);
                 setSelectedPropLabel(item.label);
-                setSelectedTenantId('');
-                setSelectedTenantLabel('');
                 setPropOpen(false);
               }}
               onClear={() => {
                 setSelectedPropId('');
                 setSelectedPropLabel('');
-                setSelectedTenantId('');
-                setSelectedTenantLabel('');
               }}
             />
 
-            {/* Tenant */}
+            {/* Unit */}
             <Dropdown
-              label="Tenant"
-              placeholder="Select tenant"
-              selectedId={selectedTenantId}
-              selectedLabel={selectedTenantLabel}
-              items={tenants}
-              loading={tenantsLoading}
-              open={tenantOpen}
+              label="Unit"
+              placeholder={selectedPropId ? 'Select unit' : 'Select a property first'}
+              selectedId={selectedUnitId}
+              selectedLabel={selectedUnitLabel}
+              items={units}
+              loading={unitsLoading}
+              open={unitOpen}
+              required
               onToggle={() => {
-                setTenantOpen(v => !v);
+                if (!selectedPropId) return;
+                setUnitOpen(v => !v);
                 setPropOpen(false);
                 setPriorityOpen(false);
               }}
               onSelect={(item) => {
-                setSelectedTenantId(item._id);
-                setSelectedTenantLabel(item.label);
-                setTenantOpen(false);
+                setSelectedUnitId(item._id);
+                setSelectedUnitLabel(item.label);
+                setSelectedUnit(item as UnitOption);
+                setLinkTenant(true);
+                setUnitOpen(false);
               }}
               onClear={() => {
-                setSelectedTenantId('');
-                setSelectedTenantLabel('');
+                setSelectedUnitId('');
+                setSelectedUnitLabel('');
+                setSelectedUnit(null);
               }}
-              emptyText={selectedPropId ? 'No tenants in this property' : 'No active tenants'}
+              emptyText="No units in this property"
             />
+
+            {/* Tenant — the unit's current occupant (optional link, as on the web form) */}
+            {selectedUnit?.tenantId ? (
+              <View style={styles.tenantRow}>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={styles.tenantLabel}>Link tenant</Text>
+                  <Text style={styles.tenantSub} numberOfLines={1}>{selectedUnit.tenantName}</Text>
+                </View>
+                <Switch
+                  value={linkTenant}
+                  onValueChange={setLinkTenant}
+                  trackColor={{ false: Colors.border, true: Colors.primary }}
+                  thumbColor={Colors.white}
+                />
+              </View>
+            ) : null}
 
             {/* Priority */}
             <Dropdown
@@ -182,7 +224,7 @@ export default function NewMaintenanceScreen() {
               onToggle={() => {
                 setPriorityOpen(v => !v);
                 setPropOpen(false);
-                setTenantOpen(false);
+                setUnitOpen(false);
               }}
               onSelect={(item) => {
                 setSelectedPriority(item._id);
@@ -211,13 +253,14 @@ export default function NewMaintenanceScreen() {
 
             {/* Description */}
             <View style={styles.fieldWrap}>
-              <Text style={styles.label}>Description <Text style={styles.optional}>(optional)</Text></Text>
+              <Text style={styles.label}>Description <Text style={styles.required}>*</Text></Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
-                placeholder="More details about the issue..."
+                placeholder="Describe the issue..."
                 placeholderTextColor={Colors.textMuted}
                 value={description}
                 onChangeText={setDescription}
+                maxLength={2000}
                 multiline
                 numberOfLines={4}
                 textAlignVertical="top"
@@ -238,14 +281,14 @@ export default function NewMaintenanceScreen() {
             </View>
 
             {/* Priority badge preview */}
-            {selectedPriority && (
+            {selectedPriority ? (
               <View style={[styles.priorityBadge, PRIORITY_STYLES[selectedPriority]]}>
                 <Ionicons name="alert-circle-outline" size={14} color={PRIORITY_STYLES[selectedPriority]?.color} />
                 <Text style={[styles.priorityText, { color: PRIORITY_STYLES[selectedPriority]?.color }]}>
                   {selectedPriorityLabel} priority request
                 </Text>
               </View>
-            )}
+            ) : null}
 
             {/* Submit */}
             <TouchableOpacity
@@ -285,6 +328,15 @@ const styles = StyleSheet.create({
     fontSize: 15, color: Colors.text,
   },
   textArea: { minHeight: 100, paddingTop: 13 },
+
+  tenantRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: Colors.white, borderRadius: 12,
+    borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  tenantLabel: { fontSize: 13, fontWeight: '700', color: Colors.textSecondary },
+  tenantSub:   { fontSize: 12, color: Colors.textMuted },
 
   priorityBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 8,

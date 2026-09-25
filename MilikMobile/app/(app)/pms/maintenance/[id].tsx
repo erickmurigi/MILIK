@@ -9,6 +9,8 @@ import { useLocalSearchParams, Stack } from 'expo-router';
 import { Colors } from '../../../../constants/colors';
 import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
+import { ErrorState } from '../../../../components/ui/PmsStates';
+import { apiError, fmtDate, fmtDateTime, fmtMoney } from '../../../../utils/pmsFormat';
 
 type Maintenance = {
   _id:            string;
@@ -23,8 +25,8 @@ type Maintenance = {
   completedDate?: string;
   createdAt:      string;
   updatedAt:      string;
-  tenant?: { name?: string; phone?: string; email?: string };
-  unit?:   { unitNumber?: string; property?: { propertyName?: string; name?: string; address?: string } };
+  tenant?: { name?: string; phone?: string; email?: string } | null;
+  unit?:   { unitNumber?: string; property?: { propertyName?: string; name?: string; address?: string } | null } | null;
 };
 
 const STATUSES = ['pending', 'in_progress', 'completed', 'cancelled'] as const;
@@ -43,11 +45,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   cancelled:   { bg: Colors.borderLight,  text: Colors.textMuted },
 };
 
-const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-
-const fmtCost = (n: number) =>
-  Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const STATUS_LABEL = (st: string) => st.replace(/_/g, ' ').replace(/\w/g, ch => ch.toUpperCase());
 
 export default function MaintenanceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -55,14 +53,18 @@ export default function MaintenanceDetailScreen() {
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [updating,   setUpdating]   = useState(false);
+  const [error,      setError]      = useState<string | null>(null);
 
-  const load = useCallback(async (isRefresh = false) => {
-    isRefresh ? setRefreshing(true) : setLoading(true);
+  const load = useCallback(async (mode: 'initial' | 'refresh' | 'silent' = 'initial') => {
+    if (mode === 'refresh') setRefreshing(true);
+    else if (mode === 'initial') setLoading(true);
     try {
       const { data } = await api.get(`/maintenances/${id}`);
-      setItem(data?.data ?? data);
-    } catch { /* fail silently */ }
-    finally { setLoading(false); setRefreshing(false); }
+      setItem((data?.data ?? data) as Maintenance);
+      setError(null);
+    } catch (err) {
+      setError(apiError(err, 'Could not load this request.'));
+    } finally { setLoading(false); setRefreshing(false); }
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
@@ -70,7 +72,9 @@ export default function MaintenanceDetailScreen() {
   const updateStatus = (newStatus: string) => {
     Alert.alert(
       'Update Status',
-      `Change status to "${newStatus.replace('_', ' ')}"?`,
+      newStatus === 'completed'
+        ? 'Mark this request as completed? The completion date will be set to today.'
+        : `Change status to "${STATUS_LABEL(newStatus)}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -79,10 +83,9 @@ export default function MaintenanceDetailScreen() {
             setUpdating(true);
             try {
               await api.put(`/maintenances/status/${id}`, { status: newStatus });
-              await load();
+              await load('silent');
             } catch (err: unknown) {
-              const e = err as { response?: { data?: { message?: string } } };
-              Alert.alert('Error', e?.response?.data?.message ?? 'Failed to update status.');
+              Alert.alert('Could not update', apiError(err, 'Failed to update status.'));
             } finally { setUpdating(false); }
           },
         },
@@ -103,10 +106,7 @@ export default function MaintenanceDetailScreen() {
     return (
       <SafeAreaView style={styles.safe} edges={['bottom']}>
         <Stack.Screen options={{ title: 'Maintenance Request' }} />
-        <View style={styles.centered}>
-          <Ionicons name="alert-circle-outline" size={48} color={Colors.border} />
-          <Text style={styles.emptyText}>Request not found</Text>
-        </View>
+        <ErrorState message={error ?? 'Request not found'} onRetry={() => load()} />
       </SafeAreaView>
     );
   }
@@ -118,82 +118,82 @@ export default function MaintenanceDetailScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: item.title.length > 30 ? item.title.slice(0, 28) + '…' : item.title }} />
+      <Stack.Screen options={{ title: (item.title ?? '').length > 30 ? item.title.slice(0, 28) + '…' : (item.title || 'Maintenance Request') }} />
       <SafeAreaView style={styles.safe} edges={['bottom']}>
         <ScrollView
           contentContainerStyle={styles.scroll}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={Colors.primary} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load('refresh')} tintColor={Colors.primary} />}
         >
           <View style={styles.heroCard}>
             <View style={styles.heroTop}>
               <View style={{ flex: 1, gap: 6 }}>
-                <Text style={styles.title}>{item.title}</Text>
+                <Text style={styles.title}>{item.title || 'Untitled request'}</Text>
                 <View style={styles.badgeRow}>
                   <View style={[styles.badge, { backgroundColor: sc.bg }]}>
                     <Text style={[styles.badgeText, { color: sc.text }]}>
-                      {item.status?.replace('_', ' ').toUpperCase()}
+                      {(item.status ?? '').replace(/_/g, ' ').toUpperCase()}
                     </Text>
                   </View>
                   <View style={[styles.badge, { backgroundColor: pc.bg }]}>
                     <Text style={[styles.badgeText, { color: pc.text }]}>
-                      {item.priority?.toUpperCase()} PRIORITY
+                      {(item.priority ?? 'medium').toUpperCase()} PRIORITY
                     </Text>
                   </View>
                 </View>
               </View>
             </View>
 
-            {(item.unit?.unitNumber || propName) && (
+            {item.unit?.unitNumber || propName ? (
               <View style={styles.infoRow}>
                 <Ionicons name="location-outline" size={16} color={Colors.textMuted} />
                 <Text style={styles.infoText}>
                   {[item.unit?.unitNumber && `Unit ${item.unit.unitNumber}`, propName].filter(Boolean).join(' · ')}
                 </Text>
               </View>
-            )}
+            ) : null}
 
-            {item.tenant?.name && (
+            {item.tenant?.name ? (
               <View style={styles.infoRow}>
                 <Ionicons name="person-outline" size={16} color={Colors.textMuted} />
                 <Text style={styles.infoText}>{item.tenant.name}</Text>
-                {item.tenant.phone && (
+                {item.tenant.phone ? (
                   <TouchableOpacity
                     style={styles.callBtn}
-                    onPress={() => Linking.openURL(`tel:${item.tenant?.phone}`)}
+                    onPress={() => Linking.openURL(`tel:${item.tenant?.phone}`).catch(() => Alert.alert('Cannot call', 'This device cannot place calls.'))}
                   >
                     <Ionicons name="call-outline" size={14} color={Colors.primary} />
                     <Text style={styles.callBtnText}>Call</Text>
                   </TouchableOpacity>
-                )}
+                ) : null}
               </View>
-            )}
+            ) : null}
 
-            {item.assignedTo && (
+            {item.assignedTo ? (
               <View style={styles.infoRow}>
                 <Ionicons name="hammer-outline" size={16} color={Colors.textMuted} />
                 <Text style={styles.infoText}>Assigned: {item.assignedTo}</Text>
               </View>
-            )}
+            ) : null}
 
-            {item.scheduledDate && (
+            {item.scheduledDate ? (
               <View style={styles.infoRow}>
                 <Ionicons name="calendar-outline" size={16} color={Colors.textMuted} />
                 <Text style={styles.infoText}>Scheduled: {fmtDate(item.scheduledDate)}</Text>
               </View>
-            )}
+            ) : null}
 
-            {item.completedDate && (
+            {item.completedDate ? (
               <View style={styles.infoRow}>
                 <Ionicons name="checkmark-done-outline" size={16} color={Colors.textMuted} />
                 <Text style={styles.infoText}>Completed: {fmtDate(item.completedDate)}</Text>
               </View>
-            )}
+            ) : null}
 
             <View style={styles.dateRow}>
-              <Text style={styles.dateMeta}>Opened {fmtDate(item.createdAt)}</Text>
-              {item.updatedAt !== item.createdAt && (
-                <Text style={styles.dateMeta}>Updated {fmtDate(item.updatedAt)}</Text>
-              )}
+              <Text style={styles.dateMeta}>Opened {fmtDateTime(item.createdAt)}</Text>
+              {item.updatedAt && item.updatedAt !== item.createdAt ? (
+                <Text style={styles.dateMeta}>Updated {fmtDateTime(item.updatedAt)}</Text>
+              ) : null}
             </View>
           </View>
 
@@ -211,13 +211,13 @@ export default function MaintenanceDetailScreen() {
                 {(item.estimatedCost ?? 0) > 0 && (
                   <View style={styles.costCell}>
                     <Text style={styles.costLabel}>Estimated</Text>
-                    <Text style={styles.costValue}>KES {fmtCost(item.estimatedCost ?? 0)}</Text>
+                    <Text style={styles.costValue}>KES {fmtMoney(item.estimatedCost ?? 0)}</Text>
                   </View>
                 )}
                 {(item.actualCost ?? 0) > 0 && (
                   <View style={[styles.costCell, (item.estimatedCost ?? 0) > 0 && styles.costCellBorder]}>
                     <Text style={styles.costLabel}>Actual</Text>
-                    <Text style={[styles.costValue, { color: Colors.primary }]}>KES {fmtCost(item.actualCost ?? 0)}</Text>
+                    <Text style={[styles.costValue, { color: Colors.primary }]}>KES {fmtMoney(item.actualCost ?? 0)}</Text>
                   </View>
                 )}
               </View>

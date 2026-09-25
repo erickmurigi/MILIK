@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { Colors } from '../../../../constants/colors';
 import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
+import ListErrorState from '../../../../components/ui/ListErrorState';
+import { usePagedList, useDebounced, Page } from '../../../../hooks/usePagedList';
 
 type Property = {
   _id:            string;
@@ -15,95 +18,97 @@ type Property = {
   propertyCode?:  string;
   address?:       string;
   townCityState?: string;
-  category?:      string;
+  propertyType?:  string;
   status?:        string;
-  landlord?:      { name?: string; surname?: string; otherNames?: string };
+  landlords?:     {
+    isPrimary?:  boolean;
+    name?:       string;
+    landlordId?: { landlordName?: string; firstName?: string; lastName?: string } | string | null;
+  }[];
   totalUnits?:    number;
   occupiedUnits?: number;
   vacantUnits?:   number;
 };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  active:   { bg: Colors.successLight, text: Colors.success },
-  inactive: { bg: Colors.borderLight,  text: Colors.textMuted },
+  active:      { bg: Colors.successLight, text: Colors.success },
+  maintenance: { bg: Colors.warningLight, text: Colors.warning },
+  closed:      { bg: Colors.dangerLight,  text: Colors.danger },
+  archived:    { bg: Colors.borderLight,  text: Colors.textMuted },
 };
+
+// The server only knows active | maintenance | closed | archived (lowercase).
+const STATUS_TABS = [
+  { key: 'active',      label: 'Active'      },
+  { key: 'maintenance', label: 'Maintenance' },
+  { key: 'closed',      label: 'Closed'      },
+  { key: 'archived',    label: 'Archived'    },
+  { key: '',            label: 'All'         },
+] as const;
+
+const LIMIT = 20;
 
 const pct = (occ = 0, total = 0) =>
   total > 0 ? Math.round((occ / total) * 100) : 0;
 
-const landlordName = (l?: Property['landlord']) => {
-  if (!l) return '';
-  return [l.surname, l.otherNames].filter(Boolean).join(' ') || l.name || '';
+// Properties can have several landlords; show the primary one (+ N more).
+const landlordName = (list?: Property['landlords']) => {
+  if (!list?.length) return '';
+  const primary = list.find(l => l.isPrimary) ?? list[0];
+  const ref = primary.landlordId && typeof primary.landlordId === 'object' ? primary.landlordId : null;
+  const name = primary.name || ref?.landlordName || [ref?.firstName, ref?.lastName].filter(Boolean).join(' ');
+  if (!name) return '';
+  return list.length > 1 ? `${name} +${list.length - 1} more` : name;
 };
 
 export default function PropertiesScreen() {
-  const [properties,   setProperties]   = useState<Property[]>([]);
-  const [loading,      setLoading]      = useState(true);
-  const [refreshing,   setRefreshing]   = useState(false);
-  const [loadingMore,  setLoadingMore]  = useState(false);
-  const [search,       setSearch]       = useState('');
-  const [page,         setPage]         = useState(1);
-  const [hasMore,      setHasMore]      = useState(true);
+  const router = useRouter();
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<string>('active');
+  const q = useDebounced(search.trim(), 400);
 
-  const LIMIT     = 20;
-  const searchRef = useRef(search);
-  searchRef.current = search;
+  const fetchPage = useCallback(async (page: number): Promise<Page<Property>> => {
+    const params: Record<string, string | number> = { page, limit: LIMIT };
+    if (q)      params.search = q;
+    if (status) params.status = status;
+    const { data } = await api.get('/properties', { params });
+    const items: Property[] = Array.isArray(data?.data) ? data.data : [];
+    return { items, hasMore: page < Number(data?.pagination?.pages ?? 0) };
+  }, [q, status]);
 
-  const load = useCallback(async (pg = 1, replace = true) => {
-    if (pg === 1) replace ? setLoading(true) : setRefreshing(true);
-    else setLoadingMore(true);
-
-    try {
-      const params: Record<string, string> = {
-        page: String(pg), limit: String(LIMIT),
-      };
-      if (searchRef.current.trim()) params.search = searchRef.current.trim();
-
-      const { data } = await api.get('/properties', { params });
-      const rows: Property[] = data.data ?? [];
-
-      setProperties(prev => pg === 1 ? rows : [...prev, ...rows]);
-      setHasMore(rows.length === LIMIT);
-      setPage(pg);
-    } catch {
-      if (pg === 1) setProperties([]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-      setLoadingMore(false);
-    }
-  }, []);
-
-  useEffect(() => { load(1); }, [load]);
-  useEffect(() => {
-    const t = setTimeout(() => load(1), 400);
-    return () => clearTimeout(t);
-  }, [search]);
+  const { items: properties, loading, refreshing, loadingMore, error, refresh, retry, loadMore } =
+    usePagedList<Property>(fetchPage, `${q}|${status}`);
 
   const renderItem = ({ item }: { item: Property }) => {
     const occ   = item.occupiedUnits ?? 0;
     const total = item.totalUnits    ?? 0;
-    const vac   = item.vacantUnits   ?? (total - occ);
+    const vac   = item.vacantUnits   ?? Math.max(0, total - occ);
     const p     = pct(occ, total);
     const sc    = STATUS_COLORS[item.status ?? 'active'] ?? STATUS_COLORS.active;
-    const owner = landlordName(item.landlord);
+    const owner = landlordName(item.landlords);
     const loc   = [item.address, item.townCityState].filter(Boolean).join(', ');
 
     return (
-      <View style={styles.card}>
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.8}
+        onPress={() => router.push({ pathname: '/pms/tenants' as any, params: { property: item._id, propertyName: item.propertyName } })}
+      >
         <View style={styles.cardHeader}>
           <View style={styles.iconWrap}>
             <Ionicons name="business" size={22} color={Colors.primary} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.propName} numberOfLines={1}>{item.propertyName}</Text>
-            {item.propertyCode ? (
-              <Text style={styles.propCode}>{item.propertyCode}</Text>
+            {item.propertyCode || item.propertyType ? (
+              <Text style={styles.propCode} numberOfLines={1}>
+                {[item.propertyCode, item.propertyType].filter(Boolean).join(' · ')}
+              </Text>
             ) : null}
           </View>
           <View style={[styles.badge, { backgroundColor: sc.bg }]}>
             <Text style={[styles.badgeText, { color: sc.text }]}>
-              {(item.status ?? 'ACTIVE').toUpperCase()}
+              {(item.status ?? 'active').toUpperCase()}
             </Text>
           </View>
         </View>
@@ -150,7 +155,7 @@ export default function PropertiesScreen() {
             </View>
           </>
         ) : null}
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -162,23 +167,42 @@ export default function PropertiesScreen() {
           <Ionicons name="search-outline" size={16} color={Colors.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search properties..."
+            placeholder="Search name, code or LR number..."
             placeholderTextColor={Colors.textMuted}
             value={search}
             onChangeText={setSearch}
             returnKeyType="search"
+            autoCorrect={false}
           />
           {search ? (
-            <TouchableOpacity onPress={() => setSearch('')}>
+            <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Ionicons name="close-circle" size={16} color={Colors.textMuted} />
             </TouchableOpacity>
-          ) : loading && !refreshing ? (
-            <ActivityIndicator size="small" color={Colors.primary} />
           ) : null}
         </View>
       </View>
 
-      {loading && !refreshing ? (
+      {/* Status filter */}
+      <View>
+        <FlatList
+          horizontal
+          data={STATUS_TABS}
+          keyExtractor={t => t.key || 'all'}
+          showsHorizontalScrollIndicator={false}
+          style={{ flexGrow: 0 }}
+          contentContainerStyle={styles.tabsRow}
+          renderItem={({ item: t }) => (
+            <TouchableOpacity
+              style={[styles.tab, status === t.key && styles.tabActive]}
+              onPress={() => setStatus(t.key)}
+            >
+              <Text style={[styles.tabText, status === t.key && styles.tabTextActive]}>{t.label}</Text>
+            </TouchableOpacity>
+          )}
+        />
+      </View>
+
+      {loading ? (
         <MilikLoader fullscreen />
       ) : (
         <FlatList
@@ -189,15 +213,19 @@ export default function PropertiesScreen() {
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
           keyboardShouldPersistTaps="handled"
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => load(1, false)} tintColor={Colors.primary} />
+            <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={Colors.primary} />
           }
-          onEndReached={() => { if (!loadingMore && hasMore) load(page + 1); }}
+          onEndReached={loadMore}
           onEndReachedThreshold={0.3}
           ListEmptyComponent={
-            <View style={styles.centered}>
-              <Ionicons name="business-outline" size={48} color={Colors.border} />
-              <Text style={styles.emptyText}>No properties found</Text>
-            </View>
+            error ? (
+              <ListErrorState message={error} onRetry={retry} />
+            ) : (
+              <View style={styles.centered}>
+                <Ionicons name="business-outline" size={48} color={Colors.border} />
+                <Text style={styles.emptyText}>No properties found</Text>
+              </View>
+            )
           }
           ListFooterComponent={
             loadingMore ? (
@@ -225,6 +253,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, height: 44,
   },
   searchInput: { flex: 1, fontSize: 14, color: Colors.text },
+
+  tabsRow: { paddingHorizontal: 16, paddingBottom: 8, gap: 7 },
+  tab: {
+    paddingHorizontal: 13, paddingVertical: 6, borderRadius: 20,
+    backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border,
+  },
+  tabActive:     { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  tabText:       { fontSize: 12, fontWeight: '600', color: Colors.textSecondary },
+  tabTextActive: { color: Colors.white },
 
   list: { paddingHorizontal: 16, paddingBottom: 40, paddingTop: 4 },
 

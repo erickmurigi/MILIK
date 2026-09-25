@@ -1,109 +1,95 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput, FlatList,
   TouchableOpacity, ActivityIndicator, RefreshControl, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { Colors } from '../../../../constants/colors';
 import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
+import ListErrorState from '../../../../components/ui/ListErrorState';
+import { usePagedList, useDebounced, Page } from '../../../../hooks/usePagedList';
+import { fmtMoney } from '../../../../utils/pmsFormat';
 
 type Tenant = {
   _id:         string;
-  name:        string;
+  name?:       string;
   phone?:      string;
   tenantCode?: string;
   status?:     string;
   balance?:    number;
-  unit?:       { unitNumber?: string; property?: { propertyName?: string } };
+  unit?:       { unitNumber?: string; property?: { propertyName?: string } } | null;
 };
 
 type Property = { _id: string; propertyName: string };
 
+// Server tenant status is computed: active | inactive | evicted | terminated.
 const STATUS_COLOR: Record<string, string> = {
   active:     Colors.success,
-  overdue:    Colors.danger,
+  inactive:   Colors.warning,
+  evicted:    Colors.danger,
   terminated: Colors.textMuted,
-  moved_out:  Colors.textMuted,
 };
 
+// "with_balance" = active tenants with an outstanding (positive) balance. The server has no
+// "overdue" tenant status; it filters by balance instead (hasBalance=true).
 const FILTER_TABS = [
-  { key: 'all',        label: 'All'     },
-  { key: 'active',     label: 'Active'  },
-  { key: 'overdue',    label: 'Overdue' },
-  { key: 'terminated', label: 'Past'    },
+  { key: 'all',          label: 'All'          },
+  { key: 'active',       label: 'Active'       },
+  { key: 'with_balance', label: 'With Balance' },
+  { key: 'terminated',   label: 'Past'         },
 ] as const;
 type FilterKey = typeof FILTER_TABS[number]['key'];
 
+const LIMIT = 30;
+
 export default function TenantSearchScreen() {
   const router = useRouter();
+  const { property: propertyParam, propertyName: propertyNameParam } =
+    useLocalSearchParams<{ property?: string; propertyName?: string }>();
 
   const [query,          setQuery]          = useState('');
-  const [results,        setResults]        = useState<Tenant[]>([]);
-  const [loading,        setLoading]        = useState(true);
-  const [refreshing,     setRefreshing]     = useState(false);
-  const [loadingMore,    setLoadingMore]    = useState(false);
-  const [page,           setPage]           = useState(1);
-  const [hasMore,        setHasMore]        = useState(true);
-  const [statusFilter,   setStatusFilter]   = useState<FilterKey>('active');
-  const [propertyFilter, setPropertyFilter] = useState('');
+  const [statusFilter,   setStatusFilter]   = useState<FilterKey>(propertyParam ? 'all' : 'active');
+  const [propertyFilter, setPropertyFilter] = useState(propertyParam ?? '');
   const [properties,     setProperties]     = useState<Property[]>([]);
-
-  const LIMIT    = 30;
-  const queryRef = useRef(query);
-  queryRef.current = query;
+  const q = useDebounced(query.trim(), 400);
 
   // Load properties once for the filter chips
   useEffect(() => {
     api.get('/properties', { params: { limit: 200, status: 'active' } })
-      .then(({ data }) => setProperties(data.data ?? []))
+      .then(({ data }) => setProperties(Array.isArray(data?.data) ? data.data : []))
       .catch(() => {});
   }, []);
 
-  const load = useCallback(async (pg = 1, isRefresh = false) => {
-    if (pg === 1) isRefresh ? setRefreshing(true) : setLoading(true);
-    else setLoadingMore(true);
+  const fetchPage = useCallback(async (page: number): Promise<Page<Tenant>> => {
+    const params: Record<string, string | number> = { page, limit: LIMIT };
+    if (q) params.search = q;
+    if (statusFilter === 'active' || statusFilter === 'terminated') params.status = statusFilter;
+    if (statusFilter === 'with_balance') { params.status = 'active'; params.hasBalance = 'true'; }
+    if (propertyFilter) params.property = propertyFilter;
 
-    try {
-      const params: Record<string, string> = {
-        page: String(pg), limit: String(LIMIT),
-      };
-      if (queryRef.current.trim()) params.search   = queryRef.current.trim();
-      if (statusFilter !== 'all')  params.status   = statusFilter;
-      if (propertyFilter)          params.property = propertyFilter;
+    const { data } = await api.get('/tenants', { params });
+    const items: Tenant[] = Array.isArray(data?.data) ? data.data : [];
+    return { items, hasMore: page < Number(data?.pages ?? 0) };
+  }, [q, statusFilter, propertyFilter]);
 
-      const { data } = await api.get('/tenants', { params });
-      const rows: Tenant[] = data.data ?? [];
+  const { items: results, loading, refreshing, loadingMore, error, refresh, retry, loadMore } =
+    usePagedList<Tenant>(fetchPage, `${q}|${statusFilter}|${propertyFilter}`);
 
-      setResults(prev => pg === 1 ? rows : [...prev, ...rows]);
-      setHasMore(rows.length === LIMIT);
-      setPage(pg);
-    } catch {
-      if (pg === 1) setResults([]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-      setLoadingMore(false);
-    }
-  }, [statusFilter, propertyFilter]);
-
-  useEffect(() => { load(1); }, [load]);
-
-  // Debounce search
-  useEffect(() => {
-    const t = setTimeout(() => load(1), 400);
-    return () => clearTimeout(t);
-  }, [query]);
-
-  const selectedProperty = properties.find(p => p._id === propertyFilter);
+  const selectedPropertyName =
+    properties.find(p => p._id === propertyFilter)?.propertyName ||
+    (propertyFilter && propertyFilter === propertyParam ? propertyNameParam : '');
 
   const renderItem = ({ item }: { item: Tenant }) => {
     const unit        = item.unit?.unitNumber || '—';
     const property    = item.unit?.property?.propertyName || '';
     const bal         = Number(item.balance || 0);
+    const owes        = bal > 0.009;
+    const credit      = bal < -0.009;
     const statusColor = STATUS_COLOR[item.status || ''] || Colors.textMuted;
+    const name        = item.name || 'Unnamed tenant';
 
     return (
       <TouchableOpacity
@@ -111,17 +97,17 @@ export default function TenantSearchScreen() {
         onPress={() => router.push(`/pms/tenants/${item._id}` as any)}
         activeOpacity={0.75}
       >
-        <View style={[styles.avatar, { backgroundColor: bal > 0 ? Colors.dangerLight : Colors.primaryFaded }]}>
-          <Text style={[styles.avatarText, { color: bal > 0 ? Colors.danger : Colors.primary }]}>
-            {item.name?.charAt(0)?.toUpperCase() || 'T'}
+        <View style={[styles.avatar, { backgroundColor: owes ? Colors.dangerLight : Colors.primaryFaded }]}>
+          <Text style={[styles.avatarText, { color: owes ? Colors.danger : Colors.primary }]}>
+            {name.charAt(0).toUpperCase()}
           </Text>
         </View>
 
         <View style={styles.cardBody}>
           <View style={styles.cardTop}>
-            <Text style={styles.tenantName} numberOfLines={1}>{item.name}</Text>
-            <Text style={[styles.balance, { color: bal > 0 ? Colors.danger : Colors.success }]}>
-              {bal > 0 ? `KES ${bal.toLocaleString()}` : 'Settled'}
+            <Text style={styles.tenantName} numberOfLines={1}>{name}</Text>
+            <Text style={[styles.balance, { color: owes ? Colors.danger : Colors.success }]}>
+              {owes ? `KES ${fmtMoney(bal)}` : credit ? `CR ${fmtMoney(-bal)}` : 'Settled'}
             </Text>
           </View>
           <View style={styles.cardMeta}>
@@ -148,17 +134,15 @@ export default function TenantSearchScreen() {
           <Ionicons name="search-outline" size={18} color={Colors.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Name, phone, unit or ID..."
+            placeholder="Name, phone, email, code or ID no..."
             placeholderTextColor={Colors.textMuted}
             value={query}
             onChangeText={setQuery}
             returnKeyType="search"
-            clearButtonMode="while-editing"
+            autoCorrect={false}
           />
-          {loading && !refreshing ? (
-            <ActivityIndicator size="small" color={Colors.primary} />
-          ) : query ? (
-            <TouchableOpacity onPress={() => setQuery('')}>
+          {query ? (
+            <TouchableOpacity onPress={() => setQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
             </TouchableOpacity>
           ) : null}
@@ -186,6 +170,7 @@ export default function TenantSearchScreen() {
             showsHorizontalScrollIndicator={false}
             style={styles.propChipsScroll}
             contentContainerStyle={styles.propChips}
+            keyboardShouldPersistTaps="handled"
           >
             <TouchableOpacity
               style={[styles.propChip, !propertyFilter && styles.propChipActive]}
@@ -216,17 +201,17 @@ export default function TenantSearchScreen() {
         )}
 
         {/* Active property label */}
-        {selectedProperty ? (
+        {propertyFilter && selectedPropertyName ? (
           <View style={styles.activePropBar}>
             <Ionicons name="business" size={13} color={Colors.primary} />
-            <Text style={styles.activePropText} numberOfLines={1}>{selectedProperty.propertyName}</Text>
+            <Text style={styles.activePropText} numberOfLines={1}>{selectedPropertyName}</Text>
             <TouchableOpacity onPress={() => setPropertyFilter('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Ionicons name="close-circle" size={15} color={Colors.textMuted} />
             </TouchableOpacity>
           </View>
         ) : null}
 
-        {loading && !refreshing ? (
+        {loading ? (
           <MilikLoader fullscreen />
         ) : (
           <FlatList
@@ -237,15 +222,19 @@ export default function TenantSearchScreen() {
             keyboardShouldPersistTaps="handled"
             ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
             refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={() => load(1, true)} tintColor={Colors.primary} />
+              <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={Colors.primary} />
             }
-            onEndReached={() => { if (!loadingMore && hasMore) load(page + 1); }}
+            onEndReached={loadMore}
             onEndReachedThreshold={0.3}
             ListEmptyComponent={
-              <View style={styles.centered}>
-                <Ionicons name="people-outline" size={48} color={Colors.border} />
-                <Text style={styles.emptyText}>No tenants found</Text>
-              </View>
+              error ? (
+                <ListErrorState message={error} onRetry={retry} />
+              ) : (
+                <View style={styles.centered}>
+                  <Ionicons name="people-outline" size={48} color={Colors.border} />
+                  <Text style={styles.emptyText}>No tenants found</Text>
+                </View>
+              )
             }
             ListFooterComponent={
               loadingMore ? (
@@ -263,7 +252,7 @@ export default function TenantSearchScreen() {
 
 const styles = StyleSheet.create({
   safe:      { flex: 1, backgroundColor: Colors.background },
-  centered:  { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  centered:  { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingTop: 60 },
   emptyText: { fontSize: 15, color: Colors.textMuted },
 
   searchWrap: {

@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { Colors } from '../../../constants/colors';
 import api from '../../../services/api';
+import { ErrorBanner, ErrorState } from '../../../components/ui/PmsStates';
+import { apiError, fmtDate as fmtAbsDate } from '../../../utils/pmsFormat';
 
 type Notification = {
   _id:         string;
@@ -17,10 +20,18 @@ type Notification = {
   priority:    string;
   createdAt:   string;
   relatedType: string;
+  relatedId?:  string;
 };
 
 // Map notification type to icon + color
 const TYPE_META: Record<string, { icon: string; color: string }> = {
+  // Types the server's Notification model actually allows
+  payment_due:          { icon: 'receipt-outline',         color: Colors.danger  },
+  maintenance_request:  { icon: 'construct-outline',       color: Colors.warning },
+  tenant_move_in:       { icon: 'log-in-outline',          color: Colors.success },
+  tenant_move_out:      { icon: 'log-out-outline',         color: Colors.textMuted },
+  system:               { icon: 'information-circle-outline', color: Colors.primary },
+  // Legacy keys kept for older records
   overdue_invoice:      { icon: 'receipt-outline',        color: Colors.danger  },
   pending_maintenance:  { icon: 'construct-outline',       color: Colors.warning },
   lease_expiry:         { icon: 'document-text-outline',   color: Colors.warning },
@@ -46,10 +57,11 @@ const fmtDate = (d: string) => {
   if (mins < 60)  return `${mins}m ago`;
   if (hours < 24) return `${hours}h ago`;
   if (days < 7)   return `${days}d ago`;
-  return new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short' });
+  return fmtAbsDate(d);
 };
 
 export default function NotificationsScreen() {
+  const router = useRouter();
   const [items,       setItems]       = useState<Notification[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [refreshing,  setRefreshing]  = useState(false);
@@ -57,11 +69,16 @@ export default function NotificationsScreen() {
   const [page,        setPage]        = useState(1);
   const [hasMore,     setHasMore]     = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [unreadTotal, setUnreadTotal] = useState(0);
+  const [error,       setError]       = useState<string | null>(null);
+  const reqRef = useRef(0);
 
   const LIMIT = 50;
 
-  const load = useCallback(async (pg = 1, replace = true) => {
-    if (pg === 1) replace ? setLoading(true) : setRefreshing(true);
+  const load = useCallback(async (pg = 1, mode: 'initial' | 'refresh' | 'more' = 'initial') => {
+    const id = ++reqRef.current;
+    if (mode === 'initial') setLoading(true);
+    else if (mode === 'refresh') setRefreshing(true);
     else setLoadingMore(true);
 
     try {
@@ -69,37 +86,67 @@ export default function NotificationsScreen() {
       if (showUnread) params.isRead = 'false';
 
       const { data } = await api.get('/notifications', { params });
+      if (id !== reqRef.current) return;
       const rows: Notification[] = data.notifications ?? [];
+      const pages: number | undefined = data.pagination?.pages;
 
-      setItems(prev => replace || pg === 1 ? rows : [...prev, ...rows]);
-      setHasMore(rows.length === LIMIT);
+      setItems(prev => {
+        if (pg === 1) return rows;
+        const seen = new Set(prev.map(n => n._id));
+        return [...prev, ...rows.filter(n => !seen.has(n._id))];
+      });
+      setHasMore(pages ? pg < pages : rows.length === LIMIT);
       setPage(pg);
-    } catch { /* fail silently */ }
-    finally {
-      setLoading(false);
-      setRefreshing(false);
-      setLoadingMore(false);
+      setError(null);
+      if (showUnread) setUnreadTotal(Number(data.pagination?.total ?? rows.length));
+    } catch (err) {
+      if (id !== reqRef.current) return;
+      setError(apiError(err, 'Could not load notifications.'));
+    } finally {
+      if (id === reqRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+        setLoadingMore(false);
+      }
     }
   }, [showUnread]);
 
+  // Server-side unread total (independent of how many pages are loaded)
+  const loadUnreadTotal = useCallback(() => {
+    api.get('/notifications', { params: { isRead: 'false', limit: '1' } })
+      .then(({ data }) => setUnreadTotal(Number(data?.pagination?.total ?? 0)))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => { load(1); }, [load]);
+  useEffect(() => { loadUnreadTotal(); }, [loadUnreadTotal]);
 
   const markRead = async (item: Notification) => {
-    if (item.isRead) return;
-    try {
-      await api.put(`/notifications/read/${item._id}`);
-      setItems(prev => prev.map(n => n._id === item._id ? { ...n, isRead: true } : n));
-    } catch { /* fail silently */ }
+    if (!item.isRead) {
+      try {
+        await api.put(`/notifications/read/${item._id}`);
+        setItems(prev => prev.map(n => n._id === item._id ? { ...n, isRead: true } : n));
+        setUnreadTotal(t => Math.max(0, t - 1));
+      } catch { /* fail silently */ }
+    }
+    // Jump straight to the maintenance request when the notification points at one.
+    if (item.type === 'maintenance_request' && item.relatedId) {
+      router.push(`/pms/maintenance/${item.relatedId}` as any);
+    }
   };
 
   const markAllRead = async () => {
     try {
       await api.put('/notifications/read-all');
-      setItems(prev => prev.map(n => ({ ...n, isRead: true })));
-    } catch { /* fail silently */ }
+      setUnreadTotal(0);
+      // In the "Unread" view everything just left the filter.
+      setItems(prev => showUnread ? [] : prev.map(n => ({ ...n, isRead: true })));
+    } catch (err) {
+      setError(apiError(err, 'Could not mark notifications as read.'));
+    }
   };
 
-  const unreadCount = items.filter(n => !n.isRead).length;
+  const unreadCount = unreadTotal;
 
   const renderItem = ({ item }: { item: Notification }) => {
     const meta = TYPE_META[item.type] ?? TYPE_META.default;
@@ -167,6 +214,8 @@ export default function NotificationsScreen() {
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
+      ) : error && items.length === 0 ? (
+        <ErrorState message={error} onRetry={() => load(1)} />
       ) : (
         <FlatList
           data={items}
@@ -174,9 +223,10 @@ export default function NotificationsScreen() {
           renderItem={renderItem}
           contentContainerStyle={styles.list}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => load(1)} tintColor={Colors.primary} />
+            <RefreshControl refreshing={refreshing} onRefresh={() => { load(1, 'refresh'); loadUnreadTotal(); }} tintColor={Colors.primary} />
           }
-          onEndReached={() => { if (!loadingMore && hasMore) load(page + 1, false); }}
+          onEndReached={() => { if (!loadingMore && hasMore) load(page + 1, 'more'); }}
+          ListHeaderComponent={error ? <ErrorBanner message={error} onRetry={() => load(1, 'refresh')} /> : null}
           onEndReachedThreshold={0.3}
           ListEmptyComponent={
             <View style={styles.empty}>

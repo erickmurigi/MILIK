@@ -1,14 +1,15 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
   TouchableOpacity, StatusBar, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../redux/store';
 import { Colors } from '../../../constants/colors';
+import api from '../../../services/api';
 
 type Module = {
   key:      string;
@@ -81,6 +82,18 @@ const ALL_MODULES: Module[] = [
 export default function ModulesHomeScreen() {
   const router  = useRouter();
   const { user, company } = useSelector((s: RootState) => s.auth);
+  const [unread, setUnread] = useState(0);
+
+  // Real unread count for the bell (the dot used to be always on).
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      api.get('/notifications', { params: { isRead: 'false', limit: 1 } })
+        .then(({ data }) => { if (active) setUnread(Number(data?.pagination?.total ?? 0)); })
+        .catch(() => {});
+      return () => { active = false; };
+    }, []),
+  );
 
   const logoUrl = company?.logo
     ? company.logo.startsWith('http') ? company.logo : `https://milikproperty.com${company.logo}`
@@ -127,7 +140,7 @@ export default function ModulesHomeScreen() {
             )}
             <TouchableOpacity style={styles.notifBtn} onPress={() => router.push('/notifications' as any)}>
               <Ionicons name="notifications-outline" size={22} color={Colors.text} />
-              <View style={styles.notifDot} />
+              {unread > 0 ? <View style={styles.notifDot} /> : null}
             </TouchableOpacity>
           </View>
         </View>

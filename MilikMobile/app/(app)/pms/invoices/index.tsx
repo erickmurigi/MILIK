@@ -1,40 +1,46 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../../../../constants/colors';
 import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
+import ListErrorState from '../../../../components/ui/ListErrorState';
+import { usePagedList, useDebounced, Page } from '../../../../hooks/usePagedList';
+import { fmtMoney, fmtDate } from '../../../../utils/pmsFormat';
+import {
+  Period, periodRange, invoiceStatusOf,
+  INVOICE_STATUS_LABEL, INVOICE_CATEGORY_LABEL, rowsOf,
+} from '../../../../utils/pmsBilling';
 
 type Invoice = {
-  _id:           string;
-  invoiceNumber: string;
-  invoiceDate:   string;
-  category:      string;
-  amount:        number;
-  outstanding:   number;
-  status:        string;
-  description?:  string;
-  tenant?:       { name?: string };
-  unit?:         { unitNumber?: string };
-  property?:     { propertyName?: string; name?: string };
+  _id:             string;
+  invoiceNumber?:  string;
+  invoiceDate?:    string;
+  bookingDate?:    string;
+  dueDate?:        string;
+  createdAt?:      string;
+  category?:       string;
+  amount:          number;
+  adjustedAmount?: number;
+  appliedAmount?:  number;
+  outstanding?:    number;
+  status?:         string;
+  computedStatus?: string;
+  ledgerMode?:     string;
+  description?:    string;
+  tenant?:         { _id?: string; name?: string } | string | null;
+  unit?:           { unitNumber?: string } | null;
+  property?:       { propertyName?: string; name?: string } | null;
 };
 
-type StatusFilter = 'all' | 'pending' | 'partially_paid' | 'paid' | 'reversed';
-type Period       = '1M'  | '3M'  | '6M'  | '1Y'  | 'All';
-
-const CATEGORY_LABELS: Record<string, string> = {
-  RENT_CHARGE:         'Rent',
-  UTILITY_CHARGE:      'Utility',
-  DEPOSIT_CHARGE:      'Deposit',
-  LATE_PENALTY_CHARGE: 'Penalty',
-  DEBIT_NOTE:          'Debit Note',
-  TAKE_ON_DEBIT:       'Take-on',
-};
+// Server filters: ACTIVE = everything not cancelled/reversed, Issued = pending + partially_paid,
+// paid / reversed = stored status. (Status values are lowercase on the server.)
+type StatusFilter = 'ACTIVE' | 'Issued' | 'paid' | 'reversed';
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   pending:        { bg: Colors.dangerLight,  text: Colors.danger   },
@@ -44,20 +50,11 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   reversed:       { bg: '#F1F5F9',           text: '#64748B'       },
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  pending:        'Unpaid',
-  partially_paid: 'Partial',
-  paid:           'Paid',
-  cancelled:      'Cancelled',
-  reversed:       'Reversed',
-};
-
 const STATUS_TABS: { key: StatusFilter; label: string }[] = [
-  { key: 'all',           label: 'All'      },
-  { key: 'pending',       label: 'Unpaid'   },
-  { key: 'partially_paid',label: 'Partial'  },
-  { key: 'paid',          label: 'Paid'     },
-  { key: 'reversed',      label: 'Reversed' },
+  { key: 'ACTIVE',   label: 'All'      },
+  { key: 'Issued',   label: 'Unpaid'   },
+  { key: 'paid',     label: 'Paid'     },
+  { key: 'reversed', label: 'Reversed' },
 ];
 
 const PERIOD_TABS: { key: Period; label: string }[] = [
@@ -68,96 +65,69 @@ const PERIOD_TABS: { key: Period; label: string }[] = [
   { key: 'All', label: 'All'    },
 ];
 
-const getPeriodDates = (p: Period): { fromDate?: string; toDate?: string } => {
-  if (p === 'All') return {};
-  const today  = new Date();
-  const toDate = today.toISOString().slice(0, 10);
-  let from: Date;
-  if      (p === '1M') from = new Date(today.getFullYear(), today.getMonth(),     1);
-  else if (p === '3M') from = new Date(today.getFullYear(), today.getMonth() - 2, 1);
-  else if (p === '6M') from = new Date(today.getFullYear(), today.getMonth() - 5, 1);
-  else                 from = new Date(today.getFullYear(), 0, 1); // 1Y
-  return { fromDate: from.toISOString().slice(0, 10), toDate };
-};
-
-const fmt = (n: number) =>
-  Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' });
+const LIMIT = 30;
 
 export default function InvoicesScreen() {
   const router = useRouter();
-  const [invoices,    setInvoices]    = useState<Invoice[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [refreshing,  setRefreshing]  = useState(false);
-  const [search,      setSearch]      = useState('');
-  const [filter,      setFilter]      = useState<StatusFilter>('all');
-  const [period,      setPeriod]      = useState<Period>('3M');
-  const [page,        setPage]        = useState(1);
-  const [hasMore,     setHasMore]     = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const { tenant: tenantParam, tenantName: tenantNameParam, status: statusParam } =
+    useLocalSearchParams<{ tenant?: string; tenantName?: string; status?: string }>();
 
-  const LIMIT     = 50;
-  const searchRef = useRef(search);
-  searchRef.current = search;
+  const [tenantId, setTenantId] = useState(tenantParam ?? '');
+  const [search,   setSearch]   = useState('');
+  const [filter,   setFilter]   = useState<StatusFilter>(statusParam === 'Issued' ? 'Issued' : 'ACTIVE');
+  const [period,   setPeriod]   = useState<Period>('All');
+  const q = useDebounced(search.trim(), 400);
 
-  const load = useCallback(async (pg = 1, replace = true) => {
-    if (pg === 1) replace ? setLoading(true) : setRefreshing(true);
-    else setLoadingMore(true);
+  const fetchPage = useCallback(async (page: number): Promise<Page<Invoice>> => {
+    const params: Record<string, string | number> = {
+      page, limit: LIMIT, paginate: 'true', includeSnapshots: 'true', status: filter,
+    };
+    if (tenantId) params.tenant = tenantId;
+    const { from, to } = periodRange(period);
+    if (from) params.fromDate = from;
+    if (to)   params.toDate   = to;
+    // The API searches by invoice number OR tenant name (not both): numbers contain digits, names rarely do.
+    if (q) params[/\d/.test(q) ? 'invoiceNumber' : 'tenantName'] = q;
 
-    try {
-      const params: Record<string, string> = {
-        page: String(pg), limit: String(LIMIT), paginate: 'true',
-      };
+    const { data } = await api.get('/tenant-invoices', { params });
+    let items = rowsOf<Invoice>(data);
+    // With snapshots on, the server also appends the tenant's outstanding standalone debit notes
+    // (not real invoices, no detail record). Only show them when browsing one tenant's open items.
+    const showNotes = !!tenantId && (filter === 'ACTIVE' || filter === 'Issued');
+    if (!showNotes) items = items.filter(i => i.ledgerMode !== 'invoice_note');
+    const totalPages = Number(data?.pagination?.totalPages ?? 1);
+    return { items, hasMore: page < totalPages };
+  }, [filter, period, q, tenantId]);
 
-      // "all" tab excludes reversed/cancelled via ACTIVE; "reversed" tab shows only reversed
-      if (filter === 'all')      params.status = 'ACTIVE';
-      else                       params.status = filter;
-
-      const { fromDate, toDate } = getPeriodDates(period);
-      if (fromDate) params.fromDate = fromDate;
-      if (toDate)   params.toDate   = toDate;
-
-      if (searchRef.current.trim()) params.search = searchRef.current.trim();
-
-      const { data } = await api.get('/tenant-invoices', { params });
-      const items: Invoice[] = data.data ?? data ?? [];
-
-      setInvoices(prev => replace || pg === 1 ? items : [...prev, ...items]);
-      setHasMore(items.length === LIMIT);
-      setPage(pg);
-    } catch { /* fail silently */ }
-    finally {
-      setLoading(false);
-      setRefreshing(false);
-      setLoadingMore(false);
-    }
-  }, [filter, period]);
-
-  useEffect(() => { load(1); }, [load]);
-  useEffect(() => {
-    const t = setTimeout(() => load(1), 400);
-    return () => clearTimeout(t);
-  }, [search]);
+  const { items: invoices, loading, refreshing, loadingMore, error, refresh, retry, loadMore } =
+    usePagedList<Invoice>(fetchPage, `${filter}|${period}|${q}|${tenantId}`);
 
   const renderItem = ({ item }: { item: Invoice }) => {
-    const sc      = STATUS_COLORS[item.status] ?? STATUS_COLORS.pending;
-    const catLabel = CATEGORY_LABELS[item.category] ?? item.category ?? 'Invoice';
-    const propName = item.property?.propertyName ?? item.property?.name ?? '';
-    const isReversed = item.status === 'reversed';
+    const st        = invoiceStatusOf(item);
+    const sc        = STATUS_COLORS[st] ?? STATUS_COLORS.pending;
+    const catLabel  = INVOICE_CATEGORY_LABEL[item.category ?? ''] ?? item.category ?? 'Invoice';
+    const tenantObj = item.tenant && typeof item.tenant === 'object' ? item.tenant : null;
+    const tenantName = tenantObj?.name || 'Unknown Tenant';
+    const propName  = item.property?.propertyName ?? item.property?.name ?? '';
+    const isVoided  = st === 'reversed' || st === 'cancelled';
+    const total     = Number(item.adjustedAmount ?? item.amount ?? 0);
+    const due       = Number(item.outstanding ?? 0);
+    const docDate   = item.bookingDate || item.invoiceDate || item.createdAt;
 
     const openDetail = () => router.push({
       pathname: '/pms/invoices/[id]' as any,
       params: {
         id:            item._id,
+        tenantId:      tenantObj?._id ?? (typeof item.tenant === 'string' ? item.tenant : ''),
         invoiceNumber: item.invoiceNumber ?? '',
-        status:        item.status ?? 'pending',
+        status:        st,
         category:      item.category ?? '',
-        amount:        String(item.amount ?? 0),
-        outstanding:   String(item.outstanding ?? 0),
+        amount:        String(total),
+        outstanding:   item.outstanding != null ? String(due) : '',
         invoiceDate:   item.invoiceDate ?? '',
-        tenantName:    item.tenant?.name ?? '',
+        dueDate:       item.dueDate ?? '',
+        description:   item.description ?? '',
+        tenantName,
         unit:          item.unit?.unitNumber ? `Unit ${item.unit.unitNumber}` : '',
         property:      propName,
       },
@@ -165,15 +135,15 @@ export default function InvoicesScreen() {
 
     return (
       <TouchableOpacity
-        style={[styles.card, isReversed && styles.cardReversed]}
+        style={[styles.card, isVoided && styles.cardReversed]}
         onPress={openDetail}
         activeOpacity={0.75}
       >
         <View style={styles.cardTop}>
           <View style={{ flex: 1, gap: 2 }}>
-            <Text style={[styles.invoiceNum, isReversed && styles.textMuted]}>{item.invoiceNumber || '—'}</Text>
-            <Text style={[styles.tenantName, isReversed && styles.textMuted]} numberOfLines={1}>
-              {item.tenant?.name ?? 'Unknown Tenant'}
+            <Text style={[styles.invoiceNum, isVoided && styles.textMuted]}>{item.invoiceNumber || '—'}</Text>
+            <Text style={[styles.tenantName, isVoided && styles.textMuted]} numberOfLines={1}>
+              {tenantName}
             </Text>
             <Text style={styles.meta} numberOfLines={1}>
               {[item.unit?.unitNumber, propName].filter(Boolean).join(' · ')}
@@ -182,18 +152,18 @@ export default function InvoicesScreen() {
           <View style={{ alignItems: 'flex-end', gap: 4 }}>
             <View style={[styles.badge, { backgroundColor: sc.bg }]}>
               <Text style={[styles.badgeText, { color: sc.text }]}>
-                {(STATUS_LABELS[item.status] ?? item.status ?? 'Unpaid').toUpperCase()}
+                {(INVOICE_STATUS_LABEL[st] ?? st).toUpperCase()}
               </Text>
             </View>
-            <Text style={[styles.amount, isReversed && styles.textMuted]}>KES {fmt(item.amount)}</Text>
+            <Text style={[styles.amount, isVoided && styles.textMuted]}>KES {fmtMoney(total)}</Text>
           </View>
         </View>
         <View style={styles.cardBottom}>
           <Text style={styles.meta}>{catLabel}</Text>
-          <Text style={styles.meta}>{fmtDate(item.invoiceDate)}</Text>
-          {!isReversed && (item.outstanding ?? 0) > 0 && (
+          <Text style={styles.meta}>{fmtDate(docDate)}</Text>
+          {!isVoided && due > 0.009 && (
             <Text style={[styles.meta, { color: Colors.danger, fontWeight: '700' }]}>
-              Due: {fmt(item.outstanding)}
+              Due: {fmtMoney(due)}
             </Text>
           )}
         </View>
@@ -212,20 +182,31 @@ export default function InvoicesScreen() {
           <Ionicons name="search-outline" size={16} color={Colors.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search invoices..."
+            placeholder="Invoice no. or tenant name..."
             placeholderTextColor={Colors.textMuted}
             value={search}
             onChangeText={setSearch}
             returnKeyType="search"
-            onSubmitEditing={() => load(1)}
+            autoCorrect={false}
           />
           {search ? (
-            <TouchableOpacity onPress={() => setSearch('')}>
+            <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Ionicons name="close-circle" size={16} color={Colors.textMuted} />
             </TouchableOpacity>
           ) : null}
         </View>
       </View>
+
+      {/* Single-tenant scope (coming from a tenant profile) */}
+      {tenantId ? (
+        <View style={styles.scopeBar}>
+          <Ionicons name="person" size={13} color={Colors.primary} />
+          <Text style={styles.scopeText} numberOfLines={1}>{tenantNameParam || 'Selected tenant'}</Text>
+          <TouchableOpacity onPress={() => setTenantId('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="close-circle" size={15} color={Colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {/* Status filter tabs */}
       <FlatList
@@ -273,16 +254,21 @@ export default function InvoicesScreen() {
           keyExtractor={item => item._id}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
+          keyboardShouldPersistTaps="handled"
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => load(1, false)} tintColor={Colors.primary} />
+            <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={Colors.primary} />
           }
-          onEndReached={() => { if (!loadingMore && hasMore) load(page + 1, false); }}
+          onEndReached={loadMore}
           onEndReachedThreshold={0.3}
           ListEmptyComponent={
-            <View style={styles.centered}>
-              <Ionicons name="receipt-outline" size={48} color={Colors.border} />
-              <Text style={styles.emptyText}>No invoices found</Text>
-            </View>
+            error ? (
+              <ListErrorState message={error} onRetry={retry} />
+            ) : (
+              <View style={styles.centered}>
+                <Ionicons name="receipt-outline" size={48} color={Colors.border} />
+                <Text style={styles.emptyText}>No invoices found</Text>
+              </View>
+            )
           }
           ListFooterComponent={
             loadingMore ? (
@@ -296,7 +282,7 @@ export default function InvoicesScreen() {
 
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => router.push('/pms/invoices/new' as any)}
+        onPress={() => router.push((tenantId ? `/pms/invoices/new?tenant=${tenantId}` : '/pms/invoices/new') as any)}
         activeOpacity={0.85}
       >
         <Ionicons name="add" size={28} color={Colors.white} />
@@ -307,7 +293,7 @@ export default function InvoicesScreen() {
 
 const styles = StyleSheet.create({
   safe:     { flex: 1, backgroundColor: Colors.background },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingTop: 60 },
   emptyText:{ fontSize: 15, color: Colors.textMuted },
   list:     { paddingBottom: 100 },
   fab: {
@@ -327,6 +313,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, height: 42,
   },
   searchInput: { flex: 1, fontSize: 14, color: Colors.text },
+
+  scopeBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginHorizontal: 16, marginBottom: 8,
+    backgroundColor: Colors.primaryFaded,
+    borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6,
+    borderWidth: 1, borderColor: Colors.primary + '30',
+  },
+  scopeText: { flex: 1, fontSize: 12, fontWeight: '600', color: Colors.primary },
 
   tabsRow: { paddingHorizontal: 16, paddingBottom: 8, gap: 7 },
   tab: {

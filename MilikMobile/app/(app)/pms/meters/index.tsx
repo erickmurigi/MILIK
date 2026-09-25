@@ -10,26 +10,33 @@ import { Colors } from '../../../../constants/colors';
 import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
 import { Dropdown, DropdownItem } from '../../../../components/ui/Dropdown';
+import { ErrorBanner, ErrorState } from '../../../../components/ui/PmsStates';
+import { usePmsList, useReloadOnFocus } from '../../../../hooks/usePmsList';
+import { apiError, fmtDate, fmtKES, fmtMoney, fmtNumber } from '../../../../utils/pmsFormat';
 
+// Field names follow the MeterReading model: unitsConsumed / rate (not consumption / ratePerUnit).
 type MeterReading = {
   _id:             string;
   utilityType:     string;
   billingPeriod:   string;
-  status:          string;
+  status:          string;   // draft | billed | void
   readingDate:     string;
   previousReading: number;
   currentReading:  number;
-  consumption:     number;
-  ratePerUnit:     number;
+  unitsConsumed:   number;
+  rate:            number;
   amount:          number;
-  tenant?:         { name?: string };
-  unit?:           { unitNumber?: string };
-  property?:       { propertyName?: string; name?: string };
+  isMeterReset?:   boolean;
+  tenant?:         { name?: string } | null;
+  unit?:           { unitNumber?: string } | null;
+  property?:       { propertyName?: string } | null;
+  billedInvoice?:  { invoiceNumber?: string; status?: string } | null;
 };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   draft:  { bg: Colors.warningLight, text: Colors.warning },
   billed: { bg: Colors.successLight, text: Colors.success },
+  void:   { bg: Colors.borderLight,  text: Colors.textMuted },
 };
 
 const UTILITY_ICONS: Record<string, string> = {
@@ -38,37 +45,23 @@ const UTILITY_ICONS: Record<string, string> = {
   gas:         'flame-outline',
 };
 
-const fmt2 = (n: number) =>
-  Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' });
-
-const FILTER_TABS = ['all', 'draft', 'billed'] as const;
+const FILTER_TABS = ['all', 'draft', 'billed', 'void'] as const;
 type FilterTab = typeof FILTER_TABS[number];
-
-const LIMIT = 50;
 
 export default function MetersScreen() {
   const router = useRouter();
-  const [items,       setItems]       = useState<MeterReading[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [refreshing,  setRefreshing]  = useState(false);
-  const [filter,      setFilter]      = useState<FilterTab>('draft');
-  const [page,        setPage]        = useState(1);
-  const [hasMore,     setHasMore]     = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [billingId,   setBillingId]   = useState<string | null>(null);
+  const [filter,    setFilter]    = useState<FilterTab>('draft');
+  const [busyId,    setBusyId]    = useState<string | null>(null);
 
-  const [properties,    setProperties]    = useState<DropdownItem[]>([]);
-  const [propsLoading,  setPropsLoading]  = useState(false);
-  const [propId,        setPropId]        = useState('');
-  const [propLabel,     setPropLabel]     = useState('');
-  const [propOpen,      setPropOpen]      = useState(false);
+  const [properties,   setProperties]   = useState<DropdownItem[]>([]);
+  const [propsLoading, setPropsLoading] = useState(false);
+  const [propId,       setPropId]       = useState('');
+  const [propLabel,    setPropLabel]    = useState('');
+  const [propOpen,     setPropOpen]     = useState(false);
 
   useEffect(() => {
     setPropsLoading(true);
-    api.get('/properties', { params: { limit: 200, status: 'active' } })
+    api.get('/properties', { params: { limit: 500 } })
       .then(({ data }) =>
         setProperties(
           (data.data ?? []).map((p: { _id: string; propertyName?: string; propertyCode?: string }) => ({
@@ -80,63 +73,87 @@ export default function MetersScreen() {
       .finally(() => setPropsLoading(false));
   }, []);
 
-  const load = useCallback(async (pg = 1, replace = true) => {
-    if (pg === 1) replace ? setLoading(true) : setRefreshing(true);
-    else setLoadingMore(true);
-
-    try {
-      const params: Record<string, string> = { page: String(pg), limit: String(LIMIT) };
-      if (filter !== 'all') params.status = filter;
-      if (propId)           params.property = propId;
-
-      const { data } = await api.get('/meter-readings', { params });
-      const rows: MeterReading[] = data.data ?? [];
-
-      setItems(prev => replace || pg === 1 ? rows : [...prev, ...rows]);
-      setHasMore(rows.length === LIMIT);
-      setPage(pg);
-    } catch { /* fail silently */ }
-    finally {
-      setLoading(false);
-      setRefreshing(false);
-      setLoadingMore(false);
-    }
-  }, [filter, propId]);
-
-  useEffect(() => { load(1); }, [load]);
+  const list = usePmsList<MeterReading>({
+    path: '/meter-readings',
+    params: { status: filter === 'all' ? undefined : filter, property: propId || undefined },
+    parse: d => ({ rows: d?.data ?? [], pages: d?.pages, total: d?.total }),
+  });
+  useReloadOnFocus(list.reload);
 
   const handleBill = useCallback((item: MeterReading) => {
     Alert.alert(
-      'Generate Bill',
-      `Generate a utility invoice for ${item.tenant?.name ?? 'this tenant'} (${item.utilityType} · ${item.billingPeriod})?`,
+      'Generate utility invoice',
+      `Bill ${fmtKES(item.amount)} to ${item.tenant?.name ?? "the unit's active tenant"} for ${item.utilityType} · ${item.billingPeriod}?\n\nThis posts a utility invoice to the tenant's account.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Generate',
           onPress: async () => {
-            setBillingId(item._id);
+            setBusyId(item._id);
             try {
-              await api.post(`/meter-readings/${item._id}/bill`);
-              Alert.alert('Success', 'Invoice generated successfully.');
-              load(1);
-            } catch (err: unknown) {
-              const e = err as { response?: { data?: { message?: string } } };
-              Alert.alert('Error', e?.response?.data?.message ?? 'Failed to generate invoice.');
-            } finally { setBillingId(null); }
+              // Same payload as the web: invoice and due date follow the reading date.
+              const { data } = await api.post(`/meter-readings/${item._id}/bill`, {
+                invoiceDate: item.readingDate,
+                dueDate:     item.readingDate,
+              });
+              const no = data?.invoice?.invoiceNumber;
+              Alert.alert('Invoice generated', no ? `Utility invoice ${no} created.` : 'Utility invoice created.');
+              list.reload();
+            } catch (err) {
+              Alert.alert('Could not bill reading', apiError(err, 'Failed to generate invoice.'));
+              list.reload();
+            } finally { setBusyId(null); }
           },
         },
-      ]
+      ],
     );
-  }, [load]);
+  }, [list]);
+
+  const handleVoid = useCallback((item: MeterReading) => {
+    Alert.alert('Void reading', `Void this ${item.utilityType} reading for ${item.billingPeriod}? It will no longer count as the previous reading or block a new one for the period.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Void', style: 'destructive',
+        onPress: async () => {
+          setBusyId(item._id);
+          try {
+            await api.patch(`/meter-readings/${item._id}/void`, {});
+            list.reload();
+          } catch (err) {
+            Alert.alert('Could not void', apiError(err, 'Failed to void reading.'));
+          } finally { setBusyId(null); }
+        },
+      },
+    ]);
+  }, [list]);
+
+  const handleDelete = useCallback((item: MeterReading) => {
+    Alert.alert('Delete reading', `Delete this ${item.status} reading (${item.utilityType} · ${item.billingPeriod})? This cannot be undone.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive',
+        onPress: async () => {
+          setBusyId(item._id);
+          try {
+            await api.delete(`/meter-readings/${item._id}`);
+            list.reload();
+          } catch (err) {
+            Alert.alert('Could not delete', apiError(err, 'Failed to delete reading.'));
+          } finally { setBusyId(null); }
+        },
+      },
+    ]);
+  }, [list]);
 
   const renderItem = ({ item }: { item: MeterReading }) => {
     const sc       = STATUS_COLORS[item.status] ?? STATUS_COLORS.draft;
     const iconName = UTILITY_ICONS[item.utilityType?.toLowerCase()] ?? 'speedometer-outline';
-    const propName = item.property?.propertyName ?? item.property?.name ?? '';
-    const isBilling = billingId === item._id;
+    const propName = item.property?.propertyName ?? '';
+    const busy     = busyId === item._id;
+    const draft    = item.status === 'draft';
 
     return (
-      <TouchableOpacity style={styles.card} activeOpacity={0.75} onPress={() => {}}>
+      <View style={styles.card}>
         <View style={styles.cardTop}>
           <View style={styles.utilIcon}>
             <Ionicons name={iconName as any} size={20} color={Colors.primary} />
@@ -146,7 +163,7 @@ export default function MetersScreen() {
               {item.utilityType ?? 'Utility'} · {item.billingPeriod ?? ''}
             </Text>
             <Text style={styles.tenantName} numberOfLines={1}>
-              {item.tenant?.name ?? 'Unknown Tenant'}
+              {item.tenant?.name ?? 'No tenant linked'}
             </Text>
             <Text style={styles.meta} numberOfLines={1}>
               {[item.unit?.unitNumber, propName].filter(Boolean).join(' · ')}
@@ -154,55 +171,64 @@ export default function MetersScreen() {
           </View>
           <View style={{ alignItems: 'flex-end', gap: 4 }}>
             <View style={[styles.badge, { backgroundColor: sc.bg }]}>
-              <Text style={[styles.badgeText, { color: sc.text }]}>
-                {item.status?.toUpperCase()}
-              </Text>
+              <Text style={[styles.badgeText, { color: sc.text }]}>{(item.status ?? '').toUpperCase()}</Text>
             </View>
-            <Text style={styles.amount}>KES {fmt2(item.amount)}</Text>
+            <Text style={styles.amount}>{fmtKES(item.amount)}</Text>
           </View>
         </View>
 
         <View style={styles.readingRow}>
           <View style={styles.readingCell}>
             <Text style={styles.readingLabel}>PREV</Text>
-            <Text style={styles.readingValue}>{item.previousReading ?? 0}</Text>
+            <Text style={styles.readingValue}>{fmtNumber(item.previousReading)}</Text>
           </View>
           <Ionicons name="arrow-forward" size={14} color={Colors.textMuted} />
           <View style={styles.readingCell}>
             <Text style={styles.readingLabel}>CURR</Text>
-            <Text style={styles.readingValue}>{item.currentReading ?? 0}</Text>
+            <Text style={styles.readingValue}>{fmtNumber(item.currentReading)}</Text>
           </View>
           <View style={[styles.readingCell, { marginLeft: 'auto' }]}>
             <Text style={styles.readingLabel}>USAGE</Text>
-            <Text style={[styles.readingValue, { color: Colors.primary }]}>
-              {item.consumption ?? 0} units
-            </Text>
+            <Text style={[styles.readingValue, { color: Colors.primary }]}>{fmtNumber(item.unitsConsumed)}</Text>
           </View>
           <View style={styles.readingCell}>
             <Text style={styles.readingLabel}>RATE</Text>
-            <Text style={styles.readingValue}>{fmt2(item.ratePerUnit)}</Text>
+            <Text style={styles.readingValue}>{fmtMoney(item.rate)}</Text>
           </View>
         </View>
 
         <View style={styles.cardFooter}>
-          <Text style={styles.date}>{fmtDate(item.readingDate)}</Text>
-          {item.status === 'draft' && (
-            <TouchableOpacity
-              style={[styles.billBtn, isBilling && { opacity: 0.6 }]}
-              onPress={() => !isBilling && handleBill(item)}
-              disabled={isBilling}
-            >
-              {isBilling
-                ? <ActivityIndicator size="small" color={Colors.white} />
-                : <>
-                    <Ionicons name="receipt-outline" size={13} color={Colors.white} />
-                    <Text style={styles.billBtnText}>Generate Bill</Text>
-                  </>
-              }
-            </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.date}>{fmtDate(item.readingDate)}</Text>
+            {item.status === 'billed' && item.billedInvoice?.invoiceNumber ? (
+              <Text style={[styles.date, { color: Colors.success, fontWeight: '700' }]}>Invoice {item.billedInvoice.invoiceNumber}</Text>
+            ) : null}
+            {item.isMeterReset ? <Text style={styles.date}>Meter reset</Text> : null}
+          </View>
+          {busy ? (
+            <ActivityIndicator size="small" color={Colors.primary} />
+          ) : (
+            <View style={styles.footerBtns}>
+              {draft || item.status === 'void' ? (
+                <TouchableOpacity style={styles.ghostBtn} onPress={() => handleDelete(item)} disabled={!!busyId}>
+                  <Ionicons name="trash-outline" size={14} color={Colors.danger} />
+                </TouchableOpacity>
+              ) : null}
+              {draft ? (
+                <TouchableOpacity style={styles.ghostBtn} onPress={() => handleVoid(item)} disabled={!!busyId}>
+                  <Text style={styles.ghostBtnText}>Void</Text>
+                </TouchableOpacity>
+              ) : null}
+              {draft ? (
+                <TouchableOpacity style={styles.billBtn} onPress={() => handleBill(item)} disabled={!!busyId}>
+                  <Ionicons name="receipt-outline" size={13} color={Colors.white} />
+                  <Text style={styles.billBtnText}>Generate Bill</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           )}
         </View>
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -237,27 +263,32 @@ export default function MetersScreen() {
         ))}
       </View>
 
-      {loading ? (
+      {list.loading ? (
         <MilikLoader fullscreen />
+      ) : list.error && list.items.length === 0 ? (
+        <ErrorState message={list.error} onRetry={list.retry} />
       ) : (
         <FlatList
-          data={items}
+          data={list.items}
           keyExtractor={item => item._id}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => load(1, false)} tintColor={Colors.primary} />
+            <RefreshControl refreshing={list.refreshing} onRefresh={list.refresh} tintColor={Colors.primary} />
           }
-          onEndReached={() => { if (!loadingMore && hasMore) load(page + 1, false); }}
+          onEndReached={list.loadMore}
           onEndReachedThreshold={0.3}
+          ListHeaderComponent={list.error ? <ErrorBanner message={list.error} onRetry={list.reload} /> : null}
           ListEmptyComponent={
             <View style={styles.centered}>
               <Ionicons name="speedometer-outline" size={48} color={Colors.border} />
-              <Text style={styles.emptyText}>No meter readings</Text>
+              <Text style={styles.emptyText}>
+                {filter === 'draft' ? 'No draft readings waiting to be billed' : 'No meter readings'}
+              </Text>
             </View>
           }
           ListFooterComponent={
-            loadingMore ? (
+            list.loadingMore ? (
               <View style={{ padding: 20, alignItems: 'center' }}>
                 <ActivityIndicator size="small" color={Colors.primary} />
               </View>
@@ -279,7 +310,7 @@ export default function MetersScreen() {
 
 const styles = StyleSheet.create({
   safe:      { flex: 1, backgroundColor: Colors.background },
-  centered:  { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  centered:  { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingTop: 60 },
   emptyText: { fontSize: 15, color: Colors.textMuted },
   list:      { paddingBottom: 100 },
   fab: {
@@ -332,10 +363,18 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.4 },
 
   cardFooter: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8,
     borderTopWidth: 1, borderTopColor: Colors.borderLight, paddingTop: 8,
   },
   date: { fontSize: 10, color: Colors.textMuted },
+  footerBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+
+  ghostBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    borderRadius: 8, borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: 10, paddingVertical: 6, minHeight: 30,
+  },
+  ghostBtnText: { fontSize: 11, fontWeight: '700', color: Colors.textSecondary },
 
   billBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5,

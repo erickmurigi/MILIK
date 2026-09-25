@@ -8,6 +8,8 @@ import { useRouter, Stack } from 'expo-router';
 import { Colors } from '../../../constants/colors';
 import api from '../../../services/api';
 import MilikLoader from '../../../components/ui/MilikLoader';
+import { ErrorState } from '../../../components/ui/PmsStates';
+import { apiError, fmtMoney } from '../../../utils/pmsFormat';
 
 type QuickAction = {
   icon:      string;
@@ -42,12 +44,15 @@ const ageInDays = (d?: string): number | null => {
 type KPI = { occupancy: string; collected: string; arrears: string };
 
 type OverdueInvoice = {
-  _id:          string;
-  tenant?:      { name?: string } | string;
-  tenantName?:  string;
-  amount:       number;
-  dueDate?:     string;
-  createdAt?:   string;
+  _id:            string;
+  tenant?:        { name?: string } | string | null;
+  tenantName?:    string;
+  amount:         number;
+  adjustedAmount?: number;
+  outstanding?:   number;
+  computedStatus?: string;
+  dueDate?:       string;
+  createdAt?:     string;
 };
 
 export default function PMSDashboard() {
@@ -59,14 +64,24 @@ export default function PMSDashboard() {
   const [maintPending,    setMaintPending]    = useState(0);
   const [mpesaUnmatched,  setMpesaUnmatched]  = useState(0);
   const [overdueInvoices, setOverdueInvoices] = useState<OverdueInvoice[]>([]);
+  const [overdueCount,    setOverdueCount]    = useState(0);
+  const [loadError,       setLoadError]       = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    // "Issued" = pending + partially paid; snapshots give the real outstanding balance per invoice.
     const [summaryRes, maintRes, mpesaRes, invRes] = await Promise.allSettled([
       api.get('/dashboard/summary'),
       api.get('/maintenances',       { params: { status: 'pending',   limit: 1 } }),
       api.get('/mpesa-collections',  { params: { status: 'unmatched', limit: 1 } }),
-      api.get('/tenant-invoices',    { params: { status: 'pending',   limit: 5 } }),
+      api.get('/tenant-invoices',    { params: { status: 'Issued', limit: 40, includeSnapshots: 'true' } }),
     ]);
+
+    // Every request failed -> show a real error instead of a dashboard full of zeros / dashes.
+    if ([summaryRes, maintRes, mpesaRes, invRes].every(r => r.status === 'rejected')) {
+      setLoadError(apiError((summaryRes as PromiseRejectedResult).reason, 'Could not load the dashboard.'));
+    } else {
+      setLoadError(null);
+    }
 
     if (summaryRes.status === 'fulfilled') {
       const d = summaryRes.value.data;
@@ -75,15 +90,26 @@ export default function PMSDashboard() {
         collected: fmtK(Number(d.collectedThisMonth ?? 0)),
         arrears:   fmtK(Number(d.outstandingArrears ?? 0)),
       });
+      setOverdueCount(Number(d.overdueInvoiceCount ?? 0));
     }
     if (maintRes.status === 'fulfilled') {
       setMaintPending(maintRes.value.data?.total ?? 0);
     }
     if (mpesaRes.status === 'fulfilled') {
-      setMpesaUnmatched(mpesaRes.value.data?.total ?? 0);
+      // /mpesa-collections reports its total under pagination.total (there is no top-level total)
+      setMpesaUnmatched(mpesaRes.value.data?.pagination?.total ?? 0);
     }
     if (invRes.status === 'fulfilled') {
-      setOverdueInvoices(invRes.value.data?.data ?? []);
+      const rows: OverdueInvoice[] = invRes.value.data?.data ?? [];
+      const now = Date.now();
+      const balance = (i: OverdueInvoice) => Number(i.outstanding ?? i.adjustedAmount ?? i.amount ?? 0);
+      // Truly overdue only (due date passed, still owing), oldest first.
+      setOverdueInvoices(
+        rows
+          .filter(i => i.dueDate && new Date(i.dueDate).getTime() < now && balance(i) > 0.009)
+          .sort((a, b) => new Date(a.dueDate as string).getTime() - new Date(b.dueDate as string).getTime())
+          .slice(0, 5),
+      );
     }
 
     setLoading(false);
@@ -93,6 +119,17 @@ export default function PMSDashboard() {
   useEffect(() => { load(); }, [load]);
 
   const onRefresh = () => { setRefreshing(true); load(); };
+
+  if (!loading && loadError && !kpi) {
+    return (
+      <>
+        <Stack.Screen options={{ title: 'Property Management' }} />
+        <SafeAreaView style={styles.safe} edges={['bottom']}>
+          <ErrorState message={loadError} onRetry={() => { setLoading(true); load(); }} />
+        </SafeAreaView>
+      </>
+    );
+  }
 
   if (loading) {
     return (
@@ -167,16 +204,16 @@ export default function PMSDashboard() {
           {overdueInvoices.length > 0 && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionLabel}>OVERDUE INVOICES</Text>
-                <TouchableOpacity onPress={() => router.push('/pms/invoices?status=pending' as any)}>
+                <Text style={styles.sectionLabel}>OVERDUE INVOICES{overdueCount > 0 ? ` (${overdueCount})` : ''}</Text>
+                <TouchableOpacity onPress={() => router.push('/pms/invoices?status=Issued' as any)}>
                   <Text style={styles.seeAll}>See all</Text>
                 </TouchableOpacity>
               </View>
               <View style={styles.listCard}>
                 {overdueInvoices.map((inv, i, arr) => {
                   const tenantName =
-                    typeof inv.tenant === 'object'
-                      ? (inv.tenant?.name ?? 'Tenant')
+                    inv.tenant && typeof inv.tenant === 'object'
+                      ? (inv.tenant.name ?? 'Tenant')
                       : (inv.tenantName ?? 'Tenant');
                   const age = ageInDays(inv.dueDate || inv.createdAt);
                   return (
@@ -194,7 +231,7 @@ export default function PMSDashboard() {
                         )}
                       </View>
                       <Text style={styles.invoiceAmt}>
-                        KES {Math.abs(inv.amount).toLocaleString('en-KE', { maximumFractionDigits: 0 })}
+                        KES {fmtMoney(Math.abs(inv.outstanding ?? inv.adjustedAmount ?? inv.amount ?? 0))}
                       </Text>
                       <Ionicons name="chevron-forward" size={14} color={Colors.textMuted} style={styles.invoiceChevron} />
                     </TouchableOpacity>

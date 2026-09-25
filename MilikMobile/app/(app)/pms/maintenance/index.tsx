@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   ActivityIndicator, RefreshControl,
@@ -7,8 +7,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Colors } from '../../../../constants/colors';
-import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
+import { ErrorBanner, ErrorState } from '../../../../components/ui/PmsStates';
+import { useDebounced, usePmsList, useReloadOnFocus } from '../../../../hooks/usePmsList';
+import { fmtDate } from '../../../../utils/pmsFormat';
 
 type MaintenanceItem = {
   _id:         string;
@@ -17,8 +19,8 @@ type MaintenanceItem = {
   priority:    string;
   status:      string;
   createdAt:   string;
-  tenant?:     { name?: string; phone?: string };
-  unit?:       { unitNumber?: string; property?: { propertyName?: string; name?: string } };
+  tenant?:     { name?: string; phone?: string } | null;
+  unit?:       { unitNumber?: string; property?: { propertyName?: string; name?: string } | null } | null;
 };
 
 const PRIORITY_COLORS: Record<string, { bg: string; text: string }> = {
@@ -45,54 +47,18 @@ const STATUS_LABELS: Record<string, string> = {
 const FILTER_TABS = ['all', 'pending', 'in_progress', 'completed', 'cancelled'] as const;
 type FilterTab = typeof FILTER_TABS[number];
 
-const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' });
-
 export default function MaintenanceScreen() {
   const router = useRouter();
-  const [items,       setItems]       = useState<MaintenanceItem[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [refreshing,  setRefreshing]  = useState(false);
-  const [search,      setSearch]      = useState('');
-  const [filter,      setFilter]      = useState<FilterTab>('pending');
-  const [page,        setPage]        = useState(1);
-  const [hasMore,     setHasMore]     = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<FilterTab>('pending');
+  const debouncedSearch = useDebounced(search.trim(), 400);
 
-  const LIMIT = 50;
-  const searchRef = useRef(search);
-  searchRef.current = search;
-
-  const load = useCallback(async (pg = 1, replace = true) => {
-    if (pg === 1) replace ? setLoading(true) : setRefreshing(true);
-    else setLoadingMore(true);
-
-    try {
-      const params: Record<string, string> = {
-        page: String(pg), limit: String(LIMIT),
-      };
-      if (filter !== 'all')         params.status = filter;
-      if (searchRef.current.trim()) params.search  = searchRef.current.trim();
-
-      const { data } = await api.get('/maintenances', { params });
-      const rows: MaintenanceItem[] = data.data ?? [];
-
-      setItems(prev => replace || pg === 1 ? rows : [...prev, ...rows]);
-      setHasMore(rows.length === LIMIT);
-      setPage(pg);
-    } catch { /* fail silently */ }
-    finally {
-      setLoading(false);
-      setRefreshing(false);
-      setLoadingMore(false);
-    }
-  }, [filter]);
-
-  useEffect(() => { load(1); }, [load]);
-  useEffect(() => {
-    const t = setTimeout(() => load(1), 400);
-    return () => clearTimeout(t);
-  }, [search]);
+  const list = usePmsList<MaintenanceItem>({
+    path: '/maintenances',
+    params: { status: filter === 'all' ? undefined : filter, search: debouncedSearch || undefined },
+    parse: d => ({ rows: d?.data ?? [], pages: d?.pages, total: d?.total }),
+  });
+  useReloadOnFocus(list.reload);
 
   const renderItem = ({ item }: { item: MaintenanceItem }) => {
     const pc = PRIORITY_COLORS[item.priority] ?? PRIORITY_COLORS.low;
@@ -104,23 +70,23 @@ export default function MaintenanceScreen() {
         <View style={styles.cardTop}>
           <View style={[styles.priorityDot, { backgroundColor: pc.text }]} />
           <View style={{ flex: 1, gap: 2 }}>
-            <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
+            <Text style={styles.cardTitle} numberOfLines={2}>{item.title || 'Untitled request'}</Text>
             <Text style={styles.meta} numberOfLines={1}>
               {[item.unit?.unitNumber, prop].filter(Boolean).join(' · ')}
             </Text>
-            {item.tenant?.name && (
+            {item.tenant?.name ? (
               <Text style={styles.meta}>{item.tenant.name}</Text>
-            )}
+            ) : null}
           </View>
           <View style={{ alignItems: 'flex-end', gap: 4 }}>
             <View style={[styles.badge, { backgroundColor: sc.bg }]}>
               <Text style={[styles.badgeText, { color: sc.text }]}>
-                {(STATUS_LABELS[item.status] ?? item.status?.replace('_', ' ') ?? '').toUpperCase()}
+                {(STATUS_LABELS[item.status] ?? item.status?.replace(/_/g, ' ') ?? '').toUpperCase()}
               </Text>
             </View>
             <View style={[styles.badge, { backgroundColor: pc.bg }]}>
               <Text style={[styles.badgeText, { color: pc.text }]}>
-                {item.priority?.toUpperCase()}
+                {(item.priority ?? 'medium').toUpperCase()}
               </Text>
             </View>
           </View>
@@ -143,7 +109,7 @@ export default function MaintenanceScreen() {
             value={search}
             onChangeText={setSearch}
             returnKeyType="search"
-            onSubmitEditing={() => load(1)}
+            autoCorrect={false}
           />
           {search ? (
             <TouchableOpacity onPress={() => setSearch('')}>
@@ -168,27 +134,32 @@ export default function MaintenanceScreen() {
         ))}
       </View>
 
-      {loading ? (
+      {list.loading ? (
         <MilikLoader fullscreen />
+      ) : list.error && list.items.length === 0 ? (
+        <ErrorState message={list.error} onRetry={list.retry} />
       ) : (
         <FlatList
-          data={items}
+          data={list.items}
           keyExtractor={item => item._id}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => load(1, false)} tintColor={Colors.primary} />
+            <RefreshControl refreshing={list.refreshing} onRefresh={list.refresh} tintColor={Colors.primary} />
           }
-          onEndReached={() => { if (!loadingMore && hasMore) load(page + 1, false); }}
+          onEndReached={list.loadMore}
           onEndReachedThreshold={0.3}
+          ListHeaderComponent={list.error ? <ErrorBanner message={list.error} onRetry={list.reload} /> : null}
           ListEmptyComponent={
             <View style={styles.centered}>
               <Ionicons name="construct-outline" size={48} color={Colors.border} />
-              <Text style={styles.emptyText}>No maintenance requests</Text>
+              <Text style={styles.emptyText}>
+                {debouncedSearch || filter !== 'all' ? 'No matching maintenance requests' : 'No maintenance requests'}
+              </Text>
             </View>
           }
           ListFooterComponent={
-            loadingMore ? (
+            list.loadingMore ? (
               <View style={{ padding: 20, alignItems: 'center' }}>
                 <ActivityIndicator size="small" color={Colors.primary} />
               </View>

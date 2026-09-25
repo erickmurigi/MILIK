@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Modal, Alert, FlatList as FL,
+  ActivityIndicator, RefreshControl, Modal, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../../../constants/colors';
 import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
+import { ErrorBanner, ErrorState } from '../../../../components/ui/PmsStates';
+import { useDebounced, usePmsList } from '../../../../hooks/usePmsList';
+import { apiError, fmtDateTime, fmtKES } from '../../../../utils/pmsFormat';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type Collection = {
@@ -20,170 +23,223 @@ type Collection = {
   accountReference: string;
   billRefNumber:    string;
   matchingStatus:   string;
-  tenant?:          { _id?: string; name?: string; unit?: { unitNumber?: string } };
-  matchedReceipt?:  { receiptNumber?: string; referenceNumber?: string };
-  metadata?:        { autoReceiptSkipReason?: string };
+  tenant?:          { _id?: string; name?: string; unit?: { unitNumber?: string } } | null;
+  matchedReceipt?:  { receiptNumber?: string; referenceNumber?: string } | null;
+  metadata?:        { autoReceiptSkipReason?: string; manualAssignment?: { assignedByName?: string } };
 };
 type SummaryRow = { _id: string; count: number; totalAmount: number };
-type TenantOption = { _id: string; name: string; unit?: { unitNumber?: string } };
+type TenantOption = {
+  _id: string; name: string; tenantCode?: string; phone?: string; status?: string;
+  unit?: { unitNumber?: string; property?: { propertyName?: string } } | null;
+};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-const fmt = (n: number) =>
-  Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' });
-
 const STATUS_META: Record<string, { label: string; bg: string; text: string; dot: string }> = {
   unmatched:     { label: 'Unmatched',  bg: Colors.warningLight, text: Colors.warning, dot: Colors.warning },
-  matched_tenant:{ label: 'Matched',    bg: Colors.warningLight, text: Colors.warning, dot: Colors.warning },
+  matched_tenant:{ label: 'Unmatched',  bg: Colors.warningLight, text: Colors.warning, dot: Colors.warning },
   captured:      { label: 'Captured',   bg: Colors.successLight, text: Colors.success, dot: Colors.success },
   ignored:       { label: 'Ignored',    bg: Colors.borderLight,  text: Colors.textMuted, dot: Colors.border },
   duplicate:     { label: 'Duplicate',  bg: Colors.dangerLight,  text: Colors.danger, dot: Colors.danger },
 };
 
-const FILTER_TABS = ['all', 'unmatched', 'captured', 'ignored', 'duplicate'] as const;
-type FilterTab = typeof FILTER_TABS[number];
+const FILTER_TABS = [
+  { key: 'all',       label: 'All' },
+  { key: 'unmatched', label: 'Pending' },
+  { key: 'captured',  label: 'Captured' },
+  { key: 'ignored',   label: 'Ignored' },
+  { key: 'duplicate', label: 'Duplicate' },
+] as const;
+type FilterTab = typeof FILTER_TABS[number]['key'];
+
+const INACTIVE_TENANT = ['terminated', 'moved_out', 'inactive', 'evicted'];
+
+const isPending  = (c: Collection) => c.matchingStatus === 'unmatched' || c.matchingStatus === 'matched_tenant';
+const tenantUnit = (t: TenantOption) =>
+  [t.unit?.unitNumber ? `Unit ${t.unit.unitNumber}` : '', t.unit?.property?.propertyName].filter(Boolean).join(' · ');
+
+const parseCollections = (d: any) => ({
+  rows:  (d?.data ?? []) as Collection[],
+  pages: d?.pagination?.pages as number | undefined,
+  total: d?.pagination?.total as number | undefined,
+  extra: (d?.summary ?? []) as SummaryRow[],
+});
 
 // ── Screen ───────────────────────────────────────────────────────────────────
 export default function MpesaNotificationsScreen() {
-  const [items,       setItems]       = useState<Collection[]>([]);
-  const [summary,     setSummary]     = useState<SummaryRow[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [refreshing,  setRefreshing]  = useState(false);
-  const [filter,      setFilter]      = useState<FilterTab>('all');
-  const [search,      setSearch]      = useState('');
-  const [page,        setPage]        = useState(1);
-  const [hasMore,     setHasMore]     = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [filter, setFilter] = useState<FilterTab>('all');
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounced(search.trim(), 400);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  // Assign tenant modal
+  const list = usePmsList<Collection, SummaryRow[]>({
+    path: '/mpesa-collections',
+    params: { status: filter === 'all' ? undefined : filter, search: debouncedSearch || undefined },
+    parse: parseCollections,
+  });
+  const { items, reload } = list;
+
+  // Assign-tenant modal
   const [assignTarget, setAssignTarget] = useState<Collection | null>(null);
   const [tenantSearch, setTenantSearch] = useState('');
-  const [allTenants,   setAllTenants]   = useState<TenantOption[]>([]);
   const [tenantResults, setTenantResults] = useState<TenantOption[]>([]);
   const [tenantSearching, setTenantSearching] = useState(false);
+  const [tenantError, setTenantError] = useState<string | null>(null);
   const [assigning, setAssigning] = useState(false);
+  const tenantReq = useRef(0);
 
-  const LIMIT = 50;
-  const searchRef = useRef(search);
-  searchRef.current = search;
+  const summary = list.extra ?? [];
+  const sumMap = Object.fromEntries(summary.map(s => [s._id, s])) as Record<string, SummaryRow | undefined>;
+  const pendingCount = (sumMap.unmatched?.count ?? 0) + (sumMap.matched_tenant?.count ?? 0);
 
-  // ── Load ──────────────────────────────────────────────────────────────────
-  const load = useCallback(async (pg = 1, replace = true) => {
-    if (pg === 1) replace ? setLoading(true) : setRefreshing(true);
-    else setLoadingMore(true);
-
-    try {
-      const params: Record<string, string> = {
-        page: String(pg), limit: String(LIMIT),
-      };
-      if (filter !== 'all')         params.status = filter;
-      if (searchRef.current.trim()) params.search  = searchRef.current.trim();
-
-      const { data } = await api.get('/mpesa-collections', { params });
-      const rows: Collection[] = data.data ?? [];
-      if (pg === 1) setSummary(data.summary ?? []);
-
-      setItems(prev => replace || pg === 1 ? rows : [...prev, ...rows]);
-      setHasMore(rows.length === LIMIT);
-      setPage(pg);
-    } catch { /* fail silently */ }
-    finally {
-      setLoading(false);
-      setRefreshing(false);
-      setLoadingMore(false);
+  // ── Tenant search (server side — the tenant list can be far bigger than one page) ──
+  const searchTenants = useCallback(async (term: string) => {
+    const q = term.trim();
+    const id = ++tenantReq.current;
+    if (q.length < 2) {
+      setTenantResults([]); setTenantSearching(false); setTenantError(null);
+      return;
     }
-  }, [filter]);
-
-  useEffect(() => { load(1); }, [load]);
-  useEffect(() => {
-    const t = setTimeout(() => load(1), 400);
-    return () => clearTimeout(t);
-  }, [search]);
-
-  // ── Summary chips ─────────────────────────────────────────────────────────
-  const sumMap = Object.fromEntries(summary.map(s => [s._id, s]));
-  const unmatchedCount = (sumMap.unmatched?.count ?? 0) + (sumMap.matched_tenant?.count ?? 0);
-
-  // Load all tenants when assign modal opens
-  useEffect(() => {
-    if (!assignTarget) return;
     setTenantSearching(true);
-    api.get('/tenants', { params: { limit: 100, status: 'active' } })
-      .then(({ data }) => {
-        const rows: TenantOption[] = data.data ?? data.tenants ?? [];
-        setAllTenants(rows);
-        setTenantResults(rows);
-      })
-      .catch(() => { setAllTenants([]); setTenantResults([]); })
-      .finally(() => setTenantSearching(false));
-  }, [assignTarget]);
+    try {
+      const { data } = await api.get('/tenants', { params: { search: q, limit: 25 } });
+      if (id !== tenantReq.current) return;
+      setTenantResults((data?.data ?? []) as TenantOption[]);
+      setTenantError(null);
+    } catch (err) {
+      if (id !== tenantReq.current) return;
+      setTenantResults([]);
+      setTenantError(apiError(err, 'Tenant search failed.'));
+    } finally {
+      if (id === tenantReq.current) setTenantSearching(false);
+    }
+  }, []);
 
-  // Filter locally as user types
+  const debouncedTenantSearch = useDebounced(tenantSearch, 350);
   useEffect(() => {
-    if (!tenantSearch.trim()) { setTenantResults(allTenants); return; }
-    const q = tenantSearch.toLowerCase();
-    setTenantResults(allTenants.filter(t => t.name.toLowerCase().includes(q)));
-  }, [tenantSearch, allTenants]);
+    if (assignTarget) searchTenants(debouncedTenantSearch);
+  }, [assignTarget, debouncedTenantSearch, searchTenants]);
+
+  const closeAssign = () => {
+    if (assigning) return;
+    tenantReq.current++;
+    setAssignTarget(null);
+    setTenantSearch('');
+    setTenantResults([]);
+    setTenantError(null);
+  };
 
   // ── Actions ───────────────────────────────────────────────────────────────
   const openAssign = (item: Collection) => {
-    setAssignTarget(item);
-    setTenantSearch('');
-    setAllTenants([]);
+    // Same as web: start with what the payer typed as the account reference.
+    setTenantSearch(item.accountReference || item.billRefNumber || '');
     setTenantResults([]);
+    setTenantError(null);
+    setAssignTarget(item);
   };
 
-  const doAssign = async (tenant: TenantOption) => {
-    if (!assignTarget) return;
+  const runAssign = async (item: Collection, tenant: { _id: string; name: string }) => {
     setAssigning(true);
+    setBusyId(item._id);
     try {
-      await api.post(`/mpesa-collections/${assignTarget._id}/assign-tenant`, { tenantId: tenant._id });
+      const { data } = await api.post(`/mpesa-collections/${item._id}/assign-tenant`, { tenantId: tenant._id });
+      const updated = data?.data as Collection | undefined;
+      const captured = updated?.matchingStatus === 'captured' && !!updated?.matchedReceipt;
+      tenantReq.current++;
       setAssignTarget(null);
-      load(1);
-    } catch (err: any) {
-      Alert.alert('Error', err?.response?.data?.message ?? 'Failed to assign tenant.');
+      setTenantSearch('');
+      setTenantResults([]);
+      reload();
+      if (captured) {
+        Alert.alert('Receipt recorded', `${fmtKES(item.amount)} was receipted to ${tenant.name}.`);
+      } else {
+        const reason = updated?.metadata?.autoReceiptSkipReason;
+        Alert.alert(
+          `Assigned to ${tenant.name}`,
+          reason
+            ? `No receipt was recorded yet: ${reason}.`
+            : 'The payment is linked to the tenant but no receipt has been recorded yet.',
+        );
+      }
+    } catch (err) {
+      Alert.alert('Could not assign', apiError(err, 'Failed to assign tenant.'));
     } finally {
       setAssigning(false);
+      setBusyId(null);
     }
   };
 
+  const confirmAssign = (tenant: TenantOption) => {
+    if (!assignTarget || assigning) return;
+    const item = assignTarget;
+    const inactive = !!tenant.status && INACTIVE_TENANT.includes(tenant.status);
+    Alert.alert(
+      'Assign payment',
+      `Assign ${fmtKES(item.amount)} (${item.transactionCode || 'M-Pesa'}) to ${tenant.name}?\n\n` +
+        'A receipt will be recorded against this tenant.' +
+        (inactive ? `\n\nNote: this tenant is ${tenant.status?.replace('_', ' ')}.` : ''),
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Assign', onPress: () => runAssign(item, tenant) },
+      ],
+    );
+  };
+
+  const retryReceipt = (item: Collection) => {
+    if (!item.tenant?._id || busyId) return;
+    const tenant = { _id: item.tenant._id, name: item.tenant.name || 'tenant' };
+    Alert.alert(
+      'Record receipt',
+      `Record ${fmtKES(item.amount)} (${item.transactionCode || 'M-Pesa'}) as a receipt for ${tenant.name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Record', onPress: () => runAssign(item, tenant) },
+      ],
+    );
+  };
+
   const doIgnore = (item: Collection) => {
-    Alert.alert('Ignore Transaction', `Ignore KES ${fmt(item.amount)} from ${item.payerName || item.msisdn}?`, [
+    Alert.alert('Ignore transaction', `Ignore ${fmtKES(item.amount)} from ${item.payerName || item.msisdn || 'this payer'}? You can restore it later.`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Ignore', style: 'destructive',
         onPress: async () => {
+          setBusyId(item._id);
           try {
-            await api.post(`/mpesa-collections/${item._id}/ignore`);
-            load(1);
-          } catch (err: any) {
-            Alert.alert('Error', err?.response?.data?.message ?? 'Failed to ignore.');
-          }
+            await api.post(`/mpesa-collections/${item._id}/ignore`, {});
+            reload();
+          } catch (err) {
+            Alert.alert('Could not ignore', apiError(err, 'Failed to ignore.'));
+          } finally { setBusyId(null); }
         },
       },
     ]);
   };
 
   const doUnignore = async (item: Collection) => {
+    if (busyId) return;
+    setBusyId(item._id);
     try {
-      await api.post(`/mpesa-collections/${item._id}/unignore`);
-      load(1);
-    } catch (err: any) {
-      Alert.alert('Error', err?.response?.data?.message ?? 'Failed to restore.');
-    }
+      await api.post(`/mpesa-collections/${item._id}/unignore`, {});
+      reload();
+    } catch (err) {
+      Alert.alert('Could not restore', apiError(err, 'Failed to restore.'));
+    } finally { setBusyId(null); }
   };
 
   // ── Render collection card ─────────────────────────────────────────────────
   const renderItem = ({ item }: { item: Collection }) => {
     const sm = STATUS_META[item.matchingStatus] ?? STATUS_META.unmatched;
-    const canAssign = ['unmatched', 'matched_tenant'].includes(item.matchingStatus);
+    const pending = isPending(item);
+    const hasTenant = !!item.tenant?._id;
+    const hasReceipt = !!item.matchedReceipt;
+    const canAssign = pending && !hasTenant && !hasReceipt;
+    const canRecord = pending && hasTenant && !hasReceipt;
+    const canIgnore = pending && !hasReceipt;
     const isIgnored = item.matchingStatus === 'ignored';
+    const busy = busyId === item._id;
 
     return (
       <View style={styles.card}>
-        {/* Status dot + top row */}
         <View style={styles.cardTop}>
           <View style={[styles.statusDot, { backgroundColor: sm.dot }]} />
           <View style={{ flex: 1, gap: 2 }}>
@@ -196,14 +252,13 @@ export default function MpesaNotificationsScreen() {
             ) : null}
           </View>
           <View style={{ alignItems: 'flex-end', gap: 4 }}>
-            <Text style={styles.amount}>KES {fmt(item.amount)}</Text>
+            <Text style={styles.amount}>{fmtKES(item.amount)}</Text>
             <View style={[styles.badge, { backgroundColor: sm.bg }]}>
               <Text style={[styles.badgeText, { color: sm.text }]}>{sm.label}</Text>
             </View>
           </View>
         </View>
 
-        {/* Tenant / receipt link */}
         {item.tenant?.name ? (
           <View style={styles.tenantRow}>
             <Ionicons name="person-circle-outline" size={14} color={Colors.primary} />
@@ -221,34 +276,50 @@ export default function MpesaNotificationsScreen() {
             </Text>
           </View>
         ) : null}
-        {item.metadata?.autoReceiptSkipReason ? (
+        {pending && item.metadata?.autoReceiptSkipReason ? (
           <Text style={styles.skipReason}>⚠ {item.metadata.autoReceiptSkipReason}</Text>
         ) : null}
 
-        {/* Actions */}
         <View style={styles.actions}>
-          <Text style={styles.date}>{fmtDate(item.transactionDate)}</Text>
+          <Text style={styles.date}>{fmtDateTime(item.transactionDate)}</Text>
           <View style={styles.actionBtns}>
-            {isIgnored ? (
+            {busy ? (
+              <ActivityIndicator size="small" color={Colors.primary} />
+            ) : isIgnored ? (
               <TouchableOpacity style={styles.actionBtn} onPress={() => doUnignore(item)}>
                 <Ionicons name="refresh-outline" size={14} color={Colors.primary} />
                 <Text style={[styles.actionBtnText, { color: Colors.primary }]}>Restore</Text>
               </TouchableOpacity>
-            ) : canAssign ? (
+            ) : (
               <>
-                <TouchableOpacity style={styles.actionBtn} onPress={() => doIgnore(item)}>
-                  <Ionicons name="ban-outline" size={14} color={Colors.danger} />
-                  <Text style={[styles.actionBtnText, { color: Colors.danger }]}>Ignore</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.actionBtn, { backgroundColor: Colors.primary, borderColor: Colors.primary }]}
-                  onPress={() => openAssign(item)}
-                >
-                  <Ionicons name="link-outline" size={14} color={Colors.white} />
-                  <Text style={[styles.actionBtnText, { color: Colors.white }]}>Assign</Text>
-                </TouchableOpacity>
+                {canIgnore ? (
+                  <TouchableOpacity style={styles.actionBtn} onPress={() => doIgnore(item)} disabled={!!busyId}>
+                    <Ionicons name="ban-outline" size={14} color={Colors.danger} />
+                    <Text style={[styles.actionBtnText, { color: Colors.danger }]}>Ignore</Text>
+                  </TouchableOpacity>
+                ) : null}
+                {canAssign ? (
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.actionBtnPrimary]}
+                    onPress={() => openAssign(item)}
+                    disabled={!!busyId}
+                  >
+                    <Ionicons name="link-outline" size={14} color={Colors.white} />
+                    <Text style={[styles.actionBtnText, { color: Colors.white }]}>Assign</Text>
+                  </TouchableOpacity>
+                ) : null}
+                {canRecord ? (
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.actionBtnPrimary]}
+                    onPress={() => retryReceipt(item)}
+                    disabled={!!busyId}
+                  >
+                    <Ionicons name="receipt-outline" size={14} color={Colors.white} />
+                    <Text style={[styles.actionBtnText, { color: Colors.white }]}>Record</Text>
+                  </TouchableOpacity>
+                ) : null}
               </>
-            ) : null}
+            )}
           </View>
         </View>
       </View>
@@ -258,18 +329,18 @@ export default function MpesaNotificationsScreen() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      {/* Summary strip */}
       <View style={styles.summaryStrip}>
         {[
-          { key: 'unmatched', label: 'Pending', count: unmatchedCount },
-          { key: 'captured',  label: 'Captured',  count: sumMap.captured?.count ?? 0 },
-          { key: 'ignored',   label: 'Ignored',   count: sumMap.ignored?.count ?? 0 },
-          { key: 'duplicate', label: 'Duplicate', count: sumMap.duplicate?.count ?? 0 },
+          { key: 'unmatched', label: 'PENDING',   count: pendingCount },
+          { key: 'captured',  label: 'CAPTURED',  count: sumMap.captured?.count ?? 0 },
+          { key: 'ignored',   label: 'IGNORED',   count: sumMap.ignored?.count ?? 0 },
+          { key: 'duplicate', label: 'DUPLICATE', count: sumMap.duplicate?.count ?? 0 },
         ].map((s, i) => (
           <TouchableOpacity
             key={s.key}
             style={[styles.summaryCell, i > 0 && styles.summaryCellBorder]}
             onPress={() => setFilter(s.key as FilterTab)}
+            activeOpacity={0.8}
           >
             <Text style={styles.summaryCount}>{s.count}</Text>
             <Text style={styles.summaryLabel}>{s.label}</Text>
@@ -277,21 +348,20 @@ export default function MpesaNotificationsScreen() {
         ))}
       </View>
 
-      {/* Search + filter */}
       <View style={styles.searchRow}>
         <View style={styles.searchBox}>
           <Ionicons name="search-outline" size={16} color={Colors.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search code, payer..."
+            placeholder="Search code, payer, phone, reference..."
             placeholderTextColor={Colors.textMuted}
             value={search}
             onChangeText={setSearch}
             returnKeyType="search"
-            onSubmitEditing={() => load(1)}
+            autoCorrect={false}
           />
           {search ? (
-            <TouchableOpacity onPress={() => setSearch('')}>
+            <TouchableOpacity onPress={() => setSearch('')} hitSlop={8}>
               <Ionicons name="close-circle" size={16} color={Colors.textMuted} />
             </TouchableOpacity>
           ) : null}
@@ -301,19 +371,19 @@ export default function MpesaNotificationsScreen() {
       <View style={styles.tabs}>
         {FILTER_TABS.map(f => (
           <TouchableOpacity
-            key={f}
-            style={[styles.tab, filter === f && styles.tabActive]}
-            onPress={() => setFilter(f)}
+            key={f.key}
+            style={[styles.tab, filter === f.key && styles.tabActive]}
+            onPress={() => setFilter(f.key)}
           >
-            <Text style={[styles.tabText, filter === f && styles.tabTextActive]}>
-              {f === 'all' ? 'All' : (STATUS_META[f]?.label ?? f)}
-            </Text>
+            <Text style={[styles.tabText, filter === f.key && styles.tabTextActive]}>{f.label}</Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {loading ? (
+      {list.loading ? (
         <MilikLoader fullscreen />
+      ) : list.error && items.length === 0 ? (
+        <ErrorState message={list.error} onRetry={list.retry} />
       ) : (
         <FlatList
           data={items}
@@ -321,20 +391,23 @@ export default function MpesaNotificationsScreen() {
           renderItem={renderItem}
           contentContainerStyle={styles.list}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => load(1, false)} tintColor={Colors.primary} />
+            <RefreshControl refreshing={list.refreshing} onRefresh={list.refresh} tintColor={Colors.primary} />
           }
-          onEndReached={() => { if (!loadingMore && hasMore) load(page + 1, false); }}
+          onEndReached={list.loadMore}
           onEndReachedThreshold={0.3}
+          ListHeaderComponent={list.error ? <ErrorBanner message={list.error} onRetry={list.reload} /> : null}
           ListEmptyComponent={
             <View style={styles.centered}>
               <Ionicons name="phone-portrait-outline" size={48} color={Colors.border} />
               <Text style={styles.emptyText}>
-                {filter === 'unmatched' ? 'No pending transactions' : 'No transactions found'}
+                {debouncedSearch
+                  ? 'No transactions match your search'
+                  : filter === 'unmatched' ? 'No pending transactions' : 'No transactions found'}
               </Text>
             </View>
           }
           ListFooterComponent={
-            loadingMore ? (
+            list.loadingMore ? (
               <View style={{ padding: 20, alignItems: 'center' }}>
                 <ActivityIndicator size="small" color={Colors.primary} />
               </View>
@@ -344,31 +417,46 @@ export default function MpesaNotificationsScreen() {
       )}
 
       {/* Assign Tenant Modal */}
-      <Modal visible={!!assignTarget} animationType="slide" presentationStyle="pageSheet">
+      <Modal
+        visible={!!assignTarget}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={closeAssign}
+      >
         <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }}>
           <View style={styles.modalHeader}>
             <View style={{ flex: 1 }}>
               <Text style={styles.modalTitle}>Assign to Tenant</Text>
               {assignTarget ? (
                 <Text style={styles.modalSub}>
-                  KES {fmt(assignTarget.amount)} · {assignTarget.transactionCode}
+                  {fmtKES(assignTarget.amount)} · {assignTarget.transactionCode}
                 </Text>
               ) : null}
             </View>
-            <TouchableOpacity onPress={() => { setAssignTarget(null); setTenantSearch(''); setAllTenants([]); setTenantResults([]); }}>
+            <TouchableOpacity onPress={closeAssign} hitSlop={8} disabled={assigning}>
               <Ionicons name="close" size={24} color={Colors.text} />
             </TouchableOpacity>
           </View>
+
+          {assignTarget && (assignTarget.accountReference || assignTarget.billRefNumber) ? (
+            <View style={styles.refNotice}>
+              <Ionicons name="alert-circle-outline" size={14} color={Colors.warning} />
+              <Text style={styles.refNoticeText}>
+                Payer typed “{assignTarget.accountReference || assignTarget.billRefNumber}” as the reference. Search to find the right tenant.
+              </Text>
+            </View>
+          ) : null}
 
           <View style={styles.modalSearch}>
             <View style={styles.searchBox}>
               <Ionicons name="search-outline" size={16} color={Colors.textMuted} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search tenant name..."
+                placeholder="Tenant name, code, phone or ID"
                 placeholderTextColor={Colors.textMuted}
                 value={tenantSearch}
                 onChangeText={setTenantSearch}
+                autoCorrect={false}
                 autoFocus
               />
               {tenantSearching && <ActivityIndicator size="small" color={Colors.primary} />}
@@ -381,33 +469,50 @@ export default function MpesaNotificationsScreen() {
               <Text style={{ color: Colors.textMuted, marginTop: 12 }}>Assigning...</Text>
             </View>
           ) : (
-            <FL
+            <FlatList
               data={tenantResults}
               keyExtractor={item => item._id}
+              keyboardShouldPersistTaps="handled"
               contentContainerStyle={{ padding: 16, gap: 8 }}
-              renderItem={({ item }: { item: TenantOption }) => (
-                <TouchableOpacity style={styles.tenantOption} onPress={() => doAssign(item)}>
-                  <View style={styles.tenantOptionAvatar}>
-                    <Text style={styles.tenantOptionAvatarText}>
-                      {item.name.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.tenantOptionName}>{item.name}</Text>
-                    {item.unit?.unitNumber ? (
-                      <Text style={styles.tenantOptionMeta}>Unit {item.unit.unitNumber}</Text>
-                    ) : null}
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
-                </TouchableOpacity>
-              )}
+              renderItem={({ item }: { item: TenantOption }) => {
+                const inactive = !!item.status && INACTIVE_TENANT.includes(item.status);
+                return (
+                  <TouchableOpacity style={styles.tenantOption} onPress={() => confirmAssign(item)} activeOpacity={0.75}>
+                    <View style={styles.tenantOptionAvatar}>
+                      <Text style={styles.tenantOptionAvatarText}>{(item.name || '?').charAt(0).toUpperCase()}</Text>
+                    </View>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={styles.tenantOptionName} numberOfLines={1}>
+                        {item.name}{item.tenantCode ? `  ·  ${item.tenantCode}` : ''}
+                      </Text>
+                      {tenantUnit(item) || item.phone ? (
+                        <Text style={styles.tenantOptionMeta} numberOfLines={1}>
+                          {[tenantUnit(item), item.phone].filter(Boolean).join(' · ')}
+                        </Text>
+                      ) : null}
+                      {inactive ? (
+                        <Text style={[styles.tenantOptionMeta, { color: Colors.danger, fontWeight: '700' }]}>
+                          {item.status?.replace('_', ' ').toUpperCase()}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
+                  </TouchableOpacity>
+                );
+              }}
               ListEmptyComponent={
-                !tenantSearching ? (
+                tenantSearching ? null : (
                   <View style={{ padding: 32, alignItems: 'center', gap: 8 }}>
                     <Ionicons name="people-outline" size={40} color={Colors.border} />
-                    <Text style={{ color: Colors.textMuted }}>No tenants found</Text>
+                    <Text style={{ color: Colors.textMuted, textAlign: 'center' }}>
+                      {tenantError
+                        ? tenantError
+                        : tenantSearch.trim().length < 2
+                          ? 'Type at least 2 characters to search tenants'
+                          : 'No tenants found'}
+                    </Text>
                   </View>
-                ) : null
+                )
               }
             />
           )}
@@ -420,7 +525,7 @@ export default function MpesaNotificationsScreen() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   safe:      { flex: 1, backgroundColor: Colors.background },
-  centered:  { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  centered:  { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingTop: 60 },
   emptyText: { fontSize: 15, color: Colors.textMuted },
   list:      { paddingBottom: 40 },
 
@@ -477,13 +582,14 @@ const styles = StyleSheet.create({
 
   actions:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 },
   date:       { fontSize: 11, color: Colors.textMuted },
-  actionBtns: { flexDirection: 'row', gap: 8 },
+  actionBtns: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   actionBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 10, paddingVertical: 6,
     borderRadius: 8, borderWidth: 1, borderColor: Colors.border,
     backgroundColor: Colors.white,
   },
+  actionBtnPrimary: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   actionBtnText: { fontSize: 12, fontWeight: '700' },
 
   // Modal
@@ -495,6 +601,12 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 17, fontWeight: '800', color: Colors.text },
   modalSub:   { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   modalSearch:{ padding: 16 },
+  refNotice: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    paddingHorizontal: 20, paddingVertical: 10,
+    backgroundColor: Colors.warningLight,
+  },
+  refNoticeText: { flex: 1, fontSize: 12, color: Colors.warning, lineHeight: 17 },
 
   tenantOption: {
     flexDirection: 'row', alignItems: 'center', gap: 12,

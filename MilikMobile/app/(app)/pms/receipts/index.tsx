@@ -1,35 +1,41 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../../../../constants/colors';
 import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
+import ListErrorState from '../../../../components/ui/ListErrorState';
+import { usePagedList, useDebounced, Page } from '../../../../hooks/usePagedList';
+import { fmtMoney, fmtDate } from '../../../../utils/pmsFormat';
+import { Period, periodRange, PAYMENT_METHOD_LABEL, rowsOf } from '../../../../utils/pmsBilling';
 
 type Receipt = {
-  _id:             string;
-  receiptNumber:   string;
-  referenceNumber: string;
-  paymentDate:     string;
-  amount:          number;
-  paymentType:     string;
-  isConfirmed:     boolean;
-  isReversed:      boolean;
-  isCancelled:     boolean;
-  tenant?:         { name?: string };
-  unit?:           { unitNumber?: string; property?: { propertyName?: string; name?: string } };
+  _id:              string;
+  receiptNumber?:   string;
+  referenceNumber?: string;
+  paymentDate?:     string;
+  amount:           number;
+  paymentType?:     string;
+  paymentMethod?:   string;
+  isConfirmed?:     boolean;
+  isReversed?:      boolean;
+  isCancelled?:     boolean;
+  postingStatus?:   string;
+  tenant?:          { _id?: string; name?: string } | null;
+  unit?:            { unitNumber?: string; property?: { propertyName?: string; name?: string } | null } | null;
   allocationSummary?: { unapplied?: number };
 };
 
-type StatusFilter = 'all' | 'confirmed' | 'pending' | 'reversed';
-type Period       = '1M'  | '3M'  | '6M'  | '1Y'  | 'All';
+// Server statuses: active (default) | confirmed | pending | failed | reversed
+type StatusFilter = 'active' | 'confirmed' | 'pending' | 'reversed';
 
 const STATUS_TABS: { key: StatusFilter; label: string }[] = [
-  { key: 'all',       label: 'All'       },
+  { key: 'active',    label: 'All'       },
   { key: 'confirmed', label: 'Confirmed' },
   { key: 'pending',   label: 'Pending'   },
   { key: 'reversed',  label: 'Reversed'  },
@@ -43,89 +49,54 @@ const PERIOD_TABS: { key: Period; label: string }[] = [
   { key: 'All', label: 'All'     },
 ];
 
-// Receipts API uses `from` / `to` (not fromDate/toDate)
-const getPeriodDates = (p: Period): { from?: string; to?: string } => {
-  if (p === 'All') return {};
-  const today = new Date();
-  const to    = today.toISOString().slice(0, 10);
-  let from: Date;
-  if      (p === '1M') from = new Date(today.getFullYear(), today.getMonth(),     1);
-  else if (p === '3M') from = new Date(today.getFullYear(), today.getMonth() - 2, 1);
-  else if (p === '6M') from = new Date(today.getFullYear(), today.getMonth() - 5, 1);
-  else                 from = new Date(today.getFullYear(), 0, 1);
-  return { from: from.toISOString().slice(0, 10), to };
+const TYPE_LABEL: Record<string, string> = {
+  rent: 'Rent', deposit: 'Deposit', utility: 'Utility', late_fee: 'Late Penalty', other: 'Other',
 };
 
 const resolveStatus = (r: Receipt) => {
-  if (r.isReversed || r.isCancelled) return { label: 'REVERSED',  bg: '#F1F5F9',           text: '#64748B'       };
-  if (r.isConfirmed)                  return { label: 'CONFIRMED', bg: Colors.successLight, text: Colors.success  };
-  return                                     { label: 'PENDING',   bg: Colors.warningLight, text: Colors.warning  };
+  if (r.isReversed || r.isCancelled)   return { label: 'REVERSED',  bg: '#F1F5F9',           text: '#64748B'       };
+  if (r.postingStatus === 'failed')    return { label: 'FAILED',    bg: Colors.dangerLight,  text: Colors.danger   };
+  if (r.isConfirmed)                   return { label: 'CONFIRMED', bg: Colors.successLight, text: Colors.success  };
+  return                                      { label: 'PENDING',   bg: Colors.warningLight, text: Colors.warning  };
 };
 
-const fmt = (n: number) =>
-  Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' });
+const LIMIT = 30;
 
 export default function ReceiptsScreen() {
   const router = useRouter();
-  const [receipts,    setReceipts]    = useState<Receipt[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [refreshing,  setRefreshing]  = useState(false);
-  const [search,      setSearch]      = useState('');
-  const [filter,      setFilter]      = useState<StatusFilter>('all');
-  const [period,      setPeriod]      = useState<Period>('3M');
-  const [page,        setPage]        = useState(1);
-  const [hasMore,     setHasMore]     = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const { tenant: tenantParam, tenantName: tenantNameParam } =
+    useLocalSearchParams<{ tenant?: string; tenantName?: string }>();
 
-  const LIMIT     = 50;
-  const searchRef = useRef(search);
-  searchRef.current = search;
+  const [tenantId, setTenantId] = useState(tenantParam ?? '');
+  const [search,   setSearch]   = useState('');
+  const [filter,   setFilter]   = useState<StatusFilter>('active');
+  const [period,   setPeriod]   = useState<Period>('3M');
+  const q = useDebounced(search.trim(), 400);
 
-  const load = useCallback(async (pg = 1, replace = true) => {
-    if (pg === 1) replace ? setLoading(true) : setRefreshing(true);
-    else setLoadingMore(true);
+  const fetchPage = useCallback(async (page: number): Promise<Page<Receipt>> => {
+    const params: Record<string, string | number> = { page, limit: LIMIT, status: filter };
+    if (tenantId) params.tenant = tenantId;
+    const { from, to } = periodRange(period);   // receipts API takes from / to
+    if (from) params.from = from;
+    if (to)   params.to   = to;
+    if (q)    params.search = q;                 // receipt no., reference, description or tenant name
 
-    try {
-      const params: Record<string, string> = {
-        page: String(pg), limit: String(LIMIT),
-      };
-      // 'all' → status=active (API default: excludes reversed/cancelled/failed)
-      params.status = filter === 'all' ? 'active' : filter;
+    const { data } = await api.get('/rent-payments', { params });
+    const items = rowsOf<Receipt>(data);
+    const totalPages = Number(data?.pagination?.totalPages ?? 1);
+    return { items, hasMore: page < totalPages };
+  }, [filter, period, q, tenantId]);
 
-      const { from, to } = getPeriodDates(period);
-      if (from) params.from = from;
-      if (to)   params.to   = to;
-
-      if (searchRef.current.trim()) params.search = searchRef.current.trim();
-
-      const { data } = await api.get('/rent-payments', { params });
-      const items: Receipt[] = data.items ?? data.data ?? (Array.isArray(data) ? data : []);
-
-      setReceipts(prev => replace || pg === 1 ? items : [...prev, ...items]);
-      setHasMore(items.length === LIMIT);
-      setPage(pg);
-    } catch { /* fail silently */ }
-    finally {
-      setLoading(false);
-      setRefreshing(false);
-      setLoadingMore(false);
-    }
-  }, [filter, period]);
-
-  useEffect(() => { load(1); }, [load]);
-  useEffect(() => {
-    const t = setTimeout(() => load(1), 400);
-    return () => clearTimeout(t);
-  }, [search]);
+  const { items: receipts, loading, refreshing, loadingMore, error, refresh, retry, loadMore } =
+    usePagedList<Receipt>(fetchPage, `${filter}|${period}|${q}|${tenantId}`);
 
   const renderItem = ({ item }: { item: Receipt }) => {
-    const sc        = resolveStatus(item);
-    const unapplied = Number(item.allocationSummary?.unapplied ?? 0);
-    const propName  = item.unit?.property?.propertyName ?? item.unit?.property?.name ?? '';
-    const isReversed = item.isReversed || item.isCancelled;
+    const sc         = resolveStatus(item);
+    const unapplied  = Number(item.allocationSummary?.unapplied ?? 0);
+    const propName   = item.unit?.property?.propertyName ?? item.unit?.property?.name ?? '';
+    const isReversed = !!(item.isReversed || item.isCancelled);
+    const method     = PAYMENT_METHOD_LABEL[item.paymentMethod ?? ''];
+    const typeLabel  = TYPE_LABEL[item.paymentType ?? ''] ?? '';
 
     return (
       <TouchableOpacity
@@ -149,15 +120,16 @@ export default function ReceiptsScreen() {
             <View style={[styles.badge, { backgroundColor: sc.bg }]}>
               <Text style={[styles.badgeText, { color: sc.text }]}>{sc.label}</Text>
             </View>
-            <Text style={[styles.amount, isReversed && styles.textMuted]}>KES {fmt(item.amount)}</Text>
+            <Text style={[styles.amount, isReversed && styles.textMuted]}>KES {fmtMoney(item.amount)}</Text>
           </View>
         </View>
         <View style={styles.cardBottom}>
-          <Text style={styles.meta}>{item.paymentType ?? ''}</Text>
+          {typeLabel ? <Text style={styles.meta}>{typeLabel}</Text> : null}
+          {method ? <Text style={styles.meta}>{method}</Text> : null}
           <Text style={styles.meta}>{fmtDate(item.paymentDate)}</Text>
-          {!isReversed && unapplied > 0 && (
+          {!isReversed && unapplied > 0.009 && (
             <Text style={[styles.meta, { color: Colors.warning, fontWeight: '700' }]}>
-              Unallocated: {fmt(unapplied)}
+              Unallocated: {fmtMoney(unapplied)}
             </Text>
           )}
         </View>
@@ -173,20 +145,31 @@ export default function ReceiptsScreen() {
           <Ionicons name="search-outline" size={16} color={Colors.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search receipts..."
+            placeholder="Receipt no., reference or tenant..."
             placeholderTextColor={Colors.textMuted}
             value={search}
             onChangeText={setSearch}
             returnKeyType="search"
-            onSubmitEditing={() => load(1)}
+            autoCorrect={false}
           />
           {search ? (
-            <TouchableOpacity onPress={() => setSearch('')}>
+            <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Ionicons name="close-circle" size={16} color={Colors.textMuted} />
             </TouchableOpacity>
           ) : null}
         </View>
       </View>
+
+      {/* Single-tenant scope (coming from a tenant profile) */}
+      {tenantId ? (
+        <View style={styles.scopeBar}>
+          <Ionicons name="person" size={13} color={Colors.primary} />
+          <Text style={styles.scopeText} numberOfLines={1}>{tenantNameParam || 'Selected tenant'}</Text>
+          <TouchableOpacity onPress={() => setTenantId('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="close-circle" size={15} color={Colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {/* Status tabs */}
       <FlatList
@@ -234,16 +217,21 @@ export default function ReceiptsScreen() {
           keyExtractor={item => item._id}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
+          keyboardShouldPersistTaps="handled"
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => load(1, false)} tintColor={Colors.primary} />
+            <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={Colors.primary} />
           }
-          onEndReached={() => { if (!loadingMore && hasMore) load(page + 1, false); }}
+          onEndReached={loadMore}
           onEndReachedThreshold={0.3}
           ListEmptyComponent={
-            <View style={styles.centered}>
-              <Ionicons name="cash-outline" size={48} color={Colors.border} />
-              <Text style={styles.emptyText}>No receipts found</Text>
-            </View>
+            error ? (
+              <ListErrorState message={error} onRetry={retry} />
+            ) : (
+              <View style={styles.centered}>
+                <Ionicons name="cash-outline" size={48} color={Colors.border} />
+                <Text style={styles.emptyText}>No receipts found</Text>
+              </View>
+            )
           }
           ListFooterComponent={
             loadingMore ? (
@@ -257,7 +245,11 @@ export default function ReceiptsScreen() {
 
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => router.push('/pms/receipts/new' as any)}
+        onPress={() => router.push(
+          (tenantId
+            ? `/pms/receipts/new?tenant=${tenantId}&tenantName=${encodeURIComponent(tenantNameParam ?? '')}`
+            : '/pms/receipts/new') as any
+        )}
         activeOpacity={0.85}
       >
         <Ionicons name="add" size={28} color={Colors.white} />
@@ -268,7 +260,7 @@ export default function ReceiptsScreen() {
 
 const styles = StyleSheet.create({
   safe:     { flex: 1, backgroundColor: Colors.background },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingTop: 60 },
   emptyText:{ fontSize: 15, color: Colors.textMuted },
   list:     { paddingBottom: 100 },
   fab: {
@@ -288,6 +280,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, height: 42,
   },
   searchInput: { flex: 1, fontSize: 14, color: Colors.text },
+
+  scopeBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginHorizontal: 16, marginBottom: 8,
+    backgroundColor: Colors.primaryFaded,
+    borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6,
+    borderWidth: 1, borderColor: Colors.primary + '30',
+  },
+  scopeText: { flex: 1, fontSize: 12, fontWeight: '600', color: Colors.primary },
 
   tabsRow:         { paddingHorizontal: 16, paddingBottom: 8, gap: 7 },
   tab:             { paddingHorizontal: 13, paddingVertical: 6, borderRadius: 20, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border },

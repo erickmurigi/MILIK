@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Linking, ActivityIndicator, RefreshControl,
+  Linking, Alert, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,18 +9,24 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Colors } from '../../../../constants/colors';
 import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
+import ListErrorState from '../../../../components/ui/ListErrorState';
+import { fmtMoney, fmtDate, apiError } from '../../../../utils/pmsFormat';
+import { invoiceStatusOf, INVOICE_STATUS_LABEL, INVOICE_CATEGORY_LABEL, rowsOf } from '../../../../utils/pmsBilling';
+
+type UnitRef = { _id: string; unitNumber?: string; property?: { _id?: string; propertyName?: string; propertyCode?: string } | null };
 
 type TenantDetail = {
-  _id:         string;
-  name:        string;
-  phone?:      string;
-  email?:      string;
-  tenantCode?: string;
-  status?:     string;
-  balance?:    number;
-  unit?:       { _id: string; unitNumber?: string; property?: { propertyName?: string; propertyCode?: string } };
-  moveInDate?: string;
-  rent?:       number;
+  _id:              string;
+  name?:            string;
+  phone?:           string;
+  email?:           string;
+  tenantCode?:      string;
+  status?:          string;
+  balance?:         number;
+  unit?:            UnitRef | null;
+  additionalUnits?: UnitRef[];
+  moveInDate?:      string;
+  rent?:            number;
 };
 
 type BalanceData = {
@@ -31,86 +37,91 @@ type BalanceData = {
 };
 
 type Invoice = {
-  _id:           string;
-  invoiceNumber?: string;
-  amount:        number;
-  status:        string;
-  category?:     string;
-  dueDate?:      string;
-  createdAt?:    string;
+  _id:             string;
+  invoiceNumber?:  string;
+  amount:          number;
+  adjustedAmount?: number;
+  outstanding?:    number;
+  appliedAmount?:  number;
+  status?:         string;
+  computedStatus?: string;
+  category?:       string;
+  dueDate?:        string;
+  invoiceDate?:    string;
+  createdAt?:      string;
 };
 
 type Payment = {
-  _id:         string;
-  receiptNumber?: string;
-  amount:      number;
-  paymentDate?: string;
-  paymentMethod?: string;
-  isConfirmed?: boolean;
+  _id:              string;
+  receiptNumber?:   string;
+  referenceNumber?: string;
+  amount:           number;
+  paymentDate?:     string;
+  isConfirmed?:     boolean;
 };
 
-const fmt = (n: number) =>
-  `KES ${Math.abs(n).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-const fmtDate = (d?: string) =>
-  d ? new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+const fmt = (n: number) => `KES ${fmtMoney(Math.abs(n))}`;
 
 const INV_STATUS_COLOR: Record<string, string> = {
-  unpaid:    Colors.danger,
-  partial:   Colors.warning,
-  paid:      Colors.success,
-  cancelled: Colors.textMuted,
-  reversed:  Colors.textMuted,
+  pending:        Colors.danger,
+  partially_paid: Colors.warning,
+  paid:           Colors.success,
+  cancelled:      Colors.textMuted,
+  reversed:       Colors.textMuted,
 };
+
+const cap = (s?: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ') : '—');
 
 export default function TenantProfileScreen() {
   const { id }   = useLocalSearchParams<{ id: string }>();
   const router   = useRouter();
 
-  const [tenant,    setTenant]    = useState<TenantDetail | null>(null);
-  const [balance,   setBalance]   = useState<BalanceData | null>(null);
-  const [invoices,  setInvoices]  = useState<Invoice[]>([]);
-  const [payments,  setPayments]  = useState<Payment[]>([]);
-  const [loading,   setLoading]   = useState(true);
+  const [tenant,     setTenant]     = useState<TenantDetail | null>(null);
+  const [balance,    setBalance]    = useState<BalanceData | null>(null);
+  const [invoices,   setInvoices]   = useState<Invoice[]>([]);
+  const [payments,   setPayments]   = useState<Payment[]>([]);
+  const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError,  setLoadError]  = useState<string | null>(null);
 
-  const loadAll = async () => {
-    try {
-      const [tenantRes, balRes, invRes, payRes] = await Promise.all([
-        api.get(`/tenants/${id}`),
-        api.get(`/tenants/balance/${id}`),
-        api.get('/tenant-invoices', { params: { tenant: id, limit: 10, page: 1 } }),
-        api.get('/rent-payments', { params: { tenant: id, limit: 10, page: 1 } }),
-      ]);
-      setTenant(tenantRes.data.data || tenantRes.data);
-      setBalance(balRes.data?.data ?? balRes.data);
-      const invRows = invRes.data;
-      setInvoices(Array.isArray(invRows) ? invRows : invRows?.data ?? invRows?.items ?? []);
-      const payRows = payRes.data;
-      setPayments(Array.isArray(payRows) ? payRows : payRows?.data ?? payRows?.items ?? []);
-    } catch (err) {
-      console.error('Tenant profile load error:', err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+  const loadAll = useCallback(async () => {
+    // The tenant itself is essential; balance / invoices / receipts degrade gracefully on their own.
+    const [tenantRes, balRes, invRes, payRes] = await Promise.allSettled([
+      api.get(`/tenants/${id}`),
+      api.get(`/tenants/balance/${id}`),
+      api.get('/tenant-invoices', { params: { tenant: id, limit: 5, page: 1, includeSnapshots: 'true' } }),
+      api.get('/rent-payments', { params: { tenant: id, limit: 5, page: 1 } }),
+    ]);
+
+    if (tenantRes.status === 'fulfilled') {
+      const d = tenantRes.value.data;
+      setTenant((d?.data ?? d) as TenantDetail);
+      setLoadError(null);
+    } else {
+      setLoadError(apiError(tenantRes.reason, 'Could not load this tenant.'));
     }
-  };
+    if (balRes.status === 'fulfilled') setBalance(balRes.value.data?.data ?? balRes.value.data);
+    if (invRes.status === 'fulfilled') setInvoices(rowsOf<Invoice>(invRes.value.data));
+    if (payRes.status === 'fulfilled') setPayments(rowsOf<Payment>(payRes.value.data));
+    setLoading(false);
+    setRefreshing(false);
+  }, [id]);
 
-  useEffect(() => { loadAll(); }, [id]);
+  useEffect(() => { loadAll(); }, [loadAll]);
 
   const onRefresh = () => { setRefreshing(true); loadAll(); };
 
   const openWhatsApp = () => {
     if (!tenant?.phone) return;
-    const phone = tenant.phone.replace(/\D/g, '');
-    // Kenya numbers: normalise to international format
-    const intl = phone.startsWith('0') ? `254${phone.slice(1)}` : phone;
-    Linking.openURL(`https://wa.me/${intl}`);
+    const digits = tenant.phone.replace(/\D/g, '');
+    // Kenya numbers: normalise 07xx / 01xx to international format
+    const intl = digits.startsWith('0') ? `254${digits.slice(1)}` : digits;
+    Linking.openURL(`https://wa.me/${intl}`).catch(() => Alert.alert('WhatsApp', 'Could not open WhatsApp.'));
   };
 
   const callTenant = () => {
     if (!tenant?.phone) return;
-    Linking.openURL(`tel:${tenant.phone}`);
+    Linking.openURL(`tel:${tenant.phone}`).catch(() => Alert.alert('Call', 'Could not start the call.'));
   };
 
   if (loading) {
@@ -125,21 +136,27 @@ export default function TenantProfileScreen() {
   if (!tenant) {
     return (
       <SafeAreaView style={styles.safe} edges={['bottom']}>
-        <Stack.Screen options={{ title: 'Not Found' }} />
-        <View style={styles.loadingWrap}>
-          <Text style={styles.errorText}>Tenant not found</Text>
-        </View>
+        <Stack.Screen options={{ title: 'Tenant' }} />
+        <ListErrorState
+          message={loadError ?? 'Tenant not found'}
+          onRetry={() => { setLoading(true); loadAll(); }}
+        />
       </SafeAreaView>
     );
   }
 
-  const currentBalance = balance?.currentBalance ?? tenant.balance ?? 0;
-  const unitNumber     = tenant.unit?.unitNumber || '—';
-  const propertyName   = (tenant.unit as any)?.property?.propertyName || '';
+  const currentBalance = Number(balance?.currentBalance ?? tenant.balance ?? 0);
+  const owes           = currentBalance > 0.009;
+  const hasCredit      = currentBalance < -0.009;
+  const tenantName     = tenant.name || 'Unnamed tenant';
+  const allUnits       = [tenant.unit, ...(tenant.additionalUnits ?? [])].filter((u): u is UnitRef => !!u);
+  const unitNumber     = allUnits.map(u => u.unitNumber).filter(Boolean).join(', ') || '—';
+  const propertyName   = tenant.unit?.property?.propertyName || '';
+  const balanceColor   = owes ? Colors.danger : Colors.success;
 
   return (
     <>
-      <Stack.Screen options={{ title: tenant.name }} />
+      <Stack.Screen options={{ title: tenantName }} />
       <SafeAreaView style={styles.safe} edges={['bottom']}>
         <ScrollView
           contentContainerStyle={styles.scroll}
@@ -149,33 +166,33 @@ export default function TenantProfileScreen() {
           {/* Header card */}
           <View style={styles.heroCard}>
             <View style={styles.heroAvatar}>
-              <Text style={styles.heroAvatarText}>{tenant.name?.charAt(0)?.toUpperCase()}</Text>
+              <Text style={styles.heroAvatarText}>{tenantName.charAt(0).toUpperCase()}</Text>
             </View>
-            <Text style={styles.heroName}>{tenant.name}</Text>
+            <Text style={styles.heroName}>{tenantName}</Text>
             <Text style={styles.heroUnit}>
               Unit {unitNumber}{propertyName ? ` · ${propertyName}` : ''}
             </Text>
-            {tenant.tenantCode && (
+            {tenant.tenantCode ? (
               <Text style={styles.heroCode}>{tenant.tenantCode}</Text>
-            )}
+            ) : null}
 
             {/* Action buttons */}
             <View style={styles.heroActions}>
-              {tenant.phone && (
+              {tenant.phone ? (
                 <TouchableOpacity style={styles.actionBtn} onPress={callTenant}>
                   <Ionicons name="call-outline" size={20} color={Colors.primary} />
                   <Text style={styles.actionBtnLabel}>Call</Text>
                 </TouchableOpacity>
-              )}
-              {tenant.phone && (
+              ) : null}
+              {tenant.phone ? (
                 <TouchableOpacity style={[styles.actionBtn, styles.actionBtnWhatsApp]} onPress={openWhatsApp}>
                   <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
                   <Text style={[styles.actionBtnLabel, { color: '#25D366' }]}>WhatsApp</Text>
                 </TouchableOpacity>
-              )}
+              ) : null}
               <TouchableOpacity
                 style={[styles.actionBtn, styles.actionBtnPrimary]}
-                onPress={() => router.push(`/pms/receipts/new?tenant=${id}` as any)}
+                onPress={() => router.push(`/pms/receipts/new?tenant=${id}&tenantName=${encodeURIComponent(tenantName)}` as any)}
               >
                 <Ionicons name="cash-outline" size={20} color={Colors.white} />
                 <Text style={[styles.actionBtnLabel, { color: Colors.white }]}>Receipt</Text>
@@ -201,12 +218,12 @@ export default function TenantProfileScreen() {
           </View>
 
           {/* Balance card */}
-          <View style={[styles.balanceCard, { borderColor: currentBalance > 0 ? Colors.danger : Colors.success }]}>
+          <View style={[styles.balanceCard, { borderColor: balanceColor }]}>
             <View style={styles.balanceRow}>
               <View style={styles.balanceStat}>
-                <Text style={styles.balanceStatLabel}>BALANCE DUE</Text>
-                <Text style={[styles.balanceStatValue, { color: currentBalance > 0 ? Colors.danger : Colors.success }]}>
-                  {currentBalance > 0 ? fmt(currentBalance) : 'Settled'}
+                <Text style={styles.balanceStatLabel}>{hasCredit ? 'CREDIT' : 'BALANCE DUE'}</Text>
+                <Text style={[styles.balanceStatValue, { color: balanceColor }]}>
+                  {owes || hasCredit ? fmt(currentBalance) : 'Settled'}
                 </Text>
               </View>
               <View style={[styles.balanceStat, styles.balanceStatBorder]}>
@@ -225,11 +242,11 @@ export default function TenantProfileScreen() {
             <Text style={styles.sectionLabel}>DETAILS</Text>
             <View style={styles.detailCard}>
               {[
-                { label: 'Phone',     value: tenant.phone || '—' },
-                { label: 'Email',     value: tenant.email || '—' },
-                { label: 'Move-in',   value: fmtDate(tenant.moveInDate) },
-                { label: 'Rent (p.m)',value: tenant.rent ? fmt(tenant.rent) : '—' },
-                { label: 'Status',    value: tenant.status || '—' },
+                { label: 'Phone',      value: tenant.phone || '—' },
+                { label: 'Email',      value: tenant.email || '—' },
+                { label: 'Move-in',    value: fmtDate(tenant.moveInDate) },
+                { label: 'Rent (p.m)', value: tenant.rent ? fmt(tenant.rent) : '—' },
+                { label: 'Status',     value: cap(tenant.status) },
               ].map((row, i, arr) => (
                 <View key={row.label} style={[styles.detailRow, i === arr.length - 1 && styles.detailRowLast]}>
                   <Text style={styles.detailLabel}>{row.label}</Text>
@@ -243,7 +260,7 @@ export default function TenantProfileScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionLabel}>RECENT INVOICES</Text>
-              <TouchableOpacity onPress={() => router.push(`/pms/invoices?tenant=${id}` as any)}>
+              <TouchableOpacity onPress={() => router.push(`/pms/invoices?tenant=${id}&tenantName=${encodeURIComponent(tenantName)}` as any)}>
                 <Text style={styles.seeAll}>See all</Text>
               </TouchableOpacity>
             </View>
@@ -251,26 +268,34 @@ export default function TenantProfileScreen() {
               <Text style={styles.emptyListText}>No invoices found</Text>
             ) : (
               <View style={styles.listCard}>
-                {invoices.slice(0, 5).map((inv, i, arr) => (
-                  <TouchableOpacity
-                    key={inv._id}
-                    style={[styles.listRow, i === arr.length - 1 && styles.listRowLast]}
-                    onPress={() => router.push(`/pms/invoices/${inv._id}` as any)}
-                    activeOpacity={0.75}
-                  >
-                    <View style={[styles.statusStripe, { backgroundColor: INV_STATUS_COLOR[inv.status] || Colors.textMuted }]} />
-                    <View style={styles.listRowBody}>
-                      <Text style={styles.listRowTitle}>
-                        {inv.invoiceNumber || inv.category || 'Invoice'}
+                {invoices.slice(0, 5).map((inv, i, arr) => {
+                  const st = invoiceStatusOf(inv);
+                  return (
+                    <TouchableOpacity
+                      key={inv._id}
+                      style={[styles.listRow, i === arr.length - 1 && styles.listRowLast]}
+                      onPress={() => router.push({
+                        pathname: '/pms/invoices/[id]' as any,
+                        params: { id: inv._id, tenantId: String(id), invoiceNumber: inv.invoiceNumber ?? '' },
+                      })}
+                      activeOpacity={0.75}
+                    >
+                      <View style={[styles.statusStripe, { backgroundColor: INV_STATUS_COLOR[st] || Colors.textMuted }]} />
+                      <View style={styles.listRowBody}>
+                        <Text style={styles.listRowTitle}>
+                          {inv.invoiceNumber || INVOICE_CATEGORY_LABEL[inv.category ?? ''] || 'Invoice'}
+                        </Text>
+                        <Text style={styles.listRowSub}>
+                          {fmtDate(inv.invoiceDate || inv.dueDate || inv.createdAt)} · {INVOICE_STATUS_LABEL[st] ?? st}
+                        </Text>
+                      </View>
+                      <Text style={[styles.listRowAmt, { color: INV_STATUS_COLOR[st] || Colors.text }]}>
+                        {fmt(inv.adjustedAmount ?? inv.amount)}
                       </Text>
-                      <Text style={styles.listRowSub}>{fmtDate(inv.dueDate || inv.createdAt)}</Text>
-                    </View>
-                    <Text style={[styles.listRowAmt, { color: INV_STATUS_COLOR[inv.status] || Colors.text }]}>
-                      {fmt(inv.amount)}
-                    </Text>
-                    <Ionicons name="chevron-forward" size={14} color={Colors.textMuted} style={{ marginRight: 10 }} />
-                  </TouchableOpacity>
-                ))}
+                      <Ionicons name="chevron-forward" size={14} color={Colors.textMuted} style={{ marginRight: 10 }} />
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             )}
           </View>
@@ -279,6 +304,9 @@ export default function TenantProfileScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionLabel}>RECENT PAYMENTS</Text>
+              <TouchableOpacity onPress={() => router.push(`/pms/receipts?tenant=${id}&tenantName=${encodeURIComponent(tenantName)}` as any)}>
+                <Text style={styles.seeAll}>See all</Text>
+              </TouchableOpacity>
             </View>
             {payments.length === 0 ? (
               <Text style={styles.emptyListText}>No payments recorded</Text>
@@ -294,9 +322,11 @@ export default function TenantProfileScreen() {
                     <View style={[styles.statusStripe, { backgroundColor: pay.isConfirmed ? Colors.success : Colors.warning }]} />
                     <View style={styles.listRowBody}>
                       <Text style={styles.listRowTitle}>
-                        {pay.receiptNumber || 'Payment'}
+                        {pay.receiptNumber || pay.referenceNumber || 'Payment'}
                       </Text>
-                      <Text style={styles.listRowSub}>{fmtDate(pay.paymentDate)}</Text>
+                      <Text style={styles.listRowSub}>
+                        {fmtDate(pay.paymentDate)}{pay.isConfirmed ? '' : ' · Pending'}
+                      </Text>
                     </View>
                     <Text style={[styles.listRowAmt, { color: Colors.success }]}>
                       {fmt(pay.amount)}
@@ -317,8 +347,6 @@ export default function TenantProfileScreen() {
 const styles = StyleSheet.create({
   safe:        { flex: 1, backgroundColor: Colors.background },
   scroll:      { padding: 16, paddingBottom: 48, gap: 16 },
-  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  errorText:   { fontSize: 16, color: Colors.textMuted },
 
   /* Hero */
   heroCard: {
@@ -335,12 +363,12 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   heroAvatarText: { fontSize: 28, fontWeight: '900', color: Colors.white },
-  heroName:       { fontSize: 20, fontWeight: '800', color: Colors.white },
-  heroUnit:       { fontSize: 13, color: 'rgba(255,255,255,0.7)' },
+  heroName:       { fontSize: 20, fontWeight: '800', color: Colors.white, textAlign: 'center' },
+  heroUnit:       { fontSize: 13, color: 'rgba(255,255,255,0.7)', textAlign: 'center' },
   heroCode:       { fontSize: 11, color: 'rgba(255,255,255,0.5)', letterSpacing: 0.5 },
 
   heroActions: {
-    flexDirection: 'row', gap: 10, marginTop: 16,
+    flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: 16,
   },
   actionBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
