@@ -25,7 +25,7 @@ type Stats = {
 
 const QUICK_ACTIONS = [
   { label: 'Leads',    icon: 'people-outline',         route: '/sales/leads',    color: '#1D4ED8' },
-  { label: 'Deals',    icon: 'handshake-outline',      route: '/sales/deals',    color: SC        },
+  { label: 'Deals',    icon: 'briefcase-outline',      route: '/sales/deals',    color: SC        },
   { label: 'Listings', icon: 'home-outline',           route: '/sales/listings', color: '#065F46' },
   { label: 'Schedule', icon: 'calendar-number-outline',route: '/sales/deals',    color: '#7C3AED' },
 ] as const;
@@ -54,7 +54,7 @@ export default function SalesDashboardScreen() {
   const statCards = [
     { label: 'Active Listings',   value: String(stats.activeListings  ?? 0), icon: 'home-outline',       color: '#065F46' },
     { label: 'Total Leads',       value: String(stats.totalLeads      ?? 0), icon: 'people-outline',     color: '#1D4ED8' },
-    { label: 'Active Deals',      value: String(stats.activeDeals     ?? 0), icon: 'handshake-outline',  color: SC        },
+    { label: 'Active Deals',      value: String(stats.activeDeals     ?? 0), icon: 'briefcase-outline',  color: SC        },
     { label: 'Overdue Items',     value: String(stats.overdueInstallments ?? 0), icon: 'alert-circle-outline', color: '#DC2626' },
   ];
 

@@ -177,7 +177,7 @@ export default function DealsScreen() {
           onEndReachedThreshold={0.3}
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
-              <Ionicons name="handshake-outline" size={48} color="#CBD5E1" />
+              <Ionicons name="briefcase-outline" size={48} color="#CBD5E1" />
               <Text style={styles.emptyTxt}>No deals found</Text>
             </View>
           }
