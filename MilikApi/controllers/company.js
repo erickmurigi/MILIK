@@ -1055,6 +1055,24 @@ const buildMpesaConfigRecord = async ({
     shortCode: nextConfig.shortCode,
   });
 
+  // A passkey belongs to exactly one Paybill. Two Paybills with the same passkey means one of them was filled in with the
+  // other's credentials, and M-Pesa then refuses every STK push for it with "Wrong credentials" (no prompt reaches the phone).
+  // Checked only when the passkey or Paybill number is being changed, so other edits to an old setup are not blocked.
+  if (nextConfig.passkey && (isCreate || normalizeText(payload.passkey) || payload.shortCode !== undefined)) {
+    const clash = (configs || []).find(
+      (other) =>
+        String(other?._id || "") !== String(nextConfig._id) &&
+        normalizeText(other?.passkey) === nextConfig.passkey &&
+        normalizeText(other?.shortCode) !== nextConfig.shortCode
+    );
+    if (clash) {
+      throw createError(
+        400,
+        `The passkey entered for Paybill ${nextConfig.shortCode || "(new)"} is identical to the one saved for Paybill ${normalizeText(clash.shortCode)} (${normalizeText(clash.name) || "another setup"}). Every Paybill has its own passkey, so one of them is wrong. Copy the passkey for this Paybill from the Safaricom Daraja portal.`
+      );
+    }
+  }
+
   const status = buildMpesaPaybillStatus(nextConfig);
   if (nextConfig.isActive && !status.isConfigured) {
     throw createError(

@@ -54,6 +54,7 @@ export const carWashApi = {
   recordPayment: async (payload) => unwrap(await adminRequests.post("/carwash/payments", bb(payload))),
   deletePayment: async (id) => unwrap(await adminRequests.delete(`/carwash/payments/${id}`)),
   initiateStkPush: async (payload) => unwrap(await adminRequests.post("/carwash/payments/stk-push", payload)),
+  getStkStatus: async (checkoutRequestId) => unwrap(await adminRequests.get(`/carwash/payments/stk-status/${encodeURIComponent(checkoutRequestId)}`)),
   listMpesaNotifications: async (params = {}) => unwrap(await adminRequests.get("/carwash/mpesa/notifications", { params: bp(params) })),
   reassignMpesaNotification: async (id, jobId) => unwrap(await adminRequests.patch(`/carwash/mpesa/notifications/${id}/reassign`, { jobId })),
   listUnpaidJobs: async () => unwrap(await adminRequests.get("/carwash/mpesa/unpaid-jobs")),

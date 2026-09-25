@@ -20,6 +20,7 @@ import { sendAdHocSms } from "../../../services/communicationService.js";
 import { postCarWashPaymentLedger, reverseCarWashPaymentLedger, reverseCarWashTopupLedger, reverseCarWashCustomerCreditCreationLedger } from "../services/carwashAccountingService.js";
 import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
 import { recomputeCustomerStats } from "../services/customerStatsService.js";
+import { describeStkOutcome } from "../services/stkOutcome.js";
 
 export const AMOUNT_TOLERANCE = 0.01; // KES 0.01 tolerance for all amount comparisons
 const PAYMENT_METHODS = new Set(["cash", "mpesa", "bank", "card", "other"]);
@@ -440,6 +441,23 @@ export const sendPaymentSms = async (req, res, next) => {
 };
 
 // â”€â”€â”€ M-Pesa STK Push â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Result of one STK push (the callback arrives after the request was accepted, so the screen polls this).
+export const getStkStatus = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const id = String(req.params.checkoutRequestId || "").trim();
+    if (!/^[A-Za-z0-9_]{8,64}$/.test(id)) return next(createError(400, "Invalid request id"));
+    const notification = await CarWashMpesaNotification.findOne({
+      business,
+      createdAt: { $gte: new Date(Date.now() - 6 * 60 * 60 * 1000) },
+      $or: [{ transactionCode: id }, { "rawPayload.CheckoutRequestID": id }, { "rawPayload.Body.stkCallback.CheckoutRequestID": id }],
+    }).select("status shortCode resultCode resultDesc rawPayload.Body.stkCallback.ResultCode").lean();
+    res.json({ success: true, data: describeStkOutcome(notification) });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const initiateStkPush = async (req, res, next) => {
   try {
     const { phone, amount, jobId } = req.body;
@@ -563,7 +581,7 @@ export const initiateStkPush = async (req, res, next) => {
 
     res.json({
       success: true,
-      data: result,
+      data: { ...result, shortCode: String(config.shortCode) },
       message: `M-Pesa payment request sent to ${phone}. Ask the customer to check their phone and enter their PIN.`,
     });
   } catch (err) {

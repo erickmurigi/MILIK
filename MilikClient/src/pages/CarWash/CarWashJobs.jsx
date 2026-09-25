@@ -943,6 +943,25 @@ const CarWashJobs = () => {
     }
   };
 
+  // "Request sent" only means Safaricom accepted it. The real outcome (prompt shown, PIN entered, refused) comes later on the
+  // callback, so ask for it for up to 90 seconds and tell the cashier what happened instead of leaving them waiting.
+  const stkWatchRef = useRef(0);
+  useEffect(() => () => { stkWatchRef.current += 1; }, []);
+  const watchStkResult = async (checkoutRequestId) => {
+    if (!checkoutRequestId) return;
+    const token = ++stkWatchRef.current;
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      if (stkWatchRef.current !== token) return; // a newer push, or the page was closed
+      try {
+        const outcome = await carWashApi.getStkStatus(checkoutRequestId);
+        if (outcome?.state === "paid") { toast.success("M-Pesa payment received."); return; }
+        if (outcome?.state === "failed") { toast.error(`M-Pesa payment failed: ${outcome.message}`, { autoClose: 15000 }); return; }
+      } catch { /* keep trying until the time is up */ }
+    }
+    toast.info("No answer from M-Pesa yet. Ask the customer to check their phone, or send the request again.");
+  };
+
   const sendStkPush = async () => {
     const phone = paymentForm.receivedFromPhone?.trim();
     const amount = Number(paymentForm.amount || 0);
@@ -951,13 +970,14 @@ const CarWashJobs = () => {
     setStkPushing(true);
     try {
       const job = allPaymentJobs.find((j) => j._id === paymentForm.job);
-      await carWashApi.initiateStkPush({
+      const pushed = await carWashApi.initiateStkPush({
         phone,
         amount,
         jobId: paymentForm.job,
         accountRef: job?.plateNumber || job?.jobNumber || "CarWash",
       });
-      toast.success(`M-Pesa payment request sent to ${phone} — ask customer to check their phone`);
+      toast.success(`M-Pesa payment request sent to ${phone}${pushed?.shortCode ? ` (paybill ${pushed.shortCode})` : ""} — ask customer to check their phone`);
+      watchStkResult(pushed?.CheckoutRequestID);
     } catch (error) {
       toast.error(error?.response?.data?.message || "M-Pesa push failed");
     } finally {

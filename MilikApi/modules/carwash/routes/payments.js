@@ -1,6 +1,6 @@
 import express from "express";
 import { verifyUser, requireCompanyModule, requireCompanyPermission } from "../../../controllers/verifyToken.js";
-import { deletePayment, initiateStkPush, listPayments, recordPayment, updatePaymentReconciliation, sendPaymentSms } from "../controllers/paymentsController.js";
+import { deletePayment, getStkStatus, initiateStkPush, listPayments, recordPayment, updatePaymentReconciliation, sendPaymentSms } from "../controllers/paymentsController.js";
 import { validateParamId } from "../middleware/validateObjectId.js";
 
 const router = express.Router();
@@ -13,5 +13,6 @@ router.patch("/:id/reconciliation", validateParamId(), requireCompanyPermission(
 router.delete("/:id", validateParamId(), requireCompanyPermission("carwash-payments", "record", "carwash"), deletePayment);
 router.post("/:id/sms", validateParamId(), requireCompanyPermission("carwash-payments", "view", "carwash"), sendPaymentSms);
 router.post("/stk-push", requireCompanyPermission("carwash-payments", "record", "carwash"), initiateStkPush);
+router.get("/stk-status/:checkoutRequestId", requireCompanyPermission("carwash-payments", "record", "carwash"), getStkStatus);
 
 export default router;
