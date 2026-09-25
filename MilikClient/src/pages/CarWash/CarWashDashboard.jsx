@@ -104,7 +104,7 @@ const CarWashDashboard = () => {
   const payments = dashData?.payments || [];
 
   const counts        = summary?.statusCounts    || {};
-  const totalRevenue  = Number(summary?.todayRevenue || 0);
+  const totalRevenue  = Number(summary?.totalRevenue ?? summary?.todayRevenue ?? 0);
   const activeQueue   = (counts.waiting || 0) + (counts.washing || 0) + (counts.done || 0);
   const cashTotal     = Number(summary?.cashTotal   || 0);
   const mpesaTotal    = Number(summary?.mpesaTotal  || 0);
@@ -196,7 +196,7 @@ const CarWashDashboard = () => {
       <div className="flex-1 min-h-0 overflow-y-auto">
       {/* ── Stat cards ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-5">
-        <StatCard label={date === today ? "Today Jobs" : "Jobs"} value={summary?.todayJobsCount || 0} icon={FaCar} tone="green" />
+        <StatCard label={date === today ? "Today Jobs" : "Jobs"} value={summary?.jobsCount ?? summary?.todayJobsCount ?? 0} icon={FaCar} tone="green" />
         <StatCard label="Active Queue"  value={activeQueue}                  icon={FaClock}         tone="orange" sub={activeQueue > 0 ? "in progress" : "all clear"} />
         <StatCard label={date === today ? "Today Revenue" : "Revenue"} value={formatMoney(totalRevenue)} icon={FaMoneyBillWave} tone="green" />
         <StatCard label="Cash"          value={formatMoney(cashTotal)}       icon={FaMoneyBillWave} tone="orange" />
