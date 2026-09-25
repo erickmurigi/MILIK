@@ -198,9 +198,9 @@ function Login() {
       {/* ── Brand panel (large screens) ── */}
       <aside className="relative hidden items-center justify-center overflow-hidden bg-gradient-to-br from-[#0B3B2E] via-[#0A3127] to-[#06231b] lg:flex">
         {/* The two overlapping squares of the Milik mark, large and faint, centred behind the logo */}
-        <svg aria-hidden="true" viewBox="0 0 400 400" className="pointer-events-none absolute inset-0 m-auto aspect-square h-auto w-[86%] max-w-[520px] select-none" fill="none" strokeWidth="10">
-          <rect x="30" y="30" width="230" height="230" stroke="#FF8C00" strokeOpacity="0.22" />
-          <rect x="140" y="110" width="230" height="230" stroke="#ffffff" strokeOpacity="0.12" />
+        <svg aria-hidden="true" viewBox="0 0 400 400" className="pointer-events-none absolute inset-0 m-auto aspect-square h-auto w-[78%] max-w-[460px] select-none" fill="none" strokeWidth="10">
+          <rect x="35" y="35" width="220" height="220" stroke="#FF8C00" strokeOpacity="0.24" />
+          <rect x="145" y="145" width="220" height="220" stroke="#ffffff" strokeOpacity="0.13" />
         </svg>
 
         <div className="relative rounded-2xl bg-white px-7 py-5 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.55)]">
@@ -211,8 +211,11 @@ function Login() {
       </aside>
 
       {/* ── Sign-in ── */}
-      <main className="flex min-h-screen flex-col items-center justify-center bg-[#f3f7f5] px-5 py-10 sm:px-10 lg:min-h-0">
-        <div className="w-full max-w-[26rem] rounded-2xl border border-slate-200/80 bg-white p-7 shadow-[0_20px_50px_-20px_rgba(11,59,46,0.25)] sm:p-9">
+      <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#f3f7f5] px-5 py-10 sm:px-10 lg:min-h-0">
+        {/* soft clouds of colour: orange at the top left, green at the bottom right */}
+        <div aria-hidden="true" className="pointer-events-none absolute -left-32 -top-32 h-[26rem] w-[26rem] rounded-full bg-[#FF8C00]/20 blur-3xl sm:h-[34rem] sm:w-[34rem]" />
+        <div aria-hidden="true" className="pointer-events-none absolute -bottom-32 -right-32 h-[26rem] w-[26rem] rounded-full bg-[#0B3B2E]/20 blur-3xl sm:h-[34rem] sm:w-[34rem]" />
+        <div className="relative w-full max-w-[26rem] rounded-2xl border border-slate-200/80 bg-white p-7 shadow-[0_20px_50px_-20px_rgba(11,59,46,0.25)] sm:p-9">
 
           <div className="mb-7 lg:hidden">
             <img src="/milik-logo-trim.png" alt="Milik System" className="mx-auto h-11 w-auto sm:h-12" />
