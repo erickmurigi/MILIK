@@ -383,18 +383,15 @@ const CarWashDashboard = () => {
                 { label: "Payments",      value: summary?.paymentCount || 0,     note: "transactions recorded" },
                 { label: "Non-Cash",      value: formatMoney(nonCash),           note: "M-Pesa · bank · card",   money: true },
               ].map(({ label, value, note, bold, warn, muted, money }) => (
-                <div key={label} className="flex items-center justify-between gap-2 px-3 py-2">
-                  <div>
-                    <p className={`text-xs font-bold ${muted ? "text-slate-400" : "text-slate-700"}`}>{label}</p>
-                    <p className="text-[10px] text-slate-400">{note}</p>
-                  </div>
+                <div key={label} title={note} className="flex items-center justify-between gap-2 px-3 py-2.5">
+                  <p className={`text-xs font-semibold ${muted ? "text-slate-400" : "text-slate-600"}`}>{label}</p>
                   <span className={`text-right font-extrabold tabular-nums ${
                     bold ? "text-emerald-700" :
                     warn ? "text-orange-600" :
                     muted ? "text-slate-400" :
                     money ? "text-[#0B3B2E]" :
                     "text-slate-900"
-                  } ${money ? "text-sm" : "text-base"}`}>
+                  } text-xs`}>
                     {value}
                   </span>
                 </div>
