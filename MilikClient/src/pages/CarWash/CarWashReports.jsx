@@ -202,7 +202,7 @@ const CarWashReports = () => {
   const cashTotal = Number(summary?.cashTotal || 0);
   const mpesaTotal = Number(summary?.mpesaTotal || 0);
   const nonCashTotal = Number(summary?.nonCashTotal ?? Math.max(totalRevenue - cashTotal, 0));
-  const openJobs = Number(summary?.openJobs ?? Number(counts.waiting || 0) + Number(counts.washing || 0) + Number(counts.done || 0));
+  const openJobs = Number(summary?.openJobs ?? Number(counts.waiting || 0) + Number(counts.washing || 0) + Number(counts.drying || 0) + Number(counts.ready || 0));
   const averageJobValue = Number(summary?.averageJobValue ?? (jobsCount ? totalRevenue / jobsCount : 0));
   const trendRows = summary?.trendRows || [];
   const serviceRows = summary?.serviceRows || [];
@@ -217,7 +217,7 @@ const CarWashReports = () => {
   const opsRows = useMemo(() => [
     ["Total Jobs",       jobsCount,                                           "All jobs created in the report period"],
     ["Paid Jobs",        counts.paid || 0,                                    "Jobs completed and paid"],
-    ["Open Jobs",        openJobs,                                            "Waiting, washing or done but not paid"],
+    ["Open Jobs",        openJobs,                                            "Waiting, washing, drying or ready: still in the shop"],
     ["Cancelled",        counts.cancelled || 0,                               "Jobs removed from the active flow"],
     ["Avg Job Value",    formatMoney(averageJobValue),                        "Revenue divided by total jobs"],
     ["Paid Expenses",    formatMoney(totalExpenses),                          "Expenses already settled from a cashbook"],

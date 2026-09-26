@@ -2,8 +2,8 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  FaBan, FaCar, FaCheckCircle, FaClock, FaHandHoldingUsd,
-  FaMoneyBillWave, FaPhone, FaPlus, FaRedoAlt, FaSoap,
+  FaBan, FaCar, FaCheck, FaChevronRight, FaClock, FaFlagCheckered,
+  FaMoneyBillWave, FaPhone, FaPlus, FaRedoAlt, FaSoap, FaWind,
 } from "react-icons/fa";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
@@ -19,12 +19,20 @@ const paymentColors = {
   other: { bar: "bg-slate-400",   text: "text-slate-500" },
 };
 
-const queueStatus = [
-  { key: "waiting",   label: "Waiting",   icon: FaClock,          ring: "border-amber-400",   num: "text-amber-600",   bg: "bg-amber-50",   hover: "hover:bg-amber-50"   },
-  { key: "washing",   label: "Washing",   icon: FaSoap,           ring: "border-sky-400",     num: "text-sky-600",     bg: "bg-sky-50",     hover: "hover:bg-sky-50"     },
-  { key: "done",      label: "Done",      icon: FaCheckCircle,    ring: "border-indigo-400",  num: "text-indigo-600",  bg: "bg-indigo-50",  hover: "hover:bg-indigo-50"  },
-  { key: "paid",      label: "Paid",      icon: FaHandHoldingUsd, ring: "border-emerald-500", num: "text-emerald-700", bg: "bg-emerald-50", hover: "hover:bg-emerald-50" },
-  { key: "cancelled", label: "Cancelled", icon: FaBan,            ring: "border-slate-300",   num: "text-slate-500",   bg: "bg-slate-50",   hover: "hover:bg-slate-100"  },
+// The stages a car goes through, in order. "Done" means finished (and paid); the other four are the open queue.
+const queueStages = [
+  { key: "waiting", label: "Waiting", icon: FaClock,          ring: "border-amber-400",   num: "text-amber-600",   bg: "bg-amber-50",   bar: "bg-amber-400",   hover: "hover:bg-amber-50"   },
+  { key: "washing", label: "Washing", icon: FaSoap,           ring: "border-sky-400",     num: "text-sky-600",     bg: "bg-sky-50",     bar: "bg-sky-500",     hover: "hover:bg-sky-50"     },
+  { key: "drying",  label: "Drying",  icon: FaWind,           ring: "border-purple-400",  num: "text-purple-600",  bg: "bg-purple-50",  bar: "bg-purple-500",  hover: "hover:bg-purple-50"  },
+  { key: "ready",   label: "Ready",   icon: FaCheck,          ring: "border-green-500",   num: "text-green-700",   bg: "bg-green-50",   bar: "bg-green-500",   hover: "hover:bg-green-50"   },
+  { key: "done",    label: "Done",    icon: FaFlagCheckered,  ring: "border-slate-500",   num: "text-slate-700",   bg: "bg-slate-100",  bar: "bg-slate-600",   hover: "hover:bg-slate-100"  },
+];
+
+// how the day's jobs stand on payment, whatever stage they are at
+const paymentSplit = [
+  { key: "paid",    label: "Paid",      tone: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+  { key: "partial", label: "Part-paid", tone: "border-amber-200 bg-amber-50 text-amber-700" },
+  { key: "unpaid",  label: "Unpaid",    tone: "border-orange-200 bg-orange-50 text-orange-700" },
 ];
 
 const fmt = (v) => {
@@ -36,20 +44,31 @@ const fmt = (v) => {
 const StatCard = DashboardStatCard;
 const Card     = DashboardCard;
 
-const payBadge = (status) =>
-  status === "paid"
-    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-    : "border-orange-200 bg-orange-50 text-orange-700";
-
 const jobStatusBadge = (status) => {
   const map = {
     waiting:   "border-amber-200 bg-amber-50 text-amber-700",
     washing:   "border-sky-200 bg-sky-50 text-sky-700",
-    done:      "border-indigo-200 bg-indigo-50 text-indigo-700",
+    drying:    "border-purple-200 bg-purple-50 text-purple-700",
+    ready:     "border-green-200 bg-green-50 text-green-700",
+    done:      "border-slate-300 bg-slate-100 text-slate-700",
     paid:      "border-emerald-200 bg-emerald-50 text-emerald-700",
-    cancelled: "border-slate-200 bg-slate-50 text-slate-500",
+    cancelled: "border-slate-200 bg-slate-50 text-slate-400",
   };
   return map[status] || "border-slate-200 bg-slate-50 text-slate-500";
+};
+
+const payBadge = (status) =>
+  status === "paid"
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : status === "partial"
+      ? "border-amber-200 bg-amber-50 text-amber-700"
+      : "border-orange-200 bg-orange-50 text-orange-700";
+
+// assignedStaff is a list of staff members (one per service line), not a single one
+const staffNames = (job) => {
+  const list = Array.isArray(job?.assignedStaff) ? job.assignedStaff : job?.assignedStaff ? [job.assignedStaff] : [];
+  const names = [...new Set(list.map((member) => member?.name).filter(Boolean))];
+  return names.length ? names.join(", ") : "—";
 };
 
 const DASH_DATE_KEY = "cw_dash_date";
@@ -105,7 +124,11 @@ const CarWashDashboard = () => {
 
   const counts        = summary?.statusCounts    || {};
   const totalRevenue  = Number(summary?.totalRevenue ?? summary?.todayRevenue ?? 0);
-  const activeQueue   = (counts.waiting || 0) + (counts.washing || 0) + (counts.done || 0);
+  const paymentCounts = summary?.paymentStatusCounts || {};
+  // still in the shop: waiting, washing, drying or ready (done and cancelled jobs are finished)
+  const activeQueue   = summary?.openJobs ?? ((counts.waiting || 0) + (counts.washing || 0) + (counts.drying || 0) + (counts.ready || 0));
+  const dayJobs       = queueStages.reduce((sum, { key }) => sum + (counts[key] || 0), 0);
+  const jobsLink     = (params) => `/carwash/jobs?${new URLSearchParams({ ...params, dateFrom: date, dateTo: date })}`;
   const cashTotal     = Number(summary?.cashTotal   || 0);
   const mpesaTotal    = Number(summary?.mpesaTotal  || 0);
   const nonCash       = totalRevenue - cashTotal;
@@ -197,7 +220,7 @@ const CarWashDashboard = () => {
       {/* ── Stat cards ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-5">
         <StatCard label={date === today ? "Today Jobs" : "Jobs"} value={summary?.jobsCount ?? summary?.todayJobsCount ?? 0} icon={FaCar} tone="green" />
-        <StatCard label="Active Queue"  value={activeQueue}                  icon={FaClock}         tone="orange" sub={activeQueue > 0 ? "in progress" : "all clear"} />
+        <StatCard label="In the Shop"  value={activeQueue}                  icon={FaClock}         tone="orange" sub={activeQueue > 0 ? "waiting · washing · drying · ready" : "all clear"} />
         <StatCard label={date === today ? "Today Revenue" : "Revenue"} value={formatMoney(totalRevenue)} icon={FaMoneyBillWave} tone="green" />
         <StatCard label="Cash"          value={formatMoney(cashTotal)}       icon={FaMoneyBillWave} tone="orange" />
         <StatCard label="M-Pesa"        value={formatMoney(mpesaTotal)}      icon={FaPhone}         tone="green" />
@@ -205,26 +228,61 @@ const CarWashDashboard = () => {
 
       {/* ── Operations Queue ───────────────────────────────────────────────── */}
       <Card title="Operations Queue" className="mt-1.5" right={
-        <span className="text-[10px] font-bold text-slate-400">{cardHeaderDate}</span>
+        <span className="text-[10px] font-bold text-slate-400">
+          {activeQueue > 0 ? `${activeQueue} in the shop · ` : ""}{cardHeaderDate}
+        </span>
       }>
-        <div className="grid grid-cols-5 divide-x divide-slate-100">
-          {queueStatus.map(({ key, label, icon: Icon, ring, num, bg, hover }) => (
+        {/* stages, in the order a car goes through them */}
+        <div className="grid grid-cols-2 sm:grid-cols-5">
+          {queueStages.map(({ key, label, icon: Icon, ring, num, bg, hover }, index) => (
             <button
               key={key}
               type="button"
-              onClick={() => navigate(`/carwash/jobs?status=${key}&dateFrom=${date}&dateTo=${date}`)}
-              className={`group flex flex-col items-center justify-between gap-1 px-2 py-3 transition ${hover} sm:flex-row sm:gap-2 sm:px-3`}
-              title={`View ${label} jobs`}
+              onClick={() => navigate(jobsLink({ status: key }))}
+              className={`group relative flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-3 transition sm:border-b-0 ${index > 0 ? "sm:border-l" : ""} ${hover}`}
+              title={`View ${label.toLowerCase()} jobs`}
             >
-              <div className="flex flex-col items-center gap-1 sm:flex-row sm:gap-2">
+              <div className="flex items-center gap-2">
                 <span className={`inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border-2 ${ring} ${bg}`}>
                   <Icon className={`h-3 w-3 ${num}`} />
                 </span>
                 <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</span>
               </div>
-              <span className={`text-xl font-black leading-none tabular-nums ${num}`}>{counts[key] || 0}</span>
+              <span className={`text-xl font-black leading-none tabular-nums ${counts[key] ? num : "text-slate-300"}`}>{counts[key] || 0}</span>
+              {index < queueStages.length - 1 && (
+                <FaChevronRight className="pointer-events-none absolute -right-1.5 top-1/2 z-10 hidden h-3 w-3 -translate-y-1/2 bg-white text-slate-300 sm:block" />
+              )}
             </button>
           ))}
+        </div>
+
+        {/* the day at a glance: each stage's share of the day's jobs */}
+        <div className="flex h-1.5 overflow-hidden bg-slate-100" title={dayJobs ? `${dayJobs} jobs (cancelled not counted)` : "No jobs yet"}>
+          {dayJobs > 0 && queueStages.map(({ key, bar }) => (counts[key] ? <div key={key} className={bar} style={{ width: `${(counts[key] / dayJobs) * 100}%` }} /> : null))}
+        </div>
+
+        {/* payment, and cancelled: kept apart from the stages */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-slate-100 px-3 py-2">
+          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Payment</span>
+          {paymentSplit.map(({ key, label, tone }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => navigate(jobsLink({ paymentStatus: key }))}
+              className={`inline-flex items-center gap-1.5 border px-2 py-0.5 text-[10px] font-bold uppercase ${tone} hover:brightness-95`}
+              title={`View ${label.toLowerCase()} jobs`}
+            >
+              {label} <span className="tabular-nums text-xs font-black">{paymentCounts[key] || 0}</span>
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => navigate(jobsLink({ status: "cancelled" }))}
+            className="ml-auto inline-flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-400 hover:text-slate-600"
+            title="View cancelled jobs"
+          >
+            <FaBan className="h-3 w-3" /> Cancelled <span className="tabular-nums text-xs font-black">{counts.cancelled || 0}</span>
+          </button>
         </div>
       </Card>
 
@@ -292,7 +350,7 @@ const CarWashDashboard = () => {
                     <td className="px-3 py-2 font-mono font-bold text-[#0B3B2E]">{job.jobNumber || "—"}</td>
                     <td className="px-3 py-2 font-extrabold text-slate-900">{job.plateNumber || "—"}</td>
                     <td className="px-3 py-2 text-slate-600">{job.serviceName || "—"}</td>
-                    <td className="px-3 py-2 text-slate-600">{job.assignedStaff?.name || "—"}</td>
+                    <td className="max-w-[160px] truncate px-3 py-2 text-slate-600">{staffNames(job)}</td>
                     <td className="px-3 py-2">
                       <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${jobStatusBadge(job.status)}`}>
                         {job.status || "—"}
@@ -324,8 +382,9 @@ const CarWashDashboard = () => {
           <Card title="Daily Summary">
             <div className="divide-y divide-slate-100">
               {[
-                { label: "Paid Jobs",     value: counts.paid || 0,               note: "fully settled",           bold: true },
-                { label: "In Queue",      value: activeQueue,                    note: "not yet paid",            warn: activeQueue > 0 },
+                { label: "Completed",     value: counts.done || 0,               note: "washed, paid and released", bold: true },
+                { label: "In the Shop",   value: activeQueue,                    note: "waiting · washing · drying · ready", warn: activeQueue > 0 },
+                { label: "Awaiting Payment", value: (paymentCounts.unpaid || 0) + (paymentCounts.partial || 0), note: "unpaid or part-paid jobs", warn: ((paymentCounts.unpaid || 0) + (paymentCounts.partial || 0)) > 0 },
                 { label: "Cancelled",     value: counts.cancelled || 0,          note: "not counted in revenue",  muted: true },
                 { label: "Payments",      value: summary?.paymentCount || 0,     note: "transactions recorded" },
                 { label: "Non-Cash",      value: formatMoney(nonCash),           note: "M-Pesa · bank · card",   money: true },

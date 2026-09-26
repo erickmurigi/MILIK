@@ -39,6 +39,16 @@ const parseDateRangePair = (fromRaw, toRaw) => {
   return { start, end };
 };
 
+// A job is still being worked on until it is done (or cancelled).
+const OPEN_JOB_STATUSES = ["waiting", "washing", "drying", "ready"];
+
+// The open-job figure and the paid / part-paid / unpaid split, computed the same way for every summary.
+const summariseJobFigures = (statusCounts, paymentStatusRows) => {
+  const paymentStatusCounts = { unpaid: 0, partial: 0, paid: 0 };
+  paymentStatusRows.forEach((row) => { if (row?._id in paymentStatusCounts) paymentStatusCounts[row._id] = row.count; });
+  return { openJobs: OPEN_JOB_STATUSES.reduce((sum, key) => sum + Number(statusCounts[key] || 0), 0), paymentStatusCounts };
+};
+
 const emptyStatusCounts = () => ({
   waiting: 0,
   washing: 0,
@@ -126,8 +136,10 @@ const buildRangeSummary = async (business, start, end, type, branchId = null) =>
   const expenseMatch = { business: businessId, expenseDate: { $gte: start, $lt: end }, status: "paid", ...branchFilter };
   const pendingExpenseMatch = { business: businessId, expenseDate: { $gte: start, $lt: end }, status: { $in: ["draft", "approved"] }, ...branchFilter };
 
-  const [jobStatusRows, paymentRows, expenseRows, pendingExpenseRows, expenseCategoryRows, jobTrendRows, paymentTrendRows, serviceRows, staffRows] = await Promise.all([
+  const [jobStatusRows, paymentStatusRows, paymentRows, expenseRows, pendingExpenseRows, expenseCategoryRows, jobTrendRows, paymentTrendRows, serviceRows, staffRows] = await Promise.all([
     CarWashJob.aggregate([{ $match: jobMatch }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
+    // how the (non-cancelled) jobs stand on payment, whatever stage of the wash they are at
+    CarWashJob.aggregate([{ $match: { ...jobMatch, status: { $ne: "cancelled" } } }, { $group: { _id: "$paymentStatus", count: { $sum: 1 } } }]),
     CarWashPayment.aggregate([{ $match: paymentMatch }, { $group: { _id: "$method", amount: { $sum: "$amount" }, count: { $sum: 1 } } }]),
     CarWashExpense.aggregate([{ $match: expenseMatch }, { $group: { _id: "$status", amount: { $sum: "$amount" }, count: { $sum: 1 } } }]),
     CarWashExpense.aggregate([{ $match: pendingExpenseMatch }, { $group: { _id: null, amount: { $sum: "$amount" }, count: { $sum: 1 } } }]),
@@ -185,7 +197,7 @@ const buildRangeSummary = async (business, start, end, type, branchId = null) =>
   const pendingExpenses = pendingExpenseRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
   const pendingExpenseCount = pendingExpenseRows.reduce((sum, row) => sum + Number(row.count || 0), 0);
   const paymentCount = paymentRows.reduce((sum, row) => sum + Number(row.count || 0), 0);
-  const openJobs = Number(statusCounts.waiting || 0) + Number(statusCounts.washing || 0) + Number(statusCounts.ready || 0) + Number(statusCounts.done || 0);
+  const { openJobs, paymentStatusCounts } = summariseJobFigures(statusCounts, paymentStatusRows);
 
   return {
     period: {
@@ -204,6 +216,7 @@ const buildRangeSummary = async (business, start, end, type, branchId = null) =>
     nonCashTotal: Math.max(totalRevenue - Number(revenueByMethod.cash || 0), 0),
     paymentCount,
     openJobs,
+    paymentStatusCounts,
     averageJobValue: jobsCount ? totalRevenue / jobsCount : 0,
     revenueByMethod,
     expenseRows: expenseCategoryRows.map((row) => ({ category: row._id || "Unspecified", amount: row.amount || 0, count: row.count || 0 })),
@@ -234,10 +247,15 @@ export const dailySummary = async (req, res, next) => {
     const paidExpenseMatch = { business: businessOId, expenseDate: { $gte: start, $lt: end }, status: "paid", ...branchFilter };
     const pendingExpenseMatch = { business: businessOId, expenseDate: { $gte: start, $lt: end }, status: { $in: ["draft", "approved"] }, ...branchFilter };
 
-    const [jobStatusRows, paymentRows, expenseRows, pendingExpenseRows, expenseCategoryRows] = await Promise.all([
+    const dayJobMatch = { business: businessOId, createdAt: { $gte: start, $lt: end }, ...branchFilter };
+    const [jobStatusRows, paymentStatusRows, paymentRows, expenseRows, pendingExpenseRows, expenseCategoryRows] = await Promise.all([
       CarWashJob.aggregate([
-        { $match: { business: businessOId, createdAt: { $gte: start, $lt: end }, ...branchFilter } },
+        { $match: dayJobMatch },
         { $group: { _id: "$status", count: { $sum: 1 } } },
+      ]).allowDiskUse(true),
+      CarWashJob.aggregate([
+        { $match: { ...dayJobMatch, status: { $ne: "cancelled" } } },
+        { $group: { _id: "$paymentStatus", count: { $sum: 1 } } },
       ]).allowDiskUse(true),
       CarWashPayment.aggregate([
         { $match: { business: businessOId, paymentDate: { $gte: start, $lt: end }, ...branchFilter } },
@@ -264,6 +282,7 @@ export const dailySummary = async (req, res, next) => {
       if (row?._id in statusCounts) statusCounts[row._id] = row.count;
     });
     const jobsCount = Object.values(statusCounts).reduce((sum, n) => sum + n, 0);
+    const { openJobs, paymentStatusCounts } = summariseJobFigures(statusCounts, paymentStatusRows);
 
     const revenueByMethod = paymentRows.reduce((acc, row) => {
       acc[row._id || "other"] = Number(row.amount || 0);
@@ -290,6 +309,8 @@ export const dailySummary = async (req, res, next) => {
         paymentCount: paymentRows.reduce((sum, row) => sum + Number(row.count || 0), 0),
         expenseRows: expenseCategoryRows.map((row) => ({ category: row._id || "Unspecified", amount: row.amount || 0, count: row.count || 0 })),
         statusCounts,
+        openJobs,
+        paymentStatusCounts,
       },
     });
   } catch (error) {

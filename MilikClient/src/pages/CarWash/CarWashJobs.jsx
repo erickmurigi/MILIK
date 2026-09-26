@@ -52,6 +52,21 @@ const defaultFilters = {
   dateTo: todayISO(),
 };
 
+// Links from the dashboard open this page already filtered: ?status=drying, ?paymentStatus=unpaid, ?dateFrom=&dateTo=, ?plate=
+const filtersFromUrl = (search) => {
+  const p       = new URLSearchParams(search);
+  const plate   = p.get("plate");
+  const status  = p.get("status");
+  const pay     = p.get("paymentStatus");
+  const from    = p.get("dateFrom");
+  const to      = p.get("dateTo");
+  if (plate) return { ...defaultFilters, search: plate, dateFrom: "", dateTo: "" };
+  if (status || pay || from) {
+    return { ...defaultFilters, status: status || "", paymentStatus: pay || "", dateFrom: from || defaultFilters.dateFrom, dateTo: to || defaultFilters.dateTo };
+  }
+  return defaultFilters;
+};
+
 const getWeekBounds = (offset = 0) => {
   const now = new Date();
   const day = now.getDay(); // 0=Sun
@@ -673,26 +688,8 @@ const CarWashJobs = () => {
     return defs;
   }, [settingsAndBranch]);
   const [paymentForm, setPaymentForm] = useState(emptyPaymentForm);
-  const [filters, setFilters] = useTabState("/carwash/jobs:filters", () => {
-    const p      = new URLSearchParams(location.search);
-    const plate  = p.get("plate");
-    const status = p.get("status");
-    const from   = p.get("dateFrom");
-    const to     = p.get("dateTo");
-    if (plate)  return { ...defaultFilters, search: plate, dateFrom: "", dateTo: "" };
-    if (status || from) return { ...defaultFilters, status: status || "", dateFrom: from || defaultFilters.dateFrom, dateTo: to || defaultFilters.dateTo };
-    return defaultFilters;
-  });
-  const [appliedFilters, setAppliedFilters] = useTabState("/carwash/jobs:appliedFilters", () => {
-    const p      = new URLSearchParams(location.search);
-    const plate  = p.get("plate");
-    const status = p.get("status");
-    const from   = p.get("dateFrom");
-    const to     = p.get("dateTo");
-    if (plate)  return { ...defaultFilters, search: plate, dateFrom: "", dateTo: "" };
-    if (status || from) return { ...defaultFilters, status: status || "", dateFrom: from || defaultFilters.dateFrom, dateTo: to || defaultFilters.dateTo };
-    return defaultFilters;
-  });
+  const [filters, setFilters] = useTabState("/carwash/jobs:filters", () => filtersFromUrl(location.search));
+  const [appliedFilters, setAppliedFilters] = useTabState("/carwash/jobs:appliedFilters", () => filtersFromUrl(location.search));
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentJobPaidSoFar, setPaymentJobPaidSoFar] = useState(0);
   const [plateCredit, setPlateCredit] = useState(null); // { creditBalance, credits, customer }
