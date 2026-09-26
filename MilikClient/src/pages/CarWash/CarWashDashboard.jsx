@@ -21,11 +21,11 @@ const paymentColors = {
 
 // The stages a car goes through, in order. "Done" means finished (and paid); the other four are the open queue.
 const queueStages = [
-  { key: "waiting", label: "Waiting", icon: FaClock,          ring: "border-amber-400",   num: "text-amber-600",   bg: "bg-amber-50",   bar: "bg-amber-400",   hover: "hover:bg-amber-50"   },
-  { key: "washing", label: "Washing", icon: FaSoap,           ring: "border-sky-400",     num: "text-sky-600",     bg: "bg-sky-50",     bar: "bg-sky-500",     hover: "hover:bg-sky-50"     },
+  { key: "waiting", label: "Waiting", icon: FaClock,          ring: "border-amber-400",   num: "text-amber-600",   bg: "bg-amber-50",   hover: "hover:bg-amber-50"   },
+  { key: "washing", label: "Washing", icon: FaSoap,           ring: "border-sky-400",     num: "text-sky-600",     bg: "bg-sky-50",       hover: "hover:bg-sky-50"     },
   { key: "drying",  label: "Drying",  icon: FaWind,           ring: "border-purple-400",  num: "text-purple-600",  bg: "bg-purple-50",  bar: "bg-purple-500",  hover: "hover:bg-purple-50"  },
-  { key: "ready",   label: "Ready",   icon: FaCheck,          ring: "border-green-500",   num: "text-green-700",   bg: "bg-green-50",   bar: "bg-green-500",   hover: "hover:bg-green-50"   },
-  { key: "done",    label: "Done",    icon: FaFlagCheckered,  ring: "border-slate-500",   num: "text-slate-700",   bg: "bg-slate-100",  bar: "bg-slate-600",   hover: "hover:bg-slate-100"  },
+  { key: "ready",   label: "Ready",   icon: FaCheck,          ring: "border-green-500",   num: "text-green-700",   bg: "bg-green-50",   hover: "hover:bg-green-50"   },
+  { key: "done",    label: "Done",    icon: FaFlagCheckered,  ring: "border-slate-500",   num: "text-slate-700",   bg: "bg-slate-100",  hover: "hover:bg-slate-100"  },
 ];
 
 // how the day's jobs stand on payment, whatever stage they are at
@@ -125,9 +125,9 @@ const CarWashDashboard = () => {
   const counts        = summary?.statusCounts    || {};
   const totalRevenue  = Number(summary?.totalRevenue ?? summary?.todayRevenue ?? 0);
   const paymentCounts = summary?.paymentStatusCounts || {};
+  const hasPaymentSplit = Boolean(summary?.paymentStatusCounts);
   // still in the shop: waiting, washing, drying or ready (done and cancelled jobs are finished)
   const activeQueue   = summary?.openJobs ?? ((counts.waiting || 0) + (counts.washing || 0) + (counts.drying || 0) + (counts.ready || 0));
-  const dayJobs       = queueStages.reduce((sum, { key }) => sum + (counts[key] || 0), 0);
   const jobsLink     = (params) => `/carwash/jobs?${new URLSearchParams({ ...params, dateFrom: date, dateTo: date })}`;
   const cashTotal     = Number(summary?.cashTotal   || 0);
   const mpesaTotal    = Number(summary?.mpesaTotal  || 0);
@@ -256,15 +256,10 @@ const CarWashDashboard = () => {
           ))}
         </div>
 
-        {/* the day at a glance: each stage's share of the day's jobs */}
-        <div className="flex h-1.5 overflow-hidden bg-slate-100" title={dayJobs ? `${dayJobs} jobs (cancelled not counted)` : "No jobs yet"}>
-          {dayJobs > 0 && queueStages.map(({ key, bar }) => (counts[key] ? <div key={key} className={bar} style={{ width: `${(counts[key] / dayJobs) * 100}%` }} /> : null))}
-        </div>
-
         {/* payment, and cancelled: kept apart from the stages */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-slate-100 px-3 py-2">
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Payment</span>
-          {paymentSplit.map(({ key, label, tone }) => (
+          {hasPaymentSplit && <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Payment</span>}
+          {hasPaymentSplit && paymentSplit.map(({ key, label, tone }) => (
             <button
               key={key}
               type="button"
@@ -384,7 +379,7 @@ const CarWashDashboard = () => {
               {[
                 { label: "Completed",     value: counts.done || 0,               note: "washed, paid and released", bold: true },
                 { label: "In the Shop",   value: activeQueue,                    note: "waiting · washing · drying · ready", warn: activeQueue > 0 },
-                { label: "Awaiting Payment", value: (paymentCounts.unpaid || 0) + (paymentCounts.partial || 0), note: "unpaid or part-paid jobs", warn: ((paymentCounts.unpaid || 0) + (paymentCounts.partial || 0)) > 0 },
+                ...(hasPaymentSplit ? [{ label: "Awaiting Payment", value: (paymentCounts.unpaid || 0) + (paymentCounts.partial || 0), note: "unpaid or part-paid jobs", warn: ((paymentCounts.unpaid || 0) + (paymentCounts.partial || 0)) > 0 }] : []),
                 { label: "Cancelled",     value: counts.cancelled || 0,          note: "not counted in revenue",  muted: true },
                 { label: "Payments",      value: summary?.paymentCount || 0,     note: "transactions recorded" },
                 { label: "Non-Cash",      value: formatMoney(nonCash),           note: "M-Pesa · bank · card",   money: true },
