@@ -105,7 +105,7 @@ const CarWashDashboard = () => {
     queryFn: async () => {
       const [sumRes, jobsRes, payRes] = await Promise.all([
         carWashApi.getDailySummary(date),
-        carWashApi.listJobs({ date, limit: 30 }),
+        carWashApi.listJobs({ date, limit: 60 }),
         carWashApi.listPayments({ date, limit: 10 }),
       ]);
       return {
@@ -216,21 +216,42 @@ const CarWashDashboard = () => {
         </>
       }
     >
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto xl:flex xl:flex-col xl:overflow-hidden">
       {/* ── Stat cards ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-5">
-        <StatCard label={date === today ? "Today Jobs" : "Jobs"} value={summary?.jobsCount ?? summary?.todayJobsCount ?? 0} icon={FaCar} tone="green" />
-        <StatCard label="In the Shop"  value={activeQueue}                  icon={FaClock}         tone="orange" sub={activeQueue > 0 ? "waiting · washing · drying · ready" : "all clear"} />
-        <StatCard label={date === today ? "Today Revenue" : "Revenue"} value={formatMoney(totalRevenue)} icon={FaMoneyBillWave} tone="green" />
-        <StatCard label="Cash"          value={formatMoney(cashTotal)}       icon={FaMoneyBillWave} tone="orange" />
-        <StatCard label="M-Pesa"        value={formatMoney(mpesaTotal)}      icon={FaPhone}         tone="green" />
+        <StatCard compact label={date === today ? "Today Jobs" : "Jobs"} value={summary?.jobsCount ?? summary?.todayJobsCount ?? 0} icon={FaCar} tone="green" />
+        <StatCard compact label="In the Shop"  value={activeQueue}                  icon={FaClock}         tone="orange" sub={activeQueue > 0 ? "waiting · washing · drying · ready" : "all clear"} />
+        <StatCard compact label={date === today ? "Today Revenue" : "Revenue"} value={formatMoney(totalRevenue)} icon={FaMoneyBillWave} tone="green" />
+        <StatCard compact label="Cash"          value={formatMoney(cashTotal)}       icon={FaMoneyBillWave} tone="orange" />
+        <StatCard compact label="M-Pesa"        value={formatMoney(mpesaTotal)}      icon={FaPhone}         tone="green" />
       </div>
 
       {/* ── Operations Queue ───────────────────────────────────────────────── */}
       <Card title="Operations Queue" className="mt-1.5" right={
-        <span className="text-[10px] font-bold text-slate-400">
-          {activeQueue > 0 ? `${activeQueue} in the shop · ` : ""}{cardHeaderDate}
-        </span>
+        <>
+          {hasPaymentSplit && paymentSplit.map(({ key, label, tone }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => navigate(jobsLink({ paymentStatus: key }))}
+              className={`inline-flex items-center gap-1 border px-1.5 py-px text-[9px] font-bold uppercase ${tone} hover:brightness-95`}
+              title={`View ${label.toLowerCase()} jobs`}
+            >
+              {label} <span className="tabular-nums text-[10px] font-black">{paymentCounts[key] || 0}</span>
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => navigate(jobsLink({ status: "cancelled" }))}
+            className="inline-flex items-center gap-1 text-[9px] font-bold uppercase text-slate-400 hover:text-slate-600"
+            title="View cancelled jobs"
+          >
+            <FaBan className="h-2.5 w-2.5" /> Cancelled <span className="tabular-nums text-[10px] font-black">{counts.cancelled || 0}</span>
+          </button>
+          <span className="text-[10px] font-bold text-slate-400">
+            {activeQueue > 0 ? `${activeQueue} in the shop · ` : ""}{cardHeaderDate}
+          </span>
+        </>
       }>
         {/* stages, in the order a car goes through them */}
         <div className="grid grid-cols-2 sm:grid-cols-5">
@@ -239,7 +260,7 @@ const CarWashDashboard = () => {
               key={key}
               type="button"
               onClick={() => navigate(jobsLink({ status: key }))}
-              className={`group relative flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-3 transition sm:border-b-0 ${index > 0 ? "sm:border-l" : ""} ${hover}`}
+              className={`group relative flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 transition sm:border-b-0 ${index > 0 ? "sm:border-l" : ""} ${hover}`}
               title={`View ${label.toLowerCase()} jobs`}
             >
               <div className="flex items-center gap-2">
@@ -256,36 +277,14 @@ const CarWashDashboard = () => {
           ))}
         </div>
 
-        {/* payment, and cancelled: kept apart from the stages */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-slate-100 px-3 py-2">
-          {hasPaymentSplit && <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Payment</span>}
-          {hasPaymentSplit && paymentSplit.map(({ key, label, tone }) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => navigate(jobsLink({ paymentStatus: key }))}
-              className={`inline-flex items-center gap-1.5 border px-2 py-0.5 text-[10px] font-bold uppercase ${tone} hover:brightness-95`}
-              title={`View ${label.toLowerCase()} jobs`}
-            >
-              {label} <span className="tabular-nums text-xs font-black">{paymentCounts[key] || 0}</span>
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => navigate(jobsLink({ status: "cancelled" }))}
-            className="ml-auto inline-flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-400 hover:text-slate-600"
-            title="View cancelled jobs"
-          >
-            <FaBan className="h-3 w-3" /> Cancelled <span className="tabular-nums text-xs font-black">{counts.cancelled || 0}</span>
-          </button>
-        </div>
       </Card>
 
       {/* ── Main two-column area ───────────────────────────────────────────── */}
-      <div className="mt-1.5 grid grid-cols-1 items-start gap-1.5 xl:grid-cols-[1fr_280px]">
+      <div className="mt-1.5 grid grid-cols-1 items-start gap-1.5 xl:min-h-0 xl:flex-1 xl:grid-cols-[1fr_280px] xl:items-stretch">
 
         {/* Left: Today Jobs */}
         <Card
+          className="xl:flex xl:min-h-0 xl:flex-col"
           title="Today Jobs"
           right={
             <button
@@ -324,9 +323,9 @@ const CarWashDashboard = () => {
             )}
           </div>
           {/* Desktop table */}
-          <div className="hidden overflow-x-auto xl:block">
+          <div className="hidden overflow-auto xl:block xl:min-h-0 xl:flex-1">
             <table className="w-full min-w-[700px] text-xs">
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr className="bg-[#0B3B2E]">
                   <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Time</th>
                   <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Job No.</th>
@@ -339,7 +338,7 @@ const CarWashDashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {jobs.length ? jobs.slice(0, 15).map((job) => (
+                {jobs.length ? jobs.map((job) => (
                   <tr key={job._id} className="border-b border-slate-100 hover:bg-slate-50">
                     <td className="px-3 py-2 text-slate-400">{fmt(job.createdAt)}</td>
                     <td className="px-3 py-2 font-mono font-bold text-[#0B3B2E]">{job.jobNumber || "—"}</td>
@@ -371,7 +370,7 @@ const CarWashDashboard = () => {
         </Card>
 
         {/* Right sidebar */}
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1.5 xl:min-h-0 xl:overflow-y-auto">
 
           {/* Daily Summary */}
           <Card title="Daily Summary">
