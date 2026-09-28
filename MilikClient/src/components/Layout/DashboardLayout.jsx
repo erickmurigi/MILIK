@@ -1657,6 +1657,9 @@ const TopToolbar = ({
               // above — this is the self-managed replacement: same underlying statement engine,
               // reframed as your own monthly record instead of a manager's remittance document.
               { id: "property-performance-statement", label: "Property Performance Statement", icon: FaFileAlt },
+              // The statement is built from how each receipt was allocated to invoices, so the allocation tool belongs beside it
+              // (the manager-mode menu that normally holds it is removed for self-managed landlords). Milik Admin only, as elsewhere.
+              ...(currentUser?.isSystemAdmin || currentUser?.superAdminAccess ? [{ id: "statement-allocations", label: "Statement Allocations", icon: FaExchangeAlt }] : []),
             ],
           };
         }
