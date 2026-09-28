@@ -15,6 +15,8 @@ import { useTerms } from "../../hooks/useTerm";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
 import MilikTable from "../../components/common/MilikTable";
+import { printSaleDocument } from "./salePrint";
+import { printPaymentReceiptById } from "./SalePaymentReceipt";
 
 const STATUS_BADGE = {
   paid:      "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -425,7 +427,7 @@ const SalePayments = () => {
 
   const renderPaymentActions = useCallback((p) => (
     <div className="inline-flex items-center gap-1">
-      <button type="button" onClick={() => window.open(`/sale/payments/${p._id}/receipt`, "_blank")} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]" title="Print Receipt">
+      <button type="button" onClick={() => printSaleDocument((win) => printPaymentReceiptById(p._id, { company: currentCompany, T, win }))} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]" title="Print Receipt">
         <FaPrint className="text-[9px]" />
       </button>
       {p.status !== "cancelled" && (
@@ -444,7 +446,7 @@ const SalePayments = () => {
         </button>
       )}
     </div>
-  ), [handleVoid, handleDelete, voiding, deletingId]);
+  ), [handleVoid, handleDelete, voiding, deletingId, currentCompany, T]);
 
   const hasFilters     = dealFilter || typeFilter || methodFilter || statusFilter || search;
   const resetFilters   = () => { setDealFilter(""); setTypeFilter(""); setMethodFilter(""); setStatusFilter(""); setSearch(""); setDateFrom(""); setDateTo(""); setPage(1); };

@@ -13,13 +13,14 @@ const fmtLabel = (s) => String(s || "").replace(/_/g, " ").replace(/\b\w/g, (c) 
 
 const kes = (n) => `KES ${money(n)}`;
 
-const printDealSummary = (company, { deal, payments, totalPaid, balance }, T) => {
+const printDealSummary = (company, { deal, payments, totalPaid, balance }, T, win = null) => {
   const buyer = deal.buyer || {};
   const listing = deal.listing || {};
   const agent = deal.agent || null;
   const co = company || {};
   const coName = co.companyName || co.name || "MILIK";
   const printed = printDocument({
+    win,
     company,
     docType: "Sale Agreement Summary",
     docNumber: deal.dealNumber || "",
@@ -46,6 +47,13 @@ const printDealSummary = (company, { deal, payments, totalPaid, balance }, T) =>
     footerNote: "Summary cover sheet for the property sale agreement",
   });
   if (!printed) toast.error(POPUP_BLOCKED);
+};
+
+// Print a deal's agreement summary straight from a list, without opening this page
+export const printDealSummaryById = async (id, { company, T, win }) => {
+  const [deal, all] = await Promise.all([saleApi.getDeal(id), saleApi.listAllDealPayments(id)]);
+  const totalPaid = (all ?? []).filter((p) => p.status === "paid").reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  printDealSummary(company, { deal, payments: (all ?? []).filter((p) => p.status === "paid"), totalPaid, balance: deal.balance ?? (Number(deal.agreedPrice || 0) - totalPaid) }, T, win);
 };
 
 const PRINT_STYLES = `

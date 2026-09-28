@@ -13,7 +13,7 @@ const fmtLabel = (s) => String(s || "").replace(/_/g, " ").replace(/\b\w/g, (c) 
 
 const kes = (n) => `KES ${money(n)}`;
 
-const printDealStatement = (company, { deal, payments, totalPaid, balance }, T) => {
+const printDealStatement = (company, { deal, payments, totalPaid, balance }, T, win = null) => {
   const buyer = deal.buyer || {};
   const listing = deal.listing || {};
   const agent = deal.agent || null;
@@ -23,6 +23,7 @@ const printDealStatement = (company, { deal, payments, totalPaid, balance }, T) 
     return { ...p, cumulative: p.status === "paid" ? kes(running) : "—" };
   });
   const printed = printDocument({
+    win,
     company,
     docType: `${T.saleDeal} Statement`,
     docNumber: deal.dealNumber || "",
@@ -60,6 +61,13 @@ const printDealStatement = (company, { deal, payments, totalPaid, balance }, T) 
     stamp: true,
   });
   if (!printed) toast.error(POPUP_BLOCKED);
+};
+
+// Print a deal's payment statement straight from a list, without opening this page
+export const printDealStatementById = async (id, { company, T, win }) => {
+  const [deal, payments] = await Promise.all([saleApi.getDeal(id), saleApi.listAllDealPayments(id)]);
+  const totalPaid = (payments ?? []).filter((p) => p.status === "paid").reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  printDealStatement(company, { deal, payments: payments ?? [], totalPaid, balance: deal.balance ?? (Number(deal.agreedPrice || 0) - totalPaid) }, T, win);
 };
 
 const PRINT_STYLES = `

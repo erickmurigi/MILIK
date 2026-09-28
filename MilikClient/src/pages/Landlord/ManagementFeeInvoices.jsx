@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { adminRequests } from "../../utils/requestMethods";
+import { printPdfBlob } from "../../utils/printKit";
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import { getProperties } from "../../redux/propertyRedux";
@@ -148,11 +149,7 @@ const ManagementFeeInvoices = () => {
         `/processed-statements/${statementId}/management-fee-invoice-pdf`,
         { responseType: "blob" }
       );
-      const blob = new Blob([res.data], { type: "application/pdf" });
-      const url = URL.createObjectURL(blob);
-      const win = window.open(url, "_blank");
-      if (win) win.focus();
-      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      await printPdfBlob(new Blob([res.data], { type: "application/pdf" }));
     } catch (err) {
       toast.error(String(err?.response?.data?.message || `Failed to generate PDF for ${invoiceNo || statementId}.`));
     } finally {

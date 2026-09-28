@@ -26,7 +26,7 @@ import {
 } from "../../redux/processedStatementsRedux";
 import PayLandlordModal from "../../components/Modals/PayLandlordModal";
 import { fmtDate } from "../../utils/dates";
-import { printDocument } from "../../utils/printKit";
+import { printDocument, printPdfBlob } from "../../utils/printKit";
 import RecordLandlordRecoveryModal from "../../components/Modals/RecordLandlordRecoveryModal";
 import PostCommissionModal from "../../components/Modals/PostCommissionModal";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
@@ -348,18 +348,7 @@ const ProcessedStatements = () => {
       const response = await adminRequests.get(`/processed-statements/${statement._id}/management-fee-invoice-pdf`, {
         responseType: "blob",
       });
-      const blob = new Blob([response.data], { type: "application/pdf" });
-      const blobUrl = window.URL.createObjectURL(blob);
-      const win = window.open(blobUrl, "_blank");
-      if (!win) {
-        window.URL.revokeObjectURL(blobUrl);
-        toast.error("Unable to open print window");
-        return;
-      }
-      const tryPrint = () => { try { win.focus(); win.print(); } catch (_) {} };
-      win.onload = tryPrint;
-      setTimeout(tryPrint, 1200);
-      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 15000);
+      await printPdfBlob(new Blob([response.data], { type: "application/pdf" }));
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to generate fee invoice PDF");
     }
@@ -378,28 +367,7 @@ const ProcessedStatements = () => {
         const response = await adminRequests.get(`/statements/${sourceStatementId}/pdf`, {
           responseType: "blob",
         });
-        const blob = new Blob([response.data], { type: "application/pdf" });
-        const blobUrl = window.URL.createObjectURL(blob);
-        const printWindow = window.open(blobUrl, "_blank");
-
-        if (!printWindow) {
-          window.URL.revokeObjectURL(blobUrl);
-          toast.error("Unable to open print window");
-          return;
-        }
-
-        const tryPrint = () => {
-          try {
-            printWindow.focus();
-            printWindow.print();
-          } catch {
-            // ignore window timing issues
-          }
-        };
-
-        printWindow.onload = tryPrint;
-        setTimeout(tryPrint, 1200);
-        setTimeout(() => window.URL.revokeObjectURL(blobUrl), 15000);
+        await printPdfBlob(new Blob([response.data], { type: "application/pdf" }));
         return;
       } catch (error) {
         toast.error(error?.response?.data?.message || "Failed to print statement PDF");

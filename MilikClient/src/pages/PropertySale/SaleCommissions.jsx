@@ -12,7 +12,8 @@ import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import { useTerms } from "../../hooks/useTerm";
 import SalePrintButton from "./SalePrintButton";
-import { fetchAllPages, money, printAfterFetch } from "./salePrint";
+import { fetchAllPages, money, printAfterFetch, printSaleDocument } from "./salePrint";
+import { printCommissionStatementById } from "./SaleCommissionStatement";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
 import { fmtDate } from "../../utils/dates";
@@ -312,7 +313,10 @@ const SaleCommissions = () => {
 
   const agentFilterOptions = useMemo(() => agentsRef.map((a) => ({ value: a._id, label: `${a.fullName}${a.agentNumber ? ` (${a.agentNumber})` : ""}` })), [agentsRef]);
   const dealFilterOptions  = useMemo(() => dealsRef.map((d) => ({ value: d._id, label: `${d.dealNumber}${d.listing?.title ? ` — ${d.listing.title}` : ""}` })), [dealsRef]);
-  const handlePrintStatement = useCallback((e) => window.open(`/sale/commissions/${e.currentTarget.dataset.id}/statement`, "_blank"), []);
+  const handlePrintStatement = useCallback((e) => {
+    const id = e.currentTarget.dataset.id;
+    printSaleDocument((win) => printCommissionStatementById(id, { company: currentCompany, T, win }));
+  }, [currentCompany, T]);
 
   const renderCommissionActions = useCallback((c) => (
     <div className="inline-flex items-center gap-1">

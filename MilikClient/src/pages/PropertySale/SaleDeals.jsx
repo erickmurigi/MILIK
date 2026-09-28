@@ -16,6 +16,10 @@ import { fmtDate } from "../../utils/dates";
 import AmountInput from "./AmountInput";
 import { useConfirm } from "../../context/ConfirmContext";
 import { useTabState } from "../../hooks/useTabState";
+import { printSaleDocument } from "./salePrint";
+import { printPaymentReceiptById } from "./SalePaymentReceipt";
+import { printDealSummaryById } from "./SaleDealSummary";
+import { printDealStatementById } from "./SaleDealStatement";
 import { useTerms, prefixedTerm } from "../../hooks/useTerm";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
@@ -877,8 +881,14 @@ const SaleDeals = () => {
   const resetFilters = () => { setSearch(""); setAppliedSearch(""); setStatusFilter(""); setAgentFilt(""); setBuyerFilt(""); setListingFilt(""); setDateFrom(""); setDateTo(""); setPage(1); };
 
   const handleRowClick       = useCallback((row) => setSelected((prev) => prev?._id === row._id ? null : row), [setSelected]);
-  const handlePrintSummary   = useCallback((e) => window.open(`/sale/deals/${e.currentTarget.dataset.id}/summary`,   "_blank"), []);
-  const handlePrintStatement = useCallback((e) => window.open(`/sale/deals/${e.currentTarget.dataset.id}/statement`, "_blank"), []);
+  const handlePrintSummary   = useCallback((e) => {
+    const id = e.currentTarget.dataset.id;
+    printSaleDocument((win) => printDealSummaryById(id, { company: currentCompany, T, win }));
+  }, [currentCompany, T]);
+  const handlePrintStatement = useCallback((e) => {
+    const id = e.currentTarget.dataset.id;
+    printSaleDocument((win) => printDealStatementById(id, { company: currentCompany, T, win }));
+  }, [currentCompany, T]);
 
   const selectedId = selected?._id;
   const isRowSelected = useCallback((row) => selectedId === row._id, [selectedId]);
@@ -1091,7 +1101,7 @@ const SaleDeals = () => {
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <span className="font-black text-xs text-slate-900">{fmtKES(p.amount)}</span>
                       <button
-                        onClick={() => window.open(`/sale/payments/${p._id}/receipt`, "_blank")}
+                        onClick={() => printSaleDocument((win) => printPaymentReceiptById(p._id, { company: currentCompany, T, win }))}
                         className="border border-[#B7C9C0] bg-white p-0.5 text-[#0B3B2E] hover:bg-[#F1F6F3]"
                         title="Print Receipt"
                       >
@@ -1212,10 +1222,10 @@ const SaleDeals = () => {
 
           {/* Panel footer actions */}
           <div className="flex-shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-2 flex items-center gap-1.5">
-            <button onClick={() => window.open(`/sale/deals/${liveSelected._id}/summary`, "_blank")} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+            <button onClick={() => printSaleDocument((win) => printDealSummaryById(liveSelected._id, { company: currentCompany, T, win }))} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
               <FaPrint size={8} /> Agreement
             </button>
-            <button onClick={() => window.open(`/sale/deals/${liveSelected._id}/statement`, "_blank")} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+            <button onClick={() => printSaleDocument((win) => printDealStatementById(liveSelected._id, { company: currentCompany, T, win }))} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
               <FaFileAlt size={8} /> Statement
             </button>
             {liveSelected.buyer?.phone && (

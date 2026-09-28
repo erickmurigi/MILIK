@@ -11,6 +11,9 @@ import { POPUP_BLOCKED, money } from "./salePrint";
 const fmtKES  = (n) => new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", minimumFractionDigits: 2 }).format(Number(n) || 0);
 const fmtLabel = (s) => String(s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
+// Print a commission statement straight from a list, without opening this page
+export const printCommissionStatementById = async (id, { company, T, win }) => printCommissionStatement(company, await saleApi.getCommission(id), T, win);
+
 const PRINT_STYLES = `
   @page { size: A4; margin: 18mm 16mm; }
   @media print {
@@ -25,7 +28,7 @@ const PRINT_STYLES = `
 const kes = (n) => `KES ${money(n)}`;
 const COMM_TONE = { paid: "success", pending: "warning", approved: "info", cancelled: "neutral", reversed: "danger" };
 
-const printCommissionStatement = (company, comm, T) => {
+const printCommissionStatement = (company, comm, T, win = null) => {
   const agent = comm.agent || {};
   const deal = comm.deal || {};
   const listing = comm.listing || {};
@@ -36,6 +39,7 @@ const printCommissionStatement = (company, comm, T) => {
   const netAmt = comm.netAmount != null ? Number(comm.netAmount) || 0 : grossAmt - whtAmt;
   const payLabel = comm.status === "paid" ? "paid" : "due";
   const printed = printDocument({
+    win,
     company,
     docType: "Commission Statement",
     docNumber: comm.commissionNumber || "",

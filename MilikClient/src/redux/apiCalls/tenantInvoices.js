@@ -1,5 +1,6 @@
 import { adminRequests } from "../../utils/requestMethods";
 import { extractList } from "./shared";
+import { printPdfBlob } from "../../utils/printKit";
 
 // Download invoice PDF
 export const downloadInvoicePdf = async (invoiceId, { preview = false, filename } = {}) => {
@@ -9,8 +10,9 @@ export const downloadInvoicePdf = async (invoiceId, { preview = false, filename 
   const blob = new Blob([res.data], { type: "application/pdf" });
   const url = window.URL.createObjectURL(blob);
   if (preview) {
-    window.open(url, "_blank");
-    setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+    // preview = print: the print dialog opens over the current page
+    window.URL.revokeObjectURL(url);
+    await printPdfBlob(blob);
   } else {
     const link = document.createElement("a");
     link.href = url;

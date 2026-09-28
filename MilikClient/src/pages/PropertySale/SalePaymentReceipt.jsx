@@ -13,7 +13,7 @@ const fmtLabel = (s) => String(s || "").replace(/_/g, " ").replace(/\b\w/g, (c) 
 
 const kes = (n) => `KES ${money(n)}`;
 
-const printReceipt = (company, payment, T) => {
+const printReceipt = (company, payment, T, win = null) => {
   const deal = payment.deal || {};
   const buyer = deal.buyer || {};
   const listing = deal.listing || {};
@@ -22,6 +22,7 @@ const printReceipt = (company, payment, T) => {
   const isPending = payment.status === "pending";
   const propertyName = listing.title || listing.listingNumber || "Property";
   const printed = printDocument({
+    win,
     company,
     docType: "Payment Receipt",
     docNumber: payment.paymentNumber || "",
@@ -54,6 +55,9 @@ const printReceipt = (company, payment, T) => {
   });
   if (!printed) toast.error(POPUP_BLOCKED);
 };
+
+// Print a payment's receipt straight from a list, without opening this page
+export const printPaymentReceiptById = async (id, { company, T, win }) => printReceipt(company, await saleApi.getPayment(id), T, win);
 
 const PRINT_STYLES = `
   @page { size: A4; margin: 18mm 16mm; }
