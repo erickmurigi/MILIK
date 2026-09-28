@@ -1387,6 +1387,9 @@ export const getPaymentVouchers = async (req, res, next) => {
     if (status) {
       if (typeof status !== "string" || !["draft", "approved", "paid", "reversed"].includes(status)) return next(createError(400, "Invalid status filter"));
       filter.status = status;
+    } else if (req.query.includeReversed !== "true") {
+      // reversed vouchers are kept for the audit trail but stay out of the working list unless asked for
+      filter.status = { $ne: "reversed" };
     }
     if (property) {
       if (typeof property !== "string" || !OBJECT_ID.test(property)) return next(createError(400, "Invalid property filter"));

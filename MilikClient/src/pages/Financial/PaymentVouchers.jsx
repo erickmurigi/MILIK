@@ -336,8 +336,12 @@ const PaymentVouchers = () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
+      // "All statuses" means the working list (reversed vouchers hidden); "Everything" adds them back
+      const showEverything = filters.status === "everything";
       const { data: rows, total, pages } = await getPaymentVouchers({
         ...filters,
+        status: showEverything ? "all" : filters.status,
+        includeReversed: showEverything,
         search: debouncedSearch,
         business: currentCompany._id,
         company: currentCompany._id,
@@ -1077,8 +1081,9 @@ const PaymentVouchers = () => {
                     { value: "approved", label: "Approved" },
                     { value: "paid", label: "Paid" },
                     { value: "reversed", label: "Reversed" },
+                    { value: "everything", label: "All (incl. reversed)" },
                   ]}
-                  placeholder="All statuses"
+                  placeholder="Active"
                   size="sm"
                   clearable
                 />

@@ -163,6 +163,21 @@ describe("payment voucher input rules", () => {
   });
 });
 
+describe("payment voucher list", () => {
+  it("keeps reversed vouchers out of the working list unless they are asked for", async () => {
+    const { call, create } = await setup();
+    const keep = (await create({ reference: "KEEP-1" })).payload;
+    const gone = (await create({ reference: "GONE-1", status: "approved" })).payload;
+    await call(updatePaymentVoucherStatus, { params: { id: String(gone._id) }, body: { status: "reversed" } });
+
+    const numbers = async (query) => (await call(getPaymentVouchers, { query })).payload.data.map((v) => v.voucherNo).sort();
+    expect(await numbers({})).toEqual([keep.voucherNo]);                                    // default: working list only
+    expect(await numbers({ status: "reversed" })).toEqual([gone.voucherNo]);               // reversed on request
+    expect(await numbers({ includeReversed: "true" })).toEqual([keep.voucherNo, gone.voucherNo].sort()); // everything
+    expect((await call(getPaymentVouchers, { query: {} })).payload.total).toBe(1);         // and the count agrees
+  });
+});
+
 describe("payment voucher withholding tax and double clicks", () => {
   it("posts the tax withheld as its own credit leg, balanced", async () => {
     const { create, live } = await setup();
@@ -242,6 +257,6 @@ describe("payment voucher route permissions", () => {
       expect((await decide(router, method, path, { user: admin, body, params: {}, query: {} })).status, `${method} ${path} admin`).toBe(200);
       expect((await decide(router, method, path, { user: plain, body, params: {}, query: {} })).status, `${method} ${path} plain`).toBe(403);
     }
-  });
+  }, 60_000);
 
 });

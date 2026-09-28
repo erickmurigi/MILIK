@@ -101,6 +101,7 @@ export const getPaymentVouchers = async (filters = {}) => {
   if (filters.company) params.append("company", filters.company);
   if (filters.category && filters.category !== "all") params.append("category", filters.category);
   if (filters.status && filters.status !== "all") params.append("status", filters.status);
+  if (filters.includeReversed) params.append("includeReversed", "true");
   if (filters.propertyId && filters.propertyId !== "all") params.append("property", filters.propertyId);
   if (filters.landlordId && filters.landlordId !== "all") params.append("landlord", filters.landlordId);
   if (filters.search) params.append("search", filters.search);
