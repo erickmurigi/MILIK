@@ -8,7 +8,7 @@ import {
   createTestUser,
 } from "../../test/factories.js";
 import Property from "../../models/Property.js";
-import { createProperty, getProperties, getProperty } from "./property.js";
+import { bulkImportProperties, createProperty, getProperties, getProperty } from "./property.js";
 
 describe("createProperty", () => {
   it("creates a property linked to a landlord and assigns a sequential property code", async () => {
@@ -130,5 +130,49 @@ describe("getProperty", () => {
 
     expect(statusCode).toBe(403);
     expect(payload.success).toBe(false);
+  });
+});
+
+describe("adding properties while working in a client company", () => {
+  // A Milik admin's token names their own company; the company they have switched into arrives with the request.
+  const setup = async () => {
+    const adminHome = await createTestCompany();
+    const client = await createTestCompany();
+    const { landlord } = await createTestLandlord({ company: client, landlordName: "DAVID KIRUBI" });
+    const admin = await createTestUser({ company: adminHome, isSystemAdmin: true });
+    return { adminHome, client, landlord, admin };
+  };
+
+  it("creates the property in the company being worked in, and finds that company's landlord", async () => {
+    const { client, landlord, admin } = await setup();
+    const { statusCode, payload } = await callController(createProperty, {
+      user: admin,
+      body: { business: String(client._id), propertyName: "KIRUBI 2", propertyType: "Residential", landlords: [{ landlordId: String(landlord._id), name: landlord.landlordName }] },
+    });
+    expect(statusCode).toBe(201);
+    expect(String((await Property.findById(payload.data._id)).business)).toBe(String(client._id));
+  });
+
+  it("imports properties into the company being worked in, matching landlords by name", async () => {
+    const { client, admin } = await setup();
+    const { payload } = await callController(bulkImportProperties, {
+      user: admin,
+      body: { business: String(client._id), properties: [{ propertyName: "MAU MAU", propertyType: "Residential", landlordName: "David Kirubi" }] },
+    });
+    expect(payload.data?.failed ?? payload.failed ?? []).toEqual([]);
+    const saved = await Property.findOne({ propertyName: "MAU MAU" });
+    expect(String(saved.business)).toBe(String(client._id));
+  });
+
+  it("does not let an ordinary user act in another company by naming it", async () => {
+    const { client } = await setup();
+    const own = await createTestCompany();
+    const user = await createTestUser({ company: own });
+    const { statusCode } = await callController(createProperty, {
+      user,
+      body: { business: String(client._id), propertyName: "SNEAKY", propertyType: "Residential", landlords: [] },
+    });
+    expect(statusCode).toBe(400); // no landlord in *their own* company: it was never created in the other one
+    expect(await Property.countDocuments({ business: client._id })).toBe(0);
   });
 });

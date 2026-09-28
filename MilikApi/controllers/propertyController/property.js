@@ -52,6 +52,7 @@ import {
   ensurePropertyControlAccount,
 } from "../../services/propertyAccountingService.js";
 import { createError } from "../../utils/error.js";
+import { resolveBusinessId } from "../../utils/requestContext.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules.js";
 
@@ -568,7 +569,7 @@ export const createProperty = async (req, res) => {
       lettingFeeValue,
     } = req.body;
 
-    const businessId = req.user?.company || req.user?.business || business;
+    const businessId = resolveBusinessId(req) || business;
 
     if (!businessId) {
       return res.status(400).json({
@@ -1539,7 +1540,7 @@ export const bulkImportProperties = async (req, res, next) => {
         .json({ success: false, message: "Maximum 1000 properties per import" });
     }
 
-    const businessId = req.user?.company || req.user?.business || business;
+    const businessId = resolveBusinessId(req) || business;
 
     if (!businessId) {
       return res
