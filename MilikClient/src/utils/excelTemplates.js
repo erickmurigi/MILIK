@@ -860,11 +860,48 @@ const canonicalUnitBillingPeriodKey = (value = "") => {
   return UNIT_BILLING_PERIOD_ALIASES[normalized] || normalized || "monthly";
 };
 
+// The values a units file may use come from the company's Operational Settings (Unit Types, Billing Periods), plus the
+// long-standing defaults, so a custom type or period added there can be imported just like the built-in ones.
+const LEGACY_UNIT_TYPES = ['studio', '1bed', '2bed', '3bed', '4bed', 'commercial'];
+const DEFAULT_BILLING_KEYS = ['monthly', 'quarterly', 'semi_annual', 'annual'];
+
+const unitTypeMatchKey = (value = '') => String(value || '').trim().toLowerCase().replace(/\s+/g, '');
+
+const configuredUnitTypeNames = (unitTypes = []) =>
+  (Array.isArray(unitTypes) ? unitTypes : [])
+    .map((item) => String(typeof item === 'string' ? item : item?.name || '').trim())
+    .filter(Boolean);
+
+/** The unit type to store for what was typed in the file (a configured name as spelt in settings, or a legacy value), or null. */
+export const resolveImportUnitType = (raw, unitTypes = []) => {
+  const key = unitTypeMatchKey(raw);
+  if (!key) return null;
+  if (LEGACY_UNIT_TYPES.includes(key)) return key;
+  return configuredUnitTypeNames(unitTypes).find((name) => unitTypeMatchKey(name) === key) || null;
+};
+
+const configuredBillingPeriods = (periods = []) =>
+  (Array.isArray(periods) ? periods : []).filter((p) => p && p.isActive !== false && (p.key || p.name));
+
+/** The billing period key to store for what was typed (a configured key or name, or one of the standard periods), or null. */
+export const resolveImportBillingKey = (raw, periods = []) => {
+  const normalized = normalizeUnitBillingPeriodKey(raw || 'monthly') || 'monthly';
+  const configured = configuredBillingPeriods(periods).find(
+    (p) => normalizeUnitBillingPeriodKey(p.key) === normalized || normalizeUnitBillingPeriodKey(p.name) === normalized
+  );
+  if (configured) return String(configured.key || normalizeUnitBillingPeriodKey(configured.name));
+  const standard = UNIT_BILLING_PERIOD_ALIASES[normalized] || normalized;
+  return DEFAULT_BILLING_KEYS.includes(standard) ? standard : null;
+};
+
 /**
  * Generate Excel template for Units with instructions
  * @param {Array} properties - Optional array of property objects with propertyCode and propertyName
  */
-export const generateUnitsTemplate = (properties = []) => {
+export const generateUnitsTemplate = (properties = [], { unitTypes = [], billingPeriods = [] } = {}) => {
+  const typeNames = Array.from(new Set([...configuredUnitTypeNames(unitTypes), ...LEGACY_UNIT_TYPES]));
+  const periodOptions = Array.from(new Set([...configuredBillingPeriods(billingPeriods).map((p) => String(p.key || normalizeUnitBillingPeriodKey(p.name))), ...DEFAULT_BILLING_KEYS]));
+  const exampleType = (i) => typeNames[i % typeNames.length];
   // Sheet 1: Data Template (Headers only)
   const dataSheet = XLSX.utils.aoa_to_sheet([
     [
@@ -902,7 +939,7 @@ export const generateUnitsTemplate = (properties = []) => {
     ['REQUIRED FIELDS (marked with *)'],
     ['• Unit Number: Unique identifier for the unit (e.g., A1, 101, UNIT-001)'],
     ['• Property Code: Must match an existing property code in the system (e.g., PRO001, PRO002)'],
-    ['• Unit Type: studio, 1bed, 2bed, 3bed, 4bed, or commercial'],
+    ['• Unit Type: one of your unit types (see the Valid Values sheet) - the ones set up in Operational Settings, or studio, 1bed, 2bed, 3bed, 4bed, commercial'],
     [''],
     ['OPTIONAL FIELDS (leave blank or use a dash - if not available)'],
     ['• Rent: Monthly rent in Kenyan Shillings (KES) — defaults to 0 if left blank'],
@@ -931,7 +968,7 @@ export const generateUnitsTemplate = (properties = []) => {
     [
       'A1',
       'PRO001',
-      '2bed',
+      exampleType(0),
       '35000',
       '70000',
       'monthly',
@@ -944,7 +981,7 @@ export const generateUnitsTemplate = (properties = []) => {
     [
       '201',
       'PRO002',
-      '1bed',
+      exampleType(1),
       '25000',
       '50000',
       'quarterly',
@@ -957,7 +994,7 @@ export const generateUnitsTemplate = (properties = []) => {
     [
       'COMM-01',
       'PRO003',
-      'commercial',
+      exampleType(2),
       '45000',
       '90000',
       'annual',
@@ -970,7 +1007,7 @@ export const generateUnitsTemplate = (properties = []) => {
     [
       'B3',
       'PRO001',
-      'studio',
+      exampleType(3),
       '15000',
       '30000',
       'semi_annual',
@@ -986,7 +1023,7 @@ export const generateUnitsTemplate = (properties = []) => {
     ['• Leave Rent and Deposit blank (or use a dash -) to default to 0 — you can update them later'],
     ['• Unit Number must be unique within the same property'],
     ['• Property Code must match exactly with existing property codes in your system'],
-    ['• Unit Type must be one of: studio, 1bed, 2bed, 3bed, 4bed, commercial (case-sensitive)'],
+    ['• Unit Type must be one of the unit types listed in the Valid Values sheet (capital letters and spaces do not matter)'],
     ['• Rent and Deposit must be numeric values when provided (numbers only, no currency symbols)'],
     ['• Status must be one of: vacant, occupied, maintenance, reserved, archived (lowercase)'],
     ['• Amenities and Utilities Included are optional - separate multiple items with commas'],
@@ -1003,18 +1040,10 @@ export const generateUnitsTemplate = (properties = []) => {
     ['VALID VALUES FOR DROPDOWNS'],
     [''],
     ['Unit Type Options:'],
-    ['studio'],
-    ['1bed'],
-    ['2bed'],
-    ['3bed'],
-    ['4bed'],
-    ['commercial'],
+    ...typeNames.map((name) => [name]),
     [''],
     ['Billing Frequency Options:'],
-    ['monthly'],
-    ['quarterly'],
-    ['semi_annual'],
-    ['annual'],
+    ...periodOptions.map((key) => [key]),
     [''],
     ['Status Options:'],
     ['vacant'],
@@ -1060,9 +1089,10 @@ export const generateUnitsTemplate = (properties = []) => {
 /**
  * Download units template
  * @param {Array} properties - Optional array of property objects with propertyCode and propertyName
+ * @param {Object} settings - { unitTypes, billingPeriods } from the company's Operational Settings
  */
-export const downloadUnitsTemplate = (properties = []) => {
-  const blob = generateUnitsTemplate(properties);
+export const downloadUnitsTemplate = (properties = [], settings = {}) => {
+  const blob = generateUnitsTemplate(properties, settings);
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -1076,7 +1106,7 @@ export const downloadUnitsTemplate = (properties = []) => {
 /**
  * Parse uploaded units Excel file
  */
-export const parseUnitsExcel = (file) => {
+export const parseUnitsExcel = (file, { unitTypes = [], billingPeriods = [] } = {}) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     
@@ -1136,7 +1166,8 @@ export const parseUnitsExcel = (file) => {
               row['billingFrequency'] ||
               row['billingPeriodKey'] ||
               '';
-            return canonicalUnitBillingPeriodKey(val || 'monthly');
+            // an unknown period is kept as typed so the row check below can name it in the error
+            return resolveImportBillingKey(val || 'monthly', billingPeriods) || normalizeUnitBillingPeriodKey(val);
           };
           const getStatus = (row) => row['Status'] || row['status'] || 'vacant';
           const getDescription = (row) => row['Description'] || row['description'] || '';
@@ -1145,7 +1176,7 @@ export const parseUnitsExcel = (file) => {
             rowNumber: index + 2,
             unitNumber: getUnitNumber(row).trim(),
             propertyCode: getPropertyCode(row).trim(),
-            unitType: getUnitType(row).trim().toLowerCase(),
+            unitType: getUnitType(row).trim(),
             rent: getRent(row),
             deposit: getDeposit(row),
             billingFrequency: getBillingFrequency(row),
@@ -1161,9 +1192,9 @@ export const parseUnitsExcel = (file) => {
         const validRecords = [];
         const errors = [];
         
-        const validUnitTypes = ['studio', '1bed', '2bed', '3bed', '4bed', 'commercial'];
+        const validUnitTypes = Array.from(new Set([...configuredUnitTypeNames(unitTypes), ...LEGACY_UNIT_TYPES]));
         const validStatuses = ['vacant', 'maintenance', 'reserved', 'archived'];
-        const validBillingFrequencies = ['monthly', 'quarterly', 'semi_annual', 'annual'];
+        const validBillingFrequencies = Array.from(new Set([...configuredBillingPeriods(billingPeriods).map((p) => String(p.key || normalizeUnitBillingPeriodKey(p.name))), ...DEFAULT_BILLING_KEYS]));
         
         // Track duplicates within the file
         const seenUnits = new Set();
@@ -1186,8 +1217,10 @@ export const parseUnitsExcel = (file) => {
           }
           
           // Enum validations
-          if (record.unitType && !validUnitTypes.includes(record.unitType)) {
-            rowErrors.push(`Invalid Unit Type. Must be one of: ${validUnitTypes.join(', ')}`);
+          if (record.unitType) {
+            const resolvedType = resolveImportUnitType(record.unitType, unitTypes);
+            if (resolvedType) record.unitType = resolvedType;
+            else rowErrors.push(`Invalid Unit Type "${record.unitType}". Add it under Operational Settings → Unit Types, or use one of: ${validUnitTypes.join(', ')}`);
           }
           if (record.status && !validStatuses.includes(record.status)) {
             rowErrors.push(`Invalid Status. Must be one of: ${validStatuses.join(', ')}`);

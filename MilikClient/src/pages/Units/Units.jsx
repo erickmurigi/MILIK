@@ -135,6 +135,7 @@ const Units = () => {
   // UI STATE
   // ---------------------------
   const [configuredUnitTypes, setConfiguredUnitTypes] = useState([]);
+  const [configuredBillingPeriods, setConfiguredBillingPeriods] = useState([]);
   const [pageSize, setPageSize] = useState(50);
   const [currentPage, setCurrentPage] = useTabState("/units:currentPage", 1);
   const [expandedUnits, setExpandedUnits] = useState([]); // Array to track multiple expanded units
@@ -283,6 +284,10 @@ const Units = () => {
       dispatch(getProperties({ business: currentCompany._id }));
       getCompanyUnitTypes(currentCompany._id)
         .then((res) => setConfiguredUnitTypes(Array.isArray(res?.unitTypes) ? res.unitTypes.filter((t) => t.isActive !== false) : []))
+        .catch(() => {});
+      // the company's own billing periods (Operational Settings) are also valid in an import
+      adminRequests.get(`/company-settings/${currentCompany._id}`)
+        .then((r) => setConfiguredBillingPeriods(Array.isArray(r?.data?.billingPeriods) ? r.data.billingPeriods.filter((p) => p.isActive !== false) : []))
         .catch(() => {});
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -628,7 +633,7 @@ const Units = () => {
   // EXCEL IMPORT/EXPORT HANDLERS
   // ---------------------------
   const handleDownloadTemplate = () => {
-    downloadUnitsTemplate(properties || []);
+    downloadUnitsTemplate(properties || [], { unitTypes: configuredUnitTypes, billingPeriods: configuredBillingPeriods });
     toast.info(`${termUnits} import template downloaded!`);
   };
 
@@ -1507,7 +1512,7 @@ const Units = () => {
           onClose={() => setShowImportModal(false)}
           title={`Import ${termUnits} from Excel`}
           entityName={termUnit.toLowerCase()}
-          parseFile={parseUnitsExcel}
+          parseFile={(file) => parseUnitsExcel(file, { unitTypes: configuredUnitTypes, billingPeriods: configuredBillingPeriods })}
           downloadTemplate={handleDownloadTemplate}
           onImport={handleBulkImport}
           maxWidthClass="max-w-4xl"
