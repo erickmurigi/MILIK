@@ -142,6 +142,12 @@ const resolveAuthorizedBusinessId = (req) => {
 
 const findCompanySettings = (companyId) => CompanySettings.findOne({ company: companyId });
 
+// A company's settings document is created the first time anything asks for it. The settings pages ask for several things at once,
+// so a plain "new document + save" lets two requests race on the unique company index and one of them answers 500. The upsert
+// is a single atomic step: whoever comes second simply gets the document the first one made.
+const createSettingsIfMissing = (companyId) =>
+  CompanySettings.findOneAndUpdate({ company: companyId }, { $setOnInsert: { company: companyId } }, { upsert: true, new: true });
+
 const buildDefaultTaxConfiguration = () => ({
   taxSettings: {
     ...DEFAULT_TAX_SETTINGS,
@@ -230,7 +236,7 @@ const DEFAULT_DEPOSIT_TYPES = [
 const ensureSettingsDocument = async (businessId) => {
   let settings = await findCompanySettings(businessId);
   if (!settings) {
-    settings = new CompanySettings({ company: businessId });
+    settings = await createSettingsIfMissing(businessId);
   }
   ensureSettingsTaxConfiguration(settings);
   ensureSettingsBillingPeriods(settings);
@@ -319,12 +325,24 @@ export const getCompanySettings = async (req, res, next) => {
         taxCodes: defaults.taxCodes,
       });
 
-      await settings.save();
+      try {
+        await settings.save();
+      } catch (saveError) {
+        // another request created it a moment earlier: use theirs
+        if (saveError?.code !== 11000) throw saveError;
+        settings = await findCompanySettings(businessId);
+      }
     } else {
       ensureSettingsTaxConfiguration(settings);
       ensureSettingsBillingPeriods(settings);
       if (settings.isModified()) {
-        await settings.save();
+        try {
+          await settings.save();
+        } catch (saveError) {
+          // a simultaneous request filled in the same defaults first: take what it saved
+          if (saveError?.name !== "VersionError") throw saveError;
+          settings = (await findCompanySettings(businessId)) || settings;
+        }
       }
     }
 
@@ -964,7 +982,7 @@ export const updateAccountingDefaults = async (req, res, next) => {
     const businessId = resolveAuthorizedBusinessId(req);
     let settings = await findCompanySettings(businessId);
     if (!settings) {
-      settings = new CompanySettings({ company: businessId });
+      settings = await createSettingsIfMissing(businessId);
       ensureSettingsTaxConfiguration(settings);
     }
 
@@ -1011,7 +1029,7 @@ export const updateHrAccountingDefaults = async (req, res, next) => {
     const businessId = resolveAuthorizedBusinessId(req);
     let settings = await findCompanySettings(businessId);
     if (!settings) {
-      settings = new CompanySettings({ company: businessId });
+      settings = await createSettingsIfMissing(businessId);
       ensureSettingsTaxConfiguration(settings);
     }
 
@@ -1058,7 +1076,7 @@ export const updateInventoryAccountingDefaults = async (req, res, next) => {
     const businessId = resolveAuthorizedBusinessId(req);
     let settings = await findCompanySettings(businessId);
     if (!settings) {
-      settings = new CompanySettings({ company: businessId });
+      settings = await createSettingsIfMissing(businessId);
       ensureSettingsTaxConfiguration(settings);
     }
 
@@ -1105,7 +1123,7 @@ export const updateTaxConfiguration = async (req, res, next) => {
     const businessId = resolveAuthorizedBusinessId(req);
     let settings = await findCompanySettings(businessId);
     if (!settings) {
-      settings = new CompanySettings({ company: businessId });
+      settings = await createSettingsIfMissing(businessId);
     }
 
     ensureSettingsTaxConfiguration(settings);
@@ -1170,7 +1188,7 @@ export const updateIncomeRules = async (req, res, next) => {
     const businessId = resolveAuthorizedBusinessId(req);
     let settings = await findCompanySettings(businessId);
     if (!settings) {
-      settings = new CompanySettings({ company: businessId });
+      settings = await createSettingsIfMissing(businessId);
     }
 
     const { latePenaltyBeneficiary, manualReceiptConfirmation } = req.body || {};
@@ -1208,7 +1226,7 @@ export const updateAutoInvoicing = async (req, res, next) => {
     const businessId = resolveAuthorizedBusinessId(req);
     let settings = await findCompanySettings(businessId);
     if (!settings) {
-      settings = new CompanySettings({ company: businessId });
+      settings = await createSettingsIfMissing(businessId);
     }
 
     const {
@@ -1279,7 +1297,7 @@ export const updateTerminology = async (req, res, next) => {
 
     let settings = await findCompanySettings(businessId);
     if (!settings) {
-      settings = new CompanySettings({ company: businessId });
+      settings = await createSettingsIfMissing(businessId);
     }
 
     for (const key of ALLOWED_TERMINOLOGY_KEYS) {
