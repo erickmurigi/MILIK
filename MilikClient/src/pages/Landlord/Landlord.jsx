@@ -573,10 +573,10 @@ const Landlords = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white p-0">
         {/* Toolbar — single scrollable row */}
         <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+          <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
             <AppSelect
               value={draftFilters.status === "any" ? null : draftFilters.status}
               onChange={(v) => setDraftFilters((p) => ({ ...p, status: v ?? "any" }))}
@@ -586,7 +586,7 @@ const Landlords = () => {
               ]}
               placeholder="All Status"
               clearable
-              size="sm"
+              compact
             />
 
             <AppSelect
@@ -598,7 +598,7 @@ const Landlords = () => {
               ]}
               placeholder="Portal"
               clearable
-              size="sm"
+              compact
             />
 
             <input
@@ -606,58 +606,58 @@ const Landlords = () => {
               onChange={(e) => setDraftFilters((p) => ({ ...p, location: e.target.value }))}
               onKeyDown={onFilterEnter}
               placeholder="Location"
-              className="h-7 w-24 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+              className="h-[20px] w-24 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
             />
 
-            <div className="h-4 w-px shrink-0 bg-slate-200" />
+            <div className="h-3 w-px shrink-0 bg-slate-200" />
 
             <input
               value={draftFilters.code}
               onChange={(e) => setDraftFilters((p) => ({ ...p, code: normalizeUppercaseInput(e.target.value) }))}
               onKeyDown={onFilterEnter}
               placeholder="Code"
-              className="h-7 w-20 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+              className="h-[20px] w-20 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
             />
             <input
               value={draftFilters.name}
               onChange={(e) => setDraftFilters((p) => ({ ...p, name: normalizeUppercaseInput(e.target.value) }))}
               onKeyDown={onFilterEnter}
               placeholder="Name"
-              className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+              className="h-[20px] w-28 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
             />
             <input
               value={draftFilters.regId}
               onChange={(e) => setDraftFilters((p) => ({ ...p, regId: normalizeUppercaseInput(e.target.value) }))}
               onKeyDown={onFilterEnter}
               placeholder="Reg/ID"
-              className="h-7 w-20 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+              className="h-[20px] w-20 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
             />
             <input
               value={draftFilters.email}
               onChange={(e) => setDraftFilters((p) => ({ ...p, email: e.target.value }))}
               onKeyDown={onFilterEnter}
               placeholder="Email"
-              className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+              className="h-[20px] w-28 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
             />
             <input
               value={draftFilters.phone}
               onChange={(e) => setDraftFilters((p) => ({ ...p, phone: normalizeUppercaseInput(e.target.value) }))}
               onKeyDown={onFilterEnter}
               placeholder="Phone"
-              className="h-7 w-24 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+              className="h-[20px] w-24 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
             />
 
-            <div className="h-4 w-px shrink-0 bg-slate-200" />
+            <div className="h-3 w-px shrink-0 bg-slate-200" />
 
-            <button onClick={applySearch} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2.5 text-xs font-semibold text-white hover:bg-[#e67e00]">
-              <FaSearch size={9} /> Search
+            <button onClick={applySearch} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#FF8C00] px-2.5 text-[9px] font-semibold text-white hover:bg-[#e67e00]">
+              <FaSearch size={7} /> Search
             </button>
-            <button onClick={resetFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
-              <FaRedoAlt size={9} /> Reset
+            <button onClick={resetFilters} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-2.5 text-[9px] font-semibold text-white hover:bg-[#0A3127]">
+              <FaRedoAlt size={7} /> Reset
             </button>
             <button onClick={openEditModal} disabled={!canEdit}
-              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${canEdit ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
-              <FaEdit size={9} /> Edit
+              className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${canEdit ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+              <FaEdit size={7} /> Edit
             </button>
 
             <div className="shrink-0">
@@ -671,8 +671,8 @@ const Landlords = () => {
                   setActionMenuOpen((v) => !v);
                 }}
                 disabled={selectedCount === 0}
-                className={`h-7 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedCount > 0 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
-                <FaArchive size={9} /> Actions <FaChevronDown size={8} />
+                className={`h-[20px] flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${selectedCount > 0 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+                <FaArchive size={7} /> Actions <FaChevronDown size={8} />
               </button>
               {actionMenuOpen && selectedCount > 0 && (
                 <div
@@ -692,34 +692,34 @@ const Landlords = () => {
             </div>
 
             <button onClick={() => setShowCommunicationModal(true)} disabled={selectedCount === 0}
-              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedCount > 0 ? "bg-[#FF8C00] hover:bg-[#e67e00]" : "bg-gray-400 cursor-not-allowed"}`}>
-              <FaSms size={9} /> SMS
+              className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${selectedCount > 0 ? "bg-[#FF8C00] hover:bg-[#e67e00]" : "bg-gray-400 cursor-not-allowed"}`}>
+              <FaSms size={7} /> SMS
             </button>
             <button onClick={deleteSelected} disabled={!canDelete || selectedCount === 0 || selectedDeletableLandlords.length === 0}
-              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${canDelete && selectedCount > 0 && selectedDeletableLandlords.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}>
-              <FaTrash size={9} /> Delete
+              className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${canDelete && selectedCount > 0 && selectedDeletableLandlords.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}>
+              <FaTrash size={7} /> Delete
             </button>
             <button onClick={openAddModal} disabled={!canCreate}
-              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${canCreate ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
-              <FaPlus size={9} /> Add
+              className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${canCreate ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+              <FaPlus size={7} /> Add
             </button>
-            <button onClick={() => navigate("/landlord-payments")} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2.5 text-xs font-semibold text-white hover:bg-[#e67e00]">
-              <FaMoneyBillWave size={9} /> Payments
+            <button onClick={() => navigate("/landlord-payments")} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#FF8C00] px-2.5 text-[9px] font-semibold text-white hover:bg-[#e67e00]">
+              <FaMoneyBillWave size={7} /> Payments
             </button>
-            <button onClick={() => setShowImportModal(true)} className="h-7 shrink-0 flex items-center gap-1 rounded border border-green-300 bg-green-50 px-2.5 text-xs font-semibold text-green-700 hover:bg-green-100">
-              <FaFileImport size={9} /> Import
+            <button onClick={() => setShowImportModal(true)} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-green-300 bg-green-50 px-2.5 text-[9px] font-semibold text-green-700 hover:bg-green-100">
+              <FaFileImport size={7} /> Import
             </button>
-            <button onClick={handlePrintList} className="h-7 shrink-0 flex items-center gap-1 rounded border border-gray-300 px-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50">
-              <FaPrint size={9} /> Print
+            <button onClick={handlePrintList} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-slate-700 px-2.5 text-[9px] font-semibold text-white hover:bg-slate-800">
+              <FaPrint size={7} /> Print
             </button>
-            <button onClick={handleExport} className="h-7 shrink-0 flex items-center gap-1 rounded border border-gray-300 px-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50">
-              <FaFileExport size={9} /> Export
+            <button onClick={handleExport} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-gray-300 px-2.5 text-[9px] font-semibold text-gray-600 hover:bg-gray-50">
+              <FaFileExport size={7} /> Export
             </button>
           </div>
         </div>
 
         {/* Table */}
-        <div className="flex w-full max-w-none min-h-0 flex-1 flex-col px-0 pb-0">
+        <div className="flex w-full max-w-none min-h-0 flex-1 flex-col px-2 pb-2">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
             {/* Make THIS the scroll area so the footer stays visible */}
             <div className="min-h-0 flex-1 overflow-auto">
