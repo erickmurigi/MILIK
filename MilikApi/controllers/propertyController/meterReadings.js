@@ -443,7 +443,7 @@ export const getMeterReadings = async (req, res, next) => {
     if (req.query.status) {
       query.status = req.query.status;
     } else {
-      query.status = { $ne: "deleted" };
+      query.status = { $nin: ["deleted", "void"] };
     }
     if (req.query.billingPeriod) query.billingPeriod = toPeriodKey(req.query.billingPeriod);
     if (req.query.utilityType) {

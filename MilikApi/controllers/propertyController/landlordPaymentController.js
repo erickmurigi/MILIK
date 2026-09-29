@@ -280,6 +280,12 @@ export const listLandlordPayments = async (req, res, next) => {
     if (businessId) query.business = new mongoose.Types.ObjectId(businessId);
     const lid = landlordId || landlordQ;
     if (isValidObjectId(lid)) query.landlord = new mongoose.Types.ObjectId(lid);
+    if (req.query.status) {
+      query.status = req.query.status;
+    } else if (req.query.includeReversed !== "true") {
+      // reversed vouchers are kept for the audit trail but stay out of the working list unless asked for
+      query.status = { $ne: "reversed" };
+    }
 
     const [data, total] = await Promise.all([
       PaymentVoucher.find(query)

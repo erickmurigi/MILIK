@@ -138,7 +138,12 @@ export const listDeals = async (req, res, next) => {
     const page = Math.max(Number(req.query.page || 1), 1);
     const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
     const filter = { business };
-    if (status)    filter.status  = status;
+    if (status) {
+      filter.status = status;
+    } else if (req.query?.includeCancelled !== "true") {
+      // cancelled deals are kept for the audit trail but stay out of the working list unless asked for
+      filter.status = { $ne: "cancelled" };
+    }
     // agent-scoped user can only see their own deals
     if (req.saleAgentId) filter.agent = req.saleAgentId;
     else if (agentId)    filter.agent = agentId;

@@ -53,7 +53,12 @@ export const listCommissions = async (req, res, next) => {
     const scopedAgentId = await resolveAgentScope(req, business);
     if (scopedAgentId) filter.agent = scopedAgentId;
     else if (agentId)  filter.agent = agentId;
-    if (status)  filter.status = status;
+    if (status) {
+      filter.status = status;
+    } else if (req.query?.includeCancelled !== "true") {
+      // cancelled/reversed commissions are kept for the audit trail but stay out of the working list unless asked for
+      filter.status = { $nin: ["cancelled", "reversed"] };
+    }
     if (dealId)  filter.deal = dealId;
     if (search.trim()) filter.commissionNumber = { $regex: search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
     if (dateFrom || dateTo) {

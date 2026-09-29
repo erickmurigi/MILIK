@@ -630,7 +630,12 @@ export const getJournalEntries = async (req, res, next) => {
     const { status, journalType, property, landlord, sourceModule, excludeSourceModules, startDate, endDate, search } = req.query;
     const filter = { business };
 
-    if (status && status !== "all") filter.status = status;
+    if (status && status !== "all") {
+      filter.status = status;
+    } else if (req.query.includeReversed !== "true") {
+      // reversed entries are kept for the audit trail but stay out of the working list unless asked for
+      filter.status = { $ne: "reversed" };
+    }
     if (journalType && journalType !== "all") filter.journalType = journalType;
     if (property && property !== "all") filter.property = property;
     if (landlord && landlord !== "all") filter.landlord = landlord;

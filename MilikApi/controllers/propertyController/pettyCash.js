@@ -386,7 +386,12 @@ export const getDisbursements = async (req, res, next) => {
 
     const filter = { business: businessId };
     if (req.query.pettyCashAccountId) filter.pettyCashAccount = req.query.pettyCashAccountId;
-    if (req.query.status) filter.status = req.query.status;
+    if (req.query.status) {
+      filter.status = req.query.status;
+    } else if (req.query.includeVoid !== "true") {
+      // voided disbursements are kept for the audit trail but stay out of the working list unless asked for
+      filter.status = { $ne: "void" };
+    }
     if (req.query.category) filter.category = req.query.category;
     if (req.query.propertyId) filter.property = req.query.propertyId;
     if (req.query.startDate || req.query.endDate) {

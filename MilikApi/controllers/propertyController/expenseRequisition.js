@@ -429,7 +429,12 @@ export const getExpenseRequisitions = async (req, res, next) => {
     if (!businessId) return next(createError(400, "Company context is required"));
 
     const filter = { business: businessId };
-    if (req.query?.status && req.query.status !== "all") filter.status = req.query.status;
+    if (req.query?.status && req.query.status !== "all") {
+      filter.status = req.query.status;
+    } else if (req.query?.includeCancelled !== "true") {
+      // cancelled requisitions are kept for the audit trail but stay out of the working list unless asked for
+      filter.status = { $ne: "cancelled" };
+    }
     const propId = req.query?.property || req.query?.propertyId;
     if (propId && isValidObjectId(propId)) filter.property = propId;
     if (req.query?.serviceProvider && isValidObjectId(req.query.serviceProvider)) filter.serviceProvider = req.query.serviceProvider;

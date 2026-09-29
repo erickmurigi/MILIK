@@ -188,7 +188,12 @@ const buildListFilter = (req, businessId) => {
 
   if (isValidObjectId(landlord)) filter.landlord = landlord;
   if (isValidObjectId(property)) filter.property = property;
-  if (status && ["draft", "posted", "reversed"].includes(String(status))) filter.status = status;
+  if (status && ["draft", "posted", "reversed"].includes(String(status))) {
+    filter.status = status;
+  } else if (req.query?.includeReversed !== "true") {
+    // reversed receipts are kept for the audit trail but stay out of the working list unless asked for
+    filter.status = { $ne: "reversed" };
+  }
   if (category && RECEIPT_CATEGORIES.includes(String(category))) filter.category = category;
   if (search) {
     const pattern = escapeRegex(String(search).trim());

@@ -2159,6 +2159,13 @@ export const getTenantInvoiceNotes = async (req, res, next) => {
     const scopedBusiness = resolveAuthorizedBusinessId(req, business);
     if (scopedBusiness) query.business = scopedBusiness;
 
+    if (req.query?.status) {
+      query.status = req.query.status;
+    } else if (req.query?.includeCancelled !== "true") {
+      // cancelled/reversed notes are kept for the audit trail but stay out of the working list unless asked for
+      query.status = { $nin: ["cancelled", "reversed"] };
+    }
+
     const notes = await TenantInvoiceNote.find(query)
       .sort({ noteDate: 1, createdAt: 1 })
       .limit(500)
@@ -2461,6 +2468,9 @@ const buildTenantInvoiceListQuery = async ({ businessId, requestQuery = {} }) =>
     } else {
       query.status = safeLower(normalizedStatus);
     }
+  } else if (String(requestQuery?.includeCancelled || "").trim() !== "true") {
+    // cancelled/reversed invoices are kept for the audit trail but stay out of the working list unless asked for
+    query.status = { $nin: ["cancelled", "reversed"] };
   }
 
   if (category) {

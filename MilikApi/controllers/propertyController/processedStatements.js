@@ -1249,6 +1249,12 @@ export const getStatementsByBusiness = async (req, res, next) => {
       }
     }
 
+    // Nothing above set a status filter (no tab, no status, no commissionStatus) — reversed
+    // statements are kept for the audit trail but stay out of the working list by default.
+    if (!query.status) {
+      query.status = { $ne: "reversed" };
+    }
+
     // Resolve search into a DB-level filter BEFORE pagination — filtering the
     // already skip/limit'ed page in JS undercounted results and broke `total`/`pages`.
     if (search) {
