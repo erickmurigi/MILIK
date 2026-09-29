@@ -3,7 +3,7 @@ import { useTabState } from '../../hooks/useTabState';
 import { useDispatch, useSelector } from 'react-redux';
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from '../../redux/selectors';
 import { FaFileDownload, FaFilter, FaPrint, FaReceipt } from 'react-icons/fa';
-import toast from 'react-hot-toast';
+import { toast } from "react-toastify";
 import { hasCompanyPermission } from '../../utils/permissions';
 import AppSelect from '../../components/common/AppSelect';
 import DashboardLayout from '../../components/Layout/DashboardLayout';

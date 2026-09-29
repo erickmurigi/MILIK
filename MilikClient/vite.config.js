@@ -40,7 +40,6 @@ export default defineConfig({
           // UI utilities
           "vendor-ui": [
             "react-toastify",
-            "react-hot-toast",
             "axios",
             "crypto-js",
           ],

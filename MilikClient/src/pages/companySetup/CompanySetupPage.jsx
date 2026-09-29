@@ -3,7 +3,7 @@ import { useTabState } from "../../hooks/useTabState";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
-import toast from "react-hot-toast";
+import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
 import SharedModal from "../../components/common/Modal";
@@ -1463,7 +1463,7 @@ export default function CompanySetupPage() {
     try {
       const result = await adminRequests.post("/mpesa-collections/register-urls", { shortCode }).then((r) => r.data);
       if (result?.alreadyRegistered) {
-        toast(result.message, { icon: "⚠️", duration: 12000 });
+        toast.warning(result.message, { autoClose: 12000 });
       } else {
         toast.success(result?.message || "URLs registered with Safaricom. Payments will now flow through.");
       }

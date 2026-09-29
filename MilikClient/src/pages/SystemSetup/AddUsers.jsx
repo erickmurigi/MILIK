@@ -19,7 +19,7 @@ import AppSelect from '../../components/common/AppSelect';
 import { useDispatch, useSelector } from 'react-redux';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { selectCurrentUser, selectCurrentCompany } from '../../redux/selectors';
-import { toast } from 'react-hot-toast';
+import { toast } from "react-toastify";
 import { adminRequests } from '../../utils/requestMethods';
 import { createUser, updateUser } from '../../redux/apiCalls';
 import { getEnabledCompanyModuleKeys, MODULE_LABELS } from '../../utils/companyModules';

@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import ErrorBoundary from "../common/ErrorBoundary";
-import { Toaster } from "react-hot-toast";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -232,18 +231,6 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
     [activeCompanyContext]
   );
 
-  // useMemo: prevents new object identity on every render so Toaster doesn't re-configure
-  const toastOptions = useMemo(
-    () => ({
-      duration: 4000,
-      style: {
-        background: darkMode ? "#374151" : "#FFFFFF",
-        color: darkMode ? "#FFFFFF" : "#374151",
-        border: `1px solid ${darkMode ? "#4B5563" : "#E5E7EB"}`,
-      },
-    }),
-    [darkMode]
-  );
 
   return (
     <div
@@ -251,10 +238,6 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
         lockContentScroll ? "h-screen overflow-hidden flex flex-col" : "min-h-screen overflow-x-hidden"
       } ${darkMode ? "dark bg-gray-900" : "bg-white"}`}
     >
-      <Toaster
-        position="top-right"
-        toastOptions={toastOptions}
-      />
       <ToastContainer
         position="top-right"
         autoClose={4000}

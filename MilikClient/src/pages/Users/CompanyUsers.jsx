@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { toast } from "react-hot-toast";
+import { toast } from "react-toastify";
 import {
   FaBan, FaCheckCircle, FaEllipsisV, FaLock, FaPlus,
   FaShieldAlt, FaUnlock, FaUserEdit, FaUsers,

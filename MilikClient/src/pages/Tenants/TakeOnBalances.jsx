@@ -22,7 +22,7 @@ import {
   FaSave,
   FaWrench,
 } from "react-icons/fa";
-import toast from "react-hot-toast";
+import { toast } from "react-toastify";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
 import { getTenants } from "../../redux/tenantsRedux";
 import { getProperties } from "../../redux/propertyRedux";

@@ -4,7 +4,7 @@ import {
   FaLayerGroup, FaPlus, FaEdit, FaTrash, FaSearch, FaRedoAlt,
   FaTimes, FaSave, FaToggleOn, FaToggleOff,
 } from 'react-icons/fa';
-import { toast } from 'react-hot-toast';
+import { toast } from "react-toastify";
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import AppSelect from '../../components/common/AppSelect';
 import { adminRequests } from '../../utils/requestMethods';

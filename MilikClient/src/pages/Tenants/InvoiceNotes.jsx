@@ -21,7 +21,7 @@ import {
   FaUndo,
   FaUpload,
 } from "react-icons/fa";
-import toast from "react-hot-toast";
+import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import ImportModal from "../../components/Modals/ImportModal";

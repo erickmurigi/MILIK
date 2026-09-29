@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { selectCurrentUser } from "../../redux/selectors";
-import toast from "react-hot-toast";
+import { toast } from "react-toastify";
 import {
   FaArrowLeft,
   FaBoxes,
