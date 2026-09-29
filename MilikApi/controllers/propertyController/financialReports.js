@@ -2087,10 +2087,7 @@ export const getCashMonthlySummary = async (req, res, next) => {
 // severity so the UI can colour-code: critical / warning / info.
 export const getTrialBalanceExceptions = async (req, res, next) => {
   try {
-    const businessId =
-      req.query?.business || req.query?.company ||
-      req.body?.business || req.body?.company ||
-      req.user?.company;
+    const businessId = resolveBusinessId(req);
     if (!businessId) return next(createError(400, "Business required"));
 
     const bizId = new mongoose.Types.ObjectId(String(businessId));
@@ -2199,8 +2196,7 @@ export const getTrialBalanceExceptions = async (req, res, next) => {
 // â”€â”€â”€ FINANCIAL RATIOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const getFinancialRatios = async (req, res, next) => {
   try {
-    const businessId =
-      req.query?.business || req.query?.company || req.user?.company;
+    const businessId = resolveBusinessId(req);
     if (!businessId) return next(createError(400, "Business required"));
 
     const bizId = new mongoose.Types.ObjectId(String(businessId));
@@ -2293,8 +2289,7 @@ export const getFinancialRatios = async (req, res, next) => {
 // Earnings (account 3200). Posts a closing journal entry and locks the period.
 export const performYearEndClose = async (req, res, next) => {
   try {
-    const businessId =
-      req.body?.business || req.body?.company || req.user?.company;
+    const businessId = resolveBusinessId(req);
     if (!businessId) return next(createError(400, "Business required"));
 
     const { periodId, fiscalYear, narration } = req.body || {};

@@ -667,7 +667,8 @@ export const getHealthHistory = async (req, res, next) => {
 export const repairBalanceGroup = async (req, res, next) => {
   try {
     const { groupId } = req.params;
-    const { business: businessId, accountId, notes, healthRunId } = req.body;
+    const { accountId, notes, healthRunId } = req.body;
+    const businessId = req.user?.company;
 
     if (!groupId || !mongoose.Types.ObjectId.isValid(groupId))
       return next(createError(400, "Valid journal group ID required"));
@@ -792,7 +793,8 @@ export const repairBalanceGroup = async (req, res, next) => {
 // back to zero when it sits on its abnormal side.
 export const repairClearAbnormalBalance = async (req, res, next) => {
   try {
-    const { business: businessId, accountId, offsetAccountId, notes, healthRunId } = req.body;
+    const { accountId, offsetAccountId, notes, healthRunId } = req.body;
+    const businessId = req.user?.company;
 
     if (!businessId)
       return next(createError(400, "Business context required"));
@@ -949,7 +951,7 @@ export const repairRepostInvoices = async (req, res, next) => {
 // ─── LIST ALL ACTIVE MANUAL GL CORRECTION ENTRIES ────────────────────────────
 // GET /api/ledger/repair/active-corrections
 export const getActiveCorrections = async (req, res, next) => {
-  const businessId = req.query?.business || req.user?.company;
+  const businessId = req.user?.company;
   if (!businessId) return next(createError(400, "Business context required"));
 
   try {
@@ -992,8 +994,8 @@ export const getActiveCorrections = async (req, res, next) => {
 // them to "reversed", then recomputes affected account balances.
 export const reverseGlCorrectionEntry = async (req, res, next) => {
   const { groupId } = req.params;
-  const { business, healthRunId, entryIds } = req.body;
-  const businessId = business || req.query?.business || req.user?.company;
+  const { healthRunId, entryIds } = req.body;
+  const businessId = req.user?.company;
 
   if (!businessId) return next(createError(400, "Business context required"));
   const isUngrouped = groupId === "ungrouped";
@@ -1048,7 +1050,7 @@ export const reverseGlCorrectionEntry = async (req, res, next) => {
 // Changes status of any manual_adjustment entries that are still "reversed"
 // (from older Undo runs) to "void" so they are excluded from COA/Trial Balance.
 export const voidReversedCorrections = async (req, res, next) => {
-  const businessId = req.body?.business || req.user?.company;
+  const businessId = req.user?.company;
   if (!businessId) return next(createError(400, "Business context required"));
 
   try {
@@ -1081,7 +1083,7 @@ export const voidReversedCorrections = async (req, res, next) => {
 // which legs exist and which is missing before deciding how to correct.
 export const getGroupEntries = async (req, res, next) => {
   const { groupId } = req.params;
-  const businessId  = req.query?.business || req.user?.company;
+  const businessId  = req.user?.company;
 
   if (!businessId) return next(createError(400, "Business context required"));
   if (!mongoose.Types.ObjectId.isValid(groupId)) return next(createError(400, "Invalid groupId"));
@@ -1123,7 +1125,7 @@ export const getGroupEntries = async (req, res, next) => {
 // trial balance entirely without adding more ledger noise.
 export const voidOrphanedJournalGroup = async (req, res, next) => {
   const { groupId }   = req.params;
-  const { business: businessId } = req.body;
+  const businessId = req.user?.company;
 
   if (!businessId) return next(createError(400, "Business context required"));
   if (!mongoose.Types.ObjectId.isValid(groupId)) return next(createError(400, "Invalid groupId"));
@@ -1156,7 +1158,8 @@ export const voidOrphanedJournalGroup = async (req, res, next) => {
 // ─── GL ENTRIES BY SOURCE TRANSACTION ────────────────────────────────────────
 // GET /api/ledger/entries?businessId=X&sourceType=Y&sourceId=Z
 export const getEntriesBySource = async (req, res, next) => {
-  const { businessId, sourceType, sourceId } = req.query;
+  const { sourceType, sourceId } = req.query;
+  const businessId = req.user?.company;
   if (!businessId || !sourceType || !sourceId) {
     return next(createError(400, "businessId, sourceType, and sourceId are required"));
   }

@@ -564,12 +564,11 @@ export const createProperty = async (req, res) => {
       virtualTourUrl,
       status,
       images,
-      business,
       lettingFeeMode,
       lettingFeeValue,
     } = req.body;
 
-    const businessId = resolveBusinessId(req) || business;
+    const businessId = resolveBusinessId(req);
 
     if (!businessId) {
       return res.status(400).json({
@@ -1526,7 +1525,7 @@ export const getPropertyTenants = async (req, res, next) => {
 // Bulk import properties
 export const bulkImportProperties = async (req, res, next) => {
   try {
-    const { properties, business } = req.body;
+    const { properties } = req.body;
 
     if (!Array.isArray(properties) || properties.length === 0) {
       return res
@@ -1540,7 +1539,7 @@ export const bulkImportProperties = async (req, res, next) => {
         .json({ success: false, message: "Maximum 1000 properties per import" });
     }
 
-    const businessId = resolveBusinessId(req) || business;
+    const businessId = resolveBusinessId(req);
 
     if (!businessId) {
       return res

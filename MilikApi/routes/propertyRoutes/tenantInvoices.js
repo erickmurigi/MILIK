@@ -1,5 +1,6 @@
 import express from "express";
 import { verifyUser } from "../../controllers/verifyToken.js";
+import { resolveBusinessId } from "../../utils/requestContext.js";
 import {
   createTenantInvoice,
   createTenantInvoicesBatch,
@@ -39,13 +40,7 @@ router.post("/notes/:id/reverse", verifyUser, reverseTenantInvoiceNote);
 router.get("/:id", verifyUser, getTenantInvoiceById);
 router.get("/:id/pdf", verifyUser, async (req, res, next) => {
   try {
-    const businessId = String(
-      req.headers?.["x-active-company-id"] ||
-      req.user?.company?._id ||
-      req.user?.company ||
-      req.user?.business ||
-      ""
-    );
+    const businessId = resolveBusinessId(req);
     const pdfBuffer = await generateInvoicePdf(req.params.id, businessId);
     const disposition = req.query?.preview === "true" ? "inline" : "attachment";
     res.setHeader("Content-Type", "application/pdf");

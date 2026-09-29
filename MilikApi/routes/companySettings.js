@@ -31,7 +31,7 @@ import {
   updateTerminology,
 } from "../controllers/propertyController/companySettings.js";
 import { processAutoRentInvoices } from "../services/autoRentInvoicingService.js";
-import { verifyUser, verifySetupAccess } from "../controllers/verifyToken.js";
+import { verifyUser, verifySetupAccess, canAccessCompanyId } from "../controllers/verifyToken.js";
 
 const router = express.Router();
 
@@ -104,6 +104,9 @@ router.put("/:businessId/auto-invoicing", verifySetupAccess, updateAutoInvoicing
 router.post("/:businessId/auto-invoicing/trigger", verifySetupAccess, async (req, res) => {
   try {
     const businessId = req.params.businessId;
+    if (!canAccessCompanyId(req.user, businessId)) {
+      return res.status(403).json({ message: "Not authorized to access this company." });
+    }
     let today = new Date();
     if (req.body?.date) {
       today = new Date(req.body.date);
