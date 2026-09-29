@@ -41,7 +41,7 @@ const loadPropertyWithAccessCheck = async (req, propertyId) => {
     return { error: { status: 404, message: "Property not found" } };
   }
   if (!req.user?.isSystemAdmin) {
-    const userBusinessId = req.user?.company || req.user?.business;
+    const userBusinessId = req.user?.company;
     if (property.business.toString() !== userBusinessId?.toString()) {
       return { error: { status: 403, message: "Not authorized to access this property" } };
     }
@@ -1035,7 +1035,7 @@ export const updateProperty = async (req, res, next) => {
     }
 
     if (!req.user.isSystemAdmin) {
-      const userBusinessId = req.user?.company || req.user?.business;
+      const userBusinessId = req.user?.company;
       if (property.business.toString() !== userBusinessId?.toString()) {
         return res.status(403).json({
           success: false,
@@ -1338,7 +1338,7 @@ export const deleteProperty = async (req, res, next) => {
     }
 
     if (!req.user.isSystemAdmin) {
-      const userBusinessId = req.user?.company || req.user?.business;
+      const userBusinessId = req.user?.company;
       if (property.business.toString() !== userBusinessId?.toString()) {
         return res.status(403).json({
           success: false,
@@ -1449,7 +1449,7 @@ export const getPropertyUnits = async (req, res, next) => {
     }
 
     if (!req.user.isSystemAdmin) {
-      const userBusinessId = req.user?.company || req.user?.business;
+      const userBusinessId = req.user?.company;
       if (property.business.toString() !== userBusinessId?.toString()) {
         return res.status(403).json({
           success: false,
@@ -1498,7 +1498,7 @@ export const getPropertyTenants = async (req, res, next) => {
 
     const propertyBusinessId = String(property.business?._id || property.business);
     if (!req.user.isSystemAdmin) {
-      const userBusinessId = req.user?.company || req.user?.business;
+      const userBusinessId = req.user?.company;
       if (propertyBusinessId !== String(userBusinessId)) {
         return res.status(403).json({
           success: false,

@@ -1,12 +1,14 @@
 import mongoose from "mongoose";
 import ExpenseProperty from "../../models/ExpenseProperty.js";
 import { createError } from "../../utils/error.js";
+import { resolveBusinessId } from "../../utils/requestContext.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
-const resolveBusinessContext = (req) => {
-  return req.user?.company || req.query?.business || req.body?.business || null;
-};
+// req.user.company always won here, so a Milik admin could never manage a client company's property expenses through
+// this endpoint — an explicit business id was only ever reachable in the (practically impossible) case of no
+// authenticated company at all. Now shares the one rule: honoured when the caller may act as that company.
+const resolveBusinessContext = (req) => resolveBusinessId(req);
 
 const buildDateFilter = (startDate, endDate) => {
   if (!startDate && !endDate) return undefined;

@@ -1,6 +1,7 @@
 import CompanySettings from "../../models/CompanySettings.js";
 import mongoose from "mongoose";
 import { createError } from "../../utils/error.js";
+import { resolveBusinessId } from "../../utils/requestContext.js";
 import {
   validateAccountingDefaultAccount,
   validateHrAccountingDefaultAccount,
@@ -117,27 +118,17 @@ const mapTaxCodeForStorage = (code) => ({
 });
 
 
+// Same rule as everywhere else now (utils/requestContext.js): an explicit business id is honoured only when the caller
+// may act as that company, otherwise the caller's own company is used. This used to require an exact match instead of
+// checking real access, so a legitimate multi-company non-admin user could never open a second company's settings here.
 const resolveAuthorizedBusinessId = (req) => {
-  const requested = req.params?.businessId || req.body?.business || req.query?.business || null;
-  const authenticated = req.user?.company?._id || req.user?.company || req.user?.businessId || null;
-
-  if (req.user?.isSystemAdmin || req.user?.superAdminAccess) {
-    return requested || authenticated || null;
-  }
-
-  if (!authenticated) {
+  const businessId = resolveBusinessId(req);
+  if (!businessId) {
     const error = new Error("No company associated with user.");
     error.statusCode = 403;
     throw error;
   }
-
-  if (requested && String(requested) !== String(authenticated)) {
-    const error = new Error("Not authorized to access this company's settings.");
-    error.statusCode = 403;
-    throw error;
-  }
-
-  return authenticated;
+  return businessId;
 };
 
 const findCompanySettings = (companyId) => CompanySettings.findOne({ company: companyId });

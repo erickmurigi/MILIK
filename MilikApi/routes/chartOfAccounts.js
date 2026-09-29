@@ -1,6 +1,7 @@
 import express from "express";
 import mongoose from "mongoose";
 import { requireCompanyModule, verifyUser, verifyAdmin, GL_ACCESS_MODULES } from "../controllers/verifyToken.js";
+import { resolveBusinessId } from "../utils/requestContext.js";
 import ChartOfAccount from "../models/ChartOfAccount.js";
 import FinancialLedgerEntry from "../models/FinancialLedgerEntry.js";
 import TenantInvoice from "../models/TenantInvoice.js";
@@ -33,16 +34,11 @@ const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value 
 
 const PROTECTED_CODES = new Set(["1200", "4100", "4102"]);
 
-const resolveBusiness = (req) => {
-  const requested = req.query.business || req.body.business || null;
-  const authenticated = req.user?.company?._id || req.user?.company || null;
-
-  if (req.user?.isSystemAdmin || req.user?.superAdminAccess) {
-    return requested || authenticated || null;
-  }
-
-  return authenticated || requested || null;
-};
+// A client-supplied business/company id is only honoured when the caller is actually entitled to act as that company
+// (system admins, or a genuinely multi-company user) — the one rule every module now shares. Previously a non-admin
+// whose own company was somehow blank on the request would fall straight through to an unverified client value, and a
+// legitimate multi-company non-admin could never select anything but their primary company. See utils/requestContext.js.
+const resolveBusiness = (req) => resolveBusinessId(req);
 
 const hasLedgerAdminAccess = (user = {}) => {
   if (user?.superAdminAccess || user?.adminAccess || user?.isSystemAdmin) return true;

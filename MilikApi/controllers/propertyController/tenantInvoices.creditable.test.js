@@ -7,7 +7,7 @@
 import { describe, it, expect } from "vitest";
 import { getCreditableTenantInvoices } from "./tenantInvoices.js";
 import { callController } from "../../test/callController.js";
-import { createTestLease } from "../../test/factories.js";
+import { createTestLease, createTestUser } from "../../test/factories.js";
 import { createTestTenantInvoice } from "../../test/factories.payments.js";
 
 describe("getCreditableTenantInvoices", () => {
@@ -28,7 +28,11 @@ describe("getCreditableTenantInvoices", () => {
       postingStatus: "posted",
     });
 
+    // a real logged-in user of this company — the endpoint now scopes strictly to the caller's own company, not a
+    // bare query param, so a request with no authenticated user can no longer read another company's invoices
+    const user = await createTestUser({ company });
     const { statusCode, payload } = await callController(getCreditableTenantInvoices, {
+      user,
       query: { business: String(company._id), tenant: String(tenant._id) },
     });
 

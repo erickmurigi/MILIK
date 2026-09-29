@@ -20,8 +20,7 @@ import { canAccessCompanyId, normalizeCompanyId } from "../controllers/verifyTok
  * writeup.
  */
 export const resolveBusinessId = (req) => {
-  const ownCompanyId =
-    normalizeCompanyId(req.user?.company) || normalizeCompanyId(req.user?.business);
+  const ownCompanyId = normalizeCompanyId(req.user?.company);
 
   const explicit =
     req.headers?.["x-active-company-id"] ||

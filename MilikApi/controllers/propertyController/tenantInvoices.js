@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 import { getFieldOfficerPropertyIds } from "../../utils/fieldOfficerScope.js";
+import { resolveBusinessId } from "../../utils/requestContext.js";
+import { canAccessCompanyId, normalizeCompanyId } from "../verifyToken.js";
 import TenantInvoice, { TENANT_INVOICE_CATEGORIES } from "../../models/TenantInvoice.js";
 import TenantInvoiceNote, { TENANT_NOTE_TYPES } from "../../models/TenantInvoiceNote.js";
 import Tenant from "../../models/Tenant.js";
@@ -167,15 +169,15 @@ const resolveInvoiceLedgerMode = ({ category, depositHeldBy = null }) => {
     ? "off_ledger"
     : "on_ledger";
 };
+// An explicit business id — whichever way it arrives (a caller-supplied override, the request body, the query string)
+// — is only honoured when the caller may act as that company; otherwise the caller's own company is used. Previously,
+// whenever the caller's own company was blank, an unverified client value was used outright with no check at all —
+// several call sites below caught this again with ensureBusinessAccess, but 8 of the 13 did not. One rule now covers
+// all of them at once. See utils/requestContext.js.
 const resolveAuthorizedBusinessId = (req, explicitBusiness = null) => {
-  const requested = explicitBusiness || req?.body?.business || req?.query?.business || null;
-  const authenticated = req?.user?.company?._id || req?.user?.company || req?.user?.businessId || null;
-
-  if (req?.user?.isSystemAdmin || req?.user?.superAdminAccess) {
-    return requested || authenticated || null;
-  }
-
-  return authenticated || requested || null;
+  const explicitId = normalizeCompanyId(explicitBusiness);
+  if (explicitId && canAccessCompanyId(req?.user, explicitId)) return explicitId;
+  return resolveBusinessId(req);
 };
 
 const ensureBusinessAccess = (req, businessId) => {

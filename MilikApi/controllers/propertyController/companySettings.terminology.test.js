@@ -60,8 +60,12 @@ describe("updateTerminology", () => {
     await a.save({ saleListing: "Vehicle" });
     const other = await b.save({ saleAgent: "Rep" });
     expect(other.payload.terminology).toEqual({ saleAgent: "Rep" });
-    // company B's user cannot write company A's words
-    await expect(callController(updateTerminology, { user: b.user, params: { businessId: String(a.company._id) }, body: { terminology: { saleListing: "Hacked" } } })).rejects.toThrow(/Not authorized/);
+    // company B's user asking (by path param) for company A's settings is not honoured — every write still lands on
+    // the caller's own company, the same rule the rest of the app uses (utils/requestContext.js), never A's
+    const crossCompany = await callController(updateTerminology, { user: b.user, params: { businessId: String(a.company._id) }, body: { terminology: { saleListing: "Hacked" } } });
+    expect(crossCompany.payload.terminology).toEqual({ saleAgent: "Rep", saleListing: "Hacked" }); // B's own settings, not A's
+    const aStillHasItsOwn = await callController(getCompanySettings, { user: a.user, params: { businessId: String(a.company._id) } });
+    expect(aStillHasItsOwn.payload.terminology ?? {}).toEqual({ saleListing: "Vehicle" });
   });
 
   it("rejects a non-object body", async () => {
