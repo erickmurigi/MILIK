@@ -163,7 +163,6 @@ const CashFlowReport = () => {
   const note = report?.note || null;
 
   const closingColor = summary.closingCash >= 0 ? "#166534" : RED;
-  const netChangeColor = summary.netChange >= 0 ? "#166534" : RED;
 
   // ── Export CSV ──────────────────────────────────────────────────────────────
   const handleExportCSV = () => {
@@ -342,24 +341,6 @@ const CashFlowReport = () => {
               </span>
             </div>
           )}
-
-          {/* ── KPI strip ───────────────────────────────────────────────────── */}
-          <div className="shrink-0 grid grid-cols-5 divide-x divide-slate-200 border-b border-slate-200 bg-white">
-            {[
-              { label: "Opening Cash",       value: summary.openingCash,           color: "#1e293b" },
-              { label: "Cash from Ops",      value: summary.netCashFromOperations, color: summary.netCashFromOperations >= 0 ? "#166534" : RED },
-              { label: "Cash from Financing",value: summary.netCashFromFinancing,  color: summary.netCashFromFinancing >= 0 ? "#166534" : RED },
-              { label: "Net Change",         value: summary.netChange,             color: netChangeColor },
-              { label: "Closing Cash",       value: summary.closingCash,           color: closingColor },
-            ].map(({ label, value, color }) => (
-              <div key={label} className="px-4 py-3">
-                <div className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">{label}</div>
-                <div className="text-base font-black tabular-nums" style={{ color }}>
-                  KES {fmtSigned(value)}
-                </div>
-              </div>
-            ))}
-          </div>
 
           {/* ── Scrollable content ───────────────────────────────────────────── */}
           <div className="min-h-0 flex-1 overflow-y-auto p-3">

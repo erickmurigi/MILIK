@@ -337,26 +337,12 @@ const RentalCollectionReport = () => {
               )}
             </div>
 
-            {/* ── Stats + Actions bar ── */}
-            <div className="flex-shrink-0 flex items-stretch border-b border-slate-200 bg-white">
-              <div className="flex-1 overflow-x-auto">
-                <div className="flex h-full min-w-max divide-x divide-slate-100">
-                  {[
-                    { label: 'Op. Income',      value: formatMoney(summary.operationalCollected ?? summary.totalCollected), accent: 'text-emerald-700' },
-                    { label: 'Total Collected', value: formatMoney(summary.totalCollected),  accent: 'text-slate-800' },
-                    { label: 'Allocated',        value: formatMoney(summary.allocatedAmount), accent: 'text-slate-800' },
-                    { label: 'Unapplied',        value: formatMoney(summary.unappliedAmount), accent: 'text-amber-600' },
-                    { label: 'Receipts',         value: String(Number(summary.totalPayments || report.rows?.length || 0)), accent: 'text-slate-800' },
-                    { label: 'Collection Rate',  value: formatPercent(summary.collectionRate), accent: 'text-slate-800' },
-                  ].map((item) => (
-                    <div key={item.label} className="flex flex-col justify-center px-3 py-1.5">
-                      <p className="whitespace-nowrap text-[8.5px] font-bold uppercase tracking-widest text-slate-400">{item.label}</p>
-                      <p className={`whitespace-nowrap text-[11px] font-black leading-tight ${item.accent}`}>{item.value}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="flex flex-shrink-0 items-center gap-1.5 border-l border-slate-200 px-2">
+            {/* ── Actions bar ── */}
+            <div className="flex-shrink-0 flex items-center justify-between border-b border-slate-200 bg-white px-2 py-1.5">
+              <span className="text-[10px] font-semibold text-slate-400">
+                {Number(summary.totalPayments || report.rows?.length || 0)} receipt{Number(summary.totalPayments || report.rows?.length || 0) !== 1 ? "s" : ""}
+              </span>
+              <div className="flex flex-shrink-0 items-center gap-1.5">
                 <button onClick={handleExportCSV} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaFileDownload /> Export</button>
                 <button onClick={handlePrint} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint /> Print</button>
                 <ResetFiltersButton onReset={resetFilters} disabled={loading} />
