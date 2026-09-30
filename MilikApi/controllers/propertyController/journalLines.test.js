@@ -200,8 +200,15 @@ describe("auto-reversing journals", () => {
     const net = (id) => all.filter((e) => String(e.accountId) === id).reduce((s, e) => s + e.debit - e.credit, 0);
     expect(net(expense)).toBe(0);
     expect(net(payable)).toBe(0);
-    // the mirror carries the later date
-    expect(all.filter((e) => new Date(e.transactionDate) > new Date(date.getFullYear(), date.getMonth() + 1, 0))).toHaveLength(2);
+    // the mirror carries the later date — compare calendar month/year directly rather than a
+    // single millisecond threshold, since "last day of this month at midnight" sits BEFORE
+    // "now" whenever the test happens to run on the month's last day, which made every entry
+    // (not just the 2 mirror ones) satisfy a `>` threshold comparison.
+    const mirrorDate = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+    expect(all.filter((e) => {
+      const d = new Date(e.transactionDate);
+      return d.getFullYear() === mirrorDate.getFullYear() && d.getMonth() === mirrorDate.getMonth();
+    })).toHaveLength(2);
 
     await expect(call(reverseJournalEntry, { params: { id: created._id }, body: { reason: "again" } })).rejects.toThrow(/already reversed automatically/);
   });
