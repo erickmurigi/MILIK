@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { FaFileDownload, FaFilePdf, FaSearch, FaSyncAlt, FaTimes } from "react-icons/fa";
 import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import MilikTable from "../../components/common/MilikTable";
 import { getAPAgingReport } from "../../redux/apiCalls";
 import { useTerms } from "../../hooks/useTerm";
 import printTabularList from "../../utils/printList";
@@ -334,98 +335,77 @@ const PaymentAgedAnalysis = () => {
         </div>
 
         {/* ── Table ────────────────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-auto">
-          {loading && !allRows.length ? (
-            <div className="flex h-32 items-center justify-center gap-2 text-sm text-slate-400">
-              <FaSyncAlt size={12} className="animate-spin" /> Loading…
-            </div>
-          ) : !filteredRows.length ? (
-            <div className="flex h-32 flex-col items-center justify-center text-slate-400">
-              <p className="text-sm font-medium">
-                {isFiltered ? "No records match your filters" : "No pending payment vouchers"}
-              </p>
-              {isFiltered && (
-                <button onClick={clearFilters} className="mt-2 text-xs text-blue-500 hover:underline">
-                  Clear filters
-                </button>
-              )}
-            </div>
-          ) : (
-            <table className="min-w-full text-[11px] border-collapse">
-              <thead className="sticky top-0 z-10">
-                <tr className="bg-[#0B3B2E] text-white">
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Reference</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Narration</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">{termProperty} / {termLandlord}</th>
-                  <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Due Date</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Days Overdue</th>
-                  {BUCKETS.map((b, i, arr) => (
-                    <th key={b.key} className={`px-3 py-1 text-right font-bold ${b.headerCls} ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>
-                      {b.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRows.map((row, i) => (
-                  <tr key={row.reference || row._id || i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
-                    <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-500">{row.reference}</td>
-                    <td className="max-w-[180px] truncate px-3 py-1 border-r border-gray-100 text-slate-700" title={row.narration}>{row.narration}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-slate-500">
-                      {row.propertyName}{row.landlordName && row.landlordName !== "—" ? ` / ${row.landlordName}` : ""}
-                    </td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-center">
-                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[row.status] || "border-slate-200 bg-slate-100 text-slate-500"}`}>
-                        {STATUS_LABELS[row.status] || row.status}
-                      </span>
-                    </td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-500">
-                      {new Date(row.dueDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })}
-                    </td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold">
-                      {row.daysOverdue <= 0
-                        ? <span className="text-emerald-600">Current</span>
-                        : <span className={
-                            row.daysOverdue > 90 ? "text-red-800" :
-                            row.daysOverdue > 60 ? "text-red-500" :
-                            row.daysOverdue > 30 ? "text-orange-600" : "text-yellow-600"
-                          }>{row.daysOverdue}d</span>
-                      }
-                    </td>
-                    {BUCKETS.map((b, j, arr) => (
-                      <td key={b.key} className={`px-3 py-1 text-right font-mono ${j < arr.length - 1 ? 'border-r border-gray-100' : ''}`}>
-                        {row.bucket === b.key
-                          ? <span className={`font-semibold ${b.valueCls}`}>{fmt(row.amount)}</span>
-                          : <span className="select-none text-slate-200">—</span>
-                        }
-                      </td>
-                    ))}
-                  </tr>
+        <div className="min-h-0 flex-1 overflow-hidden flex flex-col">
+          <MilikTable
+            columns={[
+              { label: "Reference" },
+              { label: "Narration" },
+              { label: `${termProperty} / ${termLandlord}` },
+              { label: "Status", align: "center" },
+              { label: "Due Date", align: "right" },
+              { label: "Days Overdue", align: "right" },
+              ...BUCKETS.map((b) => ({ label: b.label, align: "right", className: b.headerCls })),
+            ]}
+            rows={filteredRows}
+            rowKey={(row) => row.reference || row._id}
+            loading={loading && !allRows.length}
+            empty={isFiltered ? "No records match your filters" : "No pending payment vouchers"}
+            renderFooter={filteredRows.length > 0 ? () => (
+              <>
+                <td colSpan={5} className="px-3 py-2 text-xs font-black uppercase text-slate-600">
+                  Total Pending
+                  {isFiltered && (
+                    <span className="ml-1 font-normal normal-case text-slate-400">
+                      ({filteredRows.length} record{filteredRows.length !== 1 ? "s" : ""})
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-right font-mono text-sm font-black text-slate-700">
+                  {fmt(bucketTotals.all)}
+                </td>
+                {BUCKETS.map((b) => (
+                  <td key={b.key} className={`px-3 py-2 text-right font-mono text-sm font-black ${bucketTotals[b.key] > 0 ? b.footerCls : "text-slate-200"}`}>
+                    {bucketTotals[b.key] > 0 ? fmt(bucketTotals[b.key]) : "—"}
+                  </td>
                 ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-slate-300 bg-slate-50">
-                  <td colSpan={5} className="px-3 py-2 text-xs font-black uppercase text-slate-600">
-                    Total Pending
-                    {isFiltered && (
-                      <span className="ml-1 font-normal normal-case text-slate-400">
-                        ({filteredRows.length} record{filteredRows.length !== 1 ? "s" : ""})
-                      </span>
-                    )}
+              </>
+            ) : undefined}
+            renderRow={(row) => (
+              <>
+                <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-500">{row.reference}</td>
+                <td className="max-w-[180px] truncate px-3 py-1 border-r border-gray-100 text-slate-700" title={row.narration}>{row.narration}</td>
+                <td className="px-3 py-1 border-r border-gray-100 text-slate-500">
+                  {row.propertyName}{row.landlordName && row.landlordName !== "—" ? ` / ${row.landlordName}` : ""}
+                </td>
+                <td className="px-3 py-1 border-r border-gray-100 text-center">
+                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[row.status] || "border-slate-200 bg-slate-100 text-slate-500"}`}>
+                    {STATUS_LABELS[row.status] || row.status}
+                  </span>
+                </td>
+                <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-500">
+                  {new Date(row.dueDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })}
+                </td>
+                <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold">
+                  {row.daysOverdue <= 0
+                    ? <span className="text-emerald-600">Current</span>
+                    : <span className={
+                        row.daysOverdue > 90 ? "text-red-800" :
+                        row.daysOverdue > 60 ? "text-red-500" :
+                        row.daysOverdue > 30 ? "text-orange-600" : "text-yellow-600"
+                      }>{row.daysOverdue}d</span>
+                  }
+                </td>
+                {BUCKETS.map((b) => (
+                  <td key={b.key} className="px-3 py-1 border-r border-gray-100 text-right font-mono last:border-r-0">
+                    {row.bucket === b.key
+                      ? <span className={`font-semibold ${b.valueCls}`}>{fmt(row.amount)}</span>
+                      : <span className="select-none text-slate-200">—</span>
+                    }
                   </td>
-                  <td className="px-3 py-2 text-right font-mono text-sm font-black text-slate-700">
-                    {fmt(bucketTotals.all)}
-                  </td>
-                  {BUCKETS.map((b) => (
-                    <td key={b.key} className={`px-3 py-2 text-right font-mono text-sm font-black ${bucketTotals[b.key] > 0 ? b.footerCls : "text-slate-200"}`}>
-                      {bucketTotals[b.key] > 0 ? fmt(bucketTotals[b.key]) : "—"}
-                    </td>
-                  ))}
-                </tr>
-              </tfoot>
-            </table>
-          )}
+                ))}
+              </>
+            )}
+          />
         </div>
       </div>
     </DashboardLayout>

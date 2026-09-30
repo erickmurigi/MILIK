@@ -7,6 +7,7 @@ import {
 } from "react-icons/fa";
 import { printTabularList } from "../../utils/printList";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import MilikTable from "../../components/common/MilikTable";
 import { getARAgingReport, getAPAgingReport } from "../../redux/apiCalls";
 
 const GRN = "#0B3B2E";
@@ -39,97 +40,72 @@ const BUCKET_COLORS = {
 };
 
 // ─── Aging Table ─────────────────────────────────────────────────────────────
-const AgingTable = React.memo(({ rows, totals, type }) => {
+const AgingTable = React.memo(({ rows, totals, type, loading }) => {
   const isAR = type === "ar";
   const { tenant: termTenant, unit: termUnit, property: termProperty, landlord: termLandlord } = useTerms("tenant", "unit", "property", "landlord");
 
-  if (!rows.length) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-        <p className="text-sm font-medium">No outstanding {isAR ? "tenant arrears" : "pending payments"}</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-w-full overflow-x-auto">
-      <table className="min-w-full text-[11px] border-collapse">
-        <thead>
-          <tr className="bg-[#0B3B2E] text-white">
-            {isAR ? (
-              <>
-                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Invoice #</th>
-                <th className="px-3 py-1 text-left font-bold border-r border-white/10">{termTenant}</th>
-                <th className="px-3 py-1 text-left font-bold border-r border-white/10">{termProperty} / {termUnit}</th>
-              </>
-            ) : (
-              <>
-                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Reference</th>
-                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Narration</th>
-                <th className="px-3 py-1 text-left font-bold border-r border-white/10">{termProperty} / {termLandlord}</th>
-              </>
-            )}
-            <th className="px-3 py-1 text-right font-bold border-r border-white/10">Due Date</th>
-            <th className="px-3 py-1 text-right font-bold border-r border-white/10">Days Over</th>
-            <th className="px-3 py-1 text-right font-bold border-r border-white/10">Bucket</th>
-            <th className="px-3 py-1 text-right font-bold">Amount (KES)</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => (
-            <tr key={row.invoiceNumber || row.reference || row._id || i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
-              {isAR ? (
-                <>
-                  <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-700">{row.invoiceNumber}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.tenantName}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{row.propertyName} / {row.unitName}</td>
-                </>
-              ) : (
-                <>
-                  <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-700">{row.reference}</td>
-                  <td className="max-w-[200px] truncate px-3 py-1 border-r border-gray-100 text-slate-700">{row.narration}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{row.propertyName} / {row.landlordName}</td>
-                </>
-              )}
-              <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-500">
-                {new Date(row.dueDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })}
-              </td>
-              <td className="px-3 py-1 border-r border-gray-100 text-right font-medium text-slate-700">
-                {row.daysOverdue <= 0 ? "—" : row.daysOverdue}
-              </td>
-              <td className="px-3 py-1 border-r border-gray-100 text-right">
-                <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${BUCKET_COLORS[row.bucket]}`}>
-                  {BUCKETS.find((b) => b.key === row.bucket)?.label}
-                </span>
-              </td>
-              <td className="px-3 py-1 text-right font-mono font-semibold text-slate-800">
-                {fmt(isAR ? row.outstanding : row.amount)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold text-slate-800">
-            <td colSpan={isAR ? 3 : 3} className="px-3 py-2 text-xs font-black uppercase text-slate-600">Totals</td>
-            <td colSpan={3} />
-            <td className="px-3 py-2 text-right font-mono text-sm">{fmt(totals?.total)}</td>
-          </tr>
-          {/* Bucket breakdown row */}
-          <tr className="bg-slate-50/70 text-[10px] text-slate-500">
-            <td colSpan={4} />
-            {BUCKETS.map((b) => (
-              <td key={b.key} className="px-2 py-1 text-right">
-                <span className="block font-semibold text-slate-400">{b.label}</span>
-                <span className={`font-bold ${(totals?.[b.key] || 0) > 0 ? "text-slate-700" : "text-slate-300"}`}>
-                  {fmt(totals?.[b.key] || 0)}
-                </span>
-              </td>
-            ))}
-            <td />
-          </tr>
-        </tfoot>
-      </table>
-    </div>
+    <MilikTable
+      columns={isAR ? [
+        { label: "Invoice #" },
+        { label: termTenant },
+        { label: `${termProperty} / ${termUnit}` },
+        { label: "Due Date", align: "right" },
+        { label: "Days Over", align: "right" },
+        { label: "Bucket", align: "right" },
+        { label: "Amount (KES)", align: "right" },
+      ] : [
+        { label: "Reference" },
+        { label: "Narration" },
+        { label: `${termProperty} / ${termLandlord}` },
+        { label: "Due Date", align: "right" },
+        { label: "Days Over", align: "right" },
+        { label: "Bucket", align: "right" },
+        { label: "Amount (KES)", align: "right" },
+      ]}
+      rows={rows}
+      rowKey={(row) => row.invoiceNumber || row.reference || row._id}
+      loading={loading}
+      empty={`No outstanding ${isAR ? "tenant arrears" : "pending payments"}`}
+      renderFooter={rows.length > 0 ? () => (
+        <>
+          <td colSpan={3} className="px-3 py-2 text-xs font-black uppercase text-slate-600">Totals</td>
+          <td colSpan={3} />
+          <td className="px-3 py-2 text-right font-mono text-sm">{fmt(totals?.total)}</td>
+        </>
+      ) : undefined}
+      renderRow={(row) => (
+        <>
+          {isAR ? (
+            <>
+              <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-700">{row.invoiceNumber}</td>
+              <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.tenantName}</td>
+              <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{row.propertyName} / {row.unitName}</td>
+            </>
+          ) : (
+            <>
+              <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-700">{row.reference}</td>
+              <td className="max-w-[200px] truncate px-3 py-1 border-r border-gray-100 text-slate-700">{row.narration}</td>
+              <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{row.propertyName} / {row.landlordName}</td>
+            </>
+          )}
+          <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-500">
+            {new Date(row.dueDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })}
+          </td>
+          <td className="px-3 py-1 border-r border-gray-100 text-right font-medium text-slate-700">
+            {row.daysOverdue <= 0 ? "—" : row.daysOverdue}
+          </td>
+          <td className="px-3 py-1 border-r border-gray-100 text-right">
+            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${BUCKET_COLORS[row.bucket]}`}>
+              {BUCKETS.find((b) => b.key === row.bucket)?.label}
+            </span>
+          </td>
+          <td className="px-3 py-1 text-right font-mono font-semibold text-slate-800">
+            {fmt(isAR ? row.outstanding : row.amount)}
+          </td>
+        </>
+      )}
+    />
   );
 });
 
@@ -352,12 +328,8 @@ const ARAPAgingReport = () => {
         </div>
 
         {/* ── Scrollable table ───────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-auto">
-          {loading && !rows.length ? (
-            <div className="flex h-32 items-center justify-center text-sm text-slate-400">Loading…</div>
-          ) : (
-            <AgingTable rows={rows} totals={totals} type={tab} />
-          )}
+        <div className="min-h-0 flex-1 overflow-hidden flex flex-col">
+          <AgingTable rows={rows} totals={totals} type={tab} loading={loading && !rows.length} />
         </div>
       </div>
     </DashboardLayout>

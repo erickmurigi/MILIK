@@ -6,6 +6,7 @@ import { hasCompanyPermission } from "../../utils/permissions";
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
 import { FaExclamationCircle, FaExclamationTriangle, FaFileDownload, FaFilePdf, FaInfoCircle, FaSyncAlt, FaTimes } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import MilikTable from "../../components/common/MilikTable";
 import { getTrialBalanceExceptions, getTrialBalanceReport } from "../../redux/apiCalls";
 import { printTabularList } from "../../utils/printList";
 import { formatMoney } from "../../utils/money";
@@ -481,64 +482,44 @@ const TrialBalanceReport = () => {
                 As at {new Date(report.asOfDate || filters.asOfDate).toLocaleDateString()}
               </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full">
-                <thead className="sticky top-0 z-10 bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-sm font-bold text-gray-800">Code</th>
-                    <th className="px-6 py-3 text-left text-sm font-bold text-gray-800">Account Name</th>
-                    <th className="px-6 py-3 text-left text-sm font-bold text-gray-800">Type</th>
-                    <th className="px-6 py-3 text-left text-sm font-bold text-gray-800">Group</th>
-                    <th className="px-6 py-3 text-left text-sm font-bold text-gray-800">Sub Group</th>
-                    <th className="px-6 py-3 text-right text-sm font-bold text-gray-800">Debit</th>
-                    <th className="px-6 py-3 text-right text-sm font-bold text-gray-800">Credit</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan="7" className="px-6 py-10 text-center text-gray-600 font-medium">
-                        Loading trial balance...
-                      </td>
-                    </tr>
-                  ) : report.rows?.length ? (
-                    report.rows.map((row) => (
-                      <tr key={row._id || `${row.code}-${row.name}`} className="border-t border-gray-200 hover:bg-gray-50">
-                        <td className="px-6 py-4 text-sm font-bold text-gray-900">{row.code}</td>
-                        <td className="px-6 py-4 text-sm font-semibold text-gray-800">{row.name}</td>
-                        <td className="px-6 py-4 text-sm font-semibold text-gray-700 capitalize">{row.type}</td>
-                        <td className="px-6 py-4 text-sm font-semibold text-gray-700">{row.group}</td>
-                        <td className="px-6 py-4 text-sm font-semibold text-gray-700">{row.subGroup || "-"}</td>
-                        <td className="px-6 py-4 text-sm text-right font-bold text-gray-900">
-                          {row.debitBalance ? formatMoney(row.debitBalance) : "-"}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-right font-bold text-gray-900">
-                          {row.creditBalance ? formatMoney(row.creditBalance) : "-"}
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan="7" className="px-6 py-10 text-center text-gray-600 font-medium">
-                        No trial balance rows found for the selected date.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-                <tfoot className="bg-gray-100">
-                  <tr>
-                    <td colSpan="5" className="px-6 py-4 text-sm font-extrabold text-gray-900 text-right">
-                      TOTAL
+            <div className="min-h-0 flex-1 overflow-hidden flex flex-col">
+              <MilikTable
+                columns={[
+                  { label: "Code" },
+                  { label: "Account Name" },
+                  { label: "Type" },
+                  { label: "Group" },
+                  { label: "Sub Group" },
+                  { label: "Debit", align: "right" },
+                  { label: "Credit", align: "right" },
+                ]}
+                rows={report.rows || []}
+                rowKey={(row) => row._id || `${row.code}-${row.name}`}
+                loading={loading}
+                empty="No trial balance rows found for the selected date."
+                renderFooter={report.rows?.length > 0 ? () => (
+                  <>
+                    <td colSpan={5} className="px-6 py-4 text-sm font-extrabold text-gray-900 text-right">TOTAL</td>
+                    <td className="px-6 py-4 text-sm text-right font-extrabold text-gray-900">{formatMoney(report.totals?.debit)}</td>
+                    <td className="px-6 py-4 text-sm text-right font-extrabold text-gray-900">{formatMoney(report.totals?.credit)}</td>
+                  </>
+                ) : undefined}
+                renderRow={(row) => (
+                  <>
+                    <td className="px-6 py-4 text-sm font-bold text-gray-900">{row.code}</td>
+                    <td className="px-6 py-4 text-sm font-semibold text-gray-800">{row.name}</td>
+                    <td className="px-6 py-4 text-sm font-semibold text-gray-700 capitalize">{row.type}</td>
+                    <td className="px-6 py-4 text-sm font-semibold text-gray-700">{row.group}</td>
+                    <td className="px-6 py-4 text-sm font-semibold text-gray-700">{row.subGroup || "-"}</td>
+                    <td className="px-6 py-4 text-sm text-right font-bold text-gray-900">
+                      {row.debitBalance ? formatMoney(row.debitBalance) : "-"}
                     </td>
-                    <td className="px-6 py-4 text-sm text-right font-extrabold text-gray-900">
-                      {formatMoney(report.totals?.debit)}
+                    <td className="px-6 py-4 text-sm text-right font-bold text-gray-900">
+                      {row.creditBalance ? formatMoney(row.creditBalance) : "-"}
                     </td>
-                    <td className="px-6 py-4 text-sm text-right font-extrabold text-gray-900">
-                      {formatMoney(report.totals?.credit)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+                  </>
+                )}
+              />
             </div>
           </div>
         </div>

@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
 import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import MilikTable from "../../components/common/MilikTable";
 import { getTenantSummaryReport } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { selectAllProperties } from "../../redux/selectors";
@@ -310,45 +311,43 @@ const TenantSummaryReport = () => {
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-auto">
-              <table className="min-w-full text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className="bg-[#0B3B2E] text-white">
-                    {[termTenant, "Email", "Phone", termProperty, termUnit, "Invoiced", "Collected", "Outstanding", "Status"].map((h, i, arr) => (
-                      <th key={h} className={`whitespace-nowrap px-3 py-1 text-left font-bold ${i < arr.length - 1 ? "border-r border-white/10" : ""}`}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="px-3 py-8 text-center text-xs text-slate-500">
-                        {loading ? "Loading..." : `No ${termTenants.toLowerCase()} found for the current filter selection.`}
-                      </td>
-                    </tr>
-                  ) : (
-                    paginatedRows.map((row, idx) => (
-                      <tr key={row.tenantId} className={`border-b border-gray-100 align-top ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
-                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.tenantName}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.email}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.phone}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.propertyName}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.unitNumber}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">{formatMoney(row.totalInvoiced)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-[#0B3B2E]">{formatMoney(row.totalPaid)}</td>
-                        <td className={`px-3 py-1 border-r border-gray-100 text-right font-bold ${row.balance > 0 ? "text-red-700" : row.balance < 0 ? "text-green-700" : "text-slate-500"}`}>
-                          {formatMoney(row.balance)}
-                        </td>
-                        <td className="px-3 py-1">
-                          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${row.status === "active" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-100 text-slate-600"}`}>
-                            {row.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+              <MilikTable
+                columns={[
+                  { label: termTenant },
+                  { label: "Email" },
+                  { label: "Phone" },
+                  { label: termProperty },
+                  { label: termUnit },
+                  { label: "Invoiced", align: "right" },
+                  { label: "Collected", align: "right" },
+                  { label: "Outstanding", align: "right" },
+                  { label: "Status" },
+                ]}
+                rows={paginatedRows}
+                rowKey="tenantId"
+                loading={loading && !filteredRows.length}
+                empty={`No ${termTenants.toLowerCase()} found for the current filter selection.`}
+                renderRow={(row) => (
+                  <>
+                    <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.tenantName}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.email}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.phone}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.propertyName}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.unitNumber}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">{formatMoney(row.totalInvoiced)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-[#0B3B2E]">{formatMoney(row.totalPaid)}</td>
+                    <td className={`px-3 py-1 border-r border-gray-100 text-right font-bold ${row.balance > 0 ? "text-red-700" : row.balance < 0 ? "text-green-700" : "text-slate-500"}`}>
+                      {formatMoney(row.balance)}
+                    </td>
+                    <td className="px-3 py-1">
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${row.status === "active" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-100 text-slate-600"}`}>
+                        {row.status}
+                      </span>
+                    </td>
+                  </>
+                )}
+              />
             </div>
 
             <PaginationBar
