@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { round2 } from "../../utils/math.js";
 import { getFieldOfficerPropertyIds } from "../../utils/fieldOfficerScope.js";
 import Tenant from "../../models/Tenant.js";
 import Unit from "../../models/Unit.js";
@@ -1818,6 +1819,35 @@ export const getTenantPayments = async (req, res, next) => {
   }
 };
 
+// How much deposit is actually collected-and-not-yet-applied for a tenant — never the
+// lease's configured/required depositAmount, which doesn't move. Shared by getTenantBalance
+// and the "Deposit Applied" receipt flow (rentPayment.js), which validates against it.
+export const resolveTenantDepositAvailable = async (tenantId, businessId) => {
+  // $match in an aggregation pipeline does not auto-cast strings to ObjectIds the way
+  // Model.find() does — an un-cast id here silently matches nothing.
+  const confirmedActiveMatch = {
+    tenant: new mongoose.Types.ObjectId(String(tenantId)),
+    business: new mongoose.Types.ObjectId(String(businessId)),
+    isConfirmed: true,
+    isCancelled: { $ne: true },
+    isReversed: { $ne: true },
+  };
+
+  const [[depositCollectedAgg], [depositAppliedAgg]] = await Promise.all([
+    RentPayment.aggregate([
+      { $match: confirmedActiveMatch },
+      { $group: { _id: null, total: { $sum: "$allocationSummary.deposit" } } },
+    ]),
+    RentPayment.aggregate([
+      { $match: { ...confirmedActiveMatch, paymentMethod: "deposit_applied" } },
+      { $group: { _id: null, total: { $sum: "$amount" } } },
+    ]),
+  ]);
+  const depositCollected = round2(depositCollectedAgg?.total || 0);
+  const depositApplied = round2(depositAppliedAgg?.total || 0);
+  return { depositCollected, depositApplied, depositAvailable: round2(Math.max(0, depositCollected - depositApplied)) };
+};
+
 // Get tenant balance
 export const getTenantBalance = async (req, res, next) => {
   try {
@@ -1837,9 +1867,20 @@ export const getTenantBalance = async (req, res, next) => {
       }
     }
 
-    const [totalAgg] = await RentPayment.aggregate([
-      { $match: { tenant: tenant._id, business: tenant.business, paymentType: { $in: ["rent", "utility", "deposit"] }, isConfirmed: true } },
-      { $group: { _id: null, total: { $sum: "$amount" } } },
+    const confirmedActiveMatch = {
+      tenant: tenant._id,
+      business: tenant.business,
+      isConfirmed: true,
+      isCancelled: { $ne: true },
+      isReversed: { $ne: true },
+    };
+
+    const [[totalAgg], { depositCollected, depositApplied, depositAvailable }] = await Promise.all([
+      RentPayment.aggregate([
+        { $match: { ...confirmedActiveMatch, paymentType: { $in: ["rent", "utility", "deposit"] } } },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]),
+      resolveTenantDepositAvailable(tenant._id, tenant.business),
     ]);
     const totalPaid = totalAgg?.total || 0;
 
@@ -1852,6 +1893,9 @@ export const getTenantBalance = async (req, res, next) => {
         unit: tenant.unit,
         depositHeldBy: tenant.depositHeldBy || "Management Company",
         depositAmount: Number(tenant.depositAmount || 0),
+        depositCollected,
+        depositApplied,
+        depositAvailable,
       },
     });
   } catch (err) {

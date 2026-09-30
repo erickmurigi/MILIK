@@ -73,7 +73,15 @@ const RentPaymentSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ["bank_transfer", "mobile_money", "cash", "check", "credit_card"],
+      // deposit_applied: the tenant's held deposit is applied against an invoice instead of
+      // new cash arriving — no cashbook/bank account is touched. See resolveCashbookAccount.
+      // pesalink/rtgs/standing_order/direct_debit: the receipt form already offered these
+      // (bank-transfer variants) but they were missing here, so saving one threw a validation
+      // error — added to match, not new scope.
+      enum: [
+        "bank_transfer", "mobile_money", "cash", "check", "credit_card", "deposit_applied",
+        "pesalink", "rtgs", "standing_order", "direct_debit",
+      ],
       required: true,
     },
     cashbook: {

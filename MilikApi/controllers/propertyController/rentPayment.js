@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { getFieldOfficerPropertyIds } from "../../utils/fieldOfficerScope.js";
 import RentPayment from "../../models/RentPayment.js";
 import Tenant from "../../models/Tenant.js";
+import { resolveTenantDepositAvailable } from "./tenants.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
 import Unit from "../../models/Unit.js";
 import Property from "../../models/Property.js";
@@ -21,6 +22,7 @@ import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggr
 import {
   resolveLandlordRemittancePayableAccount,
   resolvePropertyAccountingContext,
+  resolveTenantDepositPayableAccount,
 } from "../../services/propertyAccountingService.js";
 import {
   postPropertyLedgerEntry,
@@ -422,6 +424,14 @@ const findFirstAccount = async (businessId, candidates = []) => {
 const resolveCashbookAccount = async (businessId, payment) => {
   if (payment?.paidDirectToLandlord) {
     return null;
+  }
+
+  // No cash/bank account is touched here — the tenant's already-held deposit is being
+  // reclassified into rent (or another charge), so the "debit" side is the deposit
+  // liability account, not a cashbook. Only reached for Management-Company-held deposits;
+  // landlord-held ones are routed through paidDirectToLandlord instead (see createPayment).
+  if (String(payment?.paymentMethod || "").trim() === "deposit_applied") {
+    return resolveTenantDepositPayableAccount(businessId);
   }
 
   const metadata = getPaymentMetadata(payment);
@@ -2437,9 +2447,13 @@ export const createPayment = async (req, res, next) => {
     const explicitConfirmed = Object.prototype.hasOwnProperty.call(req.body || {}, "isConfirmed")
       ? req.body.isConfirmed === true
       : null;
-    const isDirectToLandlord = req.body?.paidDirectToLandlord === true;
+    // deposit_applied receipts touch no cashbook and derive paidDirectToLandlord from who
+    // actually holds the deposit (server-side, from the tenant record) rather than trusting
+    // the client — the amount never arrives as new cash either way.
+    const isDepositApplied = String(req.body?.paymentMethod || "").trim() === "deposit_applied";
+    const isDirectToLandlord = isDepositApplied ? null : req.body?.paidDirectToLandlord === true;
     const refNumber = String(req.body?.referenceNumber || "").trim();
-    const normalizedCashbook = isDirectToLandlord || isTakeOnCredit ? "" : String(req.body?.cashbook || "").trim();
+    const normalizedCashbook = isDirectToLandlord || isTakeOnCredit || isDepositApplied ? "" : String(req.body?.cashbook || "").trim();
     const useManualAllocations =
       String(req.body?.allocationMode || "").trim().toLowerCase() === "manual" ||
       Array.isArray(req.body?.allocations);
@@ -2450,7 +2464,7 @@ export const createPayment = async (req, res, next) => {
     if (!refNumber) {
       return next(createError(400, "Reference number is required for tenant receipts."));
     }
-    if (!isDirectToLandlord && !isTakeOnCredit && !normalizedCashbook) {
+    if (!isDirectToLandlord && !isTakeOnCredit && !isDepositApplied && !normalizedCashbook) {
       return next(createError(400, "Cashbook is required unless this receipt was paid directly to the landlord."));
     }
     if (isTakeOnCredit && explicitConfirmed !== true) {
@@ -2474,6 +2488,20 @@ export const createPayment = async (req, res, next) => {
     }
     if (duplicateRef) {
       return next(createError(400, "Reference number already exists in this company."));
+    }
+
+    // The tenant record — not whatever the client sent — decides who this specific tenant's
+    // deposit belongs to, and therefore which account absorbs the application.
+    const resolvedPaidDirectToLandlord = isDepositApplied
+      ? String(tenant.depositHeldBy || "Management Company").trim() === "Landlord"
+      : isDirectToLandlord;
+
+    if (isDepositApplied) {
+      const requestedAmount = Math.abs(Number(req.body?.amount || 0));
+      const { depositAvailable } = await resolveTenantDepositAvailable(tenant._id, businessId);
+      if (requestedAmount > depositAvailable + 0.009) {
+        return next(createError(400, `Only KES ${depositAvailable.toLocaleString()} of deposit is currently held for this tenant.`));
+      }
     }
 
     const isConfirmedOnCreate =
@@ -2551,7 +2579,7 @@ export const createPayment = async (req, res, next) => {
       tenant: tenantId,
       unit: unitId,
       cashbook: normalizedCashbook,
-      paidDirectToLandlord: isDirectToLandlord,
+      paidDirectToLandlord: resolvedPaidDirectToLandlord,
       paymentType: allocationData.primaryPaymentType,
       breakdown: allocationData.breakdown,
       allocations: depositContext.allocations,

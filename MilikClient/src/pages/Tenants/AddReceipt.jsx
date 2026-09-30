@@ -189,7 +189,7 @@ const AddReceipt = () => {
       propertyId: "",
       tenantId: preselectedTenantId,
       amount: prefilledAmount,
-      paymentMethod: ["bank_transfer", "mobile_money", "cash", "check", "credit_card", "pesalink", "rtgs", "standing_order", "direct_debit"].includes(prefilledMethod) ? prefilledMethod : "mobile_money",
+      paymentMethod: ["bank_transfer", "mobile_money", "cash", "check", "credit_card", "pesalink", "rtgs", "standing_order", "direct_debit", "deposit_applied"].includes(prefilledMethod) ? prefilledMethod : "mobile_money",
       cashbook: "Main Cashbook",
       paidDirectToLandlord: isLandlordMode,
       paymentDate: todayInput(),
@@ -446,13 +446,40 @@ const AddReceipt = () => {
     return null;
   }, [formData.tenantId, propertyTenants, preselectedTenant]);
 
+  // Who holds this tenant's deposit, and how much of it is still available to apply —
+  // fetched fresh whenever the tenant changes, since it's a live balance, not a static field.
+  const [depositInfo, setDepositInfo] = useState(null);
+  useEffect(() => {
+    if (!formData.tenantId) {
+      setDepositInfo(null);
+      return;
+    }
+    let cancelled = false;
+    adminRequests
+      .get(`/tenants/balance/${formData.tenantId}`)
+      .then((response) => {
+        if (cancelled) return;
+        setDepositInfo(response?.data?.data || null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDepositInfo(null);
+      });
+    return () => { cancelled = true; };
+  }, [formData.tenantId]);
+
   useEffect(() => {
     if (selectedTenant && isTerminatedTenant(selectedTenant) && !includeTerminatedTenants) {
       setIncludeTerminatedTenants(true);
     }
   }, [includeTerminatedTenants, selectedTenant]);
 
-  const isDirectToLandlord = Boolean(formData.paidDirectToLandlord);
+  const isDepositApplied = formData.paymentMethod === "deposit_applied";
+  // For deposit_applied the server ignores whatever paidDirectToLandlord is sent and derives
+  // it from the tenant's own depositHeldBy instead — this mirrors that for display purposes.
+  const isDirectToLandlord = isDepositApplied
+    ? depositInfo?.depositHeldBy === "Landlord"
+    : Boolean(formData.paidDirectToLandlord);
   const backToPath = isLandlordMode
     ? "/receipts/landlord"
     : isInstantMode
@@ -810,9 +837,18 @@ const AddReceipt = () => {
       return;
     }
 
-    if (!isDirectToLandlord && !formData.cashbook) {
+    if (!isDirectToLandlord && !isDepositApplied && !formData.cashbook) {
       toast.error("Cashbook is required unless this receipt was paid directly to the landlord");
       return;
+    }
+
+    if (isDepositApplied) {
+      const requestedAmount = Math.abs(Number(formData.amount || 0));
+      const depositAvailable = Number(depositInfo?.depositAvailable || 0);
+      if (requestedAmount > depositAvailable + 0.009) {
+        toast.error(`Only KES ${depositAvailable.toLocaleString()} of deposit is currently held for this tenant.`);
+        return;
+      }
     }
 
     if (refRequired && !String(formData.referenceNumber || "").trim()) {
@@ -860,7 +896,7 @@ const AddReceipt = () => {
       amount: Number(formData.amount),
       paymentType: derivedPaymentType,
       paymentMethod: formData.paymentMethod,
-      cashbook: isDirectToLandlord ? "" : formData.cashbook,
+      cashbook: isDirectToLandlord || isDepositApplied ? "" : formData.cashbook,
       paidDirectToLandlord: isDirectToLandlord,
       paymentDate: formData.paymentDate,
       bookingDate: formData.bookingDate && formData.bookingDate !== formData.paymentDate ? formData.bookingDate : undefined,
@@ -904,7 +940,7 @@ const AddReceipt = () => {
       toast.error(error?.response?.data?.message || "Failed to create receipt");
       setIsSaving(false);
     }
-  }, [isSaving, canSaveReceipt, currentCompany, formData, isDirectToLandlord, isCompanyLandlordMode, selectedTenant, allocationPreview, derivedPaymentType, refRequired, refLabel, manualSelectionMode, priorityInvoiceKeys, prepaymentLines, creditOnAccountMode, prefilledCollectionId, prefilledAccountReference, prefilledMsisdn, prefilledPayerName, isInstantMode, dispatch, clearReceiptDraft, navigate, backToPath]);
+  }, [isSaving, canSaveReceipt, currentCompany, formData, isDirectToLandlord, isDepositApplied, depositInfo, isCompanyLandlordMode, selectedTenant, allocationPreview, derivedPaymentType, refRequired, refLabel, manualSelectionMode, priorityInvoiceKeys, prepaymentLines, creditOnAccountMode, prefilledCollectionId, prefilledAccountReference, prefilledMsisdn, prefilledPayerName, isInstantMode, dispatch, clearReceiptDraft, navigate, backToPath]);
 
   const amountDueColor =
     !formData.tenantId
@@ -1034,6 +1070,11 @@ const AddReceipt = () => {
                       onWheel={preventWheelValueChange}
                       className={`${inputClass} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
                     />
+                    {isDepositApplied && (
+                      <p className="mt-1 text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                        Deposit available: KES {Number(depositInfo?.depositAvailable || 0).toLocaleString()}
+                      </p>
+                    )}
                   </div>
 
                   {/* Amount Due — read-only */}
@@ -1064,6 +1105,7 @@ const AddReceipt = () => {
                         { value: "cash", label: "Cash" },
                         { value: "check", label: "Cheque" },
                         { value: "credit_card", label: "Card (Debit / Credit)" },
+                        { value: "deposit_applied", label: "Deposit Applied" },
                       ]}
                       size="md"
                     />
@@ -1092,8 +1134,12 @@ const AddReceipt = () => {
 
                   {/* Cashbook */}
                   <div>
-                    <label className={labelClass}>{isDirectToLandlord ? "Cashbook" : "Cashbook *"}</label>
-                    {isDirectToLandlord ? (
+                    <label className={labelClass}>{isDirectToLandlord || isDepositApplied ? "Cashbook" : "Cashbook *"}</label>
+                    {isDepositApplied ? (
+                      <div className="flex h-8 items-center border border-emerald-200 bg-emerald-50 px-3 text-xs text-emerald-800">
+                        Deposit applied — no cash movement, not posted to a cashbook.
+                      </div>
+                    ) : isDirectToLandlord ? (
                       <div className="flex h-8 items-center border border-amber-200 bg-amber-50 px-3 text-xs text-amber-800">
                         Direct-to-landlord — not posted to cashbooks.
                       </div>
@@ -1182,7 +1228,11 @@ const AddReceipt = () => {
 
                   {/* Checkboxes */}
                   <div className="col-span-2 md:col-span-4 flex flex-wrap items-center gap-6 border-t border-slate-100 pt-3">
-                    {isCompanyLandlordMode ? (
+                    {isDepositApplied ? (
+                      <span className="rounded-full border border-[#0B3B2E]/20 bg-[#0B3B2E]/8 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[#0B3B2E]">
+                        Deposit held by {depositInfo?.depositHeldBy || "…"} — routed automatically
+                      </span>
+                    ) : isCompanyLandlordMode ? (
                       <span className="rounded-full border border-[#0B3B2E]/20 bg-[#0B3B2E]/8 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[#0B3B2E]">
                         Landlord Mode — select the cashbook where payment was received
                       </span>
