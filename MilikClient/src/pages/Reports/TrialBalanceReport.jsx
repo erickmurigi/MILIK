@@ -308,15 +308,15 @@ const TrialBalanceReport = () => {
         <div className="flex w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden gap-2">
           <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-2 pt-2 pb-1.5 shadow-sm backdrop-blur print:hidden">
             {/* Controls row — filters left, actions right */}
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="filter-bar flex items-center gap-1.5 overflow-x-auto">
               {/* Filters */}
               <input
                 type="date"
                 value={filters.asOfDate}
                 onChange={setFilter("asOfDate")}
-                className="h-8 border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#0B3B2E] focus:bg-white"
+                className="h-8 shrink-0 border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#0B3B2E] focus:bg-white"
               />
-              <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800">
+              <label className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800">
                 <input
                   type="checkbox"
                   checked={filters.includeZeroBalances}
@@ -326,20 +326,20 @@ const TrialBalanceReport = () => {
               </label>
 
               {/* Meta chips */}
-              <span className="hidden border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600 sm:inline-flex">
+              <span className="hidden shrink-0 border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600 sm:inline-flex">
                 {businessName}
               </span>
-              <span className="border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600">
+              <span className="shrink-0 border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600">
                 {report.count || 0} rows
               </span>
 
               {/* Balance status pill */}
-              <span className={`inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[10px] font-bold uppercase tracking-wide ${report.totals?.balanced ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+              <span className={`inline-flex h-7 shrink-0 items-center gap-1 rounded-full px-2.5 text-[10px] font-bold uppercase tracking-wide ${report.totals?.balanced ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
                 {report.totals?.balanced ? "✓ Balanced" : "✗ Out of Balance"}
               </span>
 
               {/* Action buttons — pushed to far right */}
-              <div className="ml-auto flex items-center gap-1.5">
+              <div className="ml-auto flex shrink-0 items-center gap-1.5">
                 <button
                   onClick={loadReport}
                   disabled={loading}

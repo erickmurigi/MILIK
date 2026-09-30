@@ -414,11 +414,14 @@ const PaidBalanceReport = () => {
         ["Settlement Rate", formatPercent(balanceInsights.settlementRate)],
         ["Largest Debtor", balanceInsights.largestOwing ? `${balanceInsights.largestOwing.tenantName} (${formatMoney(balanceInsights.largestOwing.netBalance)})` : "—"],
         ["Largest Credit", balanceInsights.largestCredit ? `${balanceInsights.largestCredit.tenantName} (${formatMoney(Math.abs(Number(balanceInsights.largestCredit.netBalance || 0)))})` : "—"],
+        [`${termProperty}s`, String(enrichedPropertyGroups.length)],
+        [`${termTenants}`, String(searchFilteredRows.length)],
+        ["Oldest Due", balanceInsights.earliestArrear?.tenantName ? `${balanceInsights.earliestArrear.tenantName} (${fmtDate(balanceInsights.earliestArrear.oldestDueDate)})` : "—"],
       ],
       totalsRow: ["GRAND TOTAL", `${allRows.length} tenants`, bfText(grandBF), formatMoney(grandRent), dash(grandOther), formatMoney(grandAmtPaid), dash(grandOtherPaid), formatMoney(grandTotalPaid), formatMoney(grandBalance), "", ""],
     });
     if (!printed) toast.error(POPUP_BLOCKED);
-  }, [canExportReports, currentCompany, searchFilteredRows, report.summary, filters, termTenant, termUnit, balanceInsights]);
+  }, [canExportReports, currentCompany, searchFilteredRows, report.summary, filters, termTenant, termTenants, termUnit, termProperty, balanceInsights, enrichedPropertyGroups]);
 
   return (
     <DashboardLayout lockContentScroll>
@@ -428,21 +431,19 @@ const PaidBalanceReport = () => {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 
             {/* ── Toolbar ── */}
-            <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
-              <div className="grid gap-1.5 md:grid-cols-3 xl:grid-cols-6">
-                <AppSelect value={selMonth} onChange={(v) => applyMonthYear(v, selYear)} options={MONTHS} placeholder="Month" clearable size="sm" />
-                <select value={selYear} onChange={(e) => applyMonthYear(selMonth, e.target.value)} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:border-[#0B3B2E] focus:outline-none">
-                  {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-                </select>
-                <div className="flex items-center gap-1">
-                  <input type="date" value={filters.startDate} onChange={setFilter("startDate")} className="h-7 flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                  <span className="flex-shrink-0 text-[10px] font-semibold text-slate-400">–</span>
-                  <input type="date" value={filters.asOfDate} onChange={setFilter("asOfDate")} className="h-7 flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                </div>
-                <AppSelect value={filters.propertyId} onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))} options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))} placeholder="All properties" searchable clearable size="sm" />
-                <AppSelect value={filters.status} onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))} options={[{ value: "owing", label: "Arrears" }, { value: "credit", label: "Overpaid" }, { value: "settled", label: "Settled" }]} placeholder="All tenant positions" clearable size="sm" />
-                <input value={filters.search} onChange={setFilter("search")} placeholder={`Search ${termTenant.toLowerCase()}, ${termProperty.toLowerCase()}, ${termUnit.toLowerCase()}`} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+            <div className="filter-bar sticky top-0 z-30 flex-shrink-0 flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
+              <AppSelect value={selMonth} onChange={(v) => applyMonthYear(v, selYear)} options={MONTHS} placeholder="Month" clearable size="sm" className="shrink-0 w-28" />
+              <select value={selYear} onChange={(e) => applyMonthYear(selMonth, e.target.value)} className="h-7 shrink-0 w-20 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:border-[#0B3B2E] focus:outline-none">
+                {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+              </select>
+              <div className="flex shrink-0 items-center gap-1">
+                <input type="date" value={filters.startDate} onChange={setFilter("startDate")} className="h-7 w-32 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <span className="shrink-0 text-[10px] font-semibold text-slate-400">–</span>
+                <input type="date" value={filters.asOfDate} onChange={setFilter("asOfDate")} className="h-7 w-32 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </div>
+              <AppSelect value={filters.propertyId} onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))} options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))} placeholder="All properties" searchable clearable size="sm" className="shrink-0 w-40" />
+              <AppSelect value={filters.status} onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))} options={[{ value: "owing", label: "Arrears" }, { value: "credit", label: "Overpaid" }, { value: "settled", label: "Settled" }]} placeholder="All tenant positions" clearable size="sm" className="shrink-0 w-40" />
+              <input value={filters.search} onChange={setFilter("search")} placeholder={`Search ${termTenant.toLowerCase()}, ${termProperty.toLowerCase()}, ${termUnit.toLowerCase()}`} className="h-7 shrink-0 w-52 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
             </div>
 
             {/* ── Actions bar ── */}
@@ -457,18 +458,6 @@ const PaidBalanceReport = () => {
                 <ResetFiltersButton onReset={resetFilters} disabled={loading} />
                 <button onClick={() => loadReport()} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaSyncAlt className={loading ? 'animate-spin' : ''} /> Refresh</button>
               </div>
-            </div>
-
-            {/* ── Info strip ── */}
-            <div className="flex-shrink-0 flex flex-wrap gap-3 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] border-b border-slate-100">
-              <span className="text-red-600">Arrears: {summary.owingCount || 0}</span>
-              <span className="text-emerald-700">Overpaid: {summary.creditCount || 0}</span>
-              <span className="text-slate-500">Settled: {summary.settledCount || 0}</span>
-              <span className="text-slate-400">·</span>
-              <span className="text-slate-500">{enrichedPropertyGroups.length} {enrichedPropertyGroups.length === 1 ? termProperty.toLowerCase() : termProperty.toLowerCase() + 's'} · {searchFilteredRows.length} {termTenants.toLowerCase()}</span>
-              {balanceInsights.earliestArrear?.tenantName && (
-                <span className="text-orange-600">Oldest due: {balanceInsights.earliestArrear.tenantName} ({fmtDate(balanceInsights.earliestArrear.oldestDueDate)})</span>
-              )}
             </div>
 
             {/* ── Table ── */}

@@ -310,21 +310,21 @@ const IncomeStatementReport = () => {
 
         {/* ── Toolbar ───────────────────────────────────────────────────────── */}
         <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-2 shadow-sm">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[10px] font-black uppercase tracking-[0.15em]" style={{ color: GRN }}>
+          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto">
+            <span className="shrink-0 text-[10px] font-black uppercase tracking-[0.15em]" style={{ color: GRN }}>
               Income Statement
             </span>
-            <div className="mx-1 h-4 w-px bg-slate-200" />
+            <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
             <input
               type="date" value={filters.startDate}
               onChange={(e) => setFilters((p) => ({ ...p, startDate: e.target.value }))}
-              className="h-7 border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+              className="h-7 shrink-0 border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
             />
-            <span className="text-[10px] text-slate-400">to</span>
+            <span className="shrink-0 text-[10px] text-slate-400">to</span>
             <input
               type="date" value={filters.endDate}
               onChange={(e) => setFilters((p) => ({ ...p, endDate: e.target.value }))}
-              className="h-7 border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+              className="h-7 shrink-0 border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
             />
             {properties.length > 0 && (
               <AppSelect
@@ -335,19 +335,20 @@ const IncomeStatementReport = () => {
                 searchable
                 clearable
                 size="sm"
+                className="shrink-0 w-36"
               />
             )}
-            <span className="border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-semibold text-slate-500">{businessName}</span>
+            <span className="shrink-0 border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-semibold text-slate-500">{businessName}</span>
             {selectedProperty ? (
-              <span className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-semibold text-emerald-700">
+              <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-semibold text-emerald-700">
                 {selectedProperty.propertyCode} – {selectedProperty.propertyName}
               </span>
             ) : (
-              <span className="border border-slate-100 bg-slate-50 px-2 py-0.5 text-[9px] text-slate-400">
+              <span className="shrink-0 border border-slate-100 bg-slate-50 px-2 py-0.5 text-[9px] text-slate-400">
                 {report.reportBasis || "All income & expenses"}
               </span>
             )}
-            <div className="ml-auto flex items-center gap-1.5">
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
               <button onClick={loadReport} disabled={loading}
                 className="flex h-7 items-center gap-1.5 bg-blue-600 px-3 text-[11px] font-bold text-white hover:bg-blue-700 disabled:opacity-50">
                 <FaSyncAlt size={9} className={loading ? "animate-spin" : ""} />

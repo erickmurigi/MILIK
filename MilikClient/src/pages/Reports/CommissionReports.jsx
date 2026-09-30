@@ -404,31 +404,30 @@ const CommissionReports = () => {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 
           {/* Filter bar */}
-          <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <input type="month" value={appliedFilters.monthFrom} onChange={setFilter("monthFrom")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
-              <input type="month" value={appliedFilters.monthTo} onChange={setFilter("monthTo")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
-              <AppSelect
-                value={appliedFilters.status}
-                onChange={(v) => setAppliedFilters((prev) => ({ ...prev, status: v ?? "" }))}
-                options={[
-                  { value: "recognized", label: "Recognized only" },
-                  { value: "reversed", label: "Reversed only" },
-                ]}
-                placeholder="All statuses"
-                clearable
-                size="sm"
-              />
-              <div className="relative flex min-w-[200px] flex-1">
-                <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={9} />
-                <input value={appliedFilters.search} onChange={setFilter("search")} placeholder={`Search statement, ${termProperty.toLowerCase()}, ${termLandlord.toLowerCase()} or basis…`} className="h-7 w-full rounded-md border border-slate-200 bg-white pl-6 pr-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
-              </div>
-              <div className="ml-auto flex items-center gap-1.5">
-                {canExportReports && <button onClick={handleExportCSV} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaFileDownload size={9} /> Export CSV</button>}
-                {canExportReports && <button onClick={handlePrint} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaPrint size={9} /> Print</button>}
-                <button onClick={resetFilters} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaRedoAlt size={9} /> Reset</button>
-                <button onClick={loadData} disabled={loading} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaRedoAlt size={9} className={loading ? 'animate-spin' : ''} /> Reload</button>
-              </div>
+          <div className="filter-bar sticky top-0 z-30 flex-shrink-0 flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
+            <input type="month" value={appliedFilters.monthFrom} onChange={setFilter("monthFrom")} className="h-7 shrink-0 w-32 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
+            <input type="month" value={appliedFilters.monthTo} onChange={setFilter("monthTo")} className="h-7 shrink-0 w-32 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
+            <AppSelect
+              value={appliedFilters.status}
+              onChange={(v) => setAppliedFilters((prev) => ({ ...prev, status: v ?? "" }))}
+              options={[
+                { value: "recognized", label: "Recognized only" },
+                { value: "reversed", label: "Reversed only" },
+              ]}
+              placeholder="All statuses"
+              clearable
+              size="sm"
+              className="shrink-0 w-36"
+            />
+            <div className="relative shrink-0 w-56">
+              <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={9} />
+              <input value={appliedFilters.search} onChange={setFilter("search")} placeholder={`Search statement, ${termProperty.toLowerCase()}, ${termLandlord.toLowerCase()} or basis…`} className="h-7 w-full rounded-md border border-slate-200 bg-white pl-6 pr-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
+            </div>
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+              {canExportReports && <button onClick={handleExportCSV} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaFileDownload size={9} /> Export CSV</button>}
+              {canExportReports && <button onClick={handlePrint} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaPrint size={9} /> Print</button>}
+              <button onClick={resetFilters} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaRedoAlt size={9} /> Reset</button>
+              <button onClick={loadData} disabled={loading} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaRedoAlt size={9} className={loading ? 'animate-spin' : ''} /> Reload</button>
             </div>
           </div>
 

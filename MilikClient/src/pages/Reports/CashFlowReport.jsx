@@ -265,10 +265,10 @@ const CashFlowReport = () => {
 
           {/* ── Sticky toolbar ──────────────────────────────────────────────── */}
           <div className="sticky top-0 z-30 shrink-0 border-b border-gray-200 bg-gray-50/95 p-2 shadow-sm backdrop-blur">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-bold text-slate-800">Cash Flow Statement</span>
+            <div className="filter-bar flex items-center gap-2 overflow-x-auto">
+              <span className="shrink-0 text-sm font-bold text-slate-800">Cash Flow Statement</span>
 
-              <div className="flex items-center gap-1">
+              <div className="flex shrink-0 items-center gap-1">
                 <input
                   type="date"
                   value={filters.startDate}
@@ -287,30 +287,30 @@ const CashFlowReport = () => {
               <button
                 onClick={loadReport}
                 disabled={loading}
-                className="flex h-7 items-center gap-1.5 rounded bg-blue-600 px-3 text-[11px] font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+                className="flex h-7 shrink-0 items-center gap-1.5 rounded bg-blue-600 px-3 text-[11px] font-bold text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 <FaSyncAlt size={9} className={loading ? "animate-spin" : ""} />
                 {loading ? "Loading…" : "Refresh"}
               </button>
 
-              <div className="flex-1" />
-
-              <button
-                onClick={handleExportCSV}
-                disabled={!canExport || !report}
-                title={!canExport ? "No export permission" : "Export CSV"}
-                className="flex h-7 items-center gap-1.5 rounded bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00] disabled:opacity-50"
-              >
-                <FaFileDownload size={9} /> Export CSV
-              </button>
-              <button
-                onClick={handlePrintPDF}
-                disabled={!canExport || !report}
-                title={!canExport ? "No print permission" : "Print PDF"}
-                className="flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127] disabled:opacity-50"
-              >
-                <FaFilePdf size={9} /> Print PDF
-              </button>
+              <div className="ml-auto flex shrink-0 items-center gap-2">
+                <button
+                  onClick={handleExportCSV}
+                  disabled={!canExport || !report}
+                  title={!canExport ? "No export permission" : "Export CSV"}
+                  className="flex h-7 items-center gap-1.5 rounded bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00] disabled:opacity-50"
+                >
+                  <FaFileDownload size={9} /> Export CSV
+                </button>
+                <button
+                  onClick={handlePrintPDF}
+                  disabled={!canExport || !report}
+                  title={!canExport ? "No print permission" : "Print PDF"}
+                  className="flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127] disabled:opacity-50"
+                >
+                  <FaFilePdf size={9} /> Print PDF
+                </button>
+              </div>
             </div>
 
             {/* Business badge */}

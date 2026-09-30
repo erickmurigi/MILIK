@@ -221,18 +221,18 @@ const PaymentAgedAnalysis = () => {
       <div className="flex h-[calc(100dvh-152px)] flex-col overflow-hidden">
 
         {/* ── Toolbar ──────────────────────────────────────────────────────── */}
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-gray-50/95 px-4 py-2 backdrop-blur-sm">
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">As Of</span>
+        <div className="filter-bar flex shrink-0 items-center gap-2 overflow-x-auto border-b border-slate-200 bg-gray-50/95 px-4 py-2 backdrop-blur-sm">
+          <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-slate-400">As Of</span>
           <input
             type="date" value={asOf}
             onChange={(e) => setAsOf(e.target.value)}
-            className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+            className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
           />
           {PERIOD_PRESETS.map(({ label, date }) => (
             <button
               key={label}
               onClick={() => setAsOf(date)}
-              className={`h-7 rounded px-2.5 text-[10px] font-semibold transition-colors ${
+              className={`h-7 shrink-0 rounded px-2.5 text-[10px] font-semibold transition-colors ${
                 asOf === date
                   ? "bg-[#0B3B2E] text-white"
                   : "border border-slate-200 bg-white text-slate-500 hover:bg-slate-100"
@@ -243,15 +243,15 @@ const PaymentAgedAnalysis = () => {
           ))}
           <button
             onClick={fetchData} disabled={loading}
-            className="flex h-7 items-center gap-1.5 rounded bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+            className="flex h-7 shrink-0 items-center gap-1.5 rounded bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
           >
             <FaSyncAlt size={10} className={loading ? "animate-spin" : ""} />
             {loading ? "Loading…" : "Refresh"}
           </button>
 
-          <div className="mx-0.5 h-5 w-px bg-slate-200" />
+          <div className="mx-0.5 h-5 w-px shrink-0 bg-slate-200" />
 
-          <div className="relative">
+          <div className="relative shrink-0">
             <FaSearch size={9} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text" value={search}
@@ -262,7 +262,7 @@ const PaymentAgedAnalysis = () => {
           </div>
 
           {/* Status toggle */}
-          <div className="flex h-7 overflow-hidden rounded border border-slate-200 bg-white">
+          <div className="flex h-7 shrink-0 overflow-hidden rounded border border-slate-200 bg-white">
             {["", "draft", "approved"].map((s) => (
               <button
                 key={s || "all"}
@@ -287,6 +287,7 @@ const PaymentAgedAnalysis = () => {
               searchable
               clearable
               size="sm"
+              className="shrink-0 w-36"
             />
           )}
 
@@ -298,26 +299,26 @@ const PaymentAgedAnalysis = () => {
               placeholder="All Categories"
               clearable
               size="sm"
+              className="shrink-0 w-36"
             />
           )}
 
           {isFiltered && (
             <button
               onClick={clearFilters}
-              className="flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-500 hover:border-red-300 hover:text-red-500"
+              className="flex h-7 shrink-0 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-500 hover:border-red-300 hover:text-red-500"
             >
               <FaTimes size={8} /> Clear
             </button>
           )}
 
           {!loading && allRows.length > 0 && (
-            <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+            <span className="shrink-0 rounded bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
               {filteredRows.length} voucher{filteredRows.length !== 1 ? "s" : ""} · KES {fmt(bucketTotals.all)}
             </span>
           )}
 
-          <div className="flex-1" />
-
+          <div className="ml-auto flex shrink-0 items-center gap-2">
           <button
             onClick={handleExportCSV}
             className="flex h-7 items-center gap-1.5 rounded px-3 text-xs font-semibold text-white hover:opacity-90"
@@ -332,6 +333,7 @@ const PaymentAgedAnalysis = () => {
           >
             <FaFilePdf size={10} /> Print PDF
           </button>
+          </div>
         </div>
 
         {/* ── Table ────────────────────────────────────────────────────────── */}

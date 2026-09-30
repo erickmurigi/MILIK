@@ -310,31 +310,27 @@ const RentalCollectionReport = () => {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 
             {/* ── Toolbar ── */}
-            <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
-              <div className="grid gap-1.5 md:grid-cols-4 xl:grid-cols-8">
-                <AppSelect value={selMonth} onChange={(v) => applyMonthYear(v, selYear)} options={MONTHS} placeholder="Month" clearable size="sm" />
-                <select value={selYear} onChange={(e) => applyMonthYear(selMonth, e.target.value)} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:border-[#0B3B2E] focus:outline-none">
-                  {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-                </select>
-                <div className="flex items-center gap-1">
-                  <input type="date" value={filters.startDate} onChange={setFilter("startDate")} className="h-7 flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                  <span className="flex-shrink-0 text-[10px] font-semibold text-slate-400">–</span>
-                  <input type="date" value={filters.endDate} onChange={setFilter("endDate")} className="h-7 flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                </div>
-                <AppSelect value={filters.zone || null} onChange={(v) => setFilters((p) => ({ ...p, zone: v ?? "", propertyId: "" }))} options={zoneOptions} placeholder="Zone" searchable clearable size="sm" />
-                <AppSelect value={filters.propertyId || null} onChange={(v) => setFilters((p) => ({ ...p, propertyId: v ?? "", zone: "" }))} options={propertyOptions} placeholder={termProperty} searchable clearable size="sm" />
-                <AppSelect value={filters.tenantId || null} onChange={(v) => setFilters((p) => ({ ...p, tenantId: v ?? "", unitId: "" }))} options={tenantOptions} placeholder={termTenant} searchable clearable size="sm" />
-                <AppSelect value={filters.paymentMethod || null} onChange={(v) => setFilters((p) => ({ ...p, paymentMethod: v ?? "" }))} options={PAYMENT_METHOD_OPTIONS} placeholder="Method" clearable size="sm" />
-                <input value={filters.cashbook} onChange={setFilter("cashbook")} placeholder="Cashbook..." className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+            <div className="filter-bar sticky top-0 z-30 flex-shrink-0 flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
+              <AppSelect value={selMonth} onChange={(v) => applyMonthYear(v, selYear)} options={MONTHS} placeholder="Month" clearable size="sm" className="shrink-0 w-28" />
+              <select value={selYear} onChange={(e) => applyMonthYear(selMonth, e.target.value)} className="h-7 shrink-0 w-20 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:border-[#0B3B2E] focus:outline-none">
+                {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+              </select>
+              <div className="flex shrink-0 items-center gap-1">
+                <input type="date" value={filters.startDate} onChange={setFilter("startDate")} className="h-7 w-32 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <span className="shrink-0 text-[10px] font-semibold text-slate-400">–</span>
+                <input type="date" value={filters.endDate} onChange={setFilter("endDate")} className="h-7 w-32 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </div>
+              <AppSelect value={filters.zone || null} onChange={(v) => setFilters((p) => ({ ...p, zone: v ?? "", propertyId: "" }))} options={zoneOptions} placeholder="Zone" searchable clearable size="sm" className="shrink-0 w-28" />
+              <AppSelect value={filters.propertyId || null} onChange={(v) => setFilters((p) => ({ ...p, propertyId: v ?? "", zone: "" }))} options={propertyOptions} placeholder={termProperty} searchable clearable size="sm" className="shrink-0 w-36" />
+              <AppSelect value={filters.tenantId || null} onChange={(v) => setFilters((p) => ({ ...p, tenantId: v ?? "", unitId: "" }))} options={tenantOptions} placeholder={termTenant} searchable clearable size="sm" className="shrink-0 w-36" />
               {(!isLandlordMode || units.length > 0) && (
-                <div className="mt-1.5 grid gap-1.5 md:grid-cols-3 xl:grid-cols-6">
-                  <AppSelect value={filters.unitId || null} onChange={(v) => setFilters((p) => ({ ...p, unitId: v ?? "" }))} options={unitOptions} placeholder={termUnit} searchable clearable size="sm" />
-                  {!isLandlordMode && (
-                    <AppSelect value={filters.landlordId || null} onChange={(v) => setFilters((p) => ({ ...p, landlordId: v ?? "" }))} options={landlordOptions} placeholder={termLandlord} searchable clearable size="sm" />
-                  )}
-                </div>
+                <AppSelect value={filters.unitId || null} onChange={(v) => setFilters((p) => ({ ...p, unitId: v ?? "" }))} options={unitOptions} placeholder={termUnit} searchable clearable size="sm" className="shrink-0 w-28" />
               )}
+              {!isLandlordMode && (
+                <AppSelect value={filters.landlordId || null} onChange={(v) => setFilters((p) => ({ ...p, landlordId: v ?? "" }))} options={landlordOptions} placeholder={termLandlord} searchable clearable size="sm" className="shrink-0 w-36" />
+              )}
+              <AppSelect value={filters.paymentMethod || null} onChange={(v) => setFilters((p) => ({ ...p, paymentMethod: v ?? "" }))} options={PAYMENT_METHOD_OPTIONS} placeholder="Method" clearable size="sm" className="shrink-0 w-32" />
+              <input value={filters.cashbook} onChange={setFilter("cashbook")} placeholder="Cashbook..." className="h-7 shrink-0 w-28 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
             </div>
 
             {/* ── Actions bar ── */}

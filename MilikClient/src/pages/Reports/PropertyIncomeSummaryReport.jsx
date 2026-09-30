@@ -358,32 +358,32 @@ const PropertyIncomeSummaryReport = () => {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 
             {/* Filter bar */}
-            <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
-              <div className={`grid gap-1.5 md:grid-cols-2 ${isLandlordMode ? 'xl:grid-cols-3' : 'xl:grid-cols-4'}`}>
-                <input type="date" value={filters.startDate} onChange={setFilter("startDate")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                <input type="date" value={filters.endDate} onChange={setFilter("endDate")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+            <div className="filter-bar sticky top-0 z-30 flex-shrink-0 flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
+              <input type="date" value={filters.startDate} onChange={setFilter("startDate")} className="h-7 shrink-0 w-32 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+              <input type="date" value={filters.endDate} onChange={setFilter("endDate")} className="h-7 shrink-0 w-32 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+              <AppSelect
+                value={filters.propertyId}
+                onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))}
+                options={propertyOptions}
+                placeholder="All properties"
+                searchable
+                clearable
+                size="sm"
+                className="shrink-0 w-40"
+              />
+              {!isLandlordMode && (
                 <AppSelect
-                  value={filters.propertyId}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))}
-                  options={propertyOptions}
-                  placeholder="All properties"
+                  value={filters.landlordId}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, landlordId: v ?? '' }))}
+                  options={landlordOptions}
+                  placeholder={`All ${termLandlords.toLowerCase()}`}
                   searchable
                   clearable
                   size="sm"
+                  className="shrink-0 w-40"
                 />
-                {!isLandlordMode && (
-                  <AppSelect
-                    value={filters.landlordId}
-                    onChange={(v) => setFilters((prev) => ({ ...prev, landlordId: v ?? '' }))}
-                    options={landlordOptions}
-                    placeholder={`All ${termLandlords.toLowerCase()}`}
-                    searchable
-                    clearable
-                    size="sm"
-                  />
-                )}
-              </div>
-              <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
+              )}
+              <div className="ml-auto flex shrink-0 items-center gap-1.5">
                 <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? 'Export CSV' : 'No export permission'} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaFileDownload /> Export CSV</button>
                 <button onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? 'Print' : 'No print permission'} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint /> Print</button>
                 <button onClick={loadReport} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaSyncAlt className={loading ? 'animate-spin' : ''} /> Refresh</button>

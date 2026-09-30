@@ -273,10 +273,10 @@ export default function WhtRemittance() {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
 
         {/* ── Toolbar ──────────────────────────────────────────────────────── */}
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-gray-50/95 px-4 py-2 shadow-sm">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Withholding Tax Remittance</p>
+        <div className="filter-bar flex shrink-0 items-center gap-2 overflow-x-auto border-b border-slate-200 bg-gray-50/95 px-4 py-2 shadow-sm">
+          <p className="shrink-0 text-[10px] font-black uppercase tracking-widest text-slate-400">Withholding Tax Remittance</p>
 
-          <div className="mx-1 h-4 w-px bg-slate-200" />
+          <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
 
           <FaCalendarAlt className="shrink-0 text-slate-400" size={11} />
           <AppSelect
@@ -284,30 +284,31 @@ export default function WhtRemittance() {
             onChange={(v) => setMonth(Number(v ?? month))}
             options={MONTHS.map((m, i) => ({ value: i + 1, label: m }))}
             size="sm"
+            className="shrink-0"
           />
           <AppSelect
             value={year}
             onChange={(v) => setYear(Number(v ?? year))}
             options={yearOptions.map((y) => ({ value: y, label: String(y) }))}
             size="sm"
+            className="shrink-0"
           />
           <button
             type="button"
             onClick={() => load(true)}
             disabled={refreshing}
-            className="flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+            className="flex h-7 shrink-0 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
           >
             <FaRedoAlt size={10} className={refreshing ? "animate-spin" : ""} /> Refresh
           </button>
 
           {summary && (
-            <span className={`inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[10px] font-bold uppercase tracking-wide ${bd > 0 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>
+            <span className={`inline-flex h-7 shrink-0 items-center gap-1 rounded-full px-2.5 text-[10px] font-bold uppercase tracking-wide ${bd > 0 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>
               {bd > 0 ? `Balance due: ${fmtKES(bd)}` : "Fully remitted ✓"}
             </span>
           )}
 
-          <div className="flex-1" />
-
+          <div className="ml-auto flex shrink-0 items-center gap-2">
           <button
             type="button"
             onClick={handlePrint}
@@ -322,6 +323,7 @@ export default function WhtRemittance() {
             style={{ backgroundColor: GRN }}>
             <FaPlus size={9} /> Record Remittance
           </button>
+          </div>
         </div>
 
         {/* ── Scrollable content ───────────────────────────────────────────── */}

@@ -167,10 +167,10 @@ export default function HRFinancials() {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
 
         {/* ── Toolbar ───────────────────────────────────────────────────────── */}
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-gray-50/95 px-4 py-2 shadow-sm">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">HR Financials</p>
+        <div className="filter-bar flex shrink-0 items-center gap-2 overflow-x-auto border-b border-slate-200 bg-gray-50/95 px-4 py-2 shadow-sm">
+          <p className="shrink-0 text-[10px] font-black uppercase tracking-widest text-slate-400">HR Financials</p>
 
-          <div className="mx-1 h-4 w-px bg-slate-200" />
+          <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
 
           <FaCalendarAlt size={10} className="shrink-0 text-slate-400" />
           <input

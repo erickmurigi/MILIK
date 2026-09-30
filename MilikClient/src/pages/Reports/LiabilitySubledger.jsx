@@ -467,20 +467,20 @@ const LiabilitySubledger = () => {
       </div>
 
       {/* ── Filter bar ── */}
-      <div className="mb-4 flex flex-wrap items-center gap-2 rounded border border-slate-200 bg-slate-50 px-3 py-2">
+      <div className="filter-bar mb-4 flex items-center gap-2 overflow-x-auto rounded border border-slate-200 bg-slate-50 px-3 py-2">
         <FaCalendarAlt size={10} className="shrink-0 text-slate-400" />
-        <span className="text-[11px] text-slate-500">As at</span>
+        <span className="shrink-0 text-[11px] text-slate-500">As at</span>
         <input
           type="date"
           value={filters.asOf}
           max={today()}
           onChange={(e) => setFilters((p) => ({ ...p, asOf: e.target.value }))}
-          className="rounded border border-slate-200 bg-white px-2 py-1 text-[11px] focus:border-[#0B3B2E] focus:outline-none"
+          className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] focus:border-[#0B3B2E] focus:outline-none"
         />
 
-        <div className="mx-1 h-4 w-px bg-slate-200" />
+        <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
 
-        <span className="text-[11px] text-slate-500">Property</span>
+        <span className="shrink-0 text-[11px] text-slate-500">Property</span>
         <AppSelect
           value={filters.property}
           onChange={(v) => setFilters((p) => ({ ...p, property: v ?? '' }))}
@@ -489,21 +489,22 @@ const LiabilitySubledger = () => {
           searchable
           clearable
           size="sm"
+          className="shrink-0 w-36"
         />
 
         <button
           onClick={() => load(tab, filters)}
           disabled={loading}
-          className="flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-[11px] text-slate-600 transition hover:bg-slate-100 disabled:opacity-40"
+          className="flex h-7 shrink-0 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-[11px] text-slate-600 transition hover:bg-slate-100 disabled:opacity-40"
         >
           <FaSyncAlt size={9} className={loading ? "animate-spin" : ""} />
           Refresh
         </button>
 
         {/* Reconciliation note */}
-        <div className="ml-auto flex items-center gap-1.5 rounded border border-amber-200 bg-amber-50 px-2.5 py-1">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5 rounded border border-amber-200 bg-amber-50 px-2.5 py-1">
           <FaExclamationTriangle size={8} className="shrink-0 text-amber-500" />
-          <span className="text-[10px] text-amber-700">
+          <span className="whitespace-nowrap text-[10px] text-amber-700">
             Total should match <span className="font-bold">{tabDef.code}</span> on your Balance Sheet
           </span>
         </div>
@@ -512,7 +513,7 @@ const LiabilitySubledger = () => {
         {canExport && !loading && groups.length > 0 && (
           <button
             onClick={() => exportCSV({ tab, groups, total, accountCode: data.accountCode, accountName: data.accountName, asOf: filters.asOf })}
-            className="flex h-7 items-center gap-1.5 rounded px-2.5 text-[11px] text-white transition hover:opacity-90"
+            className="flex h-7 shrink-0 items-center gap-1.5 rounded px-2.5 text-[11px] text-white transition hover:opacity-90"
             style={{ background: GRN }}
           >
             <FaFileDownload size={9} /> Export CSV

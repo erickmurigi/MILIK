@@ -228,26 +228,25 @@ const ARAPAgingReport = () => {
       <div className="flex h-[calc(100dvh-152px)] flex-col overflow-hidden">
 
         {/* ── Sticky toolbar ─────────────────────────────────────────────────── */}
-        <div className="flex shrink-0 flex-wrap items-center gap-2 bg-gray-50/95 px-4 py-2 shadow-sm backdrop-blur-sm">
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">As Of</span>
+        <div className="filter-bar flex shrink-0 items-center gap-2 overflow-x-auto bg-gray-50/95 px-4 py-2 shadow-sm backdrop-blur-sm">
+          <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-slate-400">As Of</span>
           <input
             type="date"
             value={asOf}
             onChange={(e) => setAsOf(e.target.value)}
-            className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+            className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
           />
 
           <button
             onClick={fetchData}
             disabled={loading}
-            className="flex h-7 items-center gap-1.5 rounded bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+            className="flex h-7 shrink-0 items-center gap-1.5 rounded bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
           >
             <FaSyncAlt size={10} className={loading ? "animate-spin" : ""} />
             {loading ? "Loading…" : "Refresh"}
           </button>
 
-          <div className="flex-1" />
-
+          <div className="ml-auto flex shrink-0 items-center gap-2">
           <button
             onClick={handleExportCSV}
             className="flex h-7 items-center gap-1.5 rounded px-3 text-xs font-semibold text-white hover:opacity-90"
@@ -264,6 +263,7 @@ const ARAPAgingReport = () => {
             <FaFilePdf size={10} />
             Print PDF
           </button>
+          </div>
         </div>
 
         {/* ── Business badge ─────────────────────────────────────────────────── */}

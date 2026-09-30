@@ -57,13 +57,13 @@ const ProfitByTagReport = () => {
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
-        <div className="flex flex-none flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-2.5">
-          <h1 className="mr-3 text-sm font-black text-slate-900">Profit by tag</h1>
-          <AppSelect value={by} onChange={(v) => setBy(v || "costCentre")} options={groupOptions} size="sm" />
-          <input type="date" value={startDate} max={endDate} onChange={(e) => setStartDate(e.target.value)} className={inputCls} />
-          <span className="text-xs text-slate-400">to</span>
-          <input type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} className={inputCls} />
-          <button type="button" onClick={load} disabled={loading} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+        <div className="filter-bar flex flex-none items-center gap-2 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2.5">
+          <h1 className="mr-3 shrink-0 text-sm font-black text-slate-900">Profit by tag</h1>
+          <AppSelect value={by} onChange={(v) => setBy(v || "costCentre")} options={groupOptions} size="sm" className="shrink-0" />
+          <input type="date" value={startDate} max={endDate} onChange={(e) => setStartDate(e.target.value)} className={`${inputCls} shrink-0`} />
+          <span className="shrink-0 text-xs text-slate-400">to</span>
+          <input type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} className={`${inputCls} shrink-0`} />
+          <button type="button" onClick={load} disabled={loading} className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
             <FaSyncAlt size={10} className={loading ? "animate-spin" : ""} /> Refresh
           </button>
         </div>
