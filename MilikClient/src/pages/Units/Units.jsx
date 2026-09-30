@@ -138,7 +138,7 @@ const Units = () => {
   const [configuredBillingPeriods, setConfiguredBillingPeriods] = useState([]);
   const [pageSize, setPageSize] = useState(50);
   const [currentPage, setCurrentPage] = useTabState("/units:currentPage", 1);
-  const [expandedUnits, setExpandedUnits] = useState([]); // Array to track multiple expanded units
+  const [expandedUnits, setExpandedUnits] = useState(new Set()); // unit ids currently expanded — Set, matches MilikTable's expandedKeys shape
 
   const [selectedUnits, setSelectedUnits] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
@@ -457,30 +457,21 @@ const Units = () => {
     }
   }, [selectAll, visibleUnitIds]);
 
-  const handleCheckboxClick = useCallback((e) => e.stopPropagation(), []);
-
-  // Toggle expand for a specific unit
-  const toggleUnitExpand = useCallback((unitId) => {
-    setExpandedUnits((prev) =>
-      prev.includes(unitId) ? prev.filter((id) => id !== unitId) : [...prev, unitId]
-    );
-  }, []);
-
   // Expand all visible units on current page
   const expandAllUnits = useCallback(() => {
     if (currentUnits && currentUnits.length > 0) {
-      setExpandedUnits(currentUnits.map((u) => u.id));
+      setExpandedUnits(new Set(currentUnits.map((u) => u.id)));
     }
   }, [currentUnits]);
 
   // Collapse all units
   const collapseAllUnits = useCallback(() => {
-    setExpandedUnits([]);
+    setExpandedUnits(new Set());
   }, []);
 
   // Check if all visible units are expanded
   const allUnitsExpanded = useMemo(
-    () => currentUnits.length > 0 && currentUnits.every((unit) => expandedUnits.includes(unit.id)),
+    () => currentUnits.length > 0 && currentUnits.every((unit) => expandedUnits.has(unit.id)),
     [currentUnits, expandedUnits]
   );
 
@@ -991,6 +982,8 @@ const Units = () => {
               onCheckRow={(u) => handleSelectUnit(u.id)}
               onRowClick={(u) => handleSelectUnit(u.id)}
               isSelected={(u) => selectedUnitsSet.has(u.id)}
+              expandedKeys={expandedUnits}
+              onExpandedKeysChange={setExpandedUnits}
               renderRow={(u) => (
                 <>
                   <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">

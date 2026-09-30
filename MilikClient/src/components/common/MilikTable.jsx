@@ -51,13 +51,19 @@ const MilikTable = React.memo(React.forwardRef(function MilikTable({
   loading,
   empty = "No records found.",
 
+  expandedKeys: controlledExpandedKeys,   // optional — pass to drive expand/collapse from outside (e.g. an "Expand All" toolbar button)
+  onExpandedKeysChange,                   // (Set) => void — required alongside expandedKeys
+
   minWidth,
   tableFixed,
   actionsWidth,
   stickyHeader = true,
   className,
 }, ref) {
-  const [expandedKeys, setExpandedKeys] = React.useState(new Set());
+  const [internalExpandedKeys, setInternalExpandedKeys] = React.useState(new Set());
+  const isExpandControlled = controlledExpandedKeys !== undefined;
+  const expandedKeys = isExpandControlled ? controlledExpandedKeys : internalExpandedKeys;
+  const setExpandedKeys = isExpandControlled ? onExpandedKeysChange : setInternalExpandedKeys;
   const location = useLocation();
   const internalRef = useRef(null);
   const cacheKey = location.pathname + ":scrollTop";

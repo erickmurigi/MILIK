@@ -30,7 +30,7 @@ import { hasCompanyPermission } from "../../utils/permissions";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
 import ImportModal from "../../components/Modals/ImportModal";
 import { downloadPropertiesTemplate, exportPropertiesToExcel, parsePropertiesExcel } from "../../utils/excelTemplates";
-import { adminRequests } from "../../utils/requestMethods";
+import { adminRequests, getErrorMessage } from "../../utils/requestMethods";
 import { printTabularList } from "../../utils/printList";
 import { useTerm } from "../../hooks/useTerm";
 import { normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
@@ -43,9 +43,6 @@ const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
-
-const getErrorMessage = (error, fallback) =>
-  error?.response?.data?.message || error?.message || fallback;
 
 const emptyFilters = {
   status: "active",
@@ -132,7 +129,7 @@ const Properties = () => {
   const [selectedProperties, setSelectedProperties] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
   const [zoneOptions, setZoneOptions] = useState([]);
-  const [expandedRows, setExpandedRows] = useState([]); // Array to track multiple expanded rows
+  const [expandedRows, setExpandedRows] = useState(new Set()); // property ids currently expanded — Set, matches MilikTable's expandedKeys shape
   const [isResizing, setIsResizing] = useState(false);
 
   // Dropdown (Archive/Restore placeholder)
@@ -143,27 +140,6 @@ const Properties = () => {
 
   // Import modal
   const [showImportModal, setShowImportModal] = useState(false);
-
-  // Column resizing refs (kept for compatibility)
-  const resizingRef = useRef(null);
-  const tableRef = useRef(null);
-
-  // Columns (reduced to avoid horizontal scroll)
-  const columns = useMemo(
-    () => [
-      { key: "code", label: "Code" },
-      { key: "name", label: "Name" },
-      { key: "landlord", label: termLandlord },
-      { key: "category", label: "Category" },
-      { key: "zone", label: "Zone" },
-      { key: "location", label: "Location" },
-      { key: "totalUnits", label: `Total ${termUnits}` },
-      { key: "occupiedUnits", label: "Occupied" },
-      { key: "vacantUnits", label: "Vacant" },
-      { key: "status", label: "Status" },
-    ],
-    [termLandlord, termUnits]
-  );
 
   // Filters
   const [appliedFilters, setAppliedFilters] = useTabState("/properties:appliedFilters", emptyFilters);
@@ -285,39 +261,23 @@ const Properties = () => {
     }
   }, [selectAll, properties]);
 
-  const handleCheckboxClick = useCallback((e) => e.stopPropagation(), []);
-
-  // Toggle expand for a specific row
-  const toggleRowExpand = useCallback((propertyId) => {
-    setExpandedRows((prev) =>
-      prev.includes(propertyId) ? prev.filter((id) => id !== propertyId) : [...prev, propertyId]
-    );
-  }, []);
-
   // Expand all rows
   const expandAllRows = useCallback(() => {
     if (properties && properties.length > 0) {
-      setExpandedRows(properties.map((p) => p._id));
+      setExpandedRows(new Set(properties.map((p) => p._id)));
     }
   }, [properties]);
 
   // Collapse all rows
   const collapseAllRows = useCallback(() => {
-    setExpandedRows([]);
+    setExpandedRows(new Set());
   }, []);
 
   // Check if all rows are expanded
   const allRowsExpanded = useMemo(
-    () => properties && properties.length > 0 && expandedRows.length === properties.length,
+    () => properties && properties.length > 0 && properties.every((p) => expandedRows.has(p._id)),
     [properties, expandedRows]
   );
-
-  // Row click now selects the property (not expands)
-  const handleRowClick = useCallback((propertyId, e) => {
-    if (e.target.type === "checkbox" || e.target.closest(".action-buttons")) return;
-    // Select the property
-    handleSelectProperty(propertyId);
-  }, [handleSelectProperty]);
 
   const buildFetchParams = useCallback(() => ({
     page: currentPage,
@@ -471,11 +431,6 @@ const Properties = () => {
       state: { tabTitle: `${termProperty} Details` },
     });
   };
-
-  const getRowClass = useCallback((index, id) => {
-    if (selectedProperties.includes(id)) return "bg-emerald-50 shadow-[inset_3px_0_0_0_#0B3B2E]";
-    return index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40";
-  }, [selectedProperties]);
 
   const totalPages = Math.max(1, Math.ceil((pagination?.total || 0) / pageSize));
 
@@ -688,99 +643,34 @@ const Properties = () => {
         {/* Table Card */}
         <div className="flex-1 min-h-0 px-2 pb-2 overflow-hidden">
           <div className="bg-white border border-gray-200 rounded-lg shadow-sm h-full flex flex-col">
-            <>
-                {/* table scroll area */}
-                <div className="overflow-y-auto flex-1 min-h-0">
-                  <table
-                    className="w-full text-[11px] border-collapse bg-white"
-                    ref={tableRef}
-                    style={{ tableLayout: "fixed" }}
-                  >
-                    <thead className="sticky top-0 z-10 shadow-sm">
-                      <tr className="bg-[#0B3B2E] text-white">
-                        <th className="px-3 py-2 text-center font-bold border-r border-white/10" style={{ width: "44px" }}>
-                          <input
-                            type="checkbox"
-                            checked={selectAll && (properties || []).length > 0}
-                            onChange={handleSelectAll}
-                            onClick={handleCheckboxClick}
-                            className="rounded border-gray-300 text-emerald-600 focus:ring-[#0B3B2E]/20"
-                          />
-                        </th>
-                        <th className="px-1 py-2 font-bold border-r border-white/10" style={{ width: "40px" }} />
-                        {columns.map((column) => (
-                          <th key={column.key} className="px-3 py-2 text-left font-bold border-r border-white/10 whitespace-nowrap">
-                            {column.label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {properties && properties.length > 0 ? (
-                        properties.map((property, index) => (
-                          <React.Fragment key={property._id}>
-                            <tr
-                              className={`border-b border-gray-100 cursor-pointer transition-colors ${getRowClass(index, property._id)}`}
-                              onClick={(e) => handleRowClick(property._id, e)}
-                            >
-                              <td className="px-3 py-1.5 text-center border-r border-gray-100" onClick={handleCheckboxClick}>
-                                <input
-                                  type="checkbox"
-                                  checked={selectedProperties.includes(property._id)}
-                                  onChange={() => handleSelectProperty(property._id)}
-                                  onClick={handleCheckboxClick}
-                                  className="rounded border-gray-300 text-emerald-600 focus:ring-[#0B3B2E]/20"
-                                />
-                              </td>
-                              <td className="px-1 py-1.5 text-center border-r border-gray-100 text-slate-300 transition hover:text-slate-600"
-                                onClick={(e) => { e.stopPropagation(); toggleRowExpand(property._id); }}>
-                                {expandedRows.includes(property._id) ? <FaChevronUp size={9} /> : <FaChevronDown size={9} />}
-                              </td>
-                              <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                                <span className="font-mono text-[10px] text-slate-500 tracking-wide truncate block">{toListingCaps(property.propertyCode)}</span>
-                              </td>
-                              <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                                <span className="font-semibold text-slate-900 truncate block">{toListingCaps(property.propertyName)}</span>
-                                {getLedgerBadge(property) && (
-                                  <span className="inline-flex items-center px-1.5 py-px rounded text-[9px] font-bold tracking-wide bg-purple-100 text-purple-700 border border-purple-200 mt-0.5">
-                                    {termProperty} GL{property.propertyLedgerEnabled ? " ✓" : ""}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                                <span className="text-slate-600 truncate block">{toListingCaps(getPrimaryLandlord(property.landlords))}</span>
-                              </td>
-                              <td className="px-3 py-1 border-r border-gray-100">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${getCategoryColor(property.propertyType)}`}>
-                                  {property.propertyType || "N/A"}
-                                </span>
-                              </td>
-                              <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                                <span className="text-slate-600 truncate block">{toListingCaps(property.zoneRegion || "—")}</span>
-                              </td>
-                              <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                                <span className="text-slate-600 truncate block">{toListingCaps(getFullAddress(property))}</span>
-                              </td>
-                              <td className="px-3 py-1.5 text-center border-r border-gray-100 font-semibold text-slate-700">
-                                {property.totalUnits || 0}
-                              </td>
-                              <td className="px-3 py-1.5 text-center border-r border-gray-100 font-bold text-emerald-700">
-                                {property.occupiedUnits || 0}
-                              </td>
-                              <td className="px-3 py-1.5 text-center border-r border-gray-100 font-bold text-red-600">
-                                {property.vacantUnits || 0}
-                              </td>
-                              <td className="px-3 py-1.5">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusColor(property.status)}`}>
-                                  {property.status || "N/A"}
-                                </span>
-                              </td>
-                            </tr>
-
-                            {expandedRows.includes(property._id) && (
-                              <tr className={getRowClass(index, property._id)}>
-                                <td colSpan={columns.length + 2} className="p-4 border border-gray-200 bg-gradient-to-br from-white to-gray-50">
+            <MilikTable
+              tableFixed
+              columns={[
+                { label: "Code" },
+                { label: "Name" },
+                { label: termLandlord },
+                { label: "Category" },
+                { label: "Zone" },
+                { label: "Location" },
+                { label: `Total ${termUnits}`, align: "center", width: "92px" },
+                { label: "Occupied", align: "center", width: "84px" },
+                { label: "Vacant", align: "center", width: "84px" },
+                { label: "Status" },
+              ]}
+              rows={properties || []}
+              rowKey="_id"
+              empty={`No ${termProperties.toLowerCase()} found. Use the filter fields above, then click Search.`}
+              checkboxes
+              allChecked={selectAll && (properties || []).length > 0}
+              someChecked={selectedProperties.length > 0 && !selectAll}
+              onCheckAll={handleSelectAll}
+              isChecked={(property) => selectedProperties.includes(property._id)}
+              onCheckRow={(property) => handleSelectProperty(property._id)}
+              onRowClick={(property) => handleSelectProperty(property._id)}
+              isSelected={(property) => selectedProperties.includes(property._id)}
+              expandedKeys={expandedRows}
+              onExpandedKeysChange={setExpandedRows}
+              renderExpanded={(property) => (
                                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                                     {/* Property Details */}
                                     <div className="space-y-3 p-3 bg-white rounded-lg shadow-sm border border-gray-100">
@@ -922,48 +812,61 @@ const Properties = () => {
                                       </div>
                                     </div>
                                   </div>
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        ))
-                      ) : (
-                        <tr>
-                          <td
-                            colSpan={columns.length + 2}
-                            className="px-3 py-8 text-center text-gray-500 bg-white"
-                          >
-                            <div className="flex flex-col items-center justify-center py-8">
-                            
-                              <div className="text-lg font-bold text-gray-400 mb-2">No {termProperties.toLowerCase()} found</div>
-                              <div className="text-sm text-gray-500 mb-4">Use the filter fields above, then click Search</div>
-                              {canCreateProperty && (
-                                <Link to="/properties/new">
-                                  <button
-                                    className={`px-4 py-2 text-white rounded-lg transition-colors ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                                  >
-                                    Add New {termProperty}
-                                  </button>
-                                </Link>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+              )}
+              renderRow={(property) => (
+                <>
+                  <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                    <span className="font-mono text-[10px] text-slate-500 tracking-wide truncate block">{toListingCaps(property.propertyCode)}</span>
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                    <span className="font-semibold text-slate-900 truncate block">{toListingCaps(property.propertyName)}</span>
+                    {getLedgerBadge(property) && (
+                      <span className="inline-flex items-center px-1.5 py-px rounded text-[9px] font-bold tracking-wide bg-purple-100 text-purple-700 border border-purple-200 mt-0.5">
+                        {termProperty} GL{property.propertyLedgerEnabled ? " ✓" : ""}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                    <span className="text-slate-600 truncate block">{toListingCaps(getPrimaryLandlord(property.landlords))}</span>
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${getCategoryColor(property.propertyType)}`}>
+                      {property.propertyType || "N/A"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                    <span className="text-slate-600 truncate block">{toListingCaps(property.zoneRegion || "—")}</span>
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                    <span className="text-slate-600 truncate block">{toListingCaps(getFullAddress(property))}</span>
+                  </td>
+                  <td className="px-3 py-1.5 text-center border-r border-gray-100 font-semibold text-slate-700">
+                    {property.totalUnits || 0}
+                  </td>
+                  <td className="px-3 py-1.5 text-center border-r border-gray-100 font-bold text-emerald-700">
+                    {property.occupiedUnits || 0}
+                  </td>
+                  <td className="px-3 py-1.5 text-center border-r border-gray-100 font-bold text-red-600">
+                    {property.vacantUnits || 0}
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusColor(property.status)}`}>
+                      {property.status || "N/A"}
+                    </span>
+                  </td>
+                </>
+              )}
+            />
 
-                <PaginationBar
-                  page={currentPage}
-                  pages={totalPages}
-                  total={pagination?.total}
-                  pageSize={pageSize}
-                  onPageChange={setCurrentPage}
-                  onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
-                  label={termProperties.toLowerCase()}
-                />
-            </>
+            <PaginationBar
+              page={currentPage}
+              pages={totalPages}
+              total={pagination?.total}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              label={termProperties.toLowerCase()}
+            />
           </div>
         </div>
 
