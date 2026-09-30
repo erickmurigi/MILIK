@@ -1712,7 +1712,7 @@ const Statements = () => {
 
         {/* ── TOP CONTROLS ─────────────────────────────────────────────── */}
         <div className="flex-shrink-0 bg-white shadow-[0_1px_4px_rgba(0,0,0,0.08)]">
-          <div className="h-0.5 bg-gradient-to-r from-[#0B3B2E] via-[#1a6b4e] to-[#0B3B2E]" />
+          <div className="h-0.5 bg-[#0B3B2E]" />
 
           {/* Filter row — grouped: Type/Property, then Quick Period (drives Period
               Start's suggestion below — see buildPeriod effect), then the actual

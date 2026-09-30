@@ -240,10 +240,10 @@ const ModuleTabManager = ({ darkMode }) => {
               isActive
                 ? darkMode
                   ? 'bg-gray-700 text-white border-orange-400 shadow-md'
-                  : 'bg-[#1A7A44] text-white border-[#E85C0D] shadow-md'
+                  : 'bg-[#0B3B2E] text-white border-[#E85C0D] shadow-md'
                 : darkMode
                   ? 'bg-gray-900 text-gray-400 border-transparent hover:bg-gray-800 hover:text-gray-200'
-                  : 'bg-[#0A3127] text-gray-400 border-transparent hover:bg-[#1A7A44] hover:text-gray-200'
+                  : 'bg-[#0A3127] text-gray-400 border-transparent hover:bg-[#0B3B2E] hover:text-gray-200'
             }`}
           >
             <span className={`flex-shrink-0 ${isActive ? 'text-current' : 'opacity-60'}`}>
