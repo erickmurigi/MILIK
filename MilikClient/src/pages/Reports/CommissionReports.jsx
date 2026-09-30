@@ -432,26 +432,6 @@ const CommissionReports = () => {
             </div>
           </div>
 
-          {/* Stat strip */}
-          <div className="flex-shrink-0 overflow-x-auto border-b border-slate-100 bg-white">
-            <div className="flex min-w-max divide-x divide-slate-100">
-              {[
-                { label: 'Recognized Commission', value: formatCurrency(totals.recognizedCommission), accent: 'text-[#0B3B2E]', sub: null },
-                { label: 'Reversed Commission',   value: formatCurrency(totals.reversedCommission),   accent: totals.reversedCommission > 0 ? 'text-red-600' : 'text-slate-400', sub: null },
-                { label: 'Net Commission',         value: formatCurrency(totals.recognizedCommission - totals.reversedCommission), accent: 'text-emerald-700', sub: null },
-                { label: 'Statements',             value: totals.statements,            accent: 'text-slate-800', sub: null },
-                { label: 'Months',                 value: totals.months,                accent: 'text-slate-800', sub: `${toMonthLabel(appliedFilters.monthFrom)} – ${toMonthLabel(appliedFilters.monthTo)}` },
-                { label: 'Reversed Statements',    value: totals.reversedStatements,    accent: totals.reversedStatements > 0 ? 'text-amber-600' : 'text-slate-400', sub: null },
-              ].map((item) => (
-                <div key={item.label} className="min-w-[130px] flex-1 px-3 py-2.5">
-                  <p className="whitespace-nowrap text-[9px] font-bold uppercase tracking-widest text-slate-400">{item.label}</p>
-                  <p className={`mt-0.5 whitespace-nowrap text-[13px] font-black ${item.accent}`}>{item.value}</p>
-                  {item.sub && <p className="mt-0.5 whitespace-nowrap text-[9px] leading-tight text-slate-400">{item.sub}</p>}
-                </div>
-              ))}
-            </div>
-          </div>
-
           {/* Table */}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <div className="min-h-0 flex-1 overflow-hidden flex flex-col">

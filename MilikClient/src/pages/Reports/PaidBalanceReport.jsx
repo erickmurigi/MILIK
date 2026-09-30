@@ -406,15 +406,19 @@ const PaidBalanceReport = () => {
         ["Invoiced", formatMoney(summ.totalInvoiced)],
         ["Paid", formatMoney(grandTotalPaid)],
         ["Outstanding", formatMoney(summ.totalOutstanding)],
+        ["Unapplied Credit", formatMoney(summ.totalUnappliedCredit)],
         ["Net Balance", formatMoney(summ.netBalance)],
         ["Arrears", String(summ.owingCount || 0)],
         ["Overpaid", String(summ.creditCount || 0)],
         ["Settled", String(summ.settledCount || 0)],
+        ["Settlement Rate", formatPercent(balanceInsights.settlementRate)],
+        ["Largest Debtor", balanceInsights.largestOwing ? `${balanceInsights.largestOwing.tenantName} (${formatMoney(balanceInsights.largestOwing.netBalance)})` : "—"],
+        ["Largest Credit", balanceInsights.largestCredit ? `${balanceInsights.largestCredit.tenantName} (${formatMoney(Math.abs(Number(balanceInsights.largestCredit.netBalance || 0)))})` : "—"],
       ],
       totalsRow: ["GRAND TOTAL", `${allRows.length} tenants`, bfText(grandBF), formatMoney(grandRent), dash(grandOther), formatMoney(grandAmtPaid), dash(grandOtherPaid), formatMoney(grandTotalPaid), formatMoney(grandBalance), "", ""],
     });
     if (!printed) toast.error(POPUP_BLOCKED);
-  }, [canExportReports, currentCompany, searchFilteredRows, report.summary, filters, termTenant, termUnit]);
+  }, [canExportReports, currentCompany, searchFilteredRows, report.summary, filters, termTenant, termUnit, balanceInsights]);
 
   return (
     <DashboardLayout lockContentScroll>
@@ -441,29 +445,13 @@ const PaidBalanceReport = () => {
               </div>
             </div>
 
-            {/* ── Stats + Actions bar ── */}
-            <div className="flex-shrink-0 flex items-stretch border-b border-slate-200 bg-white">
-              <div className="flex-1 overflow-x-auto">
-                <div className="flex h-full min-w-max divide-x divide-slate-100">
-                  {[
-                    { label: 'Period Invoiced', value: formatMoney(summary.totalInvoiced),        accent: 'text-slate-800' },
-                    { label: 'Total Paid',       value: formatMoney(grandTotals.totalPaidGross),    accent: 'text-emerald-700' },
-                    { label: 'Outstanding',       value: formatMoney(summary.totalOutstanding),     accent: 'text-red-600',     sub: summary.owingCount ? `${summary.owingCount} in arrears` : null },
-                    { label: 'Unapplied Credit',  value: formatMoney(summary.totalUnappliedCredit), accent: 'text-amber-600',   sub: summary.creditCount ? `${summary.creditCount} overpaid` : null },
-                    { label: 'Net Balance',       value: formatMoney(summary.netBalance),           accent: 'text-slate-800' },
-                    { label: 'Largest Debtor',    value: balanceInsights.largestOwing?.tenantName || '—', accent: 'text-red-600', sub: balanceInsights.largestOwing ? formatMoney(balanceInsights.largestOwing.netBalance) : null },
-                    { label: 'Largest Credit',    value: balanceInsights.largestCredit?.tenantName || '—', accent: 'text-emerald-700', sub: balanceInsights.largestCredit ? formatMoney(Math.abs(Number(balanceInsights.largestCredit.netBalance || 0))) : null },
-                    { label: 'Settlement Rate',   value: formatPercent(balanceInsights.settlementRate), accent: 'text-slate-800', sub: 'Fully settled' },
-                  ].map((item) => (
-                    <div key={item.label} className="flex flex-col justify-center px-3 py-1.5">
-                      <p className="whitespace-nowrap text-[8.5px] font-bold uppercase tracking-widest text-slate-400">{item.label}</p>
-                      <p className={`whitespace-nowrap text-[11px] font-black leading-tight ${item.accent}`}>{item.value}</p>
-                      {item.sub && <p className="whitespace-nowrap text-[8px] leading-tight text-slate-400">{item.sub}</p>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="flex flex-shrink-0 items-center gap-1.5 border-l border-slate-200 px-2">
+            {/* ── Actions bar ── */}
+            <div className="flex-shrink-0 flex items-center justify-between border-b border-slate-200 bg-white px-2 py-1.5">
+              <span className="text-[10px] font-semibold text-slate-400">
+                {searchFilteredRows.length} tenant{searchFilteredRows.length !== 1 ? "s" : ""}
+                {summary.owingCount ? ` · ${summary.owingCount} in arrears` : ""}
+              </span>
+              <div className="flex flex-shrink-0 items-center gap-1.5">
                 <button onClick={handleExportCSV} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaFileDownload /> Export CSV</button>
                 <button onClick={handlePrint} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint /> Print</button>
                 <ResetFiltersButton onReset={resetFilters} disabled={loading} />

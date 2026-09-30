@@ -3,13 +3,9 @@ import { useTabState } from "../../hooks/useTabState";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import {
-  FaBook,
   FaCalendarAlt,
   FaChartLine,
   FaExternalLinkAlt,
-  FaFileInvoiceDollar,
-  FaLayerGroup,
-  FaMoneyBillWave,
   FaRedoAlt,
   FaSearch,
   FaTimes,
@@ -17,6 +13,7 @@ import {
 import { toast } from "react-toastify";
 import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import MilikTable from "../../components/common/MilikTable";
 import { getChartOfAccounts, getJournalEntries } from "../../redux/apiCalls";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { GL_ACCESS_MODULES, hasCompanyModule } from "../../utils/companyModules";
@@ -59,27 +56,6 @@ const ACCOUNT_TYPE_COLORS = {
   revenue:   "bg-emerald-50 text-emerald-700",
   expense:   "bg-amber-50 text-amber-700",
 };
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-const KpiCard = ({ icon: Icon, label, value, sub, accent }) => (
-  <div className="flex items-center gap-2 bg-white px-3 py-2">
-    <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded ${accent || "bg-slate-100"}`}>
-      <Icon className="text-xs text-white" />
-    </div>
-    <div className="min-w-0">
-      <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">{label}</div>
-      <div className="text-sm font-black leading-tight text-slate-900">{value ?? "—"}</div>
-      {sub && <div className="text-[9px] text-slate-400 mt-0.5">{sub}</div>}
-    </div>
-  </div>
-);
-
-const EmptyState = ({ icon: Icon, message }) => (
-  <div className="flex h-52 flex-col items-center justify-center gap-3 text-slate-400">
-    <Icon size={28} className="opacity-40" />
-    <p className="max-w-xs text-center text-xs leading-5">{message}</p>
-  </div>
-);
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function HRFinancials() {
@@ -190,84 +166,58 @@ export default function HRFinancials() {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
 
-        {/* ── Header ────────────────────────────────────────────────────────── */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-3 sm:px-5 py-3 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">
-                Human Resource
-              </div>
-              <h1 className="text-sm font-black leading-tight text-slate-900">Financials</h1>
-            </div>
+        {/* ── Toolbar ───────────────────────────────────────────────────────── */}
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-gray-50/95 px-4 py-2 shadow-sm">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">HR Financials</p>
 
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Date Range */}
-              <div className="flex flex-wrap items-center gap-1.5 rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs">
-                <FaCalendarAlt size={10} className="shrink-0 text-slate-400" />
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="border-0 bg-transparent text-xs text-slate-700 outline-none min-w-0"
-                />
-                <span className="text-slate-300">—</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="border-0 bg-transparent text-xs text-slate-700 outline-none min-w-0"
-                />
-              </div>
+          <div className="mx-1 h-4 w-px bg-slate-200" />
 
-              <button
-                onClick={handleRefresh}
-                className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
-              >
-                <FaRedoAlt size={10} /> Refresh
-              </button>
+          <FaCalendarAlt size={10} className="shrink-0 text-slate-400" />
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+          />
+          <span className="text-slate-300">—</span>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+          />
 
-              {hasFullAccounts && (
-                <button
-                  onClick={() => navigate("/financial/journals")}
-                  className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0A3127] transition-colors"
-                >
-                  <FaExternalLinkAlt size={9} /> Full Accounts
-                </button>
-              )}
-            </div>
-          </div>
+          <button
+            onClick={handleRefresh}
+            className="flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+          >
+            <FaRedoAlt size={10} /> Refresh
+          </button>
+
+          {hasFullAccounts && (
+            <button
+              onClick={() => navigate("/financial/journals")}
+              className="flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-semibold text-white hover:bg-[#0A3127]"
+            >
+              <FaExternalLinkAlt size={9} /> Full Accounts
+            </button>
+          )}
         </div>
 
         {/* ── KPI Strip ─────────────────────────────────────────────────────── */}
-        <div className="flex-shrink-0 grid grid-cols-1 gap-px border-b border-slate-200 bg-slate-200 sm:grid-cols-2 lg:grid-cols-4">
-          <KpiCard
-            icon={FaBook}
-            label="Total Entries"
-            value={kpis.total.toLocaleString()}
-            sub={`${kpis.postedCount} posted`}
-            accent="bg-slate-500"
-          />
-          <KpiCard
-            icon={FaFileInvoiceDollar}
-            label="Gross Payroll Posted"
-            value={`KES ${fmt(kpis.grossPosted)}`}
-            sub="salary expense entries"
-            accent="bg-emerald-600"
-          />
-          <KpiCard
-            icon={FaMoneyBillWave}
-            label="Total Amount Posted"
-            value={`KES ${fmt(kpis.totalPosted)}`}
-            sub="all posted journal legs"
-            accent="bg-[#0B3B2E]"
-          />
-          <KpiCard
-            icon={FaLayerGroup}
-            label="Payroll Batches"
-            value={kpis.batches.toLocaleString()}
-            sub="unique journal groups"
-            accent="bg-amber-500"
-          />
+        <div className="grid shrink-0 grid-cols-2 divide-x divide-slate-200 border-b border-slate-200 bg-white sm:grid-cols-4">
+          {[
+            { label: "Total Entries", value: kpis.total.toLocaleString(), sub: `${kpis.postedCount} posted` },
+            { label: "Gross Payroll Posted", value: `KES ${fmt(kpis.grossPosted)}`, sub: "salary expense entries" },
+            { label: "Total Amount Posted", value: `KES ${fmt(kpis.totalPosted)}`, sub: "all posted journal legs" },
+            { label: "Payroll Batches", value: kpis.batches.toLocaleString(), sub: "unique journal groups" },
+          ].map(({ label, value, sub }) => (
+            <div key={label} className="flex flex-col items-start px-4 py-2.5">
+              <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</span>
+              <span className="mt-0.5 font-mono text-sm font-black leading-tight text-slate-800">{value}</span>
+              <span className="text-[9px] text-slate-400">{sub}</span>
+            </div>
+          ))}
         </div>
 
         {/* ── Tabs ──────────────────────────────────────────────────────────── */}
@@ -288,13 +238,13 @@ export default function HRFinancials() {
         </div>
 
         {/* ── Content ───────────────────────────────────────────────────────── */}
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 flex flex-col overflow-hidden">
 
           {/* ─── Journals Tab ─────────────────────────────────────────────── */}
           {tab === "journals" && (
             <>
               {/* Filter bar */}
-              <div className="filter-bar flex items-center gap-1.5 overflow-x-auto border-b border-slate-100 bg-white px-2 py-1.5">
+              <div className="filter-bar flex-shrink-0 flex items-center gap-1.5 overflow-x-auto border-b border-slate-100 bg-white px-2 py-1.5">
                 <div className="relative w-52 shrink-0">
                   <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={10} />
                   <input
@@ -339,157 +289,122 @@ export default function HRFinancials() {
               </div>
 
               {/* Table */}
-              {journalsLoading ? (
-                <div className="flex h-40 items-center justify-center">
-                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-600" />
-                </div>
-              ) : journals.length === 0 ? (
-                <EmptyState
-                  icon={FaBook}
-                  message="No HR journals found for the selected period. Payroll journals are automatically posted when a payroll period is approved."
+              <div className="min-h-0 flex-1 overflow-hidden flex flex-col">
+                <MilikTable
+                  minWidth="750px"
+                  columns={[
+                    { label: "Journal #" },
+                    { label: "Date" },
+                    { label: "Type" },
+                    { label: "Debit Account" },
+                    { label: "Credit Account" },
+                    { label: "Amount (KES)", align: "right" },
+                    { label: "Status" },
+                  ]}
+                  rows={journals}
+                  rowKey="_id"
+                  loading={journalsLoading}
+                  empty="No HR journals found for the selected period. Payroll journals are automatically posted when a payroll period is approved."
+                  renderRow={(j) => (
+                    <>
+                      <td className="px-3 py-1 border-r border-gray-100 font-mono font-bold text-slate-700">
+                        {j.journalNo || "—"}
+                      </td>
+                      <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap text-slate-600">
+                        {fmtDate(j.date)}
+                      </td>
+                      <td className="px-3 py-1 border-r border-gray-100">
+                        <span className="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                          {JOURNAL_TYPE_LABELS[j.journalType] || j.journalType || "—"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[200px]">
+                        {j.debitAccount
+                          ? `${j.debitAccount.code} – ${j.debitAccount.name}`
+                          : "—"}
+                      </td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[200px]">
+                        {j.creditAccount
+                          ? `${j.creditAccount.code} – ${j.creditAccount.name}`
+                          : "—"}
+                      </td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-black text-slate-900 whitespace-nowrap">
+                        {fmt(j.amount)}
+                      </td>
+                      <td className="px-3 py-1">
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black capitalize ${
+                            STATUS_BADGE[j.status] || "bg-slate-100 text-slate-500 border-slate-200"
+                          }`}
+                        >
+                          {j.status || "—"}
+                        </span>
+                      </td>
+                    </>
+                  )}
                 />
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[750px] border-collapse text-[11px]">
-                    <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-                      <tr>
-                        {[
-                          "Journal #",
-                          "Date",
-                          "Type",
-                          "Debit Account",
-                          "Credit Account",
-                          "Amount (KES)",
-                          "Status",
-                        ].map((col, i, arr) => (
-                          <th
-                            key={col}
-                            className={`px-3 py-1 text-left font-bold whitespace-nowrap ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}
-                          >
-                            {col}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {journals.map((j, idx) => (
-                        <tr key={j._id} className={`border-b border-gray-100 transition-colors ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
-                          <td className="px-3 py-1 border-r border-gray-100 font-mono font-bold text-slate-700">
-                            {j.journalNo || "—"}
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap text-slate-600">
-                            {fmtDate(j.date)}
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100">
-                            <span className="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
-                              {JOURNAL_TYPE_LABELS[j.journalType] || j.journalType || "—"}
-                            </span>
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[200px]">
-                            {j.debitAccount
-                              ? `${j.debitAccount.code} – ${j.debitAccount.name}`
-                              : "—"}
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[200px]">
-                            {j.creditAccount
-                              ? `${j.creditAccount.code} – ${j.creditAccount.name}`
-                              : "—"}
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-black text-slate-900 whitespace-nowrap">
-                            {fmt(j.amount)}
-                          </td>
-                          <td className="px-3 py-1">
-                            <span
-                              className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black capitalize ${
-                                STATUS_BADGE[j.status] || "bg-slate-100 text-slate-500 border-slate-200"
-                              }`}
-                            >
-                              {j.status || "—"}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              </div>
             </>
           )}
 
           {/* ─── Accounts Tab ─────────────────────────────────────────────── */}
           {tab === "accounts" && (
-            <div className="p-4">
+            <div className="min-h-0 flex-1 overflow-hidden flex flex-col p-2">
               {!canViewAccounts ? (
                 <div className="flex h-40 items-center justify-center rounded-lg border border-slate-200 bg-white">
                   <p className="text-xs text-slate-400">
                     You do not have permission to view the chart of accounts.
                   </p>
                 </div>
-              ) : accountsLoading ? (
-                <div className="flex h-40 items-center justify-center">
-                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-600" />
-                </div>
-              ) : accounts.length === 0 ? (
-                <EmptyState
-                  icon={FaLayerGroup}
-                  message="No accounts found. Chart of accounts is provisioned automatically the first time it is initialised for this company."
-                />
               ) : (
-                <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
-                  <table className="w-full min-w-[580px] border-collapse text-[11px]">
-                    <thead className="bg-[#0B3B2E] text-white">
-                      <tr>
-                        {["Code", "Account Name", "Type", "Sub-Group", "Balance (KES)"].map(
-                          (col, i, arr) => (
-                            <th
-                              key={col}
-                              className={`px-3 py-1 text-left font-bold ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}
-                            >
-                              {col}
-                            </th>
-                          )
-                        )}
-                        <th className="px-3 py-1" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {accounts.map((a, idx) => (
-                        <tr key={a._id} className={`border-b border-gray-100 transition-colors ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
-                          <td className="px-3 py-1 border-r border-gray-100 font-mono font-bold text-slate-700">
-                            {a.code}
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{a.name}</td>
-                          <td className="px-3 py-1 border-r border-gray-100">
-                            <span
-                              className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold capitalize ${
-                                ACCOUNT_TYPE_COLORS[a.type] || "bg-slate-100 text-slate-600 border-slate-200"
-                              }`}
-                            >
-                              {a.type}
-                            </span>
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{a.subGroup || a.group || "—"}</td>
-                          <td
-                            className={`px-3 py-1 border-r border-gray-100 text-right font-mono font-black ${
-                              Number(a.balance || 0) < 0 ? "text-rose-600" : "text-slate-900"
+                <div className="min-h-0 flex-1 overflow-hidden flex flex-col rounded-lg border border-slate-200 bg-white shadow-sm">
+                  <MilikTable
+                    minWidth="580px"
+                    columns={[
+                      { label: "Code" },
+                      { label: "Account Name" },
+                      { label: "Type" },
+                      { label: "Sub-Group" },
+                      { label: "Balance (KES)", align: "right" },
+                    ]}
+                    rows={accounts}
+                    rowKey="_id"
+                    loading={accountsLoading}
+                    empty="No accounts found. Chart of accounts is provisioned automatically the first time it is initialised for this company."
+                    renderActions={(a) => (
+                      <button
+                        onClick={() => navigate(`/hr/chart-of-accounts/${a._id}/activity`)}
+                        className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-[10px] font-bold text-slate-600 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
+                      >
+                        <FaChartLine size={8} /> Ledger
+                      </button>
+                    )}
+                    renderRow={(a) => (
+                      <>
+                        <td className="px-3 py-1 border-r border-gray-100 font-mono font-bold text-slate-700">
+                          {a.code}
+                        </td>
+                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{a.name}</td>
+                        <td className="px-3 py-1 border-r border-gray-100">
+                          <span
+                            className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold capitalize ${
+                              ACCOUNT_TYPE_COLORS[a.type] || "bg-slate-100 text-slate-600 border-slate-200"
                             }`}
                           >
-                            {fmt(a.balance)}
-                          </td>
-                          <td className="px-3 py-1 text-right">
-                            <button
-                              onClick={() =>
-                                navigate(`/hr/chart-of-accounts/${a._id}/activity`)
-                              }
-                              className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-[10px] font-bold text-slate-600 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
-                            >
-                              <FaChartLine size={8} /> Ledger
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                            {a.type}
+                          </span>
+                        </td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{a.subGroup || a.group || "—"}</td>
+                        <td
+                          className={`px-3 py-1 border-r border-gray-100 text-right font-mono font-black ${
+                            Number(a.balance || 0) < 0 ? "text-rose-600" : "text-slate-900"
+                          }`}
+                        >
+                          {fmt(a.balance)}
+                        </td>
+                      </>
+                    )}
+                  />
                 </div>
               )}
             </div>

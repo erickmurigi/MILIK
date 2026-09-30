@@ -193,8 +193,10 @@ const PropertyIncomeSummaryReport = () => {
       summaryItems: [
         ['Total Invoiced', formatMoney(sm.totalInvoiced)],
         ['Total Collected', formatMoney(sm.totalCollected)],
+        ['Collection Rate', fmtP(sm.collectionRate)],
         ['Total Expenses', formatMoney(sm.totalExpenses)],
         ['Net Income', formatMoney(sm.netIncome)],
+        [termProperties, String(sm.propertyCount || 0)],
       ],
       totalsRow: ['TOTAL', formatMoney(sm.totalRentInvoiced), formatMoney(sm.totalUtilitiesInvoiced), formatMoney(sm.totalInvoiced), formatMoney(sm.totalCollected), formatMoney(sm.totalExpenses), formatMoney(sm.netIncome), fmtP(sm.collectionRate)],
       sections: expenseCategories.length ? [{
@@ -209,7 +211,7 @@ const PropertyIncomeSummaryReport = () => {
       }] : [],
     });
     if (!printed) toast.error('Pop-up blocked — allow pop-ups for this site to print');
-  }, [canExportReports, currentCompany, report, filters.startDate, filters.endDate, termProperty]);
+  }, [canExportReports, currentCompany, report, filters.startDate, filters.endDate, termProperty, termProperties]);
 
   return (
     <DashboardLayout lockContentScroll>
@@ -385,25 +387,6 @@ const PropertyIncomeSummaryReport = () => {
                 <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? 'Export CSV' : 'No export permission'} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaFileDownload /> Export CSV</button>
                 <button onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? 'Print' : 'No print permission'} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint /> Print</button>
                 <button onClick={loadReport} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaSyncAlt className={loading ? 'animate-spin' : ''} /> Refresh</button>
-              </div>
-            </div>
-
-            {/* ── Stat strip (6 core metrics) ── */}
-            <div className="flex-shrink-0 border-b border-slate-100 bg-white">
-              <div className="flex divide-x divide-slate-100">
-                {[
-                  { label: 'Total Invoiced',    value: formatMoney(summary.totalInvoiced),    accent: 'text-slate-800' },
-                  { label: 'Total Collected',   value: formatMoney(summary.totalCollected),   accent: 'text-emerald-700' },
-                  { label: 'Collection Rate',   value: formatPercent(summary.collectionRate), accent: 'text-slate-800' },
-                  { label: 'Total Expenses',    value: formatMoney(summary.totalExpenses),    accent: 'text-red-600' },
-                  { label: 'Net Income (Cash)', value: formatMoney(summary.netIncome),        accent: Number(summary.netIncome || 0) >= 0 ? 'text-emerald-700' : 'text-red-600' },
-                  { label: termProperties,       value: summary.propertyCount || 0,            accent: 'text-slate-800' },
-                ].map((item) => (
-                  <div key={item.label} className="flex-1 px-4 py-3">
-                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">{item.label}</p>
-                    <p className={`mt-1 text-[15px] font-black ${item.accent}`}>{item.value}</p>
-                  </div>
-                ))}
               </div>
             </div>
 

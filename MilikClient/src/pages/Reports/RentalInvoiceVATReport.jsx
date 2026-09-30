@@ -301,17 +301,6 @@ const RentalInvoiceVATReport = () => {
                 />
                 <span className="shrink-0 rounded border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700"><FaPercent className="inline mr-1" />{filteredRows.length} rows</span>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                {[
-                  { label: "Invoices", value: totals.count, accent: "text-slate-900" },
-                  { label: "Net", value: formatMoney(totals.net), accent: "text-[#0B3B2E]" },
-                  { label: "VAT", value: formatMoney(totals.tax), accent: "text-amber-700" },
-                  { label: "Gross", value: formatMoney(totals.gross), accent: "text-slate-900" },
-                ].map((card) => (
-                  <span key={card.label} className="shrink-0 inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
-                    {card.label} <span className={`normal-case tracking-normal ${card.accent}`}>{card.value}</span>
-                  </span>
-                ))}
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <button onClick={exportCsv} disabled={!canExportReports} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"><FaFileDownload size={9} /> CSV</button>
                 <button onClick={handlePrint} disabled={!canExportReports} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"><FaPrint size={9} /> Print</button>
                 <button onClick={loadData} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]"><FaSyncAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh</button>

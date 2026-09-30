@@ -388,28 +388,6 @@ const TrialBalanceReport = () => {
             </div>
           )}
 
-          {/* ── Summary strip ────────────────────────────────────────── */}
-          <div className="flex-shrink-0 flex flex-wrap items-center gap-px border border-slate-200 bg-white shadow-sm overflow-hidden">
-            {[
-              { label: "Total Debits",   val: `KES ${formatMoney(report.totals?.debit)}`,       color: "text-gray-900" },
-              { label: "Total Credits",  val: `KES ${formatMoney(report.totals?.credit)}`,      color: "text-gray-900" },
-              { label: "Difference",     val: `KES ${formatMoney(report.totals?.difference)}`,  color: Math.abs(Number(report.totals?.difference || 0)) < 0.005 ? "text-emerald-700" : "text-red-600" },
-            ].map((item, i) => (
-              <div key={i} className="flex flex-1 items-center gap-3 border-r border-slate-100 px-4 py-2 last:border-r-0">
-                <div>
-                  <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400">{item.label}</div>
-                  <div className={`mt-0.5 text-sm font-black tracking-tight ${item.color}`}>{item.val}</div>
-                </div>
-              </div>
-            ))}
-            <div className={`flex items-center gap-2 px-4 py-2 ${report.totals?.balanced ? "bg-emerald-50" : "bg-red-50"}`}>
-              <div className={`h-2 w-2 rounded-full ${report.totals?.balanced ? "bg-emerald-500" : "bg-red-500"}`} />
-              <span className={`text-xs font-bold ${report.totals?.balanced ? "text-emerald-700" : "text-red-700"}`}>
-                {report.totals?.balanced ? "Balanced" : "Out of Balance"}
-              </span>
-            </div>
-          </div>
-
           {/* ── Exceptions Panel ─────────────────────────────────────── */}
           {showExceptions && (
             <div className="flex-shrink-0 border border-amber-200 bg-amber-50 shadow-sm overflow-hidden">

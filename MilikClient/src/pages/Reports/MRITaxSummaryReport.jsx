@@ -320,22 +320,6 @@ const MRITaxSummaryReport = () => {
               </div>
             </div>
 
-            {/* Summary metrics */}
-            <div className="grid flex-shrink-0 gap-1.5 border-b border-slate-200 bg-white p-1.5 md:grid-cols-3">
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">
-                <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500">Gross Rent Collected</div>
-                <div className="mt-0.5 text-base font-black text-emerald-700">{formatMoney(summary.grossRent)}</div>
-              </div>
-              <div className="rounded-md border border-orange-100 bg-orange-50 px-2 py-1">
-                <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-orange-600">MRI Tax ({mriRatePercent}% Flat Rate)</div>
-                <div className="mt-0.5 text-base font-black text-orange-700">{formatMoney(summary.mriTax)}</div>
-              </div>
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">
-                <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500">Properties</div>
-                <div className="mt-0.5 text-base font-black text-slate-900">{summary.propertyCount || 0}</div>
-              </div>
-            </div>
-
             {/* Info banner */}
             <div className="flex-shrink-0 border-b border-amber-100 bg-amber-50 px-3 py-2 text-[10px] text-amber-800">
               <strong>Kenya Residential Rental Income (MRI) Tax:</strong> {mriRatePercent}% flat rate on gross rent collected, paid monthly to KRA. This report uses confirmed receipts from the selected period. Consult your tax advisor before filing.

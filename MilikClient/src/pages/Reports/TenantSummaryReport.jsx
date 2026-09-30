@@ -278,16 +278,6 @@ const TenantSummaryReport = () => {
                   <FaUsers className="inline mr-1" />{filteredRows.length} {termTenants.toLowerCase()}
                 </span>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                {[
-                  { label: "Invoiced", value: formatMoney(totals.invoiced), accent: "text-slate-900" },
-                  { label: "Collected", value: formatMoney(totals.paid), accent: "text-[#0B3B2E]" },
-                  { label: "Outstanding", value: formatMoney(totals.balance), accent: totals.balance > 0 ? "text-red-700" : "text-green-700" },
-                ].map((card) => (
-                  <span key={card.label} className="shrink-0 inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
-                    {card.label} <span className={`normal-case tracking-normal ${card.accent}`}>{card.value}</span>
-                  </span>
-                ))}
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <button
                   onClick={exportCsv}
                   disabled={!canExportReports}

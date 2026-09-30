@@ -365,21 +365,6 @@ const TaxReports = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-            <div className="rounded-md border border-slate-200 bg-white p-2 shadow-sm">
-              <div className="text-xs text-slate-600">Taxable Net Amount</div>
-              <div className="mt-0.5 text-sm font-bold text-slate-900">{formatMoney(totals.netAmount)}</div>
-            </div>
-            <div className="rounded-md border border-orange-200 bg-orange-50 p-2 shadow-sm">
-              <div className="text-xs text-orange-700">Output VAT / Tax</div>
-              <div className="mt-0.5 text-sm font-bold text-orange-700">{formatMoney(totals.taxAmount)}</div>
-            </div>
-            <div className="rounded-md border border-emerald-200 bg-emerald-50 p-2 shadow-sm">
-              <div className="text-xs text-emerald-700">Gross Value</div>
-              <div className="mt-0.5 text-sm font-bold text-emerald-700">{formatMoney(totals.grossAmount)}</div>
-            </div>
-          </div>
-
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
             <div className={`${GREEN_BG} px-3 py-2 text-white`}>
               <h3 className="text-xs font-bold">Tax Breakdown</h3>

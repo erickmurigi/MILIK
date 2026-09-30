@@ -4,6 +4,7 @@ import { FaDoorOpen, FaPrint, FaRedoAlt } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import AppSelect from '../../components/common/AppSelect';
+import MilikTable from '../../components/common/MilikTable';
 import { adminRequests } from '../../utils/requestMethods';
 import { selectCurrentCompany, selectCurrentUser } from '../../redux/selectors';
 import { fmtDate } from '../../utils/dates';
@@ -98,7 +99,7 @@ export default function ZoneVacancyReport() {
     <DashboardLayout lockContentScroll>
       <div className="flex flex-col h-full min-h-0 bg-white overflow-hidden">
 
-        {/* Filter bar */}
+        {/* Toolbar */}
         <div className="flex-none border-b border-gray-200 bg-white shadow-sm">
           <div className="filter-bar flex items-center gap-2 overflow-x-auto px-2 py-1.5">
             <FaDoorOpen className="text-amber-500 shrink-0" size={13} />
@@ -115,117 +116,107 @@ export default function ZoneVacancyReport() {
               className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-700 px-2.5 text-xs font-semibold text-white hover:bg-slate-800">
               <FaPrint size={9} /> Print
             </button>
+            <span className="ml-auto shrink-0 text-[10px] text-slate-400">{companyName} · As at {new Date().toLocaleDateString()}</span>
           </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2 space-y-3">
-          <div>
-            <h2 className="text-sm font-black text-slate-900">Zone Vacancy Report</h2>
-            <p className="text-[10px] text-slate-500 mb-3">{companyName} · As at {new Date().toLocaleDateString()}</p>
-
-            {/* Summary cards */}
-            {report && (
-              <div className="grid grid-cols-4 gap-2 mb-3">
-                {[
-                  { label: 'Vacant Units',     value: report.totalVacant,     cls: 'text-amber-600' },
-                  { label: 'Total Units',      value: report.totalUnits,      cls: 'text-slate-700' },
-                  { label: 'Overall Vacancy',  value: report.totalUnits > 0 ? pct(report.totalVacant / report.totalUnits * 100) : '0%', cls: report.totalVacant / report.totalUnits > 0.3 ? 'text-red-600' : 'text-amber-600' },
-                  { label: 'Lost Rent / Mo.',  value: fmt(report.totalPotentialRent), cls: 'text-red-600' },
-                ].map(({ label, value, cls }) => (
-                  <div key={label} className="border border-slate-200 rounded-lg p-3 bg-white">
-                    <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">{label}</p>
-                    <p className={`text-sm font-black mt-0.5 ${cls}`}>{value}</p>
-                  </div>
-                ))}
+        {/* KPI Strip */}
+        {report && (
+          <div className="grid shrink-0 grid-cols-2 divide-x divide-slate-200 border-b border-slate-200 bg-white sm:grid-cols-4">
+            {[
+              { label: 'Vacant Units',    value: report.totalVacant,     cls: 'text-amber-600' },
+              { label: 'Total Units',     value: report.totalUnits,      cls: 'text-slate-800' },
+              { label: 'Overall Vacancy', value: report.totalUnits > 0 ? pct(report.totalVacant / report.totalUnits * 100) : '0%', cls: report.totalVacant / report.totalUnits > 0.3 ? 'text-red-600' : 'text-amber-600' },
+              { label: 'Lost Rent / Mo.', value: fmt(report.totalPotentialRent), cls: 'text-red-600' },
+            ].map(({ label, value, cls }) => (
+              <div key={label} className="flex flex-col items-start px-4 py-2.5">
+                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</span>
+                <span className={`mt-0.5 font-mono text-sm font-black leading-tight ${cls}`}>{value}</span>
               </div>
-            )}
+            ))}
+          </div>
+        )}
 
-            {/* Zone summary */}
-            {summary.length > 0 && (
-              <div className="border border-slate-200 rounded-lg overflow-hidden mb-3">
-                <div className="bg-slate-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-slate-600">Vacancy by Zone</div>
-                <table className="w-full text-[11px] border-collapse">
-                  <thead>
-                    <tr className="bg-[#0B3B2E] text-white">
-                      <th className="px-3 py-2 text-left font-bold border-r border-white/10">Zone</th>
-                      <th className="px-3 py-2 text-center font-bold border-r border-white/10" style={{ width: '80px' }}>Total</th>
-                      <th className="px-3 py-2 text-center font-bold border-r border-white/10" style={{ width: '80px' }}>Vacant</th>
-                      <th className="px-3 py-2 text-center font-bold border-r border-white/10" style={{ width: '90px' }}>Vacancy %</th>
-                      <th className="px-3 py-2 text-right font-bold">Lost Rent / Mo. (KES)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {summary.map((z) => (
-                      <tr key={String(z.zoneId || z.zoneName)} className="border-b border-gray-100 odd:bg-white even:bg-slate-50/50">
-                        <td className="px-3 py-1.5 border-r border-gray-100">
-                          <div className="flex items-center gap-2">
-                            <span className="inline-block h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: z.zoneColor || '#0B3B2E' }} />
-                            <span className="font-semibold text-slate-900">{z.zoneName}</span>
-                            <span className="text-[10px] text-slate-400 font-mono">{z.zoneCode}</span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-1.5 text-center border-r border-gray-100 text-slate-600">{z.totalUnits}</td>
-                        <td className="px-3 py-1.5 text-center border-r border-gray-100 font-semibold text-amber-600">{z.vacantUnits}</td>
-                        <td className={`px-3 py-1.5 text-center border-r border-gray-100 ${vacancyColor(z.vacancyRate)}`}>{pct(z.vacancyRate)}</td>
-                        <td className="px-3 py-1.5 text-right font-mono text-red-600 font-semibold">{fmt(z.potentialRent)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Vacant units detail */}
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              <table className="w-full text-[11px] border-collapse">
-                <thead>
-                  <tr className="bg-[#0B3B2E] text-white">
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Unit</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Property</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10" style={{ width: '110px' }}>Zone</th>
-                    <th className="px-3 py-2 text-center font-bold border-r border-white/10" style={{ width: '80px' }}>Type</th>
-                    <th className="px-3 py-2 text-center font-bold border-r border-white/10" style={{ width: '90px' }}>Vacant Since</th>
-                    <th className="px-3 py-2 text-center font-bold border-r border-white/10" style={{ width: '70px' }}>Days</th>
-                    <th className="px-3 py-2 text-right font-bold" style={{ width: '110px' }}>Rent / Mo. (KES)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr><td colSpan={7} className="px-3 py-8 text-center text-xs text-slate-400">Loading…</td></tr>
-                  ) : rows.length === 0 ? (
-                    <tr><td colSpan={7} className="px-3 py-8 text-center text-xs text-slate-400">No vacant units</td></tr>
-                  ) : (
-                    <>
-                      {rows.map((row) => (
-                        <tr key={String(row.unitId)} className="border-b border-gray-100 odd:bg-white even:bg-slate-50/50 hover:bg-[#EDF5F1]/70">
-                          <td className="px-3 py-1.5 border-r border-gray-100 font-mono font-semibold text-slate-700">{row.unitNumber}</td>
-                          <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">{row.propertyName}</td>
-                          <td className="px-3 py-1.5 border-r border-gray-100">
-                            <div className="flex items-center gap-1.5">
-                              <span className="inline-block h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: row.zoneColor }} />
-                              <span className="text-slate-600">{row.zoneName}</span>
-                            </div>
-                          </td>
-                          <td className="px-3 py-1.5 text-center border-r border-gray-100 text-slate-600">
-                            {UNIT_TYPE_LABELS[row.unitType] || row.unitType}
-                          </td>
-                          <td className="px-3 py-1.5 text-center border-r border-gray-100 text-slate-500">{fmtDate(row.vacantSince)}</td>
-                          <td className={`px-3 py-1.5 text-center border-r border-gray-100 font-bold ${row.daysVacant > 60 ? 'text-red-600' : row.daysVacant > 30 ? 'text-amber-600' : 'text-slate-600'}`}>
-                            {row.daysVacant}
-                          </td>
-                          <td className="px-3 py-1.5 text-right font-mono text-slate-700">{fmt(row.rent)}</td>
-                        </tr>
-                      ))}
-                      <tr className="bg-slate-100 border-t-2 border-[#0B3B2E]">
-                        <td colSpan={6} className="px-3 py-2 font-black text-slate-900">{rows.length} vacant unit{rows.length !== 1 ? 's' : ''}</td>
-                        <td className="px-3 py-2 text-right font-black text-red-600 font-mono">{fmt(filteredPotentialRent)}</td>
-                      </tr>
-                    </>
-                  )}
-                </tbody>
-              </table>
+        {/* Fixed header section */}
+        <div className="flex-none px-2 pt-2">
+          {/* Zone summary */}
+          {summary.length > 0 && (
+            <div className="border border-slate-200 rounded-lg overflow-hidden mb-2" style={{ maxHeight: '180px', display: 'flex', flexDirection: 'column' }}>
+              <div className="bg-slate-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-slate-600 shrink-0">Vacancy by Zone</div>
+              <MilikTable
+                columns={[
+                  { label: "Zone" },
+                  { label: "Total", align: "center", width: "80px" },
+                  { label: "Vacant", align: "center", width: "80px" },
+                  { label: "Vacancy %", align: "center", width: "90px" },
+                  { label: "Lost Rent / Mo. (KES)", align: "right" },
+                ]}
+                rows={summary}
+                rowKey={(z) => String(z.zoneId || z.zoneName)}
+                renderRow={(z) => (
+                  <>
+                    <td className="px-3 py-1.5 border-r border-gray-100">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: z.zoneColor || '#0B3B2E' }} />
+                        <span className="font-semibold text-slate-900">{z.zoneName}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">{z.zoneCode}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-1.5 text-center border-r border-gray-100 text-slate-600">{z.totalUnits}</td>
+                    <td className="px-3 py-1.5 text-center border-r border-gray-100 font-semibold text-amber-600">{z.vacantUnits}</td>
+                    <td className={`px-3 py-1.5 text-center border-r border-gray-100 ${vacancyColor(z.vacancyRate)}`}>{pct(z.vacancyRate)}</td>
+                    <td className="px-3 py-1.5 text-right font-mono text-red-600 font-semibold">{fmt(z.potentialRent)}</td>
+                  </>
+                )}
+              />
             </div>
+          )}
+        </div>
+
+        {/* Vacant units detail — fills remaining height */}
+        <div className="min-h-0 flex-1 overflow-hidden flex flex-col px-2 pb-2">
+          <div className="min-h-0 flex-1 overflow-hidden flex flex-col border border-gray-200 rounded-lg">
+            <MilikTable
+              columns={[
+                { label: "Unit" },
+                { label: "Property" },
+                { label: "Zone", width: "110px" },
+                { label: "Type", align: "center", width: "80px" },
+                { label: "Vacant Since", align: "center", width: "90px" },
+                { label: "Days", align: "center", width: "70px" },
+                { label: "Rent / Mo. (KES)", align: "right", width: "110px" },
+              ]}
+              rows={rows}
+              rowKey="unitId"
+              loading={loading}
+              empty="No vacant units"
+              renderFooter={rows.length > 0 ? () => (
+                <>
+                  <td colSpan={6} className="px-3 py-2 font-black text-slate-900">{rows.length} vacant unit{rows.length !== 1 ? 's' : ''}</td>
+                  <td className="px-3 py-2 text-right font-black text-red-600 font-mono">{fmt(filteredPotentialRent)}</td>
+                </>
+              ) : undefined}
+              renderRow={(row) => (
+                <>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-mono font-semibold text-slate-700">{row.unitNumber}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">{row.propertyName}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100">
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-block h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: row.zoneColor }} />
+                      <span className="text-slate-600">{row.zoneName}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-1.5 text-center border-r border-gray-100 text-slate-600">
+                    {UNIT_TYPE_LABELS[row.unitType] || row.unitType}
+                  </td>
+                  <td className="px-3 py-1.5 text-center border-r border-gray-100 text-slate-500">{fmtDate(row.vacantSince)}</td>
+                  <td className={`px-3 py-1.5 text-center border-r border-gray-100 font-bold ${row.daysVacant > 60 ? 'text-red-600' : row.daysVacant > 30 ? 'text-amber-600' : 'text-slate-600'}`}>
+                    {row.daysVacant}
+                  </td>
+                  <td className="px-3 py-1.5 text-right font-mono text-slate-700">{fmt(row.rent)}</td>
+                </>
+              )}
+            />
           </div>
         </div>
       </div>

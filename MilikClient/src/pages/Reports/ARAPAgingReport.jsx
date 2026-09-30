@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { useTerms } from "../../hooks/useTerm";
@@ -223,15 +223,6 @@ const ARAPAgingReport = () => {
     if (!printed) toast.error("Pop-ups blocked");
   }, [rows, totals, tab, asOf, currentCompany, termTenant, termProperty, termUnit, termLandlord]);
 
-  // ── KPI strip ───────────────────────────────────────────────────────────────
-  const kpiCells = useMemo(() => {
-    const bucketTotals = BUCKETS.map((b) => ({ label: b.label, value: totals[b.key] || 0 }));
-    return [
-      { label: "Total Outstanding", value: fmt(totals.total || 0), sub: "all buckets", bold: true },
-      ...bucketTotals.map((b) => ({ label: b.label, value: fmt(b.value), sub: "KES" })),
-    ];
-  }, [totals]);
-
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-[calc(100dvh-152px)] flex-col overflow-hidden">
@@ -312,19 +303,6 @@ const ARAPAgingReport = () => {
               </button>
             ))}
           </div>
-        </div>
-
-        {/* ── KPI Strip ──────────────────────────────────────────────────────── */}
-        <div className="grid shrink-0 grid-cols-6 divide-x divide-slate-200 border-b border-slate-200 bg-white">
-          {kpiCells.map(({ label, value, sub, bold }) => (
-            <div key={label} className="px-3 py-2">
-              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-              <p className={`mt-0.5 font-mono text-sm ${bold ? "font-black text-slate-800" : "font-semibold text-slate-700"}`}>
-                {value}
-              </p>
-              {sub && <p className="text-[9px] text-slate-400">{sub}</p>}
-            </div>
-          ))}
         </div>
 
         {/* ── Scrollable table ───────────────────────────────────────────────── */}
