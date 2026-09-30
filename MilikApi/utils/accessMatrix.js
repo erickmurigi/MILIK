@@ -28,7 +28,7 @@ const DEFINITIONS = [
   { resource: 'bankReconciliation',  moduleKey: 'accounts',         actions: ['view', 'process'] },
   { resource: 'paymentVouchers',     moduleKey: 'accounts',         actions: ['view', 'process', 'approve', 'reverse'] },
   { resource: 'expenses',            moduleKey: 'accounts',         actions: ['view', 'create', 'approve', 'update', 'delete'] },
-  { resource: 'pettyCash',           moduleKey: 'accounts',         actions: ['view', 'create', 'approve'] },
+  { resource: 'pettyCash',           moduleKey: 'accounts',         actions: ['view', 'create', 'approve', 'reverse'] },
   { resource: 'budgets',             moduleKey: 'accounts',         actions: ['view', 'create', 'approve'] },
   { resource: 'fixedAssets',         moduleKey: 'accounts',         actions: ['view', 'create', 'depreciate'] },
   { resource: 'creditorLedger',      moduleKey: 'accounts',         actions: ['view'] },
@@ -37,6 +37,9 @@ const DEFINITIONS = [
   { resource: 'standingOrders',      moduleKey: 'accounts',         actions: ['view', 'create'] },
   { resource: 'landlordReceipts',    moduleKey: 'accounts',         actions: ['view', 'create', 'reverse'] },
   { resource: 'landlordPayments',    moduleKey: 'propertyManagement', actions: ['view', 'process', 'export'] },
+  { resource: 'ledger',              moduleKey: 'accounts',         actions: ['view', 'repair'] },
+  { resource: 'accountingPeriods',   moduleKey: 'accounts',         actions: ['view', 'create', 'update', 'close', 'lock'] },
+  { resource: 'taxRemittance',       moduleKey: 'accounts',         actions: ['view', 'process', 'reverse'] },
 
   // ─── PM Reports ──────────────────────────────────────────────────────────
   { resource: 'pmReports',           moduleKey: 'propertyManagement', actions: ['view', 'export'] },
@@ -52,6 +55,9 @@ const DEFINITIONS = [
   { resource: 'meterReadings',    moduleKey: 'propertyManagement',  actions: ['view', 'create'] },
   { resource: 'latePenalties',    moduleKey: 'propertyManagement',  actions: ['view', 'process'] },
   { resource: 'propertyExpenses', moduleKey: 'propertyManagement',  actions: ['view', 'create', 'update', 'delete'] },
+  { resource: 'zones',            moduleKey: 'propertyManagement',  actions: ['view', 'create', 'update', 'delete'] },
+  { resource: 'mpesaCollections', moduleKey: 'propertyManagement',  actions: ['view', 'create', 'delete'] },
+  { resource: 'coopCollections',  moduleKey: 'propertyManagement',  actions: ['view', 'create', 'delete'] },
 
   // ─── Property Sales ───────────────────────────────────────────────────────
   { resource: 'saleListings',     moduleKey: 'propertySale',        actions: ['view', 'create', 'update', 'delete'] },

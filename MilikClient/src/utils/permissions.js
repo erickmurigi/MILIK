@@ -1,21 +1,50 @@
 import { LEGACY_PERMISSION_ALIASES } from './accessMatrix';
 
+// Kept in lockstep with MilikApi/utils/permissionControl.js's ACTION_ALIASES —
+// both sides must normalize the same raw action word to the same canonical
+// action, or a permission granted on one side can silently fail on the other.
+const ACTION_ALIASES = {
+  read: 'view',
+  list: 'view',
+  get: 'view',
+  open: 'view',
+  create: 'create',
+  add: 'create',
+  new: 'create',
+  import: 'create',
+  edit: 'update',
+  update: 'update',
+  modify: 'update',
+  status: 'update',
+  lock: 'lock',
+  unlock: 'lock',
+  remove: 'delete',
+  delete: 'delete',
+  void: 'delete',
+  confirm: 'process',
+  unconfirm: 'reverse',
+  process: 'process',
+  post: 'process',
+  bill: 'process',
+  preview: 'view',
+  approve: 'approve',
+  send: 'send',
+  revise: 'update',
+  validate: 'view',
+  reverse: 'reverse',
+  cancelreversal: 'reverse',
+  pay: 'process',
+  receipt: 'process',
+  export: 'export',
+  pdf: 'export',
+  print: 'export',
+  report: 'view',
+  reclassify: 'update',
+};
+
 export const normalizeAction = (action = 'view') => {
   const text = String(action || 'view').toLowerCase();
-  const aliases = {
-    read: 'view',
-    list: 'view',
-    add: 'create',
-    edit: 'update',
-    remove: 'delete',
-    confirm: 'process',
-    reverse: 'reverse',
-    post: 'process',
-    pdf: 'export',
-    print: 'export',
-    unlock: 'lock',
-  };
-  return aliases[text] || text;
+  return ACTION_ALIASES[text] || text;
 };
 
 const resolveCompanyId = (company) => String(company?._id || company || '');

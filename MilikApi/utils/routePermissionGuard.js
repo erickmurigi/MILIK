@@ -34,6 +34,17 @@ const RULES = [
   { prefix: "/api/meter-readings", resource: "meterReadings", moduleKey: "propertyManagement" },
   { prefix: "/api/late-penalties", resource: "latePenalties", moduleKey: "propertyManagement" },
   { prefix: "/api/notifications", resource: "notifications", moduleKey: "propertyManagement" },
+  { prefix: "/api/zones", resource: "zones", moduleKey: "propertyManagement" },
+  { prefix: "/api/mpesa-collections", resource: "mpesaCollections", moduleKey: "propertyManagement" },
+  { prefix: "/api/coop-collections", resource: "coopCollections", moduleKey: "propertyManagement" },
+  { prefix: "/api/dashboard", resource: "dashboard", moduleKey: null },
+  { prefix: "/api/petty-cash", resource: "pettyCash", moduleKey: "accounts" },
+  { prefix: "/api/accounting-periods", resource: "accountingPeriods", moduleKey: "accounts" },
+  { prefix: "/api/bank-reconciliation", resource: "bankReconciliation", moduleKey: "accounts" },
+  { prefix: "/api/fixed-assets", resource: "fixedAssets", moduleKey: "accounts" },
+  { prefix: "/api/budgets", resource: "budgets", moduleKey: "accounts" },
+  { prefix: "/api/vat-remittance", resource: "taxRemittance", moduleKey: "accounts" },
+  { prefix: "/api/wht-remittance", resource: "taxRemittance", moduleKey: "accounts" },
   { prefix: "/api/clients/contracts",    resource: "clientContracts",    moduleKey: "clients" },
   { prefix: "/api/clients/invoices",     resource: "clientInvoices",     moduleKey: "clients" },
   { prefix: "/api/clients/interactions", resource: "clientInteractions", moduleKey: "clients" },
@@ -90,6 +101,13 @@ const resolveAction = (method = "GET", path = "") => {
   if (lowerPath.includes("/revise")) return "update";
   if (lowerPath.includes("/validate")) return "view";
   if (lowerPath.includes("/bulk-import")) return "create";
+  if (lowerPath.includes("/batch-delete")) return "delete";
+  if (lowerPath.includes("/repair")) return "repair";
+  if (lowerPath.includes("/void")) return "reverse";
+  if (lowerPath.includes("/remit")) return "process";
+  if (lowerPath.includes("/reopen")) return "reverse";
+  if (lowerPath.includes("/close")) return "close";
+  if (lowerPath.includes("/lock")) return "lock";
 
   if (method === "GET") return lowerPath.includes("/summary") || lowerPath.includes("/stats") ? "view" : "view";
   if (method === "POST") return "create";
