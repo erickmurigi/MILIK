@@ -691,7 +691,7 @@ export default function EmployeeProfile() {
                     <button
                       onClick={saveEssAccess}
                       disabled={essSaving}
-                      className="rounded-lg bg-[#027333] px-4 py-1.5 text-xs font-bold text-white hover:bg-[#0c5d2b] disabled:opacity-60"
+                      className="rounded-lg bg-[#0B3B2E] px-4 py-1.5 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-60"
                     >
                       {essSaving ? 'Saving…' : 'Save'}
                     </button>
@@ -701,7 +701,7 @@ export default function EmployeeProfile() {
                         onClick={sendEssInvite}
                         disabled={essInviting || !essForm.password}
                         title={!essForm.password ? 'Enter a password above to include in the invite' : 'Resend invite email with a new password'}
-                        className="rounded-lg border border-[#027333] px-4 py-1.5 text-xs font-bold text-[#027333] hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="rounded-lg border border-[#0B3B2E] px-4 py-1.5 text-xs font-bold text-[#0B3B2E] hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {essInviting ? 'Sending…' : 'Resend Invite'}
                       </button>

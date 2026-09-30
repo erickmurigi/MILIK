@@ -112,7 +112,7 @@ function DealFormModal({ editingId, initial, saving, listingFormOptions, buyerOp
       footer={
         <>
           <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button type="button" onClick={() => onSubmit(form)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+          <button type="button" onClick={() => onSubmit(form)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
             {saving ? "Saving…" : editingId ? `Update ${T.saleDeal}` : `Create ${T.saleDeal}`}
           </button>
         </>
@@ -229,7 +229,7 @@ function CloseDealModal({ deal, cashbookOptions, actionKey, onClose, onConfirm }
       footer={
         <>
           <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button type="button" onClick={() => onConfirm(closeForm)} disabled={!!actionKey} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+          <button type="button" onClick={() => onConfirm(closeForm)} disabled={!!actionKey} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
             <FaCheck className="inline mr-1 text-[9px]" />{actionKey ? "Closing…" : "Confirm Close"}
           </button>
         </>
@@ -284,7 +284,7 @@ function RecordPaymentModal({ deal, saving, cashbookOptions, onClose, onSubmit }
       footer={
         <>
           <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button type="button" onClick={() => onSubmit(payForm)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+          <button type="button" onClick={() => onSubmit(payForm)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
             {saving ? "Saving…" : "Record & Print Receipt"}
           </button>
         </>
@@ -379,7 +379,7 @@ function ScheduleBuilderModal({ initialItems, agreedPrice, saving, onClose, onSa
       footer={
         <>
           <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button type="button" onClick={() => onSave(scheduleItems)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+          <button type="button" onClick={() => onSave(scheduleItems)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
             {saving ? "Saving…" : "Save Schedule"}
           </button>
         </>

@@ -114,7 +114,7 @@ export default function HRReportAttendance() {
             />
             <button
               onClick={() => setCommitted({ month, year })}
-              className="flex h-7 shrink-0 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0a2e23]"
+              className="flex h-7 shrink-0 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]"
             >
               <FaChartBar size={9} /> Generate
             </button>

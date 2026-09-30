@@ -98,7 +98,7 @@ export default function EmailSendModal({ title, defaultEmail = '', onSend, onClo
               <button
                 type="submit"
                 disabled={sending || !email.trim()}
-                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#0B3B2E] py-2 text-xs font-black text-white hover:bg-[#0a2e23] disabled:opacity-40"
+                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#0B3B2E] py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-40"
               >
                 <FaPaperPlane size={9} />
                 {sending ? 'Sending…' : 'Send Email'}

@@ -149,7 +149,7 @@ function AdjustModal({ payslip, onClose, onSaved }) {
 
         <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50 px-5 py-3">
           <button onClick={onClose} className="h-7 rounded border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
-          <button onClick={handleSave} disabled={saving} className="h-7 rounded bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0a2e23] disabled:opacity-60">
+          <button onClick={handleSave} disabled={saving} className="h-7 rounded bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-60">
             {saving ? 'Saving…' : 'Save Adjustment'}
           </button>
         </div>
@@ -314,7 +314,7 @@ export default function PayrollPeriodDetail() {
                   </button>
                 )}
                 {canManagePayroll && isDraft && (
-                  <button onClick={runPayroll} disabled={running} className="print-hide inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23] disabled:opacity-50">
+                  <button onClick={runPayroll} disabled={running} className="print-hide inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-50">
                     <FaPlay size={9} /> {running ? 'Running…' : period.employeeCount > 0 ? 'Re-run Payroll' : 'Run Payroll'}
                   </button>
                 )}

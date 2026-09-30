@@ -834,7 +834,7 @@ const BatchReceipts = () => {
           <button
             onClick={handlePost}
             disabled={submitting || selectedCount === 0 || (!shared.paidDirectToLandlord && !shared.cashbook)}
-            className="flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-6 py-2 text-[13px] font-black text-white shadow hover:bg-[#0d4a38] disabled:cursor-not-allowed disabled:opacity-40 transition"
+            className="flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-6 py-2 text-[13px] font-black text-white shadow hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-40 transition"
           >
             {submitting
               ? <><Spinner size="sm" /> Posting…</>

@@ -1818,7 +1818,7 @@ const Statements = () => {
                 type="button"
                 onClick={() => loadDraftWorkspace({ refresh: true })}
                 disabled={!canCreateStatement || !selectedPropertyId || loadingDraft || loadingProcessedContext || !hasValidPeriodSelection}
-                className="inline-flex h-7 items-center justify-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 text-[11px] font-bold text-white shadow-sm transition-colors hover:bg-[#0a3228] disabled:cursor-not-allowed disabled:opacity-55"
+                className="inline-flex h-7 items-center justify-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 text-[11px] font-bold text-white shadow-sm transition-colors hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-55"
               >
                 <FaSyncAlt className={loadingDraft ? "animate-spin" : ""} size={11} />
                 {loadingDraft ? "Loading…" : loadingProcessedContext ? "Checking…" : "Generate"}
@@ -1915,7 +1915,7 @@ const Statements = () => {
                   !canApproveStatement ? "You do not have permission to process statements" :
                   "Finalise and post this statement to the landlord account"
                 }
-                className="inline-flex h-7 items-center gap-1.5 rounded-md bg-[#0B3B2E] px-4 text-[11px] font-bold text-white shadow-sm transition-colors hover:bg-[#0a3228] disabled:cursor-not-allowed disabled:opacity-35"
+                className="inline-flex h-7 items-center gap-1.5 rounded-md bg-[#0B3B2E] px-4 text-[11px] font-bold text-white shadow-sm transition-colors hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-35"
               >
                 <FaFileAlt size={9} />
                 {processing ? "Processing…" : "Process"}
@@ -2683,7 +2683,7 @@ const Statements = () => {
                           type="button"
                           onClick={handleSaveNotes}
                           disabled={savingNotes || !draftStatement?._id}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-[#0B3B2E] bg-[#0B3B2E] px-3 py-1 text-[10px] font-semibold text-white transition-colors hover:bg-[#0a3328] disabled:opacity-40"
+                          className="inline-flex items-center gap-1.5 rounded-md border border-[#0B3B2E] bg-[#0B3B2E] px-3 py-1 text-[10px] font-semibold text-white transition-colors hover:bg-[#0A3127] disabled:opacity-40"
                         >
                           {savingNotes ? "Saving…" : "Save Notes"}
                         </button>

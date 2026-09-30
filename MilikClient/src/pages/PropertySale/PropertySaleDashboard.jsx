@@ -112,7 +112,7 @@ const PropertySaleDashboard = () => {
           <button
             type="button"
             onClick={() => navigate("/sale/listings")}
-            className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
+            className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]"
           >
             <FaPlus size={9} /> New {T.saleListing}
           </button>

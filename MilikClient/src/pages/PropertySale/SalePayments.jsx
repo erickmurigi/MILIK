@@ -115,7 +115,7 @@ function EditPaymentModal({ target, cashbookOptions, hasCashbooks, saving, onClo
       footer={
         <>
           <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button type="button" onClick={() => onSubmit(editForm)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+          <button type="button" onClick={() => onSubmit(editForm)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
             {saving ? "Saving…" : "Save Changes"}
           </button>
         </>
@@ -178,7 +178,7 @@ function RecordPaymentModal({ deals, activeDealOptions, cashbookOptions, hasCash
       footer={
         <>
           <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button type="button" onClick={() => onSubmit(form)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+          <button type="button" onClick={() => onSubmit(form)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
             {saving ? "Saving…" : "Record Payment"}
           </button>
         </>
@@ -475,7 +475,7 @@ const SalePayments = () => {
             <button
               type="button"
               onClick={() => setShowCreate(true)}
-              className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
+              className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]"
             >
               <FaPlus size={9} /> Record Payment
             </button>

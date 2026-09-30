@@ -97,7 +97,7 @@ const AddClientModal = ({ onClose, onCreated }) => {
             type="button"
             onClick={handleSubmit}
             disabled={saving}
-            className="bg-[#0B3B2E] text-white hover:bg-[#027333] px-4 py-2 rounded-md text-sm font-semibold disabled:opacity-50"
+            className="bg-[#0B3B2E] text-white hover:bg-[#0A3127] px-4 py-2 rounded-md text-sm font-semibold disabled:opacity-50"
           >
             {saving ? 'Saving…' : 'Create Client'}
           </button>
@@ -231,7 +231,7 @@ const ClientsList = () => {
         <button
           type="button"
           onClick={() => setShowAddModal(true)}
-          className="inline-flex h-7 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#027333]"
+          className="inline-flex h-7 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]"
         >
           <FaPlus size={9} /> Add Client
         </button>

@@ -96,7 +96,7 @@ export default function SaleGenerateUnitsModal({ project, propertyTypeOptions, a
       footer={
         <>
           <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button type="button" onClick={handleSave} disabled={saving || !preview.ok} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+          <button type="button" onClick={handleSave} disabled={saving || !preview.ok} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
             {saving ? "Generating…" : preview.ok ? `Generate ${preview.count}` : "Generate"}
           </button>
         </>

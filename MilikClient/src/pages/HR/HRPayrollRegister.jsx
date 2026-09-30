@@ -136,7 +136,7 @@ export default function HRPayrollRegister() {
                   <button onClick={() => setShowEmail(true)} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 print-hide">
                     <FaEnvelope size={9} /> Email
                   </button>
-                  <button onClick={printRegister} className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23] print-hide">
+                  <button onClick={printRegister} className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0A3127] print-hide">
                     <FaPrint size={9} /> Print Register
                   </button>
                 </>

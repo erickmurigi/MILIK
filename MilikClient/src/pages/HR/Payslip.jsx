@@ -108,7 +108,7 @@ export default function Payslip() {
               >
                 <FaEnvelope size={9} /> Email
               </button>
-              <button onClick={printPayslip} className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23]">
+              <button onClick={printPayslip} className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0A3127]">
                 <FaPrint size={9} /> Print Payslip
               </button>
             </div>

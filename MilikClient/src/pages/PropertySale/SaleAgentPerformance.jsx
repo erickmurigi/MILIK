@@ -170,7 +170,7 @@ const SaleAgentPerformance = () => {
     <div className="min-h-screen bg-slate-100 p-6 print:bg-white print:p-0">
       <div id="sale-print-toolbar" className="mx-auto mb-4 flex max-w-[860px] items-center justify-between gap-3 print:hidden">
         <button onClick={() => navigate("/sale/agents")} className="border border-slate-300 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">← Back to {T.saleAgents}</button>
-        <button onClick={() => printPerformance(company, { agent, deals, commissions, totalCommEarned, totalCommPending, totalDealsValue, closedDeals, activeDeals, truncated }, T)} className="bg-[#0B3B2E] px-5 py-1.5 text-xs font-black text-white hover:bg-[#07271e]">Print / Save PDF</button>
+        <button onClick={() => printPerformance(company, { agent, deals, commissions, totalCommEarned, totalCommPending, totalDealsValue, closedDeals, activeDeals, truncated }, T)} className="bg-[#0B3B2E] px-5 py-1.5 text-xs font-black text-white hover:bg-[#0A3127]">Print / Save PDF</button>
       </div>
 
       <div id="sale-print-root" className="mx-auto max-w-[860px] bg-white shadow-lg print:shadow-none">

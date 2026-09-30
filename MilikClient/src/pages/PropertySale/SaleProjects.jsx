@@ -230,7 +230,7 @@ const SaleProjects = () => {
             <button
               type="button"
               onClick={() => setFormModal({ project: null })}
-              className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
+              className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]"
             >
               <FaPlus size={9} /> New {T.saleProject}
             </button>
@@ -258,7 +258,7 @@ const SaleProjects = () => {
             <button
               type="button"
               onClick={() => setFormModal({ project: null })}
-              className="mt-1 inline-flex items-center gap-1 bg-[#0B3B2E] px-4 py-1.5 text-xs font-bold text-white hover:bg-[#07271e]"
+              className="mt-1 inline-flex items-center gap-1 bg-[#0B3B2E] px-4 py-1.5 text-xs font-bold text-white hover:bg-[#0A3127]"
             >
               <FaPlus size={9} /> New {T.saleProject}
             </button>

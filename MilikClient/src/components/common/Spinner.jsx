@@ -16,7 +16,7 @@ const Spinner = ({ size = "md", className = "" }) => {
           className="absolute inset-0 animate-spin"
           style={{
             border: `${bw}px solid #e2e8f0`,
-            borderTopColor:   "#027333",
+            borderTopColor:   "#0A3127",
             borderRightColor: "#0B3B2E",
             animationDuration: "0.9s",
           }}
@@ -26,7 +26,7 @@ const Spinner = ({ size = "md", className = "" }) => {
           style={{
             inset,
             border: `${ibw}px solid #e2e8f0`,
-            borderBottomColor: "#027333",
+            borderBottomColor: "#0A3127",
             borderLeftColor:   "#0B3B2E",
             animationDuration:      "0.6s",
             animationDirection:     "reverse",

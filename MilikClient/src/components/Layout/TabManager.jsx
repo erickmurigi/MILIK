@@ -404,7 +404,7 @@ const TabManager = ({ darkMode }) => {
   return (
     <div
       className={`relative flex items-center border-b shadow-lg overflow-hidden ${
-        darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#31694E] border-[#1f4a35]'
+        darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#0B3B2E] border-[#0B3B2E]'
       }`}
     >
       {scrollState.left && (

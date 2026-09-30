@@ -12,7 +12,7 @@ const STATUS_BADGE = {
 
 function ScoreBar({ score, maxScore }) {
   const pct = maxScore > 0 ? Math.min((score / maxScore) * 100, 100) : 0;
-  const color = pct >= 80 ? '#027333' : pct >= 60 ? '#d97706' : '#dc2626';
+  const color = pct >= 80 ? '#0B3B2E' : pct >= 60 ? '#d97706' : '#dc2626';
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
       <div style={{ flex: 1, height: 6, borderRadius: 3, background: '#e5e7eb', overflow: 'hidden' }}>
@@ -25,7 +25,7 @@ function ScoreBar({ score, maxScore }) {
 
 function AppraisalModal({ appraisal, onClose }) {
   const overallPct = appraisal.overallScore ?? 0;
-  const color = overallPct >= 80 ? '#027333' : overallPct >= 60 ? '#d97706' : '#dc2626';
+  const color = overallPct >= 80 ? '#0B3B2E' : overallPct >= 60 ? '#d97706' : '#dc2626';
   const badge = STATUS_BADGE[appraisal.status] || { cls: 'ess-badge', label: appraisal.status };
 
   return (
@@ -138,7 +138,7 @@ export default function ESSAppraisals() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {appraisals.map((a) => {
               const pct   = a.overallScore ?? 0;
-              const color = pct >= 80 ? '#027333' : pct >= 60 ? '#d97706' : '#dc2626';
+              const color = pct >= 80 ? '#0B3B2E' : pct >= 60 ? '#d97706' : '#dc2626';
               const badge = STATUS_BADGE[a.status] || { cls: 'ess-badge', label: a.status };
               return (
                 <div

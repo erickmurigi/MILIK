@@ -54,7 +54,7 @@ const PAYOUT_METHOD_OPTIONS = PAYOUT_METHODS.map((m) => ({ value: m, label: fmtL
 // Module scope so MilikTable's React.memo isn't defeated by a fresh function identity each parent render.
 const renderCommissionRow = (c) => (
   <>
-    <td className="px-3 py-1.5 font-mono font-black text-[#027333] border-r border-gray-100">{c.commissionNumber}</td>
+    <td className="px-3 py-1.5 font-mono font-black text-[#0B3B2E] border-r border-gray-100">{c.commissionNumber}</td>
     <td className="px-3 py-1.5 font-bold text-slate-800 border-r border-gray-100">
       {c.agent?.fullName || "—"}
       {c.splits?.length > 0 && (
@@ -63,7 +63,7 @@ const renderCommissionRow = (c) => (
     </td>
     <td className="px-3 py-1.5 font-mono font-black text-slate-700 border-r border-gray-100">{c.deal?.dealNumber || "—"}</td>
     <td className="max-w-[140px] truncate px-3 py-1.5 text-slate-500 border-r border-gray-100">{c.deal?.listing?.title || c.deal?.listing?.listingNumber || "—"}</td>
-    <td className="px-3 py-1.5 font-black text-[#027333] border-r border-gray-100">
+    <td className="px-3 py-1.5 font-black text-[#0B3B2E] border-r border-gray-100">
       {c.commissionRate}{c.commissionType === "percentage" ? "%" : " KES"}
     </td>
     <td className="px-3 py-1.5 border-r border-gray-100 text-right font-mono font-black tabular-nums text-slate-900">{fmtKES(c.commissionAmount)}</td>
@@ -90,7 +90,7 @@ function PayoutModal({ commission, cashbookOptions, saving, onClose, onSubmit })
       footer={
         <>
           <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button type="button" onClick={() => onSubmit(payoutForm)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+          <button type="button" onClick={() => onSubmit(payoutForm)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
             {saving ? "Saving…" : "Confirm Payout"}
           </button>
         </>
@@ -417,7 +417,7 @@ const SaleCommissions = () => {
             onClick={resetFilters}
             className={`shrink-0 inline-flex h-7 items-center gap-1 border px-2.5 text-xs font-bold transition-colors ${
               activeFilterCount > 0
-                ? "border-[#0B3B2E] bg-[#0B3B2E] text-white hover:bg-[#07271e]"
+                ? "border-[#0B3B2E] bg-[#0B3B2E] text-white hover:bg-[#0A3127]"
                 : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
             }`}
           >

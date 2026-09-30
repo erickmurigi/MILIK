@@ -195,19 +195,19 @@ const ExpenseModal = ({ open, editing, properties, units, businessId, onClose, o
             <div>
               <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">Amount (KES) <span className="text-red-500">*</span></label>
               <input type="number" min="0.01" step="0.01" value={form.amount} onChange={set('amount')} required placeholder="0.00"
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#31694E] focus:outline-none focus:ring-1 focus:ring-[#31694E]" />
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
             </div>
 
             <div className="col-span-2">
               <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">Description <span className="text-red-500">*</span></label>
               <input type="text" value={form.description} onChange={set('description')} required placeholder="What was this expense for?"
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#31694E] focus:outline-none focus:ring-1 focus:ring-[#31694E]" />
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
             </div>
 
             <div>
               <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">Date <span className="text-red-500">*</span></label>
               <input type="date" value={form.date} onChange={set('date')} required
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#31694E] focus:outline-none focus:ring-1 focus:ring-[#31694E]" />
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
             </div>
 
             <div>
@@ -239,13 +239,13 @@ const ExpenseModal = ({ open, editing, properties, units, businessId, onClose, o
             <div>
               <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">{termReceipt} / Ref No.</label>
               <input type="text" value={form.receiptNumber} onChange={set('receiptNumber')} placeholder="Optional"
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#31694E] focus:outline-none focus:ring-1 focus:ring-[#31694E]" />
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
             </div>
 
             <div>
               <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">Paid By</label>
               <input type="text" value={form.paidBy} onChange={set('paidBy')} placeholder="Name or account"
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#31694E] focus:outline-none focus:ring-1 focus:ring-[#31694E]" />
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
             </div>
           </div>
 
@@ -255,7 +255,7 @@ const ExpenseModal = ({ open, editing, properties, units, businessId, onClose, o
               Cancel
             </button>
             <button type="submit" disabled={saving}
-              className="rounded-lg bg-[#31694E] px-5 py-2 text-xs font-extrabold text-white hover:bg-[#1f4a35] transition disabled:opacity-50">
+              className="rounded-lg bg-[#0B3B2E] px-5 py-2 text-xs font-extrabold text-white hover:bg-[#0A3127] transition disabled:opacity-50">
               {saving ? 'Saving…' : editing ? 'Update Expense' : 'Record Expense'}
             </button>
           </div>

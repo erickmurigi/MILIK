@@ -1766,7 +1766,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
               <button onClick={() => setShowSmsModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `SMS ${selectedIds.length} ${selectedIds.length !== 1 ? termReceipts : termReceipt}` : `Select ${termReceipts.toLowerCase()} to SMS`} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white bg-teal-600 hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"><FaSms size={7} /> SMS</button>
               <button onClick={() => setShowEmailModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `Email ${selectedIds.length} ${selectedIds.length !== 1 ? termReceipts : termReceipt}` : `Select ${termReceipts.toLowerCase()} to email`} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white bg-blue-600 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><FaEnvelope size={7} /> Email</button>
               {canCreateReceipt && !isLandlordReceiptView && (
-                <button onClick={() => navigate("/receipts/batch")} title="Batch Receipt Entry" className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-1.5 text-[9px] text-white hover:bg-[#0d4a38]">
+                <button onClick={() => navigate("/receipts/batch")} title="Batch Receipt Entry" className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-1.5 text-[9px] text-white hover:bg-[#0A3127]">
                   <FaListAlt size={7} /> Batch
                 </button>
               )}
@@ -1835,7 +1835,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
               renderActions={(receipt) => (
                 <div className="flex items-center justify-end gap-1">
                   <button onClick={() => openView(receipt)} className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700" title="View"><FaEye size={11} /></button>
-                  {!receipt.isReversed && <button onClick={() => openAllocationDrawer(receipt)} className="px-2 py-1 rounded bg-[#0B3B2E] hover:bg-[#07271e] text-white" title="Allocate to Invoices"><FaListAlt size={11} /></button>}
+                  {!receipt.isReversed && <button onClick={() => openAllocationDrawer(receipt)} className="px-2 py-1 rounded bg-[#0B3B2E] hover:bg-[#0A3127] text-white" title="Allocate to Invoices"><FaListAlt size={11} /></button>}
                   {!receipt.isConfirmed && !receipt.isReversed && <button onClick={() => openEditForm(receipt)} className="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white" title="Edit"><FaEdit size={11} /></button>}
                   {!receipt.isConfirmed && <button onClick={() => handleConfirmOne(receipt)} className="px-2 py-1 rounded bg-green-600 hover:bg-green-700 text-white" title="Confirm"><FaCheck size={11} /></button>}
                   {canExportReceipt && <button onClick={() => handlePrintReceipt(receipt)} className="px-2 py-1 rounded bg-purple-600 hover:bg-purple-700 text-white" title="Print Receipt"><FaPrint size={11} /></button>}

@@ -104,7 +104,7 @@ export default function SaleProjectPanel({ project, onClose, onOpen, onEdit, onC
         <button
           type="button"
           onClick={() => onOpen(project)}
-          className="inline-flex items-center gap-1 bg-[#0B3B2E] px-3 py-1 text-[11px] font-bold text-white hover:bg-[#07271e]"
+          className="inline-flex items-center gap-1 bg-[#0B3B2E] px-3 py-1 text-[11px] font-bold text-white hover:bg-[#0A3127]"
         >
           <FaExternalLinkAlt size={9} /> Open {T.saleProject}
         </button>

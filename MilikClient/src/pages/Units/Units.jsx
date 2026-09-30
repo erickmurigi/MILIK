@@ -1450,7 +1450,7 @@ const Units = () => {
                   <button
                     type="submit"
                     form="unitForm"
-                    className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white transition-colors hover:bg-[#0d5442] disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white transition-colors hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <FaSave /> Save {termUnit}
                   </button>

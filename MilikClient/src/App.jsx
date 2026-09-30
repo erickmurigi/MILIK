@@ -24,11 +24,11 @@ const PageLoader = () => (
       <div className="relative h-10 w-10">
         <div
           className="absolute inset-0 animate-spin"
-          style={{ border: "3px solid #e2e8f0", borderTopColor: "#027333", borderRightColor: "#0B3B2E", animationDuration: "0.9s" }}
+          style={{ border: "3px solid #e2e8f0", borderTopColor: "#0A3127", borderRightColor: "#0B3B2E", animationDuration: "0.9s" }}
         />
         <div
           className="absolute inset-[9px] animate-spin"
-          style={{ border: "2px solid #e2e8f0", borderBottomColor: "#027333", borderLeftColor: "#0B3B2E", animationDuration: "0.6s", animationDirection: "reverse" }}
+          style={{ border: "2px solid #e2e8f0", borderBottomColor: "#0A3127", borderLeftColor: "#0B3B2E", animationDuration: "0.6s", animationDirection: "reverse" }}
         />
       </div>
       <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">MILIK</span>

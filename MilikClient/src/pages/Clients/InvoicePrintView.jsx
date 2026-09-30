@@ -86,7 +86,7 @@ const InvoicePrintView = () => {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-[#027333]" />
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-[#0B3B2E]" />
           <span className="text-xs font-semibold text-slate-400 tracking-widest uppercase">Loading Invoice</span>
         </div>
       </div>

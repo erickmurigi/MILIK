@@ -125,7 +125,7 @@ export default function HRReportHeadcount() {
               <button onClick={load} className="flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50">
                 <FaRedoAlt size={10} />
               </button>
-              <button onClick={handlePrint} className="flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23]">
+              <button onClick={handlePrint} className="flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0A3127]">
                 <FaPrint size={10} /> Print Report
               </button>
             </div>

@@ -3145,7 +3145,7 @@ const TenantStatement = () => {
               <button onClick={() => navigate(`/receipts/${tenantId}`)} className="h-6 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2 text-[9px] font-black text-white shadow-sm hover:bg-[#e67e00] active:scale-95 transition-all">
                 <FaMoneyBillWave size={9} /> Receipts
               </button>
-              <button onClick={handlePrint} className="h-6 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2 text-[9px] font-black text-white shadow-sm hover:bg-[#0d4a39] active:scale-95 transition-all">
+              <button onClick={handlePrint} className="h-6 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2 text-[9px] font-black text-white shadow-sm hover:bg-[#0A3127] active:scale-95 transition-all">
                 <FaPrint size={9} /> Print
               </button>
               <button onClick={handleDownload} className="h-6 shrink-0 flex items-center gap-1 rounded bg-slate-600 px-2 text-[9px] font-black text-white shadow-sm hover:bg-slate-700 active:scale-95 transition-all">

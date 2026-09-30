@@ -79,7 +79,7 @@ const TargetBar = ({ label, actual, target, format }) => {
 };
 
 const btn = "inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-50 disabled:cursor-not-allowed";
-const btnPrimary = "inline-flex items-center gap-1 bg-[#0B3B2E] px-3 py-1 text-[11px] font-bold text-white hover:bg-[#07271e] disabled:opacity-50 disabled:cursor-not-allowed";
+const btnPrimary = "inline-flex items-center gap-1 bg-[#0B3B2E] px-3 py-1 text-[11px] font-bold text-white hover:bg-[#0A3127] disabled:opacity-50 disabled:cursor-not-allowed";
 
 const SaleProjectDetail = () => {
   const { id } = useParams();

@@ -101,7 +101,7 @@ export default function HRReportPayroll() {
                 <FaRedoAlt size={10} />
               </button>
               {months.length > 0 && (
-                <button onClick={handlePrint} className="flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23]">
+                <button onClick={handlePrint} className="flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0A3127]">
                   <FaPrint size={10} /> Print
                 </button>
               )}

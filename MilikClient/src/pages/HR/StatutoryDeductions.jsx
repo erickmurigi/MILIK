@@ -178,7 +178,7 @@ export default function StatutoryDeductions() {
                 <FaRedoAlt size={9} />
               </button>
               {dirty && (
-                <button onClick={handleSave} disabled={saving} className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23] disabled:opacity-60">
+                <button onClick={handleSave} disabled={saving} className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
                   <FaSave size={9} /> {saving ? 'Saving…' : 'Save Changes'}
                 </button>
               )}

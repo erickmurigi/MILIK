@@ -660,7 +660,7 @@ const SmsManager = () => {
                     <button
                       onClick={e => { e.stopPropagation(); handleResend(log._id); }}
                       disabled={resendingId === log._id}
-                      className="inline-flex items-center gap-1.5 border border-[#31694E] bg-[#ECF6F1] px-3 py-1.5 text-[10px] font-bold text-[#1f4a35] transition hover:bg-[#d4ede2] disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 border border-[#0B3B2E] bg-[#ECF6F1] px-3 py-1.5 text-[10px] font-bold text-[#0B3B2E] transition hover:bg-[#d4ede2] disabled:opacity-50"
                     >
                       {resendingId === log._id ? <Spinner size="sm" /> : <FaRedo size={9} />}
                       {resendingId === log._id ? "Resending…" : "Resend"}

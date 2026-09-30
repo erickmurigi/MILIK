@@ -93,7 +93,7 @@ export default function SaleListingFormModal({ initialEditingId, initialForm, li
             {justCreated ? "Done" : "Cancel"}
           </button>
           {!justCreated && (
-            <button type="button" onClick={handleSave} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+            <button type="button" onClick={handleSave} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
               {saving ? "Saving…" : editingId ? `Update ${T.saleListing}` : `Save ${T.saleListing}`}
             </button>
           )}

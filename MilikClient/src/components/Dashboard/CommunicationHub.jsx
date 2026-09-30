@@ -83,13 +83,13 @@ const CommunicationHub = ({ darkMode }) => {
   return (
     <div
       className={`dashboard-panel rounded-xl shadow-md border p-4 ${
-        darkMode ? "bg-gray-800 border-gray-700" : "bg-[#f8faf9] border-[#31694E]/10"
+        darkMode ? "bg-gray-800 border-gray-700" : "bg-[#f8faf9] border-[#0B3B2E]/10"
       }`}
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
-          <h3 className={`font-extrabold text-sm tracking-tight uppercase ${darkMode ? "text-white" : "text-[#1f4a35]"}`}>
+          <h3 className={`font-extrabold text-sm tracking-tight uppercase ${darkMode ? "text-white" : "text-[#0B3B2E]"}`}>
             Communications
           </h3>
           <p className={`mt-1 text-xs font-medium ${darkMode ? "text-gray-400" : "text-gray-600"}`}>

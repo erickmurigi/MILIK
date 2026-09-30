@@ -42,8 +42,8 @@ const CompanyAvatar = ({ logo, name, darkMode, size = "h-11 w-11" }) => {
     <div
       className={`${size} rounded-2xl flex items-center justify-center shadow-sm ${
         darkMode
-          ? "bg-gradient-to-br from-[#31694E] to-[#1f4a35] text-white"
-          : "bg-[#eef5f1] text-[#1f4a35] border border-[#d9e6df]"
+          ? "bg-gradient-to-br from-[#0B3B2E] to-[#0B3B2E] text-white"
+          : "bg-[#eef5f1] text-[#0B3B2E] border border-[#d9e6df]"
       }`}
     >
       <span className="text-sm font-extrabold">{initialsFromName(name)}</span>
@@ -87,7 +87,7 @@ const Navbar = React.memo(({ setSidebarOpen, darkMode, setDarkMode }) => {
   return (
     <nav
       className={`sticky top-0 z-20 border-b shadow-sm ${
-        darkMode ? "border-gray-700 bg-gray-900" : "border-[#dbe7e1] bg-white"
+        darkMode ? "border-gray-700 bg-gray-900" : "border-[#0A3127] bg-[#0B3B2E]"
       }`}
     >
       <div className="px-2 py-0 sm:px-3">
@@ -98,7 +98,7 @@ const Navbar = React.memo(({ setSidebarOpen, darkMode, setDarkMode }) => {
               className={`lg:hidden rounded-lg p-1.5 transition-colors ${
                 darkMode
                   ? "text-gray-300 hover:bg-gray-700"
-                  : "text-gray-700 hover:bg-[#eef5f1]"
+                  : "text-white/80 hover:bg-white/10"
               }`}
             >
               <FaBars />
@@ -107,9 +107,7 @@ const Navbar = React.memo(({ setSidebarOpen, darkMode, setDarkMode }) => {
             <div className="flex min-w-0 items-center">
               <div className="min-w-0 leading-tight">
                 <h1
-                  className={`truncate text-[12px] font-bold leading-none tracking-tight sm:text-[13px] ${
-                    darkMode ? "text-white" : "text-[#183a2d]"
-                  }`}
+                  className="truncate text-[12px] font-bold leading-none tracking-tight text-white sm:text-[13px]"
                   title={companyName}
                 >
                   {companyName}
@@ -124,7 +122,7 @@ const Navbar = React.memo(({ setSidebarOpen, darkMode, setDarkMode }) => {
               className={`rounded-md p-1 transition-colors duration-200 ${
                 darkMode
                   ? "bg-gray-800 text-yellow-400 hover:bg-gray-700"
-                  : "bg-[#f4f8f6] text-[#1f4a35] hover:bg-[#e7f0eb]"
+                  : "bg-white/10 text-white hover:bg-white/20"
               }`}
               aria-label="Toggle theme"
             >
@@ -135,7 +133,7 @@ const Navbar = React.memo(({ setSidebarOpen, darkMode, setDarkMode }) => {
               className={`relative hidden rounded-md p-1 transition-colors duration-200 sm:inline-flex ${
                 darkMode
                   ? "text-gray-400 hover:bg-gray-800"
-                  : "text-[#597167] hover:bg-[#f4f8f6]"
+                  : "text-white/80 hover:bg-white/10"
               }`}
             >
               <FaBell className="text-xs" />
@@ -144,10 +142,10 @@ const Navbar = React.memo(({ setSidebarOpen, darkMode, setDarkMode }) => {
 
             <div
               className={`flex items-center gap-1.5 border-l pl-1.5 sm:gap-2 sm:pl-2 ${
-                darkMode ? "border-gray-700" : "border-[#e3ece7]"
+                darkMode ? "border-gray-700" : "border-white/20"
               }`}
             >
-              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-[#31694E] to-[#1f4a35] shadow-sm">
+              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-white/15 shadow-sm">
                 <span className="text-[10px] font-semibold text-white">
                   {userName
                     .split(" ")
@@ -159,7 +157,7 @@ const Navbar = React.memo(({ setSidebarOpen, darkMode, setDarkMode }) => {
                 </span>
               </div>
               <div className="hidden text-right lg:block">
-                <p className={`text-[11px] font-semibold leading-none ${darkMode ? "text-white" : "text-[#1f4a35]"}`}>
+                <p className="text-[11px] font-semibold leading-none text-white">
                   {userName}
                 </p>
               </div>
@@ -168,7 +166,7 @@ const Navbar = React.memo(({ setSidebarOpen, darkMode, setDarkMode }) => {
                 className={`rounded-md p-1 transition-colors duration-200 ${
                   darkMode
                     ? "text-gray-400 hover:bg-gray-800 hover:text-red-400"
-                    : "text-[#597167] hover:bg-red-50 hover:text-red-600"
+                    : "text-white/80 hover:bg-red-500/20 hover:text-red-200"
                 }`}
                 title="Logout"
               >

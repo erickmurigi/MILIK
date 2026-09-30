@@ -66,7 +66,7 @@ function DeptForm({ initial = DEPT_BLANK, onSave, onCancel, saving }) {
       <div><Label>Description</Label><input value={f.description} onChange={set('description')} className={inp} placeholder="Optional" /></div>
       <div className="flex justify-end gap-2">
         <button onClick={onCancel} className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50"><FaTimes size={9}/> Cancel</button>
-        <button onClick={() => onSave(f)} disabled={saving || !f.name.trim()} className="inline-flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23] disabled:opacity-50"><FaCheck size={9}/> {saving ? 'Saving…' : 'Save'}</button>
+        <button onClick={() => onSave(f)} disabled={saving || !f.name.trim()} className="inline-flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-50"><FaCheck size={9}/> {saving ? 'Saving…' : 'Save'}</button>
       </div>
     </div>
   );
@@ -569,7 +569,7 @@ export default function HRSetup() {
                       <span className="text-[11px] font-black uppercase tracking-widest text-slate-700">Departments</span>
                       <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{departments.length}</span>
                     </div>
-                    <button onClick={() => setDeptFormMode('new')} className="inline-flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-[10px] font-black text-white hover:bg-[#0a2e23]"><FaPlus size={8}/> New</button>
+                    <button onClick={() => setDeptFormMode('new')} className="inline-flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-[10px] font-black text-white hover:bg-[#0A3127]"><FaPlus size={8}/> New</button>
                   </div>
                   <div className="relative mt-2">
                     <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400"/>
@@ -731,7 +731,7 @@ export default function HRSetup() {
                     <div className="flex items-center gap-2">
                       {tplIsCustom && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black text-emerald-700">Custom Active</span>}
                       {tplIsCustom && <button onClick={resetTpl} className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50"><FaUndo size={8}/> Reset Default</button>}
-                      <button onClick={saveTpl} disabled={tplSaving} className="inline-flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-[10px] font-black text-white hover:bg-[#0a2e23] disabled:opacity-50"><FaCheck size={8}/> {tplSaving ? 'Saving…' : 'Save Template'}</button>
+                      <button onClick={saveTpl} disabled={tplSaving} className="inline-flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-[10px] font-black text-white hover:bg-[#0A3127] disabled:opacity-50"><FaCheck size={8}/> {tplSaving ? 'Saving…' : 'Save Template'}</button>
                     </div>
                   </div>
                 </div>
@@ -936,7 +936,7 @@ export default function HRSetup() {
                 {/* Actions */}
                 <div className="flex justify-between">
                   <button onClick={resetStatutory} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 hover:bg-slate-50"><FaUndo size={10}/> Reset to Kenya Defaults</button>
-                  <button onClick={saveStatutory} disabled={statSaving} className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-4 text-xs font-black text-white hover:bg-[#0a2e23] disabled:opacity-50"><FaCheck size={10}/> {statSaving ? 'Saving…' : 'Save Rates'}</button>
+                  <button onClick={saveStatutory} disabled={statSaving} className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-4 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-50"><FaCheck size={10}/> {statSaving ? 'Saving…' : 'Save Rates'}</button>
                 </div>
               </div>
             </div>

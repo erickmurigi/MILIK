@@ -178,7 +178,7 @@ const SaleAgentsPerformance = () => {
             <>
               <td className="px-3 py-1.5 border-r border-gray-100">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-[#027333]/10 text-[10px] font-black text-[#027333]">{idx + 1}</div>
+                  <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-[#0B3B2E]/10 text-[10px] font-black text-[#0B3B2E]">{idx + 1}</div>
                   <div>
                     <div className="font-black text-slate-800">{agent.fullName}</div>
                     <div className="font-mono text-[10px] text-slate-400">{agent.agentNumber}</div>
@@ -195,7 +195,7 @@ const SaleAgentsPerformance = () => {
                 {totalDeals > 0 ? (
                   <div className="flex items-center gap-1.5">
                     <div className="h-1.5 w-16 rounded-full bg-slate-100">
-                      <div className="h-full rounded-full bg-[#027333]" style={{ width: `${closeRate}%` }} />
+                      <div className="h-full rounded-full bg-[#0B3B2E]" style={{ width: `${closeRate}%` }} />
                     </div>
                     <span>{closeRate}%</span>
                   </div>
@@ -209,7 +209,7 @@ const SaleAgentsPerformance = () => {
             </>
           )}
           renderActions={({ agent }) => (
-            <button onClick={() => navigate(`/sale/agents/${agent._id}/performance`)} className="flex items-center gap-1 border border-[#027333]/30 bg-[#027333]/5 px-2.5 py-1 text-[10px] font-black text-[#027333] hover:bg-[#027333]/10" title="View full performance report">
+            <button onClick={() => navigate(`/sale/agents/${agent._id}/performance`)} className="flex items-center gap-1 border border-[#0B3B2E]/30 bg-[#0B3B2E]/5 px-2.5 py-1 text-[10px] font-black text-[#0B3B2E] hover:bg-[#0B3B2E]/10" title="View full performance report">
               <FaChartLine className="text-[9px]" /> Report
             </button>
           )}

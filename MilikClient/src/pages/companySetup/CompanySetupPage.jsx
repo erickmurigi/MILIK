@@ -2747,7 +2747,7 @@ export default function CompanySetupPage() {
               <button
                 onClick={handleToggleEmailEnabled}
                 disabled={togglingEmail}
-                className={`ml-4 flex h-7 flex-shrink-0 items-center gap-1.5 rounded px-3 text-xs font-bold transition disabled:opacity-60 ${emailEnabled ? "bg-red-600 text-white hover:bg-red-700" : "bg-[#0B3B2E] text-white hover:bg-[#0a3026]"}`}
+                className={`ml-4 flex h-7 flex-shrink-0 items-center gap-1.5 rounded px-3 text-xs font-bold transition disabled:opacity-60 ${emailEnabled ? "bg-red-600 text-white hover:bg-red-700" : "bg-[#0B3B2E] text-white hover:bg-[#0A3127]"}`}
               >
                 {emailEnabled ? "Disable Email" : "Enable Email"}
               </button>
@@ -2873,7 +2873,7 @@ export default function CompanySetupPage() {
                     value={emailLogsSearch}
                     onChange={(e) => { setEmailLogsSearch(e.target.value); setEmailLogsPage(1); }}
                     placeholder="Search logs…"
-                    className="h-7 w-44 rounded border border-slate-600 bg-[#0d4535] pl-7 pr-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="h-7 w-44 rounded border border-slate-600 bg-[#0B3B2E] pl-7 pr-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
                 <button
@@ -2884,7 +2884,7 @@ export default function CompanySetupPage() {
                       .catch(() => setEmailLogs([]))
                       .finally(() => setEmailLogsLoading(false));
                   }}
-                  className="inline-flex h-7 items-center gap-1 rounded border border-slate-600 bg-[#0d4535] px-2 text-xs font-bold text-white transition hover:bg-[#0a3427]"
+                  className="inline-flex h-7 items-center gap-1 rounded border border-slate-600 bg-[#0B3B2E] px-2 text-xs font-bold text-white transition hover:bg-[#0A3127]"
                 >
                   <FaSyncAlt className="text-[9px]" /> Refresh
                 </button>
@@ -3278,7 +3278,7 @@ export default function CompanySetupPage() {
                     value={smsLogsSearch}
                     onChange={(e) => { setSmsLogsSearch(e.target.value); setSmsLogsPage(1); }}
                     placeholder="Search logs…"
-                    className="h-7 w-44 rounded border border-slate-600 bg-[#0d4535] pl-7 pr-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="h-7 w-44 rounded border border-slate-600 bg-[#0B3B2E] pl-7 pr-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
                 <button
@@ -3289,7 +3289,7 @@ export default function CompanySetupPage() {
                       .catch(() => setSmsLogs([]))
                       .finally(() => setSmsLogsLoading(false));
                   }}
-                  className="inline-flex h-7 items-center gap-1 rounded border border-slate-600 bg-[#0d4535] px-2 text-xs font-bold text-white transition hover:bg-[#0a3427]"
+                  className="inline-flex h-7 items-center gap-1 rounded border border-slate-600 bg-[#0B3B2E] px-2 text-xs font-bold text-white transition hover:bg-[#0A3127]"
                 >
                   <FaSyncAlt className="text-[9px]" /> Refresh
                 </button>
@@ -3555,20 +3555,20 @@ export default function CompanySetupPage() {
               {/* ── Stat strip ── */}
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 {hasPM && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-[#2A5C4A] bg-[#0D4434] px-2 py-0.5 text-[10px] font-semibold text-[#9DCFC5]">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-[#2A5C4A] bg-[#0B3B2E] px-2 py-0.5 text-[10px] font-semibold text-[#9DCFC5]">
                     <FaBuilding size={8} />
                     {companyOperatingModeOptions.find((o) => o.value === normalizeCompanyOperatingMode(company.companyMode))?.label || "Property Manager"}
                   </span>
                 )}
-                <span className="inline-flex items-center gap-1 rounded-full border border-[#2A5C4A] bg-[#0D4434] px-2 py-0.5 text-[10px] font-semibold text-[#9DCFC5]">
+                <span className="inline-flex items-center gap-1 rounded-full border border-[#2A5C4A] bg-[#0B3B2E] px-2 py-0.5 text-[10px] font-semibold text-[#9DCFC5]">
                   <FaServer size={8} />
                   {Object.values(normalizeCompanyModules(company.modules || {})).filter(Boolean).length} modules
                 </span>
-                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${paymentSummary.active > 0 ? "border-emerald-700/60 bg-emerald-900/30 text-emerald-300" : "border-[#2A5C4A] bg-[#0D4434] text-[#9DCFC5]"}`}>
+                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${paymentSummary.active > 0 ? "border-emerald-700/60 bg-emerald-900/30 text-emerald-300" : "border-[#2A5C4A] bg-[#0B3B2E] text-[#9DCFC5]"}`}>
                   <FaMoneyCheckAlt size={8} />
                   {paymentSummary.active} / {paymentSummary.total} payments
                 </span>
-                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${emailSummary.active > 0 ? "border-emerald-700/60 bg-emerald-900/30 text-emerald-300" : "border-[#2A5C4A] bg-[#0D4434] text-[#9DCFC5]"}`}>
+                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${emailSummary.active > 0 ? "border-emerald-700/60 bg-emerald-900/30 text-emerald-300" : "border-[#2A5C4A] bg-[#0B3B2E] text-[#9DCFC5]"}`}>
                   <FaEnvelope size={8} />
                   {emailSummary.active} / {emailSummary.total} email
                 </span>

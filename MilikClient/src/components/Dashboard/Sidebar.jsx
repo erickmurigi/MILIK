@@ -206,8 +206,8 @@ const RecentActivity = ({ darkMode }) => {
   };
 
   const getIcon = (type) => {
-    const colorClass = type === 'payment' || type === 'tenant' ? 'text-[#31694E]' : 'text-[#E85C0D]';
-    const bgClass = type === 'payment' || type === 'tenant' ? 'bg-[#31694E]/10' : 'bg-[#E85C0D]/10';
+    const colorClass = type === 'payment' || type === 'tenant' ? 'text-[#0B3B2E]' : 'text-[#E85C0D]';
+    const bgClass = type === 'payment' || type === 'tenant' ? 'bg-[#0B3B2E]/10' : 'bg-[#E85C0D]/10';
 
     const icons = {
       payment: <FaMoneyBillWave className={colorClass} />,
@@ -226,16 +226,16 @@ const RecentActivity = ({ darkMode }) => {
   };
 
   const getBorderClass = (type) => {
-    return type === 'payment' || type === 'tenant' || type === 'receipt' ? 'border-[#31694E]' : 'border-[#E85C0D]';
+    return type === 'payment' || type === 'tenant' || type === 'receipt' ? 'border-[#0B3B2E]' : 'border-[#E85C0D]';
   };
 
   return (
     <div className={`rounded-xl ${darkMode ? 'bg-gray-800' : 'bg-white'} shadow-md border ${darkMode ? 'border-gray-700' : 'border-gray-100'} p-5`}>
       <div className="flex items-center justify-between mb-4">
-        <h2 className={`text-sm font-extrabold uppercase tracking-tight ${darkMode ? 'text-white' : 'text-[#1f4a35]'}`}>Recent Activity</h2>
+        <h2 className={`text-sm font-extrabold uppercase tracking-tight ${darkMode ? 'text-white' : 'text-[#0B3B2E]'}`}>Recent Activity</h2>
         <button
           onClick={markAllAsRead}
-          className="text-xs font-bold text-[#31694E] hover:text-[#E85C0D] transition-colors uppercase tracking-wide"
+          className="text-xs font-bold text-[#0B3B2E] hover:text-[#E85C0D] transition-colors uppercase tracking-wide"
         >
           Mark All Read
         </button>

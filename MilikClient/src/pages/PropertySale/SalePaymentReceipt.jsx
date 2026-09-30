@@ -117,7 +117,7 @@ const SalePaymentReceipt = () => {
       {/* Toolbar */}
       <div id="sale-print-toolbar" className="mx-auto mb-4 flex max-w-[780px] items-center justify-between gap-3 print:hidden">
         <button onClick={() => navigate(-1)} className="border border-slate-300 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">← Back</button>
-        <button onClick={() => printReceipt(company, payment, T)} className="bg-[#0B3B2E] px-5 py-1.5 text-xs font-black text-white hover:bg-[#07271e]">Print / Save PDF</button>
+        <button onClick={() => printReceipt(company, payment, T)} className="bg-[#0B3B2E] px-5 py-1.5 text-xs font-black text-white hover:bg-[#0A3127]">Print / Save PDF</button>
       </div>
 
       {/* A4 Document */}

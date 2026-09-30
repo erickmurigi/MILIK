@@ -196,7 +196,7 @@ const SaleSchedule = () => {
             return (
               <>
                 <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-slate-500">{item.installmentNumber}</td>
-                <td className="px-3 py-1.5 border-r border-gray-100 font-mono font-black text-[#027333]">{item.deal?.dealNumber || "—"}</td>
+                <td className="px-3 py-1.5 border-r border-gray-100 font-mono font-black text-[#0B3B2E]">{item.deal?.dealNumber || "—"}</td>
                 <td className="max-w-[140px] truncate px-3 py-1.5 border-r border-gray-100 text-slate-700">{item.deal?.listing?.title || item.deal?.listing?.listingNumber || "—"}</td>
                 <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{item.deal?.buyer?.fullName || "—"}</td>
                 <td className="max-w-[140px] truncate px-3 py-1.5 border-r border-gray-100 text-slate-500">{item.description || `Installment ${item.installmentNumber}`}</td>

@@ -989,7 +989,7 @@ const SingleBookingModal = ({
           <button
             onClick={handleSubmit}
             disabled={submitting}
-            className="bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0d5442] disabled:cursor-not-allowed disabled:opacity-60"
+            className="bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting ? "Creating…" : "Create Booking"}
           </button>

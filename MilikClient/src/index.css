@@ -2,24 +2,25 @@
 
 
 :root {
-  --color-brand-50: #f0f9f2;
-  --color-brand-100: #dbf1e0;
-  --color-brand-200: #b9e3c3;
-  --color-brand-300: #8acf9d;
-  --color-brand-400: #55b672;
-  --color-brand-500: #359e55;
-  --color-brand-600: #027333;
-  --color-brand-700: #0c5d2b;
-  --color-brand-800: #0e4a27;
-  --color-brand-900: #0d3d23;
-  --color-brand: #027333;
-  
+  /* Kept in sync with tailwind.config.js's brand/accent scales — see the comment there. */
+  --color-brand-50: #EBF5EF;
+  --color-brand-100: #C8E6D4;
+  --color-brand-200: #8ACF9D;
+  --color-brand-300: #55B672;
+  --color-brand-400: #359E55;
+  --color-brand-500: #1A7A44;
+  --color-brand-600: #0F5E36;
+  --color-brand-700: #0C4D2E;
+  --color-brand-800: #0B3B2E;
+  --color-brand-900: #0A3127;
+  --color-brand: #0B3B2E;
+
   --font-sans: 'Nunito Sans', system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif;
 }
 
 :root {
-  --brand: #027333;
-  --brand-600: #026227;
+  --brand: #0B3B2E;
+  --brand-600: #0A3127;
   --ink: #0f172a;
   --muted: #475569;
 }

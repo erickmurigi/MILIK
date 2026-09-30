@@ -144,8 +144,8 @@ const SaleReports = () => {
                     <div className="flex w-full flex-col-reverse" style={{ height: 56 }}>
                       <div
                         className={`w-full transition-all ${
-                          isCurrent ? "bg-[#0B3B2E] group-hover:bg-[#07271e]"
-                          : hasRev  ? "bg-[#027333]/40 group-hover:bg-[#027333]/60"
+                          isCurrent ? "bg-[#0B3B2E] group-hover:bg-[#0A3127]"
+                          : hasRev  ? "bg-[#0B3B2E]/40 group-hover:bg-[#0B3B2E]/60"
                           : "bg-slate-100"
                         }`}
                         style={{ height: `${barH}%` }}
@@ -191,7 +191,7 @@ const SaleReports = () => {
                     key={mName}
                     className={`cursor-pointer select-none border-b transition ${
                       hasActivity
-                        ? "border-slate-100 bg-white hover:bg-[#027333]/5"
+                        ? "border-slate-100 bg-white hover:bg-[#0A3127]/5"
                         : "border-slate-100 bg-slate-50/60 text-slate-400 hover:bg-slate-50"
                     }`}
                     onDoubleClick={() => openMonthTab(idx)}

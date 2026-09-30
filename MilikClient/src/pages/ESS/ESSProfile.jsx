@@ -87,7 +87,7 @@ export default function ESSProfile() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
               {emp.profilePicture
                 ? <img src={emp.profilePicture} alt="profile" style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', border: '2px solid #e2e8f0' }} />
-                : <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#027333', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', fontWeight: 700 }}>
+                : <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#0B3B2E', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', fontWeight: 700 }}>
                     {emp.surname?.[0]}{emp.otherNames?.[0]}
                   </div>
               }

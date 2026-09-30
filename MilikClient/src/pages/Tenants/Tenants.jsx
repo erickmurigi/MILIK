@@ -501,7 +501,7 @@ function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSave
             Cancel
           </button>
           <button onClick={handleSave} disabled={saving}
-            className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0d5442] disabled:opacity-50">
+            className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:opacity-50">
             {saving
               ? <><Spinner size="sm" /> Saving…</>
               : isMulti ? `Save to ${tenants.length} ${termTenants}` : "Save Utilities"}
@@ -2727,7 +2727,7 @@ const confirmTransferUnit = useCallback(async () => {
             <button
               onClick={confirmTransferUnit}
               disabled={isTransferring || !transferForm.newUnit}
-              className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0d5442] disabled:opacity-50">
+              className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:opacity-50">
               {isTransferring ? "Transferring…" : "Transfer Unit"}
             </button>
           </div>
@@ -2907,7 +2907,7 @@ const confirmTransferUnit = useCallback(async () => {
               <button
                 onClick={confirmRestoreTenant}
                 disabled={!canUpdateTenant || isRestoring}
-                className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0d5442] disabled:opacity-50">
+                className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:opacity-50">
                 {isRestoring ? "Restoring…" : `Restore ${termTenant}`}
               </button>
             </div>
@@ -3234,7 +3234,7 @@ const confirmTransferUnit = useCallback(async () => {
                       <button
                         onClick={processDepositSettlement}
                         disabled={isProcessingDepositSettlement || depositSettlementContext.loading}
-                        className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0d5442] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {isProcessingDepositSettlement ? "Processing..." : "Confirm Settlement"}
                       </button>

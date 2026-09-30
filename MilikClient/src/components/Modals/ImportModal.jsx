@@ -35,7 +35,7 @@ const ImportModal = ({
   // Original per-type modal's Import-button color. Everyone but InvoiceNotes used the
   // standard green; InvoiceNotes used orange, deliberately distinguishing debit/credit
   // notes (a correction to existing records) from the other, purely-additive import types.
-  submitColorClass = "bg-[#0B3B2E] hover:bg-[#0d5442]",
+  submitColorClass = "bg-[#0B3B2E] hover:bg-[#0A3127]",
 }) => {
   const [selectedFile,   setSelectedFile]   = useState(null);
   const [parseResult,    setParseResult]    = useState(null);
@@ -148,7 +148,7 @@ const ImportModal = ({
               accept={accept}
               onChange={handleFileChange}
               disabled={isParsing || isImporting}
-              className="block w-full cursor-pointer text-sm text-slate-500 file:mr-4 file:cursor-pointer file:border-0 file:bg-[#0B3B2E] file:px-4 file:py-2 file:text-xs file:font-black file:uppercase file:tracking-wide file:text-white hover:file:bg-[#0d5442] disabled:opacity-50"
+              className="block w-full cursor-pointer text-sm text-slate-500 file:mr-4 file:cursor-pointer file:border-0 file:bg-[#0B3B2E] file:px-4 file:py-2 file:text-xs file:font-black file:uppercase file:tracking-wide file:text-white hover:file:bg-[#0B3B2E] disabled:opacity-50"
             />
             {selectedFile && (
               <p className="mt-1 text-xs text-slate-500">

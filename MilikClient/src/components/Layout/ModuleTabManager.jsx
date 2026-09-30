@@ -217,7 +217,7 @@ const ModuleTabManager = ({ darkMode }) => {
   return (
     <div
       className={`fixed bottom-0 left-0 right-0 z-50 border-t shadow-lg ${
-        darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#1a472a] border-[#0d3320]'
+        darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#0B3B2E] border-[#0A3127]'
       }`}
     >
       <div
@@ -240,10 +240,10 @@ const ModuleTabManager = ({ darkMode }) => {
               isActive
                 ? darkMode
                   ? 'bg-gray-700 text-white border-orange-400 shadow-md'
-                  : 'bg-[#2d5a4a] text-white border-[#E85C0D] shadow-md'
+                  : 'bg-[#1A7A44] text-white border-[#E85C0D] shadow-md'
                 : darkMode
                   ? 'bg-gray-900 text-gray-400 border-transparent hover:bg-gray-800 hover:text-gray-200'
-                  : 'bg-[#163d26] text-gray-400 border-transparent hover:bg-[#2d5a4a] hover:text-gray-200'
+                  : 'bg-[#0A3127] text-gray-400 border-transparent hover:bg-[#1A7A44] hover:text-gray-200'
             }`}
           >
             <span className={`flex-shrink-0 ${isActive ? 'text-current' : 'opacity-60'}`}>

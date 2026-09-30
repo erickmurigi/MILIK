@@ -69,7 +69,7 @@ const SaleFilterBar = ({ leading, children, onReset, activeCount = 0, trailing }
         onClick={onReset}
         className={`ml-auto shrink-0 inline-flex h-7 items-center gap-1 border px-2.5 text-xs font-bold transition-colors ${
           activeCount > 0
-            ? "border-[#0B3B2E] bg-[#0B3B2E] text-white hover:bg-[#07271e]"
+            ? "border-[#0B3B2E] bg-[#0B3B2E] text-white hover:bg-[#0A3127]"
             : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
         }`}
       >

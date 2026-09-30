@@ -104,7 +104,7 @@ function BuyerFormModal({ editingId, initial, saving, onClose, onSubmit }) {
       footer={
         <>
           <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button type="button" onClick={() => onSubmit(form)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+          <button type="button" onClick={() => onSubmit(form)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
             {saving ? "Saving…" : editingId ? `Update ${T.saleBuyer}` : `Register ${T.saleBuyer}`}
           </button>
         </>
@@ -459,7 +459,7 @@ const SaleBuyers = () => {
             <button type="button" onClick={() => setShowImportModal(true)} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
               <FaFileImport size={9} /> Import
             </button>
-            <button type="button" onClick={openCreate} className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]">
+            <button type="button" onClick={openCreate} className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
               <FaPlus size={8} /> New {T.saleBuyer}
             </button>
           </>
@@ -786,7 +786,7 @@ const SaleBuyers = () => {
                 )}
               </div>
               <button type="button" onClick={() => openEdit(selected)}
-                className="inline-flex items-center gap-1 bg-[#0B3B2E] px-3 py-1 text-[11px] font-black text-white hover:bg-[#07271e]">
+                className="inline-flex items-center gap-1 bg-[#0B3B2E] px-3 py-1 text-[11px] font-black text-white hover:bg-[#0A3127]">
                 <FaEdit size={9} /> Edit Profile
               </button>
             </div>

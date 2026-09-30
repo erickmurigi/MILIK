@@ -229,7 +229,7 @@ export default function HRFinancials() {
               {hasFullAccounts && (
                 <button
                   onClick={() => navigate("/financial/journals")}
-                  className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#092f24] transition-colors"
+                  className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0A3127] transition-colors"
                 >
                   <FaExternalLinkAlt size={9} /> Full Accounts
                 </button>

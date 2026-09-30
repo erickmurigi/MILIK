@@ -1,6 +1,5 @@
 /* ─── MILIK brand palette ─────────────────────────────────────────────────── */
-/* 50:#f0f9f2  100:#dbf1e0  200:#b9e3c3  300:#8acf9d  400:#55b672            */
-/* 500:#359e55  600:#027333  700:#0c5d2b  800:#0e4a27  900:#0d3d23            */
+/* Kept in sync with tailwind.config.js's brand scale. Primary #0B3B2E, hover #0A3127. */
 
 /* ─── ESS Login ───────────────────────────────────────────────────────────── */
 .ess-login-page {
@@ -8,7 +7,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #0d3d23 0%, #0c5d2b 50%, #027333 100%);
+  background: linear-gradient(135deg, #0A3127 0%, #0A3127 50%, #0B3B2E 100%);
   padding: 1rem;
 }
 
@@ -29,7 +28,7 @@
 .ess-login-logo {
   width: 56px;
   height: 56px;
-  background: linear-gradient(135deg, #0d3d23, #027333);
+  background: linear-gradient(135deg, #0A3127, #0B3B2E);
   color: #fff;
   border-radius: 14px;
   font-size: 1.6rem;
@@ -43,7 +42,7 @@
 .ess-login-header h1 {
   font-size: 1.4rem;
   font-weight: 700;
-  color: #0c5d2b;
+  color: #0A3127;
   margin: 0 0 0.25rem;
 }
 
@@ -65,7 +64,7 @@
   transition: border-color 0.15s;
   outline: none;
 }
-.ess-field input:focus { border-color: #027333; }
+.ess-field input:focus { border-color: #0B3B2E; }
 
 .ess-form-error {
   background: #fee2e2;
@@ -77,7 +76,7 @@
 }
 
 .ess-login-btn {
-  background: linear-gradient(135deg, #0c5d2b, #027333);
+  background: linear-gradient(135deg, #0A3127, #0B3B2E);
   color: #fff;
   border: none;
   border-radius: 8px;
@@ -115,7 +114,7 @@
 /* Sidebar */
 .ess-sidebar {
   width: 250px;
-  background: linear-gradient(180deg, #0d3d23 0%, #0c5d2b 60%, #027333 100%);
+  background: linear-gradient(180deg, #0A3127 0%, #0A3127 60%, #0B3B2E 100%);
   color: #fff;
   display: flex;
   flex-direction: column;
@@ -266,7 +265,7 @@
 .ess-topbar-title {
   font-size: 0.95rem;
   font-weight: 600;
-  color: #027333;
+  color: #0B3B2E;
   flex: 1;
 }
 
@@ -281,7 +280,7 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #027333;
+  background: #0B3B2E;
   color: #fff;
   display: flex;
   align-items: center;
@@ -301,7 +300,7 @@
 .ess-page-title {
   font-size: 1.25rem;
   font-weight: 700;
-  color: #0c5d2b;
+  color: #0A3127;
   margin: 0 0 1.25rem;
 }
 
@@ -343,7 +342,7 @@
   border: 1px solid #e2e8f0;
   border-radius: 10px;
   padding: 1rem 1.25rem;
-  border-top: 3px solid #027333;
+  border-top: 3px solid #0B3B2E;
 }
 
 .ess-stat-label {
@@ -357,7 +356,7 @@
 .ess-stat-value {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #027333;
+  color: #0B3B2E;
   line-height: 1;
 }
 
@@ -422,8 +421,8 @@
   transition: opacity 0.15s;
 }
 .ess-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-.ess-btn-primary { background: #027333; color: #fff; }
-.ess-btn-primary:hover:not(:disabled) { background: #0c5d2b; }
+.ess-btn-primary { background: #0B3B2E; color: #fff; }
+.ess-btn-primary:hover:not(:disabled) { background: #0A3127; }
 .ess-btn-success { background: #15803d; color: #fff; }
 .ess-btn-success:hover:not(:disabled) { background: #166534; }
 .ess-btn-danger  { background: #dc2626; color: #fff; }
@@ -433,7 +432,7 @@
   color: #374151;
   border: 1.5px solid #d1d5db;
 }
-.ess-btn-outline:hover:not(:disabled) { background: #f0f9f2; border-color: #027333; color: #027333; }
+.ess-btn-outline:hover:not(:disabled) { background: #f0f9f2; border-color: #0B3B2E; color: #0B3B2E; }
 
 /* Form elements inside pages */
 .ess-form { display: flex; flex-direction: column; gap: 0.875rem; }
@@ -454,7 +453,7 @@
 }
 .ess-form-group input:focus,
 .ess-form-group select:focus,
-.ess-form-group textarea:focus { border-color: #027333; }
+.ess-form-group textarea:focus { border-color: #0B3B2E; }
 
 /* Pagination */
 .ess-pagination {
@@ -476,7 +475,7 @@
   font-size: 0.8rem;
 }
 .ess-pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
-.ess-pagination button:hover:not(:disabled) { background: #f0f9f2; border-color: #027333; color: #027333; }
+.ess-pagination button:hover:not(:disabled) { background: #f0f9f2; border-color: #0B3B2E; color: #0B3B2E; }
 
 /* Empty state */
 .ess-empty {
@@ -502,7 +501,7 @@
   margin-bottom: 1rem;
 }
 .ess-alert-error   { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
-.ess-alert-success { background: #f0f9f2; color: #027333; border: 1px solid #b9e3c3; }
+.ess-alert-success { background: #f0f9f2; color: #0B3B2E; border: 1px solid #b9e3c3; }
 
 /* Modal */
 .ess-modal-overlay {
@@ -532,7 +531,7 @@
   justify-content: space-between;
   padding: 1rem 1.25rem;
   border-bottom: 1px solid #e2e8f0;
-  border-top: 4px solid #027333;
+  border-top: 4px solid #0B3B2E;
   border-radius: 12px 12px 0 0;
 }
 
@@ -559,7 +558,7 @@
 
 /* Attendance checkin panel */
 .ess-checkin-panel {
-  background: linear-gradient(135deg, #0d3d23, #027333);
+  background: linear-gradient(135deg, #0A3127, #0B3B2E);
   border-radius: 10px;
   padding: 1.5rem;
   color: #fff;
@@ -589,7 +588,7 @@
 
 .ess-checkin-btn {
   background: #fff;
-  color: #027333;
+  color: #0B3B2E;
   border: none;
   border-radius: 8px;
   padding: 0.7rem 1.75rem;

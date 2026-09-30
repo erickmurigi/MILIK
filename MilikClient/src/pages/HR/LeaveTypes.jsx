@@ -99,7 +99,7 @@ function LeaveTypeForm({ initial = BLANK, onSave, onCancel, saving }) {
         <button onClick={onCancel} type="button" className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50">
           <FaTimes size={9} /> Cancel
         </button>
-        <button onClick={() => onSave(f)} type="button" disabled={saving || !f.name.trim()} className="inline-flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0a2e23] disabled:opacity-50">
+        <button onClick={() => onSave(f)} type="button" disabled={saving || !f.name.trim()} className="inline-flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-50">
           <FaCheck size={9} /> {saving ? 'Saving…' : 'Save'}
         </button>
       </div>

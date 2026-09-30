@@ -45,7 +45,7 @@ const daysUntil = (d) =>
 
 
 const btnPrimary =
-  'bg-[#0B3B2E] text-white hover:bg-[#027333] px-4 py-2 rounded-md text-sm font-semibold disabled:opacity-50';
+  'bg-[#0B3B2E] text-white hover:bg-[#0A3127] px-4 py-2 rounded-md text-sm font-semibold disabled:opacity-50';
 const btnDanger =
   'bg-red-600 text-white hover:bg-red-700 px-4 py-2 rounded-md text-sm font-semibold disabled:opacity-50';
 const btnSecondary =
@@ -290,7 +290,7 @@ const ProfileTab = ({ client, summary, onRefresh }) => {
                 type="button"
                 onClick={handleSave}
                 disabled={saving}
-                className="inline-flex h-6 items-center gap-1 bg-[#0B3B2E] text-white hover:bg-[#027333] px-2 rounded text-xs font-semibold disabled:opacity-50"
+                className="inline-flex h-6 items-center gap-1 bg-[#0B3B2E] text-white hover:bg-[#0A3127] px-2 rounded text-xs font-semibold disabled:opacity-50"
               >
                 <FaSave size={9} /> {saving ? 'Saving…' : 'Save'}
               </button>
@@ -350,7 +350,7 @@ const ProfileTab = ({ client, summary, onRefresh }) => {
           <button
             type="button"
             onClick={() => setShowAddContact(true)}
-            className="inline-flex h-6 items-center gap-1 bg-[#0B3B2E] text-white hover:bg-[#027333] px-2 rounded text-xs font-semibold"
+            className="inline-flex h-6 items-center gap-1 bg-[#0B3B2E] text-white hover:bg-[#0A3127] px-2 rounded text-xs font-semibold"
           >
             <FaPlus size={9} /> Add Contact
           </button>
@@ -767,7 +767,7 @@ const ContractsTab = ({ clientId, onSummaryChange }) => {
         <button
           type="button"
           onClick={() => setShowAdd(true)}
-          className="inline-flex h-7 items-center gap-1.5 bg-[#0B3B2E] text-white hover:bg-[#027333] px-3 text-xs font-bold rounded"
+          className="inline-flex h-7 items-center gap-1.5 bg-[#0B3B2E] text-white hover:bg-[#0A3127] px-3 text-xs font-bold rounded"
         >
           <FaPlus size={9} /> Add Contract
         </button>
@@ -1187,7 +1187,7 @@ const InvoicesTab = ({ clientId, contracts, onSummaryChange }) => {
         <button
           type="button"
           onClick={() => setShowCreate(true)}
-          className="inline-flex h-7 items-center gap-1.5 bg-[#0B3B2E] text-white hover:bg-[#027333] px-3 text-xs font-bold rounded"
+          className="inline-flex h-7 items-center gap-1.5 bg-[#0B3B2E] text-white hover:bg-[#0A3127] px-3 text-xs font-bold rounded"
         >
           <FaPlus size={9} /> Create Invoice
         </button>

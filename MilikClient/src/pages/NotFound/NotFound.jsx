@@ -31,7 +31,7 @@ export default function NotFound() {
         </button>
         <Link
           to="/"
-          className="inline-flex items-center gap-2 rounded-full bg-[#0B3B2E] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0d4a39]"
+          className="inline-flex items-center gap-2 rounded-full bg-[#0B3B2E] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0A3127]"
         >
           <FaHome size={12} />
           Home

@@ -90,7 +90,7 @@ const ClientsDashboard = () => {
         <button
           type="button"
           onClick={() => navigate('/clients')}
-          className="inline-flex h-7 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#027333]"
+          className="inline-flex h-7 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]"
         >
           All Clients
         </button>

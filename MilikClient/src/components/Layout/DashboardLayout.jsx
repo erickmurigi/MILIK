@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ErrorBoundary from "../common/ErrorBoundary";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -209,8 +209,28 @@ const filterMenuByPermissions = (items = [], currentUser = {}, activeCompany = n
     })
     .filter(Boolean);
 
+const DARK_MODE_STORAGE_KEY = "milik_dark_mode";
+
 const DashboardLayout = ({ children, lockContentScroll = false }) => {
-  const [darkMode, setDarkMode] = useState(false);
+  // Every page wraps itself in its own <DashboardLayout>, so this component remounts fresh on
+  // every navigation — a plain useState(false) here meant dark mode silently reset on every
+  // page change. Persisting to localStorage (read lazily so the very first paint is already
+  // correct) survives that remount.
+  const [darkMode, setDarkMode] = useState(() => {
+    try {
+      return localStorage.getItem(DARK_MODE_STORAGE_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(DARK_MODE_STORAGE_KEY, String(darkMode));
+    } catch {
+      // ignore storage write failures (private browsing, quota, etc.)
+    }
+  }, [darkMode]);
   const location = useLocation();
   const currentUser = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
@@ -353,7 +373,7 @@ const HelpMegaPanel = ({ darkMode, onClose, navigate, activeCompany }) => {
   const sectionHead = darkMode ? "text-gray-400" : "text-gray-400";
   const divider = darkMode ? "border-gray-700" : "border-gray-100";
   const rowHover = darkMode ? "hover:bg-gray-800" : "hover:bg-emerald-50";
-  const iconWrap = darkMode ? "bg-gray-800 text-emerald-400" : "bg-emerald-50 text-[#1f4a35]";
+  const iconWrap = darkMode ? "bg-gray-800 text-emerald-400" : "bg-emerald-50 text-[#0B3B2E]";
   const contactBg = darkMode ? "bg-gray-800" : "bg-[#f7fbf9]";
 
   const enabledModules = useMemo(() => {
@@ -371,7 +391,7 @@ const HelpMegaPanel = ({ darkMode, onClose, navigate, activeCompany }) => {
     >
       {/* Header */}
       <div className={`border-b px-5 py-3 ${divider}`}>
-        <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-[#31694E]">Help &amp; Resources</p>
+        <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-[#0B3B2E]">Help &amp; Resources</p>
       </div>
 
       <div className="grid grid-cols-2 gap-0">
@@ -418,7 +438,7 @@ const HelpMegaPanel = ({ darkMode, onClose, navigate, activeCompany }) => {
         <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
           <a
             href="tel:0141455841"
-            className={`inline-flex items-center gap-1.5 text-[11px] font-bold transition-colors ${darkMode ? "text-emerald-400 hover:text-emerald-300" : "text-[#1f4a35] hover:text-[#31694E]"}`}
+            className={`inline-flex items-center gap-1.5 text-[11px] font-bold transition-colors ${darkMode ? "text-emerald-400 hover:text-emerald-300" : "text-[#0B3B2E] hover:text-[#0A3127]"}`}
           >
             <FaPhone className="text-[10px]" />
             0141 455 841
@@ -452,14 +472,14 @@ const MENU_COLOR_MAP = {
   "carwash-commissions-group":  { color: "#0B3B2E", label: "Commissions", icon: FaHandshake },
   "carwash-reporting":          { color: "#0B3B2E", label: "Reports",     icon: FaChartBar },
   "carwash-setup":              { color: "#0B3B2E", label: "Setup",       icon: FaCog },
-  "sale-listings-grp": { color: "#027333", label: "Listings",  icon: FaBuilding },
-  "sale-crm":          { color: "#027333", label: "CRM",       icon: FaUserClock },
-  "sale-clients":      { color: "#027333", label: "Buyers",    icon: FaUsers },
-  "sale-pipeline":     { color: "#027333", label: "Deals",     icon: FaHandshake },
-  "sale-finance":      { color: "#027333", label: "Finance",   icon: FaMoneyBillWave },
-  "sale-reporting":    { color: "#027333", label: "Reports",   icon: FaFileAlt },
-  "sale-agents-grp":   { color: "#027333", label: "Agents",    icon: FaUser },
-  "sale-setup":        { color: "#027333", label: "Setup",     icon: FaCog },
+  "sale-listings-grp": { color: "#0B3B2E", label: "Listings",  icon: FaBuilding },
+  "sale-crm":          { color: "#0B3B2E", label: "CRM",       icon: FaUserClock },
+  "sale-clients":      { color: "#0B3B2E", label: "Buyers",    icon: FaUsers },
+  "sale-pipeline":     { color: "#0B3B2E", label: "Deals",     icon: FaHandshake },
+  "sale-finance":      { color: "#0B3B2E", label: "Finance",   icon: FaMoneyBillWave },
+  "sale-reporting":    { color: "#0B3B2E", label: "Reports",   icon: FaFileAlt },
+  "sale-agents-grp":   { color: "#0B3B2E", label: "Agents",    icon: FaUser },
+  "sale-setup":        { color: "#0B3B2E", label: "Setup",     icon: FaCog },
   "clients-main":            { color: "#0B3B2E", label: "Clients",   icon: FaUsers },
   "clients-contracts-group": { color: "#0B3B2E", label: "Contracts", icon: FaHandshake },
   "clients-billing":         { color: "#0B3B2E", label: "Billing",   icon: FaFileInvoice },
@@ -1876,7 +1896,7 @@ const TopToolbar = ({
     <div className="relative bg-[#a5c9b7]">
       <Navbar darkMode={darkMode} setDarkMode={setDarkMode} workspaceLabel={workspaceLabel} />
 
-      <div className={`relative z-50 flex min-h-[22px] items-center overflow-visible ${darkMode ? "bg-gray-800" : "bg-[#0A400C]"}`}>
+      <div className={`relative z-50 flex min-h-[22px] items-center overflow-visible ${darkMode ? "bg-gray-800" : "bg-[#0B3B2E]"}`}>
         <StartMenu darkMode={darkMode} variant="header" />
 
         {mainMenuItems.map((item) => (
