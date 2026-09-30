@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import { FaBook, FaCalculator, FaEye, FaPlay, FaSyncAlt } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import JournalEntriesDrawer from "../../components/Accounting/JournalEntriesDrawer";
+import MilikTable from "../../components/common/MilikTable";
 import { previewDepreciation, runDepreciation } from "../../redux/apiCalls";
 
 const GRN = "#0B3B2E";
@@ -146,70 +147,55 @@ const FixedAssetsDepreciation = () => {
 
           {/* Preview table */}
           {preview && (
-            <table className="min-w-full text-[11px] border-collapse">
-              <thead className="sticky top-0 z-10">
-                <tr className="bg-[#0B3B2E] text-white">
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Code</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Asset Name</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Category</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Method</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Book Value (KES)</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Monthly Dep. (KES)</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Last Run</th>
-                  <th className="px-3 py-1 text-center font-bold">Will Post</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activeRows.map((p, idx) => (
-                  <tr key={p._id} className={`border-b border-gray-100 ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
-                    <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-400">{p.code || "—"}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{p.name}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{p.category || "—"}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{methodLabel(p.depreciationMethod)}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">{fmt(p.bookValue)}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold text-rose-600">{fmt(p.monthlyDepreciation)}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-slate-400">
-                      {p.lastDepreciationDate
-                        ? new Date(p.lastDepreciationDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })
-                        : "Never"}
-                    </td>
-                    <td className="px-3 py-1 text-center">
+            <MilikTable
+              columns={[
+                { label: "Code" },
+                { label: "Asset Name" },
+                { label: "Category" },
+                { label: "Method" },
+                { label: "Book Value (KES)", align: "right" },
+                { label: "Monthly Dep. (KES)", align: "right" },
+                { label: "Last Run" },
+                { label: "Will Post", align: "center" },
+              ]}
+              rows={[...activeRows, ...skippedRows]}
+              rowClassName={(p) => (p.monthlyDepreciation === 0 ? "opacity-35" : "")}
+              empty="No active assets with depreciation to preview."
+              renderFooter={activeRows.length > 0 ? () => (
+                <>
+                  <td colSpan={4} className="px-4 py-2">Total to post · {activeRows.length} asset{activeRows.length !== 1 ? "s" : ""}</td>
+                  <td className="px-4 py-2 text-right font-mono text-rose-600">{fmt(preview.totalDepreciation)}</td>
+                  <td colSpan={2} />
+                </>
+              ) : undefined}
+              renderRow={(p) => (
+                <>
+                  <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-400">{p.code || "—"}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{p.name}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{p.category || "—"}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{methodLabel(p.depreciationMethod)}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">{fmt(p.bookValue)}</td>
+                  <td className={`px-3 py-1 border-r border-gray-100 text-right font-mono ${p.monthlyDepreciation === 0 ? "text-slate-300" : "font-semibold text-rose-600"}`}>
+                    {p.monthlyDepreciation === 0 ? "—" : fmt(p.monthlyDepreciation)}
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-400">
+                    {p.lastDepreciationDate
+                      ? new Date(p.lastDepreciationDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })
+                      : "Never"}
+                  </td>
+                  <td className="px-3 py-1 text-center">
+                    {p.monthlyDepreciation === 0 ? (
+                      <span className="inline-block rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-400">Skip</span>
+                    ) : (
                       <div className="flex items-center justify-center gap-2">
                         <span className="inline-block rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Yes</span>
                         <button onClick={() => setGlAsset(p)} className="rounded p-1 text-teal-600 hover:bg-teal-50 hover:text-teal-800" title="View past GL entries for this asset"><FaBook size={10} /></button>
                       </div>
-                    </td>
-                  </tr>
-                ))}
-                {skippedRows.map((p, idx) => (
-                  <tr key={p._id} className="border-b border-gray-100 opacity-35">
-                    <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-400">{p.code || "—"}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{p.name}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{p.category || "—"}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{methodLabel(p.depreciationMethod)}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">{fmt(p.bookValue)}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-300">—</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-slate-400">
-                      {p.lastDepreciationDate
-                        ? new Date(p.lastDepreciationDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })
-                        : "Never"}
-                    </td>
-                    <td className="px-3 py-1 text-center">
-                      <span className="inline-block rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-400">Skip</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              {activeRows.length > 0 && (
-                <tfoot>
-                  <tr className="border-t-2 border-slate-200 bg-slate-50 text-[10px] font-black text-slate-500">
-                    <td colSpan={5} className="px-4 py-2">Total to post · {activeRows.length} asset{activeRows.length !== 1 ? "s" : ""}</td>
-                    <td className="px-4 py-2 text-right font-mono text-rose-600">{fmt(preview.totalDepreciation)}</td>
-                    <td colSpan={2} />
-                  </tr>
-                </tfoot>
+                    )}
+                  </td>
+                </>
               )}
-            </table>
+            />
           )}
 
           {/* Post result */}

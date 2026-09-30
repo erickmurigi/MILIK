@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import { FaSyncAlt } from "react-icons/fa";
 import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import MilikTable from "../../components/common/MilikTable";
 import { useTabState } from "../../hooks/useTabState";
 import { getTagSummaryReport } from "../../redux/apiCalls";
 import { selectCurrentCompany } from "../../redux/selectors";
@@ -67,46 +68,39 @@ const ProfitByTagReport = () => {
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          <div className="overflow-x-auto border border-slate-200 bg-white shadow-sm">
-            <table className="w-full min-w-[560px] border-collapse text-xs">
-              <thead className="bg-[#0B3B2E] text-white">
-                <tr>
-                  <th className="px-3 py-2 text-left font-bold">{label}</th>
-                  <th className="px-3 py-2 text-right font-bold">Income (KES)</th>
-                  <th className="px-3 py-2 text-right font-bold">Expenses (KES)</th>
-                  <th className="px-3 py-2 text-right font-bold">Net (KES)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading && !report ? (
-                  <tr><td colSpan={4} className="px-4 py-10 text-center text-slate-500">Loading…</td></tr>
-                ) : rows.length === 0 ? (
-                  <tr><td colSpan={4} className="px-4 py-10 text-center text-slate-500">
-                    Nothing is tagged with a {label.toLowerCase()} in this period. Tag journal lines (the tag button on each line) to see income and costs per {label.toLowerCase()} here.
-                  </td></tr>
-                ) : rows.map((r, i) => (
-                  <tr key={r.key} className={`border-b border-slate-100 ${i % 2 ? "bg-slate-50/60" : "bg-white"}`}>
-                    <td className="px-3 py-1.5 font-semibold text-slate-800">{r.label}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">{fmt(r.income)}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">{fmt(r.expenses)}</td>
-                    <td className={`px-3 py-1.5 text-right font-bold tabular-nums ${net(r.net)}`}>{fmt(r.net)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              {rows.length > 0 && (
-                <tfoot>
-                  <tr className="border-t-2 border-slate-300 bg-slate-100 font-black">
-                    <td className="px-3 py-2">Total</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmt(totals.income)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmt(totals.expenses)}</td>
-                    <td className={`px-3 py-2 text-right tabular-nums ${net(totals.net)}`}>{fmt(totals.net)}</td>
-                  </tr>
-                </tfoot>
+        <div className="min-h-0 flex-1 overflow-hidden p-3 flex flex-col">
+          <div className="min-h-0 flex-1 border border-slate-200 bg-white shadow-sm flex flex-col overflow-hidden">
+            <MilikTable
+              minWidth="560px"
+              columns={[
+                { label },
+                { label: "Income (KES)", align: "right" },
+                { label: "Expenses (KES)", align: "right" },
+                { label: "Net (KES)", align: "right" },
+              ]}
+              rows={rows}
+              rowKey="key"
+              loading={loading && !report}
+              empty={`Nothing is tagged with a ${label.toLowerCase()} in this period. Tag journal lines (the tag button on each line) to see income and costs per ${label.toLowerCase()} here.`}
+              renderRow={(r) => (
+                <>
+                  <td className="px-3 py-1.5 font-semibold text-slate-800">{r.label}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{fmt(r.income)}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{fmt(r.expenses)}</td>
+                  <td className={`px-3 py-1.5 text-right font-bold tabular-nums ${net(r.net)}`}>{fmt(r.net)}</td>
+                </>
               )}
-            </table>
+              renderFooter={() => (
+                <>
+                  <td className="px-3 py-2">Total</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{fmt(totals.income)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{fmt(totals.expenses)}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${net(totals.net)}`}>{fmt(totals.net)}</td>
+                </>
+              )}
+            />
           </div>
-          <p className="mt-2 text-[11px] text-slate-500">
+          <p className="mt-2 flex-none text-[11px] text-slate-500">
             Counts only income and expense accounts on lines carrying this tag. Reversed journals net out; untagged postings are not shown.
           </p>
         </div>

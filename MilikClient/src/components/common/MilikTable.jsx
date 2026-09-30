@@ -30,6 +30,7 @@ const MilikTable = React.memo(React.forwardRef(function MilikTable({
   renderRow,        // (row, i) => just <td>s
   renderActions,    // (row) => JSX — rendered in a final "Actions" col (stopPropagation auto)
   renderExpanded,   // (row) => JSX — collapsible detail row
+  renderFooter,     // () => just <td>s — a totals row, sticky to the bottom of the scroll area
 
   groupBy,          // (row) => string — group label
 
@@ -287,6 +288,17 @@ const MilikTable = React.memo(React.forwardRef(function MilikTable({
             renderDataRows(rows, 0)
           )}
         </tbody>
+
+        {renderFooter && !loading && rows.length > 0 && (
+          <tfoot className="sticky bottom-0 z-10 shadow-[0_-1px_3px_rgba(0,0,0,0.08)]">
+            <tr className="bg-slate-100 border-t-2 border-slate-300 font-black">
+              {checkboxes && <td className="border-r border-slate-200" />}
+              {hasExpand && <td className="border-r border-slate-200" />}
+              {renderFooter()}
+              {hasActions && <td />}
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
   );

@@ -3,8 +3,9 @@ import { useTabState } from "../../hooks/useTabState";
 import { useDispatch, useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import { toast } from "react-toastify";
-import { FaEdit, FaPlus, FaRedoAlt, FaSave, FaSearch, FaTrash, FaTimes } from "react-icons/fa";
+import { FaEdit, FaPlus, FaRedoAlt, FaSave, FaTrash, FaTimes } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import ListToolbar from "../../components/common/ListToolbar";
 import { updateCompany } from "../../redux/apiCalls";
 import { useConfirm } from "../../context/ConfirmContext";
 
@@ -170,16 +171,11 @@ const UnitTypesPage = () => {
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 p-0">
-        <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-            <div className="h-7 shrink-0 flex items-center gap-2 rounded border border-slate-200 bg-white px-2 text-xs text-gray-800">
-              <FaSearch size={10} />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search unit type" className="w-36 bg-transparent text-xs outline-none" />
-            </div>
-            <button onClick={() => setSearch("")} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={10} /> Reset</button>
-            <button onClick={handleRestoreDefaults} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaRedoAlt size={10} /> Restore Defaults</button>
-          </div>
-        </div>
+        <ListToolbar>
+          <ListToolbar.Input width="w-36" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search unit type" />
+          <ListToolbar.Button icon={FaRedoAlt} onClick={() => setSearch("")}>Reset</ListToolbar.Button>
+          <ListToolbar.Button icon={FaRedoAlt} variant="accent" onClick={handleRestoreDefaults}>Restore Defaults</ListToolbar.Button>
+        </ListToolbar>
 
         <div className="min-h-0 flex-1 overflow-auto p-2">
           <div className="grid min-h-full grid-cols-1 gap-3 xl:grid-cols-[1.1fr_0.9fr]">

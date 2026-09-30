@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { FaSearch, FaRedoAlt, FaPrint, FaChartBar } from 'react-icons/fa';
 import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from '../../components/Layout/DashboardLayout';
+import MilikTable from '../../components/common/MilikTable';
 import { selectCurrentCompany } from '../../redux/selectors';
 import { adminRequests } from '../../utils/requestMethods';
 import { printTabularList } from '../../utils/printKit';
@@ -39,7 +40,7 @@ export default function HRReportAttendance() {
   const [search,   setSearch]   = useTabState('/hr/reports/attendance:search', '');
   const [committed, setCommitted] = useState({ month: String(thisMonth), year: String(thisYear) });
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['hr-report-attendance', committed],
     queryFn: () => adminRequests.get('/hr/reports/attendance', {
       params: { month: committed.month, year: committed.year },
@@ -145,49 +146,37 @@ export default function HRReportAttendance() {
         </div>
 
         {/* Table */}
-        <div className="min-h-0 flex-1 overflow-auto">
-          {isLoading ? (
-            <div className="flex h-32 items-center justify-center text-xs text-slate-400">Generating report…</div>
-          ) : !data ? (
-            <div className="flex h-32 flex-col items-center justify-center gap-2 text-slate-400">
-              <FaChartBar size={22} className="text-slate-300" />
-              <span className="text-xs">Select a month and year, then click Generate</span>
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="flex h-32 items-center justify-center text-xs text-slate-400">No attendance records for this period</div>
-          ) : (
-            <table className="w-full text-[11px] border-collapse">
-              <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-                <tr>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Employee</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Working Days</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Present</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Absent</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Total Hours</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Avg / Day</th>
-                  <th className="px-3 py-1 text-left font-bold">Attendance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((r, idx) => (
-                  <tr key={String(r.employee?._id || idx)} className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
-                    <td className="px-3 py-1 border-r border-gray-100">
-                      <div className="font-semibold text-slate-900">{r.employee?.surname} {r.employee?.otherNames}</div>
-                      <div className="text-[10px] text-slate-400">{r.employee?.employeeNumber} · {r.employee?.department?.name || '—'}</div>
-                    </td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-500">{workingDays}</td>
-                    <td className={`px-3 py-1 border-r border-gray-100 text-right font-bold ${r.daysPresent === 0 ? 'text-rose-500' : 'text-emerald-700'}`}>{r.daysPresent}</td>
-                    <td className={`px-3 py-1 border-r border-gray-100 text-right font-bold ${r.daysAbsent > 0 ? 'text-rose-600' : 'text-slate-400'}`}>{r.daysAbsent}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">{fmtHr(r.totalHours)}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-600">{fmtHr(r.avgHours)}</td>
-                    <td className="px-3 py-1">
-                      <MiniBar pct={r.attendancePct} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+        <div className="min-h-0 flex-1 overflow-hidden flex flex-col">
+          <MilikTable
+            columns={[
+              { label: "Employee" },
+              { label: "Working Days", align: "right" },
+              { label: "Present", align: "right" },
+              { label: "Absent", align: "right" },
+              { label: "Total Hours", align: "right" },
+              { label: "Avg / Day", align: "right" },
+              { label: "Attendance" },
+            ]}
+            rows={filtered}
+            loading={isLoading}
+            empty={!data ? "Select a month and year, then click Generate" : "No attendance records for this period"}
+            renderRow={(r) => (
+              <>
+                <td className="px-3 py-1 border-r border-gray-100">
+                  <div className="font-semibold text-slate-900">{r.employee?.surname} {r.employee?.otherNames}</div>
+                  <div className="text-[10px] text-slate-400">{r.employee?.employeeNumber} · {r.employee?.department?.name || '—'}</div>
+                </td>
+                <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-500">{workingDays}</td>
+                <td className={`px-3 py-1 border-r border-gray-100 text-right font-bold ${r.daysPresent === 0 ? 'text-rose-500' : 'text-emerald-700'}`}>{r.daysPresent}</td>
+                <td className={`px-3 py-1 border-r border-gray-100 text-right font-bold ${r.daysAbsent > 0 ? 'text-rose-600' : 'text-slate-400'}`}>{r.daysAbsent}</td>
+                <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">{fmtHr(r.totalHours)}</td>
+                <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-600">{fmtHr(r.avgHours)}</td>
+                <td className="px-3 py-1">
+                  <MiniBar pct={r.attendancePct} />
+                </td>
+              </>
+            )}
+          />
         </div>
       </div>
     </DashboardLayout>
