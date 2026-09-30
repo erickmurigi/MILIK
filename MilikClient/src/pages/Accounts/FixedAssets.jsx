@@ -3,10 +3,11 @@ import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import {
-  FaEdit, FaPlus, FaSyncAlt, FaTimes, FaTrash, FaTools,
+  FaEdit, FaPlus, FaSyncAlt, FaTimes, FaTrash,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
+import MilikTable from "../../components/common/MilikTable";
 import {
   getFixedAssets, createFixedAsset, updateFixedAsset,
   disposeFixedAsset, getChartOfAccounts,
@@ -446,87 +447,70 @@ const FixedAssets = () => {
         )}
 
         {/* ── Table ── */}
-        <div className="flex-1 overflow-auto">
-          {loading && !assets.length ? (
-            <div className="flex h-32 items-center justify-center gap-2 text-sm text-slate-400">
-              <FaSyncAlt size={12} className="animate-spin" /> Loading…
-            </div>
-          ) : filteredAssets.length === 0 ? (
-            <div className="flex h-40 flex-col items-center justify-center gap-2 text-slate-400">
-              <FaTools size={22} className="opacity-25" />
-              <p className="text-xs font-semibold">No assets found</p>
-              {!filterStatus && !filterCategory && !search && (
-                <button onClick={openAdd} className="mt-1 text-xs font-bold hover:underline" style={{ color: GRN }}>
-                  + Add your first asset
-                </button>
-              )}
-            </div>
-          ) : (
-            <table className="min-w-full text-[11px] border-collapse">
-              <thead className="sticky top-0 z-10">
-                <tr className="bg-[#0B3B2E] text-white">
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Code</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Asset Name</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Category</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Method</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Cost (KES)</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Acc. Dep. (KES)</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Book Value (KES)</th>
-                  <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Last Dep.</th>
-                  <th className="px-3 py-1 font-bold" />
-                </tr>
-              </thead>
-              <tbody>
-                {filteredAssets.map((asset, idx) => (
-                  <tr key={asset._id} className={`border-b border-gray-100 ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
-                    <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-400">{asset.code || "—"}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{asset.name}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{asset.category || "—"}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{methodLabel(asset.depreciationMethod)}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">{fmt(asset.purchaseCost)}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-rose-500">{fmt(asset.accumulatedDepreciation)}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold" style={{ color: GRN }}>{fmt(asset.bookValue)}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-center">{statusPill(asset.status)}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-slate-400">
-                      {asset.lastDepreciationDate
-                        ? new Date(asset.lastDepreciationDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })
-                        : "—"}
-                    </td>
-                    <td className="px-3 py-1">
-                      <div className="flex items-center justify-end gap-2">
-                        {asset.status !== "disposed" && (
-                          <button onClick={() => openEdit(asset)} className="text-slate-300 hover:text-slate-600" title="Edit">
-                            <FaEdit size={12} />
-                          </button>
-                        )}
-                        {asset.status === "active" && (
-                          <button onClick={() => openDispose(asset)} className="text-slate-300 hover:text-red-500" title="Dispose">
-                            <FaTrash size={11} />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-slate-200 bg-slate-50 text-[10px] font-black text-slate-500">
-                  <td colSpan={4} className="px-4 py-2">Filtered total · {filteredAssets.length} rows</td>
-                  <td className="px-4 py-2 text-right font-mono">
-                    {fmt(filteredAssets.reduce((s, a) => s + Number(a.purchaseCost || 0), 0))}
-                  </td>
-                  <td className="px-4 py-2 text-right font-mono text-rose-500">
-                    {fmt(filteredAssets.reduce((s, a) => s + Number(a.accumulatedDepreciation || 0), 0))}
-                  </td>
-                  <td className="px-4 py-2 text-right font-mono" style={{ color: GRN }}>
-                    {fmt(filteredAssets.reduce((s, a) => s + Number(a.bookValue || 0), 0))}
-                  </td>
-                  <td colSpan={3} />
-                </tr>
-              </tfoot>
-            </table>
-          )}
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+          <MilikTable
+            columns={[
+              { label: "Code" },
+              { label: "Asset Name" },
+              { label: "Category" },
+              { label: "Method" },
+              { label: "Cost (KES)", align: "right" },
+              { label: "Acc. Dep. (KES)", align: "right" },
+              { label: "Book Value (KES)", align: "right" },
+              { label: "Status", align: "center" },
+              { label: "Last Dep." },
+            ]}
+            rows={filteredAssets}
+            rowKey="_id"
+            loading={loading && !assets.length}
+            empty="No assets found"
+            renderFooter={filteredAssets.length > 0 ? () => (
+              <>
+                <td colSpan={4} className="px-4 py-2">Filtered total · {filteredAssets.length} rows</td>
+                <td className="px-4 py-2 text-right font-mono">
+                  {fmt(filteredAssets.reduce((s, a) => s + Number(a.purchaseCost || 0), 0))}
+                </td>
+                <td className="px-4 py-2 text-right font-mono text-rose-500">
+                  {fmt(filteredAssets.reduce((s, a) => s + Number(a.accumulatedDepreciation || 0), 0))}
+                </td>
+                <td className="px-4 py-2 text-right font-mono" style={{ color: GRN }}>
+                  {fmt(filteredAssets.reduce((s, a) => s + Number(a.bookValue || 0), 0))}
+                </td>
+                <td colSpan={2} />
+              </>
+            ) : undefined}
+            renderActions={(asset) => (
+              <div className="flex items-center justify-end gap-2">
+                {asset.status !== "disposed" && (
+                  <button onClick={() => openEdit(asset)} className="text-slate-300 hover:text-slate-600" title="Edit">
+                    <FaEdit size={12} />
+                  </button>
+                )}
+                {asset.status === "active" && (
+                  <button onClick={() => openDispose(asset)} className="text-slate-300 hover:text-red-500" title="Dispose">
+                    <FaTrash size={11} />
+                  </button>
+                )}
+              </div>
+            )}
+            renderRow={(asset) => (
+              <>
+                <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-400">{asset.code || "—"}</td>
+                <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{asset.name}</td>
+                <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{asset.category || "—"}</td>
+                <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{methodLabel(asset.depreciationMethod)}</td>
+                <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">{fmt(asset.purchaseCost)}</td>
+                <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-rose-500">{fmt(asset.accumulatedDepreciation)}</td>
+                <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold" style={{ color: GRN }}>{fmt(asset.bookValue)}</td>
+                <td className="px-3 py-1 border-r border-gray-100 text-center">{statusPill(asset.status)}</td>
+                <td className="px-3 py-1 border-r border-gray-100 text-slate-400">
+                  {asset.lastDepreciationDate
+                    ? new Date(asset.lastDepreciationDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })
+                    : "—"}
+                </td>
+              </>
+            )}
+          />
         </div>
       </div>
 

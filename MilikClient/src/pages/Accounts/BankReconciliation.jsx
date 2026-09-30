@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
@@ -9,6 +9,7 @@ import {
 import { printTabularList } from "../../utils/printList";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
+import MilikTable from "../../components/common/MilikTable";
 import {
   getBankReconciliationAccounts, getReconciliationEntries,
   getReconciliations, createReconciliation, saveReconciliation,
@@ -416,77 +417,60 @@ const BankReconciliation = () => {
           )}
 
           {/* History list */}
-          <div className="flex-1 overflow-auto">
-            {loadingHistory ? (
-              <div className="flex h-32 items-center justify-center gap-2 text-sm text-slate-400">
-                <FaSyncAlt size={12} className="animate-spin" /> Loading…
-              </div>
-            ) : history.length === 0 ? (
-              <div className="flex h-40 flex-col items-center justify-center text-slate-400">
-                <p className="text-sm font-medium">No reconciliations yet</p>
-                <p className="mt-1 text-xs">Click "New Reconciliation" to get started</p>
-              </div>
-            ) : (
-              <table className="min-w-full text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10">
-                  <tr className="bg-[#0B3B2E] text-white">
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Account</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Period</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Statement Balance (KES)</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Difference (KES)</th>
-                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Notes</th>
-                    <th className="px-3 py-1 font-bold" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.map((r, idx) => (
-                    <tr
-                      key={r._id}
-                      className={`border-b border-gray-100 cursor-pointer ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}
-                      onClick={() => openRecon(r)}
-                    >
-                      <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">
-                        <span className="font-mono text-slate-400 mr-1">{r.accountCode || r.account?.code}</span>
-                        {r.accountName || r.account?.name}
-                      </td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500">
-                        {fmtDate(r.periodStart)} — {fmtDate(r.periodEnd)}
-                      </td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold text-slate-700">
-                        {fmt(r.statementClosingBalance)}
-                      </td>
-                      <td className={`px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold ${Math.abs(r.difference) < 0.005 ? "text-emerald-600" : "text-red-600"}`}>
-                        {fmt(r.difference)}
-                      </td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-center">
-                        {r.status === "reconciled" ? (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                            <FaLock size={8} /> Finalised
-                          </span>
-                        ) : (
-                          <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600">
-                            Draft
-                          </span>
-                        )}
-                      </td>
-                      <td className="max-w-[160px] truncate px-3 py-1 border-r border-gray-100 text-slate-400" title={r.notes}>{r.notes || "—"}</td>
-                      <td className="px-3 py-1 text-right">
-                        {r.status !== "reconciled" && (
-                          <button
-                            onClick={(e) => handleDelete(r._id, e)}
-                            className="rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500"
-                            title="Delete draft"
-                          >
-                            <FaTrash size={10} />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            <MilikTable
+              columns={[
+                { label: "Account" },
+                { label: "Period" },
+                { label: "Statement Balance (KES)", align: "right" },
+                { label: "Difference (KES)", align: "right" },
+                { label: "Status", align: "center" },
+                { label: "Notes" },
+              ]}
+              rows={history}
+              rowKey="_id"
+              loading={loadingHistory}
+              empty="No reconciliations yet. Click “New Reconciliation” to get started."
+              onRowClick={openRecon}
+              renderActions={(r) => r.status !== "reconciled" && (
+                <button
+                  onClick={(e) => handleDelete(r._id, e)}
+                  className="rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500"
+                  title="Delete draft"
+                >
+                  <FaTrash size={10} />
+                </button>
+              )}
+              renderRow={(r) => (
+                <>
+                  <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">
+                    <span className="font-mono text-slate-400 mr-1">{r.accountCode || r.account?.code}</span>
+                    {r.accountName || r.account?.name}
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-500">
+                    {fmtDate(r.periodStart)} — {fmtDate(r.periodEnd)}
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold text-slate-700">
+                    {fmt(r.statementClosingBalance)}
+                  </td>
+                  <td className={`px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold ${Math.abs(r.difference) < 0.005 ? "text-emerald-600" : "text-red-600"}`}>
+                    {fmt(r.difference)}
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-center">
+                    {r.status === "reconciled" ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                        <FaLock size={8} /> Finalised
+                      </span>
+                    ) : (
+                      <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600">
+                        Draft
+                      </span>
+                    )}
+                  </td>
+                  <td className="max-w-[160px] truncate px-3 py-1 border-r border-gray-100 text-slate-400" title={r.notes}>{r.notes || "—"}</td>
+                </>
+              )}
+            />
           </div>
         </div>
       </DashboardLayout>
@@ -589,94 +573,67 @@ const BankReconciliation = () => {
         </div>
 
         {/* Entries table */}
-        <div className="flex-1 overflow-auto">
-          {loadingEntries ? (
-            <div className="flex h-32 items-center justify-center gap-2 text-sm text-slate-400">
-              <FaSyncAlt size={12} className="animate-spin" /> Loading entries…
-            </div>
-          ) : filteredEntries.length === 0 ? (
-            <div className="flex h-32 items-center justify-center text-sm text-slate-400">
-              No ledger entries found for this account and period
-            </div>
-          ) : (
-            <table className="min-w-full text-[11px] border-collapse">
-              <thead className="sticky top-0 z-10">
-                <tr className="bg-[#0B3B2E] text-white">
-                  <th className="px-3 py-1 text-center font-bold border-r border-white/10">
-                    {!isLocked && (
-                      <button
-                        onClick={toggleAll}
-                        className={`flex h-4 w-4 items-center justify-center rounded border ${allVisibleCleared ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 bg-white text-transparent"}`}
-                        title={allVisibleCleared ? "Uncheck all" : "Check all"}
-                      >
-                        <FaCheck size={8} />
-                      </button>
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+          <MilikTable
+            columns={[
+              { label: "Date" },
+              { label: "Description / Category" },
+              { label: "Type" },
+              { label: "Debit (In)", align: "right" },
+              { label: "Credit (Out)", align: "right" },
+              { label: "Cleared", align: "center" },
+            ]}
+            rows={filteredEntries}
+            rowKey="_id"
+            loading={loadingEntries}
+            empty="No ledger entries found for this account and period"
+            checkboxes={!isLocked}
+            allChecked={allVisibleCleared}
+            onCheckAll={toggleAll}
+            isChecked={(e) => cleared.has(String(e._id))}
+            onCheckRow={(e) => toggleEntry(String(e._id))}
+            onRowClick={!isLocked ? (e) => toggleEntry(String(e._id)) : undefined}
+            rowClassName={(e) => (cleared.has(String(e._id)) ? "bg-emerald-50/40" : "")}
+            renderFooter={() => (
+              <>
+                <td colSpan={3} className="px-3 py-2 uppercase text-slate-500">
+                  {cleared.size} of {entries.length} entries cleared
+                </td>
+                <td className="px-3 py-2 text-right font-mono text-emerald-700">
+                  {fmt(summary.clearedDebits)} <span className="text-[9px] font-normal text-slate-400 ml-1">cleared in</span>
+                </td>
+                <td className="px-3 py-2 text-right font-mono text-red-600">
+                  {fmt(summary.clearedCredits)} <span className="text-[9px] font-normal text-slate-400 ml-1">cleared out</span>
+                </td>
+                <td />
+              </>
+            )}
+            renderRow={(e) => {
+              const id = String(e._id);
+              const isClear = cleared.has(id);
+              const amt = Number(e.amount || 0);
+              return (
+                <>
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-500 whitespace-nowrap">{fmtDate(e.transactionDate)}</td>
+                  <td className="max-w-[240px] truncate px-3 py-1 border-r border-gray-100 text-slate-700" title={e.notes}>{e.notes || "—"}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-400 capitalize">{(e.sourceTransactionType || "").replace(/_/g, " ")}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold">
+                    {e.direction === "debit" ? <span className="text-emerald-700">{fmt(amt)}</span> : <span className="text-slate-200">—</span>}
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold">
+                    {e.direction === "credit" ? <span className="text-red-600">{fmt(amt)}</span> : <span className="text-slate-200">—</span>}
+                  </td>
+                  <td className="px-3 py-1 text-center">
+                    {isClear && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">
+                        <FaCheck size={7} /> Cleared
+                      </span>
                     )}
-                  </th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Description / Category</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Debit (In)</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Credit (Out)</th>
-                  <th className="px-3 py-1 text-center font-bold">Cleared</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredEntries.map((e, idx) => {
-                  const id = String(e._id);
-                  const isClear = cleared.has(id);
-                  const amt = Number(e.amount || 0);
-                  return (
-                    <tr
-                      key={id}
-                      onClick={() => !isLocked && toggleEntry(id)}
-                      className={`border-b border-gray-100 transition-colors ${isLocked ? "" : "cursor-pointer"} ${isClear ? "bg-emerald-50/40" : idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}
-                    >
-                      <td className="px-3 py-1 border-r border-gray-100 text-center">
-                        <div
-                          className={`mx-auto flex h-4 w-4 items-center justify-center rounded border ${
-                            isClear ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 bg-white text-transparent"
-                          }`}
-                        >
-                          <FaCheck size={8} />
-                        </div>
-                      </td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500 whitespace-nowrap">{fmtDate(e.transactionDate)}</td>
-                      <td className="max-w-[240px] truncate px-3 py-1 border-r border-gray-100 text-slate-700" title={e.notes}>{e.notes || "—"}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-slate-400 capitalize">{(e.sourceTransactionType || "").replace(/_/g, " ")}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold">
-                        {e.direction === "debit" ? <span className="text-emerald-700">{fmt(amt)}</span> : <span className="text-slate-200">—</span>}
-                      </td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold">
-                        {e.direction === "credit" ? <span className="text-red-600">{fmt(amt)}</span> : <span className="text-slate-200">—</span>}
-                      </td>
-                      <td className="px-3 py-1 text-center">
-                        {isClear && (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">
-                            <FaCheck size={7} /> Cleared
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-slate-300 bg-slate-50 text-xs font-black">
-                  <td colSpan={4} className="px-3 py-2 uppercase text-slate-500">
-                    {cleared.size} of {entries.length} entries cleared
                   </td>
-                  <td className="px-3 py-2 text-right font-mono text-emerald-700">
-                    {fmt(summary.clearedDebits)} <span className="text-[9px] font-normal text-slate-400 ml-1">cleared in</span>
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono text-red-600">
-                    {fmt(summary.clearedCredits)} <span className="text-[9px] font-normal text-slate-400 ml-1">cleared out</span>
-                  </td>
-                  <td />
-                </tr>
-              </tfoot>
-            </table>
-          )}
+                </>
+              );
+            }}
+          />
         </div>
       </div>
     </DashboardLayout>

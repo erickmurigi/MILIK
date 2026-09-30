@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
-import { FaArrowLeft, FaBook, FaSync, FaAddressCard } from "react-icons/fa";
+import { FaArrowLeft, FaBook, FaSync } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import MilikTable from "../../components/common/MilikTable";
 import { getCreditorsSummary, getCreditorStatement } from "../../redux/apiCalls";
 import { fmtDate } from "../../utils/dates";
 
@@ -137,115 +138,71 @@ const CreditorLedger = () => {
               </span>
             </div>
 
-            <div className="flex-1 overflow-auto">
-              {loadingList ? (
-                <div className="flex h-40 items-center justify-center text-xs text-slate-400">
-                  Loading…
-                </div>
-              ) : (
-                <table className="min-w-full text-[11px] border-collapse">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="bg-[#0B3B2E] text-white">
-                      {[
-                        "Code",
-                        "Name",
-                        "Category",
-                        "Phone",
-                        "Invoiced (KES)",
-                        "Paid (KES)",
-                        "Outstanding (KES)",
-                        "",
-                      ].map((h, i, arr) => (
-                        <th
-                          key={h}
-                          className={`px-3 py-1 text-left font-bold whitespace-nowrap ${i < arr.length - 1 ? "border-r border-white/10" : ""}`}
-                        >
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="px-3 py-10 text-center text-xs text-slate-400">
-                          <FaAddressCard className="mx-auto mb-2 text-slate-200" size={32} />
-                          No service providers found
-                        </td>
-                      </tr>
-                    ) : (
-                      filtered.map((p, idx) => {
-                        const outstanding = p.outstanding || 0;
-                        return (
-                          <tr
-                            key={p._id}
-                            className={`border-b border-gray-100 cursor-pointer ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}
-                            onClick={() => openDetail(p)}
-                          >
-                            <td className="px-3 py-1 border-r border-gray-100 font-mono font-bold text-slate-600">
-                              {p.providerCode}
-                            </td>
-                            <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{p.name}</td>
-                            <td className="px-3 py-1 border-r border-gray-100 capitalize text-slate-500">{p.category || "—"}</td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{p.phone || "—"}</td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">
-                              {fmt(p.totalInvoiced)}
-                            </td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-green-700">
-                              {fmt(p.totalPaid)}
-                            </td>
-                            <td
-                              className={`px-3 py-1 border-r border-gray-100 text-right font-mono font-bold ${
-                                outstanding > 0 ? "text-red-600" : "text-slate-400"
-                              }`}
-                            >
-                              {fmt(outstanding)}
-                            </td>
-                            <td className="px-3 py-1">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openDetail(p);
-                                }}
-                                className="flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"
-                              >
-                                <FaBook size={9} />
-                                Statement
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                  {filtered.length > 0 && (
-                    <tfoot>
-                      <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold">
-                        <td
-                          colSpan={4}
-                          className="px-3 py-2 text-[10px] uppercase tracking-widest text-slate-400"
-                        >
-                          Totals
-                        </td>
-                        <td className="px-3 py-2 text-right font-mono text-xs text-slate-700">
-                          {fmt(listTotals.invoiced)}
-                        </td>
-                        <td className="px-3 py-2 text-right font-mono text-xs text-green-700">
-                          {fmt(listTotals.paid)}
-                        </td>
-                        <td
-                          className={`px-3 py-2 text-right font-mono text-xs font-bold ${
-                            listTotals.outstanding > 0 ? "text-red-600" : "text-slate-400"
-                          }`}
-                        >
-                          {fmt(listTotals.outstanding)}
-                        </td>
-                        <td />
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
-              )}
+            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+              <MilikTable
+                columns={[
+                  { label: "Code" },
+                  { label: "Name" },
+                  { label: "Category" },
+                  { label: "Phone" },
+                  { label: "Invoiced (KES)", align: "right" },
+                  { label: "Paid (KES)", align: "right" },
+                  { label: "Outstanding (KES)", align: "right" },
+                ]}
+                rows={filtered}
+                rowKey="_id"
+                loading={loadingList}
+                empty="No service providers found"
+                onRowClick={openDetail}
+                renderActions={(p) => (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openDetail(p);
+                    }}
+                    className="flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"
+                  >
+                    <FaBook size={9} />
+                    Statement
+                  </button>
+                )}
+                renderFooter={filtered.length > 0 ? () => (
+                  <>
+                    <td colSpan={4} className="px-3 py-2 text-[10px] uppercase tracking-widest text-slate-400">Totals</td>
+                    <td className="px-3 py-2 text-right font-mono text-xs text-slate-700">{fmt(listTotals.invoiced)}</td>
+                    <td className="px-3 py-2 text-right font-mono text-xs text-green-700">{fmt(listTotals.paid)}</td>
+                    <td className={`px-3 py-2 text-right font-mono text-xs font-bold ${listTotals.outstanding > 0 ? "text-red-600" : "text-slate-400"}`}>
+                      {fmt(listTotals.outstanding)}
+                    </td>
+                  </>
+                ) : undefined}
+                renderRow={(p) => {
+                  const outstanding = p.outstanding || 0;
+                  return (
+                    <>
+                      <td className="px-3 py-1 border-r border-gray-100 font-mono font-bold text-slate-600">
+                        {p.providerCode}
+                      </td>
+                      <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{p.name}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 capitalize text-slate-500">{p.category || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{p.phone || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">
+                        {fmt(p.totalInvoiced)}
+                      </td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-green-700">
+                        {fmt(p.totalPaid)}
+                      </td>
+                      <td
+                        className={`px-3 py-1 border-r border-gray-100 text-right font-mono font-bold ${
+                          outstanding > 0 ? "text-red-600" : "text-slate-400"
+                        }`}
+                      >
+                        {fmt(outstanding)}
+                      </td>
+                    </>
+                  );
+                }}
+              />
             </div>
           </>
         )}
@@ -286,109 +243,70 @@ const CreditorLedger = () => {
               )}
             </div>
 
-            <div className="flex-1 overflow-auto">
-              {loadingStatement ? (
-                <div className="flex h-40 items-center justify-center text-xs text-slate-400">
-                  Loading statement…
-                </div>
-              ) : !statement ? null : statement.lines.length === 0 ? (
-                <div className="flex h-40 items-center justify-center text-xs text-slate-400">
-                  No transactions found for this provider
-                </div>
-              ) : (
-                <table className="min-w-full text-[11px] border-collapse">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="bg-[#0B3B2E] text-white">
-                      {[
-                        "Date",
-                        "Reference",
-                        "Type",
-                        "Description",
-                        "Invoiced (KES)",
-                        "Paid (KES)",
-                        "Balance (KES)",
-                      ].map((h, i, arr) => (
-                        <th
-                          key={h}
-                          className={`px-3 py-1 text-left font-bold whitespace-nowrap ${i < arr.length - 1 ? "border-r border-white/10" : ""}`}
-                        >
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {statement.lines.map((line, i) => (
-                      <tr
-                        key={i}
-                        className={`border-b border-gray-100 ${
-                          line.type === "payment"
-                            ? "bg-emerald-50/30 hover:bg-blue-50/40"
-                            : i % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"
-                        }`}
-                      >
-                        <td className="whitespace-nowrap px-3 py-1 border-r border-gray-100 text-slate-500">
-                          {fmtDate(line.date)}
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-600">{line.ref || "—"}</td>
-                        <td className="px-3 py-1 border-r border-gray-100">
-                          <span
-                            className={`inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                              TYPE_STYLE[line.type] || "border-slate-200 bg-slate-100 text-slate-500"
-                            }`}
-                          >
-                            {line.type}
-                          </span>
-                        </td>
-                        <td className="max-w-xs truncate px-3 py-1 border-r border-gray-100 text-slate-700">
-                          {line.description || "—"}
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">
-                          {line.invoiced > 0 ? fmt(line.invoiced) : "—"}
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-green-700">
-                          {line.paid > 0 ? fmt(line.paid) : "—"}
-                        </td>
-                        <td
-                          className={`px-3 py-1 text-right font-mono font-bold ${
-                            line.balance > 0
-                              ? "text-red-600"
-                              : line.balance < 0
-                              ? "text-green-700"
-                              : "text-slate-400"
+            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+              {!statement && !loadingStatement ? null : (
+                <MilikTable
+                  columns={[
+                    { label: "Date" },
+                    { label: "Reference" },
+                    { label: "Type" },
+                    { label: "Description" },
+                    { label: "Invoiced (KES)", align: "right" },
+                    { label: "Paid (KES)", align: "right" },
+                    { label: "Balance (KES)", align: "right" },
+                  ]}
+                  rows={statement?.lines || []}
+                  loading={loadingStatement}
+                  empty="No transactions found for this provider"
+                  rowClassName={(line) => (line.type === "payment" ? "bg-emerald-50/30" : "")}
+                  renderFooter={statement?.lines?.length > 0 ? () => (
+                    <>
+                      <td colSpan={4} className="px-3 py-2 text-[10px] uppercase tracking-widest text-slate-400">Totals</td>
+                      <td className="px-3 py-2 text-right font-mono text-xs text-slate-700">{fmt(statement.summary?.totalInvoiced)}</td>
+                      <td className="px-3 py-2 text-right font-mono text-xs text-green-700">{fmt(statement.summary?.totalPaid)}</td>
+                      <td className={`px-3 py-2 text-right font-mono text-xs font-bold ${(statement.summary?.outstanding || 0) > 0 ? "text-red-600" : "text-slate-400"}`}>
+                        {fmt(statement.summary?.outstanding)}
+                      </td>
+                    </>
+                  ) : undefined}
+                  renderRow={(line) => (
+                    <>
+                      <td className="whitespace-nowrap px-3 py-1 border-r border-gray-100 text-slate-500">
+                        {fmtDate(line.date)}
+                      </td>
+                      <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-600">{line.ref || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100">
+                        <span
+                          className={`inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                            TYPE_STYLE[line.type] || "border-slate-200 bg-slate-100 text-slate-500"
                           }`}
                         >
-                          {fmt(line.balance)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
-                      <td
-                        colSpan={4}
-                        className="px-3 py-2 text-[10px] uppercase tracking-widest text-slate-400"
-                      >
-                        Totals
+                          {line.type}
+                        </span>
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-xs text-slate-700">
-                        {fmt(statement.summary?.totalInvoiced)}
+                      <td className="max-w-xs truncate px-3 py-1 border-r border-gray-100 text-slate-700">
+                        {line.description || "—"}
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-xs text-green-700">
-                        {fmt(statement.summary?.totalPaid)}
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">
+                        {line.invoiced > 0 ? fmt(line.invoiced) : "—"}
+                      </td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-green-700">
+                        {line.paid > 0 ? fmt(line.paid) : "—"}
                       </td>
                       <td
-                        className={`px-3 py-2 text-right font-mono text-xs font-bold ${
-                          (statement.summary?.outstanding || 0) > 0
+                        className={`px-3 py-1 text-right font-mono font-bold ${
+                          line.balance > 0
                             ? "text-red-600"
+                            : line.balance < 0
+                            ? "text-green-700"
                             : "text-slate-400"
                         }`}
                       >
-                        {fmt(statement.summary?.outstanding)}
+                        {fmt(line.balance)}
                       </td>
-                    </tr>
-                  </tfoot>
-                </table>
+                    </>
+                  )}
+                />
               )}
             </div>
           </>

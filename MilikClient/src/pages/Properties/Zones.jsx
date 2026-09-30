@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useConfirm } from '../../context/ConfirmContext';
 import {
-  FaLayerGroup, FaPlus, FaEdit, FaTrash, FaSearch, FaRedoAlt,
+  FaPlus, FaEdit, FaTrash, FaSearch, FaRedoAlt,
   FaTimes, FaSave, FaToggleOn, FaToggleOff,
 } from 'react-icons/fa';
 import { toast } from "react-toastify";
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import AppSelect from '../../components/common/AppSelect';
+import MilikTable from '../../components/common/MilikTable';
 import { adminRequests } from '../../utils/requestMethods';
 import PaginationBar from '../../components/PaginationBar';
 import { useTerm } from '../../hooks/useTerm';
@@ -402,130 +403,88 @@ export default function Zones() {
 
         {/* Table card */}
         <div className="flex-1 min-h-0 px-2 pb-2 overflow-hidden">
-          <div className="bg-white border border-gray-200 rounded-lg shadow-sm h-full flex flex-col">
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm h-full flex flex-col overflow-hidden">
 
-            {/* Scrollable table */}
-            <div className="overflow-y-auto flex-1 min-h-0">
-              <table className="w-full text-[11px] border-collapse bg-white" style={{ tableLayout: 'fixed' }}>
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className="bg-[#0B3B2E] text-white">
-                    <th className="px-3 py-2 text-center font-bold border-r border-white/10" style={{ width: '36px' }}>#</th>
-                    <th className="px-3 py-2 text-center font-bold border-r border-white/10" style={{ width: '36px' }}>Clr</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Name / Code</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10" style={{ width: '110px' }}>Type</th>
-                    <th className="px-3 py-2 text-center font-bold border-r border-white/10" style={{ width: '80px' }}>{termProperties}</th>
-                    <th className="px-3 py-2 text-center font-bold border-r border-white/10" style={{ width: '76px' }}>Officers</th>
-                    <th className="px-3 py-2 text-center font-bold border-r border-white/10" style={{ width: '80px' }}>Supervisors</th>
-                    <th className="px-3 py-2 text-center font-bold border-r border-white/10" style={{ width: '76px' }}>Status</th>
-                    <th className="px-3 py-2 text-center font-bold" style={{ width: '86px' }}>Actions</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan={9} className="px-3 py-10 text-center text-xs text-slate-400">
-                        Loading zones…
-                      </td>
-                    </tr>
-                  ) : zones.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="px-3 py-12 text-center">
-                        <div className="flex flex-col items-center gap-3">
-                          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EDF5F1]">
-                            <FaLayerGroup className="text-lg text-[#0B3B2E]" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-black text-slate-900">
-                              {search || typeFilter || statusFilter ? 'No zones match your filters' : 'No zones yet'}
-                            </p>
-                            <p className="mt-1 text-xs text-slate-500">
-                              {search || typeFilter || statusFilter
-                                ? 'Try clearing filters and searching again'
-                                : 'Create your first zone to start grouping properties'}
-                            </p>
-                          </div>
-                          {!search && !typeFilter && !statusFilter && (
-                            <button
-                              onClick={() => setModalZone(false)}
-                              className="inline-flex items-center gap-1.5 rounded bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127]"
-                            >
-                              <FaPlus size={10} /> Create First Zone
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    zones.map((zone, idx) => (
-                      <tr
-                        key={zone._id}
-                        className="border-b border-gray-100 transition-colors odd:bg-white even:bg-slate-50/50 hover:bg-[#EDF5F1]/70"
-                      >
-                        <td className="px-3 py-1.5 text-center text-slate-400 font-mono border-r border-gray-100">
-                          {(page - 1) * pageSize + idx + 1}
-                        </td>
-                        <td className="px-3 py-1.5 text-center border-r border-gray-100">
-                          <span
-                            className="inline-block h-4 w-4 rounded-full"
-                            style={{ backgroundColor: zone.color || '#0B3B2E' }}
-                          />
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                          <span className="font-semibold text-slate-900 truncate block">{zone.name}</span>
-                          <span className="font-mono text-[10px] text-slate-400 tracking-wide">{zone.code}</span>
-                        </td>
-                        <td className="px-3 py-1.5 border-r border-gray-100">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${TYPE_BADGE[zone.type] || TYPE_BADGE.other}`}>
-                            {TYPE_OPTIONS.find((t) => t.value === zone.type)?.label || zone.type}
-                          </span>
-                        </td>
-                        <td className="px-3 py-1.5 text-center border-r border-gray-100 font-semibold text-slate-700">
-                          {zone.propertyCount || 0}
-                        </td>
-                        <td className="px-3 py-1.5 text-center border-r border-gray-100 font-semibold text-slate-700">
-                          {(zone.fieldOfficers || []).length}
-                        </td>
-                        <td className="px-3 py-1.5 text-center border-r border-gray-100 font-semibold text-slate-700">
-                          {(zone.supervisors || []).length}
-                        </td>
-                        <td className="px-3 py-1.5 text-center border-r border-gray-100">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${zone.isActive ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                            {zone.isActive ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td className="px-3 py-1.5 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => setModalZone(zone)}
-                              title="Edit"
-                              className="flex h-6 w-6 items-center justify-center rounded border border-slate-200 text-slate-500 hover:border-[#0B3B2E] hover:text-[#0B3B2E] transition-colors"
-                            >
-                              <FaEdit size={9} />
-                            </button>
-                            <button
-                              onClick={() => handleToggle(zone)}
-                              title={zone.isActive ? 'Deactivate' : 'Activate'}
-                              className={`flex h-6 w-6 items-center justify-center rounded border transition-colors ${zone.isActive ? 'border-amber-200 text-amber-500 hover:border-amber-500 hover:text-amber-700' : 'border-emerald-200 text-emerald-500 hover:border-emerald-600 hover:text-emerald-700'}`}
-                            >
-                              {zone.isActive ? <FaToggleOff size={9} /> : <FaToggleOn size={9} />}
-                            </button>
-                            <button
-                              onClick={() => handleDelete(zone)}
-                              disabled={deleting === zone._id}
-                              title="Delete"
-                              className="flex h-6 w-6 items-center justify-center rounded border border-red-200 text-red-400 hover:border-red-500 hover:text-red-600 transition-colors disabled:opacity-40"
-                            >
-                              <FaTrash size={9} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <MilikTable
+              tableFixed
+              columns={[
+                { label: '#', align: 'center', width: '36px' },
+                { label: 'Clr', align: 'center', width: '36px' },
+                { label: 'Name / Code' },
+                { label: 'Type', width: '110px' },
+                { label: termProperties, align: 'center', width: '80px' },
+                { label: 'Officers', align: 'center', width: '76px' },
+                { label: 'Supervisors', align: 'center', width: '80px' },
+                { label: 'Status', align: 'center', width: '76px' },
+              ]}
+              rows={zones}
+              rowKey="_id"
+              loading={loading}
+              empty={search || typeFilter || statusFilter ? 'No zones match your filters' : 'No zones yet — create your first zone to start grouping properties'}
+              actionsWidth="86px"
+              renderActions={(zone) => (
+                <div className="flex items-center justify-center gap-1">
+                  <button
+                    onClick={() => setModalZone(zone)}
+                    title="Edit"
+                    className="flex h-6 w-6 items-center justify-center rounded border border-slate-200 text-slate-500 hover:border-[#0B3B2E] hover:text-[#0B3B2E] transition-colors"
+                  >
+                    <FaEdit size={9} />
+                  </button>
+                  <button
+                    onClick={() => handleToggle(zone)}
+                    title={zone.isActive ? 'Deactivate' : 'Activate'}
+                    className={`flex h-6 w-6 items-center justify-center rounded border transition-colors ${zone.isActive ? 'border-amber-200 text-amber-500 hover:border-amber-500 hover:text-amber-700' : 'border-emerald-200 text-emerald-500 hover:border-emerald-600 hover:text-emerald-700'}`}
+                  >
+                    {zone.isActive ? <FaToggleOff size={9} /> : <FaToggleOn size={9} />}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(zone)}
+                    disabled={deleting === zone._id}
+                    title="Delete"
+                    className="flex h-6 w-6 items-center justify-center rounded border border-red-200 text-red-400 hover:border-red-500 hover:text-red-600 transition-colors disabled:opacity-40"
+                  >
+                    <FaTrash size={9} />
+                  </button>
+                </div>
+              )}
+              renderRow={(zone, idx) => (
+                <>
+                  <td className="px-3 py-1.5 text-center text-slate-400 font-mono border-r border-gray-100">
+                    {(page - 1) * pageSize + idx + 1}
+                  </td>
+                  <td className="px-3 py-1.5 text-center border-r border-gray-100">
+                    <span
+                      className="inline-block h-4 w-4 rounded-full"
+                      style={{ backgroundColor: zone.color || '#0B3B2E' }}
+                    />
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                    <span className="font-semibold text-slate-900 truncate block">{zone.name}</span>
+                    <span className="font-mono text-[10px] text-slate-400 tracking-wide">{zone.code}</span>
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${TYPE_BADGE[zone.type] || TYPE_BADGE.other}`}>
+                      {TYPE_OPTIONS.find((t) => t.value === zone.type)?.label || zone.type}
+                    </span>
+                  </td>
+                  <td className="px-3 py-1.5 text-center border-r border-gray-100 font-semibold text-slate-700">
+                    {zone.propertyCount || 0}
+                  </td>
+                  <td className="px-3 py-1.5 text-center border-r border-gray-100 font-semibold text-slate-700">
+                    {(zone.fieldOfficers || []).length}
+                  </td>
+                  <td className="px-3 py-1.5 text-center border-r border-gray-100 font-semibold text-slate-700">
+                    {(zone.supervisors || []).length}
+                  </td>
+                  <td className="px-3 py-1.5 text-center border-r border-gray-100">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${zone.isActive ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                      {zone.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                </>
+              )}
+            />
 
             {/* Pagination footer */}
             <PaginationBar

@@ -7,6 +7,7 @@ import {
   FaChartPie, FaCheck, FaEdit, FaPlus, FaSyncAlt, FaTimes, FaTrash,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import MilikTable from "../../components/common/MilikTable";
 import {
   getBudgets, getBudget, createBudget, updateBudget,
   deleteBudget, getChartOfAccounts,
@@ -310,52 +311,38 @@ const BudgetVsActual = () => {
           )}
 
           {/* List */}
-          <div className="flex-1 overflow-auto">
-            {loadingList ? (
-              <div className="flex h-32 items-center justify-center gap-2 text-sm text-slate-400">
-                <FaSyncAlt size={12} className="animate-spin" /> Loading…
-              </div>
-            ) : budgets.length === 0 ? (
-              <div className="flex h-40 flex-col items-center justify-center gap-1 text-slate-400">
-                <FaChartPie size={22} className="opacity-20" />
-                <p className="text-xs font-semibold">No budgets yet</p>
-                <p className="text-[11px]">Click "New Budget" to get started</p>
-              </div>
-            ) : (
-              <table className="min-w-full text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10">
-                  <tr className="bg-[#0B3B2E] text-white">
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Budget Name</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Period</th>
-                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Lines</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Total Budgeted (KES)</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Notes</th>
-                    <th className="px-3 py-1 font-bold" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {budgets.map((b, idx) => (
-                    <tr key={b._id} className={`border-b border-gray-100 cursor-pointer ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`} onClick={() => openBudget(b)}>
-                      <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{b.name}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{fmtDate(b.periodStart)} — {fmtDate(b.periodEnd)}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-center">{statusPill(b.status)}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-500">{b.lineCount}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold text-slate-700">{fmt(b.totalBudgeted)}</td>
-                      <td className="max-w-[180px] truncate px-3 py-1 border-r border-gray-100 text-slate-400">{b.notes || "—"}</td>
-                      <td className="px-3 py-1 text-right">
-                        {b.status === "draft" && (
-                          <button onClick={(e) => handleDelete(b._id, e)}
-                            className="rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500">
-                            <FaTrash size={10} />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            <MilikTable
+              columns={[
+                { label: "Budget Name" },
+                { label: "Period" },
+                { label: "Status", align: "center" },
+                { label: "Lines", align: "right" },
+                { label: "Total Budgeted (KES)", align: "right" },
+                { label: "Notes" },
+              ]}
+              rows={budgets}
+              rowKey="_id"
+              loading={loadingList}
+              empty="No budgets yet. Click “New Budget” to get started."
+              onRowClick={openBudget}
+              renderActions={(b) => b.status === "draft" && (
+                <button onClick={(e) => handleDelete(b._id, e)}
+                  className="rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500">
+                  <FaTrash size={10} />
+                </button>
+              )}
+              renderRow={(b) => (
+                <>
+                  <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{b.name}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{fmtDate(b.periodStart)} — {fmtDate(b.periodEnd)}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-center">{statusPill(b.status)}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-500">{b.lineCount}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold text-slate-700">{fmt(b.totalBudgeted)}</td>
+                  <td className="max-w-[180px] truncate px-3 py-1 border-r border-gray-100 text-slate-400">{b.notes || "—"}</td>
+                </>
+              )}
+            />
           </div>
         </div>
       </DashboardLayout>
