@@ -2452,7 +2452,9 @@ export const createPayment = async (req, res, next) => {
     // the client — the amount never arrives as new cash either way.
     const isDepositApplied = String(req.body?.paymentMethod || "").trim() === "deposit_applied";
     const isDirectToLandlord = isDepositApplied ? null : req.body?.paidDirectToLandlord === true;
-    const refNumber = String(req.body?.referenceNumber || "").trim();
+    // deposit_applied has no external transaction to reference — auto-filled below as
+    // "DEP-<receiptNumber>" once the receipt number is known, unless one was explicitly given.
+    let refNumber = String(req.body?.referenceNumber || "").trim();
     const normalizedCashbook = isDirectToLandlord || isTakeOnCredit || isDepositApplied ? "" : String(req.body?.cashbook || "").trim();
     const useManualAllocations =
       String(req.body?.allocationMode || "").trim().toLowerCase() === "manual" ||
@@ -2461,7 +2463,7 @@ export const createPayment = async (req, res, next) => {
     const providedReceiptNumber = String(req.body?.receiptNumber || "").trim();
 
     // Non-DB validations first — fail fast before hitting the database
-    if (!refNumber) {
+    if (!refNumber && !isDepositApplied) {
       return next(createError(400, "Reference number is required for tenant receipts."));
     }
     if (!isDirectToLandlord && !isTakeOnCredit && !isDepositApplied && !normalizedCashbook) {
@@ -2475,7 +2477,7 @@ export const createPayment = async (req, res, next) => {
     const [tenant, unit, duplicateRef, companySettingsDoc] = await Promise.all([
       Tenant.findOne({ _id: tenantId, business: businessId }).select("_id unit business depositHeldBy").lean(),
       Unit.findOne({ _id: unitId, business: businessId }).select("_id property business").lean(),
-      RentPayment.findOne({ business: businessId, referenceNumber: refNumber }).lean(),
+      refNumber ? RentPayment.findOne({ business: businessId, referenceNumber: refNumber }).lean() : Promise.resolve(null),
       explicitConfirmed === null
         ? CompanySettings.findOne({ company: businessId }).select("incomeRules").lean()
         : Promise.resolve(null),
@@ -2551,6 +2553,12 @@ export const createPayment = async (req, res, next) => {
       if (duplicateReceipt) {
         return next(createError(400, "Receipt number already exists in this company."));
       }
+    }
+
+    // No external transaction to reference for a deposit application — built from the
+    // receipt number, which is already guaranteed unique, so no further dup check is needed.
+    if (isDepositApplied && !refNumber) {
+      refNumber = `DEP-${receiptNumber}`;
     }
 
     const depositContext = buildResolvedDepositMetadata({

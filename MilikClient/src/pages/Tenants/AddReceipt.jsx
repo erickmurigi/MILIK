@@ -266,6 +266,7 @@ const AddReceipt = () => {
     cash:           "Reference No.",
     check:          "Cheque No.",
     credit_card:    "Card Auth. Ref",
+    deposit_applied: "Reference No.",
   }[formData.paymentMethod] || "Reference No.";
 
   useEffect(() => {
@@ -1116,20 +1117,26 @@ const AddReceipt = () => {
                     <label className={labelClass}>
                       {refLabel}{refRequired ? " *" : ""}
                     </label>
-                    <input
-                      type="text"
-                      value={formData.referenceNumber}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, referenceNumber: e.target.value }))}
-                      className={inputClass}
-                      placeholder={
-                        formData.paymentMethod === "mobile_money" ? "e.g. QJZ7HK3P2T"
-                        : formData.paymentMethod === "bank_transfer" ? "EFT reference / slip no."
-                        : formData.paymentMethod === "pesalink" ? "PesaLink transaction ref"
-                        : formData.paymentMethod === "rtgs"    ? "Wire transfer ref"
-                        : formData.paymentMethod === "check"   ? "Cheque number"
-                        : "Optional"
-                      }
-                    />
+                    {isDepositApplied ? (
+                      <div className="flex h-8 items-center border border-emerald-200 bg-emerald-50 px-3 text-xs text-emerald-800">
+                        Auto-generated on save (e.g. DEP-REC00412)
+                      </div>
+                    ) : (
+                      <input
+                        type="text"
+                        value={formData.referenceNumber}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, referenceNumber: e.target.value }))}
+                        className={inputClass}
+                        placeholder={
+                          formData.paymentMethod === "mobile_money" ? "e.g. QJZ7HK3P2T"
+                          : formData.paymentMethod === "bank_transfer" ? "EFT reference / slip no."
+                          : formData.paymentMethod === "pesalink" ? "PesaLink transaction ref"
+                          : formData.paymentMethod === "rtgs"    ? "Wire transfer ref"
+                          : formData.paymentMethod === "check"   ? "Cheque number"
+                          : "Optional"
+                        }
+                      />
+                    )}
                   </div>
 
                   {/* Cashbook */}

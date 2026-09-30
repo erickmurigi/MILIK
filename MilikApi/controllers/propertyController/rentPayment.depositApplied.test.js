@@ -45,11 +45,12 @@ describe("deposit_applied receipts", () => {
       category: "RENT_CHARGE", amount: 12000, invoiceDate: new Date(2026, 1, 1), dueDate: new Date(2026, 1, 5),
     });
 
+    // No referenceNumber sent — deposit_applied has no external transaction to reference,
+    // so it must be auto-filled from the (also auto-generated) receipt number.
     const { statusCode, payload } = await callController(createPayment, {
       user,
       body: {
         tenant: String(tenant._id), unit: String(unit._id), amount: 12000,
-        referenceNumber: `DEPAPP-REF-${Date.now()}`,
         paymentMethod: "deposit_applied",
         paymentDate: new Date(2026, 1, 3), month: 2, year: 2026, isConfirmed: true,
       },
@@ -59,6 +60,7 @@ describe("deposit_applied receipts", () => {
     expect(payload.paidDirectToLandlord).toBe(false);
     expect(payload.cashbook).toBe("");
     expect(payload.allocationSummary.rent).toBe(12000);
+    expect(payload.referenceNumber).toBe(`DEP-${payload.receiptNumber}`);
 
     const saved = await RentPayment.findById(payload._id).lean();
     expect(saved.postingStatus).toBe("posted");
