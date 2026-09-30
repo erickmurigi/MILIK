@@ -8,6 +8,7 @@ import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
 import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import MilikTable from "../../components/common/MilikTable";
 import { getTenantInvoices } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
 import { fmtDate } from "../../utils/dates";
@@ -317,40 +318,42 @@ const RentalInvoiceVATReport = () => {
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-auto">
-              <table className="min-w-full text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className="bg-[#0B3B2E] text-white">
-                    {['Invoice', termTenant, termProperty, termUnit, 'Category', 'Invoice Date', 'Due Date', 'Tax', 'Net', 'VAT', 'Gross', 'Status'].map((header, i, arr) => (
-                      <th key={i} className={`whitespace-nowrap px-3 py-1 text-left font-bold ${i < arr.length - 1 ? "border-r border-white/10" : ""}`}>{header}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={12} className="px-3 py-8 text-center text-xs text-slate-500">No taxable rental invoices found for the current filter selection.</td>
-                    </tr>
-                  ) : (
-                    paginatedRows.map((row, idx) => (
-                      <tr key={row._id} className={`border-b border-gray-100 align-top ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
-                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row?.invoiceNumber || '-'}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row?.tenant?.tenantName || row?.tenant?.name || '-'}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row?.property?.propertyName || '-'}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row?.unit?.unitNumber || '-'}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{String(row?.category || '').replace(/_/g, ' ')}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{fmtDate(row?.invoiceDate)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{fmtDate(row?.dueDate)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row?.taxSnapshot?.taxCodeName || '-'} ({Number(row?.taxSnapshot?.taxRate || 0)}%)</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">{formatMoney(row?.taxSnapshot?.netAmount || 0)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-amber-700">{formatMoney(row?.taxSnapshot?.taxAmount || 0)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-[#0B3B2E]">{formatMoney(row?.taxSnapshot?.grossAmount || row?.amount || 0)}</td>
-                        <td className="px-3 py-1 text-slate-700">{row?.status || '-'}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+              <MilikTable
+                columns={[
+                  { label: "Invoice" },
+                  { label: termTenant },
+                  { label: termProperty },
+                  { label: termUnit },
+                  { label: "Category" },
+                  { label: "Invoice Date" },
+                  { label: "Due Date" },
+                  { label: "Tax" },
+                  { label: "Net", align: "right" },
+                  { label: "VAT", align: "right" },
+                  { label: "Gross", align: "right" },
+                  { label: "Status" },
+                ]}
+                rows={paginatedRows}
+                rowKey="_id"
+                empty="No taxable rental invoices found for the current filter selection."
+                renderRow={(row) => (
+                  <>
+                    <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row?.invoiceNumber || '-'}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row?.tenant?.tenantName || row?.tenant?.name || '-'}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row?.property?.propertyName || '-'}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row?.unit?.unitNumber || '-'}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{String(row?.category || '').replace(/_/g, ' ')}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{fmtDate(row?.invoiceDate)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{fmtDate(row?.dueDate)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row?.taxSnapshot?.taxCodeName || '-'} ({Number(row?.taxSnapshot?.taxRate || 0)}%)</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">{formatMoney(row?.taxSnapshot?.netAmount || 0)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-amber-700">{formatMoney(row?.taxSnapshot?.taxAmount || 0)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-[#0B3B2E]">{formatMoney(row?.taxSnapshot?.grossAmount || row?.amount || 0)}</td>
+                    <td className="px-3 py-1 text-slate-700">{row?.status || '-'}</td>
+                  </>
+                )}
+              />
             </div>
             <PaginationBar
               page={safeCurrentPage}

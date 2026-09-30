@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 import { hasCompanyPermission } from '../../utils/permissions';
 import AppSelect from '../../components/common/AppSelect';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
+import MilikTable from '../../components/common/MilikTable';
 import { getProperties } from '../../redux/propertyRedux';
 import { fetchCompanySettings, selectCompanySettings } from '../../redux/companySettingsRedux';
 import { adminRequests } from '../../utils/requestMethods';
@@ -384,49 +385,40 @@ const TaxReports = () => {
               <h3 className="text-xs font-bold">Tax Breakdown</h3>
               <p className="mt-1 text-xs text-emerald-50">Default company VAT rate: {Number(companyTaxConfig?.taxSettings?.defaultVatRate || DEFAULT_RATE)}%</p>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full min-w-[1000px] text-[11px] border-collapse">
-                <thead className="sticky top-0 z-20 bg-[#0B3B2E] text-white">
-                  <tr>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Source</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Reference</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{termProperty}</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Party</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Tax Code</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Rate</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Net</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Tax</th>
-                    <th className="px-3 py-1 text-right font-bold">Gross</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan="10" className="px-4 py-8 text-center text-slate-500">Loading tax data...</td>
-                    </tr>
-                  ) : rows.length === 0 ? (
-                    <tr>
-                      <td colSpan="10" className="px-4 py-8 text-center text-slate-500">No tax rows found for the selected period.</td>
-                    </tr>
-                  ) : (
-                    paginatedRows.map((row, idx) => (
-                      <tr key={row.id} className={`border-b border-gray-100 ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
-                        <td className="px-3 py-1 border-r border-gray-100">{new Date(row.date).toLocaleDateString()}</td>
-                        <td className="px-3 py-1 border-r border-gray-100">{row.source}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.reference}</td>
-                        <td className="px-3 py-1 border-r border-gray-100">{row.propertyName}</td>
-                        <td className="px-3 py-1 border-r border-gray-100">{row.partyName}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 uppercase">{row.taxCode}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right">{row.taxRate.toFixed(2)}%</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold">{formatMoney(row.netAmount)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-orange-700">{formatMoney(row.taxAmount)}</td>
-                        <td className="px-3 py-1 text-right font-bold text-slate-900">{formatMoney(row.grossAmount)}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+            <div className="min-h-0 flex-1 overflow-hidden flex flex-col">
+              <MilikTable
+                minWidth="1000px"
+                columns={[
+                  { label: "Date" },
+                  { label: "Source" },
+                  { label: "Reference" },
+                  { label: termProperty },
+                  { label: "Party" },
+                  { label: "Tax Code" },
+                  { label: "Rate", align: "right" },
+                  { label: "Net", align: "right" },
+                  { label: "Tax", align: "right" },
+                  { label: "Gross", align: "right" },
+                ]}
+                rows={paginatedRows}
+                rowKey="id"
+                loading={loading}
+                empty="No tax rows found for the selected period."
+                renderRow={(row) => (
+                  <>
+                    <td className="px-3 py-1 border-r border-gray-100">{new Date(row.date).toLocaleDateString()}</td>
+                    <td className="px-3 py-1 border-r border-gray-100">{row.source}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.reference}</td>
+                    <td className="px-3 py-1 border-r border-gray-100">{row.propertyName}</td>
+                    <td className="px-3 py-1 border-r border-gray-100">{row.partyName}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 uppercase">{row.taxCode}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right">{row.taxRate.toFixed(2)}%</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold">{formatMoney(row.netAmount)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-orange-700">{formatMoney(row.taxAmount)}</td>
+                    <td className="px-3 py-1 text-right font-bold text-slate-900">{formatMoney(row.grossAmount)}</td>
+                  </>
+                )}
+              />
             </div>
             <PaginationBar
               page={safeCurrentPage}

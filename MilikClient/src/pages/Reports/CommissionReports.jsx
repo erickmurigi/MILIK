@@ -13,6 +13,7 @@ import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
 import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import MilikTable from "../../components/common/MilikTable";
 import { fmtDate } from "../../utils/dates";
 import { adminRequests } from "../../utils/requestMethods";
 import PaginationBar from "../../components/PaginationBar";
@@ -453,51 +454,49 @@ const CommissionReports = () => {
 
           {/* Table */}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="min-h-0 flex-1 overflow-auto">
-              <table className="min-w-full text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-                  <tr>
-                    {['Recognition Date', 'Statement No.', termProperty, termLandlord, 'Basis', 'Structure', 'Recognized', 'Reversed', 'Status'].map((h, i, arr) => (
-                      <th key={h} className={`whitespace-nowrap px-3 py-1.5 text-left font-bold ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {!currentCompany?._id ? (
-                    <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-400">Select an active company to view the commission report.</td></tr>
-                  ) : loading ? (
-                    <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-400">Loading commission report…</td></tr>
-                  ) : filteredRows.length === 0 ? (
-                    <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-400">No commission data found for the selected filter range.</td></tr>
-                  ) : paginatedRows.map((row, idx) => (
-                    <tr key={row.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'} hover:bg-emerald-50/30`}>
-                      <td className="px-3 py-1.5 border-r border-slate-100 font-semibold text-slate-900">{fmtDate(row.recognitionDate)}</td>
-                      <td className="px-3 py-1.5 border-r border-slate-100 text-slate-700">{row.statementNumber}</td>
-                      <td className="px-3 py-1.5 border-r border-slate-100 text-slate-700">{row.propertyName}</td>
-                      <td className="px-3 py-1.5 border-r border-slate-100 text-slate-700">{row.landlordName}</td>
-                      <td className="px-3 py-1.5 border-r border-slate-100 text-slate-700">{row.recognitionBasis}</td>
-                      <td className="px-3 py-1.5 border-r border-slate-100 text-slate-700">{row.structureLabel}</td>
-                      <td className="px-3 py-1.5 border-r border-slate-100 text-right font-bold text-[#0B3B2E]">{formatCurrency(row.recognizedAmount)}</td>
-                      <td className="px-3 py-1.5 border-r border-slate-100 text-right font-bold text-red-600">{formatCurrency(row.reversedAmount)}</td>
-                      <td className="px-3 py-1.5">
-                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${row.status === 'Reversed' ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
-                          {row.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                {filteredRows.length > 0 && (
-                  <tfoot className="bg-[#0B3B2E]/5 border-t-2 border-[#0B3B2E]/20 text-[11px]">
-                    <tr>
-                      <td colSpan={6} className="px-3 py-2 text-right font-black text-slate-700">Totals</td>
-                      <td className="px-3 py-2 text-right font-black text-[#0B3B2E]">{formatCurrency(totals.recognizedCommission)}</td>
-                      <td className="px-3 py-2 text-right font-black text-red-600">{formatCurrency(totals.reversedCommission)}</td>
-                      <td />
-                    </tr>
-                  </tfoot>
+            <div className="min-h-0 flex-1 overflow-hidden flex flex-col">
+              <MilikTable
+                columns={[
+                  { label: "Recognition Date" },
+                  { label: "Statement No." },
+                  { label: termProperty },
+                  { label: termLandlord },
+                  { label: "Basis" },
+                  { label: "Structure" },
+                  { label: "Recognized", align: "right" },
+                  { label: "Reversed", align: "right" },
+                  { label: "Status" },
+                ]}
+                rows={paginatedRows}
+                rowKey="id"
+                loading={loading}
+                empty={!currentCompany?._id ? "Select an active company to view the commission report." : "No commission data found for the selected filter range."}
+                renderFooter={filteredRows.length > 0 ? () => (
+                  <>
+                    <td colSpan={6} className="px-3 py-2 text-right font-black text-slate-700">Totals</td>
+                    <td className="px-3 py-2 text-right font-black text-[#0B3B2E]">{formatCurrency(totals.recognizedCommission)}</td>
+                    <td className="px-3 py-2 text-right font-black text-red-600">{formatCurrency(totals.reversedCommission)}</td>
+                    <td />
+                  </>
+                ) : undefined}
+                renderRow={(row) => (
+                  <>
+                    <td className="px-3 py-1.5 border-r border-slate-100 font-semibold text-slate-900">{fmtDate(row.recognitionDate)}</td>
+                    <td className="px-3 py-1.5 border-r border-slate-100 text-slate-700">{row.statementNumber}</td>
+                    <td className="px-3 py-1.5 border-r border-slate-100 text-slate-700">{row.propertyName}</td>
+                    <td className="px-3 py-1.5 border-r border-slate-100 text-slate-700">{row.landlordName}</td>
+                    <td className="px-3 py-1.5 border-r border-slate-100 text-slate-700">{row.recognitionBasis}</td>
+                    <td className="px-3 py-1.5 border-r border-slate-100 text-slate-700">{row.structureLabel}</td>
+                    <td className="px-3 py-1.5 border-r border-slate-100 text-right font-bold text-[#0B3B2E]">{formatCurrency(row.recognizedAmount)}</td>
+                    <td className="px-3 py-1.5 border-r border-slate-100 text-right font-bold text-red-600">{formatCurrency(row.reversedAmount)}</td>
+                    <td className="px-3 py-1.5">
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${row.status === 'Reversed' ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+                        {row.status}
+                      </span>
+                    </td>
+                  </>
                 )}
-              </table>
+              />
             </div>
             <PaginationBar
               page={safeCurrentPage}

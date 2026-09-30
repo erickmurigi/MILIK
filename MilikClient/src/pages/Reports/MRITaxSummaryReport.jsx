@@ -3,6 +3,7 @@ import { useTabState } from '../../hooks/useTabState';
 import { useDispatch, useSelector } from 'react-redux';
 import AppSelect from '../../components/common/AppSelect';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
+import MilikTable from '../../components/common/MilikTable';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties } from '../../redux/selectors';
 import { getMRITaxSummaryReport } from '../../redux/apiCalls';
 import { getProperties } from '../../redux/propertyRedux';
@@ -347,62 +348,54 @@ const MRITaxSummaryReport = () => {
                 {/* By property */}
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
                   <div className="flex-shrink-0 bg-[#0B3B2E] px-2 py-1.5 text-xs font-bold text-white">By {termProperty}</div>
-                  <div className="min-h-0 flex-1 overflow-auto">
-                    <table className="min-w-full text-[11px] border-collapse">
-                      <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-                        <tr>
-                          <th className="whitespace-nowrap px-2 py-1 text-left font-bold border-r border-white/10">{termProperty}</th>
-                          <th className="whitespace-nowrap px-2 py-1 text-left font-bold border-r border-white/10">Gross Rent</th>
-                          <th className="whitespace-nowrap px-2 py-1 text-left font-bold">MRI Tax ({mriRatePercent}%)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(report.byProperty || []).length === 0 ? (
-                          <tr><td colSpan={3} className="px-2 py-4 text-center text-slate-500">{loading ? 'Loading…' : 'No data for selected period.'}</td></tr>
-                        ) : (report.byProperty || []).map((row, i) => (
-                          <tr key={row.propertyId || row.propertyName} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
-                            <td className="px-2 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.propertyName}</td>
-                            <td className="px-2 py-1 border-r border-gray-100 font-semibold text-emerald-700">{formatMoney(row.grossRent)}</td>
-                            <td className="px-2 py-1 font-semibold text-orange-700">{formatMoney(row.mriTax)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <MilikTable
+                    columns={[
+                      { label: termProperty },
+                      { label: "Gross Rent" },
+                      { label: `MRI Tax (${mriRatePercent}%)` },
+                    ]}
+                    rows={report.byProperty || []}
+                    rowKey={(row) => row.propertyId || row.propertyName}
+                    loading={loading}
+                    empty="No data for selected period."
+                    renderRow={(row) => (
+                      <>
+                        <td className="px-2 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.propertyName}</td>
+                        <td className="px-2 py-1 border-r border-gray-100 font-semibold text-emerald-700">{formatMoney(row.grossRent)}</td>
+                        <td className="px-2 py-1 font-semibold text-orange-700">{formatMoney(row.mriTax)}</td>
+                      </>
+                    )}
+                  />
                 </div>
 
                 {/* By month */}
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
                   <div className="flex-shrink-0 bg-[#0B3B2E] px-2 py-1.5 text-xs font-bold text-white">Monthly Breakdown</div>
-                  <div className="min-h-0 flex-1 overflow-auto">
-                    <table className="min-w-full text-[11px] border-collapse">
-                      <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-                        <tr>
-                          <th className="whitespace-nowrap px-2 py-1 text-left font-bold border-r border-white/10">Month</th>
-                          <th className="whitespace-nowrap px-2 py-1 text-left font-bold border-r border-white/10">Gross Rent</th>
-                          <th className="whitespace-nowrap px-2 py-1 text-left font-bold">MRI Tax</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(report.byMonth || []).length === 0 ? (
-                          <tr><td colSpan={3} className="px-2 py-4 text-center text-slate-500">{loading ? 'Loading…' : 'No monthly data.'}</td></tr>
-                        ) : (report.byMonth || []).map((row, i) => (
-                          <tr key={row.monthKey || `${row.year}-${row.month}`} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
-                            <td className="px-2 py-1 border-r border-gray-100 font-semibold text-slate-900">{MONTH_NAMES[(row.month || 1) - 1]} {row.year}</td>
-                            <td className="px-2 py-1 border-r border-gray-100 font-semibold text-emerald-700">{formatMoney(row.grossRent)}</td>
-                            <td className="px-2 py-1 font-semibold text-orange-700">{formatMoney(row.mriTax)}</td>
-                          </tr>
-                        ))}
-                        {(report.byMonth || []).length > 0 && (
-                          <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
-                            <td className="px-2 py-1.5 text-slate-900">Total</td>
-                            <td className="px-2 py-1.5 text-emerald-700">{formatMoney(summary.grossRent)}</td>
-                            <td className="px-2 py-1.5 text-orange-700">{formatMoney(summary.mriTax)}</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                  <MilikTable
+                    columns={[
+                      { label: "Month" },
+                      { label: "Gross Rent" },
+                      { label: "MRI Tax" },
+                    ]}
+                    rows={report.byMonth || []}
+                    rowKey={(row) => row.monthKey || `${row.year}-${row.month}`}
+                    loading={loading}
+                    empty="No monthly data."
+                    renderFooter={(report.byMonth || []).length > 0 ? () => (
+                      <>
+                        <td className="px-2 py-1.5 text-slate-900">Total</td>
+                        <td className="px-2 py-1.5 text-emerald-700">{formatMoney(summary.grossRent)}</td>
+                        <td className="px-2 py-1.5 text-orange-700">{formatMoney(summary.mriTax)}</td>
+                      </>
+                    ) : undefined}
+                    renderRow={(row) => (
+                      <>
+                        <td className="px-2 py-1 border-r border-gray-100 font-semibold text-slate-900">{MONTH_NAMES[(row.month || 1) - 1]} {row.year}</td>
+                        <td className="px-2 py-1 border-r border-gray-100 font-semibold text-emerald-700">{formatMoney(row.grossRent)}</td>
+                        <td className="px-2 py-1 font-semibold text-orange-700">{formatMoney(row.mriTax)}</td>
+                      </>
+                    )}
+                  />
                 </div>
               </div>
             </div>

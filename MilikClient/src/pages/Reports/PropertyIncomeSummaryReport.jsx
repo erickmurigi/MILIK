@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useTerms } from '../../hooks/useTerm';
 import AppSelect from '../../components/common/AppSelect';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
+import MilikTable from '../../components/common/MilikTable';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties, selectAllLandlords } from '../../redux/selectors';
 import { getLandlords, getPropertyIncomeSummaryReport } from '../../redux/apiCalls';
 import { getProperties } from '../../redux/propertyRedux';
@@ -412,46 +413,47 @@ const PropertyIncomeSummaryReport = () => {
               {/* Income & Expenses by Property */}
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <div className="flex-shrink-0 border-b border-[#0B3B2E]/10 bg-[#0B3B2E] px-3 py-1.5 text-xs font-bold text-white">Income &amp; Expenses by Property</div>
-                <div className="min-h-0 flex-1 overflow-auto">
-                  <table className="min-w-full text-[11px] border-collapse">
-                    <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-                      <tr>
-                        {[termProperty, 'Rent Invoiced', 'Utilities Invoiced', 'Total Invoiced', 'Collected', 'Expenses', 'Net Income (Cash)', 'Collection %'].map((h, i, arr) => (
-                          <th key={i} className={`whitespace-nowrap px-3 py-1.5 text-left font-bold ${i > 0 ? 'text-right' : ''} ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(report.byProperty || []).length === 0 ? (
-                        <tr><td colSpan={8} className="px-3 py-6 text-center text-[11px] text-slate-400">{loading ? 'Loading…' : 'No data found for the selected filters.'}</td></tr>
-                      ) : (report.byProperty || []).map((row, i) => (
-                        <tr key={row.propertyId || row.propertyName} className={`border-b border-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} hover:bg-emerald-50/30`}>
-                          <td className="px-3 py-1.5 border-r border-slate-100 font-semibold text-slate-900">{row.propertyName}</td>
-                          <td className="px-3 py-1.5 border-r border-slate-100 text-right text-slate-700">{formatMoney(row.rentInvoiced)}</td>
-                          <td className="px-3 py-1.5 border-r border-slate-100 text-right text-slate-700">{formatMoney(row.utilitiesInvoiced)}</td>
-                          <td className="px-3 py-1.5 border-r border-slate-100 text-right text-slate-700">{formatMoney(row.totalInvoiced)}</td>
-                          <td className="px-3 py-1.5 border-r border-slate-100 text-right font-semibold text-emerald-700">{formatMoney(row.totalCollected)}</td>
-                          <td className="px-3 py-1.5 border-r border-slate-100 text-right text-red-600">{formatMoney(row.totalExpenses)}</td>
-                          <td className={`px-3 py-1.5 border-r border-slate-100 text-right font-semibold ${Number(row.netIncome || 0) >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{formatMoney(row.netIncome)}</td>
-                          <td className="px-3 py-1.5 text-right text-slate-700">{formatPercent(row.collectionRate)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    {(report.byProperty || []).length > 1 && (
-                      <tfoot className="bg-[#0B3B2E]/5 border-t-2 border-[#0B3B2E]/20 text-[11px]">
-                        <tr>
-                          <td className="px-3 py-2 font-black text-slate-700">Totals</td>
-                          <td className="px-3 py-2 text-right font-black text-slate-700">{formatMoney((report.byProperty||[]).reduce((s,r)=>s+Number(r.rentInvoiced||0),0))}</td>
-                          <td className="px-3 py-2 text-right font-black text-slate-700">{formatMoney((report.byProperty||[]).reduce((s,r)=>s+Number(r.utilitiesInvoiced||0),0))}</td>
-                          <td className="px-3 py-2 text-right font-black text-slate-700">{formatMoney(summary.totalInvoiced)}</td>
-                          <td className="px-3 py-2 text-right font-black text-emerald-700">{formatMoney(summary.totalCollected)}</td>
-                          <td className="px-3 py-2 text-right font-black text-red-600">{formatMoney(summary.totalExpenses)}</td>
-                          <td className={`px-3 py-2 text-right font-black ${Number(summary.netIncome || 0) >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{formatMoney(summary.netIncome)}</td>
-                          <td className="px-3 py-2 text-right font-black text-slate-700">{formatPercent(summary.collectionRate)}</td>
-                        </tr>
-                      </tfoot>
+                <div className="min-h-0 flex-1 overflow-hidden flex flex-col">
+                  <MilikTable
+                    columns={[
+                      { label: termProperty },
+                      { label: "Rent Invoiced", align: "right" },
+                      { label: "Utilities Invoiced", align: "right" },
+                      { label: "Total Invoiced", align: "right" },
+                      { label: "Collected", align: "right" },
+                      { label: "Expenses", align: "right" },
+                      { label: "Net Income (Cash)", align: "right" },
+                      { label: "Collection %", align: "right" },
+                    ]}
+                    rows={report.byProperty || []}
+                    rowKey={(row) => row.propertyId || row.propertyName}
+                    loading={loading}
+                    empty="No data found for the selected filters."
+                    renderFooter={(report.byProperty || []).length > 1 ? () => (
+                      <>
+                        <td className="px-3 py-2 font-black text-slate-700">Totals</td>
+                        <td className="px-3 py-2 text-right font-black text-slate-700">{formatMoney((report.byProperty||[]).reduce((s,r)=>s+Number(r.rentInvoiced||0),0))}</td>
+                        <td className="px-3 py-2 text-right font-black text-slate-700">{formatMoney((report.byProperty||[]).reduce((s,r)=>s+Number(r.utilitiesInvoiced||0),0))}</td>
+                        <td className="px-3 py-2 text-right font-black text-slate-700">{formatMoney(summary.totalInvoiced)}</td>
+                        <td className="px-3 py-2 text-right font-black text-emerald-700">{formatMoney(summary.totalCollected)}</td>
+                        <td className="px-3 py-2 text-right font-black text-red-600">{formatMoney(summary.totalExpenses)}</td>
+                        <td className={`px-3 py-2 text-right font-black ${Number(summary.netIncome || 0) >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{formatMoney(summary.netIncome)}</td>
+                        <td className="px-3 py-2 text-right font-black text-slate-700">{formatPercent(summary.collectionRate)}</td>
+                      </>
+                    ) : undefined}
+                    renderRow={(row) => (
+                      <>
+                        <td className="px-3 py-1.5 border-r border-slate-100 font-semibold text-slate-900">{row.propertyName}</td>
+                        <td className="px-3 py-1.5 border-r border-slate-100 text-right text-slate-700">{formatMoney(row.rentInvoiced)}</td>
+                        <td className="px-3 py-1.5 border-r border-slate-100 text-right text-slate-700">{formatMoney(row.utilitiesInvoiced)}</td>
+                        <td className="px-3 py-1.5 border-r border-slate-100 text-right text-slate-700">{formatMoney(row.totalInvoiced)}</td>
+                        <td className="px-3 py-1.5 border-r border-slate-100 text-right font-semibold text-emerald-700">{formatMoney(row.totalCollected)}</td>
+                        <td className="px-3 py-1.5 border-r border-slate-100 text-right text-red-600">{formatMoney(row.totalExpenses)}</td>
+                        <td className={`px-3 py-1.5 border-r border-slate-100 text-right font-semibold ${Number(row.netIncome || 0) >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{formatMoney(row.netIncome)}</td>
+                        <td className="px-3 py-1.5 text-right text-slate-700">{formatPercent(row.collectionRate)}</td>
+                      </>
                     )}
-                  </table>
+                  />
                 </div>
               </div>
 
