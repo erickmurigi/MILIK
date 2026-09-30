@@ -38,6 +38,7 @@ import { useTabState } from "../../hooks/useTabState";
 import { fmtDate } from "../../utils/dates";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
+import ListToolbar from '../../components/common/ListToolbar';
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -134,8 +135,6 @@ const Properties = () => {
 
   // Dropdown (Archive/Restore placeholder)
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
-  const [actionMenuPos, setActionMenuPos] = useState({ top: 0, right: 0 });
-  const actionMenuRef = useRef(null);
   const actionMenuBtnRef = useRef(null);
 
   // Import modal
@@ -169,16 +168,6 @@ const Properties = () => {
         (res.data?.zones || []).map((z) => ({ value: z.name, label: z.name }))
       ))
       .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    const onDocClick = (e) => {
-      if (actionMenuBtnRef.current?.contains(e.target)) return;
-      if (actionMenuRef.current?.contains(e.target)) return;
-      setActionMenuOpen(false);
-    };
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
   // Keep selectAll off when page changes
@@ -497,148 +486,116 @@ const Properties = () => {
     <DashboardLayout lockContentScroll>
       <div className="flex flex-col h-full min-h-0 p-0 bg-white overflow-hidden">
         {/* Toolbar — single scrollable row */}
-        <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-          <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
-            <AppSelect
-              value={draftFilters.status}
-              onChange={(v) => setDraftFilters((p) => ({ ...p, status: v ?? "" }))}
-              options={[
-                { value: "active", label: "Active" },
-                { value: "maintenance", label: "Maintenance" },
-                { value: "closed", label: "Closed" },
-                { value: "archived", label: "Archived" },
-              ]}
-              placeholder="All Status"
-              clearable
-              compact
-            />
+        <ListToolbar>
+          <AppSelect
+            value={draftFilters.status}
+            onChange={(v) => setDraftFilters((p) => ({ ...p, status: v ?? "" }))}
+            options={[
+              { value: "active", label: "Active" },
+              { value: "maintenance", label: "Maintenance" },
+              { value: "closed", label: "Closed" },
+              { value: "archived", label: "Archived" },
+            ]}
+            placeholder="All Status"
+            clearable
+            compact
+          />
 
-            <AppSelect
-              value={draftFilters.zone}
-              onChange={(v) => setDraftFilters((p) => ({ ...p, zone: v ?? "" }))}
-              options={zoneOptions}
-              placeholder="All Zones"
-              searchable
-              clearable
-              compact
-            />
+          <AppSelect
+            value={draftFilters.zone}
+            onChange={(v) => setDraftFilters((p) => ({ ...p, zone: v ?? "" }))}
+            options={zoneOptions}
+            placeholder="All Zones"
+            searchable
+            clearable
+            compact
+          />
 
-            <AppSelect
-              value={draftFilters.category}
-              onChange={(v) => setDraftFilters((p) => ({ ...p, category: v ?? "" }))}
-              options={[
-                { value: "Residential", label: "Residential" },
-                { value: "Commercial", label: "Commercial" },
-                { value: "Mixed Use", label: "Mixed Use" },
-                { value: "Industrial", label: "Industrial" },
-                { value: "Agricultural", label: "Agricultural" },
-              ]}
-              placeholder="All Categories"
-              clearable
-              compact
-            />
+          <AppSelect
+            value={draftFilters.category}
+            onChange={(v) => setDraftFilters((p) => ({ ...p, category: v ?? "" }))}
+            options={[
+              { value: "Residential", label: "Residential" },
+              { value: "Commercial", label: "Commercial" },
+              { value: "Mixed Use", label: "Mixed Use" },
+              { value: "Industrial", label: "Industrial" },
+              { value: "Agricultural", label: "Agricultural" },
+            ]}
+            placeholder="All Categories"
+            clearable
+            compact
+          />
 
-            <AppSelect
-              value={draftFilters.landlord}
-              onChange={(v) => setDraftFilters((p) => ({ ...p, landlord: v ?? "" }))}
-              options={landlordOptions}
-              placeholder={`All ${termLandlords}`}
-              searchable
-              clearable
-              compact
-            />
+          <AppSelect
+            value={draftFilters.landlord}
+            onChange={(v) => setDraftFilters((p) => ({ ...p, landlord: v ?? "" }))}
+            options={landlordOptions}
+            placeholder={`All ${termLandlords}`}
+            searchable
+            clearable
+            compact
+          />
 
-            <div className="h-3 w-px shrink-0 bg-slate-200" />
+          <ListToolbar.Divider />
 
-            <input value={draftFilters.code} onChange={(e) => setDraftFilters((p) => ({ ...p, code: normalizeUppercaseInput(e.target.value) }))}
-              onKeyDown={onFilterEnter} placeholder="Code"
-              className="h-[20px] w-[4.5rem] shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-            <input value={draftFilters.name} onChange={(e) => setDraftFilters((p) => ({ ...p, name: normalizeUppercaseInput(e.target.value) }))}
-              onKeyDown={onFilterEnter} placeholder="Name"
-              className="h-[20px] w-24 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-            <input value={draftFilters.lr} onChange={(e) => setDraftFilters((p) => ({ ...p, lr: e.target.value }))}
-              onKeyDown={onFilterEnter} placeholder="LR No."
-              className="h-[20px] w-[4.5rem] shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-            <input value={draftFilters.location} onChange={(e) => setDraftFilters((p) => ({ ...p, location: normalizeUppercaseInput(e.target.value) }))}
-              onKeyDown={onFilterEnter} placeholder="Location"
-              className="h-[20px] w-20 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+          <ListToolbar.Input width="w-[4.5rem]" value={draftFilters.code} onChange={(e) => setDraftFilters((p) => ({ ...p, code: normalizeUppercaseInput(e.target.value) }))}
+            onKeyDown={onFilterEnter} placeholder="Code" />
+          <ListToolbar.Input value={draftFilters.name} onChange={(e) => setDraftFilters((p) => ({ ...p, name: normalizeUppercaseInput(e.target.value) }))}
+            onKeyDown={onFilterEnter} placeholder="Name" />
+          <ListToolbar.Input width="w-[4.5rem]" value={draftFilters.lr} onChange={(e) => setDraftFilters((p) => ({ ...p, lr: e.target.value }))}
+            onKeyDown={onFilterEnter} placeholder="LR No." />
+          <ListToolbar.Input width="w-20" value={draftFilters.location} onChange={(e) => setDraftFilters((p) => ({ ...p, location: normalizeUppercaseInput(e.target.value) }))}
+            onKeyDown={onFilterEnter} placeholder="Location" />
 
-            <div className="h-3 w-px shrink-0 bg-slate-200" />
+          <ListToolbar.Divider />
 
-            <button onClick={applySearch} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#FF8C00] px-2.5 text-[9px] font-semibold text-white hover:bg-[#e67e00]">
-              <FaSearch size={7} /> Search
-            </button>
-            <button onClick={resetFilters} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-2.5 text-[9px] font-semibold text-white hover:bg-[#0A3127]">
-              <FaRedoAlt size={7} /> Reset
-            </button>
-            <button onClick={allRowsExpanded ? collapseAllRows : expandAllRows} disabled={!properties || properties.length === 0}
-              className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${properties && properties.length > 0 ? allRowsExpanded ? "bg-orange-600 hover:bg-orange-700" : "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
-              {allRowsExpanded ? <><FaCompressAlt size={7} /> Collapse</> : <><FaExpandAlt size={7} /> Expand</>}
-            </button>
-            {canUpdateProperty && (
-              <button onClick={() => openEditProperty(selectedProperties[0])} disabled={selectedProperties.length !== 1}
-                className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${selectedProperties.length === 1 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
-                <FaEdit size={7} /> Edit
-              </button>
-            )}
+          <ListToolbar.Button icon={FaSearch} variant="accent" onClick={applySearch}>Search</ListToolbar.Button>
+          <ListToolbar.Button icon={FaRedoAlt} onClick={resetFilters}>Reset</ListToolbar.Button>
+          <ListToolbar.Button
+            icon={allRowsExpanded ? FaCompressAlt : FaExpandAlt}
+            variant={allRowsExpanded ? "toggle" : "primary"}
+            disabled={!properties || properties.length === 0}
+            onClick={allRowsExpanded ? collapseAllRows : expandAllRows}
+          >
+            {allRowsExpanded ? "Collapse" : "Expand"}
+          </ListToolbar.Button>
+          {canUpdateProperty && (
+            <ListToolbar.Button icon={FaEdit} disabled={selectedProperties.length !== 1} onClick={() => openEditProperty(selectedProperties[0])}>
+              Edit
+            </ListToolbar.Button>
+          )}
 
-            {canUpdateProperty && (
-              <div className="shrink-0">
-                <button
-                  ref={actionMenuBtnRef}
-                  onClick={() => {
-                    if (!actionMenuOpen) {
-                      const rect = actionMenuBtnRef.current?.getBoundingClientRect();
-                      if (rect) setActionMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-                    }
-                    setActionMenuOpen((v) => !v);
-                  }}
-                  disabled={selectedProperties.length === 0}
-                  className={`h-[20px] flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${selectedProperties.length > 0 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}
-                >
-                  <FaArchive size={7} /> Actions <FaChevronDown size={8} />
-                </button>
-                {actionMenuOpen && selectedProperties.length > 0 && (
-                  <div
-                    ref={actionMenuRef}
-                    style={{ position: "fixed", top: actionMenuPos.top, right: actionMenuPos.right, zIndex: 9999 }}
-                    className="w-40 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden"
-                  >
-                    <button onClick={archiveSelected} className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2">
-                      <FaArchive className="text-xs text-gray-700" /> Archive
-                    </button>
-                    <button onClick={restoreSelected} className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2">
-                      <FaUndo className="text-xs text-gray-700" /> Restore
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+          {canUpdateProperty && (
+            <div className="shrink-0">
+              <ListToolbar.Button
+                icon={FaArchive}
+                ref={actionMenuBtnRef}
+                disabled={selectedProperties.length === 0}
+                onClick={() => setActionMenuOpen((v) => !v)}
+              >
+                Actions <FaChevronDown size={8} />
+              </ListToolbar.Button>
+              <ListToolbar.Menu open={actionMenuOpen && selectedProperties.length > 0} onClose={() => setActionMenuOpen(false)} anchorRef={actionMenuBtnRef}>
+                <ListToolbar.MenuItem icon={FaArchive} onClick={archiveSelected}>Archive</ListToolbar.MenuItem>
+                <ListToolbar.MenuItem icon={FaUndo} onClick={restoreSelected}>Restore</ListToolbar.MenuItem>
+              </ListToolbar.Menu>
+            </div>
+          )}
 
-            {canDeleteProperty && (
-              <button onClick={handleBulkDelete} disabled={selectedProperties.length === 0}
-                className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${selectedProperties.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}>
-                <FaTrash size={7} /> Delete{selectedProperties.length > 0 ? ` (${selectedProperties.length})` : ""}
-              </button>
-            )}
-            {canCreateProperty && (
-              <Link to="/properties/new" className="shrink-0">
-                <button className="h-[20px] flex items-center gap-0.5 bg-[#0B3B2E] px-2.5 text-[9px] font-semibold text-white hover:bg-[#0A3127]">
-                  <FaPlus size={7} /> Add
-                </button>
-              </Link>
-            )}
-            <button onClick={() => setShowImportModal(true)} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-green-300 bg-green-50 px-2.5 text-[9px] font-semibold text-green-700 hover:bg-green-100">
-              <FaFileImport size={7} /> Import
-            </button>
-            <button onClick={handlePrintList} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-slate-700 px-2.5 text-[9px] font-semibold text-white hover:bg-slate-800">
-              <FaPrint size={7} /> Print
-            </button>
-            <button onClick={handleExport} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-gray-300 px-2.5 text-[9px] font-semibold text-gray-600 hover:bg-gray-50">
-              <FaFileExport size={7} /> Export
-            </button>
-          </div>
-        </div>
+          {canDeleteProperty && (
+            <ListToolbar.Button icon={FaTrash} variant="danger" disabled={selectedProperties.length === 0} onClick={handleBulkDelete}>
+              Delete{selectedProperties.length > 0 ? ` (${selectedProperties.length})` : ""}
+            </ListToolbar.Button>
+          )}
+          {canCreateProperty && (
+            <Link to="/properties/new" className="shrink-0">
+              <ListToolbar.Button icon={FaPlus}>Add</ListToolbar.Button>
+            </Link>
+          )}
+          <ListToolbar.Button icon={FaFileImport} variant="outlineOk" onClick={() => setShowImportModal(true)}>Import</ListToolbar.Button>
+          <ListToolbar.Button icon={FaPrint} variant="dark" onClick={handlePrintList}>Print</ListToolbar.Button>
+          <ListToolbar.Button icon={FaFileExport} variant="outline" onClick={handleExport}>Export</ListToolbar.Button>
+        </ListToolbar>
 
         {/* Table Card */}
         <div className="flex-1 min-h-0 px-2 pb-2 overflow-hidden">

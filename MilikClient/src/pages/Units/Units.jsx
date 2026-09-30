@@ -23,6 +23,7 @@ import {
   FaCompressAlt,
 } from "react-icons/fa";
 import MilikTable from '../../components/common/MilikTable';
+import ListToolbar from '../../components/common/ListToolbar';
 import { getUnits, deleteUnit, updateUnit } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectUnitPagination, selectAllUnits, selectUnitIsFetching } from "../../redux/selectors";
@@ -149,8 +150,6 @@ const Units = () => {
 
   // Archive/Restore dropdown
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
-  const [actionMenuPos, setActionMenuPos] = useState({ top: 0, right: 0 });
-  const actionMenuRef = useRef(null);
   const actionMenuBtnRef = useRef(null);
 
   // Modal
@@ -263,16 +262,6 @@ const Units = () => {
     }
   }, [applySearch]);
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    const onDocClick = (e) => {
-      if (actionMenuBtnRef.current?.contains(e.target)) return;
-      if (actionMenuRef.current?.contains(e.target)) return;
-      setActionMenuOpen(false);
-    };
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, []);
 
   // Reset selectAll whenever page changes
   useEffect(() => setSelectAll(false), [currentPage]);
@@ -832,127 +821,97 @@ const Units = () => {
     <DashboardLayout lockContentScroll>
       <div className="flex flex-col h-full min-h-0 p-0 bg-gray-50 overflow-hidden">
         {/* Toolbar — single scrollable row */}
-        <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-          <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
-            <AppSelect
-              value={draftFilters.property === "any" ? "" : draftFilters.property}
-              onChange={(v) => setDraftFilters((p) => ({ ...p, property: v ?? "any" }))}
-              options={uniqueProperties.filter((p) => p.value !== "any")}
-              placeholder={termProperty}
-              searchable
-              clearable
-              compact
-            />
+        <ListToolbar>
+          <AppSelect
+            value={draftFilters.property === "any" ? "" : draftFilters.property}
+            onChange={(v) => setDraftFilters((p) => ({ ...p, property: v ?? "any" }))}
+            options={uniqueProperties.filter((p) => p.value !== "any")}
+            placeholder={termProperty}
+            searchable
+            clearable
+            compact
+          />
 
-            <AppSelect
-              value={draftFilters.status}
-              onChange={(v) => setDraftFilters((p) => ({ ...p, status: v ?? "active" }))}
-              options={[
-                { value: "active", label: "Active" },
-                { value: "any", label: "All Statuses" },
-                { value: "occupied", label: "Occupied" },
-                { value: "vacant", label: "Vacant" },
-                { value: "maintenance", label: "Maintenance" },
-                { value: "archived", label: "Archived" },
-              ]}
-              placeholder="All Statuses"
-              clearable
-              compact
-            />
+          <AppSelect
+            value={draftFilters.status}
+            onChange={(v) => setDraftFilters((p) => ({ ...p, status: v ?? "active" }))}
+            options={[
+              { value: "active", label: "Active" },
+              { value: "any", label: "All Statuses" },
+              { value: "occupied", label: "Occupied" },
+              { value: "vacant", label: "Vacant" },
+              { value: "maintenance", label: "Maintenance" },
+              { value: "archived", label: "Archived" },
+            ]}
+            placeholder="All Statuses"
+            clearable
+            compact
+          />
 
-            <AppSelect
-              value={draftFilters.unitType === "any" ? "" : draftFilters.unitType}
-              onChange={(v) => setDraftFilters((p) => ({ ...p, unitType: v ?? "any" }))}
-              options={unitTypeOptions}
-              placeholder={`${termUnit} Type`}
-              searchable
-              clearable
-              compact
-            />
+          <AppSelect
+            value={draftFilters.unitType === "any" ? "" : draftFilters.unitType}
+            onChange={(v) => setDraftFilters((p) => ({ ...p, unitType: v ?? "any" }))}
+            options={unitTypeOptions}
+            placeholder={`${termUnit} Type`}
+            searchable
+            clearable
+            compact
+          />
 
-            <div className="h-3 w-px shrink-0 bg-slate-200" />
+          <ListToolbar.Divider />
 
-            <input value={draftFilters.unitNo} onChange={(e) => setDraftFilters((p) => ({ ...p, unitNo: normalizeUppercaseInput(e.target.value) }))}
-              onKeyDown={onFilterEnter} placeholder={`${termUnit} No.`}
-              className="h-[20px] w-20 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-            <input value={draftFilters.tenant} onChange={(e) => setDraftFilters((p) => ({ ...p, tenant: normalizeUppercaseInput(e.target.value) }))}
-              onKeyDown={onFilterEnter} placeholder={termTenant}
-              className="h-[20px] w-24 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+          <ListToolbar.Input value={draftFilters.unitNo} onChange={(e) => setDraftFilters((p) => ({ ...p, unitNo: normalizeUppercaseInput(e.target.value) }))}
+            onKeyDown={onFilterEnter} placeholder={`${termUnit} No.`} />
+          <ListToolbar.Input value={draftFilters.tenant} onChange={(e) => setDraftFilters((p) => ({ ...p, tenant: normalizeUppercaseInput(e.target.value) }))}
+            onKeyDown={onFilterEnter} placeholder={termTenant} />
 
-            <div className="h-3 w-px shrink-0 bg-slate-200" />
+          <ListToolbar.Divider />
 
-            <button onClick={applySearch} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#FF8C00] px-2.5 text-[9px] font-semibold text-white hover:bg-[#e67e00]">
-              <FaSearch size={7} /> Search
-            </button>
-            <button onClick={resetFilters} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-2.5 text-[9px] font-semibold text-white hover:bg-[#0A3127]">
-              <FaRedoAlt size={7} /> Reset
-            </button>
-            <button onClick={allUnitsExpanded ? collapseAllUnits : expandAllUnits} disabled={currentUnits.length === 0}
-              className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${currentUnits.length > 0 ? allUnitsExpanded ? "bg-orange-600 hover:bg-orange-700" : "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
-              {allUnitsExpanded ? <><FaCompressAlt size={7} /> Collapse</> : <><FaExpandAlt size={7} /> Expand</>}
-            </button>
-            {canUpdateUnit && (
-              <button disabled={!canEdit} onClick={() => { const id = selectedUnits[0]; if (id) navigate(`/units/${id}`); }}
-                className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${canEdit ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
-                <FaEdit size={7} /> Edit
-              </button>
-            )}
+          <ListToolbar.Button icon={FaSearch} variant="accent" onClick={applySearch}>Search</ListToolbar.Button>
+          <ListToolbar.Button icon={FaRedoAlt} onClick={resetFilters}>Reset</ListToolbar.Button>
+          <ListToolbar.Button
+            icon={allUnitsExpanded ? FaCompressAlt : FaExpandAlt}
+            variant={allUnitsExpanded ? "toggle" : "primary"}
+            disabled={currentUnits.length === 0}
+            onClick={allUnitsExpanded ? collapseAllUnits : expandAllUnits}
+          >
+            {allUnitsExpanded ? "Collapse" : "Expand"}
+          </ListToolbar.Button>
+          {canUpdateUnit && (
+            <ListToolbar.Button icon={FaEdit} disabled={!canEdit} onClick={() => { const id = selectedUnits[0]; if (id) navigate(`/units/${id}`); }}>
+              Edit
+            </ListToolbar.Button>
+          )}
 
-            {canUpdateUnit && (
-              <div className="shrink-0">
-                <button
-                  ref={actionMenuBtnRef}
-                  onClick={() => {
-                    if (!actionMenuOpen) {
-                      const rect = actionMenuBtnRef.current?.getBoundingClientRect();
-                      if (rect) setActionMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-                    }
-                    setActionMenuOpen((v) => !v);
-                  }}
-                  disabled={selectedCount === 0}
-                  className={`h-[20px] flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${selectedCount > 0 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
-                  <FaArchive size={7} /> Actions <FaChevronDown size={8} />
-                </button>
-                {actionMenuOpen && selectedCount > 0 && (
-                  <div
-                    ref={actionMenuRef}
-                    style={{ position: "fixed", top: actionMenuPos.top, right: actionMenuPos.right, zIndex: 9999 }}
-                    className="w-40 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden">
-                    <button onClick={archiveSelected} disabled={selectedArchivableUnits.length === 0}
-                      className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedArchivableUnits.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
-                      <FaArchive className="text-xs text-gray-700" /> Archive
-                    </button>
-                    <button onClick={restoreSelected} disabled={selectedRestorableUnits.length === 0}
-                      className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedRestorableUnits.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
-                      <FaUndo className="text-xs text-gray-700" /> Restore
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+          {canUpdateUnit && (
+            <div className="shrink-0">
+              <ListToolbar.Button
+                icon={FaArchive}
+                ref={actionMenuBtnRef}
+                disabled={selectedCount === 0}
+                onClick={() => setActionMenuOpen((v) => !v)}
+              >
+                Actions <FaChevronDown size={8} />
+              </ListToolbar.Button>
+              <ListToolbar.Menu open={actionMenuOpen && selectedCount > 0} onClose={() => setActionMenuOpen(false)} anchorRef={actionMenuBtnRef}>
+                <ListToolbar.MenuItem icon={FaArchive} disabled={selectedArchivableUnits.length === 0} onClick={archiveSelected}>Archive</ListToolbar.MenuItem>
+                <ListToolbar.MenuItem icon={FaUndo} disabled={selectedRestorableUnits.length === 0} onClick={restoreSelected}>Restore</ListToolbar.MenuItem>
+              </ListToolbar.Menu>
+            </div>
+          )}
 
-            {canDeleteUnit && (
-              <button onClick={deleteSelected} disabled={selectedCount === 0 || selectedDeletableUnits.length === 0}
-                className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${selectedCount > 0 && selectedDeletableUnits.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}>
-                <FaTrash size={7} /> Delete{selectedCount > 0 ? ` (${selectedCount})` : ""}
-              </button>
-            )}
-            {canCreateUnit && (
-              <button onClick={() => navigate("/units/new")} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-2.5 text-[9px] font-semibold text-white hover:bg-[#0A3127]">
-                <FaPlus size={7} /> Add
-              </button>
-            )}
-            <button onClick={handlePrintList} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-slate-700 px-2.5 text-[9px] font-semibold text-white hover:bg-slate-800">
-              <FaPrint size={7} /> Print
-            </button>
-            <button onClick={() => setShowImportModal(true)} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-orange-600 px-2.5 text-[9px] font-semibold text-white hover:bg-orange-700">
-              <FaFileExport size={7} /> Import
-            </button>
-            <button onClick={handleExportToExcel} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-gray-300 px-2.5 text-[9px] font-semibold text-gray-600 hover:bg-gray-50">
-              <FaFileExport size={7} /> Export
-            </button>
-          </div>
-        </div>
+          {canDeleteUnit && (
+            <ListToolbar.Button icon={FaTrash} variant="danger" disabled={selectedCount === 0 || selectedDeletableUnits.length === 0} onClick={deleteSelected}>
+              Delete{selectedCount > 0 ? ` (${selectedCount})` : ""}
+            </ListToolbar.Button>
+          )}
+          {canCreateUnit && (
+            <ListToolbar.Button icon={FaPlus} onClick={() => navigate("/units/new")}>Add</ListToolbar.Button>
+          )}
+          <ListToolbar.Button icon={FaPrint} variant="dark" onClick={handlePrintList}>Print</ListToolbar.Button>
+          <ListToolbar.Button icon={FaFileExport} variant="toggle" onClick={() => setShowImportModal(true)}>Import</ListToolbar.Button>
+          <ListToolbar.Button icon={FaFileExport} variant="outline" onClick={handleExportToExcel}>Export</ListToolbar.Button>
+        </ListToolbar>
 
         {/* PROPERTIES TABLE (Units appear below property) */}
         <div className="flex-1 min-h-0 px-2 pb-2 overflow-hidden">

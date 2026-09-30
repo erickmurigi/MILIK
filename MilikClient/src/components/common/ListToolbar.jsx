@@ -37,7 +37,7 @@ ListToolbar.Input = React.forwardRef(function Input({ className = "", width = "w
   );
 });
 
-ListToolbar.Button = function ToolbarButton({
+ListToolbar.Button = React.forwardRef(function ToolbarButton({
   icon: Icon,
   children,
   variant = "primary",
@@ -45,10 +45,11 @@ ListToolbar.Button = function ToolbarButton({
   className = "",
   iconSize = 7,
   ...props
-}) {
+}, ref) {
   const styleClass = disabled ? "bg-gray-400 text-white cursor-not-allowed" : (VARIANTS[variant] || VARIANTS.primary);
   return (
     <button
+      ref={ref}
       type="button"
       disabled={disabled}
       className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold ${styleClass} ${className}`}
@@ -57,7 +58,7 @@ ListToolbar.Button = function ToolbarButton({
       {Icon && <Icon size={iconSize} />} {children}
     </button>
   );
-};
+});
 
 // Dropdown menu triggered by a ListToolbar.Button — handles the fixed-position
 // measure-on-open + click-outside-to-close boilerplate every bulk "Actions" menu repeats.
