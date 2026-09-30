@@ -19,7 +19,7 @@ const SIZE_CLASSES = {
  *   children {node}        — body content
  *   footer   {node}        — optional button row rendered below body
  *   size     {string}      — "sm" | "md" (default) | "lg" | "wide" | "extraWide"
- *   wide     {boolean}     — max-w-3xl instead of max-w-xl (back-compat with size="wide")
+ *   wide     {boolean}    — max-w-3xl instead of max-w-xl (back-compat with size="wide")
  *   extraWide {boolean}    — max-w-5xl for very wide content (back-compat with size="extraWide")
  */
 const Modal = ({ title, icon, onClose, children, footer, size, wide, extraWide }) => {
