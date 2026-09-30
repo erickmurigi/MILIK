@@ -1,12 +1,9 @@
-import { adminRequests } from "../utils/requestMethods";
+import { adminRequests, getErrorMessage as extractErrorMessage } from "../utils/requestMethods";
 import {
   getSettingsFailure,
   getSettingsStart,
   getSettingsSuccess,
 } from "./companySettingsRedux";
-
-const extractErrorMessage = (err) =>
-  err?.response?.data?.message || err?.message || "Failed to process company settings request";
 
 const refreshCompanySettings = async (dispatch, businessId) => {
   const res = await adminRequests.get(`/company-settings/${businessId}`);

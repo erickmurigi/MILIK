@@ -11,7 +11,7 @@ import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
 import SalePropertyTypeEditor from "./SalePropertyTypeEditor";
 import { useConfirm } from "../../context/ConfirmContext";
-import { adminRequests } from "../../utils/requestMethods";
+import { adminRequests, getErrorMessage as extractErrorMessage } from "../../utils/requestMethods";
 import { createLatePenaltyRule, getChartOfAccounts, getLatePenaltyRules, updateLatePenaltyRule } from "../../redux/apiCalls";
 import { inputClass, labelClass } from "../../utils/formStyles";
 import { hasCompanyModule } from "../../utils/companyModules";
@@ -491,9 +491,6 @@ const ACCOUNTING_DEFAULT_FIELDS = [
     type: "income",
   },
 ];
-
-const extractErrorMessage = (error) =>
-  error?.response?.data?.message || error?.message || "Failed to process company settings request";
 
 const INV_POS_DEFAULTS = {
   receiptHeader: "", receiptFooter: "Thank you for your business!",

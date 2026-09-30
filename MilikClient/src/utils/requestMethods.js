@@ -145,4 +145,12 @@ adminRequests.interceptors.response.use(
   }
 );
 
+// Shared error-message extractor for UI code (toasts, inline errors). The API's error
+// responses aren't consistently shaped across every endpoint — most use { message }, some
+// older ones use { error } — so this checks both, matching what the response interceptor
+// above already logs internally, before falling back to axios's own error.message or a
+// caller-supplied default.
+export const getErrorMessage = (error, fallback = "Something went wrong. Please try again.") =>
+  error?.response?.data?.message || error?.response?.data?.error || error?.message || fallback;
+
 export { STORAGE_KEY };

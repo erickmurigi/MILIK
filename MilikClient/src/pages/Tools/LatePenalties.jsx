@@ -3,6 +3,7 @@ import { useTabState } from "../../hooks/useTabState";
 import PaginationBar from '../../components/PaginationBar';
 import { useConfirm } from "../../context/ConfirmContext";
 import { fmtDate } from "../../utils/dates";
+import { getErrorMessage } from "../../utils/requestMethods";
 import {
   FaCheckSquare,
   FaEnvelope,
@@ -39,9 +40,6 @@ const pillTabClass = (active, tone = "green") => {
     ? "border-[#0B3B2E] bg-[#E7F5EC] text-[#0B3B2E]"
     : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50";
 };
-const getErrorMessage = (error, fallback) =>
-  error?.response?.data?.message || error?.message || fallback;
-
 const formatCurrency = (value) =>
   new Intl.NumberFormat("en-KE", {
     style: "currency",

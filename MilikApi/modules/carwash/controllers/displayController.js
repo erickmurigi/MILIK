@@ -19,12 +19,12 @@ export const getQueueDisplay = async (req, res, next) => {
   try {
     const { businessId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(businessId)) {
-      return res.status(404).json({ error: "Not found" });
+      return res.status(404).json({ success: false, status: 404, message: "Not found", error: "Not found" });
     }
 
     const company = await Company.findById(businessId).select("companyName modules carwashSettings").lean();
     if (!company?.modules?.carwash) {
-      return res.status(404).json({ error: "Not found" });
+      return res.status(404).json({ success: false, status: 404, message: "Not found", error: "Not found" });
     }
 
     const todayStart = todayStartEAT();

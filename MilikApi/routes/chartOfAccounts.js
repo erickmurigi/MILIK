@@ -120,9 +120,7 @@ router.get("/", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), async (req,
     const business = resolveBusiness(req);
 
     if (!business) {
-      return res.status(400).json({
-        error: "business query parameter is required",
-      });
+      return res.status(400).json({ success: false, status: 400, message: "business query parameter is required", error: "business query parameter is required" });
     }
 
     await ensureSystemChartOfAccounts(business);
@@ -140,9 +138,7 @@ router.get("/", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), async (req,
     return res.status(200).json(accounts.map(serializeAccount));
   } catch (err) {
     console.error("Failed to fetch ChartOfAccounts:", err);
-    return res.status(500).json({
-      error: err?.message || "Failed to fetch ChartOfAccounts",
-    });
+    return res.status(500).json({ success: false, status: 500, message: err?.message || "Failed to fetch ChartOfAccounts", error: err?.message || "Failed to fetch ChartOfAccounts" });
   }
 });
 
@@ -153,11 +149,11 @@ router.get("/:id/activity", verifyUser, requireCompanyModule(GL_ACCESS_MODULES),
     const { startDate, endDate, direction, sourceTransactionType, includeReversed, property } = req.query;
 
     if (!business) {
-      return res.status(400).json({ error: "business is required" });
+      return res.status(400).json({ success: false, status: 400, message: "business is required", error: "business is required" });
     }
 
     if (!isValidObjectId(id)) {
-      return res.status(400).json({ error: "Invalid chart account id" });
+      return res.status(400).json({ success: false, status: 400, message: "Invalid chart account id", error: "Invalid chart account id" });
     }
 
     // Fetch account without recomputing balance snapshot — activity computes its own
@@ -166,7 +162,7 @@ router.get("/:id/activity", verifyUser, requireCompanyModule(GL_ACCESS_MODULES),
       .lean();
 
     if (!account) {
-      return res.status(404).json({ error: "Chart account not found" });
+      return res.status(404).json({ success: false, status: 404, message: "Chart account not found", error: "Chart account not found" });
     }
 
     const start = normalizeDate(startDate, "start");
@@ -295,16 +291,14 @@ router.get("/:id/activity", verifyUser, requireCompanyModule(GL_ACCESS_MODULES),
     });
   } catch (err) {
     console.error("Failed to fetch chart account activity:", err);
-    return res.status(500).json({
-      error: err?.message || "Failed to fetch chart account activity",
-    });
+    return res.status(500).json({ success: false, status: 500, message: err?.message || "Failed to fetch chart account activity", error: err?.message || "Failed to fetch chart account activity" });
   }
 });
 
 router.post("/activity/:entryId/reclassify", verifyUser, requireCompanyModule("accounts"), async (req, res) => {
   try {
     if (!hasLedgerAdminAccess(req.user)) {
-      return res.status(403).json({ error: "Only accountant/admin users can reclassify ledger entries." });
+      return res.status(403).json({ success: false, status: 403, message: "Only accountant/admin users can reclassify ledger entries.", error: "Only accountant/admin users can reclassify ledger entries." });
     }
 
     const business = resolveBusiness(req);
@@ -312,11 +306,11 @@ router.post("/activity/:entryId/reclassify", verifyUser, requireCompanyModule("a
     const { newAccountId, reason } = req.body || {};
 
     if (!business) {
-      return res.status(400).json({ error: "business is required" });
+      return res.status(400).json({ success: false, status: 400, message: "business is required", error: "business is required" });
     }
 
     if (!isValidObjectId(entryId) || !isValidObjectId(newAccountId)) {
-      return res.status(400).json({ error: "Valid entryId and newAccountId are required" });
+      return res.status(400).json({ success: false, status: 400, message: "Valid entryId and newAccountId are required", error: "Valid entryId and newAccountId are required" });
     }
 
     const [entry, newAccount] = await Promise.all([
@@ -325,23 +319,23 @@ router.post("/activity/:entryId/reclassify", verifyUser, requireCompanyModule("a
     ]);
 
     if (!entry) {
-      return res.status(404).json({ error: "Ledger entry not found" });
+      return res.status(404).json({ success: false, status: 404, message: "Ledger entry not found", error: "Ledger entry not found" });
     }
 
     if (!newAccount) {
-      return res.status(404).json({ error: "Destination account not found" });
+      return res.status(404).json({ success: false, status: 404, message: "Destination account not found", error: "Destination account not found" });
     }
 
     if (!newAccount.isPosting || newAccount.isHeader) {
-      return res.status(400).json({ error: "Destination account must be a posting ledger account" });
+      return res.status(400).json({ success: false, status: 400, message: "Destination account must be a posting ledger account", error: "Destination account must be a posting ledger account" });
     }
 
     if (String(entry.accountId || "") === String(newAccount._id)) {
-      return res.status(400).json({ error: "Entry is already posted to that account" });
+      return res.status(400).json({ success: false, status: 400, message: "Entry is already posted to that account", error: "Entry is already posted to that account" });
     }
 
     if (entry.status === "reversed") {
-      return res.status(400).json({ error: "Reversed entries cannot be reclassified" });
+      return res.status(400).json({ success: false, status: 400, message: "Reversed entries cannot be reclassified", error: "Reversed entries cannot be reclassified" });
     }
 
     const actorId = await resolveAuditActorUserId({ req, businessId: business });
@@ -377,9 +371,7 @@ router.post("/activity/:entryId/reclassify", verifyUser, requireCompanyModule("a
     });
   } catch (err) {
     console.error("Failed to reclassify ledger entry:", err);
-    return res.status(500).json({
-      error: err?.message || "Failed to reclassify ledger entry",
-    });
+    return res.status(500).json({ success: false, status: 500, message: err?.message || "Failed to reclassify ledger entry", error: err?.message || "Failed to reclassify ledger entry" });
   }
 });
 
@@ -388,15 +380,13 @@ router.post("/", verifyUser, requireCompanyModule("accounts"), async (req, res) 
     const business = resolveBusiness(req);
 
     if (!business) {
-      return res.status(400).json({ error: "business is required" });
+      return res.status(400).json({ success: false, status: 400, message: "business is required", error: "business is required" });
     }
 
     const payload = normalizeChartAccountPayload(req.body);
 
     if (!payload.code || !payload.name || !payload.type) {
-      return res.status(400).json({
-        error: "code, name and type are required",
-      });
+      return res.status(400).json({ success: false, status: 400, message: "code, name and type are required", error: "code, name and type are required" });
     }
 
     await ensureSystemChartOfAccounts(business);
@@ -407,9 +397,7 @@ router.post("/", verifyUser, requireCompanyModule("accounts"), async (req, res) 
     }).lean();
 
     if (existing) {
-      return res.status(409).json({
-        error: "Account code already exists for this business",
-      });
+      return res.status(409).json({ success: false, status: 409, message: "Account code already exists for this business", error: "Account code already exists for this business" });
     }
 
     let parentAccount = null;
@@ -417,9 +405,7 @@ router.post("/", verifyUser, requireCompanyModule("accounts"), async (req, res) 
 
     if (payload.parentAccount) {
       if (!isValidObjectId(payload.parentAccount)) {
-        return res.status(400).json({
-          error: "parentAccount must be a valid account id",
-        });
+        return res.status(400).json({ success: false, status: 400, message: "parentAccount must be a valid account id", error: "parentAccount must be a valid account id" });
       }
 
       parentAccount = await ChartOfAccount.findOne({
@@ -428,9 +414,7 @@ router.post("/", verifyUser, requireCompanyModule("accounts"), async (req, res) 
       });
 
       if (!parentAccount) {
-        return res.status(404).json({
-          error: "Parent account not found for this business",
-        });
+        return res.status(404).json({ success: false, status: 404, message: "Parent account not found for this business", error: "Parent account not found for this business" });
       }
 
       level = Number(parentAccount.level || 0) + 1;
@@ -464,9 +448,7 @@ router.post("/", verifyUser, requireCompanyModule("accounts"), async (req, res) 
     return res.status(201).json(serializeAccount(populated));
   } catch (err) {
     console.error("Failed to create ChartOfAccount:", err);
-    return res.status(500).json({
-      error: err?.message || "Failed to create ChartOfAccount",
-    });
+    return res.status(500).json({ success: false, status: 500, message: err?.message || "Failed to create ChartOfAccount", error: err?.message || "Failed to create ChartOfAccount" });
   }
 });
 
@@ -476,31 +458,27 @@ router.put("/:id", verifyUser, requireCompanyModule("accounts"), async (req, res
     const { id } = req.params;
 
     if (!business) {
-      return res.status(400).json({ error: "business is required" });
+      return res.status(400).json({ success: false, status: 400, message: "business is required", error: "business is required" });
     }
 
     if (!isValidObjectId(id)) {
-      return res.status(400).json({ error: "Invalid chart account id" });
+      return res.status(400).json({ success: false, status: 400, message: "Invalid chart account id", error: "Invalid chart account id" });
     }
 
     const account = await ChartOfAccount.findOne({ _id: id, business });
     if (!account) {
-      return res.status(404).json({ error: "Chart account not found" });
+      return res.status(404).json({ success: false, status: 404, message: "Chart account not found", error: "Chart account not found" });
     }
 
     const payload = normalizeChartAccountPayload(req.body);
 
     if (!payload.code || !payload.name || !payload.type) {
-      return res.status(400).json({
-        error: "code, name and type are required",
-      });
+      return res.status(400).json({ success: false, status: 400, message: "code, name and type are required", error: "code, name and type are required" });
     }
 
     if (account.isSystem && PROTECTED_CODES.has(account.code)) {
       if (payload.code !== account.code || payload.type !== account.type) {
-        return res.status(400).json({
-          error: `Core account ${account.code} cannot change code or type.`,
-        });
+        return res.status(400).json({ success: false, status: 400, message: `Core account ${account.code} cannot change code or type.`, error: `Core account ${account.code} cannot change code or type.` });
       }
     }
 
@@ -511,9 +489,7 @@ router.put("/:id", verifyUser, requireCompanyModule("accounts"), async (req, res
     }).lean();
 
     if (duplicate) {
-      return res.status(409).json({
-        error: "Another account already uses that code",
-      });
+      return res.status(409).json({ success: false, status: 409, message: "Another account already uses that code", error: "Another account already uses that code" });
     }
 
     let parent = null;
@@ -521,11 +497,11 @@ router.put("/:id", verifyUser, requireCompanyModule("accounts"), async (req, res
 
     if (payload.parentAccount) {
       if (!isValidObjectId(payload.parentAccount)) {
-        return res.status(400).json({ error: "parentAccount must be a valid account id" });
+        return res.status(400).json({ success: false, status: 400, message: "parentAccount must be a valid account id", error: "parentAccount must be a valid account id" });
       }
 
       if (String(payload.parentAccount) === String(account._id)) {
-        return res.status(400).json({ error: "An account cannot be its own parent" });
+        return res.status(400).json({ success: false, status: 400, message: "An account cannot be its own parent", error: "An account cannot be its own parent" });
       }
 
       parent = await ChartOfAccount.findOne({
@@ -534,7 +510,7 @@ router.put("/:id", verifyUser, requireCompanyModule("accounts"), async (req, res
       });
 
       if (!parent) {
-        return res.status(404).json({ error: "Parent account not found" });
+        return res.status(404).json({ success: false, status: 404, message: "Parent account not found", error: "Parent account not found" });
       }
 
       level = Number(parent.level || 0) + 1;
@@ -595,9 +571,7 @@ router.put("/:id", verifyUser, requireCompanyModule("accounts"), async (req, res
     return res.status(200).json(serializeAccount(populated));
   } catch (err) {
     console.error("Failed to update ChartOfAccount:", err);
-    return res.status(500).json({
-      error: err?.message || "Failed to update ChartOfAccount",
-    });
+    return res.status(500).json({ success: false, status: 500, message: err?.message || "Failed to update ChartOfAccount", error: err?.message || "Failed to update ChartOfAccount" });
   }
 });
 
@@ -607,22 +581,20 @@ router.delete("/:id", verifyUser, requireCompanyModule("accounts"), async (req, 
     const { id } = req.params;
 
     if (!business) {
-      return res.status(400).json({ error: "business is required" });
+      return res.status(400).json({ success: false, status: 400, message: "business is required", error: "business is required" });
     }
 
     if (!isValidObjectId(id)) {
-      return res.status(400).json({ error: "Invalid chart account id" });
+      return res.status(400).json({ success: false, status: 400, message: "Invalid chart account id", error: "Invalid chart account id" });
     }
 
     const account = await ChartOfAccount.findOne({ _id: id, business });
     if (!account) {
-      return res.status(404).json({ error: "Chart account not found" });
+      return res.status(404).json({ success: false, status: 404, message: "Chart account not found", error: "Chart account not found" });
     }
 
     if (PROTECTED_CODES.has(account.code)) {
-      return res.status(400).json({
-        error: `Core account ${account.code} cannot be deleted.`,
-      });
+      return res.status(400).json({ success: false, status: 400, message: `Core account ${account.code} cannot be deleted.`, error: `Core account ${account.code} cannot be deleted.` });
     }
 
     const childCount = await ChartOfAccount.countDocuments({
@@ -631,9 +603,7 @@ router.delete("/:id", verifyUser, requireCompanyModule("accounts"), async (req, 
     });
 
     if (childCount > 0) {
-      return res.status(400).json({
-        error: "This account has sub-accounts. Move or delete the children first.",
-      });
+      return res.status(400).json({ success: false, status: 400, message: "This account has sub-accounts. Move or delete the children first.", error: "This account has sub-accounts. Move or delete the children first." });
     }
 
     const [ledgerUsage, invoiceUsage] = await Promise.all([
@@ -645,15 +615,13 @@ router.delete("/:id", verifyUser, requireCompanyModule("accounts"), async (req, 
     // Clean accounts with no history are physically removed.
     if (ledgerUsage > 0 || invoiceUsage > 0) {
       if (account.isActive === false) {
-        return res.status(400).json({ error: "Account is already deactivated." });
+        return res.status(400).json({ success: false, status: 400, message: "Account is already deactivated.", error: "Account is already deactivated." });
       }
 
       // A deactivated account takes no new postings, so switching one off that still holds money (or that Milik itself
       // posts to) would make vouchers, receipts and journals start failing.
       if (account.isSystem) {
-        return res.status(400).json({
-          error: `${account.code} ${account.name} is a system account that Milik posts to, and it has transaction history, so it cannot be deleted.`,
-        });
+        return res.status(400).json({ success: false, status: 400, message: `${account.code} ${account.name} is a system account that Milik posts to, and it has transaction history, so it cannot be deleted.`, error: `${account.code} ${account.name} is a system account that Milik posts to, and it has transaction history, so it cannot be deleted.` });
       }
       const [held] = await FinancialLedgerEntry.aggregate([
         { $match: { accountId: account._id } },
@@ -661,9 +629,7 @@ router.delete("/:id", verifyUser, requireCompanyModule("accounts"), async (req, 
       ]);
       const balance = Math.round(((held?.debit || 0) - (held?.credit || 0)) * 100) / 100;
       if (Math.abs(balance) >= 0.01) {
-        return res.status(400).json({
-          error: `${account.code} ${account.name} still has a balance of ${balance.toLocaleString("en-KE", { minimumFractionDigits: 2 })}. Move it to another account with a journal before deleting.`,
-        });
+        return res.status(400).json({ success: false, status: 400, message: `${account.code} ${account.name} still has a balance of ${balance.toLocaleString("en-KE", { minimumFractionDigits: 2 })}. Move it to another account with a journal before deleting.`, error: `${account.code} ${account.name} still has a balance of ${balance.toLocaleString("en-KE", { minimumFractionDigits: 2 })}. Move it to another account with a journal before deleting.` });
       }
       account.isActive = false;
       account.deletedAt = new Date();
@@ -689,9 +655,7 @@ router.delete("/:id", verifyUser, requireCompanyModule("accounts"), async (req, 
     });
   } catch (err) {
     console.error("Failed to delete ChartOfAccount:", err);
-    return res.status(500).json({
-      error: err?.message || "Failed to delete ChartOfAccount",
-    });
+    return res.status(500).json({ success: false, status: 500, message: err?.message || "Failed to delete ChartOfAccount", error: err?.message || "Failed to delete ChartOfAccount" });
   }
 });
 
@@ -701,12 +665,12 @@ router.post("/:id/reactivate", verifyUser, requireCompanyModule("accounts"), asy
     const business = resolveBusiness(req);
     const { id } = req.params;
 
-    if (!business) return res.status(400).json({ error: "business is required" });
-    if (!isValidObjectId(id)) return res.status(400).json({ error: "Invalid chart account id" });
+    if (!business) return res.status(400).json({ success: false, status: 400, message: "business is required", error: "business is required" });
+    if (!isValidObjectId(id)) return res.status(400).json({ success: false, status: 400, message: "Invalid chart account id", error: "Invalid chart account id" });
 
     const account = await ChartOfAccount.findOne({ _id: id, business });
-    if (!account) return res.status(404).json({ error: "Chart account not found" });
-    if (account.isActive !== false) return res.status(400).json({ error: "Account is already active." });
+    if (!account) return res.status(404).json({ success: false, status: 404, message: "Chart account not found", error: "Chart account not found" });
+    if (account.isActive !== false) return res.status(400).json({ success: false, status: 400, message: "Account is already active.", error: "Account is already active." });
 
     account.isActive = true;
     account.deletedAt = null;
@@ -718,7 +682,7 @@ router.post("/:id/reactivate", verifyUser, requireCompanyModule("accounts"), asy
     return res.status(200).json(serializeAccount(account.toObject()));
   } catch (err) {
     console.error("Failed to reactivate ChartOfAccount:", err);
-    return res.status(500).json({ error: err?.message || "Failed to reactivate ChartOfAccount" });
+    return res.status(500).json({ success: false, status: 500, message: err?.message || "Failed to reactivate ChartOfAccount", error: err?.message || "Failed to reactivate ChartOfAccount" });
   }
 });
 
@@ -730,7 +694,7 @@ router.post("/admin/cleanup-property-sub-accounts", verifyAdmin, requireCompanyM
 
     const business = resolveBusiness(req);
     if (!business) {
-      return res.status(400).json({ error: "business is required" });
+      return res.status(400).json({ success: false, status: 400, message: "business is required", error: "business is required" });
     }
 
     // Delete all property-specific sub-accounts (have a property ref, code is NOT PCTRL-)
@@ -754,7 +718,7 @@ router.post("/admin/cleanup-property-sub-accounts", verifyAdmin, requireCompanyM
     });
   } catch (err) {
     console.error("Cleanup failed:", err);
-    return res.status(500).json({ error: err?.message || "Cleanup failed" });
+    return res.status(500).json({ success: false, status: 500, message: err?.message || "Cleanup failed", error: err?.message || "Cleanup failed" });
   }
 });
 

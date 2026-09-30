@@ -197,10 +197,10 @@ function shapePrepaymentHistory(log, receipt) {
 // ─── SEARCH ────────────────────────────────────────────────────────────────────
 export const searchTransactions = async (req, res, next) => {
   try {
-    if (!isAdmin(req.user)) return res.status(403).json({ error: "Milik Admin access required" });
+    if (!isAdmin(req.user)) return res.status(403).json({ success: false, status: 403, message: "Milik Admin access required", error: "Milik Admin access required" });
 
     const businessId = getBizId(req);
-    if (!isOid(businessId)) return res.status(400).json({ error: "Valid business required" });
+    if (!isOid(businessId)) return res.status(400).json({ success: false, status: 400, message: "Valid business required", error: "Valid business required" });
 
     const { type = "all", search = "", dateFrom, dateTo, property, tenantId, page = 1 } = req.query;
     const bId = new mongoose.Types.ObjectId(businessId);
@@ -330,20 +330,20 @@ export const searchTransactions = async (req, res, next) => {
 // ─── ADJUST BOOKING DATE ────────────────────────────────────────────────────────
 export const adjustBookingDate = async (req, res, next) => {
   try {
-    if (!isAdmin(req.user)) return res.status(403).json({ error: "Milik Admin access required" });
+    if (!isAdmin(req.user)) return res.status(403).json({ success: false, status: 403, message: "Milik Admin access required", error: "Milik Admin access required" });
 
     const businessId = getBizId(req);
     const { type, id, bookingDate, narration, reason } = req.body;
 
     if (!type || !id || !reason?.trim())
-      return res.status(400).json({ error: "type, id, and reason are all required" });
+      return res.status(400).json({ success: false, status: 400, message: "type, id, and reason are all required", error: "type, id, and reason are all required" });
     if (!bookingDate && narration === undefined)
-      return res.status(400).json({ error: "At least one of bookingDate or narration must be provided" });
+      return res.status(400).json({ success: false, status: 400, message: "At least one of bookingDate or narration must be provided", error: "At least one of bookingDate or narration must be provided" });
     if (!isOid(id) || !isOid(businessId))
-      return res.status(400).json({ error: "Invalid ID" });
+      return res.status(400).json({ success: false, status: 400, message: "Invalid ID", error: "Invalid ID" });
 
     const newDate = bookingDate ? new Date(bookingDate) : null;
-    if (newDate && isNaN(newDate.getTime())) return res.status(400).json({ error: "Invalid booking date" });
+    if (newDate && isNaN(newDate.getTime())) return res.status(400).json({ success: false, status: 400, message: "Invalid booking date", error: "Invalid booking date" });
 
     const MODEL_MAP = {
       payment:    { Model: RentPayment,       dateField: "paymentDate",  refField: "receiptNumber"  },
@@ -356,18 +356,18 @@ export const adjustBookingDate = async (req, res, next) => {
 
     if (type === "meter_reading") {
       const reading = await MeterReading.findOne({ _id: id, business: businessId }).lean();
-      if (!reading) return res.status(404).json({ error: "Meter reading not found" });
-      if (!reading.billedInvoice) return res.status(400).json({ error: "This meter reading has no linked invoice" });
+      if (!reading) return res.status(404).json({ success: false, status: 404, message: "Meter reading not found", error: "Meter reading not found" });
+      if (!reading.billedInvoice) return res.status(400).json({ success: false, status: 400, message: "This meter reading has no linked invoice", error: "This meter reading has no linked invoice" });
       doc = await TenantInvoice.findOne({ _id: reading.billedInvoice, business: businessId });
-      if (!doc) return res.status(404).json({ error: "Linked invoice not found" });
+      if (!doc) return res.status(404).json({ success: false, status: 404, message: "Linked invoice not found", error: "Linked invoice not found" });
       originalDate = doc.bookingDate || doc.invoiceDate;
       refNumber = doc.invoiceNumber;
       targetType = "TenantInvoice";
     } else {
       const conf = MODEL_MAP[type];
-      if (!conf) return res.status(400).json({ error: `Unknown transaction type: ${type}` });
+      if (!conf) return res.status(400).json({ success: false, status: 400, message: `Unknown transaction type: ${type}`, error: `Unknown transaction type: ${type}` });
       doc = await conf.Model.findOne({ _id: id, business: businessId });
-      if (!doc) return res.status(404).json({ error: "Transaction not found" });
+      if (!doc) return res.status(404).json({ success: false, status: 404, message: "Transaction not found", error: "Transaction not found" });
       originalDate = doc.bookingDate || doc[conf.dateField];
       refNumber = doc[conf.refField];
       targetType = conf.Model.modelName;
@@ -432,7 +432,7 @@ export const reallocatePayment = async (req, res, next) => {
   try {
     if (!isAdmin(req.user)) {
       await session.abortTransaction(); session.endSession();
-      return res.status(403).json({ error: "Milik Admin access required" });
+      return res.status(403).json({ success: false, status: 403, message: "Milik Admin access required", error: "Milik Admin access required" });
     }
 
     const businessId = getBizId(req);
@@ -440,32 +440,32 @@ export const reallocatePayment = async (req, res, next) => {
 
     if (!paymentId || !isOid(paymentId) || !isOid(businessId)) {
       await session.abortTransaction(); session.endSession();
-      return res.status(400).json({ error: "Valid paymentId and business required" });
+      return res.status(400).json({ success: false, status: 400, message: "Valid paymentId and business required", error: "Valid paymentId and business required" });
     }
     if (!reason?.trim()) {
       await session.abortTransaction(); session.endSession();
-      return res.status(400).json({ error: "Reason is required" });
+      return res.status(400).json({ success: false, status: 400, message: "Reason is required", error: "Reason is required" });
     }
     if (!Array.isArray(newAllocs) || newAllocs.length === 0) {
       await session.abortTransaction(); session.endSession();
-      return res.status(400).json({ error: "At least one allocation entry required" });
+      return res.status(400).json({ success: false, status: 400, message: "At least one allocation entry required", error: "At least one allocation entry required" });
     }
 
     const payment = await RentPayment.findOne({ _id: paymentId, business: businessId }).session(session);
     if (!payment) {
       await session.abortTransaction(); session.endSession();
-      return res.status(404).json({ error: "Payment not found" });
+      return res.status(404).json({ success: false, status: 404, message: "Payment not found", error: "Payment not found" });
     }
     if (payment.isCancelled || payment.isReversed) {
       await session.abortTransaction(); session.endSession();
-      return res.status(400).json({ error: "Cannot reallocate a cancelled or reversed payment" });
+      return res.status(400).json({ success: false, status: 400, message: "Cannot reallocate a cancelled or reversed payment", error: "Cannot reallocate a cancelled or reversed payment" });
     }
 
     // Validate: submitted allocation totals must equal payment amount
     const totalNew = round2(newAllocs.reduce((s, a) => s + Number(a.amount || 0), 0));
     if (Math.abs(totalNew - round2(payment.amount)) > 0.01) {
       await session.abortTransaction(); session.endSession();
-      return res.status(400).json({ error: `Allocation total (Ksh ${totalNew.toLocaleString()}) must equal payment amount (Ksh ${payment.amount.toLocaleString()}). Difference: Ksh ${round2(totalNew - payment.amount).toLocaleString()}` });
+      return res.status(400).json({ success: false, status: 400, message: `Allocation total (Ksh ${totalNew.toLocaleString()}) must equal payment amount (Ksh ${payment.amount.toLocaleString()}). Difference: Ksh ${round2(totalNew - payment.amount).toLocaleString()}`, error: `Allocation total (Ksh ${totalNew.toLocaleString()}) must equal payment amount (Ksh ${payment.amount.toLocaleString()}). Difference: Ksh ${round2(totalNew - payment.amount).toLocaleString()}` });
     }
 
     // Validate: no duplicate invoice IDs in submission
@@ -477,7 +477,7 @@ export const reallocatePayment = async (req, res, next) => {
     const dupEntry = Object.entries(invoiceIdCounts).find(([, n]) => n > 1);
     if (dupEntry) {
       await session.abortTransaction(); session.endSession();
-      return res.status(400).json({ error: `Invoice ${dupEntry[0]} appears ${dupEntry[1]} times. Each invoice may only appear once per allocation.` });
+      return res.status(400).json({ success: false, status: 400, message: `Invoice ${dupEntry[0]} appears ${dupEntry[1]} times. Each invoice may only appear once per allocation.`, error: `Invoice ${dupEntry[0]} appears ${dupEntry[1]} times. Each invoice may only appear once per allocation.` });
     }
 
     // Collect all invoice IDs involved
@@ -543,16 +543,16 @@ export const reallocatePayment = async (req, res, next) => {
       const inv = stateMap.get(invId);
       if (!inv) {
         await session.abortTransaction(); session.endSession();
-        return res.status(400).json({ error: `Invoice ${invId} not found in this business` });
+        return res.status(400).json({ success: false, status: 400, message: `Invoice ${invId} not found in this business`, error: `Invoice ${invId} not found in this business` });
       }
       if (String(inv.tenant) !== String(payment.tenant)) {
         await session.abortTransaction(); session.endSession();
-        return res.status(400).json({ error: `Invoice ${inv.invoiceNumber} does not belong to this payment's tenant` });
+        return res.status(400).json({ success: false, status: 400, message: `Invoice ${inv.invoiceNumber} does not belong to this payment's tenant`, error: `Invoice ${inv.invoiceNumber} does not belong to this payment's tenant` });
       }
       const terminalStatuses = ["cancelled", "reversed", "void"];
       if (terminalStatuses.includes(String(inv.status || "").toLowerCase())) {
         await session.abortTransaction(); session.endSession();
-        return res.status(400).json({ error: `Invoice ${inv.invoiceNumber} is ${inv.status} and cannot receive payment allocations` });
+        return res.status(400).json({ success: false, status: 400, message: `Invoice ${inv.invoiceNumber} is ${inv.status} and cannot receive payment allocations`, error: `Invoice ${inv.invoiceNumber} is ${inv.status} and cannot receive payment allocations` });
       }
     }
 
@@ -603,13 +603,13 @@ export const reallocatePayment = async (req, res, next) => {
 
       if (!isOid(alloc.invoiceId)) {
         await session.abortTransaction(); session.endSession();
-        return res.status(400).json({ error: `Invalid invoice ID: ${alloc.invoiceId}` });
+        return res.status(400).json({ success: false, status: 400, message: `Invalid invoice ID: ${alloc.invoiceId}`, error: `Invalid invoice ID: ${alloc.invoiceId}` });
       }
 
       const inv = stateMap.get(String(alloc.invoiceId));
       if (!inv) {
         await session.abortTransaction(); session.endSession();
-        return res.status(400).json({ error: `Invoice not found: ${alloc.invoiceId}` });
+        return res.status(400).json({ success: false, status: 400, message: `Invoice not found: ${alloc.invoiceId}`, error: `Invoice not found: ${alloc.invoiceId}` });
       }
 
       const beforeOutstanding = round2(inv.outstanding);
@@ -641,9 +641,7 @@ export const reallocatePayment = async (req, res, next) => {
     const actualApplied = round2(builtAllocations.reduce((s, a) => s + Number(a.appliedAmount || 0), 0));
     if (Math.abs(actualApplied - round2(payment.amount)) > 0.01) {
       await session.abortTransaction(); session.endSession();
-      return res.status(400).json({
-        error: `Applied total (Ksh ${actualApplied.toLocaleString()}) does not equal payment amount (Ksh ${payment.amount.toLocaleString()}). One or more invoices may have been partially paid by another receipt since this panel was opened. Refresh and re-check outstanding balances before saving.`,
-      });
+      return res.status(400).json({ success: false, status: 400, message: `Applied total (Ksh ${actualApplied.toLocaleString()}) does not equal payment amount (Ksh ${payment.amount.toLocaleString()}). One or more invoices may have been partially paid by another receipt since this panel was opened. Refresh and re-check outstanding balances before saving.`, error: `Applied total (Ksh ${actualApplied.toLocaleString()}) does not equal payment amount (Ksh ${payment.amount.toLocaleString()}). One or more invoices may have been partially paid by another receipt since this panel was opened. Refresh and re-check outstanding balances before saving.` });
     }
 
     // Step 3 — Persist updated outstanding + status for every involved invoice/debit note.
@@ -788,11 +786,11 @@ const noteToInvoiceShape = (note) => ({
 // ─── GET TENANT INVOICES (for reallocation picker) ─────────────────────────────
 export const getTenantInvoicesForRealloc = async (req, res, next) => {
   try {
-    if (!isAdmin(req.user)) return res.status(403).json({ error: "Milik Admin access required" });
+    if (!isAdmin(req.user)) return res.status(403).json({ success: false, status: 403, message: "Milik Admin access required", error: "Milik Admin access required" });
 
     const businessId = getBizId(req);
     const { tenantId, paymentId } = req.query;
-    if (!isOid(businessId) || !isOid(tenantId)) return res.status(400).json({ error: "Valid business and tenantId required" });
+    if (!isOid(businessId) || !isOid(tenantId)) return res.status(400).json({ success: false, status: 400, message: "Valid business and tenantId required", error: "Valid business and tenantId required" });
 
     const bId = new mongoose.Types.ObjectId(businessId);
     const tId = new mongoose.Types.ObjectId(tenantId);
@@ -864,10 +862,10 @@ export const getTenantInvoicesForRealloc = async (req, res, next) => {
 // ─── RECOMPUTE TENANT INVOICE BALANCES ──────────────────────────────────────────
 export const recomputeTenantState = async (req, res, next) => {
   try {
-    if (!isAdmin(req.user)) return res.status(403).json({ error: "Milik Admin access required" });
+    if (!isAdmin(req.user)) return res.status(403).json({ success: false, status: 403, message: "Milik Admin access required", error: "Milik Admin access required" });
     const businessId = getBizId(req);
     const { tenantId } = req.body;
-    if (!isOid(businessId) || !isOid(tenantId)) return res.status(400).json({ error: "Valid business and tenantId required" });
+    if (!isOid(businessId) || !isOid(tenantId)) return res.status(400).json({ success: false, status: 400, message: "Valid business and tenantId required", error: "Valid business and tenantId required" });
 
     // Compute snapshots to identify receipts with only implicit (legacy) FIFO allocations,
     // then write those as formal records so the statement panel can display them correctly.
@@ -886,10 +884,10 @@ export const recomputeTenantState = async (req, res, next) => {
 // ─── ADJUSTMENT HISTORY ─────────────────────────────────────────────────────────
 export const getAdjustmentHistory = async (req, res, next) => {
   try {
-    if (!isAdmin(req.user)) return res.status(403).json({ error: "Milik Admin access required" });
+    if (!isAdmin(req.user)) return res.status(403).json({ success: false, status: 403, message: "Milik Admin access required", error: "Milik Admin access required" });
 
     const businessId = getBizId(req);
-    if (!isOid(businessId)) return res.status(400).json({ error: "Valid business required" });
+    if (!isOid(businessId)) return res.status(400).json({ success: false, status: 400, message: "Valid business required", error: "Valid business required" });
 
     const { dateFrom, dateTo, page = 1 } = req.query;
     const PER_PAGE = 50;
