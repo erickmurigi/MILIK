@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { FaCheck, FaEdit, FaHandshake, FaPlus, FaPrint, FaRedoAlt, FaTimes } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterSearch } from "./SaleFilterBar";
+import ListToolbar from "../../components/common/ListToolbar";
 import PaginationBar from "../../components/PaginationBar";
 import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
 import AmountInput from "./AmountInput";
@@ -613,24 +614,17 @@ const SaleOffers = () => {
       <div className="flex-1 min-h-0 flex flex-col gap-1">
         {/* Filter bar */}
         <SaleFilterBar
-          leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} {(total !== 1 ? T.saleOffers : T.saleOffer).toLowerCase()}</span>}
+          leading={<span className="shrink-0 font-mono text-[9px] font-black text-slate-500">{total} {(total !== 1 ? T.saleOffers : T.saleOffer).toLowerCase()}</span>}
           onReset={() => { setSearch(""); setStatusFilter(""); setListingFilt(""); setBuyerFilt(""); setPage(1); }}
           activeCount={[search, statusFilter, listingFilt, buyerFilt].filter(Boolean).length}
           trailing={
             <>
-              <button
-                type="button"
-                onClick={invalidate}
-                className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-              >
-                <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
-              </button>
-              <button
-                onClick={() => setShowCreate(true)}
-                className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]"
-              >
-                <FaPlus size={9} /> New {T.saleOffer}
-              </button>
+              <ListToolbar.Button variant="outline" onClick={invalidate}>
+                <FaRedoAlt size={7} className={isFetching ? "animate-spin" : ""} /> Refresh
+              </ListToolbar.Button>
+              <ListToolbar.Button icon={FaPlus} onClick={() => setShowCreate(true)}>
+                New {T.saleOffer}
+              </ListToolbar.Button>
             </>
           }
         >
@@ -639,9 +633,9 @@ const SaleOffers = () => {
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder={`${T.saleOffer} no. / ${T.saleListing.toLowerCase()} / ${T.saleBuyer.toLowerCase()}…`}
           />
-          <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={OFFER_STATUS_FILTER_OPTIONS} placeholder="All Statuses" clearable size="sm" />
-          <AppSelect value={listingFilt} onChange={(v) => { setListingFilt(v ?? ""); setPage(1); }} options={listingFilterOptions} placeholder={`All ${T.saleListings}`} clearable size="sm" searchable />
-          <AppSelect value={buyerFilt} onChange={(v) => { setBuyerFilt(v ?? ""); setPage(1); }} options={buyerFilterOptions} placeholder={`All ${T.saleBuyers}`} clearable size="sm" searchable />
+          <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={OFFER_STATUS_FILTER_OPTIONS} placeholder="All Statuses" clearable compact />
+          <AppSelect value={listingFilt} onChange={(v) => { setListingFilt(v ?? ""); setPage(1); }} options={listingFilterOptions} placeholder={`All ${T.saleListings}`} clearable compact searchable />
+          <AppSelect value={buyerFilt} onChange={(v) => { setBuyerFilt(v ?? ""); setPage(1); }} options={buyerFilterOptions} placeholder={`All ${T.saleBuyers}`} clearable compact searchable />
         </SaleFilterBar>
 
         {/* Table */}
