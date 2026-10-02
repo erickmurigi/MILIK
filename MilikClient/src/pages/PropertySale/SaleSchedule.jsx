@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import { FaBell, FaExternalLinkAlt, FaTimes } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterDateRange } from "./SaleFilterBar";
+import ListToolbar from "../../components/common/ListToolbar";
 import PaginationBar from "../../components/PaginationBar";
 import { fmtKES, saleApi } from "../../services/propertySaleApi";
 import { useTabState } from "../../hooks/useTabState";
@@ -135,29 +136,31 @@ const SaleSchedule = () => {
       <SaleFilterBar
         leading={
           <>
-            <span className="shrink-0 font-mono text-[10px] font-black text-rose-600">{fmtKES(overdueAmt)}</span>
-            <span className="shrink-0 text-[10px] text-slate-400">overdue</span>
+            <span className="shrink-0 font-mono text-[9px] font-black text-rose-600">{fmtKES(overdueAmt)}</span>
+            <span className="shrink-0 text-[9px] text-slate-400">overdue</span>
             <span className="shrink-0 select-none text-slate-200">|</span>
-            <span className="shrink-0 font-mono text-[10px] font-black text-blue-600">{fmtKES(due30Amt)}</span>
-            <span className="shrink-0 text-[10px] text-slate-400">due 30d</span>
+            <span className="shrink-0 font-mono text-[9px] font-black text-blue-600">{fmtKES(due30Amt)}</span>
+            <span className="shrink-0 text-[9px] text-slate-400">due 30d</span>
             <span className="shrink-0 select-none text-slate-200">|</span>
-            <span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{fmtKES(upcomingAmt)}</span>
-            <span className="shrink-0 text-[10px] text-slate-400">upcoming</span>
+            <span className="shrink-0 font-mono text-[9px] font-black text-slate-500">{fmtKES(upcomingAmt)}</span>
+            <span className="shrink-0 text-[9px] text-slate-400">upcoming</span>
             <span className="shrink-0 select-none text-slate-200">|</span>
-            <span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total}</span>
-            <span className="shrink-0 text-[10px] text-slate-400">showing</span>
+            <span className="shrink-0 font-mono text-[9px] font-black text-slate-500">{total}</span>
+            <span className="shrink-0 text-[9px] text-slate-400">showing</span>
           </>
         }
         onReset={resetFilters}
         activeCount={activeFilterCount}
         trailing={
           selectedIds.size > 0 && (
-            <button
+            <ListToolbar.Button
+              icon={FaBell}
+              className="!border-amber-300 !bg-amber-50 !text-amber-700 hover:!bg-amber-100"
+              variant="outline"
               onClick={() => setShowReminderModal(true)}
-              className="inline-flex items-center gap-1.5 border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100"
             >
-              <FaBell size={10} /> Remind ({selectedIds.size})
-            </button>
+              Remind ({selectedIds.size})
+            </ListToolbar.Button>
           )
         }
       >
@@ -167,7 +170,7 @@ const SaleSchedule = () => {
           options={STATUS_OPTS}
           placeholder="All Statuses"
           clearable
-          size="sm"
+          compact
         />
         <FilterDateRange
           from={dateFrom}
