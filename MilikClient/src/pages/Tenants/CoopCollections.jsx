@@ -14,6 +14,7 @@ import { toast } from "react-toastify";
 import { adminRequests } from "../../utils/requestMethods";
 import { selectCurrentCompany } from "../../redux/selectors";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import ListToolbar from "../../components/common/ListToolbar";
 import { useTabState } from "../../hooks/useTabState";
 import useDebounce from "../../hooks/useDebounce";
 import { useTerms } from '../../hooks/useTerm';
@@ -337,41 +338,40 @@ export default function CoopCollections() {
         </div>
 
         {/* Filters */}
-        <div className="mb-3 flex flex-wrap gap-2 border border-slate-200 bg-white p-2.5">
-          <div className="flex items-center gap-1.5">
-            <FaSearch className="text-[10px] text-slate-400" />
-            <input
-              value={search}
-              onChange={e => { setSearch(e.target.value); if (!e.target.value) fetchData(1); }}
-              onKeyDown={e => e.key === "Enter" && fetchData(1)}
-              placeholder="Ref, tenant code, payer…"
-              className="h-7 w-44 border border-slate-200 bg-white px-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+        <div className="mb-3">
+          <ListToolbar>
+            <div className="relative shrink-0">
+              <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400" />
+              <ListToolbar.Input
+                width="w-44"
+                className="pl-5"
+                value={search}
+                onChange={e => { setSearch(e.target.value); if (!e.target.value) fetchData(1); }}
+                onKeyDown={e => e.key === "Enter" && fetchData(1)}
+                placeholder="Ref, tenant code, payer…"
+              />
+            </div>
+
+            <AppSelect
+              value={statusFilter}
+              onChange={(v) => { setStatusFilter(v ?? ""); fetchData(1); }}
+              options={[
+                { value: "unmatched", label: "Unmatched" },
+                { value: "matched_tenant", label: "Matched" },
+                { value: "captured", label: "Captured" },
+                { value: "ignored", label: "Ignored" },
+              ]}
+              placeholder="All statuses"
+              clearable
+              compact
             />
-          </div>
 
-          <AppSelect
-            value={statusFilter}
-            onChange={(v) => { setStatusFilter(v ?? ""); fetchData(1); }}
-            options={[
-              { value: "unmatched", label: "Unmatched" },
-              { value: "matched_tenant", label: "Matched" },
-              { value: "captured", label: "Captured" },
-              { value: "ignored", label: "Ignored" },
-            ]}
-            placeholder="All statuses"
-            clearable
-            size="sm"
-          />
+            <ListToolbar.Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+            <span className="shrink-0 text-[9px] text-slate-400">to</span>
+            <ListToolbar.Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
 
-          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-            className="h-7 border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none" />
-          <span className="self-center text-[10px] text-slate-400">to</span>
-          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-            className="h-7 border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none" />
-
-          <button onClick={() => fetchData(1)} className="inline-flex h-7 items-center gap-1.5 bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127]">
-            <FaSearch size={9} /> Filter
-          </button>
+            <ListToolbar.Button icon={FaSearch} onClick={() => fetchData(1)}>Filter</ListToolbar.Button>
+          </ListToolbar>
         </div>
 
         {/* Table */}
