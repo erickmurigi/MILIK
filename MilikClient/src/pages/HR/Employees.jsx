@@ -14,6 +14,7 @@ import { selectCurrentCompany } from '../../redux/selectors';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 import AppSelect from "../../components/common/AppSelect";
+import ListToolbar from "../../components/common/ListToolbar";
 import { fmtDate } from '../../utils/dates';
 import { printTabularList } from '../../utils/printKit';
 
@@ -192,24 +193,23 @@ export default function Employees() {
         </div>
 
         {/* Filters */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-2 py-1.5">
-          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto">
-            <div className="relative w-56 shrink-0">
-              <FaSearch className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={10} />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search name, phone, email, ID number..."
-                className="h-7 w-full rounded border border-slate-200 bg-white pl-7 pr-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-              />
-            </div>
-            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-            <div className="shrink-0"><AppSelect value={deptFilter} onChange={(v) => setDeptFilter(v ?? '')} options={departmentOptions} placeholder="All departments" clearable searchable size="sm" /></div>
-            <div className="shrink-0"><AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? '')} options={STATUS_OPTIONS} placeholder="All statuses" clearable size="sm" /></div>
-            <div className="shrink-0"><AppSelect value={typeFilter} onChange={(v) => setTypeFilter(v ?? '')} options={TYPE_OPTIONS} placeholder="All types" clearable size="sm" /></div>
-            <span className="ml-auto shrink-0 whitespace-nowrap text-[10px] font-semibold text-slate-400">{total} result{total !== 1 ? 's' : ''}</span>
+        <ListToolbar>
+          <div className="relative shrink-0">
+            <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
+            <ListToolbar.Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name, phone, email, ID number..."
+              width="w-56"
+              className="pl-5"
+            />
           </div>
-        </div>
+          <ListToolbar.Divider />
+          <AppSelect value={deptFilter} onChange={(v) => setDeptFilter(v ?? '')} options={departmentOptions} placeholder="All departments" clearable searchable compact />
+          <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? '')} options={STATUS_OPTIONS} placeholder="All statuses" clearable compact />
+          <AppSelect value={typeFilter} onChange={(v) => setTypeFilter(v ?? '')} options={TYPE_OPTIONS} placeholder="All types" clearable compact />
+          <span className="ml-auto shrink-0 whitespace-nowrap pl-2 text-[9px] font-semibold text-slate-400">{total} result{total !== 1 ? 's' : ''}</span>
+        </ListToolbar>
 
         {/* Table */}
         <MilikTable
