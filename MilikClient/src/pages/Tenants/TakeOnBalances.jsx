@@ -8,6 +8,7 @@ import {
   selectAllProperties,
 } from "../../redux/selectors";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import ListToolbar from "../../components/common/ListToolbar";
 import { useTerms } from "../../hooks/useTerm";
 import {
   FaPlus,
@@ -985,67 +986,72 @@ const TakeOnBalances = () => {
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
-              <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
-                <span className="shrink-0 border border-slate-200 bg-white px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide text-slate-500">Rows <span className="text-slate-900 normal-case">{filteredRows.length}</span></span>
-                <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-                <input value={draftFilters.search} onChange={setFilter("search")} placeholder="Search…" className="h-[20px] w-32 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <AppSelect
-                  value={draftFilters.propertyId}
-                  onChange={(v) => setDraftFilters((prev) => ({ ...prev, propertyId: v ?? "", tenant: "" }))}
-                  options={propertyFilterOptions}
-                  placeholder={termProperty}
-                  searchable
-                  clearable
-                  compact
-                />
-                <AppSelect
-                  value={draftFilters.tenant}
-                  onChange={(v) => setDraftFilters((prev) => ({ ...prev, tenant: v ?? "" }))}
-                  options={tenantFilterOptions}
-                  placeholder={termTenant}
-                  searchable
-                  clearable
-                  compact
-                />
-                <AppSelect
-                  value={draftFilters.billItem}
-                  onChange={(v) => setDraftFilters((prev) => ({ ...prev, billItem: v ?? "" }))}
-                  options={filterBillItemOptions}
-                  placeholder="Bill Item"
-                  clearable
-                  compact
-                />
-                <AppSelect
-                  value={draftFilters.type}
-                  onChange={(v) => setDraftFilters((prev) => ({ ...prev, type: v ?? "" }))}
-                  options={[
-                    { value: "Debit", label: "Debit" },
-                    { value: "Credit", label: "Credit" },
-                  ]}
-                  placeholder="Type"
-                  clearable
-                  compact
-                />
-                <AppSelect
-                  value={draftFilters.status}
-                  onChange={(v) => setDraftFilters((prev) => ({ ...prev, status: v ?? "" }))}
-                  options={[
-                    { value: "unallocated", label: "Unallocated" },
-                    { value: "partially_allocated", label: "Partially Allocated" },
-                    { value: "fully_allocated", label: "Fully Allocated" },
-                  ]}
-                  placeholder="Status"
-                  clearable
-                  compact
-                />
-                <button type="button" onClick={() => setAppliedFilters(draftFilters)} className={`h-[20px] shrink-0 px-1.5 text-[9px] font-semibold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}>Apply</button>
-                <button type="button" onClick={() => { setDraftFilters(emptyFilters); setAppliedFilters(emptyFilters); }} className="h-[20px] shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] font-semibold text-slate-700 shadow-sm hover:bg-slate-100">Reset</button>
-                <button type="button" onClick={loadRows} className={`h-[20px] shrink-0 flex items-center gap-0.5 border border-slate-200 bg-white px-1.5 text-[9px] font-bold text-slate-700 shadow-sm hover:bg-slate-50`}><FaRedoAlt size={7} /> Refresh</button>
-                <button type="button" onClick={openCreateModal} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaPlus size={7} /> Add Take-On</button>
-                <button type="button" onClick={handleFixTakeOnDeposits} disabled={fixingDeposits} title="Re-classify take-on deposit receipts that were incorrectly saved as rent" className="h-[20px] shrink-0 flex items-center gap-0.5 border border-amber-300 bg-amber-50 px-1.5 text-[9px] font-bold text-amber-800 shadow-sm hover:bg-amber-100 disabled:opacity-60 disabled:cursor-not-allowed"><FaWrench size={7} /> {fixingDeposits ? "Fixing…" : "Fix Deposits"}</button>
-              </div>
-            </div>
+            <ListToolbar>
+              <span className="shrink-0 border border-slate-200 bg-white px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide text-slate-500">Rows <span className="text-slate-900 normal-case">{filteredRows.length}</span></span>
+              <ListToolbar.Divider />
+              <ListToolbar.Input width="w-32" value={draftFilters.search} onChange={setFilter("search")} placeholder="Search…" />
+              <AppSelect
+                value={draftFilters.propertyId}
+                onChange={(v) => setDraftFilters((prev) => ({ ...prev, propertyId: v ?? "", tenant: "" }))}
+                options={propertyFilterOptions}
+                placeholder={termProperty}
+                searchable
+                clearable
+                compact
+              />
+              <AppSelect
+                value={draftFilters.tenant}
+                onChange={(v) => setDraftFilters((prev) => ({ ...prev, tenant: v ?? "" }))}
+                options={tenantFilterOptions}
+                placeholder={termTenant}
+                searchable
+                clearable
+                compact
+              />
+              <AppSelect
+                value={draftFilters.billItem}
+                onChange={(v) => setDraftFilters((prev) => ({ ...prev, billItem: v ?? "" }))}
+                options={filterBillItemOptions}
+                placeholder="Bill Item"
+                clearable
+                compact
+              />
+              <AppSelect
+                value={draftFilters.type}
+                onChange={(v) => setDraftFilters((prev) => ({ ...prev, type: v ?? "" }))}
+                options={[
+                  { value: "Debit", label: "Debit" },
+                  { value: "Credit", label: "Credit" },
+                ]}
+                placeholder="Type"
+                clearable
+                compact
+              />
+              <AppSelect
+                value={draftFilters.status}
+                onChange={(v) => setDraftFilters((prev) => ({ ...prev, status: v ?? "" }))}
+                options={[
+                  { value: "unallocated", label: "Unallocated" },
+                  { value: "partially_allocated", label: "Partially Allocated" },
+                  { value: "fully_allocated", label: "Fully Allocated" },
+                ]}
+                placeholder="Status"
+                clearable
+                compact
+              />
+              <ListToolbar.Button variant="accent" onClick={() => setAppliedFilters(draftFilters)}>Apply</ListToolbar.Button>
+              <ListToolbar.Button variant="outline" onClick={() => { setDraftFilters(emptyFilters); setAppliedFilters(emptyFilters); }}>Reset</ListToolbar.Button>
+              <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={loadRows}>Refresh</ListToolbar.Button>
+              <ListToolbar.Button icon={FaPlus} onClick={openCreateModal}>Add Take-On</ListToolbar.Button>
+              <ListToolbar.Button
+                icon={FaWrench}
+                variant="outline"
+                className="!border-amber-300 !bg-amber-50 !text-amber-800 hover:!bg-amber-100"
+                onClick={handleFixTakeOnDeposits}
+                disabled={fixingDeposits}
+                title="Re-classify take-on deposit receipts that were incorrectly saved as rent"
+              >{fixingDeposits ? "Fixing…" : "Fix Deposits"}</ListToolbar.Button>
+            </ListToolbar>
 
             <MilikTable
               columns={[
