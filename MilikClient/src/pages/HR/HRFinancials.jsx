@@ -12,6 +12,7 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import AppSelect from "../../components/common/AppSelect";
+import ListToolbar from "../../components/common/ListToolbar";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import MilikTable from "../../components/common/MilikTable";
 import { getChartOfAccounts, getJournalEntries } from "../../redux/apiCalls";
@@ -167,42 +168,20 @@ export default function HRFinancials() {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
 
         {/* ── Toolbar ───────────────────────────────────────────────────────── */}
-        <div className="filter-bar flex shrink-0 items-center gap-2 overflow-x-auto border-b border-slate-200 bg-gray-50/95 px-4 py-2 shadow-sm">
-          <p className="shrink-0 text-[10px] font-black uppercase tracking-widest text-slate-400">HR Financials</p>
-
-          <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-
-          <FaCalendarAlt size={10} className="shrink-0 text-slate-400" />
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-          />
-          <span className="text-slate-300">—</span>
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-          />
-
-          <button
-            onClick={handleRefresh}
-            className="flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-          >
-            <FaRedoAlt size={10} /> Refresh
-          </button>
-
+        <ListToolbar>
+          <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-400">HR Financials</span>
+          <ListToolbar.Divider />
+          <FaCalendarAlt size={8} className="shrink-0 text-slate-400" />
+          <ListToolbar.Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <span className="shrink-0 text-[9px] text-slate-400">—</span>
+          <ListToolbar.Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={handleRefresh}>Refresh</ListToolbar.Button>
           {hasFullAccounts && (
-            <button
-              onClick={() => navigate("/financial/journals")}
-              className="flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-semibold text-white hover:bg-[#0A3127]"
-            >
-              <FaExternalLinkAlt size={9} /> Full Accounts
-            </button>
+            <ListToolbar.Button icon={FaExternalLinkAlt} onClick={() => navigate("/financial/journals")}>
+              Full Accounts
+            </ListToolbar.Button>
           )}
-        </div>
+        </ListToolbar>
 
         {/* ── KPI Strip ─────────────────────────────────────────────────────── */}
         <div className="grid shrink-0 grid-cols-2 divide-x divide-slate-200 border-b border-slate-200 bg-white sm:grid-cols-4">
@@ -244,21 +223,22 @@ export default function HRFinancials() {
           {tab === "journals" && (
             <>
               {/* Filter bar */}
-              <div className="filter-bar flex-shrink-0 flex items-center gap-1.5 overflow-x-auto border-b border-slate-100 bg-white px-2 py-1.5">
-                <div className="relative w-52 shrink-0">
-                  <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={10} />
-                  <input
+              <ListToolbar>
+                <div className="relative shrink-0">
+                  <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
+                  <ListToolbar.Input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search journal #, narration…"
-                    className="h-7 w-full rounded border border-slate-200 pl-7 pr-6 text-xs text-slate-700 placeholder-slate-400 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/30"
+                    width="w-52"
+                    className="pl-5 pr-6"
                   />
                   {search && (
                     <button
                       onClick={() => setSearch("")}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
                     >
-                      <FaTimes size={9} />
+                      <FaTimes size={8} />
                     </button>
                   )}
                 </div>
@@ -272,21 +252,17 @@ export default function HRFinancials() {
                   ]}
                   placeholder="All Status"
                   clearable
-                  size="sm"
+                  compact
                 />
                 {(search || statusFilter) && (
-                  <button
-                    onClick={() => { setSearch(""); setStatusFilter(""); }}
-                    className="shrink-0 text-[10px] font-bold text-slate-500 hover:text-rose-600 transition-colors"
-                  >
+                  <ListToolbar.Button variant="outline" onClick={() => { setSearch(""); setStatusFilter(""); }}>
                     Clear filters
-                  </button>
+                  </ListToolbar.Button>
                 )}
-                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-                <span className="ml-auto shrink-0 whitespace-nowrap text-[10px] font-semibold text-slate-400">
+                <span className="ml-auto shrink-0 whitespace-nowrap pl-2 text-[9px] font-semibold text-slate-400">
                   {journals.length.toLocaleString()} {journals.length === 1 ? "entry" : "entries"}
                 </span>
-              </div>
+              </ListToolbar>
 
               {/* Table */}
               <div className="min-h-0 flex-1 overflow-hidden flex flex-col">
