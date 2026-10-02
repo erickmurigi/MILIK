@@ -390,7 +390,7 @@ const SaleProjectDetail = () => {
                 <button
                   type="button"
                   onClick={() => setStatusFilt("")}
-                  className={`inline-flex items-center gap-1 border px-2 py-0.5 text-[10px] font-bold ${statusFilt === "" ? "border-[#0B3B2E] bg-[#0B3B2E] text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                  className={`inline-flex h-[20px] items-center gap-1 border px-2 text-[9px] font-bold ${statusFilt === "" ? "border-[#0B3B2E] bg-[#0B3B2E] text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
                 >
                   All <span className="tabular-nums opacity-70">{u.total || 0}</span>
                 </button>
@@ -399,14 +399,14 @@ const SaleProjectDetail = () => {
                     key={s}
                     type="button"
                     onClick={() => setStatusFilt((prev) => (prev === s ? "" : s))}
-                    className={`inline-flex items-center gap-1 border px-2 py-0.5 text-[10px] font-bold ${statusFilt === s ? "border-[#0B3B2E] bg-[#F1F6F3] text-[#0B3B2E]" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                    className={`inline-flex h-[20px] items-center gap-1 border px-2 text-[9px] font-bold ${statusFilt === s ? "border-[#0B3B2E] bg-[#F1F6F3] text-[#0B3B2E]" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
                   >
                     <span className={`h-2 w-2 ${STATUS_SWATCH[s]}`} /> {STATUS_LABEL[s]} <span className="tabular-nums text-slate-400">{u[s] || 0}</span>
                   </button>
                 ))}
                 <span className="mx-1 hidden text-slate-200 sm:inline">·</span>
                 {blockOptions.length > 0 && (
-                  <AppSelect value={blockFilt} onChange={(v) => setBlockFilt(v ?? "")} options={blockOptions} placeholder="All blocks" clearable size="sm" />
+                  <AppSelect value={blockFilt} onChange={(v) => setBlockFilt(v ?? "")} options={blockOptions} placeholder="All blocks" clearable compact />
                 )}
                 <FilterSearch value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Search ${T.saleUnit.toLowerCase()} no...`} />
                 <div className="ml-auto flex">
