@@ -13,6 +13,7 @@ import { useNavigate } from "react-router-dom";
 import { FaBalanceScale } from "react-icons/fa";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import ListToolbar from "../../components/common/ListToolbar";
 import { fmtDate } from "../../utils/dates";
 import { printDocument } from "../../utils/printKit";
 import { selectCurrentCompany } from "../../redux/selectors";
@@ -759,82 +760,106 @@ export default function CarWashCustomers() {
             <div className="flex flex-wrap items-center gap-1">
               {/* Search */}
               <div className="relative">
-                <FaSearch className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={9} />
+                <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-400" size={8} />
                 <input ref={searchRef} type="text" placeholder="Name / phone / plate..." value={search}
                   onChange={(e) => handleSearch(e.target.value)}
-                  className="h-7 w-36 rounded border border-slate-300 bg-white pl-6 pr-6 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20 sm:w-48 transition-all"
+                  className="h-[20px] w-36 border border-slate-300 bg-white pl-5 pr-6 text-[9px] focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20 sm:w-48 transition-all"
                 />
                 {search && (
-                  <button type="button" onClick={() => handleSearch("")} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><FaTimes size={9} /></button>
+                  <button type="button" onClick={() => handleSearch("")} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><FaTimes size={8} /></button>
                 )}
               </div>
 
               {/* Outstanding toggle */}
-              <button type="button" onClick={() => { setFilterOutstanding((v) => !v); setPage(1); }}
-                className={`flex items-center gap-1 h-7 rounded border px-2 text-xs font-semibold transition-colors ${filterOutstanding ? "border-red-200 bg-red-50 text-red-700" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"}`}>
-                <FaExclamationTriangle size={9} /><span className="hidden sm:inline">Outstanding only</span><span className="sm:hidden">Unpaid</span>
-              </button>
+              <ListToolbar.Button
+                icon={FaExclamationTriangle}
+                variant="outline"
+                className={filterOutstanding ? "!border-red-200 !bg-red-50 !text-red-700" : ""}
+                onClick={() => { setFilterOutstanding((v) => !v); setPage(1); }}
+              >
+                <span className="hidden sm:inline">Outstanding only</span><span className="sm:hidden">Unpaid</span>
+              </ListToolbar.Button>
 
               {/* Credit toggle */}
-              <button type="button" onClick={() => { setFilterCredit((v) => !v); setPage(1); }}
-                className={`flex items-center gap-1 h-7 rounded border px-2 text-xs font-semibold transition-colors ${filterCredit ? "border-emerald-600 bg-emerald-50 text-emerald-700" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"}`}>
-                <FaPiggyBank size={9} /><span className="hidden sm:inline">With credit</span>
-              </button>
+              <ListToolbar.Button
+                icon={FaPiggyBank}
+                variant="outline"
+                className={filterCredit ? "!border-emerald-600 !bg-emerald-50 !text-emerald-700" : ""}
+                onClick={() => { setFilterCredit((v) => !v); setPage(1); }}
+              >
+                <span className="hidden sm:inline">With credit</span>
+              </ListToolbar.Button>
 
               {/* Advanced filters toggle */}
-              <button type="button" onClick={() => setFiltersOpen((v) => !v)}
-                className={`flex items-center gap-1 h-7 rounded border px-2 text-xs font-semibold transition-colors ${hasAdvancedFilters ? "border-violet-400 bg-violet-50 text-violet-700" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"}`}>
-                <FaFilter size={9} />
+              <ListToolbar.Button
+                icon={FaFilter}
+                variant="outline"
+                className={hasAdvancedFilters ? "!border-violet-400 !bg-violet-50 !text-violet-700" : ""}
+                onClick={() => setFiltersOpen((v) => !v)}
+              >
                 <span className="hidden sm:inline">Filters</span>
-                {activeFilterCount > 0 && <span className="rounded-full bg-violet-500 text-white text-[9px] font-bold px-1 leading-none py-0.5">{activeFilterCount}</span>}
-                {filtersOpen ? <FaChevronUp size={8} /> : <FaChevronDown size={8} />}
-              </button>
+                {activeFilterCount > 0 && <span className="bg-violet-500 text-white text-[8px] font-bold px-1 leading-none py-0.5">{activeFilterCount}</span>}
+                {filtersOpen ? <FaChevronUp size={7} /> : <FaChevronDown size={7} />}
+              </ListToolbar.Button>
 
               {/* Export CSV */}
-              <button type="button" onClick={handleExportCsv} disabled={exporting || loading}
-                className="flex items-center gap-1 h-7 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors">
-                <FaDownload size={9} className={exporting ? "animate-bounce" : ""} />
+              <ListToolbar.Button variant="outline" onClick={handleExportCsv} disabled={exporting || loading}>
+                <FaDownload size={7} className={exporting ? "animate-bounce" : ""} />
                 <span className="hidden sm:inline">{exporting ? "Exporting…" : "Export"}</span>
-              </button>
+              </ListToolbar.Button>
 
               {/* Opening Balances */}
-              <button type="button" onClick={() => navigate("/carwash/customers/opening-balances")}
-                className="flex items-center gap-1 h-7 rounded border border-amber-300 bg-amber-50 px-2 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition-colors">
-                <FaBalanceScale size={9} /><span className="hidden sm:inline">Opening Balances</span>
-              </button>
+              <ListToolbar.Button
+                icon={FaBalanceScale}
+                variant="outline"
+                className="!border-amber-300 !bg-amber-50 !text-amber-700 hover:!bg-amber-100"
+                onClick={() => navigate("/carwash/customers/opening-balances")}
+              >
+                <span className="hidden sm:inline">Opening Balances</span>
+              </ListToolbar.Button>
 
               {/* Merge Duplicates */}
               {canManage && (
-                <button type="button" onClick={() => setShowMerge(true)}
-                  className="flex items-center gap-1 h-7 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
-                  title="Find and merge duplicate customer records">
-                  <FaCodeBranch size={9} /><span className="hidden lg:inline">Duplicates</span>
-                </button>
+                <ListToolbar.Button
+                  icon={FaCodeBranch}
+                  variant="outline"
+                  onClick={() => setShowMerge(true)}
+                  title="Find and merge duplicate customer records"
+                >
+                  <span className="hidden lg:inline">Duplicates</span>
+                </ListToolbar.Button>
               )}
 
               {/* Sync */}
               {canManage && (
-                <button type="button" onClick={async () => {
-                  setSyncing(true);
-                  try {
-                    const r = await carWashApi.backfillCustomersAndStamps();
-                    toast.success(`Sync done — ${r?.customersCreated ?? 0} created, ${r?.stampsAwarded ?? 0} stamps`);
-                    queryClient.invalidateQueries({ queryKey: ["cw-customers"] });
-                  } catch (err) { toast.error(err?.message || "Sync failed"); }
-                  finally { setSyncing(false); }
-                }} disabled={syncing || loading}
-                  className="flex items-center gap-1 h-7 rounded border border-emerald-300 bg-emerald-50 px-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 transition-colors">
-                  <FaRedoAlt size={9} className={syncing ? "animate-spin" : ""} />
+                <ListToolbar.Button
+                  variant="outline"
+                  className="!border-emerald-300 !bg-emerald-50 !text-emerald-700 hover:!bg-emerald-100"
+                  disabled={syncing || loading}
+                  onClick={async () => {
+                    setSyncing(true);
+                    try {
+                      const r = await carWashApi.backfillCustomersAndStamps();
+                      toast.success(`Sync done — ${r?.customersCreated ?? 0} created, ${r?.stampsAwarded ?? 0} stamps`);
+                      queryClient.invalidateQueries({ queryKey: ["cw-customers"] });
+                    } catch (err) { toast.error(err?.message || "Sync failed"); }
+                    finally { setSyncing(false); }
+                  }}
+                >
+                  <FaRedoAlt size={7} className={syncing ? "animate-spin" : ""} />
                   <span className="hidden sm:inline">{syncing ? "Syncing..." : "Sync Jobs"}</span>
-                </button>
+                </ListToolbar.Button>
               )}
 
               {/* Refresh */}
-              <button type="button" onClick={() => queryClient.invalidateQueries({ queryKey: ["cw-customers"] })} disabled={loading}
-                className="flex items-center gap-1 h-7 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors">
-                <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} />
+              <ListToolbar.Button
+                variant="outline"
+                onClick={() => queryClient.invalidateQueries({ queryKey: ["cw-customers"] })}
+                disabled={loading}
+              >
+                <FaRedoAlt size={7} className={loading ? "animate-spin" : ""} />
                 <span className="hidden sm:inline">Refresh</span>
-              </button>
+              </ListToolbar.Button>
             </div>
           </div>
 
