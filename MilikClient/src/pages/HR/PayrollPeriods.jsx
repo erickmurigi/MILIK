@@ -13,6 +13,7 @@ import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 import AppSelect from "../../components/common/AppSelect";
+import ListToolbar from "../../components/common/ListToolbar";
 import PaginationBar from "../../components/PaginationBar";
 import MilikTable from '../../components/common/MilikTable';
 
@@ -183,23 +184,17 @@ export default function PayrollPeriods() {
         </div>
 
         {/* Filter bar */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-2 py-1.5">
-          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto">
-            <FaFilter size={9} className="shrink-0 text-slate-400" />
-            <AppSelect value={yearFilter} onChange={(v) => setYearFilter(v ?? "")} options={YEAR_OPTIONS} placeholder="All years" clearable size="sm" />
-            <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? "")} options={PAYROLL_STATUS_OPTIONS} placeholder="All statuses" clearable size="sm" />
-            {hasFilters && (
-              <button
-                onClick={() => { setYearFilter(''); setStatusFilter(''); }}
-                className="inline-flex h-7 shrink-0 items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-[10px] font-bold text-slate-500 hover:bg-slate-100"
-              >
-                <FaTimes size={8} /> Clear
-              </button>
-            )}
-            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-            <span className="ml-auto shrink-0 whitespace-nowrap text-[10px] font-semibold text-slate-400">{total} result{total !== 1 ? 's' : ''}</span>
-          </div>
-        </div>
+        <ListToolbar>
+          <FaFilter size={8} className="shrink-0 text-slate-400" />
+          <AppSelect value={yearFilter} onChange={(v) => setYearFilter(v ?? "")} options={YEAR_OPTIONS} placeholder="All years" clearable compact />
+          <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? "")} options={PAYROLL_STATUS_OPTIONS} placeholder="All statuses" clearable compact />
+          {hasFilters && (
+            <ListToolbar.Button icon={FaTimes} variant="outline" onClick={() => { setYearFilter(''); setStatusFilter(''); }}>
+              Clear
+            </ListToolbar.Button>
+          )}
+          <span className="ml-auto shrink-0 whitespace-nowrap pl-2 text-[9px] font-semibold text-slate-400">{total} result{total !== 1 ? 's' : ''}</span>
+        </ListToolbar>
 
         {/* Table */}
         <div className="min-h-0 flex-1 overflow-auto">
