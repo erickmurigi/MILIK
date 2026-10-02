@@ -5,6 +5,7 @@ import { FaPlus, FaSearch, FaTimes, FaUser } from 'react-icons/fa';
 import ClientsShell from './ClientsShell';
 import { clientsApi } from '../../services/clientsApi';
 import AppSelect from '../../components/common/AppSelect';
+import ListToolbar from '../../components/common/ListToolbar';
 import PaginationBar from '../../components/PaginationBar';
 import Modal from '../../components/common/Modal';
 import { inputClass, labelClass } from '../../utils/formStyles';
@@ -240,68 +241,56 @@ const ClientsList = () => {
       <div className="flex flex-col h-full bg-white">
 
         {/* ── Filters ─────────────────────────────────────────────────────── */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-2 py-1.5">
-          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto">
-            {/* Search */}
-            <div className="relative w-56 shrink-0">
-              <FaSearch className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={10} />
-              <input
-                type="text"
-                placeholder="Search name, email, phone, code…"
-                value={search}
-                onChange={(e) => handleSearch(e.target.value)}
-                className="h-7 w-full rounded border border-slate-200 pl-7 pr-6 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/30"
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => handleSearch('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <FaTimes size={9} />
-                </button>
-              )}
-            </div>
-
-            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-
-            {/* Category filter */}
-            <div className="shrink-0">
-              <AppSelect
-                size="sm"
-                clearable
-                placeholder="All Categories"
-                value={categoryFilter}
-                onChange={(v) => { setCategoryFilter(v ?? ''); setPage(1); }}
-                options={CATEGORIES.map((c) => ({ value: c, label: c }))}
-              />
-            </div>
-
-            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-
-            {/* Status tabs */}
-            <div className="flex shrink-0 items-center gap-1">
-              {STATUS_TABS.map((tab) => (
-                <button
-                  key={tab.value}
-                  type="button"
-                  onClick={() => { setStatusFilter(tab.value); setPage(1); }}
-                  className={`h-7 shrink-0 rounded px-2.5 text-[11px] font-semibold transition-colors ${
-                    statusFilter === tab.value
-                      ? 'bg-[#0B3B2E] text-white'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            <span className="ml-auto shrink-0 whitespace-nowrap text-[10px] font-semibold text-slate-400">
-              {pagination.total || 0} client{(pagination.total || 0) !== 1 ? 's' : ''}
-            </span>
+        <ListToolbar>
+          {/* Search */}
+          <div className="relative shrink-0">
+            <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
+            <ListToolbar.Input
+              value={search}
+              onChange={(e) => handleSearch(e.target.value)}
+              placeholder="Search name, email, phone, code…"
+              width="w-56"
+              className="pl-5 pr-6"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => handleSearch('')}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <FaTimes size={8} />
+              </button>
+            )}
           </div>
-        </div>
+
+          <ListToolbar.Divider />
+
+          <AppSelect
+            compact
+            clearable
+            placeholder="All Categories"
+            value={categoryFilter}
+            onChange={(v) => { setCategoryFilter(v ?? ''); setPage(1); }}
+            options={CATEGORIES.map((c) => ({ value: c, label: c }))}
+          />
+
+          <ListToolbar.Divider />
+
+          {STATUS_TABS.map((tab) => (
+            <ListToolbar.Button
+              key={tab.value}
+              type="button"
+              variant={statusFilter === tab.value ? 'primary' : 'outline'}
+              onClick={() => { setStatusFilter(tab.value); setPage(1); }}
+            >
+              {tab.label}
+            </ListToolbar.Button>
+          ))}
+
+          <span className="ml-auto shrink-0 whitespace-nowrap pl-2 text-[9px] font-semibold text-slate-400">
+            {pagination.total || 0} client{(pagination.total || 0) !== 1 ? 's' : ''}
+          </span>
+        </ListToolbar>
 
         {/* ── Table ─────────────────────────────────────────────────────────── */}
         <MilikTable
