@@ -20,6 +20,7 @@ import { inventoryApi } from "../../services/inventoryApi";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from "../../components/PaginationBar";
 import MilikTable from "../../components/common/MilikTable";
+import ListToolbar from "../../components/common/ListToolbar";
 import { useConfirm } from "../../context/ConfirmContext";
 import { fmtDateTime } from "../../utils/dates";
 
@@ -541,43 +542,38 @@ const SmsManager = () => {
           </div>
 
           {/* Filter bar */}
-          <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-2">
-            <div className="flex items-center gap-0">
+          <ListToolbar>
             {TABS.map(tab => {
               const count  = counts[tab.countKey] ?? 0;
               const active = activeStatus === tab.key;
               return (
-                <button key={tab.key} onClick={() => setStatus(tab.key)}
-                  className={[
-                    "px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide transition border-b-2",
-                    active ? "border-[#FF8C00] bg-[#EDF5F1] text-[#0B3B2E]" : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50",
-                  ].join(" ")}>
+                <ListToolbar.Button key={tab.key} variant={active ? 'primary' : 'outline'} onClick={() => setStatus(tab.key)}>
                   {tab.label}
                   {count > 0 && (
-                    <span className={`ml-1.5 border px-1.5 py-0.5 text-[9px] font-bold ${active ? "border-[#0B3B2E]/20 bg-[#0B3B2E]/10 text-[#0B3B2E]" : "border-slate-200 bg-slate-100 text-slate-500"}`}>
+                    <span className={`ml-1 border px-1 py-0.5 text-[8px] font-bold ${active ? "border-white/30 bg-white/10 text-white" : "border-slate-200 bg-slate-100 text-slate-500"}`}>
                       {count.toLocaleString()}
                     </span>
                   )}
-                </button>
+                </ListToolbar.Button>
               );
             })}
-            </div>
 
-            <div className="ml-auto flex items-center gap-2 border border-slate-300 bg-white px-3 py-1.5 min-w-[240px]">
-            <FaSearch size={10} className="shrink-0 text-slate-400" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search name, phone, message…"
-              className="flex-1 bg-transparent text-[11px] text-slate-700 placeholder-slate-400 outline-none"
-            />
-            {search && (
-              <button onClick={() => { setSearch(""); setDebouncedSearch(""); }}>
-                <FaTimesCircle size={11} className="text-slate-400 hover:text-slate-600" />
-              </button>
-            )}
+            <div className="relative ml-auto shrink-0">
+              <FaSearch size={8} className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <ListToolbar.Input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search name, phone, message…"
+                width="w-60"
+                className="pl-5 pr-6"
+              />
+              {search && (
+                <button onClick={() => { setSearch(""); setDebouncedSearch(""); }} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <FaTimesCircle size={10} />
+                </button>
+              )}
             </div>
-          </div>
+          </ListToolbar>
         </div>{/* end header */}
         
         {/* ── Table ────────────────────────────────────────────────────────── */}
