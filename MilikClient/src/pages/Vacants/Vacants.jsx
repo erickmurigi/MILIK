@@ -39,6 +39,7 @@ import { printTabularList } from "../../utils/printList";
 import { useTerm } from "../../hooks/useTerm";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
+import ListToolbar from '../../components/common/ListToolbar';
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -821,25 +822,32 @@ const Vacants = () => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 p-0">
         <div className="flex-none sticky top-0 z-30 border-b border-gray-100 bg-white shadow-sm">
-          <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
-            <button onClick={applySearch} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-bold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaSearch size={7} /> Search</button>
-            <button onClick={resetFilters} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={7} /> Reset</button>
-            <button onClick={allExpanded ? collapseAll : expandAll} disabled={!currentRows.length} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white shadow-sm ${currentRows.length ? (allExpanded ? "bg-orange-600 hover:bg-orange-700" : `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`) : "cursor-not-allowed bg-gray-400"}`}>{allExpanded ? <><FaCompressAlt size={7} /> Collapse</> : <><FaExpandAlt size={7} /> Expand</>}</button>
-            <div className="mx-1 h-3 w-px shrink-0 bg-gray-300" />
-            {canCreateTenant && <button onClick={() => navigate("/tenant/new")} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaUserPlus size={7} /> Add {termTenant}</button>}
-            {canCreateUnit && <button onClick={() => navigate("/units/new")} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaPlus size={7} /> Add {termUnit}</button>}
-            <div className="mx-1 h-3 w-px shrink-0 bg-gray-300" />
-            <button onClick={handlePrint} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-slate-700 px-1.5 text-[9px] font-bold text-white shadow-sm hover:bg-slate-800"><FaPrint size={7} /> Print</button>
-            <button onClick={handleExport} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-gray-300 px-1.5 text-[9px] font-bold shadow-sm hover:bg-gray-50"><FaFileExport size={7} /> Export</button>
-            <div className="mx-1 h-3 w-px shrink-0 bg-gray-300" />
+          <ListToolbar>
+            <ListToolbar.Button icon={FaSearch} variant="accent" onClick={applySearch}>Search</ListToolbar.Button>
+            <ListToolbar.Button icon={FaRedoAlt} onClick={resetFilters}>Reset</ListToolbar.Button>
+            <ListToolbar.Button
+              icon={allExpanded ? FaCompressAlt : FaExpandAlt}
+              className={allExpanded ? "!bg-orange-600 hover:!bg-orange-700" : ""}
+              onClick={allExpanded ? collapseAll : expandAll}
+              disabled={!currentRows.length}
+            >
+              {allExpanded ? "Collapse" : "Expand"}
+            </ListToolbar.Button>
+            <ListToolbar.Divider />
+            {canCreateTenant && <ListToolbar.Button icon={FaUserPlus} onClick={() => navigate("/tenant/new")}>Add {termTenant}</ListToolbar.Button>}
+            {canCreateUnit && <ListToolbar.Button icon={FaPlus} onClick={() => navigate("/units/new")}>Add {termUnit}</ListToolbar.Button>}
+            <ListToolbar.Divider />
+            <ListToolbar.Button icon={FaPrint} variant="dark" onClick={handlePrint}>Print</ListToolbar.Button>
+            <ListToolbar.Button icon={FaFileExport} variant="outline" onClick={handleExport}>Export</ListToolbar.Button>
+            <ListToolbar.Divider />
             <AppSelect value={draftFilters.property} onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "any" }))} options={uniqueProperties.filter((o) => o.value !== "any")} placeholder="Property" clearable searchable compact />
             <AppSelect value={draftFilters.status} onChange={(v) => setDraftFilters((prev) => ({ ...prev, status: v ?? "any" }))} options={[{value:"occupied",label:"Occupied"},{value:"vacant",label:"Vacant"},{value:"notice_given",label:"Notice Given"},{value:"reserved",label:"Reserved"},{value:"under_maintenance",label:"Under Maintenance"},{value:"off_market",label:"Off Market"},{value:"owner_occupied",label:"Owner Occupied"}]} placeholder="Status" clearable compact />
             <AppSelect value={draftFilters.unitType} onChange={(v) => setDraftFilters((prev) => ({ ...prev, unitType: v ?? "any" }))} options={unitTypeOptions.map((type) => ({ value: type, label: formatUnitTypeLabel(type) }))} placeholder="Unit Type" clearable compact />
             <AppSelect value={draftFilters.window} onChange={(v) => setDraftFilters((prev) => ({ ...prev, window: v ?? "all" }))} options={[{value:"now",label:"Available Now"},{value:"next7",label:"In 7 Days"},{value:"next30",label:"In 30 Days"}]} placeholder="Availability" clearable compact />
-            <div className="mx-1 h-3 w-px shrink-0 bg-gray-300" />
-            <input value={draftFilters.search} onChange={(event) => setDraftFilters((prev) => ({ ...prev, search: event.target.value }))} onKeyDown={handleFilterEnter} placeholder="Search…" className="h-[20px] w-28 shrink-0 border border-gray-300 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-            <input value={draftFilters.tenant} onChange={(event) => setDraftFilters((prev) => ({ ...prev, tenant: event.target.value }))} onKeyDown={handleFilterEnter} placeholder={termTenant} className="h-[20px] w-20 shrink-0 border border-gray-300 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-          </div>
+            <ListToolbar.Divider />
+            <ListToolbar.Input value={draftFilters.search} onChange={(event) => setDraftFilters((prev) => ({ ...prev, search: event.target.value }))} onKeyDown={handleFilterEnter} placeholder="Search…" width="w-28" />
+            <ListToolbar.Input value={draftFilters.tenant} onChange={(event) => setDraftFilters((prev) => ({ ...prev, tenant: event.target.value }))} onKeyDown={handleFilterEnter} placeholder={termTenant} width="w-20" />
+          </ListToolbar>
 
           {/* Context action bar — shows when a row is selected */}
           <div className={`flex items-center gap-1.5 overflow-x-auto border-t px-2 py-1 transition-all ${selectedRow ? "border-gray-200 bg-[#f5faf8]" : "border-transparent bg-transparent"}`} style={{ minHeight: "34px" }}>
