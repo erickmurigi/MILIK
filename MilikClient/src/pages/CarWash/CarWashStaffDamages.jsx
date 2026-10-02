@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload } from "../../services/carWashApi";
 import { fmtDate, todayISO } from "../../utils/dates";
 import CarWashShell from "./CarWashShell";
+import ListToolbar from "../../components/common/ListToolbar";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import AppSelect from "../../components/common/AppSelect";
 import { useTabState } from "../../hooks/useTabState";
@@ -318,9 +319,9 @@ export default function CarWashStaffDamages() {
         )}
 
         {/* Filters */}
-        <div className="flex-shrink-0 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2">
+        <ListToolbar>
           <AppSelect
-            size="sm"
+            compact
             clearable
             searchable
             placeholder="All Staff"
@@ -329,24 +330,23 @@ export default function CarWashStaffDamages() {
             options={staffList.map((s) => ({ value: s._id, label: s.name }))}
           />
           <AppSelect
-            size="sm"
+            compact
             value={filterStatus}
             onChange={(v) => { setFilterStatus(v ?? "all"); setPage(1); }}
             options={DAMAGE_STATUS_OPTIONS}
           />
-          <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
-            className="h-8 border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none" />
-          <input type="date" value={dateTo}   onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
-            className="h-8 border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none" />
-          <button
+          <ListToolbar.Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} />
+          <span className="shrink-0 text-[9px] text-slate-400">→</span>
+          <ListToolbar.Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} />
+          <ListToolbar.Button
+            icon={FaRedoAlt}
+            type="button"
             onClick={() => queryClient.invalidateQueries({ queryKey: ["cw-damages"] })}
-            className="h-8 border border-slate-300 bg-white px-2 text-slate-500 hover:bg-slate-100"
-            title="Refresh"
           >
-            <FaRedoAlt className="text-[11px]" />
-          </button>
-          <span className="ml-auto text-[11px] font-semibold text-slate-500">{total} record{total !== 1 ? "s" : ""}</span>
-        </div>
+            Refresh
+          </ListToolbar.Button>
+          <span className="ml-auto shrink-0 pl-2 text-[9px] font-semibold text-slate-500">{total} record{total !== 1 ? "s" : ""}</span>
+        </ListToolbar>
 
         {/* Table */}
         <MilikTable
