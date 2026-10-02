@@ -7,10 +7,9 @@ import {
 } from "react-icons/fa";
 import { printTabularList } from "../../utils/printList";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import ListToolbar from "../../components/common/ListToolbar";
 import MilikTable from "../../components/common/MilikTable";
 import { getARAgingReport, getAPAgingReport } from "../../redux/apiCalls";
-
-const GRN = "#0B3B2E";
 
 const fmt = (v) =>
   Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -228,43 +227,24 @@ const ARAPAgingReport = () => {
       <div className="flex h-[calc(100dvh-152px)] flex-col overflow-hidden">
 
         {/* ── Sticky toolbar ─────────────────────────────────────────────────── */}
-        <div className="filter-bar flex shrink-0 items-center gap-2 overflow-x-auto bg-gray-50/95 px-4 py-2 shadow-sm backdrop-blur-sm">
-          <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-slate-400">As Of</span>
-          <input
-            type="date"
-            value={asOf}
-            onChange={(e) => setAsOf(e.target.value)}
-            className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-          />
+        <ListToolbar>
+          <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-400">As Of</span>
+          <ListToolbar.Input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} />
 
-          <button
-            onClick={fetchData}
-            disabled={loading}
-            className="flex h-7 shrink-0 items-center gap-1.5 rounded bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            <FaSyncAlt size={10} className={loading ? "animate-spin" : ""} />
+          <ListToolbar.Button onClick={fetchData} disabled={loading}>
+            <FaSyncAlt size={7} className={loading ? "animate-spin" : ""} />
             {loading ? "Loading…" : "Refresh"}
-          </button>
+          </ListToolbar.Button>
 
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-          <button
-            onClick={handleExportCSV}
-            className="flex h-7 items-center gap-1.5 rounded px-3 text-xs font-semibold text-white hover:opacity-90"
-            style={{ backgroundColor: "#FF8C00" }}
-          >
-            <FaFileDownload size={10} />
-            Export CSV
-          </button>
-          <button
-            onClick={handlePrintPDF}
-            className="flex h-7 items-center gap-1.5 rounded px-3 text-xs font-semibold text-white hover:opacity-90"
-            style={{ backgroundColor: GRN }}
-          >
-            <FaFilePdf size={10} />
-            Print PDF
-          </button>
+          <div className="ml-auto flex shrink-0 items-center gap-0.5">
+            <ListToolbar.Button icon={FaFileDownload} variant="accent" onClick={handleExportCSV}>
+              Export CSV
+            </ListToolbar.Button>
+            <ListToolbar.Button icon={FaFilePdf} onClick={handlePrintPDF}>
+              Print PDF
+            </ListToolbar.Button>
           </div>
-        </div>
+        </ListToolbar>
 
         {/* ── Business badge ─────────────────────────────────────────────────── */}
         {companyName && (
