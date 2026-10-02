@@ -128,16 +128,16 @@ const SaleAgentsPerformance = () => {
       <SaleFilterBar
         leading={
           <>
-            <span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{agents.length} {(agents.length === 1 ? T.saleAgent : T.saleAgents).toLowerCase()}</span>
+            <span className="shrink-0 font-mono text-[9px] font-black text-slate-500">{agents.length} {(agents.length === 1 ? T.saleAgent : T.saleAgents).toLowerCase()}</span>
             <span className="shrink-0 select-none text-slate-200">|</span>
-            <span className="shrink-0 font-mono text-[10px] font-black text-emerald-700">{closedAll}</span>
-            <span className="shrink-0 text-[10px] text-slate-400">closed</span>
+            <span className="shrink-0 font-mono text-[9px] font-black text-emerald-700">{closedAll}</span>
+            <span className="shrink-0 text-[9px] text-slate-400">closed</span>
             <span className="shrink-0 select-none text-slate-200">|</span>
-            <span className="shrink-0 font-mono text-[10px] font-black text-slate-700">{fmtKES(totalRevAll)}</span>
-            <span className="shrink-0 text-[10px] text-slate-400">revenue</span>
+            <span className="shrink-0 font-mono text-[9px] font-black text-slate-700">{fmtKES(totalRevAll)}</span>
+            <span className="shrink-0 text-[9px] text-slate-400">revenue</span>
             <span className="shrink-0 select-none text-slate-200">|</span>
-            <span className="shrink-0 font-mono text-[10px] font-black text-slate-700">{fmtKES(totalCommAll)}</span>
-            <span className="shrink-0 text-[10px] text-slate-400">comm. paid</span>
+            <span className="shrink-0 font-mono text-[9px] font-black text-slate-700">{fmtKES(totalCommAll)}</span>
+            <span className="shrink-0 text-[9px] text-slate-400">comm. paid</span>
           </>
         }
         onReset={() => setStatusFilter("active")}
@@ -150,7 +150,7 @@ const SaleAgentsPerformance = () => {
           options={STATUS_OPTS}
           placeholder={`All ${T.saleAgents}`}
           clearable
-          size="sm"
+          compact
         />
       </SaleFilterBar>
 
