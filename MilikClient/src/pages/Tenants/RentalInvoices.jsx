@@ -34,6 +34,7 @@ import {
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import ListToolbar from "../../components/common/ListToolbar";
 import { getTenants } from "../../redux/tenantsRedux";
 import { getProperties } from "../../redux/propertyRedux";
 import { getUnits } from "../../redux/unitRedux";
@@ -660,10 +661,6 @@ function areEqual(prev, next) {
 const InvoiceTableRow = React.memo(InvoiceTableRowBase, areEqual);
 
 const EMPTY_ARRAY = [];
-
-// Pure helper — defined at module scope so it never creates a new reference inside the component
-const actionBtnCls = (enabled, activeCls) =>
-  `h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white ${enabled ? activeCls : "bg-gray-400 cursor-not-allowed"}`;
 
 const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const [pageSize, setPageSize] = useState(50);
@@ -2232,84 +2229,93 @@ const createInvoiceForTenant = async (
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
         <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-            <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-              <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
-                {fromLedger && (
-                  <button onClick={() => navigate(`/properties/${location.state.propertyId}/ledger`)} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-[#0B3B2E] hover:bg-[#EDF5F1]">
-                    <FaArrowLeft size={7} /> {location.state.propertyName} Ledger
-                  </button>
-                )}
-                {!fromLedger && tenantId && (
-                  <button onClick={() => navigate("/tenants")} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-gray-600 hover:text-gray-900">
-                    <FaArrowLeft size={7} /> Back
-                  </button>
-                )}
-                <span className="shrink-0 border border-blue-200 bg-blue-50 px-1 py-0.5 text-[8px] font-bold text-blue-700">Invoices: {invoiceListPagination.totalItems || 0}</span>
-                <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1 py-0.5 text-[8px] font-bold text-emerald-700">Total: {formatCurrency(invoicePageSummary.pageTotalAmount || 0)}</span>
-                <span className="shrink-0 border border-amber-200 bg-amber-50 px-1 py-0.5 text-[8px] font-bold text-amber-700">Pend: {formatCurrency(invoicePageSummary.pagePendingAmount || 0)}</span>
-                <div className="mx-0.5 h-3 w-px shrink-0 bg-slate-200" />
-                <AppSelect
-                  value={draftFilters.status}
-                  onChange={(v) => setDraftFilters((prev) => ({ ...prev, status: v ?? "ACTIVE" }))}
-                  options={[{ value: "ACTIVE", label: "All" }, { value: "Issued", label: "Unpaid" }, { value: "Paid", label: "Paid" }]}
-                  compact
-                />
-                <div className="mx-0.5 h-3 w-px shrink-0 bg-slate-200" />
-                <input type="text" value={draftFilters.invoiceNo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: normalizeUppercaseInput(e.target.value) }))} placeholder="Invoice #" className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                {!tenantId && <input type="text" value={draftFilters.tenantName} onChange={setFilter("tenantName")} placeholder={termTenant} className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />}
-                <AppSelect
-                  value={draftFilters.property === "any" ? "" : draftFilters.property}
-                  onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "any", unit: "any" }))}
-                  options={uniqueProperties.filter((p) => p !== "any").map((p) => ({ value: p, label: p }))}
-                  placeholder={termProperty}
-                  searchable
-                  clearable
-                  compact
-                />
-                <AppSelect
-                  value={draftFilters.unit === "any" ? "" : draftFilters.unit}
-                  onChange={(v) => setDraftFilters((prev) => ({ ...prev, unit: v ?? "any" }))}
-                  options={unitsForSelectedProperty.filter((u) => u !== "any").map((u) => ({ value: u, label: u }))}
-                  placeholder={termUnit}
-                  searchable
-                  clearable
-                  compact
-                />
-                <input type="date" value={draftFilters.fromDate} onChange={setFilter("fromDate")} className="h-[20px] w-[5.5rem] shrink-0 border border-slate-200 bg-white px-1 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <input type="date" value={draftFilters.toDate} onChange={setFilter("toDate")} className="h-[20px] w-[5.5rem] shrink-0 border border-slate-200 bg-white px-1 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <div className="mx-0.5 h-3 w-px shrink-0 bg-slate-200" />
-                <button onClick={applySearch} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaSearch size={7} /> Search</button>
-                <button onClick={resetFilters} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={7} /> Reset</button>
-                <div className="mx-0.5 h-3 w-px shrink-0 bg-slate-200" />
-                {canUpdateInvoice && (
-                  <button onClick={handleEditSelected} disabled={!canEdit} className={actionBtnCls(canEdit, `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`)}><FaEdit size={7} /> Edit</button>
-                )}
-                {canDeleteInvoice && (
-                  <button onClick={handleDeleteSelected} disabled={selectedCount === 0} className={actionBtnCls(selectedCount > 0, "bg-red-600 hover:bg-red-700")}><FaTrash size={7} /> Delete</button>
-                )}
-                {canExportInvoice && (
-                  <button onClick={handlePrintList} disabled={totalFilteredCount === 0} className={actionBtnCls(totalFilteredCount > 0, `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`)}><FaPrint size={7} /> Print</button>
-                )}
-                <button onClick={() => setShowSmsModal(true)} disabled={selectedCount === 0} title={selectedCount === 0 ? "Select invoices to SMS" : `SMS ${selectedCount} invoice${selectedCount !== 1 ? "s" : ""}`} className={actionBtnCls(selectedCount > 0, "bg-emerald-600 hover:bg-emerald-700")}><FaSms size={7} /> SMS</button>
-                <button onClick={() => setShowEmailModal(true)} disabled={selectedCount === 0} title={selectedCount === 0 ? "Select invoices to email" : `Email ${selectedCount} invoice${selectedCount !== 1 ? "s" : ""}`} className={actionBtnCls(selectedCount > 0, "bg-blue-600 hover:bg-blue-700")}><FaEnvelope size={7} /> Email</button>
-                <div className="mx-0.5 h-3 w-px shrink-0 bg-slate-200" />
-                {canCreateInvoice && (
-                  <button type="button" onClick={() => navigate("/tenants/deposits")} className={`h-[20px] shrink-0 px-1.5 text-[9px] font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}>Deposit</button>
-                )}
-                {canCreateInvoice && (
-                  <div className="flex shrink-0 items-center gap-0.5">
-                    <FaPlus className="text-[10px] text-[#0B3B2E]" />
-                    <AppSelect
-                      value={bookingAction}
-                      onChange={(v) => handleBookingActionChange(v ?? "")}
-                      options={[{ value: "single", label: "Single Booking" }, { value: "batch", label: "Batch Booking" }]}
-                      placeholder="Booking"
-                      compact
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
+            <ListToolbar>
+              {fromLedger && (
+                <ListToolbar.Button icon={FaArrowLeft} variant="outline" onClick={() => navigate(`/properties/${location.state.propertyId}/ledger`)}>
+                  {location.state.propertyName} Ledger
+                </ListToolbar.Button>
+              )}
+              {!fromLedger && tenantId && (
+                <ListToolbar.Button icon={FaArrowLeft} variant="outline" onClick={() => navigate("/tenants")}>
+                  Back
+                </ListToolbar.Button>
+              )}
+              <span className="shrink-0 border border-blue-200 bg-blue-50 px-1 py-0.5 text-[8px] font-bold text-blue-700">Invoices: {invoiceListPagination.totalItems || 0}</span>
+              <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1 py-0.5 text-[8px] font-bold text-emerald-700">Total: {formatCurrency(invoicePageSummary.pageTotalAmount || 0)}</span>
+              <span className="shrink-0 border border-amber-200 bg-amber-50 px-1 py-0.5 text-[8px] font-bold text-amber-700">Pend: {formatCurrency(invoicePageSummary.pagePendingAmount || 0)}</span>
+              <ListToolbar.Divider />
+              <AppSelect
+                value={draftFilters.status}
+                onChange={(v) => setDraftFilters((prev) => ({ ...prev, status: v ?? "ACTIVE" }))}
+                options={[{ value: "ACTIVE", label: "All" }, { value: "Issued", label: "Unpaid" }, { value: "Paid", label: "Paid" }]}
+                compact
+              />
+              <ListToolbar.Divider />
+              <ListToolbar.Input width="w-20" type="text" value={draftFilters.invoiceNo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: normalizeUppercaseInput(e.target.value) }))} placeholder="Invoice #" />
+              {!tenantId && <ListToolbar.Input width="w-20" type="text" value={draftFilters.tenantName} onChange={setFilter("tenantName")} placeholder={termTenant} />}
+              <AppSelect
+                value={draftFilters.property === "any" ? "" : draftFilters.property}
+                onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "any", unit: "any" }))}
+                options={uniqueProperties.filter((p) => p !== "any").map((p) => ({ value: p, label: p }))}
+                placeholder={termProperty}
+                searchable
+                clearable
+                compact
+              />
+              <AppSelect
+                value={draftFilters.unit === "any" ? "" : draftFilters.unit}
+                onChange={(v) => setDraftFilters((prev) => ({ ...prev, unit: v ?? "any" }))}
+                options={unitsForSelectedProperty.filter((u) => u !== "any").map((u) => ({ value: u, label: u }))}
+                placeholder={termUnit}
+                searchable
+                clearable
+                compact
+              />
+              <ListToolbar.Input width="w-[5.5rem]" type="date" value={draftFilters.fromDate} onChange={setFilter("fromDate")} />
+              <ListToolbar.Input width="w-[5.5rem]" type="date" value={draftFilters.toDate} onChange={setFilter("toDate")} />
+              <ListToolbar.Divider />
+              <ListToolbar.Button icon={FaSearch} variant="accent" onClick={applySearch}>Search</ListToolbar.Button>
+              <ListToolbar.Button icon={FaRedoAlt} onClick={resetFilters}>Reset</ListToolbar.Button>
+              <ListToolbar.Divider />
+              {canUpdateInvoice && (
+                <ListToolbar.Button icon={FaEdit} onClick={handleEditSelected} disabled={!canEdit}>Edit</ListToolbar.Button>
+              )}
+              {canDeleteInvoice && (
+                <ListToolbar.Button icon={FaTrash} variant="danger" onClick={handleDeleteSelected} disabled={selectedCount === 0}>Delete</ListToolbar.Button>
+              )}
+              {canExportInvoice && (
+                <ListToolbar.Button icon={FaPrint} onClick={handlePrintList} disabled={totalFilteredCount === 0}>Print</ListToolbar.Button>
+              )}
+              <ListToolbar.Button
+                icon={FaSms}
+                className="!bg-emerald-600 hover:!bg-emerald-700"
+                onClick={() => setShowSmsModal(true)}
+                disabled={selectedCount === 0}
+                title={selectedCount === 0 ? "Select invoices to SMS" : `SMS ${selectedCount} invoice${selectedCount !== 1 ? "s" : ""}`}
+              >SMS</ListToolbar.Button>
+              <ListToolbar.Button
+                icon={FaEnvelope}
+                onClick={() => setShowEmailModal(true)}
+                disabled={selectedCount === 0}
+                title={selectedCount === 0 ? "Select invoices to email" : `Email ${selectedCount} invoice${selectedCount !== 1 ? "s" : ""}`}
+              >Email</ListToolbar.Button>
+              <ListToolbar.Divider />
+              {canCreateInvoice && (
+                <ListToolbar.Button type="button" onClick={() => navigate("/tenants/deposits")}>Deposit</ListToolbar.Button>
+              )}
+              {canCreateInvoice && (
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <FaPlus className="text-[9px] text-[#0B3B2E]" />
+                  <AppSelect
+                    value={bookingAction}
+                    onChange={(v) => handleBookingActionChange(v ?? "")}
+                    options={[{ value: "single", label: "Single Booking" }, { value: "batch", label: "Batch Booking" }]}
+                    placeholder="Booking"
+                    compact
+                  />
+                </div>
+              )}
+            </ListToolbar>
 
             <MilikTable
               columns={[
