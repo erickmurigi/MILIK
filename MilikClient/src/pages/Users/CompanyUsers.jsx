@@ -8,6 +8,7 @@ import {
   FaShieldAlt, FaUnlock, FaUserEdit, FaUsers,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import ListToolbar from "../../components/common/ListToolbar";
 import MilikTable from "../../components/common/MilikTable";
 import PaginationBar from "../../components/PaginationBar";
 import { getUsers } from "../../redux/apiCalls";
@@ -145,31 +146,25 @@ export default function CompanyUsers() {
         </div>
 
         {/* Toolbar */}
-        <div className="flex-shrink-0 flex flex-wrap items-center gap-3 border-b border-slate-100 bg-slate-50/80 px-4 py-2">
-          <div className="flex items-center gap-1.5 border border-slate-200 bg-white px-2.5 h-7 flex-1 max-w-xs">
-            <svg className="shrink-0 text-[11px] text-slate-400 w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" /></svg>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name, email, phone…"
-              className="flex-1 bg-transparent text-[11px] outline-none placeholder:text-slate-400"
-            />
-          </div>
-          <div className="flex items-center gap-1">
-            {STATUS_FILTERS.map((f) => (
-              <button
-                key={f}
-                onClick={() => setStatusFilter(f)}
-                className={`px-2.5 py-1 text-[10px] font-bold transition-colors ${
-                  statusFilter === f ? "bg-[#0B3B2E] text-white" : "text-slate-500 hover:bg-slate-100"
-                }`}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-          <span className="ml-auto text-[11px] text-slate-400">{filtered.length} user{filtered.length !== 1 ? "s" : ""}</span>
-        </div>
+        <ListToolbar>
+          <ListToolbar.Input
+            width="w-56"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search name, email, phone…"
+          />
+          <ListToolbar.Divider />
+          {STATUS_FILTERS.map((f) => (
+            <ListToolbar.Button
+              key={f}
+              variant={statusFilter === f ? "primary" : "outline"}
+              onClick={() => setStatusFilter(f)}
+            >
+              {f}
+            </ListToolbar.Button>
+          ))}
+          <span className="ml-auto text-[9px] text-slate-400">{filtered.length} user{filtered.length !== 1 ? "s" : ""}</span>
+        </ListToolbar>
 
         {/* Table */}
         <div className="min-h-0 flex-1 overflow-hidden flex flex-col">

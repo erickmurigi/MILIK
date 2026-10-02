@@ -7,6 +7,7 @@ import {
   FaChartPie, FaCheck, FaEdit, FaPlus, FaSyncAlt, FaTimes, FaTrash,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import ListToolbar from "../../components/common/ListToolbar";
 import MilikTable from "../../components/common/MilikTable";
 import {
   getBudgets, getBudget, createBudget, updateBudget,
@@ -251,25 +252,21 @@ const BudgetVsActual = () => {
         <div className="flex h-[calc(100dvh-152px)] flex-col overflow-hidden">
 
           {/* Toolbar */}
-          <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-gray-50/95 px-4 py-2">
-            <FaChartPie size={11} className="text-slate-400" />
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Budget vs Actual</p>
+          <ListToolbar>
+            <FaChartPie size={10} className="text-slate-400" />
+            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Budget vs Actual</p>
             <div className="flex-1" />
-            <button
-              onClick={() => setShowNewForm(true)}
-              className="flex h-7 items-center gap-1.5 rounded px-3 text-xs font-semibold text-white"
-              style={{ backgroundColor: GRN }}
-            >
-              <FaPlus size={9} /> New Budget
-            </button>
-            <button
+            <ListToolbar.Button icon={FaPlus} onClick={() => setShowNewForm(true)}>
+              New Budget
+            </ListToolbar.Button>
+            <ListToolbar.Button
+              variant="outline"
               onClick={() => { fetchedRef.current = false; loadList(); }}
               disabled={loadingList}
-              className="flex h-7 items-center rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
             >
-              <FaSyncAlt size={10} className={loadingList ? "animate-spin" : ""} />
-            </button>
-          </div>
+              <FaSyncAlt size={7} className={loadingList ? "animate-spin" : ""} />
+            </ListToolbar.Button>
+          </ListToolbar>
 
           {/* New budget form */}
           {showNewForm && (
@@ -359,46 +356,50 @@ const BudgetVsActual = () => {
       <div className="flex h-[calc(100dvh-152px)] flex-col overflow-hidden">
 
         {/* Toolbar */}
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-gray-50/95 px-4 py-2">
-          <button onClick={backToList}
-            className="flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+        <ListToolbar>
+          <ListToolbar.Button variant="outline" onClick={backToList}>
             ← Back
-          </button>
-          <div className="mx-1 h-4 w-px bg-slate-200" />
+          </ListToolbar.Button>
+          <ListToolbar.Divider />
           <div>
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{activeBudget?.name}</span>
+            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">{activeBudget?.name}</span>
             <span className="mx-1.5 text-slate-300">·</span>
-            <span className="text-[10px] text-slate-500">{fmtDate(activeBudget?.periodStart)} — {fmtDate(activeBudget?.periodEnd)}</span>
+            <span className="text-[9px] text-slate-500">{fmtDate(activeBudget?.periodStart)} — {fmtDate(activeBudget?.periodEnd)}</span>
             <span className="ml-2">{statusPill(activeBudget?.status)}</span>
           </div>
           <div className="flex-1" />
 
           {/* Status actions */}
           {!isLocked && activeBudget?.status === "draft" && (
-            <button onClick={() => handleStatusChange("active")} disabled={savingStatus}
-              className="flex h-7 items-center gap-1.5 rounded border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50">
+            <ListToolbar.Button
+              variant="outline"
+              className="border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+              onClick={() => handleStatusChange("active")}
+              disabled={savingStatus}
+            >
               Activate
-            </button>
+            </ListToolbar.Button>
           )}
           {activeBudget?.status === "active" && (
-            <button onClick={() => handleStatusChange("closed")} disabled={savingStatus}
-              className="flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+            <ListToolbar.Button variant="outline" onClick={() => handleStatusChange("closed")} disabled={savingStatus}>
               Close Budget
-            </button>
+            </ListToolbar.Button>
           )}
 
           {!isLocked && (
-            <button onClick={() => setEditingLines((p) => !p)}
-              className={`flex h-7 items-center gap-1.5 rounded border px-3 text-xs font-semibold ${editingLines ? "border-slate-300 bg-slate-100 text-slate-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
-              <FaEdit size={10} /> {editingLines ? "Cancel Edit" : "Edit Lines"}
-            </button>
+            <ListToolbar.Button
+              variant="outline"
+              className={editingLines ? "border-slate-300 bg-slate-100" : ""}
+              onClick={() => setEditingLines((p) => !p)}
+            >
+              <FaEdit size={7} /> {editingLines ? "Cancel Edit" : "Edit Lines"}
+            </ListToolbar.Button>
           )}
 
-          <button onClick={() => openBudget(activeBudget)} disabled={loadingDetail}
-            className="flex h-7 items-center rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
-            <FaSyncAlt size={10} className={loadingDetail ? "animate-spin" : ""} />
-          </button>
-        </div>
+          <ListToolbar.Button variant="outline" onClick={() => openBudget(activeBudget)} disabled={loadingDetail}>
+            <FaSyncAlt size={7} className={loadingDetail ? "animate-spin" : ""} />
+          </ListToolbar.Button>
+        </ListToolbar>
 
         {/* Line editor panel */}
         {editingLines && (
