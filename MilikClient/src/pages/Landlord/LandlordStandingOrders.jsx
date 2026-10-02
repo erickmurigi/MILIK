@@ -42,6 +42,7 @@ import { selectCurrentCompany, selectCurrentUser, selectAllLandlords, selectAllP
 import { hasCompanyPermission } from "../../utils/permissions";
 import { isCashbookAccount } from "../../utils/cashbookUtils";
 import AppSelect from "../../components/common/AppSelect";
+import ListToolbar from "../../components/common/ListToolbar";
 import PaginationBar from "../../components/PaginationBar";
 import MilikTable from "../../components/common/MilikTable";
 
@@ -619,54 +620,65 @@ const LandlordStandingOrders = () => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
-              <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
-                <div className="relative shrink-0">
-                  <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
-                  <input value={filters.search} onChange={setFilter("search")} placeholder="Search order, title…" className="h-[20px] w-32 border border-slate-200 bg-white pl-6 pr-1 text-[9px] outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                </div>
-                <AppSelect
-                  value={filters.landlordId}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, landlordId: v ?? "all" }))}
-                  options={landlordOptions}
-                  placeholder="All Landlords"
-                  searchable
-                  clearable
-                  compact
-                />
-                <AppSelect
-                  value={filters.propertyId}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "all" }))}
-                  options={activePropertyOptions}
-                  placeholder="All Properties"
-                  searchable
-                  clearable
-                  compact
-                />
-                <AppSelect
-                  value={filters.status}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))}
-                  options={[
-                    { value: "draft", label: "Draft" },
-                    { value: "active", label: "Active" },
-                    { value: "paused", label: "Paused" },
-                    { value: "stopped", label: "Stopped" },
-                  ]}
-                  placeholder="All Statuses"
-                  clearable
-                  compact
-                />
-                <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-                <span className="shrink-0 border border-slate-200 bg-white px-1 py-0.5 text-[8px] font-bold text-slate-600">{stats.total} orders</span>
-                <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1 py-0.5 text-[8px] font-bold text-emerald-700">Active: {stats.active}</span>
-                <span className="shrink-0 border border-blue-200 bg-blue-50 px-1 py-0.5 text-[8px] font-bold text-blue-700">Processed: {money(stats.processed)}</span>
-                <span className="shrink-0 border border-amber-200 bg-amber-50 px-1 py-0.5 text-[8px] font-bold text-amber-700">Pending: {stats.pendingPeriods}</span>
-                <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-                <button onClick={handleRunSelected} disabled={bulkRunning || selectedIds.length === 0} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white bg-green-600 hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"><FaCheck size={7} /> {bulkRunning ? "Running…" : `Run${selectedIds.length ? ` (${selectedIds.length})` : ""}`}</button>
-                <button onClick={openCreate} disabled={!canWrite} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white bg-[#0B3B2E] hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus size={7} /> Add</button>
-                <button onClick={() => setFilters({ search: "", status: "all", landlordId: "all", propertyId: "all" })} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white bg-slate-500 hover:bg-slate-600">Reset</button>
+            <ListToolbar>
+              <div className="relative shrink-0">
+                <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
+                <ListToolbar.Input value={filters.search} onChange={setFilter("search")} placeholder="Search order, title…" width="w-32" className="pl-5" />
               </div>
-            </div>
+              <AppSelect
+                value={filters.landlordId}
+                onChange={(v) => setFilters((prev) => ({ ...prev, landlordId: v ?? "all" }))}
+                options={landlordOptions}
+                placeholder="All Landlords"
+                searchable
+                clearable
+                compact
+              />
+              <AppSelect
+                value={filters.propertyId}
+                onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "all" }))}
+                options={activePropertyOptions}
+                placeholder="All Properties"
+                searchable
+                clearable
+                compact
+              />
+              <AppSelect
+                value={filters.status}
+                onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))}
+                options={[
+                  { value: "draft", label: "Draft" },
+                  { value: "active", label: "Active" },
+                  { value: "paused", label: "Paused" },
+                  { value: "stopped", label: "Stopped" },
+                ]}
+                placeholder="All Statuses"
+                clearable
+                compact
+              />
+              <ListToolbar.Divider />
+              <span className="shrink-0 border border-slate-200 bg-white px-1 py-0.5 text-[8px] font-bold text-slate-600">{stats.total} orders</span>
+              <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1 py-0.5 text-[8px] font-bold text-emerald-700">Active: {stats.active}</span>
+              <span className="shrink-0 border border-blue-200 bg-blue-50 px-1 py-0.5 text-[8px] font-bold text-blue-700">Processed: {money(stats.processed)}</span>
+              <span className="shrink-0 border border-amber-200 bg-amber-50 px-1 py-0.5 text-[8px] font-bold text-amber-700">Pending: {stats.pendingPeriods}</span>
+              <ListToolbar.Divider />
+              <ListToolbar.Button
+                icon={FaCheck}
+                variant="toggle"
+                className="!bg-green-600 hover:!bg-green-700"
+                disabled={bulkRunning || selectedIds.length === 0}
+                onClick={handleRunSelected}
+              >
+                {bulkRunning ? "Running…" : `Run${selectedIds.length ? ` (${selectedIds.length})` : ""}`}
+              </ListToolbar.Button>
+              <ListToolbar.Button icon={FaPlus} disabled={!canWrite} onClick={openCreate}>Add</ListToolbar.Button>
+              <ListToolbar.Button
+                variant="dark"
+                onClick={() => setFilters({ search: "", status: "all", landlordId: "all", propertyId: "all" })}
+              >
+                Reset
+              </ListToolbar.Button>
+            </ListToolbar>
 
             <MilikTable
               columns={[
