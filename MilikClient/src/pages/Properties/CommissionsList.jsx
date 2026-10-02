@@ -12,6 +12,7 @@ import { useConfirm } from '../../context/ConfirmContext';
 import AppSelect from '../../components/common/AppSelect';
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
+import ListToolbar from '../../components/common/ListToolbar';
 
 const MILIK_GREEN = "#0B3B2E";
 const MILIK_GREEN_BG = "bg-[#0B3B2E]";
@@ -230,25 +231,23 @@ const CommissionsList = () => {
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
-              <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
-                <span className="shrink-0 border border-slate-200 bg-white px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide text-slate-500">Visible <span className="normal-case text-slate-900">{filteredProperties.length}</span></span>
-                <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-                <input type="text" placeholder="Search by property code or name" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-[20px] w-32 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] text-slate-700 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                <AppSelect
-                  value={filterMode || null}
-                  onChange={(v) => setFilterMode(v ?? '')}
-                  options={[
-                    { value: 'all', label: 'All Properties' },
-                    { value: 'configured', label: 'Configured Only' },
-                    { value: 'unconfigured', label: 'Unconfigured Only' },
-                  ]}
-                  clearable
-                  compact
-                />
-                <button onClick={resetFilters} className="h-[20px] shrink-0 inline-flex items-center gap-0.5 border border-slate-200 bg-white px-1.5 text-[9px] font-semibold text-slate-700 shadow-sm hover:bg-slate-100"><FaRedoAlt size={7} /> Reset</button>
-              </div>
-            </div>
+            <ListToolbar>
+              <span className="shrink-0 border border-slate-200 bg-white px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide text-slate-500">Visible <span className="normal-case text-slate-900">{filteredProperties.length}</span></span>
+              <ListToolbar.Divider />
+              <ListToolbar.Input type="text" placeholder="Search by property code or name" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} width="w-32" />
+              <AppSelect
+                value={filterMode || null}
+                onChange={(v) => setFilterMode(v ?? '')}
+                options={[
+                  { value: 'all', label: 'All Properties' },
+                  { value: 'configured', label: 'Configured Only' },
+                  { value: 'unconfigured', label: 'Unconfigured Only' },
+                ]}
+                clearable
+                compact
+              />
+              <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={resetFilters}>Reset</ListToolbar.Button>
+            </ListToolbar>
 
             <MilikTable
               columns={[
