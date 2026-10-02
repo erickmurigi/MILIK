@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux';
 import { FaDoorOpen, FaPrint, FaRedoAlt } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
+import ListToolbar from '../../components/common/ListToolbar';
 import AppSelect from '../../components/common/AppSelect';
 import MilikTable from '../../components/common/MilikTable';
 import { adminRequests } from '../../utils/requestMethods';
@@ -100,25 +101,21 @@ export default function ZoneVacancyReport() {
       <div className="flex flex-col h-full min-h-0 bg-white overflow-hidden">
 
         {/* Toolbar */}
-        <div className="flex-none border-b border-gray-200 bg-white shadow-sm">
-          <div className="filter-bar flex items-center gap-2 overflow-x-auto px-2 py-1.5">
-            <FaDoorOpen className="text-amber-500 shrink-0" size={13} />
-            <span className="text-xs font-black text-slate-700 shrink-0">Zone Vacancy</span>
-            <div className="h-4 w-px bg-slate-200 shrink-0" />
-            <AppSelect value={zoneFilter} onChange={(v) => setZoneFilter(v ?? '')}
-              options={zoneOptions} placeholder="All Zones" clearable size="sm" />
-            <button onClick={loadReport} disabled={loading}
-              className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127] disabled:opacity-60">
-              <FaRedoAlt size={9} /> {loading ? 'Loading…' : 'Refresh'}
-            </button>
-            <div className="h-4 w-px bg-slate-200 shrink-0" />
-            <button onClick={handlePrint}
-              className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-700 px-2.5 text-xs font-semibold text-white hover:bg-slate-800">
-              <FaPrint size={9} /> Print
-            </button>
-            <span className="ml-auto shrink-0 text-[10px] text-slate-400">{companyName} · As at {new Date().toLocaleDateString()}</span>
-          </div>
-        </div>
+        <ListToolbar>
+          <FaDoorOpen className="text-amber-500 shrink-0" size={11} />
+          <span className="text-[9px] font-black text-slate-700 shrink-0">Zone Vacancy</span>
+          <ListToolbar.Divider />
+          <AppSelect value={zoneFilter} onChange={(v) => setZoneFilter(v ?? '')}
+            options={zoneOptions} placeholder="All Zones" clearable compact />
+          <ListToolbar.Button icon={FaRedoAlt} onClick={loadReport} disabled={loading}>
+            {loading ? 'Loading…' : 'Refresh'}
+          </ListToolbar.Button>
+          <ListToolbar.Divider />
+          <ListToolbar.Button icon={FaPrint} variant="dark" onClick={handlePrint}>
+            Print
+          </ListToolbar.Button>
+          <span className="ml-auto shrink-0 text-[9px] text-slate-400">{companyName} · As at {new Date().toLocaleDateString()}</span>
+        </ListToolbar>
 
         {/* Fixed header section */}
         <div className="flex-none px-2 pt-2">

@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 import { hasCompanyPermission } from '../../utils/permissions';
 import AppSelect from '../../components/common/AppSelect';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
+import ListToolbar from '../../components/common/ListToolbar';
 import MilikTable from '../../components/common/MilikTable';
 import { getProperties } from '../../redux/propertyRedux';
 import { fetchCompanySettings, selectCompanySettings } from '../../redux/companySettingsRedux';
@@ -336,33 +337,32 @@ const TaxReports = () => {
       </div>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100 p-2">
         <div className="flex w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur print:hidden">
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">Start Date</label>
-                <input type="date" value={filters.startDate} onChange={setFilter("startDate")} className="w-full rounded-md border border-orange-300 bg-orange-50 px-2 py-1.5 text-xs" />
+          <div className="print:hidden">
+            <ListToolbar>
+              <div className="flex flex-col gap-0.5">
+                <label className="text-[8px] font-semibold uppercase text-slate-400">Start Date</label>
+                <input type="date" value={filters.startDate} onChange={setFilter("startDate")}
+                  className="h-[20px] border border-orange-300 bg-orange-50 px-1.5 text-[9px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
               </div>
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">End Date</label>
-                <input type="date" value={filters.endDate} onChange={setFilter("endDate")} className="w-full rounded-md border border-orange-300 bg-orange-50 px-2 py-1.5 text-xs" />
+              <div className="flex flex-col gap-0.5">
+                <label className="text-[8px] font-semibold uppercase text-slate-400">End Date</label>
+                <input type="date" value={filters.endDate} onChange={setFilter("endDate")}
+                  className="h-[20px] border border-orange-300 bg-orange-50 px-1.5 text-[9px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
               </div>
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">{termProperty}</label>
-                <AppSelect
-                  value={filters.propertyId}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))}
-                  options={propertyOptions}
-                  placeholder={`All ${termProperty}s`}
-                  searchable
-                  clearable
-                  size="sm"
-                />
+              <AppSelect
+                value={filters.propertyId}
+                onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))}
+                options={propertyOptions}
+                placeholder={`All ${termProperty}s`}
+                searchable
+                clearable
+                compact
+              />
+              <div className="ml-auto flex shrink-0 items-center gap-0.5">
+                <ListToolbar.Button icon={FaFileDownload} variant="accent" onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"}>Export CSV</ListToolbar.Button>
+                <ListToolbar.Button icon={FaPrint} onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"}>Print</ListToolbar.Button>
               </div>
-            </div>
-            <div className="mt-2 flex flex-wrap justify-end gap-2">
-              <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00] disabled:opacity-50"><FaFileDownload /> Export CSV</button>
-              <button onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-bold text-white disabled:opacity-50 ${GREEN_BG} hover:bg-[#0A3127]`}><FaPrint /> Print</button>
-            </div>
+            </ListToolbar>
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
