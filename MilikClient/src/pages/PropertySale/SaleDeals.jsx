@@ -10,6 +10,7 @@ import SaleEmailModal from "./SaleEmailModal";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterSearch, FilterDateRange } from "./SaleFilterBar";
+import ListToolbar from "../../components/common/ListToolbar";
 import PaginationBar from "../../components/PaginationBar";
 import { saleApi, fmtKES, todayISO } from "../../services/propertySaleApi";
 import { fmtDate } from "../../utils/dates";
@@ -953,13 +954,12 @@ const SaleDeals = () => {
         onReset={resetFilters}
         activeCount={[appliedSearch, statusFilter, agentFilt, buyerFilt, listingFilt, dateFrom, dateTo].filter(Boolean).length}
         trailing={
-          <button
-            type="button"
+          <ListToolbar.Button
+            variant="outline"
             onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] })}
-            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
           >
-            <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
-          </button>
+            <FaRedoAlt size={7} className={isFetching ? "animate-spin" : ""} /> Refresh
+          </ListToolbar.Button>
         }
       >
         <FilterSearch
@@ -967,13 +967,13 @@ const SaleDeals = () => {
           onChange={(e) => setSearch(e.target.value)}
           placeholder={`${T.saleDeal} no. / property / ${T.saleBuyer.toLowerCase()}`}
         />
-        <button type="submit" className="inline-flex h-8 shrink-0 items-center gap-1.5 border border-[#C8511A] bg-[#C8511A] px-3 text-xs font-bold text-white hover:bg-[#a84115]">
-          <FaSearch size={9} /> Search
-        </button>
-        <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={DEAL_STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
-        <AppSelect value={agentFilt} onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }} options={agentFilterOptions} placeholder={`All ${T.saleAgents}`} clearable size="sm" searchable />
-        <AppSelect value={buyerFilt} onChange={(v) => { setBuyerFilt(v ?? ""); setPage(1); }} options={buyerOptions} placeholder={`All ${T.saleBuyers}`} clearable size="sm" searchable />
-        <AppSelect value={listingFilt} onChange={(v) => { setListingFilt(v ?? ""); setPage(1); }} options={listingFilterOptions} placeholder={`All ${T.saleListings}`} clearable size="sm" searchable />
+        <ListToolbar.Button icon={FaSearch} type="submit" className="!bg-[#C8511A] hover:!bg-[#a84115]">
+          Search
+        </ListToolbar.Button>
+        <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={DEAL_STATUS_OPTIONS} placeholder="All Statuses" clearable compact />
+        <AppSelect value={agentFilt} onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }} options={agentFilterOptions} placeholder={`All ${T.saleAgents}`} clearable compact searchable />
+        <AppSelect value={buyerFilt} onChange={(v) => { setBuyerFilt(v ?? ""); setPage(1); }} options={buyerOptions} placeholder={`All ${T.saleBuyers}`} clearable compact searchable />
+        <AppSelect value={listingFilt} onChange={(v) => { setListingFilt(v ?? ""); setPage(1); }} options={listingFilterOptions} placeholder={`All ${T.saleListings}`} clearable compact searchable />
         <FilterDateRange
           from={dateFrom} to={dateTo}
           onFromChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
