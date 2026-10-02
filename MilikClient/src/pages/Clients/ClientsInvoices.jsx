@@ -8,6 +8,7 @@ import { fmtDate } from '../../utils/dates';
 import { useConfirm } from '../../context/ConfirmContext';
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
+import ListToolbar from '../../components/common/ListToolbar';
 import RecordClientPaymentModal from '../../components/Modals/RecordClientPaymentModal';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -134,48 +135,40 @@ const ClientsInvoices = () => {
       <div className="flex flex-col h-full bg-white">
 
         {/* ── Filters ─────────────────────────────────────────────────────── */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-2 py-1.5">
-          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto">
-            <div className="relative w-52 shrink-0">
-              <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={10} />
-              <input
-                type="text"
-                value={searchInput}
-                onChange={(e) => handleSearchInput(e.target.value)}
-                placeholder="Search invoice #…"
-                className="h-7 w-full rounded border border-slate-200 pl-7 pr-6 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/30"
-              />
-              {searchInput && (
-                <button type="button" onClick={clearSearch} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                  <FaTimes size={9} />
-                </button>
-              )}
-            </div>
-
-            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-
-            <div className="flex shrink-0 items-center gap-1">
-              {STATUS_TABS.map((tab) => (
-                <button
-                  key={tab.value}
-                  type="button"
-                  onClick={() => { setStatusFilter(tab.value); setPage(1); }}
-                  className={`h-7 shrink-0 rounded px-2.5 text-[11px] font-semibold transition-colors ${
-                    statusFilter === tab.value
-                      ? 'bg-[#0B3B2E] text-white'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            <span className="ml-auto shrink-0 whitespace-nowrap text-[10px] font-semibold text-slate-400">
-              {pagination.total || 0} invoice{(pagination.total || 0) !== 1 ? 's' : ''}
-            </span>
+        <ListToolbar>
+          <div className="relative shrink-0">
+            <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
+            <ListToolbar.Input
+              value={searchInput}
+              onChange={(e) => handleSearchInput(e.target.value)}
+              placeholder="Search invoice #…"
+              width="w-52"
+              className="pl-5 pr-6"
+            />
+            {searchInput && (
+              <button type="button" onClick={clearSearch} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <FaTimes size={8} />
+              </button>
+            )}
           </div>
-        </div>
+
+          <ListToolbar.Divider />
+
+          {STATUS_TABS.map((tab) => (
+            <ListToolbar.Button
+              key={tab.value}
+              type="button"
+              variant={statusFilter === tab.value ? 'primary' : 'outline'}
+              onClick={() => { setStatusFilter(tab.value); setPage(1); }}
+            >
+              {tab.label}
+            </ListToolbar.Button>
+          ))}
+
+          <span className="ml-auto shrink-0 whitespace-nowrap pl-2 text-[9px] font-semibold text-slate-400">
+            {pagination.total || 0} invoice{(pagination.total || 0) !== 1 ? 's' : ''}
+          </span>
+        </ListToolbar>
 
         {/* ── Table ─────────────────────────────────────────────────────────── */}
         <MilikTable
