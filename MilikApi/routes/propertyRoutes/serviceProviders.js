@@ -1,5 +1,5 @@
 import express from "express";
-import { verifyUser } from "../../controllers/verifyToken.js";
+import { requireCompanyPermission, verifyUser } from "../../controllers/verifyToken.js";
 import {
   createServiceProvider,
   deleteServiceProvider,
@@ -11,8 +11,10 @@ import {
 
 const router = express.Router();
 
-router.get("/creditors/summary", verifyUser, getCreditorsSummary);
-router.get("/creditors/:id/statement", verifyUser, getCreditorStatement);
+const canViewCreditorLedger = requireCompanyPermission("creditorLedger", "view", "accounts");
+
+router.get("/creditors/summary", verifyUser, canViewCreditorLedger, getCreditorsSummary);
+router.get("/creditors/:id/statement", verifyUser, canViewCreditorLedger, getCreditorStatement);
 router.get("/", verifyUser, getServiceProviders);
 router.post("/", verifyUser, createServiceProvider);
 router.put("/:id", verifyUser, updateServiceProvider);

@@ -13,7 +13,7 @@ const DEFINITIONS = [
   // ─── Leases & Agreements ─────────────────────────────────────────────────
   { resource: 'leases',           moduleKey: 'propertyManagement',  actions: ['view', 'create', 'update', 'terminate'] },
   { resource: 'deposits',         moduleKey: 'propertyManagement',  actions: ['view', 'create', 'refund'] },
-  { resource: 'takeOnBalances',   moduleKey: 'propertyManagement',  actions: ['view', 'create'] },
+  { resource: 'takeOnBalances',   moduleKey: 'propertyManagement',  actions: ['view', 'create', 'update'] },
 
   // ─── Invoicing, Receipting & Statements ──────────────────────────────────
   { resource: 'tenantInvoices',   moduleKey: 'propertyManagement',  actions: ['view', 'create', 'update', 'reverse', 'delete', 'export'] },

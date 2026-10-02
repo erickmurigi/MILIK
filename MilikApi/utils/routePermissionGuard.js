@@ -14,6 +14,7 @@ const RULES = [
   { prefix: "/api/expense-requisitions", resource: "expenses", moduleKey: "accounts" },
   { prefix: "/api/landlord-standing-orders", resource: "standingOrders", moduleKey: "accounts" },
   { prefix: "/api/landlord-advancements", resource: "landlordAdvancements", moduleKey: "accounts" },
+  { prefix: "/api/service-providers/creditors", resource: "creditorLedger", moduleKey: "accounts" },
   { prefix: "/api/service-providers", resource: "expenses", moduleKey: "accounts" },
   { prefix: "/api/ledger", resource: "ledger", moduleKey: "accounts" },
   { prefix: "/api/landlord-payments", resource: "landlordPayments", moduleKey: "accounts" },
@@ -76,6 +77,14 @@ const RULES = [
 ];
 
 const PUBLIC_PREFIXES = ["/api/auth/login", "/api/auth/super-admin", "/api/trial"];
+
+// Matched by substring rather than prefix — a dynamic :id segment sits between
+// the shared /api/tenant-invoices prefix and the "take-on-balance" keyword, so
+// a plain startsWith prefix can't isolate PUT /:id/take-on-balance from the
+// rest of the tenantInvoices resource. Checked before the prefix-based RULES.
+const CONTAINS_RULES = [
+  { contains: "/take-on-balance", resource: "takeOnBalances", moduleKey: "propertyManagement" },
+];
 
 const resolveAction = (method = "GET", path = "") => {
   const lowerPath = String(path || "").toLowerCase();
@@ -149,7 +158,10 @@ export const enforceRoutePermissions = async (req, _res, next) => {
     if (!req.user) return next();
     if (req.user?.isSystemAdmin || req.user?.superAdminAccess) return next();
 
-    const rule = RULES.find((item) => req.path.startsWith(item.prefix));
+    const lowerPathForRule = req.path.toLowerCase();
+    const rule =
+      CONTAINS_RULES.find((item) => lowerPathForRule.includes(item.contains)) ||
+      RULES.find((item) => req.path.startsWith(item.prefix));
     if (!rule) return next();
 
     const company = await loadCompanyForRequest(req.user);

@@ -58,6 +58,7 @@ export const ACCESS_SECTIONS = [
       { resource: 'deposits',       action: 'refund', label: 'Refund / release deposits',    moduleKey: 'propertyManagement' },
       { resource: 'takeOnBalances', action: 'view',   label: 'View take-on balances',        moduleKey: 'propertyManagement' },
       { resource: 'takeOnBalances', action: 'create', label: 'Create / edit take-on entries',moduleKey: 'propertyManagement' },
+      { resource: 'takeOnBalances', action: 'update', label: 'Edit existing take-on entries', moduleKey: 'propertyManagement' },
     ],
   },
 

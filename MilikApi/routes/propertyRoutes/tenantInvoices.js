@@ -1,5 +1,5 @@
 import express from "express";
-import { verifyUser } from "../../controllers/verifyToken.js";
+import { requireCompanyPermission, verifyUser } from "../../controllers/verifyToken.js";
 import { resolveBusinessId } from "../../utils/requestContext.js";
 import {
   createTenantInvoice,
@@ -22,12 +22,15 @@ import { generateInvoicePdf } from "../../services/invoicePdfService.js";
 
 const router = express.Router();
 
+const canViewTakeOnBalances = requireCompanyPermission("takeOnBalances", "view", "propertyManagement");
+const canUpdateTakeOnBalance = requireCompanyPermission("takeOnBalances", "update", "propertyManagement");
+
 // Static / collection routes — must come before any /:id patterns
 router.get("/", verifyUser, getTenantInvoicesList);
 router.get("/note-charge-types", verifyUser, getTenantInvoiceNoteChargeTypes);
 router.get("/notes", verifyUser, getTenantInvoiceNotes);
 router.get("/creditable", verifyUser, getCreditableTenantInvoices);
-router.get("/take-on-balances", verifyUser, getTakeOnBalances);
+router.get("/take-on-balances", verifyUser, canViewTakeOnBalances, getTakeOnBalances);
 
 router.post("/", verifyUser, createTenantInvoice);
 router.post("/batch", verifyUser, createTenantInvoicesBatch);
@@ -51,7 +54,7 @@ router.get("/:id/pdf", verifyUser, async (req, res, next) => {
     next(err);
   }
 });
-router.put("/:id/take-on-balance", verifyUser, updateTakeOnBalance);
+router.put("/:id/take-on-balance", verifyUser, canUpdateTakeOnBalance, updateTakeOnBalance);
 router.delete("/:id", verifyUser, deleteTenantInvoice);
 router.delete("/notes/:id", verifyUser, reverseTenantInvoiceNote);
 
