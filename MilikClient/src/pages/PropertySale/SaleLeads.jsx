@@ -16,6 +16,7 @@ import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import SaleFilterBar, { FilterSearch, FilterDateRange } from "./SaleFilterBar";
+import ListToolbar from "../../components/common/ListToolbar";
 import MilikTable from "../../components/common/MilikTable";
 import { labelClass } from "../../utils/formStyles";
 import { useTerms } from "../../hooks/useTerm";
@@ -748,16 +749,13 @@ export default function SaleLeads() {
 
           {/* Filter bar */}
           <SaleFilterBar
-            leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} {(total === 1 ? T.saleLead : T.saleLeads).toLowerCase()}</span>}
+            leading={<span className="shrink-0 font-mono text-[9px] font-black text-slate-500">{total} {(total === 1 ? T.saleLead : T.saleLeads).toLowerCase()}</span>}
             onReset={() => { setSearch(""); setStatus(""); setSource(""); setAgent(""); setOverdue(false); setCreatedFrom(""); setCreatedTo(""); setPage(1); }}
             activeCount={[search, statusFilter, sourceFilter, agentFilter, overdueOnly ? "1" : "", createdFrom, createdTo].filter(Boolean).length}
             trailing={
-              <button
-                onClick={openCreate}
-                className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]"
-              >
-                <FaPlus size={9} /> Add {T.saleLead}
-              </button>
+              <ListToolbar.Button icon={FaPlus} onClick={openCreate}>
+                Add {T.saleLead}
+              </ListToolbar.Button>
             }
           >
             <FilterSearch
@@ -765,10 +763,10 @@ export default function SaleLeads() {
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               placeholder={`Search ${T.saleLeads.toLowerCase()}…`}
             />
-            <AppSelect value={statusFilter} onChange={(v) => { setStatus(v ?? ""); setPage(1); }} options={LEAD_STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
-            <AppSelect value={sourceFilter} onChange={(v) => { setSource(v ?? ""); setPage(1); }} options={LEAD_SOURCE_OPTIONS} placeholder="All Sources" clearable size="sm" />
-            <AppSelect value={agentFilter} onChange={(v) => { setAgent(v ?? ""); setPage(1); }} options={agentOptions} placeholder={`All ${T.saleAgents}`} searchable clearable size="sm" />
-            <label className="flex shrink-0 items-center gap-1.5 text-[11px] font-semibold text-slate-600 cursor-pointer select-none whitespace-nowrap">
+            <AppSelect value={statusFilter} onChange={(v) => { setStatus(v ?? ""); setPage(1); }} options={LEAD_STATUS_OPTIONS} placeholder="All Statuses" clearable compact />
+            <AppSelect value={sourceFilter} onChange={(v) => { setSource(v ?? ""); setPage(1); }} options={LEAD_SOURCE_OPTIONS} placeholder="All Sources" clearable compact />
+            <AppSelect value={agentFilter} onChange={(v) => { setAgent(v ?? ""); setPage(1); }} options={agentOptions} placeholder={`All ${T.saleAgents}`} searchable clearable compact />
+            <label className="flex shrink-0 items-center gap-1.5 text-[9px] font-semibold text-slate-600 cursor-pointer select-none whitespace-nowrap">
               <input type="checkbox" checked={overdueOnly} onChange={(e) => { setOverdue(e.target.checked); setPage(1); }} className="accent-[#0B3B2E]" />
               Overdue
             </label>
