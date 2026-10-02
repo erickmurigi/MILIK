@@ -35,7 +35,7 @@ const DEFINITIONS = [
   { resource: 'financialReports',    moduleKey: 'accounts',         actions: ['view', 'export', 'close'] },
   { resource: 'landlordAdvancements',moduleKey: 'accounts',         actions: ['view', 'create', 'update', 'process', 'reverse', 'delete'] },
   { resource: 'standingOrders',      moduleKey: 'accounts',         actions: ['view', 'create', 'update', 'process', 'reverse', 'delete'] },
-  { resource: 'landlordReceipts',    moduleKey: 'accounts',         actions: ['view', 'create', 'reverse'] },
+  { resource: 'landlordReceipts',    moduleKey: 'accounts',         actions: ['view', 'create', 'update', 'process', 'reverse', 'delete'] },
   { resource: 'landlordPayments',    moduleKey: 'propertyManagement', actions: ['view', 'process', 'export'] },
   { resource: 'ledger',              moduleKey: 'accounts',         actions: ['view', 'repair'] },
   { resource: 'accountingPeriods',   moduleKey: 'accounts',         actions: ['view', 'create', 'update', 'close', 'reverse', 'lock'] },

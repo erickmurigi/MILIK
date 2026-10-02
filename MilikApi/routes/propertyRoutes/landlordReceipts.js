@@ -1,5 +1,5 @@
 import express from "express";
-import { verifyUser } from "../../controllers/verifyToken.js";
+import { requireCompanyPermission, verifyUser } from "../../controllers/verifyToken.js";
 import {
   createLandlordReceipt,
   deleteLandlordReceipt,
@@ -12,12 +12,14 @@ import {
 
 const router = express.Router();
 
-router.post("/", verifyUser, createLandlordReceipt);
-router.get("/", verifyUser, getLandlordReceipts);
-router.put("/post/:id", verifyUser, postLandlordReceipt);
-router.put("/reverse/:id", verifyUser, reverseLandlordReceipt);
-router.get("/:id", verifyUser, getLandlordReceipt);
-router.put("/:id", verifyUser, updateLandlordReceipt);
-router.delete("/:id", verifyUser, deleteLandlordReceipt);
+const can = (action) => requireCompanyPermission("landlordReceipts", action, "accounts");
+
+router.post("/", verifyUser, can("create"), createLandlordReceipt);
+router.get("/", verifyUser, can("view"), getLandlordReceipts);
+router.put("/post/:id", verifyUser, can("process"), postLandlordReceipt);
+router.put("/reverse/:id", verifyUser, can("reverse"), reverseLandlordReceipt);
+router.get("/:id", verifyUser, can("view"), getLandlordReceipt);
+router.put("/:id", verifyUser, can("update"), updateLandlordReceipt);
+router.delete("/:id", verifyUser, can("delete"), deleteLandlordReceipt);
 
 export default router;
