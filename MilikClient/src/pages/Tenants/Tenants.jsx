@@ -12,6 +12,7 @@ import {
 import { useNavigate, useLocation } from "react-router-dom";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import ListToolbar from "../../components/common/ListToolbar";
 import { useTerm } from "../../hooks/useTerm";
 import {
   FaPlus,
@@ -2153,34 +2154,33 @@ const confirmTransferUnit = useCallback(async () => {
                 compact
               />
 
-              <div className="h-3 w-px shrink-0 bg-slate-200" />
+              <ListToolbar.Divider />
 
-              <input type="text" placeholder="Name" value={draftFilters.tenantName}
-                onChange={(e) => setDraftFilters({ ...draftFilters, tenantName: normalizeUppercaseInput(e.target.value) })}
-                className="h-[20px] w-24 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              <input type="text" placeholder="Code (TT####)" value={draftFilters.tenantCode}
-                onChange={(e) => setDraftFilters({ ...draftFilters, tenantCode: normalizeUppercaseInput(e.target.value) })}
-                className="h-[20px] w-24 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              <input type="text" placeholder={isTerminatedView ? "Search terminated…" : "Search tenants…"} value={draftFilters.search}
-                onChange={(e) => setDraftFilters({ ...draftFilters, search: normalizeUppercaseInput(e.target.value) })}
-                className="h-[20px] w-28 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <ListToolbar.Input width="w-24" type="text" placeholder="Name" value={draftFilters.tenantName}
+                onChange={(e) => setDraftFilters({ ...draftFilters, tenantName: normalizeUppercaseInput(e.target.value) })} />
+              <ListToolbar.Input width="w-24" type="text" placeholder="Code (TT####)" value={draftFilters.tenantCode}
+                onChange={(e) => setDraftFilters({ ...draftFilters, tenantCode: normalizeUppercaseInput(e.target.value) })} />
+              <ListToolbar.Input width="w-28" type="text" placeholder={isTerminatedView ? "Search terminated…" : "Search tenants…"} value={draftFilters.search}
+                onChange={(e) => setDraftFilters({ ...draftFilters, search: normalizeUppercaseInput(e.target.value) })} />
 
-              <div className="h-3 w-px shrink-0 bg-slate-200" />
+              <ListToolbar.Divider />
 
-              <button onClick={() => { setAppliedFilters(draftFilters); setCurrentPage(1); }} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-1.5 text-[9px] font-semibold text-white hover:bg-[#0A3127]">
-                <FaSearch size={7} /> Search
-              </button>
-              <button onClick={handleResetFilters} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-gray-500 px-1.5 text-[9px] font-semibold text-white hover:bg-gray-600">
-                <FaRedoAlt size={7} /> Reset
-              </button>
-{canUpdateTenant && (
-                <button onClick={handleEditTenant} disabled={selectedTenants.length !== 1}
-                  className="h-[20px] shrink-0 flex items-center gap-0.5 bg-blue-500 px-1.5 text-[9px] font-semibold text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed">
-                  <FaEdit size={7} /> Edit
-                </button>
+              <ListToolbar.Button icon={FaSearch} onClick={() => { setAppliedFilters(draftFilters); setCurrentPage(1); }}>
+                Search
+              </ListToolbar.Button>
+              <ListToolbar.Button icon={FaRedoAlt} variant="dark" onClick={handleResetFilters}>
+                Reset
+              </ListToolbar.Button>
+              {canUpdateTenant && (
+                <ListToolbar.Button
+                  icon={FaEdit}
+                  className="!bg-blue-500 hover:!bg-blue-600"
+                  onClick={handleEditTenant}
+                  disabled={selectedTenants.length !== 1}
+                >Edit</ListToolbar.Button>
               )}
               {selectedTenants.length > 0 && (
-                <span className="shrink-0 text-[10px] font-bold text-slate-500 tabular-nums">{selectedTenants.length} selected</span>
+                <span className="shrink-0 text-[9px] font-bold text-slate-500 tabular-nums">{selectedTenants.length} selected</span>
               )}
             </div>
 
@@ -2313,23 +2313,17 @@ const confirmTransferUnit = useCallback(async () => {
               </div>
 
               {(isTerminatedView || canCreateTenant) && (
-                <button onClick={() => isTerminatedView ? navigate("/invoices/new") : navigate("/tenant/new")}
-                  className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#FF8C00] hover:bg-[#e67e00] px-1.5 text-[9px] font-semibold text-white">
-                  <FaPlus size={7} /> {isTerminatedView ? "Final Billing" : "Add"}
-                </button>
+                <ListToolbar.Button icon={FaPlus} variant="accent" onClick={() => isTerminatedView ? navigate("/invoices/new") : navigate("/tenant/new")}>
+                  {isTerminatedView ? "Final Billing" : "Add"}
+                </ListToolbar.Button>
               )}
               {canCreateTenant && !isTerminatedView && (
-                <button onClick={() => setShowImportModal(true)}
-                  className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#FF8C00] hover:bg-[#e67e00] px-1.5 text-[9px] font-semibold text-white">
+                <ListToolbar.Button variant="accent" onClick={() => setShowImportModal(true)}>
                   <FaFileExport size={7} className="rotate-180" /> Import
-                </button>
+                </ListToolbar.Button>
               )}
-              <button onClick={handlePrintList} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-slate-700 px-1.5 text-[9px] font-semibold text-white hover:bg-slate-800">
-                <FaPrint size={7} /> Print
-              </button>
-              <button onClick={handleExportToExcel} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-gray-600 px-1.5 text-[9px] font-semibold text-white hover:bg-gray-700">
-                <FaFileExport size={7} /> Export
-              </button>
+              <ListToolbar.Button icon={FaPrint} variant="dark" onClick={handlePrintList}>Print</ListToolbar.Button>
+              <ListToolbar.Button icon={FaFileExport} className="!bg-gray-600 hover:!bg-gray-700" onClick={handleExportToExcel}>Export</ListToolbar.Button>
             </div>
           </div>
         </div>
