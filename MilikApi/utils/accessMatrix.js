@@ -24,13 +24,13 @@ const DEFINITIONS = [
 
   // ─── Accounting & General Ledger ─────────────────────────────────────────
   { resource: 'chartOfAccounts',     moduleKey: 'accounts',         actions: ['view', 'create', 'update', 'delete'] },
-  { resource: 'journals',            moduleKey: 'accounts',         actions: ['view', 'process', 'reverse'] },
-  { resource: 'bankReconciliation',  moduleKey: 'accounts',         actions: ['view', 'process'] },
+  { resource: 'journals',            moduleKey: 'accounts',         actions: ['view', 'create', 'update', 'process', 'approve', 'reverse', 'delete'] },
+  { resource: 'bankReconciliation',  moduleKey: 'accounts',         actions: ['view', 'create', 'update', 'process', 'delete'] },
   { resource: 'paymentVouchers',     moduleKey: 'accounts',         actions: ['view', 'process', 'approve', 'reverse'] },
   { resource: 'expenses',            moduleKey: 'accounts',         actions: ['view', 'create', 'approve', 'update', 'delete'] },
   { resource: 'pettyCash',           moduleKey: 'accounts',         actions: ['view', 'create', 'approve', 'reverse'] },
-  { resource: 'budgets',             moduleKey: 'accounts',         actions: ['view', 'create', 'approve'] },
-  { resource: 'fixedAssets',         moduleKey: 'accounts',         actions: ['view', 'create', 'depreciate'] },
+  { resource: 'budgets',             moduleKey: 'accounts',         actions: ['view', 'create', 'update', 'approve', 'delete'] },
+  { resource: 'fixedAssets',         moduleKey: 'accounts',         actions: ['view', 'create', 'update', 'depreciate', 'dispose'] },
   { resource: 'creditorLedger',      moduleKey: 'accounts',         actions: ['view'] },
   { resource: 'financialReports',    moduleKey: 'accounts',         actions: ['view', 'export'] },
   { resource: 'landlordAdvancements',moduleKey: 'accounts',         actions: ['view', 'create'] },
@@ -38,7 +38,7 @@ const DEFINITIONS = [
   { resource: 'landlordReceipts',    moduleKey: 'accounts',         actions: ['view', 'create', 'reverse'] },
   { resource: 'landlordPayments',    moduleKey: 'propertyManagement', actions: ['view', 'process', 'export'] },
   { resource: 'ledger',              moduleKey: 'accounts',         actions: ['view', 'repair'] },
-  { resource: 'accountingPeriods',   moduleKey: 'accounts',         actions: ['view', 'create', 'update', 'close', 'lock'] },
+  { resource: 'accountingPeriods',   moduleKey: 'accounts',         actions: ['view', 'create', 'update', 'close', 'reverse', 'lock'] },
   { resource: 'taxRemittance',       moduleKey: 'accounts',         actions: ['view', 'process', 'reverse'] },
 
   // ─── PM Reports ──────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import express from "express";
 import mongoose from "mongoose";
-import { requireCompanyModule, verifyUser, verifyAdmin, GL_ACCESS_MODULES } from "../controllers/verifyToken.js";
+import { requireCompanyModule, requireCompanyPermission, verifyUser, verifyAdmin, GL_ACCESS_MODULES } from "../controllers/verifyToken.js";
 import { resolveBusinessId } from "../utils/requestContext.js";
 import ChartOfAccount from "../models/ChartOfAccount.js";
 import FinancialLedgerEntry from "../models/FinancialLedgerEntry.js";
@@ -106,6 +106,11 @@ const decorateLedgerActivityEntry = (entry = {}) => ({
     : "live_entry",
   auditLinkId: entry?.reversalOf || entry?.reversedByEntry || null,
 });
+
+const can = (action) => requireCompanyPermission("chartOfAccounts", action, "accounts");
+const canCreate = can("create");
+const canUpdate = can("update");
+const canDelete = can("delete");
 
 const serializeAccount = (account = {}) => ({
   ...account,
@@ -375,7 +380,7 @@ router.post("/activity/:entryId/reclassify", verifyUser, requireCompanyModule("a
   }
 });
 
-router.post("/", verifyUser, requireCompanyModule("accounts"), async (req, res) => {
+router.post("/", verifyUser, canCreate, async (req, res) => {
   try {
     const business = resolveBusiness(req);
 
@@ -452,7 +457,7 @@ router.post("/", verifyUser, requireCompanyModule("accounts"), async (req, res) 
   }
 });
 
-router.put("/:id", verifyUser, requireCompanyModule("accounts"), async (req, res) => {
+router.put("/:id", verifyUser, canUpdate, async (req, res) => {
   try {
     const business = resolveBusiness(req);
     const { id } = req.params;
@@ -575,7 +580,7 @@ router.put("/:id", verifyUser, requireCompanyModule("accounts"), async (req, res
   }
 });
 
-router.delete("/:id", verifyUser, requireCompanyModule("accounts"), async (req, res) => {
+router.delete("/:id", verifyUser, canDelete, async (req, res) => {
   try {
     const business = resolveBusiness(req);
     const { id } = req.params;
@@ -660,7 +665,7 @@ router.delete("/:id", verifyUser, requireCompanyModule("accounts"), async (req, 
 });
 
 // Undo a "delete" of an account that had history (it was only deactivated): it takes postings again.
-router.post("/:id/reactivate", verifyUser, requireCompanyModule("accounts"), async (req, res) => {
+router.post("/:id/reactivate", verifyUser, canUpdate, async (req, res) => {
   try {
     const business = resolveBusiness(req);
     const { id } = req.params;

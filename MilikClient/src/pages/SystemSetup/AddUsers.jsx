@@ -96,7 +96,7 @@ const SECTION_META = {
   communications: { bar: 'bg-violet-500'  },
 };
 
-const DANGER_ACTIONS = new Set(['delete', 'reverse', 'lock', 'approve', 'pay', 'process', 'repair', 'close']);
+const DANGER_ACTIONS = new Set(['delete', 'reverse', 'lock', 'approve', 'pay', 'process', 'repair', 'close', 'dispose']);
 
 const PROFILE_SELECT_OPTIONS = PROFILE_OPTIONS.map(({ value, label }) => ({ value, label }));
 

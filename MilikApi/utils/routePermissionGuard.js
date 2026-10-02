@@ -85,6 +85,7 @@ const resolveAction = (method = "GET", path = "") => {
   if (lowerPath.includes("/reverse")) return "reverse";
   if (lowerPath.includes("/unconfirm")) return "reverse";
   if (lowerPath.includes("/confirm")) return "process";
+  if (lowerPath.includes("/finalize")) return "process";
   if (lowerPath.includes("/process")) return "process";
   if (lowerPath.includes("/post") || lowerPath.includes("post-commission")) return "process";
   // "/pay" and "/bill" are substrings of plain read paths too ("/payments",
@@ -108,6 +109,15 @@ const resolveAction = (method = "GET", path = "") => {
   if (lowerPath.includes("/reopen")) return "reverse";
   if (lowerPath.includes("/close")) return "close";
   if (lowerPath.includes("/lock")) return "lock";
+  if (lowerPath.includes("/reactivate")) return "update";
+  if (lowerPath.includes("/submit")) return "update";
+  // "/review" must not catch "/reviews" (lease reviews is an unrelated, plural
+  // resource) — endsWith keeps it scoped to the .../:id/review approval step.
+  if (lowerPath.endsWith("/review")) return "approve";
+  if (lowerPath.includes("/reject")) return "approve";
+  if (lowerPath.includes("/dispose")) return "dispose";
+  if (method !== "GET" && lowerPath.includes("/depreciation")) return "depreciate";
+  if (lowerPath.includes("/run") || lowerPath.includes("-run")) return "process";
 
   if (method === "GET") return lowerPath.includes("/summary") || lowerPath.includes("/stats") ? "view" : "view";
   if (method === "POST") return "create";

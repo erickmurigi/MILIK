@@ -1,5 +1,5 @@
 import express from "express";
-import { requireCompanyModule, verifyUser, GL_ACCESS_MODULES } from "../../controllers/verifyToken.js";
+import { requireCompanyModule, requireCompanyPermission, verifyUser, GL_ACCESS_MODULES } from "../../controllers/verifyToken.js";
 import {
   getBudgets,
   getBudget,
@@ -10,10 +10,12 @@ import {
 
 const router = express.Router();
 
+const can = (action) => requireCompanyPermission("budgets", action, "accounts");
+
 router.get("/",       verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getBudgets);
-router.post("/",      verifyUser, requireCompanyModule(GL_ACCESS_MODULES), createBudget);
 router.get("/:id",    verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getBudget);
-router.put("/:id",    verifyUser, requireCompanyModule(GL_ACCESS_MODULES), updateBudget);
-router.delete("/:id", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), deleteBudget);
+router.post("/",      verifyUser, can("create"), createBudget);
+router.put("/:id",    verifyUser, can("update"), updateBudget);
+router.delete("/:id", verifyUser, can("delete"), deleteBudget);
 
 export default router;

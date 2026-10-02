@@ -1,5 +1,5 @@
 import express from "express";
-import { requireCompanyModule, verifyUser, GL_ACCESS_MODULES } from "../../controllers/verifyToken.js";
+import { requireCompanyModule, requireCompanyPermission, verifyUser, GL_ACCESS_MODULES } from "../../controllers/verifyToken.js";
 import {
   getBankAccounts,
   getReconciliationEntries,
@@ -13,13 +13,15 @@ import {
 
 const router = express.Router();
 
+const can = (action) => requireCompanyPermission("bankReconciliation", action, "accounts");
+
 router.get("/accounts",  verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getBankAccounts);
 router.get("/entries",   verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getReconciliationEntries);
 router.get("/",          verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getReconciliations);
-router.post("/",         verifyUser, requireCompanyModule(GL_ACCESS_MODULES), createReconciliation);
 router.get("/:id",       verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getReconciliation);
-router.put("/:id",       verifyUser, requireCompanyModule(GL_ACCESS_MODULES), updateReconciliation);
-router.post("/:id/finalize", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), finalizeReconciliation);
-router.delete("/:id",    verifyUser, requireCompanyModule(GL_ACCESS_MODULES), deleteReconciliation);
+router.post("/",         verifyUser, can("create"), createReconciliation);
+router.put("/:id",       verifyUser, can("update"), updateReconciliation);
+router.post("/:id/finalize", verifyUser, can("process"), finalizeReconciliation);
+router.delete("/:id",    verifyUser, can("delete"), deleteReconciliation);
 
 export default router;
