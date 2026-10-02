@@ -87,16 +87,15 @@ const buildInvoicePdfCacheKey = (invoice) => {
 };
 
 export const generateInvoicePdf = async (invoiceId, businessId) => {
-  const invoice = await TenantInvoice.findOne({ _id: invoiceId, business: businessId })
-    .populate('tenant', 'name email tenantCode phone')
-    .populate('property', 'propertyName propertyCode address invoicePaymentTerms mpesaPaybill')
-    .populate('unit', 'unitNumber name')
-    .populate('business', `${COMPANY_PRINT_FIELDS} slogan invoicePaymentTerms`)
+  // Cheap, indexed lookup (just enough to build the cache key and enforce access) so a cache
+  // hit never pays for the full populated fetch below — that one only runs on an actual miss.
+  const invoiceStub = await TenantInvoice.findOne({ _id: invoiceId, business: businessId })
+    .select('_id updatedAt')
     .lean();
 
-  if (!invoice) { const e = new Error('Invoice not found or access denied'); e.status = 404; throw e; }
+  if (!invoiceStub) { const e = new Error('Invoice not found or access denied'); e.status = 404; throw e; }
 
-  const cacheKey = buildInvoicePdfCacheKey(invoice);
+  const cacheKey = buildInvoicePdfCacheKey(invoiceStub);
   const cachedPdfBuffer = getCachedPdfBuffer(cacheKey);
   if (cachedPdfBuffer) return cachedPdfBuffer;
 
@@ -105,6 +104,15 @@ export const generateInvoicePdf = async (invoiceId, businessId) => {
   }
 
   const renderPromise = (async () => {
+    const invoice = await TenantInvoice.findOne({ _id: invoiceId, business: businessId })
+      .populate('tenant', 'name email tenantCode phone')
+      .populate('property', 'propertyName propertyCode address invoicePaymentTerms mpesaPaybill')
+      .populate('unit', 'unitNumber name')
+      .populate('business', `${COMPANY_PRINT_FIELDS} slogan invoicePaymentTerms`)
+      .lean();
+
+    if (!invoice) { const e = new Error('Invoice not found or access denied'); e.status = 404; throw e; }
+
     const company = invoice.business || {};
     const tenant = invoice.tenant || {};
     const property = invoice.property || {};

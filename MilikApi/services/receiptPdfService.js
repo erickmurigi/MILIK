@@ -66,19 +66,15 @@ const releasePdfRenderSlot = () => {
 };
 
 export const generateReceiptPdf = async (receiptId, businessId) => {
-  const receipt = await RentPayment.findOne({ _id: receiptId, business: businessId })
-    .populate('tenant', 'name email tenantCode phone')
-    .populate({ path: 'unit', select: 'unitNumber name property', populate: { path: 'property', select: 'propertyName propertyCode address' } })
-    .populate('business', COMPANY_PRINT_FIELDS)
+  // Cheap, indexed lookup (just enough to build the cache key and enforce access) so a cache
+  // hit never pays for the full populated fetch below — that one only runs on an actual miss.
+  const receiptStub = await RentPayment.findOne({ _id: receiptId, business: businessId })
+    .select('_id updatedAt')
     .lean();
 
-  if (!receipt) { const e = new Error('Receipt not found or access denied'); e.status = 404; throw e; }
+  if (!receiptStub) { const e = new Error('Receipt not found or access denied'); e.status = 404; throw e; }
 
-  // Normalise field names so the rest of the service works unchanged
-  receipt.property = receipt.unit?.property || {};
-  receipt.receiptDate = receipt.paymentDate || receipt.createdAt;
-
-  const cacheKey = `receipt::${String(receipt._id)}::${receipt.updatedAt ? new Date(receipt.updatedAt).toISOString() : ''}`;
+  const cacheKey = `receipt::${String(receiptStub._id)}::${receiptStub.updatedAt ? new Date(receiptStub.updatedAt).toISOString() : ''}`;
   const cached = getCachedPdfBuffer(cacheKey);
   if (cached) return cached;
 
@@ -87,6 +83,18 @@ export const generateReceiptPdf = async (receiptId, businessId) => {
   }
 
   const renderPromise = (async () => {
+    const receipt = await RentPayment.findOne({ _id: receiptId, business: businessId })
+      .populate('tenant', 'name email tenantCode phone')
+      .populate({ path: 'unit', select: 'unitNumber name property', populate: { path: 'property', select: 'propertyName propertyCode address' } })
+      .populate('business', COMPANY_PRINT_FIELDS)
+      .lean();
+
+    if (!receipt) { const e = new Error('Receipt not found or access denied'); e.status = 404; throw e; }
+
+    // Normalise field names so the rest of the service works unchanged
+    receipt.property = receipt.unit?.property || {};
+    receipt.receiptDate = receipt.paymentDate || receipt.createdAt;
+
     const company = receipt.business || {};
     const tenant = receipt.tenant || {};
     const property = receipt.property || {};
