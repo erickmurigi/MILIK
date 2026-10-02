@@ -9,6 +9,7 @@ import { toast } from "react-toastify";
 import { carWashApi } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import CwSmsModal from "./CwSmsModal";
+import ListToolbar from "../../components/common/ListToolbar";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
@@ -873,20 +874,21 @@ const CarWashLoyalty = () => {
               </div>
 
               {/* Controls bar */}
-              <div className="flex flex-wrap items-center gap-2">
+              <ListToolbar>
                 {/* Search */}
-                <div className="flex min-w-[220px] flex-1 items-center border border-slate-300 bg-white">
-                  <FaSearch className="ml-2 shrink-0 text-[11px] text-slate-400" />
-                  <input
+                <div className="relative shrink-0">
+                  <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
+                  <ListToolbar.Input
                     ref={searchRef}
                     value={search}
                     onChange={handleSearchChange}
                     placeholder="Search name, phone or plate…"
-                    className="h-9 flex-1 px-2 text-sm text-slate-800 outline-none"
+                    width="w-56"
+                    className="pl-5 pr-6"
                   />
                   {search && (
-                    <button onClick={clearSearch} className="mr-1 text-slate-400 hover:text-slate-600">
-                      <FaTimes className="text-[10px]" />
+                    <button type="button" onClick={clearSearch} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                      <FaTimes size={8} />
                     </button>
                   )}
                 </div>
@@ -901,33 +903,26 @@ const CarWashLoyalty = () => {
                     { value: 90, label: "Dormant 90+ days" },
                   ]}
                   placeholder="All customers"
-                  size="sm"
+                  compact
                   clearable
                 />
 
-                <button onClick={refetch} className="h-9 border border-slate-300 bg-white px-2.5 text-slate-500 hover:bg-slate-50" title="Refresh">
-                  <FaRedoAlt className="text-[11px]" />
-                </button>
+                <ListToolbar.Button icon={FaRedoAlt} type="button" onClick={refetch}>Refresh</ListToolbar.Button>
 
                 {/* Bulk SMS bar */}
                 {selectedIds.size > 0 && (
-                  <div className="flex items-center gap-2 border border-emerald-300 bg-emerald-50 px-3 py-1">
-                    <FaCheck className="text-[10px] text-emerald-600" />
-                    <span className="text-xs font-bold text-emerald-700">{selectedIds.size} selected</span>
-                    <button
-                      onClick={() => setBulkSmsOpen(true)}
-                      className="inline-flex items-center gap-1 border border-emerald-600 bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white hover:bg-emerald-700"
-                    >
-                      <FaSms className="text-[10px]" /> Send SMS
-                    </button>
-                    <button onClick={() => setSelectedIds(new Set())} className="text-slate-400 hover:text-slate-600">
-                      <FaTimes className="text-[10px]" />
-                    </button>
-                  </div>
+                  <>
+                    <ListToolbar.Divider />
+                    <span className="inline-flex shrink-0 items-center gap-1 text-[9px] font-bold text-emerald-700">
+                      <FaCheck className="text-[8px]" /> {selectedIds.size} selected
+                    </span>
+                    <ListToolbar.Button icon={FaSms} variant="accent" onClick={() => setBulkSmsOpen(true)}>Send SMS</ListToolbar.Button>
+                    <ListToolbar.Button icon={FaTimes} variant="outline" onClick={() => setSelectedIds(new Set())}>Clear</ListToolbar.Button>
+                  </>
                 )}
 
-                <span className="ml-auto text-[11px] font-semibold text-slate-500">{total} customer{total !== 1 ? "s" : ""}</span>
-              </div>
+                <span className="ml-auto shrink-0 pl-2 text-[9px] font-semibold text-slate-500">{total} customer{total !== 1 ? "s" : ""}</span>
+              </ListToolbar>
 
               {/* Table */}
               <MilikTable
