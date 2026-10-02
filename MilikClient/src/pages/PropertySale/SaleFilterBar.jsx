@@ -1,37 +1,35 @@
 import React from "react";
 import { FaRedoAlt, FaSearch } from "react-icons/fa";
 import AppSelect from "../../components/common/AppSelect";
+import ListToolbar from "../../components/common/ListToolbar";
 
 export const FilterSearch = ({ value, onChange, placeholder, width = 160 }) => (
   <div className="relative shrink-0" style={{ width }}>
-    <FaSearch className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[9px] text-slate-400" />
-    <input
+    <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
+    <ListToolbar.Input
       value={value}
       onChange={onChange}
       placeholder={placeholder}
-      className="h-7 w-full border border-slate-200 bg-white pl-6 pr-2 text-xs text-slate-700 placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none"
+      className="w-full pl-5"
+      width=""
     />
   </div>
 );
 
 export const FilterDate = ({ value, onChange, title }) => (
-  <input
+  <ListToolbar.Input
     type="date"
     value={value}
     onChange={onChange}
     title={title}
-    className={`h-7 shrink-0 border px-2 text-xs focus:outline-none ${
-      value
-        ? "border-[#0B3B2E] bg-[#F1F6F3] text-[#0B3B2E]"
-        : "border-slate-200 bg-white text-slate-500 focus:border-[#0B3B2E]"
-    }`}
+    className={value ? "border-[#0B3B2E] bg-[#F1F6F3] text-[#0B3B2E]" : ""}
   />
 );
 
 export const FilterDateRange = ({ from, to, onFromChange, onToChange }) => (
   <div className="flex shrink-0 items-center gap-1">
     <FilterDate value={from} onChange={onFromChange} title="From date" />
-    <span className="text-[10px] font-semibold text-slate-400">—</span>
+    <span className="text-[9px] font-semibold text-slate-400">—</span>
     <FilterDate value={to} onChange={onToChange} title="To date" />
   </div>
 );
@@ -48,7 +46,7 @@ export const FilterDateRange = ({ from, to, onFromChange, onToChange }) => (
  */
 const SaleFilterBar = ({ leading, children, onReset, activeCount = 0, trailing }) => (
   <div
-    className="flex shrink-0 items-center gap-2 overflow-x-auto border border-slate-200 bg-white px-3 py-1.5"
+    className="filter-bar flex shrink-0 items-center gap-1.5 overflow-x-auto border border-slate-200 bg-white px-2 py-1"
     style={{ borderLeft: "3px solid #0B3B2E" }}
   >
     {/* Stats / leading content */}
@@ -64,27 +62,23 @@ const SaleFilterBar = ({ leading, children, onReset, activeCount = 0, trailing }
 
     {/* Reset */}
     {onReset && (
-      <button
-        type="button"
+      <ListToolbar.Button
+        icon={FaRedoAlt}
+        variant={activeCount > 0 ? "primary" : "outline"}
+        className="ml-auto"
         onClick={onReset}
-        className={`ml-auto shrink-0 inline-flex h-7 items-center gap-1 border px-2.5 text-xs font-bold transition-colors ${
-          activeCount > 0
-            ? "border-[#0B3B2E] bg-[#0B3B2E] text-white hover:bg-[#0A3127]"
-            : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-        }`}
       >
-        <FaRedoAlt size={8} />
         Reset
         {activeCount > 0 && (
-          <span className="flex h-4 min-w-[14px] items-center justify-center rounded-full bg-white/25 px-1 text-[9px] font-black">
+          <span className="flex h-3.5 min-w-[14px] items-center justify-center bg-white/25 px-1 text-[8px] font-black">
             {activeCount}
           </span>
         )}
-      </button>
+      </ListToolbar.Button>
     )}
 
     {/* Trailing actions (Refresh, Print, etc.) */}
-    {trailing && <div className={`${onReset ? "" : "ml-auto"} flex shrink-0 items-center gap-1.5`}>{trailing}</div>}
+    {trailing && <div className={`${onReset ? "" : "ml-auto"} flex shrink-0 items-center gap-1`}>{trailing}</div>}
   </div>
 );
 

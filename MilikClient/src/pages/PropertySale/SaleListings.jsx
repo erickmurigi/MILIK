@@ -11,6 +11,7 @@ import ImportModal from "../../components/Modals/ImportModal";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterSearch } from "./SaleFilterBar";
+import ListToolbar from "../../components/common/ListToolbar";
 import PaginationBar from "../../components/PaginationBar";
 import { saleApi, fmtKES } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
@@ -258,32 +259,23 @@ const SaleListings = () => {
     <PropertySaleShell>
       {/* Filter bar */}
       <SaleFilterBar
-        leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} listing{total !== 1 ? "s" : ""}</span>}
+        leading={<span className="shrink-0 font-mono text-[9px] font-black text-slate-500">{total} listing{total !== 1 ? "s" : ""}</span>}
         onReset={resetFilters}
         activeCount={[search, statusFilt, typeFilt, agentFilt, scope].filter(Boolean).length}
         trailing={
           <>
-            <button
-              type="button"
+            <ListToolbar.Button
+              variant="outline"
               onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] })}
-              className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
             >
-              <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowImportModal(true)}
-              className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-            >
-              <FaFileImport size={9} /> Import
-            </button>
-            <button
-              type="button"
-              onClick={openCreate}
-              className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]"
-            >
-              <FaPlus size={9} /> New {T.saleListing}
-            </button>
+              <FaRedoAlt size={7} className={isFetching ? "animate-spin" : ""} /> Refresh
+            </ListToolbar.Button>
+            <ListToolbar.Button icon={FaFileImport} variant="outline" onClick={() => setShowImportModal(true)}>
+              Import
+            </ListToolbar.Button>
+            <ListToolbar.Button icon={FaPlus} onClick={openCreate}>
+              New {T.saleListing}
+            </ListToolbar.Button>
           </>
         }
       >
@@ -292,11 +284,11 @@ const SaleListings = () => {
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           placeholder={`Search ${T.saleListings.toLowerCase()}...`}
         />
-        <AppSelect value={statusFilt} onChange={(v) => { setStatusFilt(v ?? ""); setPage(1); }} options={STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
-        <AppSelect value={typeFilt} onChange={(v) => { setTypeFilt(v ?? ""); setPage(1); }} options={PROPERTY_TYPE_OPTIONS} placeholder="All Types" clearable size="sm" />
-        <AppSelect value={agentFilt} onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }} options={agentFilterOptions} placeholder={`All ${T.saleAgents}`} clearable size="sm" searchable />
+        <AppSelect value={statusFilt} onChange={(v) => { setStatusFilt(v ?? ""); setPage(1); }} options={STATUS_OPTIONS} placeholder="All Statuses" clearable compact />
+        <AppSelect value={typeFilt} onChange={(v) => { setTypeFilt(v ?? ""); setPage(1); }} options={PROPERTY_TYPE_OPTIONS} placeholder="All Types" clearable compact />
+        <AppSelect value={agentFilt} onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }} options={agentFilterOptions} placeholder={`All ${T.saleAgents}`} clearable compact searchable />
         {usesProjects && (
-          <AppSelect value={scopeFilt} onChange={(v) => { setScopeFilt(v ?? ""); setPage(1); }} options={SCOPE_OPTIONS} placeholder="All items" clearable size="sm" />
+          <AppSelect value={scopeFilt} onChange={(v) => { setScopeFilt(v ?? ""); setPage(1); }} options={SCOPE_OPTIONS} placeholder="All items" clearable compact />
         )}
       </SaleFilterBar>
 
