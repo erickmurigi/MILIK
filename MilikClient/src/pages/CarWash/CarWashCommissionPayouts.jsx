@@ -6,6 +6,7 @@ import { FaMoneyBillWave, FaPiggyBank, FaRedoAlt, FaSearch, FaTimes, FaUndo, FaB
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import ListToolbar from "../../components/common/ListToolbar";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
@@ -27,7 +28,6 @@ const PAYOUT_COLUMNS = [
   { label: "Net Cash", align: "right" },
   { label: "Date" },
 ];
-const ic         = "h-7 border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const methods    = ["cash", "mpesa", "bank", "card", "other"];
 const DEFAULT_PAGE_SIZE = 30;
 
@@ -557,33 +557,23 @@ const CarWashCommissionPayouts = () => {
       }
     >
       {/* Filter bar */}
-      <form onSubmit={applyFilters} className="mt-1 flex flex-wrap items-end gap-1.5 border border-slate-200 bg-white px-3 py-2 shadow-sm">
-        <div className="flex flex-col gap-0.5">
-          <label className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Staff</label>
+      <form onSubmit={applyFilters} className="mt-1">
+        <ListToolbar>
           <AppSelect
             value={filters.staff}
             onChange={(v) => setFilters((p) => ({ ...p, staff: v ?? "" }))}
             options={staff.map((s) => ({ value: s._id, label: s.name }))}
             placeholder="All staff"
-            size="sm"
+            compact
             clearable
             searchable
           />
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <label className="text-[9px] font-bold uppercase tracking-wide text-slate-400">From</label>
-          <input type="date" className={ic} value={filters.dateFrom} onChange={(e) => setFilters((p) => ({ ...p, dateFrom: e.target.value }))} />
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <label className="text-[9px] font-bold uppercase tracking-wide text-slate-400">To</label>
-          <input type="date" className={ic} value={filters.dateTo} onChange={(e) => setFilters((p) => ({ ...p, dateTo: e.target.value }))} />
-        </div>
-        <button type="submit" className="inline-flex h-7 items-center gap-1.5 bg-[#FF8C00] px-3 text-xs font-bold text-white hover:bg-[#E67E00]">
-          <FaSearch size={9} /> Search
-        </button>
-        <button type="button" onClick={resetFilters} className="inline-flex h-7 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
-          <FaRedoAlt size={9} /> Reset
-        </button>
+          <ListToolbar.Input type="date" value={filters.dateFrom} onChange={(e) => setFilters((p) => ({ ...p, dateFrom: e.target.value }))} />
+          <span className="shrink-0 text-[9px] text-slate-400">→</span>
+          <ListToolbar.Input type="date" value={filters.dateTo} onChange={(e) => setFilters((p) => ({ ...p, dateTo: e.target.value }))} />
+          <ListToolbar.Button icon={FaSearch} variant="accent" type="submit">Search</ListToolbar.Button>
+          <ListToolbar.Button icon={FaRedoAlt} type="button" onClick={resetFilters}>Reset</ListToolbar.Button>
+        </ListToolbar>
       </form>
 
       {/* Table */}
