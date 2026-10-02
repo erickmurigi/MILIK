@@ -3,6 +3,7 @@ import { useTabState } from '../../hooks/useTabState';
 import { useDispatch, useSelector } from 'react-redux';
 import AppSelect from '../../components/common/AppSelect';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
+import ListToolbar from '../../components/common/ListToolbar';
 import MilikTable from '../../components/common/MilikTable';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties } from '../../redux/selectors';
 import { getMRITaxSummaryReport } from '../../redux/apiCalls';
@@ -299,9 +300,9 @@ const MRITaxSummaryReport = () => {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 
             {/* Filter bar */}
-            <div className="filter-bar sticky top-0 z-30 flex-shrink-0 flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
-              <input type="date" value={filters.startDate} onChange={setFilter("startDate")} className="h-7 shrink-0 w-32 rounded border border-slate-200 bg-white px-2 text-xs transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-              <input type="date" value={filters.endDate} onChange={setFilter("endDate")} className="h-7 shrink-0 w-32 rounded border border-slate-200 bg-white px-2 text-xs transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+            <ListToolbar>
+              <ListToolbar.Input type="date" width="w-32" value={filters.startDate} onChange={setFilter("startDate")} />
+              <ListToolbar.Input type="date" width="w-32" value={filters.endDate} onChange={setFilter("endDate")} />
               <AppSelect
                 value={filters.propertyId}
                 onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))}
@@ -309,15 +310,17 @@ const MRITaxSummaryReport = () => {
                 placeholder={`All ${termProperty}s`}
                 searchable
                 clearable
-                size="sm"
+                compact
                 className="shrink-0 w-40"
               />
-              <div className="ml-auto flex shrink-0 items-center gap-1.5">
-                <button onClick={handleExportCSV} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaFileDownload /> Export CSV</button>
-                <button onClick={handlePrint} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaPrint /> Print</button>
-                <button onClick={loadReport} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaSyncAlt className={loading ? 'animate-spin' : ''} /> Refresh</button>
+              <div className="ml-auto flex shrink-0 items-center gap-0.5">
+                <ListToolbar.Button icon={FaFileDownload} variant="outline" onClick={handleExportCSV} disabled={!canExportReports}>Export CSV</ListToolbar.Button>
+                <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrint} disabled={!canExportReports}>Print</ListToolbar.Button>
+                <ListToolbar.Button variant="outline" onClick={loadReport}>
+                  <FaSyncAlt size={7} className={loading ? 'animate-spin' : ''} /> Refresh
+                </ListToolbar.Button>
               </div>
-            </div>
+            </ListToolbar>
 
             {/* Info banner */}
             <div className="flex-shrink-0 border-b border-amber-100 bg-amber-50 px-3 py-2 text-[10px] text-amber-800">

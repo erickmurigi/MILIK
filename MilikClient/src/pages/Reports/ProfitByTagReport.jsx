@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import { FaSyncAlt } from "react-icons/fa";
 import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import ListToolbar from "../../components/common/ListToolbar";
 import MilikTable from "../../components/common/MilikTable";
 import { useTabState } from "../../hooks/useTabState";
 import { getTagSummaryReport } from "../../redux/apiCalls";
@@ -14,7 +15,6 @@ import { hasCompanyModule } from "../../utils/companyModules";
 // the company has them). Only tagged lines count, so a tag with nothing posted to it simply does not appear.
 const fmt = (v) => Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-const inputCls = "h-7 rounded border border-slate-200 bg-white px-2 text-xs outline-none focus:border-[#0B3B2E]";
 
 const ProfitByTagReport = () => {
   const company = useSelector(selectCurrentCompany);
@@ -57,16 +57,16 @@ const ProfitByTagReport = () => {
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
-        <div className="filter-bar flex flex-none items-center gap-2 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2.5">
-          <h1 className="mr-3 shrink-0 text-sm font-black text-slate-900">Profit by tag</h1>
-          <AppSelect value={by} onChange={(v) => setBy(v || "costCentre")} options={groupOptions} size="sm" className="shrink-0" />
-          <input type="date" value={startDate} max={endDate} onChange={(e) => setStartDate(e.target.value)} className={`${inputCls} shrink-0`} />
-          <span className="shrink-0 text-xs text-slate-400">to</span>
-          <input type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} className={`${inputCls} shrink-0`} />
-          <button type="button" onClick={load} disabled={loading} className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-            <FaSyncAlt size={10} className={loading ? "animate-spin" : ""} /> Refresh
-          </button>
-        </div>
+        <ListToolbar>
+          <h1 className="mr-3 shrink-0 text-xs font-black text-slate-900">Profit by tag</h1>
+          <AppSelect value={by} onChange={(v) => setBy(v || "costCentre")} options={groupOptions} compact className="shrink-0" />
+          <ListToolbar.Input type="date" value={startDate} max={endDate} onChange={(e) => setStartDate(e.target.value)} />
+          <span className="shrink-0 text-[9px] text-slate-400">to</span>
+          <ListToolbar.Input type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} />
+          <ListToolbar.Button variant="outline" onClick={load} disabled={loading}>
+            <FaSyncAlt size={7} className={loading ? "animate-spin" : ""} /> Refresh
+          </ListToolbar.Button>
+        </ListToolbar>
 
         <div className="min-h-0 flex-1 overflow-hidden p-3 flex flex-col">
           <div className="min-h-0 flex-1 border border-slate-200 bg-white shadow-sm flex flex-col overflow-hidden">
