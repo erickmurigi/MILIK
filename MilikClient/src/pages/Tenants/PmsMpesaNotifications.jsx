@@ -18,6 +18,7 @@ import { toast } from "react-toastify";
 import { adminRequests } from "../../utils/requestMethods";
 import { selectCurrentCompany } from "../../redux/selectors";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import ListToolbar from "../../components/common/ListToolbar";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
@@ -921,59 +922,49 @@ export default function PmsMpesaNotifications() {
         </div>
 
         {/* Filter bar */}
-        <form onSubmit={apply} className="shrink-0 flex items-center gap-0.5 overflow-x-auto border-b border-slate-200 bg-white px-2 py-1">
-          <AppSelect
-            value={filters.status}
-            onChange={(v) => setFilters(p => ({ ...p, status: v ?? "" }))}
-            options={STATUS_FILTER_OPTIONS}
-            placeholder="All statuses"
-            clearable
-            compact
-          />
-          {paybills.length > 1 && (
+        <form onSubmit={apply}>
+          <ListToolbar>
             <AppSelect
-              value={filters.shortCode}
-              onChange={(v) => setFilters(p => ({ ...p, shortCode: v ?? "" }))}
-              options={paybillOptions}
-              placeholder="All paybills"
-              searchable
+              value={filters.status}
+              onChange={(v) => setFilters(p => ({ ...p, status: v ?? "" }))}
+              options={STATUS_FILTER_OPTIONS}
+              placeholder="All statuses"
               clearable
               compact
             />
-          )}
-          <input
-            className="h-[20px] border border-slate-300 px-1.5 text-[9px] font-semibold text-slate-700 placeholder:font-normal focus:border-[#0B3B2E] focus:outline-none"
-            placeholder="Account ref / tenant code"
-            value={filters.ref} onChange={e => setFilters(p => ({ ...p, ref: e.target.value }))} />
-          <div className="relative flex items-center">
-            <FaSearch size={9} className="pointer-events-none absolute left-2 text-slate-400" />
-            <input
-              className="h-[20px] w-40 border border-slate-300 pl-6 pr-2 text-[9px] font-semibold text-slate-700 placeholder:font-normal focus:border-[#0B3B2E] focus:outline-none"
-              placeholder="Txn ID or payer name"
-              value={filters.search} onChange={e => setFilters(p => ({ ...p, search: e.target.value }))} />
-          </div>
-          <input type="date" value={filters.dateFrom} onChange={e => setFilters(p => ({ ...p, dateFrom: e.target.value }))}
-            className="h-[20px] w-[5.5rem] border border-slate-300 px-1 text-[9px] font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none" />
-          <span className="text-[9px] font-bold text-slate-400">→</span>
-          <input type="date" value={filters.dateTo} onChange={e => setFilters(p => ({ ...p, dateTo: e.target.value }))}
-            className="h-[20px] w-[5.5rem] border border-slate-300 px-1 text-[9px] font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none" />
-          <button type="submit" className="inline-flex h-[20px] items-center gap-0.5 bg-[#FF8C00] px-1.5 text-[9px] font-bold text-white hover:bg-[#E67E00]">
-            <FaSearch size={7} /> Search
-          </button>
-          <button type="button" onClick={reset} className="inline-flex h-[20px] items-center gap-0.5 bg-[#0B3B2E] px-1.5 text-[9px] font-bold text-white hover:bg-[#0A3127]">
-            <FaRedoAlt size={7} /> Reset
-          </button>
-          <div className="ml-auto flex items-center gap-2">
-            <button type="button" onClick={() => setShowUpload(true)}
-              className="inline-flex h-[20px] items-center gap-0.5 border border-slate-300 bg-white px-1.5 text-[9px] font-bold text-slate-700 hover:bg-slate-50">
-              <FaUpload size={7} /> Import
-            </button>
-            <button type="button" onClick={handlePrint} disabled={notifications.length === 0}
-              className="inline-flex h-[20px] items-center gap-0.5 border border-slate-300 bg-white px-1.5 text-[9px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40">
-              <FaPrint size={7} /> Print
-            </button>
-            <CountdownButton onRefresh={load} loading={loading} />
-          </div>
+            {paybills.length > 1 && (
+              <AppSelect
+                value={filters.shortCode}
+                onChange={(v) => setFilters(p => ({ ...p, shortCode: v ?? "" }))}
+                options={paybillOptions}
+                placeholder="All paybills"
+                searchable
+                clearable
+                compact
+              />
+            )}
+            <ListToolbar.Input
+              placeholder="Account ref / tenant code"
+              value={filters.ref} onChange={e => setFilters(p => ({ ...p, ref: e.target.value }))} />
+            <div className="relative flex items-center">
+              <FaSearch size={8} className="pointer-events-none absolute left-1.5 text-slate-400" />
+              <ListToolbar.Input
+                width="w-40"
+                className="pl-5"
+                placeholder="Txn ID or payer name"
+                value={filters.search} onChange={e => setFilters(p => ({ ...p, search: e.target.value }))} />
+            </div>
+            <ListToolbar.Input type="date" value={filters.dateFrom} onChange={e => setFilters(p => ({ ...p, dateFrom: e.target.value }))} />
+            <span className="text-[9px] font-bold text-slate-400">→</span>
+            <ListToolbar.Input type="date" value={filters.dateTo} onChange={e => setFilters(p => ({ ...p, dateTo: e.target.value }))} />
+            <ListToolbar.Button icon={FaSearch} variant="accent" type="submit">Search</ListToolbar.Button>
+            <ListToolbar.Button icon={FaRedoAlt} type="button" onClick={reset}>Reset</ListToolbar.Button>
+            <div className="ml-auto flex items-center gap-2">
+              <ListToolbar.Button icon={FaUpload} variant="outline" type="button" onClick={() => setShowUpload(true)}>Import</ListToolbar.Button>
+              <ListToolbar.Button icon={FaPrint} variant="outline" type="button" onClick={handlePrint} disabled={notifications.length === 0}>Print</ListToolbar.Button>
+              <CountdownButton onRefresh={load} loading={loading} />
+            </div>
+          </ListToolbar>
         </form>
 
         {/* Table area */}
