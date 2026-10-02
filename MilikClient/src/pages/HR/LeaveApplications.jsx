@@ -8,6 +8,7 @@ import {
 } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import AppSelect from '../../components/common/AppSelect';
+import ListToolbar from '../../components/common/ListToolbar';
 import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
@@ -250,41 +251,31 @@ export default function LeaveApplications() {
         </div>
 
         {/* Filters */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-2 py-1.5">
-          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto">
-            <div className="flex shrink-0 items-center gap-1">
-              {STATUS_TABS.map((tab) => (
-                <button
-                  key={tab.value}
-                  type="button"
-                  onClick={() => setStatusFilter(tab.value)}
-                  className={`h-7 shrink-0 rounded px-2.5 text-[11px] font-semibold transition-colors ${
-                    statusFilter === tab.value
-                      ? 'bg-[#0B3B2E] text-white'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+        <ListToolbar>
+          {STATUS_TABS.map((tab) => (
+            <ListToolbar.Button
+              key={tab.value}
+              type="button"
+              variant={statusFilter === tab.value ? 'primary' : 'outline'}
+              onClick={() => setStatusFilter(tab.value)}
+            >
+              {tab.label}
+            </ListToolbar.Button>
+          ))}
 
-            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+          <ListToolbar.Divider />
 
-            <div className="shrink-0">
-              <AppSelect
-                value={typeFilter}
-                onChange={(v) => setTypeFilter(v ?? '')}
-                options={leaveTypes.map((l) => ({ value: l._id, label: l.name }))}
-                placeholder="All leave types"
-                clearable
-                size="sm"
-              />
-            </div>
+          <AppSelect
+            value={typeFilter}
+            onChange={(v) => setTypeFilter(v ?? '')}
+            options={leaveTypes.map((l) => ({ value: l._id, label: l.name }))}
+            placeholder="All leave types"
+            clearable
+            compact
+          />
 
-            <span className="ml-auto shrink-0 whitespace-nowrap text-[10px] font-semibold text-slate-400">{total} result{total !== 1 ? 's' : ''}</span>
-          </div>
-        </div>
+          <span className="ml-auto shrink-0 whitespace-nowrap pl-2 text-[9px] font-semibold text-slate-400">{total} result{total !== 1 ? 's' : ''}</span>
+        </ListToolbar>
 
         {/* Table */}
         <MilikTable
