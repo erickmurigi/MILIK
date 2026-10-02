@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux';
 import { useQuery } from '@tanstack/react-query';
 import { FaSearch, FaRedoAlt, FaPrint, FaChartBar } from 'react-icons/fa';
 import AppSelect from "../../components/common/AppSelect";
+import ListToolbar from "../../components/common/ListToolbar";
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import MilikTable from '../../components/common/MilikTable';
 import { selectCurrentCompany } from '../../redux/selectors';
@@ -16,7 +17,6 @@ const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June',
 const thisYear  = new Date().getFullYear();
 const thisMonth = new Date().getMonth() + 1;
 const yearOpts  = Array.from({ length: 4 }, (_, i) => thisYear - i);
-const F = 'h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]';
 
 const fmtHr = (h) => `${h.toFixed(1)}h`;
 const pctColor = (p) => p >= 90 ? 'text-emerald-700' : p >= 70 ? 'text-amber-600' : 'text-rose-600';
@@ -97,53 +97,43 @@ export default function HRReportAttendance() {
       <div className="flex h-full flex-col overflow-hidden">
 
         {/* Toolbar */}
-        <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
-          <div className="filter-bar flex items-center gap-1 overflow-x-auto px-2 py-1.5">
-            <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-emerald-700">Attendance Report</span>
-            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-            <AppSelect
-              value={month}
-              onChange={(v) => setMonth(v ?? String(thisMonth))}
-              options={MONTHS.slice(1).map((m, i) => ({ value: String(i + 1), label: m }))}
-              size="sm"
-            />
-            <AppSelect
-              value={year}
-              onChange={(v) => setYear(v ?? String(thisYear))}
-              options={yearOpts.map((y) => ({ value: String(y), label: String(y) }))}
-              size="sm"
-            />
-            <button
-              onClick={() => setCommitted({ month, year })}
-              className="flex h-7 shrink-0 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]"
-            >
-              <FaChartBar size={9} /> Generate
-            </button>
-            {rows.length > 0 && (
-              <div className="relative shrink-0">
-                <FaSearch size={9} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Filter by name…" className={`${F} w-36 pl-7`} />
-              </div>
-            )}
-            {data && rows.length > 0 && (
-              <>
-                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-                <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">Working days {workingDays}</span>
-                <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold ${avgAttPct >= 90 ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : avgAttPct >= 70 ? 'border-amber-200 bg-amber-50 text-amber-600' : 'border-rose-200 bg-rose-50 text-rose-600'}`}>Avg attendance {avgAttPct}%</span>
-                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Present days {totalPresent}</span>
-                <span className="shrink-0 rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[9px] font-bold text-rose-600">Absent days {totalAbsent}</span>
-                <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">Hours {totalHours.toFixed(0)}h</span>
-              </>
-            )}
-            <span className="shrink-0 text-[10px] text-slate-400">{filtered.length} employee{filtered.length !== 1 ? 's' : ''}</span>
-            {rows.length > 0 && (
-              <button onClick={handlePrint} className="ml-auto flex h-7 shrink-0 items-center gap-1 rounded border border-slate-200 px-2.5 text-xs font-semibold text-slate-500 hover:bg-slate-50">
-                <FaPrint size={9} /> Print
-              </button>
-            )}
-          </div>
-        </div>
+        <ListToolbar>
+          <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-emerald-700">Attendance Report</span>
+          <ListToolbar.Divider />
+          <AppSelect
+            value={month}
+            onChange={(v) => setMonth(v ?? String(thisMonth))}
+            options={MONTHS.slice(1).map((m, i) => ({ value: String(i + 1), label: m }))}
+            compact
+          />
+          <AppSelect
+            value={year}
+            onChange={(v) => setYear(v ?? String(thisYear))}
+            options={yearOpts.map((y) => ({ value: String(y), label: String(y) }))}
+            compact
+          />
+          <ListToolbar.Button icon={FaChartBar} onClick={() => setCommitted({ month, year })}>Generate</ListToolbar.Button>
+          {rows.length > 0 && (
+            <div className="relative shrink-0">
+              <FaSearch size={8} className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <ListToolbar.Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filter by name…" width="w-36" className="pl-5" />
+            </div>
+          )}
+          {data && rows.length > 0 && (
+            <>
+              <ListToolbar.Divider />
+              <span className="shrink-0 border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">Working days {workingDays}</span>
+              <span className={`shrink-0 border px-1.5 py-0.5 text-[9px] font-bold ${avgAttPct >= 90 ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : avgAttPct >= 70 ? 'border-amber-200 bg-amber-50 text-amber-600' : 'border-rose-200 bg-rose-50 text-rose-600'}`}>Avg attendance {avgAttPct}%</span>
+              <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Present days {totalPresent}</span>
+              <span className="shrink-0 border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[9px] font-bold text-rose-600">Absent days {totalAbsent}</span>
+              <span className="shrink-0 border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">Hours {totalHours.toFixed(0)}h</span>
+            </>
+          )}
+          <span className="shrink-0 text-[9px] text-slate-400">{filtered.length} employee{filtered.length !== 1 ? 's' : ''}</span>
+          {rows.length > 0 && (
+            <ListToolbar.Button icon={FaPrint} variant="outline" className="ml-auto" onClick={handlePrint}>Print</ListToolbar.Button>
+          )}
+        </ListToolbar>
 
         {/* Table */}
         <div className="min-h-0 flex-1 overflow-hidden flex flex-col">
