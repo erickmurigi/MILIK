@@ -9,6 +9,7 @@ import {
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import ListToolbar from "../../components/common/ListToolbar";
 import StatusBadge from "../../components/common/StatusBadge";
 import { fmtDateTime } from "../../utils/dates";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
@@ -1126,60 +1127,57 @@ export default function CarWashMpesaNotifications() {
       </div>
 
       {/* Filters */}
-      <form onSubmit={apply} className="mb-2 flex flex-wrap items-center gap-2 border border-slate-200 bg-white p-2 shadow-sm">
-        <AppSelect
-          value={filters.status}
-          onChange={(v) => setFilters(p => ({ ...p, status: v ?? "" }))}
-          options={Object.entries(STATUS_META).map(([k, v]) => ({ value: k, label: v.label }))}
-          placeholder="All statuses"
-          size="sm"
-          clearable
-        />
-        {paybills.length > 1 && (
+      <form onSubmit={apply} className="mb-2">
+        <ListToolbar>
           <AppSelect
-            value={filters.shortCode}
-            onChange={(v) => setFilters(p => ({ ...p, shortCode: v ?? "" }))}
-            options={paybills.map((pb) => ({ value: pb.shortCode, label: `${pb.name || pb.shortCode} (${pb.shortCode})` }))}
-            placeholder="All paybills"
-            size="sm"
+            value={filters.status}
+            onChange={(v) => setFilters(p => ({ ...p, status: v ?? "" }))}
+            options={Object.entries(STATUS_META).map(([k, v]) => ({ value: k, label: v.label }))}
+            placeholder="All statuses"
+            compact
             clearable
           />
-        )}
-        <input
-          className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none uppercase placeholder:normal-case"
-          placeholder="Plate (e.g. KBY 578D)"
-          value={filters.plate}
-          onChange={e => setFilters(p => ({ ...p, plate: e.target.value.toUpperCase() }))}
-        />
-        <div className="relative flex items-center">
-          <FaSearch size={9} className="pointer-events-none absolute left-2 text-slate-400" />
-          <input
-            className="h-8 w-52 border border-slate-300 pl-6 pr-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none placeholder:font-normal placeholder:normal-case"
-            placeholder="Txn ID or sender name"
-            value={filters.search}
-            onChange={e => setFilters(p => ({ ...p, search: e.target.value }))}
-          />
-          {filters.search && (
-            <button type="button" onClick={() => setFilters(p => ({ ...p, search: "" }))}
-              className="absolute right-1.5 text-slate-400 hover:text-slate-600">
-              <FaTimesCircle size={11} />
-            </button>
+          {paybills.length > 1 && (
+            <AppSelect
+              value={filters.shortCode}
+              onChange={(v) => setFilters(p => ({ ...p, shortCode: v ?? "" }))}
+              options={paybills.map((pb) => ({ value: pb.shortCode, label: `${pb.name || pb.shortCode} (${pb.shortCode})` }))}
+              placeholder="All paybills"
+              compact
+              clearable
+            />
           )}
-        </div>
-        <input type="date" className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.dateFrom} onChange={e => setFilters(p => ({ ...p, dateFrom: e.target.value }))} title="From" />
-        <span className="text-xs text-slate-400 font-bold">→</span>
-        <input type="date" className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.dateTo} onChange={e => setFilters(p => ({ ...p, dateTo: e.target.value }))} title="To" />
-        <button type="submit" className="inline-flex h-8 items-center gap-1.5 bg-[#FF8C00] px-4 text-xs font-bold text-white hover:bg-[#E67E00]">
-          <FaSearch size={10} /> Search
-        </button>
-        <button type="button" onClick={reset} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127]">
-          <FaRedoAlt size={10} /> Reset
-        </button>
-        <span className="ml-auto text-[11px] font-semibold text-slate-500">
-          {pagination.total} notification{pagination.total !== 1 ? "s" : ""}
-        </span>
+          <ListToolbar.Input
+            placeholder="Plate (e.g. KBY 578D)"
+            value={filters.plate}
+            onChange={e => setFilters(p => ({ ...p, plate: e.target.value.toUpperCase() }))}
+            className="uppercase placeholder:normal-case"
+          />
+          <div className="relative shrink-0">
+            <FaSearch size={8} className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <ListToolbar.Input
+              width="w-52"
+              placeholder="Txn ID or sender name"
+              value={filters.search}
+              onChange={e => setFilters(p => ({ ...p, search: e.target.value }))}
+              className="pl-5 pr-6"
+            />
+            {filters.search && (
+              <button type="button" onClick={() => setFilters(p => ({ ...p, search: "" }))}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <FaTimesCircle size={10} />
+              </button>
+            )}
+          </div>
+          <ListToolbar.Input type="date" value={filters.dateFrom} onChange={e => setFilters(p => ({ ...p, dateFrom: e.target.value }))} title="From" />
+          <span className="shrink-0 text-[9px] text-slate-400">→</span>
+          <ListToolbar.Input type="date" value={filters.dateTo} onChange={e => setFilters(p => ({ ...p, dateTo: e.target.value }))} title="To" />
+          <ListToolbar.Button icon={FaSearch} variant="accent" type="submit">Search</ListToolbar.Button>
+          <ListToolbar.Button icon={FaRedoAlt} type="button" onClick={reset}>Reset</ListToolbar.Button>
+          <span className="ml-auto shrink-0 pl-2 text-[9px] font-semibold text-slate-500">
+            {pagination.total} notification{pagination.total !== 1 ? "s" : ""}
+          </span>
+        </ListToolbar>
       </form>
 
       {/* Table */}
