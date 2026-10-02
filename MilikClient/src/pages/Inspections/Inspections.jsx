@@ -35,6 +35,7 @@ import { useConfirm } from "../../context/ConfirmContext";
 import { fmtDate } from "../../utils/dates";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
+import ListToolbar from '../../components/common/ListToolbar';
 
 const DEFAULT_PAGE_SIZE = 25;
 
@@ -426,18 +427,18 @@ const Inspections = () => {
         </div>
 
         {/* Filter bar */}
-        <div className="shrink-0 flex items-center gap-0.5 overflow-x-auto border-b border-slate-200 bg-white px-2 py-1">
-          <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search inspections…" className="h-[20px] w-40 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:border-[#0B3B2E]" />
+        <ListToolbar>
+          <ListToolbar.Input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search inspections…" width="w-40" />
           <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? "")} options={STATUS_OPTIONS} placeholder="All statuses" clearable compact />
           <AppSelect value={typeFilter} onChange={(v) => setTypeFilter(v ?? "")} options={TYPE_OPTIONS} placeholder="All types" clearable compact />
-          <button onClick={() => { setSearchTerm(""); setStatusFilter(""); setTypeFilter(""); }} className="inline-flex h-[20px] items-center gap-0.5 border border-slate-200 bg-white px-1.5 text-[9px] font-semibold text-slate-600 hover:bg-slate-50"><FaFilter size={7} /> Reset</button>
-          <button onClick={loadInspections} className="inline-flex h-[20px] items-center gap-0.5 border border-slate-200 bg-white px-1.5 text-[9px] text-slate-600 hover:bg-slate-50"><FaRedoAlt size={7} /> Refresh</button>
-          <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-          <button onClick={exportCsv} className="inline-flex h-[20px] items-center gap-0.5 border border-slate-200 bg-white px-1.5 text-[9px] font-semibold text-slate-700 hover:bg-slate-50"><FaDownload size={7} /> CSV</button>
+          <ListToolbar.Button icon={FaFilter} variant="outline" onClick={() => { setSearchTerm(""); setStatusFilter(""); setTypeFilter(""); }}>Reset</ListToolbar.Button>
+          <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={loadInspections}>Refresh</ListToolbar.Button>
+          <ListToolbar.Divider />
+          <ListToolbar.Button icon={FaDownload} variant="outline" onClick={exportCsv}>CSV</ListToolbar.Button>
           {canCreate && (
-            <button onClick={openCreateModal} className="inline-flex h-[20px] items-center gap-0.5 bg-[#0B3B2E] px-1.5 text-[9px] font-black text-white hover:bg-[#0A3127]"><FaPlus size={7} /> Schedule Inspection</button>
+            <ListToolbar.Button icon={FaPlus} onClick={openCreateModal}>Schedule Inspection</ListToolbar.Button>
           )}
-        </div>
+        </ListToolbar>
 
         {/* Table */}
         <MilikTable
