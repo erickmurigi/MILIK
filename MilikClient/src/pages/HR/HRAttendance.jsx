@@ -6,6 +6,7 @@ import {
 } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import AppSelect from '../../components/common/AppSelect';
+import ListToolbar from '../../components/common/ListToolbar';
 import PaginationBar from "../../components/PaginationBar";
 import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
 import { adminRequests } from '../../utils/requestMethods';
@@ -212,38 +213,29 @@ export default function HRAttendance() {
       <div className="flex h-full flex-col overflow-hidden">
 
         {/* Toolbar */}
-        <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
-          <div className="filter-bar flex items-center gap-1 overflow-x-auto px-2 py-1.5">
-            <span className="shrink-0 text-[9px] font-extrabold uppercase tracking-widest text-[#0B3B2E]">Attendance</span>
-            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-            <AppSelect value={empFilter} onChange={(v) => { setEmpFilter(v ?? ""); setPage(1); }} options={employees.map((e) => ({ value: e._id, label: `${e.surname} ${e.otherNames}` }))} placeholder="All employees" clearable searchable size="sm" />
-            <AppSelect value={monthFilter} onChange={(v) => { setMonthFilter(v ?? ""); setPage(1); }} options={MONTH_OPTIONS} placeholder="All months" clearable size="sm" />
-            <AppSelect value={yearFilter} onChange={(v) => { setYearFilter(v ?? String(thisYear)); setPage(1); }} options={YEAR_OPTIONS} size="sm" />
-            <div className="relative shrink-0">
-              <FaSearch size={10} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name…"
-                className={`${F} h-7 w-36 pl-7`} />
-            </div>
-            {records.length > 0 && (
-              <>
-                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-                <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">Shown {records.length}</span>
-                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Out {present}</span>
-                <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-600">Still in {absent}</span>
-                <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">Avg {fmtDur(Math.round(avgDur))}</span>
-              </>
-            )}
-            <span className="shrink-0 text-[10px] text-slate-400">{total} record{total !== 1 ? 's' : ''}</span>
-            <div className="ml-auto flex shrink-0 items-center gap-1.5">
-              <button onClick={refetch} className="flex h-7 items-center gap-1 rounded border border-slate-200 px-2.5 text-xs font-semibold text-slate-500 hover:bg-slate-50">
-                <FaRedoAlt size={9} /> Refresh
-              </button>
-              <button onClick={() => setModal('add')} className="flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0a3127]">
-                <FaPlus size={9} /> Add Record
-              </button>
-            </div>
+        <ListToolbar>
+          <span className="shrink-0 text-[9px] font-extrabold uppercase tracking-widest text-[#0B3B2E]">Attendance</span>
+          <ListToolbar.Divider />
+          <AppSelect value={empFilter} onChange={(v) => { setEmpFilter(v ?? ""); setPage(1); }} options={employees.map((e) => ({ value: e._id, label: `${e.surname} ${e.otherNames}` }))} placeholder="All employees" clearable searchable compact />
+          <AppSelect value={monthFilter} onChange={(v) => { setMonthFilter(v ?? ""); setPage(1); }} options={MONTH_OPTIONS} placeholder="All months" clearable compact />
+          <AppSelect value={yearFilter} onChange={(v) => { setYearFilter(v ?? String(thisYear)); setPage(1); }} options={YEAR_OPTIONS} compact />
+          <div className="relative shrink-0">
+            <FaSearch size={8} className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <ListToolbar.Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name…" width="w-36" className="pl-5" />
           </div>
-        </div>
+          {records.length > 0 && (
+            <>
+              <ListToolbar.Divider />
+              <span className="shrink-0 border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">Shown {records.length}</span>
+              <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Out {present}</span>
+              <span className="shrink-0 border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-600">Still in {absent}</span>
+              <span className="shrink-0 border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">Avg {fmtDur(Math.round(avgDur))}</span>
+            </>
+          )}
+          <span className="shrink-0 text-[9px] text-slate-400">{total} record{total !== 1 ? 's' : ''}</span>
+          <ListToolbar.Button icon={FaRedoAlt} variant="outline" className="ml-auto" onClick={refetch}>Refresh</ListToolbar.Button>
+          <ListToolbar.Button icon={FaPlus} onClick={() => setModal('add')}>Add Record</ListToolbar.Button>
+        </ListToolbar>
 
         {/* Table */}
         <MilikTable
