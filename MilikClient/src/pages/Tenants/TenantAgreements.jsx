@@ -35,6 +35,7 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import ListToolbar from "../../components/common/ListToolbar";
 import { useConfirm } from "../../context/ConfirmContext";
 import { adminRequests } from "../../utils/requestMethods";
 import { getTenants } from "../../redux/tenantsRedux";
@@ -666,67 +667,70 @@ const TenantAgreements = () => {
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 p-0">
-        <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-          <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
-            <span className="shrink-0 text-[10px] font-bold text-gray-500">Total <span className="text-gray-900">{summary.total}</span></span>
-            <span className="shrink-0 border border-green-200 bg-green-50 px-1 py-0.5 text-[8px] font-bold text-green-700">Active: {summary.active}</span>
-            <span className="shrink-0 border border-amber-200 bg-amber-50 px-1 py-0.5 text-[8px] font-bold text-amber-700">Expiring: {summary.expiring}</span>
-            <span className="shrink-0 border border-slate-200 bg-slate-50 px-1 py-0.5 text-[8px] font-bold text-slate-600">Pending: {summary.pending}</span>
-            {missingCount > 0 && (
-              <span className="shrink-0 border border-red-300 bg-red-50 px-1 py-0.5 text-[8px] font-bold text-red-700">
-                {missingCount} {termTenant.toLowerCase()}{missingCount !== 1 ? "s" : ""} missing agreement
-              </span>
-            )}
-            {selectedAgreements.length > 0 && (
-              <>
-                <span className="shrink-0 border border-blue-200 bg-blue-50 px-1 py-0.5 text-[8px] font-bold text-blue-700">{selectedAgreements.length} selected</span>
-                <button onClick={handleBulkDelete} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-red-600 px-1.5 text-[9px] font-medium text-white shadow-sm hover:bg-red-700">
-                  <FaTrash size={7} /> Delete ({selectedAgreements.length})
-                </button>
-              </>
-            )}
-            <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-            <button onClick={expandAllAgreements} className="h-[20px] shrink-0 flex items-center gap-0.5 p-1 text-[9px] text-gray-700 hover:bg-gray-200" title="Expand all"><FaExpandAlt size={7} /> Expand</button>
-            <button onClick={collapseAllAgreements} className="h-[20px] shrink-0 flex items-center gap-0.5 p-1 text-[9px] text-gray-700 hover:bg-gray-200" title="Collapse all"><FaCompressAlt size={7} /> Collapse</button>
-            <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-            <AppSelect
-              compact
-              clearable
-              placeholder={termProperty}
-              value={draftFilters.property}
-              onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "any" }))}
-              options={uniquePropertyOptions}
-            />
-            <AppSelect
-              compact
-              clearable
-              placeholder="Status"
-              value={draftFilters.status}
-              onChange={(v) => setDraftFilters((prev) => ({ ...prev, status: v ?? "any" }))}
-              options={AGREEMENT_STATUS_SELECT_OPTIONS}
-            />
-            <label className="h-[20px] shrink-0 inline-flex items-center gap-1.5 border border-slate-200 bg-white px-1.5 text-[9px] text-gray-800 hover:bg-white cursor-pointer">
-              <input type="checkbox" checked={draftFilters.expiringOnly} onChange={(event) => setDraftFilters((prev) => ({ ...prev, expiringOnly: event.target.checked }))} className="rounded border-gray-300 text-orange-600 focus:ring-[#0B3B2E]/20" />
-              Expiring 30d
-            </label>
-            <input type="text" value={draftFilters.search} onChange={(event) => setDraftFilters((prev) => ({ ...prev, search: normalizeUppercaseInput(event.target.value) }))} placeholder="Search…" className="h-[20px] w-32 shrink-0 border border-gray-300 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-            <button onClick={handleSearchFilters} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-medium text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSearch size={7} /> Search</button>
-            <button onClick={handleResetFilters} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-gray-500 px-1.5 text-[9px] font-medium text-white shadow-sm hover:bg-gray-600"><FaRedoAlt size={7} /> Reset</button>
-            <button onClick={() => loadData()} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-medium text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSyncAlt size={7} /> Refresh</button>
-            {missingCount > 0 && (
-              <button
-                onClick={handleBackfillLeases}
-                disabled={backfilling}
-                title={`Create agreements for ${missingCount} ${termTenant.toLowerCase()}${missingCount !== 1 ? "s" : ""} that don't have one`}
-                className="h-[20px] shrink-0 flex items-center gap-0.5 bg-red-600 px-1.5 text-[9px] font-medium text-white shadow-sm hover:bg-red-700 disabled:opacity-60"
-              >
-                {backfilling ? <FaSyncAlt size={7} className="animate-spin" /> : <FaWrench size={7} />}
-                Fix {missingCount} missing
-              </button>
-            )}
-            <button onClick={() => selectedAgreements.length === 1 && openEditModal(sortedFilteredRows.find((row) => row.id === selectedAgreements[0]))} disabled={selectedAgreements.length !== 1} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-blue-500 px-1.5 text-[9px] font-medium text-white shadow-sm hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"><FaEdit size={7} /> Edit</button>
-          </div>
-        </div>
+        <ListToolbar>
+          <span className="shrink-0 text-[9px] font-bold text-gray-500">Total <span className="text-gray-900">{summary.total}</span></span>
+          <span className="shrink-0 border border-green-200 bg-green-50 px-1 py-0.5 text-[8px] font-bold text-green-700">Active: {summary.active}</span>
+          <span className="shrink-0 border border-amber-200 bg-amber-50 px-1 py-0.5 text-[8px] font-bold text-amber-700">Expiring: {summary.expiring}</span>
+          <span className="shrink-0 border border-slate-200 bg-slate-50 px-1 py-0.5 text-[8px] font-bold text-slate-600">Pending: {summary.pending}</span>
+          {missingCount > 0 && (
+            <span className="shrink-0 border border-red-300 bg-red-50 px-1 py-0.5 text-[8px] font-bold text-red-700">
+              {missingCount} {termTenant.toLowerCase()}{missingCount !== 1 ? "s" : ""} missing agreement
+            </span>
+          )}
+          {selectedAgreements.length > 0 && (
+            <>
+              <span className="shrink-0 border border-blue-200 bg-blue-50 px-1 py-0.5 text-[8px] font-bold text-blue-700">{selectedAgreements.length} selected</span>
+              <ListToolbar.Button icon={FaTrash} variant="danger" onClick={handleBulkDelete}>
+                Delete ({selectedAgreements.length})
+              </ListToolbar.Button>
+            </>
+          )}
+          <ListToolbar.Divider />
+          <ListToolbar.Button icon={FaExpandAlt} variant="outline" onClick={expandAllAgreements} title="Expand all">Expand</ListToolbar.Button>
+          <ListToolbar.Button icon={FaCompressAlt} variant="outline" onClick={collapseAllAgreements} title="Collapse all">Collapse</ListToolbar.Button>
+          <ListToolbar.Divider />
+          <AppSelect
+            compact
+            clearable
+            placeholder={termProperty}
+            value={draftFilters.property}
+            onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "any" }))}
+            options={uniquePropertyOptions}
+          />
+          <AppSelect
+            compact
+            clearable
+            placeholder="Status"
+            value={draftFilters.status}
+            onChange={(v) => setDraftFilters((prev) => ({ ...prev, status: v ?? "any" }))}
+            options={AGREEMENT_STATUS_SELECT_OPTIONS}
+          />
+          <label className="h-[20px] shrink-0 inline-flex items-center gap-1.5 border border-slate-200 bg-white px-1.5 text-[9px] text-gray-800 hover:bg-white cursor-pointer">
+            <input type="checkbox" checked={draftFilters.expiringOnly} onChange={(event) => setDraftFilters((prev) => ({ ...prev, expiringOnly: event.target.checked }))} className="rounded border-gray-300 text-orange-600 focus:ring-[#0B3B2E]/20" />
+            Expiring 30d
+          </label>
+          <ListToolbar.Input width="w-32" type="text" value={draftFilters.search} onChange={(event) => setDraftFilters((prev) => ({ ...prev, search: normalizeUppercaseInput(event.target.value) }))} placeholder="Search…" />
+          <ListToolbar.Button icon={FaSearch} onClick={handleSearchFilters}>Search</ListToolbar.Button>
+          <ListToolbar.Button icon={FaRedoAlt} variant="dark" onClick={handleResetFilters}>Reset</ListToolbar.Button>
+          <ListToolbar.Button icon={FaSyncAlt} onClick={() => loadData()}>Refresh</ListToolbar.Button>
+          {missingCount > 0 && (
+            <ListToolbar.Button
+              variant="danger"
+              onClick={handleBackfillLeases}
+              disabled={backfilling}
+              title={`Create agreements for ${missingCount} ${termTenant.toLowerCase()}${missingCount !== 1 ? "s" : ""} that don't have one`}
+            >
+              {backfilling ? <FaSyncAlt size={7} className="animate-spin" /> : <FaWrench size={7} />}
+              Fix {missingCount} missing
+            </ListToolbar.Button>
+          )}
+          <ListToolbar.Button
+            icon={FaEdit}
+            className="!bg-blue-500 hover:!bg-blue-600"
+            onClick={() => selectedAgreements.length === 1 && openEditModal(sortedFilteredRows.find((row) => row.id === selectedAgreements[0]))}
+            disabled={selectedAgreements.length !== 1}
+          >Edit</ListToolbar.Button>
+        </ListToolbar>
 
         <MilikTable
               columns={[
