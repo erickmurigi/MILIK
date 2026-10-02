@@ -9,6 +9,7 @@ import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 import AppSelect from "../../components/common/AppSelect";
+import ListToolbar from "../../components/common/ListToolbar";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
 import { fmtDate } from '../../utils/dates';
@@ -172,36 +173,30 @@ export default function AppraisalCycles() {
         </div>
 
         {/* ── Filter + stat bar ── */}
-        <div className="flex flex-none items-center gap-2 border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-          <span className="text-[11px] font-bold text-slate-600 tabular-nums whitespace-nowrap">{cycles.length} <span className="font-normal text-slate-400">total</span></span>
-          <span className="text-[11px] font-bold text-slate-500 tabular-nums whitespace-nowrap">{nDraft} <span className="font-normal text-slate-400">draft</span></span>
-          <span className="text-[11px] font-bold text-emerald-600 tabular-nums whitespace-nowrap">{nOpen} <span className="font-normal text-slate-400">open</span></span>
-          <span className="text-[11px] font-bold text-rose-500 tabular-nums whitespace-nowrap">{nClosed} <span className="font-normal text-slate-400">closed</span></span>
-          <div className="h-4 w-px bg-slate-300 mx-0.5" />
-          <AppSelect value={yearFilter} onChange={(v) => setYearFilter(v ?? "")} options={YEARS.map((y) => ({ value: y, label: String(y) }))} placeholder="All years" clearable size="sm" />
-          <div className="flex shrink-0 items-center gap-1">
-            {STATUS_TABS.map((tab) => (
-              <button
-                key={tab.value}
-                type="button"
-                onClick={() => setStatus(tab.value)}
-                className={`h-7 shrink-0 rounded px-2.5 text-[11px] font-semibold transition-colors ${
-                  statusFilter === tab.value
-                    ? 'bg-[#0B3B2E] text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+        <ListToolbar>
+          <span className="shrink-0 text-[9px] font-bold text-slate-600 tabular-nums whitespace-nowrap">{cycles.length} <span className="font-normal text-slate-400">total</span></span>
+          <span className="shrink-0 text-[9px] font-bold text-slate-500 tabular-nums whitespace-nowrap">{nDraft} <span className="font-normal text-slate-400">draft</span></span>
+          <span className="shrink-0 text-[9px] font-bold text-emerald-600 tabular-nums whitespace-nowrap">{nOpen} <span className="font-normal text-slate-400">open</span></span>
+          <span className="shrink-0 text-[9px] font-bold text-rose-500 tabular-nums whitespace-nowrap">{nClosed} <span className="font-normal text-slate-400">closed</span></span>
+          <ListToolbar.Divider />
+          <AppSelect value={yearFilter} onChange={(v) => setYearFilter(v ?? "")} options={YEARS.map((y) => ({ value: y, label: String(y) }))} placeholder="All years" clearable compact />
+          {STATUS_TABS.map((tab) => (
+            <ListToolbar.Button
+              key={tab.value}
+              type="button"
+              variant={statusFilter === tab.value ? 'primary' : 'outline'}
+              onClick={() => setStatus(tab.value)}
+            >
+              {tab.label}
+            </ListToolbar.Button>
+          ))}
           {(yearFilter || statusFilter) && (
-            <button onClick={() => { setYearFilter(''); setStatus(''); }} className="flex h-7 items-center gap-0.5 rounded border border-slate-200 bg-white px-2 text-[10px] text-slate-400 hover:text-slate-600">
-              <FaTimes size={8} /> Clear
-            </button>
+            <ListToolbar.Button icon={FaTimes} variant="outline" onClick={() => { setYearFilter(''); setStatus(''); }}>
+              Clear
+            </ListToolbar.Button>
           )}
-          <span className="ml-auto text-[10px] text-slate-400 whitespace-nowrap tabular-nums">{cycles.length} cycle{cycles.length !== 1 ? 's' : ''}</span>
-        </div>
+          <span className="ml-auto shrink-0 pl-2 text-[9px] text-slate-400 whitespace-nowrap tabular-nums">{cycles.length} cycle{cycles.length !== 1 ? 's' : ''}</span>
+        </ListToolbar>
 
         {/* ── Table ── */}
         <MilikTable
