@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { FaBan, FaEdit, FaPlus, FaPrint, FaRedoAlt, FaTimes } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterSearch, FilterDateRange } from "./SaleFilterBar";
+import ListToolbar from "../../components/common/ListToolbar";
 import PaginationBar from "../../components/PaginationBar";
 import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
 import AmountInput from "./AmountInput";
@@ -456,29 +457,24 @@ const SalePayments = () => {
       <SaleFilterBar
         leading={
           <>
-            <span className="shrink-0 font-mono text-[10px] font-black text-emerald-700">{fmtKES(totalCollected)}</span>
+            <span className="shrink-0 font-mono text-[9px] font-black text-emerald-700">{fmtKES(totalCollected)}</span>
             <span className="shrink-0 select-none text-slate-300">|</span>
-            <span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} payment{total !== 1 ? "s" : ""}</span>
+            <span className="shrink-0 font-mono text-[9px] font-black text-slate-500">{total} payment{total !== 1 ? "s" : ""}</span>
           </>
         }
         onReset={resetFilters}
         activeCount={[search, dealFilter, typeFilter, methodFilter, statusFilter, dateFrom, dateTo].filter(Boolean).length}
         trailing={
           <>
-            <button
-              type="button"
+            <ListToolbar.Button
+              variant="outline"
               onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-payments", biz] })}
-              className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
             >
-              <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowCreate(true)}
-              className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]"
-            >
-              <FaPlus size={9} /> Record Payment
-            </button>
+              <FaRedoAlt size={7} className={isFetching ? "animate-spin" : ""} /> Refresh
+            </ListToolbar.Button>
+            <ListToolbar.Button icon={FaPlus} onClick={() => setShowCreate(true)}>
+              Record Payment
+            </ListToolbar.Button>
           </>
         }
       >
@@ -488,10 +484,10 @@ const SalePayments = () => {
           placeholder="Receipt no. / buyer…"
           minWidth="130px"
         />
-        <AppSelect value={dealFilter} onChange={(v) => { setDealFilter(v ?? ""); setPage(1); }} options={dealFilterOptions} placeholder={`All ${T.saleDeals}`} clearable size="sm" searchable />
-        <AppSelect value={typeFilter} onChange={(v) => { setTypeFilter(v ?? ""); setPage(1); }} options={PAYMENT_TYPE_OPTIONS} placeholder="All Types" clearable size="sm" />
-        <AppSelect value={methodFilter} onChange={(v) => { setMethodFilter(v ?? ""); setPage(1); }} options={PAYMENT_METHOD_OPTIONS} placeholder="All Methods" clearable size="sm" />
-        <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
+        <AppSelect value={dealFilter} onChange={(v) => { setDealFilter(v ?? ""); setPage(1); }} options={dealFilterOptions} placeholder={`All ${T.saleDeals}`} clearable compact searchable />
+        <AppSelect value={typeFilter} onChange={(v) => { setTypeFilter(v ?? ""); setPage(1); }} options={PAYMENT_TYPE_OPTIONS} placeholder="All Types" clearable compact />
+        <AppSelect value={methodFilter} onChange={(v) => { setMethodFilter(v ?? ""); setPage(1); }} options={PAYMENT_METHOD_OPTIONS} placeholder="All Methods" clearable compact />
+        <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={STATUS_OPTIONS} placeholder="All Statuses" clearable compact />
         <FilterDateRange
           from={dateFrom} to={dateTo}
           onFromChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
