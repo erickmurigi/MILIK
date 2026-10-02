@@ -1,5 +1,5 @@
 import express from "express";
-import { requireCompanyModule, verifyUser, GL_ACCESS_MODULES } from "../../controllers/verifyToken.js";
+import { requireCompanyModule, requireCompanyPermission, verifyUser, GL_ACCESS_MODULES } from "../../controllers/verifyToken.js";
 import {
   getBalanceSheetReport,
   getCashFlowReport,
@@ -46,6 +46,6 @@ router.get("/tenant-summary", verifyUser, requireCompanyModule(GL_ACCESS_MODULES
 router.get("/rental-aged-analysis", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getRentalAgedAnalysisReport);
 
 // Year-end close — write operation, requires dedicated accounts module
-router.post("/year-end-close", verifyUser, requireCompanyModule("accounts"), performYearEndClose);
+router.post("/year-end-close", verifyUser, requireCompanyPermission("financialReports", "close", "accounts"), performYearEndClose);
 
 export default router;

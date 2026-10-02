@@ -1,5 +1,5 @@
 import express from "express";
-import { verifyUser } from "../../controllers/verifyToken.js";
+import { requireCompanyPermission, verifyUser } from "../../controllers/verifyToken.js";
 import {
   createLandlordStandingOrder,
   deleteLandlordStandingOrder,
@@ -13,13 +13,15 @@ import {
 
 const router = express.Router();
 
-router.get("/", verifyUser, getLandlordStandingOrders);
-router.post("/", verifyUser, createLandlordStandingOrder);
-router.post("/batch-run", verifyUser, runLandlordStandingOrdersBatch);
-router.put("/:id", verifyUser, updateLandlordStandingOrder);
-router.put("/:id/status", verifyUser, updateLandlordStandingOrderStatus);
-router.post("/:id/run", verifyUser, runLandlordStandingOrder);
-router.post("/:id/runs/:runId/reverse", verifyUser, reverseLandlordStandingOrderRun);
-router.delete("/:id", verifyUser, deleteLandlordStandingOrder);
+const can = (action) => requireCompanyPermission("standingOrders", action, "accounts");
+
+router.get("/", verifyUser, can("view"), getLandlordStandingOrders);
+router.post("/", verifyUser, can("create"), createLandlordStandingOrder);
+router.post("/batch-run", verifyUser, can("process"), runLandlordStandingOrdersBatch);
+router.put("/:id", verifyUser, can("update"), updateLandlordStandingOrder);
+router.put("/:id/status", verifyUser, can("update"), updateLandlordStandingOrderStatus);
+router.post("/:id/run", verifyUser, can("process"), runLandlordStandingOrder);
+router.post("/:id/runs/:runId/reverse", verifyUser, can("reverse"), reverseLandlordStandingOrderRun);
+router.delete("/:id", verifyUser, can("delete"), deleteLandlordStandingOrder);
 
 export default router;

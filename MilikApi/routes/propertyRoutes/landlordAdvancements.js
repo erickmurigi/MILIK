@@ -1,5 +1,5 @@
 import express from "express";
-import { verifyUser } from "../../controllers/verifyToken.js";
+import { requireCompanyPermission, verifyUser } from "../../controllers/verifyToken.js";
 import {
   cancelLandlordAdvancementRecovery,
   createLandlordAdvancement,
@@ -12,12 +12,14 @@ import {
 
 const router = express.Router();
 
-router.get("/", verifyUser, getLandlordAdvancements);
-router.post("/", verifyUser, createLandlordAdvancement);
-router.put("/:id", verifyUser, updateLandlordAdvancement);
-router.put("/:id/status", verifyUser, updateLandlordAdvancementStatus);
-router.post("/:id/recover", verifyUser, processLandlordAdvancementRecovery);
-router.post("/:id/recoveries/:recoveryId/cancel", verifyUser, cancelLandlordAdvancementRecovery);
-router.delete("/:id", verifyUser, deleteLandlordAdvancement);
+const can = (action) => requireCompanyPermission("landlordAdvancements", action, "accounts");
+
+router.get("/", verifyUser, can("view"), getLandlordAdvancements);
+router.post("/", verifyUser, can("create"), createLandlordAdvancement);
+router.put("/:id", verifyUser, can("update"), updateLandlordAdvancement);
+router.put("/:id/status", verifyUser, can("update"), updateLandlordAdvancementStatus);
+router.post("/:id/recover", verifyUser, can("process"), processLandlordAdvancementRecovery);
+router.post("/:id/recoveries/:recoveryId/cancel", verifyUser, can("reverse"), cancelLandlordAdvancementRecovery);
+router.delete("/:id", verifyUser, can("delete"), deleteLandlordAdvancement);
 
 export default router;

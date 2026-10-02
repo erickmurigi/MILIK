@@ -12,8 +12,8 @@ const RULES = [
   { prefix: "/api/financial-reports", resource: "financialReports", moduleKey: "accounts" },
   { prefix: "/api/payment-vouchers", resource: "paymentVouchers", moduleKey: "accounts" },
   { prefix: "/api/expense-requisitions", resource: "expenses", moduleKey: "accounts" },
-  { prefix: "/api/landlord-standing-orders", resource: "landlordPayments", moduleKey: "accounts" },
-  { prefix: "/api/landlord-advancements", resource: "landlordPayments", moduleKey: "accounts" },
+  { prefix: "/api/landlord-standing-orders", resource: "standingOrders", moduleKey: "accounts" },
+  { prefix: "/api/landlord-advancements", resource: "landlordAdvancements", moduleKey: "accounts" },
   { prefix: "/api/service-providers", resource: "expenses", moduleKey: "accounts" },
   { prefix: "/api/ledger", resource: "ledger", moduleKey: "accounts" },
   { prefix: "/api/landlord-payments", resource: "landlordPayments", moduleKey: "accounts" },
@@ -107,7 +107,7 @@ const resolveAction = (method = "GET", path = "") => {
   if (lowerPath.includes("/void")) return "reverse";
   if (lowerPath.includes("/remit")) return "process";
   if (lowerPath.includes("/reopen")) return "reverse";
-  if (lowerPath.includes("/close")) return "close";
+  if (lowerPath.includes("/close") || lowerPath.includes("-close")) return "close";
   if (lowerPath.includes("/lock")) return "lock";
   if (lowerPath.includes("/reactivate")) return "update";
   if (lowerPath.includes("/submit")) return "update";
@@ -117,6 +117,10 @@ const resolveAction = (method = "GET", path = "") => {
   if (lowerPath.includes("/reject")) return "approve";
   if (lowerPath.includes("/dispose")) return "dispose";
   if (method !== "GET" && lowerPath.includes("/depreciation")) return "depreciate";
+  // Checked before "/recover" — "/recoveries/.../cancel" contains "recover" as a
+  // substring, so cancel must win first or a cancellation would be misread as "process".
+  if (lowerPath.includes("/cancel")) return "reverse";
+  if (lowerPath.includes("/recover")) return "process";
   if (lowerPath.includes("/run") || lowerPath.includes("-run")) return "process";
 
   if (method === "GET") return lowerPath.includes("/summary") || lowerPath.includes("/stats") ? "view" : "view";
