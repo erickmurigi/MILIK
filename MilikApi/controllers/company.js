@@ -1196,7 +1196,7 @@ export const createCompany = async (req, res, next) => {
       City,
     } = req.body;
 
-    const identityFields = normalizeCompanyIdentityFields(req.body);
+    const identityFields = await normalizeCompanyIdentityFields(req.body);
 
     if (!companyName || !postalAddress) {
       return next(createError(400, "Company name and postal address are required"));
@@ -1457,7 +1457,7 @@ export const updateCompany = async (req, res, next) => {
       company.companyMode = normalizeCompanyOperatingMode(req.body.companyMode);
     }
 
-    const identityFields = normalizeCompanyIdentityFields(req.body);
+    const identityFields = await normalizeCompanyIdentityFields(req.body);
     Object.entries(identityFields).forEach(([key, value]) => {
       if (key === "unitTypes") {
         if (req.body.unitTypes !== undefined) {

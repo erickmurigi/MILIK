@@ -1,3 +1,37 @@
+import sharp from 'sharp';
+
+// Company logos are uploaded as raw data URIs with only a 1MB client-side size cap — unresized
+// phone-camera-resolution images land straight in Mongo and get re-fetched/re-rasterized by
+// Puppeteer on every single print for that company. A print-header logo never needs to be
+// bigger than this, so every save recompresses it once instead of paying that cost per print.
+const LOGO_MAX_WIDTH = 480;
+
+const compressLogoDataUrl = async (dataUrl) => {
+  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return dataUrl || '';
+  const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
+  if (!match) return dataUrl;
+
+  try {
+    const original = Buffer.from(match[2], 'base64');
+    const image = sharp(original, { failOn: 'none' }).rotate();
+    const metadata = await image.metadata();
+    const resized = image.resize({ width: LOGO_MAX_WIDTH, withoutEnlargement: true });
+
+    const hasAlpha = Boolean(metadata.hasAlpha);
+    const outputMime = hasAlpha ? 'image/png' : 'image/jpeg';
+    const output = hasAlpha
+      ? await resized.png({ compressionLevel: 9, palette: true, quality: 90 }).toBuffer()
+      : await resized.jpeg({ quality: 85, mozjpeg: true }).toBuffer();
+
+    const finalBuffer = output.length < original.length ? output : original;
+    const finalMime = output.length < original.length ? outputMime : match[1];
+    return `data:${finalMime};base64,${finalBuffer.toString('base64')}`;
+  } catch (err) {
+    console.error('[company logo] compression failed, keeping original upload:', err?.message || err);
+    return dataUrl;
+  }
+};
+
 const MODULE_REGISTRY = {
   propertyManagement: {
     key: 'propertyManagement',
@@ -1076,13 +1110,16 @@ export const normalizeCompanyModules = (modules = {}) => {
   return normalized;
 };
 
-export const normalizeCompanyIdentityFields = (payload = {}) => ({
-  email: typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '',
-  phoneNo: typeof payload.phoneNo === 'string' ? payload.phoneNo.trim() : '',
-  slogan: typeof payload.slogan === 'string' ? payload.slogan.trim() : '',
-  logo: typeof payload.logo === 'string' ? payload.logo.trim() : '',
-  unitTypes: normalizeCompanyUnitTypes(payload.unitTypes),
-});
+export const normalizeCompanyIdentityFields = async (payload = {}) => {
+  const rawLogo = typeof payload.logo === 'string' ? payload.logo.trim() : '';
+  return {
+    email: typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '',
+    phoneNo: typeof payload.phoneNo === 'string' ? payload.phoneNo.trim() : '',
+    slogan: typeof payload.slogan === 'string' ? payload.slogan.trim() : '',
+    logo: rawLogo ? await compressLogoDataUrl(rawLogo) : '',
+    unitTypes: normalizeCompanyUnitTypes(payload.unitTypes),
+  };
+};
 
 export const buildMpesaPaybillStatus = (config = {}) => {
   const shortCode = normalizeText(config?.shortCode);
