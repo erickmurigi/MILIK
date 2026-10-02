@@ -10,6 +10,7 @@ import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 import AppSelect from "../../components/common/AppSelect";
+import ListToolbar from "../../components/common/ListToolbar";
 import PaginationBar from "../../components/PaginationBar";
 import MilikTable from '../../components/common/MilikTable';
 import { useConfirm } from '../../context/ConfirmContext';
@@ -128,39 +129,32 @@ export default function KpiLibrary() {
         </div>
 
         {/* ── Stat + filter row ── */}
-        <div className="flex flex-none items-center gap-2 border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-          <span className="whitespace-nowrap text-[11px] font-bold tabular-nums text-slate-600">
+        <ListToolbar>
+          <span className="shrink-0 whitespace-nowrap text-[9px] font-bold tabular-nums text-slate-600">
             {kpis.length} <span className="font-normal text-slate-400">total</span>
           </span>
-          <span className="whitespace-nowrap text-[11px] font-bold tabular-nums text-emerald-600">
+          <span className="shrink-0 whitespace-nowrap text-[9px] font-bold tabular-nums text-emerald-600">
             {nActive} <span className="font-normal text-slate-400">active</span>
           </span>
-          <span className="whitespace-nowrap text-[11px] font-bold tabular-nums text-rose-500">
+          <span className="shrink-0 whitespace-nowrap text-[9px] font-bold tabular-nums text-rose-500">
             {kpis.length - nActive} <span className="font-normal text-slate-400">inactive</span>
           </span>
-          <div className="mx-0.5 h-4 w-px bg-slate-300" />
-          <input
-            className={`${F} w-40`}
-            placeholder="Search KPIs…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <AppSelect value={catFilter} onChange={(v) => setCatFilter(v ?? "")} options={CATEGORY_OPTIONS} placeholder="All categories" clearable size="sm" />
-          <button
+          <ListToolbar.Divider />
+          <ListToolbar.Input width="w-40" placeholder="Search KPIs…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <AppSelect value={catFilter} onChange={(v) => setCatFilter(v ?? "")} options={CATEGORY_OPTIONS} placeholder="All categories" clearable compact />
+          <ListToolbar.Button
+            icon={activeOnly ? FaToggleOn : FaToggleOff}
+            variant={activeOnly ? 'outlineOk' : 'outline'}
             onClick={() => setActiveOnly((v) => !v)}
-            className={`flex h-7 items-center gap-1 whitespace-nowrap rounded border px-2.5 text-[11px] font-semibold transition-colors ${
-              activeOnly ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
-            }`}
           >
-            {activeOnly ? <FaToggleOn size={12} /> : <FaToggleOff size={12} />} Active only
-          </button>
+            Active only
+          </ListToolbar.Button>
           {(search || catFilter || activeOnly) && (
-            <button onClick={() => { setSearch(''); setCatFilter(''); setActiveOnly(false); }}
-              className="flex h-7 items-center gap-0.5 rounded border border-slate-200 bg-white px-2 text-[10px] text-slate-400 hover:text-slate-600">
-              <FaTimes size={8} /> Clear
-            </button>
+            <ListToolbar.Button icon={FaTimes} variant="outline" onClick={() => { setSearch(''); setCatFilter(''); setActiveOnly(false); }}>
+              Clear
+            </ListToolbar.Button>
           )}
-        </div>
+        </ListToolbar>
 
         {/* ── Scrollable table area ── */}
         <MilikTable
