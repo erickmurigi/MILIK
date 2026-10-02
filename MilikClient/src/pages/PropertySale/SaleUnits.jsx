@@ -6,6 +6,7 @@ import { FaEdit, FaRedoAlt, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterSearch } from "./SaleFilterBar";
+import ListToolbar from "../../components/common/ListToolbar";
 import SaleListingFormModal from "./SaleListingFormModal";
 import SaleListingAgent from "./SaleListingAgent";
 import SaleListingPanel from "./SaleListingPanel";
@@ -207,12 +208,12 @@ const SaleUnits = () => {
 
   const statsStrip = useMemo(() => (
     <div className="flex shrink-0 items-baseline gap-2">
-      <span className="font-mono text-[10px] font-black text-slate-500">{total} {(total === 1 ? T.saleUnit : T.saleUnits).toLowerCase()}</span>
+      <span className="font-mono text-[9px] font-black text-slate-500">{total} {(total === 1 ? T.saleUnit : T.saleUnits).toLowerCase()}</span>
       {STAT_TONES.map(({ key, tone }) => (
         <div key={key} className="flex shrink-0 items-baseline gap-1">
-          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">{STATUS_LABEL[key]}</span>
-          <span className={`font-mono text-xs font-black tabular-nums ${tone}`}>{stats?.[key]?.count ?? 0}</span>
-          <span className="text-[10px] text-slate-400">{fmtKES(stats?.[key]?.totalValue ?? 0)}</span>
+          <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">{STATUS_LABEL[key]}</span>
+          <span className={`font-mono text-[10px] font-black tabular-nums ${tone}`}>{stats?.[key]?.count ?? 0}</span>
+          <span className="text-[9px] text-slate-400">{fmtKES(stats?.[key]?.totalValue ?? 0)}</span>
         </div>
       ))}
     </div>
@@ -227,13 +228,12 @@ const SaleUnits = () => {
         onReset={resetFilters}
         activeCount={[search, projectFilt, statusFilt, blockFilt, agentFilt].filter(Boolean).length}
         trailing={
-          <button
-            type="button"
+          <ListToolbar.Button
+            variant="outline"
             onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] })}
-            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
           >
-            <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
-          </button>
+            <FaRedoAlt size={7} className={isFetching ? "animate-spin" : ""} /> Refresh
+          </ListToolbar.Button>
         }
       >
         <FilterSearch
@@ -246,18 +246,19 @@ const SaleUnits = () => {
           onChange={(v) => { setProjectFilt(v ?? ""); setBlockFilt(""); setPage(1); }}
           options={projectOptions}
           placeholder={`All ${T.saleProjects}`}
-          clearable size="sm" searchable
+          clearable compact searchable
         />
-        <AppSelect value={statusFilt} onChange={(v) => { setStatusFilt(v ?? ""); setPage(1); }} options={STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
-        <input
+        <AppSelect value={statusFilt} onChange={(v) => { setStatusFilt(v ?? ""); setPage(1); }} options={STATUS_OPTIONS} placeholder="All Statuses" clearable compact />
+        <ListToolbar.Input
+          width="w-[90px]"
           value={blockFilt}
           disabled={!projectFilt}
           onChange={(e) => { setBlockFilt(e.target.value); setPage(1); }}
           placeholder="Block"
           title={projectFilt ? undefined : `Choose a ${T.saleProject.toLowerCase()} to filter by block`}
-          className="h-7 w-[90px] shrink-0 border border-slate-200 bg-white px-2 text-xs text-slate-700 placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-50"
+          className="disabled:cursor-not-allowed disabled:bg-slate-50"
         />
-        <AppSelect value={agentFilt} onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }} options={agentFilterOptions} placeholder={`All ${T.saleAgents}`} clearable size="sm" searchable />
+        <AppSelect value={agentFilt} onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }} options={agentFilterOptions} placeholder={`All ${T.saleAgents}`} clearable compact searchable />
       </SaleFilterBar>
 
       {/* Table + detail panel */}
