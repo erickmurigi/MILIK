@@ -11,6 +11,7 @@ import PropertySaleShell from "./PropertySaleShell";
 import { FilterSearch } from "./SaleFilterBar";
 import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
+import ListToolbar from "../../components/common/ListToolbar";
 import Spinner from "../../components/common/Spinner";
 import StatusBadge from "../../components/common/StatusBadge";
 import { saleApi, fmtKES } from "../../services/propertySaleApi";
@@ -386,34 +387,30 @@ const SaleProjectDetail = () => {
           <div className="relative flex min-h-[420px] flex-1 flex-col">
             <div className={`flex flex-1 min-h-0 flex-col border border-slate-200 bg-white shadow-sm transition-[margin] duration-200 ${selected ? "sm:mr-[320px]" : ""}`}>
               {/* Filters + legend */}
-              <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 px-3 py-1.5">
-                <button
-                  type="button"
-                  onClick={() => setStatusFilt("")}
-                  className={`inline-flex h-[20px] items-center gap-1 border px-2 text-[9px] font-bold ${statusFilt === "" ? "border-[#0B3B2E] bg-[#0B3B2E] text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
-                >
+              <ListToolbar className="flex-wrap">
+                <ListToolbar.Button variant={statusFilt === "" ? "primary" : "outline"} onClick={() => setStatusFilt("")}>
                   All <span className="tabular-nums opacity-70">{u.total || 0}</span>
-                </button>
+                </ListToolbar.Button>
                 {UNIT_STATUSES.map((s) => (
-                  <button
+                  <ListToolbar.Button
                     key={s}
-                    type="button"
+                    variant={statusFilt === s ? "outlineOk" : "outline"}
+                    className={statusFilt === s ? "!border-[#0B3B2E] !bg-[#F1F6F3] !text-[#0B3B2E]" : ""}
                     onClick={() => setStatusFilt((prev) => (prev === s ? "" : s))}
-                    className={`inline-flex h-[20px] items-center gap-1 border px-2 text-[9px] font-bold ${statusFilt === s ? "border-[#0B3B2E] bg-[#F1F6F3] text-[#0B3B2E]" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
                   >
                     <span className={`h-2 w-2 ${STATUS_SWATCH[s]}`} /> {STATUS_LABEL[s]} <span className="tabular-nums text-slate-400">{u[s] || 0}</span>
-                  </button>
+                  </ListToolbar.Button>
                 ))}
                 <span className="mx-1 hidden text-slate-200 sm:inline">·</span>
                 {blockOptions.length > 0 && (
                   <AppSelect value={blockFilt} onChange={(v) => setBlockFilt(v ?? "")} options={blockOptions} placeholder="All blocks" clearable compact />
                 )}
                 <FilterSearch value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Search ${T.saleUnit.toLowerCase()} no...`} />
-                <div className="ml-auto flex">
+                <div className="ml-auto flex shrink-0">
                   <button type="button" onClick={() => setView("grid")} title="Grid view" className={`border px-2 py-1 ${view === "grid" ? "border-[#0B3B2E] bg-[#0B3B2E] text-white" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}><FaBorderAll size={10} /></button>
                   <button type="button" onClick={() => setView("table")} title="Table view" className={`border border-l-0 px-2 py-1 ${view === "table" ? "border-[#0B3B2E] bg-[#0B3B2E] text-white" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}><FaListUl size={10} /></button>
                 </div>
-              </div>
+              </ListToolbar>
 
               {unitsData?.truncated && (
                 <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-semibold text-amber-700">
