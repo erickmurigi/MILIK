@@ -19,6 +19,7 @@ import {
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import ListToolbar from "../../components/common/ListToolbar";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
@@ -28,7 +29,6 @@ import { fmtDate, todayISO } from "../../utils/dates";
 import { openPrintWindow, printTabularList } from "../../utils/printKit";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const ic  = "h-7 border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const icc = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const lc  = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 
@@ -562,19 +562,18 @@ const CarWashStaffSavings = () => {
             </div>
 
             {/* Date filter bar */}
-            <div className="flex-shrink-0 flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">From</span>
-              <input type="date" className={ic} value={detailFrom} onChange={(e) => handleDetailDateChange("from", e.target.value)} />
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">To</span>
-              <input type="date" className={ic} value={detailTo} onChange={(e) => handleDetailDateChange("to", e.target.value)} />
+            <ListToolbar>
+              <span className="shrink-0 text-[9px] font-extrabold uppercase tracking-wider text-slate-400">From</span>
+              <ListToolbar.Input type="date" value={detailFrom} onChange={(e) => handleDetailDateChange("from", e.target.value)} />
+              <span className="shrink-0 text-[9px] font-extrabold uppercase tracking-wider text-slate-400">To</span>
+              <ListToolbar.Input type="date" value={detailTo} onChange={(e) => handleDetailDateChange("to", e.target.value)} />
               {detailFrom && (
-                <button type="button" onClick={() => { setDetailFrom(""); setDetailPage(1); }}
-                  className="text-[10px] font-semibold text-slate-400 hover:text-[#0B3B2E]">
+                <ListToolbar.Button variant="outline" onClick={() => { setDetailFrom(""); setDetailPage(1); }}>
                   Clear filter
-                </button>
+                </ListToolbar.Button>
               )}
-              <span className="ml-auto text-[10px] text-slate-400">{recordsTotal} record{recordsTotal !== 1 ? "s" : ""}</span>
-            </div>
+              <span className="ml-auto shrink-0 pl-2 text-[9px] text-slate-400">{recordsTotal} record{recordsTotal !== 1 ? "s" : ""}</span>
+            </ListToolbar>
 
             {/* Records table */}
             <div className="flex-1 min-h-0 overflow-auto">
