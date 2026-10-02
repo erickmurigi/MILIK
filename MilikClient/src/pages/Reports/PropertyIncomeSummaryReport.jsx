@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useTerms } from '../../hooks/useTerm';
 import AppSelect from '../../components/common/AppSelect';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
+import ListToolbar from '../../components/common/ListToolbar';
 import MilikTable from '../../components/common/MilikTable';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties, selectAllLandlords } from '../../redux/selectors';
 import { getLandlords, getPropertyIncomeSummaryReport } from '../../redux/apiCalls';
@@ -358,9 +359,9 @@ const PropertyIncomeSummaryReport = () => {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 
             {/* Filter bar */}
-            <div className="filter-bar sticky top-0 z-30 flex-shrink-0 flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
-              <input type="date" value={filters.startDate} onChange={setFilter("startDate")} className="h-7 shrink-0 w-32 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-              <input type="date" value={filters.endDate} onChange={setFilter("endDate")} className="h-7 shrink-0 w-32 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+            <ListToolbar>
+              <ListToolbar.Input type="date" width="w-32" value={filters.startDate} onChange={setFilter("startDate")} />
+              <ListToolbar.Input type="date" width="w-32" value={filters.endDate} onChange={setFilter("endDate")} />
               <AppSelect
                 value={filters.propertyId}
                 onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))}
@@ -368,7 +369,7 @@ const PropertyIncomeSummaryReport = () => {
                 placeholder="All properties"
                 searchable
                 clearable
-                size="sm"
+                compact
                 className="shrink-0 w-40"
               />
               {!isLandlordMode && (
@@ -379,16 +380,18 @@ const PropertyIncomeSummaryReport = () => {
                   placeholder={`All ${termLandlords.toLowerCase()}`}
                   searchable
                   clearable
-                  size="sm"
+                  compact
                   className="shrink-0 w-40"
                 />
               )}
-              <div className="ml-auto flex shrink-0 items-center gap-1.5">
-                <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? 'Export CSV' : 'No export permission'} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaFileDownload /> Export CSV</button>
-                <button onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? 'Print' : 'No print permission'} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint /> Print</button>
-                <button onClick={loadReport} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaSyncAlt className={loading ? 'animate-spin' : ''} /> Refresh</button>
+              <div className="ml-auto flex shrink-0 items-center gap-0.5">
+                <ListToolbar.Button icon={FaFileDownload} variant="outline" onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? 'Export CSV' : 'No export permission'}>Export CSV</ListToolbar.Button>
+                <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? 'Print' : 'No print permission'}>Print</ListToolbar.Button>
+                <ListToolbar.Button variant="outline" onClick={loadReport}>
+                  <FaSyncAlt size={7} className={loading ? 'animate-spin' : ''} /> Refresh
+                </ListToolbar.Button>
               </div>
-            </div>
+            </ListToolbar>
 
             {/* ── Tables ── */}
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

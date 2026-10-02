@@ -8,6 +8,7 @@ import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
 import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import ListToolbar from "../../components/common/ListToolbar";
 import MilikTable from "../../components/common/MilikTable";
 import { getTenantInvoices } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
@@ -267,45 +268,46 @@ const RentalInvoiceVATReport = () => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
-              <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-                <div className="relative shrink-0">
-                  <FaFilter className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
-                  <input
-                    value={filters.search}
-                    onChange={setFilter("search")}
-                    placeholder={`Invoice, ${termTenant.toLowerCase()}, ${termProperty.toLowerCase()}, ${termUnit.toLowerCase()}`}
-                    className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  />
-                </div>
-                <AppSelect
-                  value={filters.propertyId}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "" }))}
-                  options={propertyOptions}
-                  placeholder={`All ${termProperties.toLowerCase()}`}
-                  searchable
-                  clearable
-                  size="sm"
+            <ListToolbar>
+              <div className="relative shrink-0">
+                <FaFilter className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400" />
+                <ListToolbar.Input
+                  width="w-44"
+                  className="pl-5"
+                  value={filters.search}
+                  onChange={setFilter("search")}
+                  placeholder={`Invoice, ${termTenant.toLowerCase()}, ${termProperty.toLowerCase()}, ${termUnit.toLowerCase()}`}
                 />
-                <AppSelect
-                  value={filters.category}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, category: v ?? "" }))}
-                  options={[
-                    { value: "RENT_CHARGE", label: termRent },
-                    { value: "UTILITY_CHARGE", label: "Utility" },
-                    { value: "LATE_PENALTY_CHARGE", label: "Late penalty" },
-                  ]}
-                  placeholder="All charge types"
-                  clearable
-                  size="sm"
-                />
-                <span className="shrink-0 rounded border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700"><FaPercent className="inline mr-1" />{filteredRows.length} rows</span>
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <button onClick={exportCsv} disabled={!canExportReports} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"><FaFileDownload size={9} /> CSV</button>
-                <button onClick={handlePrint} disabled={!canExportReports} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"><FaPrint size={9} /> Print</button>
-                <button onClick={loadData} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]"><FaSyncAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh</button>
               </div>
-            </div>
+              <AppSelect
+                value={filters.propertyId}
+                onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "" }))}
+                options={propertyOptions}
+                placeholder={`All ${termProperties.toLowerCase()}`}
+                searchable
+                clearable
+                compact
+              />
+              <AppSelect
+                value={filters.category}
+                onChange={(v) => setFilters((prev) => ({ ...prev, category: v ?? "" }))}
+                options={[
+                  { value: "RENT_CHARGE", label: termRent },
+                  { value: "UTILITY_CHARGE", label: "Utility" },
+                  { value: "LATE_PENALTY_CHARGE", label: "Late penalty" },
+                ]}
+                placeholder="All charge types"
+                clearable
+                compact
+              />
+              <span className="shrink-0 border border-orange-200 bg-orange-50 px-2 py-0.5 text-[9px] font-bold text-orange-700"><FaPercent className="inline mr-1" />{filteredRows.length} rows</span>
+              <ListToolbar.Divider />
+              <ListToolbar.Button icon={FaFileDownload} variant="outline" onClick={exportCsv} disabled={!canExportReports}>CSV</ListToolbar.Button>
+              <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrint} disabled={!canExportReports}>Print</ListToolbar.Button>
+              <ListToolbar.Button onClick={loadData}>
+                <FaSyncAlt size={7} className={loading ? "animate-spin" : ""} /> Refresh
+              </ListToolbar.Button>
+            </ListToolbar>
 
             <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
               <MilikTable
