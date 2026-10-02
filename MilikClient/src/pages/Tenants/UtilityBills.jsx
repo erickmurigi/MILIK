@@ -22,6 +22,7 @@ import {
   FaSms,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import ListToolbar from "../../components/common/ListToolbar";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { getTenants } from "../../redux/tenantsRedux";
 import { getUnits } from "../../redux/unitRedux";
@@ -380,34 +381,39 @@ const UtilityBills = () => {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
 
             {/* FILTER BAR */}
-            <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-              <div className="flex flex-wrap items-center gap-1 overflow-x-auto px-2 py-1.5">
-                <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">Bills: {totals.count}</span>
-                <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">O/S: {formatCurrency(totals.outstanding)}</span>
-                {selectedCount > 0 && <span className="shrink-0 rounded border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">{selectedCount} selected</span>}
-                <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-                {STATUS_FILTERS.map(({ val, label }) => (
-                  <button
-                    key={val}
-                    onClick={() => setFilters((prev) => ({ ...prev, status: val }))}
-                    className={`h-[20px] shrink-0 px-1.5 text-[9px] font-semibold ${filters.status === val ? `${MILIK_GREEN} text-white` : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"}`}
-                  >{label}</button>
-                ))}
-                <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-                <input type="text" value={filters.invoiceNo} onChange={(e) => setFilters((prev) => ({ ...prev, invoiceNo: e.target.value.toUpperCase() }))} placeholder="Invoice #" className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <input type="text" value={filters.tenantName} onChange={setFilter("tenantName")} placeholder={termTenant} className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <AppSelect compact clearable searchable placeholder={termProperty} value={filters.propertyId} onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "any", unitId: "any" }))} options={activePropertyOptions} />
-                <AppSelect compact clearable placeholder={termUnit} value={filters.unitId} onChange={(v) => setFilters((prev) => ({ ...prev, unitId: v ?? "any" }))} options={unitFilterOptions} />
-                <AppSelect compact clearable placeholder="Utility Type" value={filters.utilityType} onChange={(v) => setFilters((prev) => ({ ...prev, utilityType: v ?? "any" }))} options={utilityTypeOptions} />
-                <input type="date" value={filters.fromDate} onChange={setFilter("fromDate")} className="h-[20px] w-[5.5rem] shrink-0 border border-slate-200 bg-white px-1 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <input type="date" value={filters.toDate} onChange={setFilter("toDate")} className="h-[20px] w-[5.5rem] shrink-0 border border-slate-200 bg-white px-1 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <button onClick={resetFilters} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={7} /> Reset</button>
-                <button onClick={loadData} disabled={loading} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-gray-300 bg-white px-1.5 text-[9px] text-gray-700 hover:bg-gray-50 disabled:opacity-60"><FaRedoAlt size={7} /> Refresh</button>
-                <button onClick={handlePrint} disabled={filteredRows.length === 0} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-gray-300 bg-white px-1.5 text-[9px] text-gray-700 hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint size={7} /> Print</button>
-                <button onClick={() => setCommunicationModal({ contextType: "invoice", recordIds: selectedRows, title: `SMS ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, allowedChannels: ["sms"], defaultChannel: "sms" })} disabled={selectedCount === 0} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white ${selectedCount > 0 ? "bg-teal-600 hover:bg-teal-700" : "cursor-not-allowed bg-gray-400"}`}><FaSms size={7} /> SMS</button>
-                <button onClick={() => setCommunicationModal({ contextType: "invoice", recordIds: selectedRows, title: `Email ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, allowedChannels: ["email"], defaultChannel: "email" })} disabled={selectedCount === 0} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white ${selectedCount > 0 ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-gray-400"}`}><FaEnvelope size={7} /> Email</button>
-              </div>
-            </div>
+            <ListToolbar>
+              <span className="shrink-0 border border-blue-200 bg-blue-50 px-2 py-0.5 text-[9px] font-bold text-blue-700">Bills: {totals.count}</span>
+              <span className="shrink-0 border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-bold text-amber-700">O/S: {formatCurrency(totals.outstanding)}</span>
+              {selectedCount > 0 && <span className="shrink-0 border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-[9px] font-bold text-emerald-800">{selectedCount} selected</span>}
+              <ListToolbar.Divider />
+              {STATUS_FILTERS.map(({ val, label }) => (
+                <ListToolbar.Button
+                  key={val}
+                  variant={filters.status === val ? "primary" : "outline"}
+                  onClick={() => setFilters((prev) => ({ ...prev, status: val }))}
+                >{label}</ListToolbar.Button>
+              ))}
+              <ListToolbar.Divider />
+              <ListToolbar.Input width="w-20" type="text" value={filters.invoiceNo} onChange={(e) => setFilters((prev) => ({ ...prev, invoiceNo: e.target.value.toUpperCase() }))} placeholder="Invoice #" />
+              <ListToolbar.Input width="w-20" type="text" value={filters.tenantName} onChange={setFilter("tenantName")} placeholder={termTenant} />
+              <AppSelect compact clearable searchable placeholder={termProperty} value={filters.propertyId} onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "any", unitId: "any" }))} options={activePropertyOptions} />
+              <AppSelect compact clearable placeholder={termUnit} value={filters.unitId} onChange={(v) => setFilters((prev) => ({ ...prev, unitId: v ?? "any" }))} options={unitFilterOptions} />
+              <AppSelect compact clearable placeholder="Utility Type" value={filters.utilityType} onChange={(v) => setFilters((prev) => ({ ...prev, utilityType: v ?? "any" }))} options={utilityTypeOptions} />
+              <ListToolbar.Input width="w-[5.5rem]" type="date" value={filters.fromDate} onChange={setFilter("fromDate")} />
+              <ListToolbar.Input width="w-[5.5rem]" type="date" value={filters.toDate} onChange={setFilter("toDate")} />
+              <ListToolbar.Button icon={FaRedoAlt} onClick={resetFilters}>Reset</ListToolbar.Button>
+              <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={loadData} disabled={loading}>Refresh</ListToolbar.Button>
+              <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrint} disabled={filteredRows.length === 0}>Print</ListToolbar.Button>
+              <ListToolbar.Button
+                className="!bg-teal-600 hover:!bg-teal-700"
+                onClick={() => setCommunicationModal({ contextType: "invoice", recordIds: selectedRows, title: `SMS ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, allowedChannels: ["sms"], defaultChannel: "sms" })}
+                disabled={selectedCount === 0}
+              ><FaSms size={7} /> SMS</ListToolbar.Button>
+              <ListToolbar.Button
+                onClick={() => setCommunicationModal({ contextType: "invoice", recordIds: selectedRows, title: `Email ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, allowedChannels: ["email"], defaultChannel: "email" })}
+                disabled={selectedCount === 0}
+              ><FaEnvelope size={7} /> Email</ListToolbar.Button>
+            </ListToolbar>
 
             {/* TABLE */}
             <MilikTable
