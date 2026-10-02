@@ -100,6 +100,7 @@ import carWashDisplayRoutes from "./modules/carwash/routes/display.js";
 import carWashCreditsRoutes from "./modules/carwash/routes/credits.js";
 import { processDueBilling } from "./modules/carwash/controllers/creditAccountsController.js";
 import { processAutoRentInvoices } from "./services/autoRentInvoicingService.js";
+import { createPage } from "./services/browserService.js";
 import { processRenewalReminders } from "./modules/clients/services/renewalReminderService.js";
 import hrDepartmentRoutes from "./modules/hr/routes/departments.js";
 import hrDesignationRoutes from "./modules/hr/routes/designations.js";
@@ -930,6 +931,21 @@ async function startServer() {
       console.error("[RenewalReminder Cron] Failed to schedule:", cronErr?.message || cronErr);
     }
     } // end isPrimaryWorker
+
+    // Pre-warm the shared Puppeteer browser + its next-page slot (invoices,
+    // receipts, leases, statements, vouchers/payslips all render through it —
+    // see services/browserService.js) so the first real print of this
+    // process's lifetime doesn't pay Chromium's cold-launch cost (1-3s+) on
+    // top of a newPage() round-trip. createPage() launches the browser, opens
+    // a page, and queues the *next* page to warm — we only needed the launch
+    // + queue side effects, so the throwaway page this call returns is closed
+    // immediately. Runs on every worker, not just the primary — each process
+    // has its own browser instance in memory, unlike the cron jobs above.
+    // Fire-and-forget: a failed warmup just means the first print request
+    // launches it lazily instead, same as before this existed.
+    createPage()
+      .then((page) => { page.close().catch(() => {}); console.log("[PDF] Puppeteer browser pre-warmed"); })
+      .catch((err) => console.error("[PDF] Puppeteer pre-warm failed (will retry lazily on first print):", err?.message || err));
 
     // Socket.IO Redis adapter — required for cross-worker events in PM2 cluster mode.
     // emitToCompany/emitToUser would otherwise only reach clients on the same worker.
