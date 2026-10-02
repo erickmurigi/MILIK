@@ -17,6 +17,7 @@ const RULES = [
   { prefix: "/api/service-providers/creditors", resource: "creditorLedger", moduleKey: "accounts" },
   { prefix: "/api/service-providers", resource: "expenses", moduleKey: "accounts" },
   { prefix: "/api/ledger", resource: "ledger", moduleKey: "accounts" },
+  { prefix: "/api/landlord-payments/post-commission", resource: "commissions", moduleKey: "propertyManagement" },
   { prefix: "/api/landlord-payments", resource: "landlordPayments", moduleKey: "accounts" },
   { prefix: "/api/processed-statements", resource: "processedStatements", moduleKey: "accounts" },
   { prefix: "/api/statements", resource: "statements", moduleKey: "propertyManagement" },
