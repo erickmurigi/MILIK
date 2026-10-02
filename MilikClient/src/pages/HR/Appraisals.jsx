@@ -7,6 +7,7 @@ import {
   FaClipboardCheck, FaUser, FaBuilding, FaUserTie,
 } from 'react-icons/fa';
 import AppSelect from "../../components/common/AppSelect";
+import ListToolbar from "../../components/common/ListToolbar";
 import PaginationBar from "../../components/PaginationBar";
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
@@ -27,8 +28,6 @@ const STATUS_TABS = [
   { value: 'InProgress', label: 'In Progress' },
   { value: 'Submitted',  label: 'Submitted' },
 ];
-const F  = 'h-7 rounded border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]';
-const FW = `${F} w-full`;
 
 function MiniBar({ score, maxScore }) {
   const pct   = maxScore > 0 ? Math.min((score / maxScore) * 100, 100) : 0;
@@ -154,15 +153,15 @@ export default function Appraisals() {
         </div>
 
         {/* ── Filter + stat bar ── */}
-        <div className="flex flex-none items-center gap-2 border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+        <ListToolbar>
           {cycleId && (
             <>
-              <span className="text-[11px] font-bold text-slate-600 tabular-nums whitespace-nowrap">{total} <span className="font-normal text-slate-400">total</span></span>
-              <span className="text-[11px] font-bold text-slate-400 tabular-nums whitespace-nowrap">{nPending} <span className="font-normal">pending</span></span>
-              <span className="text-[11px] font-bold text-amber-600 tabular-nums whitespace-nowrap">{nInProg} <span className="font-normal text-slate-400">in progress</span></span>
-              <span className="text-[11px] font-bold text-emerald-600 tabular-nums whitespace-nowrap">{nSubmitted} <span className="font-normal text-slate-400">submitted</span></span>
-              {total > 0 && <span className="text-[11px] font-bold text-[#0B3B2E] tabular-nums whitespace-nowrap">{Math.round((nSubmitted / total) * 100)}% <span className="font-normal text-slate-400">done</span></span>}
-              <div className="h-4 w-px bg-slate-300 mx-0.5" />
+              <span className="shrink-0 text-[9px] font-bold text-slate-600 tabular-nums whitespace-nowrap">{total} <span className="font-normal text-slate-400">total</span></span>
+              <span className="shrink-0 text-[9px] font-bold text-slate-400 tabular-nums whitespace-nowrap">{nPending} <span className="font-normal">pending</span></span>
+              <span className="shrink-0 text-[9px] font-bold text-amber-600 tabular-nums whitespace-nowrap">{nInProg} <span className="font-normal text-slate-400">in progress</span></span>
+              <span className="shrink-0 text-[9px] font-bold text-emerald-600 tabular-nums whitespace-nowrap">{nSubmitted} <span className="font-normal text-slate-400">submitted</span></span>
+              {total > 0 && <span className="shrink-0 text-[9px] font-bold text-[#0B3B2E] tabular-nums whitespace-nowrap">{Math.round((nSubmitted / total) * 100)}% <span className="font-normal text-slate-400">done</span></span>}
+              <ListToolbar.Divider />
             </>
           )}
           <AppSelect
@@ -172,35 +171,29 @@ export default function Appraisals() {
             placeholder="Select a cycle…"
             searchable
             clearable
-            size="sm"
+            compact
           />
-          <div className="flex shrink-0 items-center gap-1">
-            {STATUS_TABS.map((tab) => (
-              <button
-                key={tab.value}
-                type="button"
-                onClick={() => setStatus(tab.value)}
-                className={`h-7 shrink-0 rounded px-2.5 text-[11px] font-semibold transition-colors ${
-                  statusFilter === tab.value
-                    ? 'bg-[#0B3B2E] text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          <input className={`${F} w-40`} placeholder="Search employee…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          {STATUS_TABS.map((tab) => (
+            <ListToolbar.Button
+              key={tab.value}
+              type="button"
+              variant={statusFilter === tab.value ? 'primary' : 'outline'}
+              onClick={() => setStatus(tab.value)}
+            >
+              {tab.label}
+            </ListToolbar.Button>
+          ))}
+          <ListToolbar.Input width="w-40" placeholder="Search employee…" value={search} onChange={(e) => setSearch(e.target.value)} />
           {(cycleId || statusFilter || search) && (
-            <button onClick={() => { setCycleId(''); setStatus(''); setSearch(''); }} className="flex h-7 items-center gap-0.5 rounded border border-slate-200 bg-white px-2 text-[10px] text-slate-400 hover:text-slate-600">
-              <FaTimes size={8} /> Clear
-            </button>
+            <ListToolbar.Button icon={FaTimes} variant="outline" onClick={() => { setCycleId(''); setStatus(''); setSearch(''); }}>
+              Clear
+            </ListToolbar.Button>
           )}
-          <span className="ml-auto text-[10px] text-slate-400 whitespace-nowrap tabular-nums">
+          <span className="ml-auto shrink-0 pl-2 text-[9px] text-slate-400 whitespace-nowrap tabular-nums">
             {total} record{total !== 1 ? 's' : ''}
             {totalPages > 1 && ` · p${page}/${totalPages}`}
           </span>
-        </div>
+        </ListToolbar>
 
         {/* ── Table ── */}
         <MilikTable
