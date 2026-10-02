@@ -3,11 +3,10 @@ import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { FaBook, FaCalculator, FaEye, FaPlay, FaSyncAlt } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import ListToolbar from "../../components/common/ListToolbar";
 import JournalEntriesDrawer from "../../components/Accounting/JournalEntriesDrawer";
 import MilikTable from "../../components/common/MilikTable";
 import { previewDepreciation, runDepreciation } from "../../redux/apiCalls";
-
-const GRN = "#0B3B2E";
 const fmt = (n) =>
   Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -84,54 +83,49 @@ const FixedAssetsDepreciation = () => {
       <div className="flex h-[calc(100dvh-152px)] flex-col overflow-hidden">
 
         {/* ── Toolbar ── */}
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-gray-50/95 px-4 py-2">
-          <FaCalculator size={11} className="text-slate-400" />
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Depreciation</p>
+        <ListToolbar>
+          <FaCalculator size={10} className="text-slate-400" />
+          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Depreciation</p>
 
-          <div className="mx-1 h-4 w-px bg-slate-200" />
+          <ListToolbar.Divider />
 
           {/* Period */}
           <div className="flex flex-col gap-0.5">
-            <label className="text-[9px] font-semibold uppercase text-slate-400">Period Start</label>
+            <label className="text-[8px] font-semibold uppercase text-slate-400">Period Start</label>
             <input type="date" value={depPeriodStart} onChange={(e) => setDepPeriodStart(e.target.value)}
-              className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              className="h-[20px] border border-slate-200 bg-white px-1.5 text-[9px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
           </div>
           <div className="flex flex-col gap-0.5">
-            <label className="text-[9px] font-semibold uppercase text-slate-400">Period End</label>
+            <label className="text-[8px] font-semibold uppercase text-slate-400">Period End</label>
             <input type="date" value={depPeriodEnd} onChange={(e) => setDepPeriodEnd(e.target.value)}
-              className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              className="h-[20px] border border-slate-200 bg-white px-1.5 text-[9px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
           </div>
 
-          <div className="mx-1 h-4 w-px bg-slate-200" />
+          <ListToolbar.Divider />
 
-          <button
-            onClick={loadPreview} disabled={previewLoading}
-            className="flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-          >
-            {previewLoading ? <FaSyncAlt size={9} className="animate-spin" /> : <FaEye size={10} />}
+          <ListToolbar.Button variant="outline" onClick={loadPreview} disabled={previewLoading}>
+            {previewLoading ? <FaSyncAlt size={7} className="animate-spin" /> : <FaEye size={7} />}
             {previewLoading ? "Loading…" : "Preview"}
-          </button>
+          </ListToolbar.Button>
 
-          <button
+          <ListToolbar.Button
             onClick={handleRun}
             disabled={depRunning || !preview || activeRows.length === 0}
-            className="flex h-7 items-center gap-1.5 rounded px-3 text-xs font-semibold text-white disabled:opacity-40"
-            style={{ backgroundColor: GRN }}
             title={!preview ? "Load preview first" : ""}
           >
-            {depRunning ? <FaSyncAlt size={9} className="animate-spin" /> : <FaPlay size={9} />}
+            {depRunning ? <FaSyncAlt size={7} className="animate-spin" /> : <FaPlay size={7} />}
             {depRunning ? "Posting…" : "Post Depreciation"}
-          </button>
+          </ListToolbar.Button>
 
           {preview && (
             <>
-              <div className="mx-1 h-4 w-px bg-slate-200" />
-              <span className="text-[10px] font-semibold text-slate-400">
+              <ListToolbar.Divider />
+              <span className="text-[9px] font-semibold text-slate-400">
                 {activeRows.length} asset{activeRows.length !== 1 ? "s" : ""} · Total KES {fmt(preview.totalDepreciation)}
               </span>
             </>
           )}
-        </div>
+        </ListToolbar>
 
         {/* ── Content ── */}
         <div className="flex-1 overflow-auto">

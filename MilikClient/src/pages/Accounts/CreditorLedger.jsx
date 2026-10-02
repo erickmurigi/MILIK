@@ -4,6 +4,7 @@ import { useSelector } from "react-redux";
 import { FaArrowLeft, FaBook, FaSync } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import ListToolbar from "../../components/common/ListToolbar";
 import MilikTable from "../../components/common/MilikTable";
 import { getCreditorsSummary, getCreditorStatement } from "../../redux/apiCalls";
 import { fmtDate } from "../../utils/dates";
@@ -113,30 +114,31 @@ const CreditorLedger = () => {
         {/* ── LIST VIEW ────────────────────────────────────────────────── */}
         {view === "list" && (
           <>
-            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-gray-50/95 px-4 py-2">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+            <ListToolbar>
+              <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
                 Creditors Ledger
               </span>
-              <input
-                className="ml-2 h-7 w-48 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+              <ListToolbar.Divider />
+              <ListToolbar.Input
+                width="w-48"
                 placeholder="Search name, code, category…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
-              <button
+              <ListToolbar.Button
+                variant="outline"
                 onClick={() => {
                   fetchedRef.current = false;
                   loadList(true);
                 }}
-                className="flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"
               >
-                <FaSync size={10} className={loadingList ? "animate-spin" : ""} />
+                <FaSync size={7} className={loadingList ? "animate-spin" : ""} />
                 Refresh
-              </button>
-              <span className="ml-auto text-[10px] text-slate-400">
+              </ListToolbar.Button>
+              <span className="ml-auto text-[9px] text-slate-400">
                 {filtered.length} provider{filtered.length !== 1 ? "s" : ""}
               </span>
-            </div>
+            </ListToolbar>
 
             <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
               <MilikTable

@@ -7,6 +7,7 @@ import {
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
+import ListToolbar from "../../components/common/ListToolbar";
 import MilikTable from "../../components/common/MilikTable";
 import {
   getFixedAssets, createFixedAsset, updateFixedAsset,
@@ -241,14 +242,14 @@ const FixedAssets = () => {
       <div className="flex h-[calc(100dvh-152px)] flex-col overflow-hidden">
 
         {/* ── Toolbar ── */}
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-gray-50/95 px-4 py-2">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Asset Register</p>
+        <ListToolbar>
+          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Asset Register</p>
 
-          <div className="mx-1 h-4 w-px bg-slate-200" />
+          <ListToolbar.Divider />
 
           {/* Filters */}
           <AppSelect
-            size="sm"
+            compact
             clearable
             placeholder="All Statuses"
             value={filterStatus}
@@ -261,7 +262,7 @@ const FixedAssets = () => {
           />
 
           <AppSelect
-            size="sm"
+            compact
             clearable
             placeholder="All Categories"
             value={filterCategory}
@@ -269,35 +270,32 @@ const FixedAssets = () => {
             options={CATEGORY_OPTIONS}
           />
 
-          <input
-            value={search} onChange={(e) => setSearch(e.target.value)}
+          <ListToolbar.Input
+            width="w-44"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
             placeholder="Search name or code…"
-            className="h-7 w-44 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
           />
 
           {/* Summary pills */}
-          <div className="mx-1 h-4 w-px bg-slate-200" />
-          <span className="text-[10px] font-semibold text-slate-400">
+          <ListToolbar.Divider />
+          <span className="text-[9px] font-semibold text-slate-400">
             {totals.count} active · BV KES {fmt(totals.bookValue)}
           </span>
 
           <div className="flex-1" />
 
-          <button
-            onClick={openAdd}
-            className="flex h-7 items-center gap-1.5 rounded px-3 text-xs font-semibold text-white"
-            style={{ backgroundColor: GRN }}
-          >
-            <FaPlus size={9} /> New Asset
-          </button>
-          <button
-            onClick={() => { fetchedRef.current = false; load(); }}
+          <ListToolbar.Button icon={FaPlus} onClick={openAdd}>
+            New Asset
+          </ListToolbar.Button>
+          <ListToolbar.Button
+            variant="outline"
             disabled={loading}
-            className="flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            onClick={() => { fetchedRef.current = false; load(); }}
           >
-            <FaSyncAlt size={10} className={loading ? "animate-spin" : ""} />
-          </button>
-        </div>
+            <FaSyncAlt size={7} className={loading ? "animate-spin" : ""} />
+          </ListToolbar.Button>
+        </ListToolbar>
 
         {/* ── Add / Edit form panel ── */}
         {showForm && (
