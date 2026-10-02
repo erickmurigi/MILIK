@@ -23,6 +23,7 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import ListToolbar from "../../components/common/ListToolbar";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import ImportModal from "../../components/Modals/ImportModal";
 import { parseInvoiceNotesExcel, downloadInvoiceNotesTemplate } from "../../utils/excelTemplates";
@@ -895,82 +896,81 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
         <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
 
-            <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-              <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-                <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">Notes: {filteredNotes.length}</span>
-                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Active: {formatCurrency(summaryCards.activeValue)}</span>
-                <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">Total: {formatCurrency(summaryCards.totalValue)}</span>
-                {selectedNotes.length > 0 && <span className="shrink-0 rounded border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">{selectedNotes.length} selected</span>}
-                {!isLocked && (
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                )}
-                {!isLocked && (
-                <button type="button" onClick={() => { setNoteType("CREDIT_NOTE"); setFilters((prev) => ({ ...prev, noteType: "CREDIT_NOTE" })); const p = new URLSearchParams(searchParams); p.set("type", "credit"); setSearchParams(p, { replace: true }); }} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold ${filters.noteType === "CREDIT_NOTE" ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}>Credit Notes</button>
-                )}
-                {!isLocked && (
-                <button type="button" onClick={() => { setNoteType("DEBIT_NOTE"); setFilters((prev) => ({ ...prev, noteType: "DEBIT_NOTE" })); const p = new URLSearchParams(searchParams); p.set("type", "debit"); setSearchParams(p, { replace: true }); }} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold ${filters.noteType === "DEBIT_NOTE" ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}>Debit Notes</button>
-                )}
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <input type="text" value={filters.search} onChange={setFilter("search")} placeholder="Search…" className="h-7 w-36 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <AppSelect
-                  value={filters.propertyId}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "", tenantId: "" }))}
-                  options={propertySelectOptions}
-                  placeholder="Property"
-                  searchable
-                  clearable
-                  size="sm"
-                />
-                <AppSelect
-                  value={filters.tenantScope || "active"}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, tenantScope: v ?? "active", tenantId: "" }))}
-                  options={[
-                    { value: "active", label: "Active" },
-                    { value: "terminated", label: "Terminated" },
-                    { value: "all", label: `All ${termTenants}` },
-                  ]}
-                  size="sm"
-                />
-                <AppSelect
-                  value={filters.tenantId}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, tenantId: v ?? "" }))}
-                  options={filterTenantOptions}
-                  placeholder={termTenant}
-                  searchable
-                  clearable
-                  size="sm"
-                />
-                <AppSelect
-                  value={filters.status}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "" }))}
-                  options={[
-                    { value: "active", label: "Active" },
-                    { value: "reversed", label: "Reversed" },
-                    { value: "all", label: "All" },
-                  ]}
-                  size="sm"
-                />
-                <button type="button" onClick={handleSearchFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_ORANGE} hover:bg-[#e67e00]`}><FaSearch size={10} /></button>
-                <button type="button" onClick={resetWorkspaceFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} hover:bg-[#0A3127]`}><FaRedoAlt size={10} /></button>
-                <button type="button" onClick={loadData} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} hover:bg-[#0A3127]`}><FaRedoAlt size={10} /></button>
-                <button type="button" onClick={openAddModal} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_ORANGE} hover:bg-[#e67e00]`}><FaPlus size={10} /> Add Note</button>
-                <button type="button" onClick={() => setShowImportModal(true)} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} hover:bg-[#0A3127]`}><FaUpload size={10} /> Import</button>
-                <button
-                  type="button"
-                  onClick={() => setCommunicationModal({ contextType: "tenant_bulk", recordIds: selectedNoteTenantIds, title: `Notify ${selectedNoteTenantIds.length} ${termTenant}${selectedNoteTenantIds.length !== 1 ? "s" : ""}`, subtitle: "Send credit/debit note notification via SMS.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })}
-                  disabled={selectedNoteTenantIds.length === 0}
-                  title={selectedNotes.length === 0 ? `Select notes to SMS ${termTenants}` : `SMS ${selectedNoteTenantIds.length} ${termTenant}${selectedNoteTenantIds.length !== 1 ? "s" : ""}`}
-                  className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${selectedNoteTenantIds.length > 0 ? "bg-teal-600 hover:bg-teal-700" : "bg-gray-400 cursor-not-allowed"}`}
-                ><FaSms size={10} /></button>
-                <button
-                  type="button"
-                  onClick={() => setCommunicationModal({ contextType: "tenant_bulk", recordIds: selectedNoteTenantIds, title: `Email ${selectedNoteTenantIds.length} ${termTenant}${selectedNoteTenantIds.length !== 1 ? "s" : ""}`, subtitle: "Send credit/debit note notification via email.", allowedChannels: ["email"], defaultChannel: "email" })}
-                  disabled={selectedNoteTenantIds.length === 0}
-                  title={selectedNotes.length === 0 ? `Select notes to email ${termTenants}` : `Email ${selectedNoteTenantIds.length} ${termTenant}${selectedNoteTenantIds.length !== 1 ? "s" : ""}`}
-                  className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${selectedNoteTenantIds.length > 0 ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-400 cursor-not-allowed"}`}
-                ><FaEnvelope size={10} /></button>
-              </div>
-            </div>
+            <ListToolbar>
+              <span className="shrink-0 border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Notes: {filteredNotes.length}</span>
+              <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Active: {formatCurrency(summaryCards.activeValue)}</span>
+              <span className="shrink-0 border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">Total: {formatCurrency(summaryCards.totalValue)}</span>
+              {selectedNotes.length > 0 && <span className="shrink-0 border border-emerald-300 bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-800">{selectedNotes.length} selected</span>}
+              {!isLocked && <ListToolbar.Divider />}
+              {!isLocked && (
+                <ListToolbar.Button
+                  variant={filters.noteType === "CREDIT_NOTE" ? "primary" : "outline"}
+                  onClick={() => { setNoteType("CREDIT_NOTE"); setFilters((prev) => ({ ...prev, noteType: "CREDIT_NOTE" })); const p = new URLSearchParams(searchParams); p.set("type", "credit"); setSearchParams(p, { replace: true }); }}
+                >Credit Notes</ListToolbar.Button>
+              )}
+              {!isLocked && (
+                <ListToolbar.Button
+                  variant={filters.noteType === "DEBIT_NOTE" ? "primary" : "outline"}
+                  onClick={() => { setNoteType("DEBIT_NOTE"); setFilters((prev) => ({ ...prev, noteType: "DEBIT_NOTE" })); const p = new URLSearchParams(searchParams); p.set("type", "debit"); setSearchParams(p, { replace: true }); }}
+                >Debit Notes</ListToolbar.Button>
+              )}
+              <ListToolbar.Divider />
+              <ListToolbar.Input width="w-36" type="text" value={filters.search} onChange={setFilter("search")} placeholder="Search…" />
+              <AppSelect
+                value={filters.propertyId}
+                onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "", tenantId: "" }))}
+                options={propertySelectOptions}
+                placeholder="Property"
+                searchable
+                clearable
+                compact
+              />
+              <AppSelect
+                value={filters.tenantScope || "active"}
+                onChange={(v) => setFilters((prev) => ({ ...prev, tenantScope: v ?? "active", tenantId: "" }))}
+                options={[
+                  { value: "active", label: "Active" },
+                  { value: "terminated", label: "Terminated" },
+                  { value: "all", label: `All ${termTenants}` },
+                ]}
+                compact
+              />
+              <AppSelect
+                value={filters.tenantId}
+                onChange={(v) => setFilters((prev) => ({ ...prev, tenantId: v ?? "" }))}
+                options={filterTenantOptions}
+                placeholder={termTenant}
+                searchable
+                clearable
+                compact
+              />
+              <AppSelect
+                value={filters.status}
+                onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "" }))}
+                options={[
+                  { value: "active", label: "Active" },
+                  { value: "reversed", label: "Reversed" },
+                  { value: "all", label: "All" },
+                ]}
+                compact
+              />
+              <ListToolbar.Button variant="accent" onClick={handleSearchFilters}><FaSearch size={7} /></ListToolbar.Button>
+              <ListToolbar.Button onClick={resetWorkspaceFilters}><FaRedoAlt size={7} /></ListToolbar.Button>
+              <ListToolbar.Button onClick={loadData}><FaRedoAlt size={7} /></ListToolbar.Button>
+              <ListToolbar.Button icon={FaPlus} variant="accent" onClick={openAddModal}>Add Note</ListToolbar.Button>
+              <ListToolbar.Button icon={FaUpload} onClick={() => setShowImportModal(true)}>Import</ListToolbar.Button>
+              <ListToolbar.Button
+                className="!bg-teal-600 hover:!bg-teal-700"
+                onClick={() => setCommunicationModal({ contextType: "tenant_bulk", recordIds: selectedNoteTenantIds, title: `Notify ${selectedNoteTenantIds.length} ${termTenant}${selectedNoteTenantIds.length !== 1 ? "s" : ""}`, subtitle: "Send credit/debit note notification via SMS.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })}
+                disabled={selectedNoteTenantIds.length === 0}
+                title={selectedNotes.length === 0 ? `Select notes to SMS ${termTenants}` : `SMS ${selectedNoteTenantIds.length} ${termTenant}${selectedNoteTenantIds.length !== 1 ? "s" : ""}`}
+              ><FaSms size={7} /></ListToolbar.Button>
+              <ListToolbar.Button
+                onClick={() => setCommunicationModal({ contextType: "tenant_bulk", recordIds: selectedNoteTenantIds, title: `Email ${selectedNoteTenantIds.length} ${termTenant}${selectedNoteTenantIds.length !== 1 ? "s" : ""}`, subtitle: "Send credit/debit note notification via email.", allowedChannels: ["email"], defaultChannel: "email" })}
+                disabled={selectedNoteTenantIds.length === 0}
+                title={selectedNotes.length === 0 ? `Select notes to email ${termTenants}` : `Email ${selectedNoteTenantIds.length} ${termTenant}${selectedNoteTenantIds.length !== 1 ? "s" : ""}`}
+              ><FaEnvelope size={7} /></ListToolbar.Button>
+            </ListToolbar>
 
             {/* ── TABLE ── */}
             <MilikTable
