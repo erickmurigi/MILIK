@@ -10,6 +10,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { FaArrowRight, FaCoins, FaReceipt, FaSearch } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import ListToolbar from "../../components/common/ListToolbar";
 import { listRentPaymentsPage } from "../../redux/apiCalls";
 import { useTerms } from "../../hooks/useTerm";
 import { useTabState } from "../../hooks/useTabState";
@@ -234,45 +235,43 @@ const TenantPrepayments = () => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2 pb-10">
         <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
           <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
-              <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
-                {[
-                  { label: "Open", value: totals.rowCount, accent: "text-slate-900" },
-                  { label: "Unapplied", value: formatMoney(totals.totalUnapplied), accent: "text-amber-700" },
-                  { label: "Allocated", value: formatMoney(totals.totalAllocated), accent: "text-emerald-700" },
-                  { label: "Confirmed", value: totals.confirmedRows, accent: "text-blue-700" },
-                  { label: "Receipt Value", value: formatMoney(totals.totalReceiptAmount), accent: "text-slate-900" },
-                ].map((card) => (
-                  <span key={card.label} className="shrink-0 inline-flex h-[20px] items-center gap-1 border border-slate-200 bg-white px-1 text-[8px] font-bold uppercase tracking-[0.08em] text-slate-500">
-                    {card.label} <span className={`normal-case tracking-normal ${card.accent}`}>{card.value}</span>
-                  </span>
-                ))}
-                <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" className="h-[20px] w-32 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                <AppSelect
-                  value={propertyFilter}
-                  onChange={(v) => setPropertyFilter(v ?? "all")}
-                  options={propertyOptions}
-                  placeholder={termProperty}
-                  clearable
-                  searchable
-                  compact
-                />
-                <AppSelect
-                  value={statusFilter}
-                  onChange={(v) => setStatusFilter(v ?? "all")}
-                  options={[
-                    { value: "confirmed", label: "Confirmed" },
-                    { value: "unconfirmed", label: "Unconfirmed" },
-                  ]}
-                  placeholder="All Active"
-                  clearable
-                  compact
-                />
-                <button onClick={() => navigate("/receipts/new")} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-1.5 text-[9px] font-bold text-white shadow-sm hover:bg-[#0A3127]"><FaReceipt size={7} /> New Receipt</button>
-                <button onClick={() => { setSearch(""); setPropertyFilter("all"); setStatusFilter("all"); }} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-slate-200 bg-white px-1.5 text-[9px] font-bold text-slate-700 shadow-sm hover:bg-slate-50"><FaCoins size={7} /> Reset</button>
-              </div>
-            </div>
+            <ListToolbar>
+              {[
+                { label: "Open", value: totals.rowCount, accent: "text-slate-900" },
+                { label: "Unapplied", value: formatMoney(totals.totalUnapplied), accent: "text-amber-700" },
+                { label: "Allocated", value: formatMoney(totals.totalAllocated), accent: "text-emerald-700" },
+                { label: "Confirmed", value: totals.confirmedRows, accent: "text-blue-700" },
+                { label: "Receipt Value", value: formatMoney(totals.totalReceiptAmount), accent: "text-slate-900" },
+              ].map((card) => (
+                <span key={card.label} className="shrink-0 inline-flex h-[20px] items-center gap-1 border border-slate-200 bg-white px-1 text-[8px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                  {card.label} <span className={`normal-case tracking-normal ${card.accent}`}>{card.value}</span>
+                </span>
+              ))}
+              <ListToolbar.Divider />
+              <ListToolbar.Input width="w-32" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" />
+              <AppSelect
+                value={propertyFilter}
+                onChange={(v) => setPropertyFilter(v ?? "all")}
+                options={propertyOptions}
+                placeholder={termProperty}
+                clearable
+                searchable
+                compact
+              />
+              <AppSelect
+                value={statusFilter}
+                onChange={(v) => setStatusFilter(v ?? "all")}
+                options={[
+                  { value: "confirmed", label: "Confirmed" },
+                  { value: "unconfirmed", label: "Unconfirmed" },
+                ]}
+                placeholder="All Active"
+                clearable
+                compact
+              />
+              <ListToolbar.Button icon={FaReceipt} onClick={() => navigate("/receipts/new")}>New Receipt</ListToolbar.Button>
+              <ListToolbar.Button icon={FaCoins} variant="outline" onClick={() => { setSearch(""); setPropertyFilter("all"); setStatusFilter("all"); }}>Reset</ListToolbar.Button>
+            </ListToolbar>
 
             <MilikTable
               columns={[
