@@ -24,6 +24,7 @@ import { getProperties } from "../../redux/propertyRedux";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
+import ListToolbar from "../../components/common/ListToolbar";
 
 const MONTHS = [
   { value: 1,  label: "January"   }, { value: 2,  label: "February"  }, { value: 3,  label: "March"     },
@@ -458,17 +459,11 @@ const BatchReceipts = () => {
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
 
               {/* Filter bar */}
-              <div className="flex items-center gap-0.5 overflow-x-auto border-b border-slate-100 bg-slate-50/60 px-2 py-1">
-                <div className="flex items-center gap-1.5">
-                  <label className="text-[10px] font-semibold text-slate-500">From</label>
-                  <input type="date" value={mpesaDateFrom} onChange={(e) => setMpesaDateFrom(e.target.value)}
-                    className="h-[20px] w-[5.5rem] border border-slate-200 bg-white px-1 text-[9px] focus:border-emerald-500 focus:outline-none" />
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <label className="text-[10px] font-semibold text-slate-500">To</label>
-                  <input type="date" value={mpesaDateTo} onChange={(e) => setMpesaDateTo(e.target.value)}
-                    className="h-[20px] w-[5.5rem] border border-slate-200 bg-white px-1 text-[9px] focus:border-emerald-500 focus:outline-none" />
-                </div>
+              <ListToolbar>
+                <label className="shrink-0 text-[9px] font-semibold text-slate-500">From</label>
+                <ListToolbar.Input type="date" value={mpesaDateFrom} onChange={(e) => setMpesaDateFrom(e.target.value)} />
+                <label className="shrink-0 text-[9px] font-semibold text-slate-500">To</label>
+                <ListToolbar.Input type="date" value={mpesaDateTo} onChange={(e) => setMpesaDateTo(e.target.value)} />
                 {mpesaPropertyOptions.length > 1 && (
                   <AppSelect
                     compact
@@ -479,21 +474,16 @@ const BatchReceipts = () => {
                     options={mpesaPropertyOptions}
                   />
                 )}
-                <button
-                  onClick={loadCollections}
-                  disabled={colLoading}
-                  className="flex h-[20px] items-center gap-0.5 border border-slate-200 bg-white px-1.5 text-[9px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition"
-                >
-                  {colLoading && <Spinner size="sm" />}
-                  {colLoading ? "Loading…" : "Refresh"}
-                </button>
-                <span className="ml-auto text-[11px] text-slate-400">
+                <ListToolbar.Button variant="outline" disabled={colLoading} onClick={loadCollections}>
+                  {colLoading && <Spinner size="sm" />} {colLoading ? "Loading…" : "Refresh"}
+                </ListToolbar.Button>
+                <span className="ml-auto shrink-0 pl-2 text-[9px] text-slate-400">
                   Showing tenant-matched rows.{" "}
                   <button onClick={() => navigate("/receipts/mpesa-collections")} className="text-emerald-700 hover:underline">
                     Assign unmatched →
                   </button>
                 </span>
-              </div>
+              </ListToolbar>
 
               {/* Stats strip */}
               {!colLoading && collections.length > 0 && (
