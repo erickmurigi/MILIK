@@ -8,6 +8,7 @@ import { FaExternalLinkAlt, FaRedoAlt, FaSearch } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import ListToolbar from "../../components/common/ListToolbar";
 import PaginationBar from "../../components/PaginationBar";
 import MilikTable from "../../components/common/MilikTable";
 
@@ -108,10 +109,12 @@ const CarWashCashbooks = () => {
         </>
       }
     >
-      <form onSubmit={applyFilters} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 md:grid-cols-[1fr_auto_auto]">
-        <input className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none" placeholder="Cashbook code / name" value={filters.search} onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))} />
-        <button type="submit" className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#FF8C00] px-4 text-xs font-bold text-white hover:bg-[#E67E00]"><FaSearch />Search</button>
-        <button type="button" onClick={resetFilters} className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127]"><FaRedoAlt />Reset</button>
+      <form onSubmit={applyFilters} className="mb-2">
+        <ListToolbar>
+          <ListToolbar.Input width="w-56" placeholder="Cashbook code / name" value={filters.search} onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))} />
+          <ListToolbar.Button icon={FaSearch} variant="accent" type="submit">Search</ListToolbar.Button>
+          <ListToolbar.Button icon={FaRedoAlt} type="button" onClick={resetFilters}>Reset</ListToolbar.Button>
+        </ListToolbar>
       </form>
 
       <div className="flex-1 min-h-0 flex flex-col border border-slate-200 bg-white shadow-sm">
