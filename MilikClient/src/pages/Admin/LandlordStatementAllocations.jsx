@@ -8,6 +8,7 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from "../../components/PaginationBar";
 import MilikTable from "../../components/common/MilikTable";
+import ListToolbar from "../../components/common/ListToolbar";
 import {
   FaSearch, FaCalendarAlt, FaExchangeAlt, FaHistory, FaShieldAlt,
   FaTimes, FaCheck, FaInfoCircle, FaMoneyBillWave, FaFileInvoice,
@@ -695,8 +696,7 @@ export default function LandlordStatementAllocations() {
           <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden gap-2">
 
             {/* ── Sticky header — single scrollable line ── */}
-            <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
-              <div className="filter-bar flex items-center gap-1 overflow-x-auto px-2 py-1.5">
+            <ListToolbar>
 
                 {/* Tabs */}
                 {TABS.map((tab) => {
@@ -704,25 +704,22 @@ export default function LandlordStatementAllocations() {
                   const count = tab.id !== "history" ? typeCounts[tab.id] : histTotal;
                   const active = activeTab === tab.id;
                   return (
-                    <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                      className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2 text-[11px] font-bold transition
-                        ${active ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}>
-                      {Icon && <Icon size={9} />}
+                    <ListToolbar.Button key={tab.id} icon={Icon} variant={active ? "primary" : "outline"} onClick={() => setActiveTab(tab.id)}>
                       {tab.label}
                       {searched && tab.id !== "history" && (
-                        <span className={`ml-0.5 rounded-full px-1.5 py-px text-[9px] font-black ${active ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"}`}>
+                        <span className={`ml-0.5 rounded-full px-1.5 py-px text-[8px] font-black ${active ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"}`}>
                           {count}
                         </span>
                       )}
-                    </button>
+                    </ListToolbar.Button>
                   );
                 })}
 
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                <ListToolbar.Divider />
 
                 {/* Property */}
                 <AppSelect
-                  size="sm"
+                  compact
                   clearable
                   searchable
                   placeholder="All properties"
@@ -839,37 +836,33 @@ export default function LandlordStatementAllocations() {
                   )}
                 </div>
 
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                <ListToolbar.Divider />
 
                 {/* Ref search */}
                 <div className="relative shrink-0">
-                  <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={9} />
-                  <input type="text" placeholder="Ref / receipt…" value={refSearch}
+                  <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
+                  <ListToolbar.Input
+                    type="text" placeholder="Ref / receipt…" value={refSearch}
                     onChange={(e) => setRefSearch(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && runSearch()}
-                    className="h-7 w-32 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs text-slate-700 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                    width="w-32" className="pl-5"
+                  />
                 </div>
 
                 {/* Date range */}
-                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-                  className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                <span className="shrink-0 text-[10px] text-slate-400">–</span>
-                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-                  className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <ListToolbar.Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+                <span className="shrink-0 text-[9px] text-slate-400">–</span>
+                <ListToolbar.Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
 
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                <ListToolbar.Divider />
 
-                <button onClick={runSearch} disabled={loading}
-                  className="h-7 shrink-0 inline-flex items-center gap-1 rounded-lg bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
-                  <FaSearch size={9} /> {loading ? "Searching…" : "Search"}
-                </button>
-                <button onClick={runSearch} disabled={loading} title="Refresh"
-                  className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-slate-500 hover:bg-slate-50 disabled:opacity-40">
-                  <FaRedoAlt size={10} />
-                </button>
+                <ListToolbar.Button icon={FaSearch} onClick={runSearch} disabled={loading}>
+                  {loading ? "Searching…" : "Search"}
+                </ListToolbar.Button>
+                <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={runSearch} disabled={loading} title="Refresh" />
 
                 {/* Show reversed toggle — off by default, reversed txns are noise */}
-                <label className="ml-2 shrink-0 inline-flex cursor-pointer items-center gap-1.5 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-500 hover:border-slate-300 select-none">
+                <label className="ml-2 shrink-0 inline-flex cursor-pointer items-center gap-1.5 border border-slate-200 bg-white px-2 py-0.5 text-[9px] font-semibold text-slate-500 hover:border-slate-300 select-none">
                   <input
                     type="checkbox"
                     checked={showReversed}
@@ -879,11 +872,10 @@ export default function LandlordStatementAllocations() {
                   Show reversed
                 </label>
 
-                <span className="ml-auto shrink-0 inline-flex items-center gap-1 rounded-full bg-[#0B3B2E] px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
+                <span className="ml-auto shrink-0 inline-flex items-center gap-1 bg-[#0B3B2E] px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-white">
                   <FaShieldAlt size={8} /> Milik Admin
                 </span>
-              </div>
-            </div>
+            </ListToolbar>
 
             {/* ── Table card ── */}
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
