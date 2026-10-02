@@ -8,6 +8,7 @@ import {
 } from "react-icons/fa";
 import { printTabularList } from "../../utils/printList";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import ListToolbar from "../../components/common/ListToolbar";
 import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
 import {
@@ -17,8 +18,6 @@ import {
 } from "../../redux/apiCalls";
 import { fmtDate } from "../../utils/dates";
 import { useConfirm } from "../../context/ConfirmContext";
-
-const GRN = "#0B3B2E";
 const fmt = (v) => Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const localDate = (d) => { const dt = new Date(d); const y = dt.getFullYear(); const m = String(dt.getMonth()+1).padStart(2,"0"); const day = String(dt.getDate()).padStart(2,"0"); return `${y}-${m}-${day}`; };
 const todayStr  = () => localDate(new Date());
@@ -332,23 +331,16 @@ const BankReconciliation = () => {
         <div className="flex h-[calc(100dvh-152px)] flex-col overflow-hidden">
 
           {/* Toolbar */}
-          <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-gray-50/95 px-4 py-2">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Bank Reconciliation</p>
+          <ListToolbar>
+            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Bank Reconciliation</p>
             <div className="flex-1" />
-            <button
-              onClick={() => setShowNewForm(true)}
-              className="flex h-7 items-center gap-1.5 rounded px-3 text-xs font-semibold text-white"
-              style={{ backgroundColor: GRN }}
-            >
-              <FaPlus size={9} /> New Reconciliation
-            </button>
-            <button
-              onClick={loadInitial} disabled={loadingHistory}
-              className="flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-            >
-              <FaSyncAlt size={10} className={loadingHistory ? "animate-spin" : ""} />
-            </button>
-          </div>
+            <ListToolbar.Button icon={FaPlus} onClick={() => setShowNewForm(true)}>
+              New Reconciliation
+            </ListToolbar.Button>
+            <ListToolbar.Button variant="outline" onClick={loadInitial} disabled={loadingHistory}>
+              <FaSyncAlt size={7} className={loadingHistory ? "animate-spin" : ""} />
+            </ListToolbar.Button>
+          </ListToolbar>
 
           {/* New Reconciliation Form */}
           {showNewForm && (
@@ -483,22 +475,19 @@ const BankReconciliation = () => {
       <div className="flex h-[calc(100dvh-152px)] flex-col overflow-hidden">
 
         {/* Toolbar */}
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-gray-50/95 px-4 py-2 backdrop-blur-sm">
-          <button
-            onClick={backToList}
-            className="flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-          >
+        <ListToolbar>
+          <ListToolbar.Button variant="outline" onClick={backToList}>
             ← Back
-          </button>
+          </ListToolbar.Button>
 
-          <div className="mx-1 h-5 w-px bg-slate-200" />
+          <ListToolbar.Divider />
 
           <div>
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
               {activeRecon?.accountCode} {activeRecon?.accountName}
             </span>
             <span className="mx-1.5 text-slate-300">·</span>
-            <span className="text-[10px] text-slate-500">
+            <span className="text-[9px] text-slate-500">
               {fmtDate(activeRecon?.periodStart)} — {fmtDate(activeRecon?.periodEnd)}
             </span>
             {isLocked && (
@@ -508,47 +497,49 @@ const BankReconciliation = () => {
             )}
           </div>
 
-          <div className="mx-1 h-5 w-px bg-slate-200" />
+          <ListToolbar.Divider />
 
           {/* Search */}
           <div className="relative">
-            <FaSearch size={9} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+            <FaSearch size={8} className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <ListToolbar.Input
+              width="w-44"
+              className="pl-5"
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
               placeholder="Filter entries…"
-              className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs text-slate-700 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
             />
           </div>
 
           <div className="flex-1" />
 
-          <button
-            onClick={handlePrintPDF}
-            className="flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-          >
-            <FaFilePdf size={10} /> PDF
-          </button>
+          <ListToolbar.Button variant="outline" icon={FaFilePdf} onClick={handlePrintPDF}>
+            PDF
+          </ListToolbar.Button>
 
           {!isLocked && (
             <>
-              <button
-                onClick={handleSave} disabled={saving}
-                className="flex h-7 items-center gap-1.5 rounded border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+              <ListToolbar.Button
+                variant="outline"
+                className="border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                onClick={handleSave}
+                disabled={saving}
               >
-                {saving ? <FaSyncAlt size={9} className="animate-spin" /> : null}
+                {saving ? <FaSyncAlt size={7} className="animate-spin" /> : null}
                 Save Progress
-              </button>
-              <button
-                onClick={handleFinalize} disabled={saving || Math.abs(summary.difference) > 0.005}
-                className="flex h-7 items-center gap-1.5 rounded px-3 text-xs font-semibold text-white disabled:opacity-40"
-                style={{ backgroundColor: Math.abs(summary.difference) < 0.005 ? "#059669" : "#94a3b8" }}
+              </ListToolbar.Button>
+              <ListToolbar.Button
+                onClick={handleFinalize}
+                disabled={saving || Math.abs(summary.difference) > 0.005}
+                className={Math.abs(summary.difference) < 0.005 ? "!bg-emerald-600 hover:!bg-emerald-700" : "!bg-slate-400"}
                 title={Math.abs(summary.difference) > 0.005 ? "Clear all matching entries first (difference must be 0)" : "Finalise reconciliation"}
               >
-                <FaLock size={9} /> Finalise
-              </button>
+                <FaLock size={7} /> Finalise
+              </ListToolbar.Button>
             </>
           )}
-        </div>
+        </ListToolbar>
 
         {/* Summary strip */}
         <div className="grid shrink-0 grid-cols-5 divide-x divide-slate-200 border-b border-slate-200 bg-white">

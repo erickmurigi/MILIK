@@ -6,6 +6,7 @@ import {
 } from 'react-icons/fa';
 import { toast } from "react-toastify";
 import DashboardLayout from '../../components/Layout/DashboardLayout';
+import ListToolbar from '../../components/common/ListToolbar';
 import AppSelect from '../../components/common/AppSelect';
 import MilikTable from '../../components/common/MilikTable';
 import { adminRequests } from '../../utils/requestMethods';
@@ -353,53 +354,42 @@ export default function Zones() {
       <div className="flex flex-col h-full min-h-0 p-0 bg-white overflow-hidden">
 
         {/* Toolbar */}
-        <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-            <input
-              value={draftSearch}
-              onChange={(e) => setDraftSearch(e.target.value)}
-              onKeyDown={onEnter}
-              placeholder="Name or code…"
-              className="h-7 w-40 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-            />
-            <AppSelect
-              value={draftType}
-              onChange={(v) => setDraftType(v ?? '')}
-              options={TYPE_OPTIONS}
-              placeholder="All Types"
-              clearable
-              size="sm"
-            />
-            <AppSelect
-              value={draftStatus}
-              onChange={(v) => setDraftStatus(v ?? '')}
-              options={STATUS_OPTIONS}
-              placeholder="All Status"
-              clearable
-              size="sm"
-            />
-            <div className="h-4 w-px shrink-0 bg-slate-200" />
-            <button
-              onClick={applyFilters}
-              className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2.5 text-xs font-semibold text-white hover:bg-[#e67e00]"
-            >
-              <FaSearch size={9} /> Search
-            </button>
-            <button
-              onClick={resetFilters}
-              className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]"
-            >
-              <FaRedoAlt size={9} /> Reset
-            </button>
-            <div className="h-4 w-px shrink-0 bg-slate-200" />
-            <button
-              onClick={() => setModalZone(false)}
-              className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]"
-            >
-              <FaPlus size={9} /> Add Zone
-            </button>
-          </div>
-        </div>
+        <ListToolbar>
+          <ListToolbar.Input
+            width="w-40"
+            value={draftSearch}
+            onChange={(e) => setDraftSearch(e.target.value)}
+            onKeyDown={onEnter}
+            placeholder="Name or code…"
+          />
+          <AppSelect
+            value={draftType}
+            onChange={(v) => setDraftType(v ?? '')}
+            options={TYPE_OPTIONS}
+            placeholder="All Types"
+            clearable
+            compact
+          />
+          <AppSelect
+            value={draftStatus}
+            onChange={(v) => setDraftStatus(v ?? '')}
+            options={STATUS_OPTIONS}
+            placeholder="All Status"
+            clearable
+            compact
+          />
+          <ListToolbar.Divider />
+          <ListToolbar.Button icon={FaSearch} variant="accent" onClick={applyFilters}>
+            Search
+          </ListToolbar.Button>
+          <ListToolbar.Button icon={FaRedoAlt} onClick={resetFilters}>
+            Reset
+          </ListToolbar.Button>
+          <ListToolbar.Divider />
+          <ListToolbar.Button icon={FaPlus} onClick={() => setModalZone(false)}>
+            Add Zone
+          </ListToolbar.Button>
+        </ListToolbar>
 
         {/* Table card */}
         <div className="flex-1 min-h-0 px-2 pb-2 overflow-hidden">
