@@ -6,6 +6,7 @@ import { FaArchive, FaEdit, FaExternalLinkAlt, FaLayerGroup, FaPlus, FaRedoAlt, 
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterSearch } from "./SaleFilterBar";
+import ListToolbar from "../../components/common/ListToolbar";
 import PaginationBar from "../../components/PaginationBar";
 import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
@@ -214,26 +215,21 @@ const SaleProjects = () => {
   return (
     <PropertySaleShell>
       <SaleFilterBar
-        leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} {(total === 1 ? T.saleProject : T.saleProjects).toLowerCase()}</span>}
+        leading={<span className="shrink-0 font-mono text-[9px] font-black text-slate-500">{total} {(total === 1 ? T.saleProject : T.saleProjects).toLowerCase()}</span>}
         onReset={resetFilters}
         activeCount={activeCount}
         trailing={
           <>
             <SalePrintButton onClick={printReport} busy={printing} disabled={loading || total === 0} />
-            <button
-              type="button"
+            <ListToolbar.Button
+              variant="outline"
               onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-projects", biz] })}
-              className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
             >
-              <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
-            </button>
-            <button
-              type="button"
-              onClick={() => setFormModal({ project: null })}
-              className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]"
-            >
-              <FaPlus size={9} /> New {T.saleProject}
-            </button>
+              <FaRedoAlt size={7} className={isFetching ? "animate-spin" : ""} /> Refresh
+            </ListToolbar.Button>
+            <ListToolbar.Button icon={FaPlus} onClick={() => setFormModal({ project: null })}>
+              New {T.saleProject}
+            </ListToolbar.Button>
           </>
         }
       >
@@ -242,7 +238,7 @@ const SaleProjects = () => {
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           placeholder={`Search ${T.saleProjects.toLowerCase()}...`}
         />
-        <AppSelect value={statusFilt} onChange={(v) => { setStatusFilt(v ?? ""); setPage(1); }} options={STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
+        <AppSelect value={statusFilt} onChange={(v) => { setStatusFilt(v ?? ""); setPage(1); }} options={STATUS_OPTIONS} placeholder="All Statuses" clearable compact />
       </SaleFilterBar>
 
       <div className="relative flex flex-1 min-h-0 flex-col overflow-hidden">
