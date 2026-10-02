@@ -2,6 +2,7 @@
 import { useTabState } from "../../hooks/useTabState";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
+import ListToolbar from '../../components/common/ListToolbar';
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectCurrentCompany,
@@ -56,9 +57,6 @@ import {
 import { useTerms } from "../../hooks/useTerm";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
-const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
-const MILIK_ORANGE = "bg-[#FF8C00]";
-const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
 
 const normalizeList = (payload) => {
   if (Array.isArray(payload)) return payload;
@@ -1755,11 +1753,11 @@ const MeterReadings = () => {
           )}
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-            <div className="flex-none sticky top-0 z-20 border-b border-gray-200 bg-white shadow-sm">
-              <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
+            <ListToolbar>
                 {[{val:"ALL",label:"All"},{val:"paid",label:"Paid"},{val:"unpaid",label:"Unpaid"},{val:"partial",label:"Partial"},{val:"vacant",label:"Vacant"},{val:"voided",label:"Voided"}].map(({val,label}) => (
-                  <button
+                  <ListToolbar.Button
                     key={val}
+                    variant={draftFilters.status === val ? "primary" : "outline"}
                     onClick={() => {
                       // Status tabs are quick filters — apply immediately rather than
                       // waiting for the Search button (unlike property/unit/search/period,
@@ -1767,37 +1765,48 @@ const MeterReadings = () => {
                       setDraftFilters((prev) => ({ ...prev, status: val }));
                       setAppliedFilters((prev) => ({ ...prev, status: val }));
                     }}
-                    className={`h-[20px] shrink-0 px-1.5 text-[9px] font-semibold ${draftFilters.status === val ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}
-                  >{label}</button>
+                  >{label}</ListToolbar.Button>
                 ))}
-                <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-                <input type="text" value={draftFilters.search} onChange={setFilter("search")} placeholder="Search…" className="h-[20px] w-36 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <ListToolbar.Divider />
+                <ListToolbar.Input type="text" value={draftFilters.search} onChange={setFilter("search")} placeholder="Search…" width="w-36" />
                 <AppSelect value={draftFilters.property} onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "any", unit: "any" }))} options={propertyOptions} placeholder="Property" clearable searchable compact />
                 <AppSelect value={draftFilters.unit} onChange={(v) => setDraftFilters((prev) => ({ ...prev, unit: v ?? "any" }))} options={unitsForSelectedProperty.map((unit) => ({ value: unit._id, label: unit.unitNumber }))} placeholder="Unit" clearable compact />
                 <AppSelect value={draftFilters.utilityType} onChange={(v) => setDraftFilters((prev) => ({ ...prev, utilityType: v ?? "any" }))} options={utilityOptions.map((utility) => ({ value: utility, label: utility }))} placeholder="Utility" clearable compact />
-                <input type="month" value={draftFilters.billingPeriod} onChange={setFilter("billingPeriod")} className="h-[20px] w-[5.5rem] shrink-0 border border-gray-300 px-1 text-[9px]" />
-                <button onClick={applySearch} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaSearch size={7} /> Search</button>
-                <button onClick={resetFilters} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={7} /> Reset</button>
-                <button onClick={handleEditSelected} disabled={!canEditSelected} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white shadow-sm ${canEditSelected ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaEdit size={7} /> Edit</button>
-                <button onClick={handleDeleteSelected} disabled={selectedDeletableRows.length === 0 || bulkDeleting || !canDeleteReading} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white shadow-sm ${selectedDeletableRows.length > 0 && !bulkDeleting && canDeleteReading ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}><FaTrash size={7} /> Delete</button>
-                <button
+                <ListToolbar.Input type="month" value={draftFilters.billingPeriod} onChange={setFilter("billingPeriod")} width="w-[5.5rem]" />
+                <ListToolbar.Button icon={FaSearch} variant="accent" onClick={applySearch}>Search</ListToolbar.Button>
+                <ListToolbar.Button icon={FaRedoAlt} onClick={resetFilters}>Reset</ListToolbar.Button>
+                <ListToolbar.Button icon={FaEdit} onClick={handleEditSelected} disabled={!canEditSelected}>Edit</ListToolbar.Button>
+                <ListToolbar.Button
+                  icon={FaTrash}
+                  variant="danger"
+                  onClick={handleDeleteSelected}
+                  disabled={selectedDeletableRows.length === 0 || bulkDeleting || !canDeleteReading}
+                >
+                  Delete
+                </ListToolbar.Button>
+                <ListToolbar.Button
+                  icon={FaSms}
+                  className="!bg-teal-600 hover:!bg-teal-700"
                   onClick={() => setCommunicationModal({ contextType: "meter_reading", recordIds: selectedReadingIds, title: `Notify ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, subtitle: "Send meter reading notification via SMS.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })}
                   disabled={selectedCount === 0}
                   title={selectedCount === 0 ? "Select readings to SMS tenants" : `SMS ${selectedCount} tenant${selectedCount !== 1 ? "s" : ""}`}
-                  className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white shadow-sm ${selectedCount > 0 ? "bg-teal-600 hover:bg-teal-700" : "bg-gray-400 cursor-not-allowed"}`}
-                ><FaSms size={7} /> SMS</button>
-                <button
+                >
+                  SMS
+                </ListToolbar.Button>
+                <ListToolbar.Button
+                  icon={FaEnvelope}
+                  className="!bg-blue-600 hover:!bg-blue-700"
                   onClick={() => setCommunicationModal({ contextType: "meter_reading", recordIds: selectedReadingIds, title: `Email ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, subtitle: "Send meter reading notification via email.", allowedChannels: ["email"], defaultChannel: "email" })}
                   disabled={selectedCount === 0}
                   title={selectedCount === 0 ? "Select readings to email tenants" : `Email ${selectedCount} tenant${selectedCount !== 1 ? "s" : ""}`}
-                  className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white shadow-sm ${selectedCount > 0 ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-400 cursor-not-allowed"}`}
-                ><FaEnvelope size={7} /> Email</button>
-                <button onClick={handlePrintList} disabled={filteredReadings.length === 0} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white shadow-sm ${filteredReadings.length > 0 ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaPrint size={7} /> Print</button>
-                <button onClick={loadPageData} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSync size={7} /> Refresh</button>
-                <button onClick={openAddSectionForNew} disabled={!canCreateReading} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white shadow-sm ${canCreateReading ? `${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaPlus size={7} /> Add</button>
-                <button onClick={openBatchModal} disabled={!canCreateReading} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white shadow-sm ${canCreateReading ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaBolt size={7} /> Batch Add</button>
-              </div>
-            </div>
+                >
+                  Email
+                </ListToolbar.Button>
+                <ListToolbar.Button icon={FaPrint} onClick={handlePrintList} disabled={filteredReadings.length === 0}>Print</ListToolbar.Button>
+                <ListToolbar.Button icon={FaSync} onClick={loadPageData}>Refresh</ListToolbar.Button>
+                <ListToolbar.Button icon={FaPlus} variant="accent" onClick={openAddSectionForNew} disabled={!canCreateReading}>Add</ListToolbar.Button>
+                <ListToolbar.Button icon={FaBolt} onClick={openBatchModal} disabled={!canCreateReading}>Batch Add</ListToolbar.Button>
+            </ListToolbar>
 
             <MilikTable
               columns={[
