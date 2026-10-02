@@ -54,7 +54,7 @@ const ManagementFeeInvoices = () => {
     [currentCompany, currentUser]
   );
 
-  const canEmail = hasCompanyPermission(currentUser || {}, currentCompany, "processedStatements", "read", "propertyManagement");
+  const canEmail = hasCompanyPermission(currentUser || {}, currentCompany, "processedStatements", "read", "accounts");
 
   const [pageSize, setPageSize] = useState(50);
   const [draftFilters, setDraftFilters] = useState(emptyFilters);

@@ -3,14 +3,19 @@ import {
   FaArrowLeft,
   FaBan,
   FaBuilding,
-  FaCheckCircle,
   FaChevronDown,
   FaChevronUp,
   FaEye,
   FaEyeSlash,
+  FaExclamationTriangle,
+  FaFilter,
   FaKey,
   FaSave,
+  FaSearch,
   FaShieldAlt,
+  FaStar,
+  FaRegStar,
+  FaTimes,
   FaUnlockAlt,
   FaUserPlus,
 } from 'react-icons/fa';
@@ -26,6 +31,7 @@ import { getEnabledCompanyModuleKeys, MODULE_LABELS } from '../../utils/companyM
 import {
   ACCESS_SECTIONS,
   buildEmptyPermissionMap,
+  isPermissionKeyPresent,
   normalizePermissionMap,
   setPermissionGroupValue,
 } from '../../utils/accessMatrix';
@@ -183,6 +189,33 @@ const normalizeUserToForm = (user, companies) => {
 const sectionPermissionCount = (permissions = {}, items = []) =>
   items.reduce((count, item) => count + (permissions?.[item.resource]?.[item.action] ? 1 : 0), 0);
 
+// For an existing user, find every catalogue permission their saved record never
+// actually set (in any key format) — these are either brand-new catalogue
+// additions or ones added after this user was last saved. Keyed by companyId so
+// the UI can badge them as "new" instead of silently reading as "denied".
+const computeUnreviewedByCompany = (rawUser, companyList) => {
+  const map = {};
+  const rawAssignments = Array.isArray(rawUser?.companyAssignments) ? rawUser.companyAssignments : [];
+  rawAssignments.forEach((assignment) => {
+    const companyId = assignment?.company?._id || assignment?.company;
+    if (!companyId) return;
+    const company = companyList.find((item) => item._id === companyId);
+    const enabledModuleKeys = getEnabledCompanyModuleKeys(company);
+    const rawPerms = assignment?.permissions || {};
+    const unreviewed = new Set();
+    ACCESS_SECTIONS.forEach((section) => {
+      section.permissions.forEach((permission) => {
+        if (permission.moduleKey && !enabledModuleKeys.includes(permission.moduleKey)) return;
+        if (!isPermissionKeyPresent(rawPerms, permission.resource, permission.action)) {
+          unreviewed.add(`${permission.resource}.${permission.action}`);
+        }
+      });
+    });
+    if (unreviewed.size) map[companyId] = unreviewed;
+  });
+  return map;
+};
+
 const applyPreset = (preset, enabledModuleKeys, assignment) => {
   const allPerms = ACCESS_SECTIONS.flatMap((s) =>
     s.permissions.filter((p) => !p.moduleKey || enabledModuleKeys.includes(p.moduleKey))
@@ -209,16 +242,36 @@ export default function AddUserPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [branchesByCompany, setBranchesByCompany] = useState({});
-  const [openSections, setOpenSections] = useState(() => new Set(ACCESS_SECTIONS.map((s) => s.id)));
+  // Keyed `${companyId}:${sectionId}` — each company assignment collapses independently.
+  const [openSections, setOpenSections] = useState(() => new Set());
   const [showPw, setShowPw] = useState(false);
   const [showCpw, setShowCpw] = useState(false);
+  const [permissionSearch, setPermissionSearch] = useState('');
+  const [sensitiveOnly, setSensitiveOnly] = useState(false);
+  const [companySearch, setCompanySearch] = useState('');
+  // companyId -> Set('resource.action') the saved record never explicitly set.
+  const [unreviewedByCompany, setUnreviewedByCompany] = useState({});
+  // Keyed `${companyId}:${moduleKey}` — role-preset blocks collapse independently too.
+  const [openRolePresets, setOpenRolePresets] = useState(() => new Set());
+  const seededOpenSectionsRef = useRef(false);
 
-  const toggleSection = (sectionId) =>
+  const toggleSection = (companyId, sectionId) => {
+    const key = `${companyId}:${sectionId}`;
     setOpenSections((prev) => {
       const next = new Set(prev);
-      next.has(sectionId) ? next.delete(sectionId) : next.add(sectionId);
+      next.has(key) ? next.delete(key) : next.add(key);
       return next;
     });
+  };
+
+  const toggleRolePreset = (companyId, moduleKey) => {
+    const key = `${companyId}:${moduleKey}`;
+    setOpenRolePresets((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
 
   const [form, setForm] = useState({
     surname: '',
@@ -260,6 +313,7 @@ export default function AddUserPage() {
 
         if (isEditing) {
           setForm(normalizeUserToForm(userRes.data, companyList));
+          setUnreviewedByCompany(computeUnreviewedByCompany(userRes.data, companyList));
         } else if (isSystemAdmin) {
           const defaultCompanyId = currentCompany?._id || companyList[0]?._id || '';
           const defaultCompany = companyList.find((item) => item._id === defaultCompanyId);
@@ -323,17 +377,42 @@ export default function AddUserPage() {
     return m;
   }, [availableCompanies]);
 
+  // Seed which sections / role-preset blocks start open, once: something only
+  // needs attention if it's partially granted (not a clean all-or-nothing state),
+  // doesn't cleanly match a standard role, or has something unreviewed. Runs once
+  // per page load so it never fights the admin's own manual toggling.
+  useEffect(() => {
+    if (seededOpenSectionsRef.current) return;
+    if (!form.companyAssignments.length) return;
+    seededOpenSectionsRef.current = true;
+    const nextSections = new Set();
+    const nextPresets = new Set();
+    form.companyAssignments.forEach((assignment) => {
+      const enabledModuleKeys = enabledModuleKeysByCompany[assignment.company] || [];
+      const unreviewed = unreviewedByCompany[assignment.company];
+      ACCESS_SECTIONS.forEach((section) => {
+        const enabledPermissions = section.permissions.filter(
+          (p) => !p.moduleKey || enabledModuleKeys.includes(p.moduleKey)
+        );
+        if (!enabledPermissions.length) return;
+        const granted = sectionPermissionCount(assignment.permissions, enabledPermissions);
+        const isMixed = granted > 0 && granted < enabledPermissions.length;
+        const hasUnreviewed = unreviewed && enabledPermissions.some((p) => unreviewed.has(`${p.resource}.${p.action}`));
+        if (isMixed || hasUnreviewed) nextSections.add(`${assignment.company}:${section.id}`);
+      });
+      Object.keys(MODULE_ROLE_PRESETS).forEach((moduleKey) => {
+        if (!enabledModuleKeys.includes(moduleKey)) return;
+        const role = detectModuleRole(assignment.permissions, moduleKey);
+        if (role === 'custom') nextPresets.add(`${assignment.company}:${moduleKey}`);
+      });
+    });
+    setOpenSections(nextSections);
+    setOpenRolePresets(nextPresets);
+  }, [form.companyAssignments, enabledModuleKeysByCompany, unreviewedByCompany]);
+
   const profileDesc = useMemo(
     () => PROFILE_OPTIONS.find((p) => p.value === form.profile)?.description,
     [form.profile]
-  );
-
-  const primaryCompanyOptions = useMemo(
-    () => form.accessibleCompanies.map((id) => {
-      const c = availableCompanies.find((x) => x._id === id);
-      return { value: id, label: c?.companyName || id };
-    }),
-    [form.accessibleCompanies, availableCompanies]
   );
 
   const primaryCompanyName = useMemo(
@@ -379,6 +458,16 @@ export default function AddUserPage() {
       return { ...prev, accessibleCompanies, companyAssignments, primaryCompany };
     });
   };
+
+  const makePrimaryCompany = (companyId) => updateForm('primaryCompany', companyId);
+
+  const normalizedCompanySearch = companySearch.trim().toLowerCase();
+  const visibleCompanies = normalizedCompanySearch
+    ? availableCompanies.filter((company) =>
+        company.companyName?.toLowerCase().includes(normalizedCompanySearch) ||
+        company.companyCode?.toLowerCase().includes(normalizedCompanySearch)
+      )
+    : availableCompanies;
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -462,6 +551,24 @@ export default function AddUserPage() {
     }
   };
 
+  const emailError = form.email && !/^\S+@\S+\.\S+$/.test(form.email) ? 'Doesn\'t look like a valid email' : null;
+  const phoneError = form.phoneNumber && form.phoneNumber.replace(/\D/g, '').length < 9 ? 'Looks too short for a phone number' : null;
+  const newPassword = form.password;
+  const passwordTooShort = Boolean(newPassword) && newPassword.length < 8;
+  const passwordMismatch = Boolean(newPassword) && form.confirmPassword && newPassword !== form.confirmPassword;
+
+  const normalizedSearch = permissionSearch.trim().toLowerCase();
+  const isFiltering = Boolean(normalizedSearch) || sensitiveOnly;
+  const matchesFilters = (permission) => {
+    if (sensitiveOnly && !DANGER_ACTIONS.has(permission.action)) return false;
+    if (!normalizedSearch) return true;
+    return (
+      permission.label.toLowerCase().includes(normalizedSearch) ||
+      permission.resource.toLowerCase().includes(normalizedSearch) ||
+      permission.action.toLowerCase().includes(normalizedSearch)
+    );
+  };
+
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
@@ -487,7 +594,7 @@ export default function AddUserPage() {
                 </h1>
               </div>
             </div>
-            <span className="rounded-lg border border-[#2A5C4A] bg-[#0A3127] px-2.5 py-1 text-[10px] font-bold text-[#B7C9C0]">
+            <span className="border border-[#2A5C4A] bg-[#0A3127] px-2.5 py-1 text-[10px] font-bold text-[#B7C9C0]">
               {isSystemAdmin ? 'Multi-company enabled' : 'Single company'}
             </span>
           </div>
@@ -513,20 +620,26 @@ export default function AddUserPage() {
                   <div className="p-3">
                     <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                       {[
-                        ['surname',       'Surname *'],
-                        ['otherNames',    'Other names *'],
-                        ['idNumber',      'ID / Passport *'],
-                        ['phoneNumber',   'Phone number *'],
-                        ['email',         'Email *'],
-                        ['postalAddress', 'Postal address'],
-                      ].map(([field, label]) => (
+                        ['surname',       'Surname *',       null,          undefined],
+                        ['otherNames',    'Other names *',   null,          undefined],
+                        ['idNumber',      'ID / Passport *', null,          undefined],
+                        ['phoneNumber',   'Phone number *',  phoneError,    '0712 345 678'],
+                        ['email',         'Email *',         emailError,    'name@company.com'],
+                        ['postalAddress', 'Postal address',  null,          undefined],
+                      ].map(([field, label, error, placeholder]) => (
                         <label key={field} className="text-xs font-semibold text-slate-700">
                           <span className="mb-0.5 block">{label}</span>
                           <input
                             value={form[field]}
                             onChange={(e) => updateForm(field, e.target.value)}
-                            className="h-8 w-full rounded-lg border border-slate-200 px-3 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                            placeholder={placeholder}
+                            className={`h-8 w-full border px-3 text-xs outline-none focus:ring-1 ${
+                              error
+                                ? 'border-red-300 focus:border-red-400 focus:ring-red-200'
+                                : 'border-slate-200 focus:border-[#0B3B2E] focus:ring-[#0B3B2E]/20'
+                            }`}
                           />
+                          {error && <span className="mt-0.5 block text-[10px] font-semibold text-red-500">{error}</span>}
                         </label>
                       ))}
                       <AppSelect
@@ -564,12 +677,21 @@ export default function AddUserPage() {
                                 type={showPw ? 'text' : 'password'}
                                 value={form.password}
                                 onChange={(e) => updateForm('password', e.target.value)}
-                                className="h-8 w-full rounded-lg border border-slate-200 px-3 pr-8 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                                className={`h-8 w-full border px-3 pr-8 text-xs outline-none focus:ring-1 ${
+                                  passwordTooShort
+                                    ? 'border-red-300 focus:border-red-400 focus:ring-red-200'
+                                    : 'border-slate-200 focus:border-[#0B3B2E] focus:ring-[#0B3B2E]/20'
+                                }`}
                               />
                               <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                                 {showPw ? <FaEyeSlash size={10} /> : <FaEye size={10} />}
                               </button>
                             </div>
+                            {newPassword && (
+                              <span className={`mt-0.5 block text-[10px] font-semibold ${passwordTooShort ? 'text-red-500' : 'text-emerald-600'}`}>
+                                {passwordTooShort ? 'At least 8 characters required' : 'Looks good'}
+                              </span>
+                            )}
                           </div>
                           <div className="text-xs font-semibold text-slate-700">
                             <span className="mb-0.5 block">Confirm password</span>
@@ -578,69 +700,93 @@ export default function AddUserPage() {
                                 type={showCpw ? 'text' : 'password'}
                                 value={form.confirmPassword}
                                 onChange={(e) => updateForm('confirmPassword', e.target.value)}
-                                className="h-8 w-full rounded-lg border border-slate-200 px-3 pr-8 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                                className={`h-8 w-full border px-3 pr-8 text-xs outline-none focus:ring-1 ${
+                                  passwordMismatch
+                                    ? 'border-red-300 focus:border-red-400 focus:ring-red-200'
+                                    : 'border-slate-200 focus:border-[#0B3B2E] focus:ring-[#0B3B2E]/20'
+                                }`}
                               />
                               <button type="button" onClick={() => setShowCpw(!showCpw)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                                 {showCpw ? <FaEyeSlash size={10} /> : <FaEye size={10} />}
                               </button>
                             </div>
+                            {passwordMismatch && (
+                              <span className="mt-0.5 block text-[10px] font-semibold text-red-500">Passwords don't match</span>
+                            )}
                           </div>
                         </>
                       )}
                     </div>
 
-                    {/* Access toggles */}
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {[
-                        ['userControl', 'User control'],
-                      ].map(([field, label]) => (
-                        <label
-                          key={field}
-                          className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                        >
+                    {/* Access toggles, grouped by what they actually control */}
+                    <div className="mt-2 space-y-2">
+                      <div>
+                        <p className="mb-1 text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-400">
+                          Account status
+                        </p>
+                        <label className="flex cursor-pointer items-center gap-1.5 border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
                           <input
                             type="checkbox"
-                            checked={Boolean(form[field])}
-                            onChange={(e) => updateForm(field, e.target.checked)}
+                            checked={Boolean(form.userControl)}
+                            onChange={(e) => updateForm('userControl', e.target.checked)}
                             className="accent-[#0B3B2E]"
                           />
-                          {label}
+                          User control
+                          <span className="font-normal text-slate-400">— unchecked blocks this user from signing in</span>
                         </label>
-                      ))}
-                      {(currentUser?.adminAccess || isSystemAdmin) && [
-                        ['adminAccess',        'Company admin'],
-                        ['setupAccess',        'Operational settings'],
-                        ['companySetupAccess', 'Company setup'],
-                      ].map(([field, label]) => (
-                        <label
-                          key={field}
-                          className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={Boolean(form[field])}
-                            onChange={(e) => updateForm(field, e.target.checked)}
-                            className="accent-[#0B3B2E]"
-                          />
-                          {label}
-                        </label>
-                      ))}
+                      </div>
+
+                      {(currentUser?.adminAccess || isSystemAdmin) && (
+                        <div>
+                          <p className="mb-1 text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-400">
+                            Administrative privileges
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {[
+                              ['adminAccess',        'Company admin',        'bypasses granular permission checks for this company'],
+                              ['setupAccess',        'Operational settings', 'edit zones, chart of accounts, templates & setup data'],
+                              ['companySetupAccess', 'Company setup',        'edit company profile, branding & module activation'],
+                            ].map(([field, label, hint]) => (
+                              <label
+                                key={field}
+                                title={hint}
+                                className="flex cursor-pointer items-center gap-1.5 border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(form[field])}
+                                  onChange={(e) => updateForm(field, e.target.checked)}
+                                  className="accent-[#0B3B2E]"
+                                />
+                                {label}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       {isSystemAdmin && (
-                        <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-2 py-1.5 text-xs font-semibold text-slate-700">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(form.superAdminAccess)}
-                            onChange={(e) => updateForm('superAdminAccess', e.target.checked)}
-                            className="accent-[#FF8C00]"
-                          />
-                          Milik super admin
-                        </label>
+                        <div>
+                          <p className="mb-1 text-[9px] font-extrabold uppercase tracking-[0.14em] text-orange-400">
+                            System access
+                          </p>
+                          <label className="flex cursor-pointer items-center gap-1.5 border border-orange-200 bg-orange-50 px-2 py-1.5 text-xs font-semibold text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(form.superAdminAccess)}
+                              onChange={(e) => updateForm('superAdminAccess', e.target.checked)}
+                              className="accent-[#FF8C00]"
+                            />
+                            Milik super admin
+                            <span className="font-normal text-orange-700/70">— unrestricted access across every company</span>
+                          </label>
+                        </div>
                       )}
                     </div>
 
                     {/* First-time sign-in options */}
                     {!isEditing && (
-                      <div className="mt-2 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                      <div className="mt-2 flex flex-wrap items-center gap-3 border border-slate-200 bg-slate-50 p-2">
                         <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-[#0B3B2E]">
                           <FaKey size={9} /> First-time sign-in:
                         </span>
@@ -675,57 +821,98 @@ export default function AddUserPage() {
                     <h2 className="text-[11px] font-bold uppercase tracking-wide text-white">Company Assignment</h2>
                   </div>
                   <div className="p-3">
-                    <div className="space-y-1.5">
-                      {availableCompanies.map((company) => {
+                    {availableCompanies.length > 6 && (
+                      <div className="relative mb-2">
+                        <FaSearch className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
+                        <input
+                          value={companySearch}
+                          onChange={(e) => setCompanySearch(e.target.value)}
+                          placeholder="Search companies by name or code..."
+                          className="h-7 w-full border border-slate-200 bg-white pl-7 pr-7 text-[11px] outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                        />
+                        {companySearch && (
+                          <button
+                            type="button"
+                            onClick={() => setCompanySearch('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                          >
+                            <FaTimes size={10} />
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="max-h-[260px] space-y-1.5 overflow-y-auto pr-0.5">
+                      {visibleCompanies.map((company) => {
                         const checked = form.accessibleCompanies.includes(company._id);
+                        const isPrimary = checked && form.primaryCompany === company._id;
+                        const moduleCount = enabledModuleKeysByCompany[company._id]?.length ?? 0;
                         return (
-                          <label
+                          <div
                             key={company._id}
-                            className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs transition ${
+                            className={`flex items-center gap-2 border px-3 py-2 text-xs transition ${
                               checked
                                 ? 'border-[#0B3B2E]/30 bg-[#EDF5F1]'
                                 : 'border-slate-200 bg-white hover:border-slate-300'
                             }`}
                           >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => toggleCompany(company)}
-                              className="accent-[#0B3B2E]"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="font-black text-slate-900">{company.companyName}</div>
-                              <div className="text-[10px] text-slate-500">{company.companyCode || 'No code'}</div>
-                            </div>
-                            {checked && <FaCheckCircle className="shrink-0 text-[#0B3B2E]" size={11} />}
-                          </label>
+                            <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleCompany(company)}
+                                className="accent-[#0B3B2E]"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="truncate font-black text-slate-900">{company.companyName}</span>
+                                  {isPrimary && (
+                                    <span className="shrink-0 bg-[#0B3B2E] px-1.5 py-0.5 text-[8px] font-extrabold uppercase text-white">
+                                      Primary
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-slate-500">
+                                  {company.companyCode || 'No code'} · {moduleCount} module{moduleCount !== 1 ? 's' : ''} enabled
+                                </div>
+                              </div>
+                            </label>
+                            {checked && (
+                              <button
+                                type="button"
+                                onClick={() => makePrimaryCompany(company._id)}
+                                title={isPrimary ? 'Primary company' : 'Set as primary company'}
+                                className={`shrink-0 p-1 ${isPrimary ? 'text-amber-500' : 'text-slate-300 hover:text-amber-400'}`}
+                              >
+                                {isPrimary ? <FaStar size={12} /> : <FaRegStar size={12} />}
+                              </button>
+                            )}
+                          </div>
                         );
                       })}
+                      {!visibleCompanies.length && (
+                        <div className="border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-[11px] text-slate-500">
+                          No companies match "{companySearch}"
+                        </div>
+                      )}
                     </div>
 
-                    <AppSelect
-                      label="Primary company *"
-                      value={form.primaryCompany}
-                      onChange={(v) => updateForm('primaryCompany', v ?? '')}
-                      options={primaryCompanyOptions}
-                      placeholder="Select primary company"
-                      searchable
-                      size="md"
-                      className="mt-2"
-                    />
-
-                    <div className="mt-2 flex items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-                      <span>
-                        <span className="font-black text-slate-900">{form.accessibleCompanies.length}</span>{' '}
-                        compan{form.accessibleCompanies.length === 1 ? 'y' : 'ies'} selected
-                      </span>
-                      <span>
-                        Primary:{' '}
-                        <span className="font-bold text-slate-900">
-                          {primaryCompanyName}
+                    {!form.accessibleCompanies.length ? (
+                      <div className="mt-2 border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
+                        Select at least one company above — this user has no access anywhere yet.
+                      </div>
+                    ) : (
+                      <div className="mt-2 flex items-center gap-4 border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                        <span>
+                          <span className="font-black text-slate-900">{form.accessibleCompanies.length}</span>{' '}
+                          compan{form.accessibleCompanies.length === 1 ? 'y' : 'ies'} selected
                         </span>
-                      </span>
-                    </div>
+                        <span className="flex items-center gap-1">
+                          <FaStar className="text-amber-500" size={10} /> Primary:{' '}
+                          <span className="font-bold text-slate-900">{primaryCompanyName}</span>
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -737,9 +924,41 @@ export default function AddUserPage() {
                   <h2 className="flex-1 text-[11px] font-bold uppercase tracking-wide text-white">
                     Modules &amp; Action Privileges
                   </h2>
-                  <p className="text-[10px] text-[#B7C9C0]">
-                    Configure per-company access level and granular permissions
+                  <p className="hidden text-[10px] text-[#B7C9C0] sm:block">
+                    Module level sets the ceiling — role presets &amp; checkboxes fine-tune within it
                   </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/60 px-3 py-2">
+                  <div className="relative min-w-[180px] flex-1">
+                    <FaSearch className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
+                    <input
+                      value={permissionSearch}
+                      onChange={(e) => setPermissionSearch(e.target.value)}
+                      placeholder="Search permissions — e.g. &quot;commission&quot;, &quot;delete&quot;, &quot;journal&quot;"
+                      className="h-7 w-full border border-slate-200 bg-white pl-7 pr-7 text-[11px] outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    />
+                    {permissionSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setPermissionSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        <FaTimes size={10} />
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSensitiveOnly((v) => !v)}
+                    className={`inline-flex h-7 shrink-0 items-center gap-1.5 border px-2.5 text-[10px] font-bold transition-colors ${
+                      sensitiveOnly
+                        ? 'border-red-300 bg-red-50 text-red-700'
+                        : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    <FaFilter size={9} /> Sensitive only
+                  </button>
                 </div>
 
                 <div className="divide-y divide-slate-100">
@@ -751,6 +970,10 @@ export default function AddUserPage() {
                       s.permissions.filter((p) => !p.moduleKey || enabledModuleKeys.includes(p.moduleKey))
                     );
                     const totalGranted = sectionPermissionCount(assignment.permissions, allEnabledPerms);
+                    const unreviewedSet = unreviewedByCompany[assignment.company];
+                    const totalUnreviewed = unreviewedSet
+                      ? allEnabledPerms.filter((p) => unreviewedSet.has(`${p.resource}.${p.action}`)).length
+                      : 0;
 
                     return (
                       <div key={assignment.company} className="p-4">
@@ -761,7 +984,7 @@ export default function AddUserPage() {
                             <span className="text-xs font-black text-slate-900">
                               {company?.companyName || 'Company'}
                             </span>
-                            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-500">
+                            <span className="border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-500">
                               {enabledModuleKeys.length} modules
                             </span>
                           </div>
@@ -769,6 +992,11 @@ export default function AddUserPage() {
                             <span className="text-[10px] font-semibold text-slate-400">
                               {totalGranted} permission{totalGranted !== 1 ? 's' : ''} granted
                             </span>
+                            {totalUnreviewed > 0 && (
+                              <span className="inline-flex items-center gap-1 bg-amber-100 px-2 py-0.5 text-[9px] font-extrabold text-amber-700">
+                                <FaExclamationTriangle size={8} /> {totalUnreviewed} new — not yet reviewed
+                              </span>
+                            )}
                             <div className="h-3 w-px bg-slate-200" />
                             <span className="text-[10px] font-bold text-slate-500">Quick set:</span>
                             {[
@@ -785,7 +1013,7 @@ export default function AddUserPage() {
                                     permissions: applyPreset(key, enabledModuleKeys, current),
                                   }))
                                 }
-                                className={`rounded border px-2 py-0.5 text-[10px] font-extrabold transition-colors ${cls}`}
+                                className={`border px-2 py-0.5 text-[10px] font-extrabold transition-colors ${cls}`}
                               >
                                 {label}
                               </button>
@@ -794,10 +1022,17 @@ export default function AddUserPage() {
                         </div>
 
                         {/* Module access levels */}
-                        <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-                          <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
-                            Module Access Levels
-                          </p>
+                        <div className="mb-3 border border-slate-200 bg-slate-50/60 p-3">
+                          <div className="mb-2 flex flex-wrap items-center justify-between gap-1">
+                            <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
+                              Module Access Levels
+                            </p>
+                            <p className="text-[9px] text-slate-400">
+                              <span className="font-bold text-red-500">None</span> no access ·{' '}
+                              <span className="font-bold text-blue-500">View</span> see only ·{' '}
+                              <span className="font-bold text-emerald-600">Full</span> create, edit &amp; delete
+                            </p>
+                          </div>
                           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                             {enabledModuleKeys.map((moduleKey) => {
                               const mappedKey = MODULE_KEY_MAP[moduleKey] || moduleKey;
@@ -821,14 +1056,14 @@ export default function AddUserPage() {
                                     : 'bg-blue-400';
 
                               return (
-                                <div key={moduleKey} className={`rounded-lg border p-2.5 transition-all ${cardClass}`}>
+                                <div key={moduleKey} className={`border p-2.5 transition-all ${cardClass}`}>
                                   <div className="mb-2 flex items-center gap-1.5">
-                                    <span className={`h-2 w-2 rounded-full ${dotClass}`} />
+                                    <span className={`h-2 w-2 ${dotClass}`} />
                                     <span className="text-[11px] font-black text-slate-800">
                                       {MODULE_LABELS[moduleKey] || moduleKey}
                                     </span>
                                   </div>
-                                  <div className="flex overflow-hidden rounded-md border border-slate-200 bg-white text-[10px] font-bold shadow-sm">
+                                  <div className="flex overflow-hidden border border-slate-200 bg-white text-[10px] font-bold shadow-sm">
                                     {[
                                       { val: 'Not allowed', icon: <FaBan size={8} />,       label: 'None',  active: 'bg-red-500 text-white',     idle: 'text-slate-400 hover:bg-slate-50' },
                                       { val: 'View only',   icon: <FaEye size={8} />,       label: 'View',  active: 'bg-blue-500 text-white',    idle: 'text-slate-400 hover:bg-slate-50' },
@@ -855,7 +1090,7 @@ export default function AddUserPage() {
 
                           {/* Carwash branch lock */}
                           {enabledModuleKeys.includes('carwash') && assignment.moduleAccess?.carwash !== 'Not allowed' && (
-                            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5">
+                            <div className="mt-3 border border-amber-200 bg-amber-50 p-2.5">
                               <div className="mb-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-amber-700">
                                 Car Wash Branch Restriction
                               </div>
@@ -892,12 +1127,37 @@ export default function AddUserPage() {
                             })
                             .map(([moduleKey, preset]) => {
                               const currentRole = detectModuleRole(assignment.permissions, moduleKey);
+                              const presetKey = `${assignment.company}:${moduleKey}`;
+                              const isPresetOpen = openRolePresets.has(presetKey);
+                              const currentRoleLabel = currentRole === 'custom'
+                                ? 'Custom'
+                                : preset.roles[currentRole]?.label || 'Not set';
                               return (
-                                <div key={moduleKey} className={`mt-3 rounded-lg border p-2.5 ${preset.blockCls}`}>
-                                  <div className={`mb-2 text-[10px] font-extrabold uppercase tracking-[0.14em] ${preset.titleCls}`}>
-                                    {preset.label}
-                                  </div>
-                                  <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                                <div key={moduleKey} className={`mt-3 border p-2.5 ${preset.blockCls}`}>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleRolePreset(assignment.company, moduleKey)}
+                                    className="mb-0.5 flex w-full items-center gap-2 text-left"
+                                  >
+                                    <span className={`flex-1 text-[10px] font-extrabold uppercase tracking-[0.14em] ${preset.titleCls}`}>
+                                      {preset.label}
+                                    </span>
+                                    {!isPresetOpen && (
+                                      <span className={`px-2 py-0.5 text-[9px] font-extrabold ${
+                                        currentRole === 'custom'
+                                          ? 'bg-amber-100 text-amber-700'
+                                          : 'bg-white/70 text-slate-600'
+                                      }`}>
+                                        {currentRoleLabel}
+                                      </span>
+                                    )}
+                                    {isPresetOpen ? (
+                                      <FaChevronUp className="shrink-0 text-[10px] opacity-50" />
+                                    ) : (
+                                      <FaChevronDown className="shrink-0 text-[10px] opacity-50" />
+                                    )}
+                                  </button>
+                                  {isPresetOpen && <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3 mt-2">
                                     {Object.entries(preset.roles).map(([key, role]) => {
                                       const active = currentRole === key;
                                       return (
@@ -910,7 +1170,7 @@ export default function AddUserPage() {
                                               permissions: applyModuleRole(current.permissions, moduleKey, key),
                                             }))
                                           }
-                                          className={`rounded border px-2.5 py-2 text-left transition-colors ${
+                                          className={`border px-2.5 py-2 text-left transition-colors ${
                                             active ? preset.activeCls : preset.inactiveCls
                                           }`}
                                         >
@@ -922,17 +1182,22 @@ export default function AddUserPage() {
                                       );
                                     })}
                                     {currentRole === 'custom' && (
-                                      <div className="rounded border border-slate-300 bg-slate-100 px-2.5 py-2">
-                                        <p className="text-[11px] font-extrabold text-slate-600">Custom</p>
-                                        <p className="mt-0.5 text-[10px] leading-tight text-slate-400">
-                                          Permissions set manually below
-                                        </p>
+                                      <div className="flex items-start gap-1.5 border border-amber-300 bg-amber-50 px-2.5 py-2">
+                                        <FaExclamationTriangle className="mt-0.5 shrink-0 text-amber-500" size={10} />
+                                        <div>
+                                          <p className="text-[11px] font-extrabold text-amber-700">Custom — matches no preset</p>
+                                          <p className="mt-0.5 text-[10px] leading-tight text-amber-600/80">
+                                            Permissions were hand-edited below, away from any standard role
+                                          </p>
+                                        </div>
                                       </div>
                                     )}
-                                  </div>
-                                  <p className={`mt-2 text-[10px] ${preset.hintCls}`}>
-                                    Selecting a role overwrites the {preset.label.replace(' Role', '')} section of granular permissions below.
-                                  </p>
+                                  </div>}
+                                  {isPresetOpen && (
+                                    <p className={`mt-2 text-[10px] ${preset.hintCls}`}>
+                                      Selecting a role overwrites the {preset.label.replace(' Role', '')} section of granular permissions below.
+                                    </p>
+                                  )}
                                 </div>
                               );
                             })
@@ -940,7 +1205,7 @@ export default function AddUserPage() {
                         </div>
 
                         {/* Granular action permissions */}
-                        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                        <div className="overflow-hidden border border-slate-200 bg-white">
                           <div className="border-b border-slate-100 px-3 py-2">
                             <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
                               Granular Action Permissions
@@ -952,24 +1217,38 @@ export default function AddUserPage() {
                                 (p) => !p.moduleKey || enabledModuleKeys.includes(p.moduleKey)
                               );
                               if (!enabledPermissions.length) return null;
+                              const visiblePermissions = enabledPermissions.filter(matchesFilters);
+                              if (isFiltering && !visiblePermissions.length) return null;
+
                               const granted = sectionPermissionCount(assignment.permissions, enabledPermissions);
-                              const isOpen = openSections.has(section.id);
+                              const sectionKey = `${assignment.company}:${section.id}`;
+                              const isOpen = isFiltering || openSections.has(sectionKey);
                               const meta = SECTION_META[section.id] || { bar: 'bg-slate-400' };
                               const allGranted = granted === enabledPermissions.length;
+                              const sectionHasUnreviewed = unreviewedSet
+                                ? enabledPermissions.some((p) => unreviewedSet.has(`${p.resource}.${p.action}`))
+                                : false;
+                              const bulkTargets = isFiltering ? visiblePermissions : enabledPermissions;
 
                               return (
                                 <div key={section.id}>
                                   <button
                                     type="button"
-                                    onClick={() => toggleSection(section.id)}
-                                    className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-slate-50"
+                                    onClick={() => toggleSection(assignment.company, section.id)}
+                                    disabled={isFiltering}
+                                    className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-slate-50 disabled:cursor-default"
                                   >
-                                    <span className={`h-2.5 w-1 shrink-0 rounded-full ${meta.bar}`} />
+                                    <span className={`h-2.5 w-1 shrink-0 ${meta.bar}`} />
                                     <span className="flex-1 text-[11px] font-black text-slate-800">
                                       {section.label}
                                     </span>
+                                    {sectionHasUnreviewed && (
+                                      <span className="inline-flex items-center gap-1 bg-amber-100 px-1.5 py-0.5 text-[8px] font-extrabold uppercase text-amber-700">
+                                        <FaExclamationTriangle size={7} /> new
+                                      </span>
+                                    )}
                                     <span
-                                      className={`rounded-full px-2 py-0.5 text-[9px] font-extrabold ${
+                                      className={`px-2 py-0.5 text-[9px] font-extrabold ${
                                         allGranted
                                           ? 'bg-emerald-100 text-emerald-700'
                                           : granted > 0
@@ -977,7 +1256,7 @@ export default function AddUserPage() {
                                             : 'bg-slate-100 text-slate-500'
                                       }`}
                                     >
-                                      {granted}/{enabledPermissions.length}
+                                      {isFiltering ? `${visiblePermissions.length} match` : `${granted}/${enabledPermissions.length}`}
                                     </span>
                                     <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                                       <button
@@ -987,12 +1266,12 @@ export default function AddUserPage() {
                                             ...current,
                                             permissions: setPermissionGroupValue(
                                               current.permissions,
-                                              enabledPermissions,
+                                              bulkTargets,
                                               true
                                             ),
                                           }))
                                         }
-                                        className="rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-extrabold text-emerald-700 hover:bg-emerald-100"
+                                        className="border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-extrabold text-emerald-700 hover:bg-emerald-100"
                                       >
                                         All
                                       </button>
@@ -1003,39 +1282,44 @@ export default function AddUserPage() {
                                             ...current,
                                             permissions: setPermissionGroupValue(
                                               current.permissions,
-                                              enabledPermissions,
+                                              bulkTargets,
                                               false
                                             ),
                                           }))
                                         }
-                                        className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-extrabold text-slate-500 hover:bg-slate-50"
+                                        className="border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-extrabold text-slate-500 hover:bg-slate-50"
                                       >
                                         Clear
                                       </button>
                                     </div>
-                                    {isOpen ? (
+                                    {!isFiltering && (isOpen ? (
                                       <FaChevronUp className="shrink-0 text-[10px] text-slate-400" />
                                     ) : (
                                       <FaChevronDown className="shrink-0 text-[10px] text-slate-400" />
-                                    )}
+                                    ))}
                                   </button>
 
                                   {isOpen && (
                                     <div className="grid gap-1.5 border-t border-slate-100 bg-slate-50/40 px-3 py-2.5 sm:grid-cols-2 xl:grid-cols-3">
-                                      {enabledPermissions.map((permission) => {
+                                      {(isFiltering ? visiblePermissions : enabledPermissions).map((permission) => {
                                         const checked = Boolean(
                                           assignment.permissions?.[permission.resource]?.[permission.action]
                                         );
                                         const isDanger = DANGER_ACTIONS.has(permission.action);
+                                        const isNew = Boolean(
+                                          unreviewedSet?.has(`${permission.resource}.${permission.action}`)
+                                        );
                                         return (
                                           <label
                                             key={`${permission.resource}.${permission.action}`}
-                                            className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-all ${
-                                              checked
-                                                ? isDanger
-                                                  ? 'border-red-200 bg-red-50 text-red-800'
-                                                  : 'border-[#0B3B2E]/20 bg-[#EDF5F1] text-[#0B3B2E]'
-                                                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                                            className={`flex cursor-pointer items-center gap-2 border px-2.5 py-1.5 text-[11px] font-semibold transition-all ${
+                                              isNew
+                                                ? 'border-amber-300 bg-amber-50 text-amber-800'
+                                                : checked
+                                                  ? isDanger
+                                                    ? 'border-red-200 bg-red-50 text-red-800'
+                                                    : 'border-[#0B3B2E]/20 bg-[#EDF5F1] text-[#0B3B2E]'
+                                                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                                             }`}
                                           >
                                             <input
@@ -1059,8 +1343,13 @@ export default function AddUserPage() {
                                               className="accent-[#0B3B2E]"
                                             />
                                             <span className="leading-tight">{permission.label}</span>
-                                            {isDanger && checked && (
-                                              <span className="ml-auto rounded bg-red-100 px-1 text-[8px] font-extrabold uppercase text-red-600">
+                                            {isNew && (
+                                              <span className="ml-auto shrink-0 bg-amber-200 px-1 text-[8px] font-extrabold uppercase text-amber-800">
+                                                new
+                                              </span>
+                                            )}
+                                            {!isNew && isDanger && checked && (
+                                              <span className="ml-auto shrink-0 bg-red-100 px-1 text-[8px] font-extrabold uppercase text-red-600">
                                                 sensitive
                                               </span>
                                             )}
@@ -1079,7 +1368,7 @@ export default function AddUserPage() {
                   })}
 
                   {!form.companyAssignments.length && (
-                    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-xs text-slate-500">
+                    <div className="border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-xs text-slate-500">
                       Select at least one company above to configure modules and action permissions.
                     </div>
                   )}
@@ -1093,14 +1382,14 @@ export default function AddUserPage() {
                 <button
                   type="button"
                   onClick={() => navigate(returnTo)}
-                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                  className="border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <FaSave />
                   {isSaving ? 'Saving...' : isEditing ? 'Update user access' : 'Create user'}

@@ -88,13 +88,13 @@ export const ACCESS_SECTIONS = [
       { resource: 'statements',     action: 'export',  label: 'Print / export landlord statements',   moduleKey: 'propertyManagement' },
       { resource: 'statements',     action: 'reverse', label: 'Reverse / cancel landlord statements', moduleKey: 'propertyManagement' },
       { resource: 'statements',         action: 'delete',  label: 'Delete landlord statement records',             moduleKey: 'propertyManagement' },
-      { resource: 'processedStatements', action: 'view',    label: 'View processed statements',                    moduleKey: 'propertyManagement' },
-      { resource: 'processedStatements', action: 'reverse', label: 'Reverse processed statements',                 moduleKey: 'propertyManagement' },
-      { resource: 'processedStatements', action: 'send',    label: 'Send processed statements to landlords',       moduleKey: 'propertyManagement' },
-      { resource: 'processedStatements', action: 'export',  label: 'Print / export processed statements',          moduleKey: 'propertyManagement' },
-      { resource: 'landlordPayments',    action: 'view',    label: 'View landlord payment history',                moduleKey: 'propertyManagement' },
-      { resource: 'landlordPayments',    action: 'process', label: 'Pay landlords / post commission',              moduleKey: 'propertyManagement' },
-      { resource: 'landlordPayments',    action: 'export',  label: 'Print / export landlord payment records',      moduleKey: 'propertyManagement' },
+      { resource: 'processedStatements', action: 'view',    label: 'View processed statements',                    moduleKey: 'accounts' },
+      { resource: 'processedStatements', action: 'reverse', label: 'Reverse processed statements',                 moduleKey: 'accounts' },
+      { resource: 'processedStatements', action: 'send',    label: 'Send processed statements to landlords',       moduleKey: 'accounts' },
+      { resource: 'processedStatements', action: 'export',  label: 'Print / export processed statements',          moduleKey: 'accounts' },
+      { resource: 'landlordPayments',    action: 'view',    label: 'View landlord payment history',                moduleKey: 'accounts' },
+      { resource: 'landlordPayments',    action: 'process', label: 'Pay landlords / post commission',              moduleKey: 'accounts' },
+      { resource: 'landlordPayments',    action: 'export',  label: 'Print / export landlord payment records',      moduleKey: 'accounts' },
     ],
   },
 
@@ -527,6 +527,29 @@ export const normalizePermissionMap = (rawPermissions = {}) => {
   });
 
   return normalized;
+};
+
+// True if a saved permission record ever explicitly set resource.action, in any
+// of the historical key formats. False means this specific action didn't exist
+// (or wasn't reachable) the last time this record was saved — used to flag
+// permissions a user's record has never actually been reviewed against, so a
+// catalogue addition doesn't silently read as "deliberately denied".
+export const isPermissionKeyPresent = (rawPermissions = {}, resource, action) => {
+  if (!rawPermissions || typeof rawPermissions !== 'object') return false;
+  const nested = rawPermissions?.[resource];
+  if (nested && typeof nested === 'object' && Object.prototype.hasOwnProperty.call(nested, action)) {
+    return true;
+  }
+  const flatKeys = [
+    `${resource}.${action}`,
+    `${resource}:${action}`,
+    `${resource}_${action}`,
+    `${action}_${resource}`,
+    `${action}:${resource}`,
+  ];
+  if (flatKeys.some((key) => Object.prototype.hasOwnProperty.call(rawPermissions, key))) return true;
+  const legacyKeys = LEGACY_PERMISSION_ALIASES?.[resource]?.[action] || [];
+  return legacyKeys.some((key) => Object.prototype.hasOwnProperty.call(rawPermissions, key));
 };
 
 export const setPermissionGroupValue = (permissionMap = {}, permissions = [], nextValue = true) => {
