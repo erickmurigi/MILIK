@@ -48,6 +48,7 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import ListToolbar from "../../components/common/ListToolbar";
 import JournalEntriesDrawer from "../../components/Accounting/JournalEntriesDrawer";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import {
@@ -1652,26 +1653,26 @@ const Receipts = ({ viewMode = "tenant" }) => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
         <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
-          <div className="flex-none sticky top-0 z-30 mb-2 border-b border-slate-200 bg-white shadow-sm">
-            <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
+          <div className="mb-2">
+            <ListToolbar>
               {fromLedger && (
-                <button onClick={() => navigate(`/properties/${location.state.propertyId}/ledger`)} className="h-[20px] shrink-0 flex items-center gap-1 px-2 text-[9px] font-semibold text-[#0B3B2E] hover:bg-[#EDF5F1]">
-                  <FaArrowLeft size={8} /> {location.state.propertyName} Ledger
-                </button>
+                <ListToolbar.Button icon={FaArrowLeft} variant="outline" onClick={() => navigate(`/properties/${location.state.propertyId}/ledger`)}>
+                  {location.state.propertyName} Ledger
+                </ListToolbar.Button>
               )}
               <span className="shrink-0 border border-slate-300 bg-white px-1 py-0.5 text-[8px] font-bold text-slate-700">{stats.count} {termReceipts}</span>
               <span className="shrink-0 border border-green-300 bg-green-50 px-1 py-0.5 text-[8px] font-bold text-green-700">Ksh {stats.total.toLocaleString()}</span>
               <span className="shrink-0 border border-blue-300 bg-blue-50 px-1 py-0.5 text-[8px] font-bold text-blue-700">{stats.confirmedCount} Conf.</span>
               <span className="shrink-0 border border-orange-300 bg-orange-50 px-1 py-0.5 text-[8px] font-bold text-orange-700">{stats.pendingCount} Pend.</span>
-              <div className="mx-0.5 h-3 w-px shrink-0 bg-slate-200" />
-              <input
+              <ListToolbar.Divider />
+              <ListToolbar.Input
+                width="w-[4.5rem]"
                 value={draftFilters.search}
                 onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))}
                 onKeyDown={(e) => e.key === "Enter" && applySearchFilters()}
                 placeholder="Receipt #"
-                className="h-[20px] w-[4.5rem] shrink-0 border border-slate-200 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
-              <input value={draftFilters.tenantSearch} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantSearch: normalizeUppercaseInput(e.target.value) }))} placeholder={termTenant} className="h-[20px] w-[4.5rem] shrink-0 border border-slate-200 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <ListToolbar.Input width="w-[4.5rem]" value={draftFilters.tenantSearch} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantSearch: normalizeUppercaseInput(e.target.value) }))} placeholder={termTenant} />
               <AppSelect
                 value={draftFilters.property}
                 onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "all", unit: "" }))}
@@ -1681,11 +1682,11 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 clearable
                 compact
               />
-              <input
+              <ListToolbar.Input
+                width="w-10"
                 value={draftFilters.unit}
                 onChange={(e) => setDraftFilters((prev) => ({ ...prev, unit: e.target.value || "" }))}
                 placeholder={termUnit}
-                className="h-[20px] w-10 shrink-0 border border-slate-200 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
               <AppSelect
                 value={draftFilters.ledger}
@@ -1721,9 +1722,9 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 clearable
                 compact
               />
-              <input type="date" value={draftFilters.from} onChange={setFilter("from")} className="h-[20px] w-[5.5rem] shrink-0 border border-slate-200 bg-white px-1 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              <input type="date" value={draftFilters.to} onChange={setFilter("to")} className="h-[20px] w-[5.5rem] shrink-0 border border-slate-200 bg-white px-1 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              <div className="mx-0.5 h-3 w-px shrink-0 bg-slate-200" />
+              <ListToolbar.Input width="w-[5.5rem]" type="date" value={draftFilters.from} onChange={setFilter("from")} />
+              <ListToolbar.Input width="w-[5.5rem]" type="date" value={draftFilters.to} onChange={setFilter("to")} />
+              <ListToolbar.Divider />
               <AppSelect
                 value=""
                 onChange={(v) => { if (v) applyDatePresetAndSearch(v); }}
@@ -1742,10 +1743,10 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 placeholder="Period"
                 compact
               />
-              <div className="mx-0.5 h-3 w-px shrink-0 bg-slate-200" />
-              <button onClick={applySearchFilters} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSearch size={7} /> Search</button>
-              <button onClick={resetSearchFilters} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white bg-slate-500 hover:bg-slate-600"><FaRedoAlt size={7} /> Reset</button>
-              <div className="mx-0.5 h-3 w-px shrink-0 bg-slate-200" />
+              <ListToolbar.Divider />
+              <ListToolbar.Button icon={FaSearch} onClick={applySearchFilters}>Search</ListToolbar.Button>
+              <ListToolbar.Button icon={FaRedoAlt} variant="dark" onClick={resetSearchFilters}>Reset</ListToolbar.Button>
+              <ListToolbar.Divider />
               <AppSelect
                 value=""
                 disabled={selectedIds.length === 0}
@@ -1762,16 +1763,27 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 placeholder="Actions"
                 compact
               />
-              {canExportReceipt && <button onClick={handlePrintList} title="Print list" className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white bg-indigo-600 hover:bg-indigo-700"><FaPrint size={7} /> Print</button>}
-              <button onClick={() => setShowSmsModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `SMS ${selectedIds.length} ${selectedIds.length !== 1 ? termReceipts : termReceipt}` : `Select ${termReceipts.toLowerCase()} to SMS`} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white bg-teal-600 hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"><FaSms size={7} /> SMS</button>
-              <button onClick={() => setShowEmailModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `Email ${selectedIds.length} ${selectedIds.length !== 1 ? termReceipts : termReceipt}` : `Select ${termReceipts.toLowerCase()} to email`} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white bg-blue-600 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><FaEnvelope size={7} /> Email</button>
+              {canExportReceipt && <ListToolbar.Button icon={FaPrint} className="!bg-indigo-600 hover:!bg-indigo-700" onClick={handlePrintList} title="Print list">Print</ListToolbar.Button>}
+              <ListToolbar.Button
+                icon={FaSms}
+                className="!bg-teal-600 hover:!bg-teal-700"
+                onClick={() => setShowSmsModal(true)}
+                disabled={selectedIds.length === 0}
+                title={selectedIds.length > 0 ? `SMS ${selectedIds.length} ${selectedIds.length !== 1 ? termReceipts : termReceipt}` : `Select ${termReceipts.toLowerCase()} to SMS`}
+              >SMS</ListToolbar.Button>
+              <ListToolbar.Button
+                icon={FaEnvelope}
+                onClick={() => setShowEmailModal(true)}
+                disabled={selectedIds.length === 0}
+                title={selectedIds.length > 0 ? `Email ${selectedIds.length} ${selectedIds.length !== 1 ? termReceipts : termReceipt}` : `Select ${termReceipts.toLowerCase()} to email`}
+              >Email</ListToolbar.Button>
               {canCreateReceipt && !isLandlordReceiptView && (
-                <button onClick={() => navigate("/receipts/batch")} title="Batch Receipt Entry" className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-1.5 text-[9px] text-white hover:bg-[#0A3127]">
-                  <FaListAlt size={7} /> Batch
-                </button>
+                <ListToolbar.Button icon={FaListAlt} onClick={() => navigate("/receipts/batch")} title="Batch Receipt Entry">
+                  Batch
+                </ListToolbar.Button>
               )}
-              {canCreateReceipt && <button onClick={openCreateForm} title={pageCreateLabel} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaPlus size={7} /> New</button>}
-            </div>
+              {canCreateReceipt && <ListToolbar.Button icon={FaPlus} variant="accent" onClick={openCreateForm} title={pageCreateLabel}>New</ListToolbar.Button>}
+            </ListToolbar>
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
