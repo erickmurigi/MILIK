@@ -25,6 +25,7 @@ import { getProperties } from "../../redux/propertyRedux";
 
 import PaginationBar from "../../components/PaginationBar";
 import MilikTable from "../../components/common/MilikTable";
+import ListToolbar from "../../components/common/ListToolbar";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 
@@ -260,150 +261,125 @@ const LandlordPayments = ({ mode = "payments" }) => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
-            <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
-              <div className="relative shrink-0">
-                <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
-                <input value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search name, code, email…" className="h-[20px] w-36 border border-slate-200 bg-white pl-6 pr-1 text-[9px] outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-              </div>
-              <AppSelect
-                value={filters.status}
-                onChange={(v) => setFilters({ ...filters, status: v ?? '' })}
-                options={[{ value: 'Active', label: 'Active' }, { value: 'Archived', label: 'Archived' }]}
-                placeholder="All Status"
-                compact
-                clearable
-              />
-              <AppSelect
-                value={filters.paymentStatus}
-                onChange={(v) => setFilters({ ...filters, paymentStatus: v ?? '' })}
-                options={[{ value: 'owed', label: 'Balance Owed' }, { value: 'clear', label: 'Fully Paid' }]}
-                placeholder="All Payment Status"
-                compact
-                clearable
-              />
-              <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-              <span className="shrink-0 border border-slate-200 bg-white px-1 py-0.5 text-[8px] font-bold text-slate-600">{stats.totalLandlords} landlords</span>
-              <span className="shrink-0 border border-green-200 bg-green-50 px-1 py-0.5 text-[8px] font-bold text-green-700">Paid: Ksh {stats.totalPaid.toLocaleString()}</span>
-              <span className="shrink-0 border border-orange-200 bg-orange-50 px-1 py-0.5 text-[8px] font-bold text-orange-700">Balance: Ksh {stats.totalOwed.toLocaleString()}</span>
-              <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-              <button onClick={() => setShowSmsModal(true)} disabled={selectedLandlords.length === 0} title={selectedLandlords.length > 0 ? `SMS ${selectedLandlords.length} landlord${selectedLandlords.length !== 1 ? "s" : ""}` : "Select landlords to SMS"} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-teal-600 px-1.5 text-[9px] font-semibold text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"><FaSms size={7} /> SMS{selectedLandlords.length > 0 && <span> ({selectedLandlords.length})</span>}</button>
-              <button onClick={() => dispatch(getLandlords({ business: currentCompany._id }))} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white bg-[#0B3B2E] hover:bg-[#0A3127]"><FaRedoAlt size={7} /> Refresh</button>
+          <ListToolbar>
+            <div className="relative shrink-0">
+              <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
+              <ListToolbar.Input value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search name, code, email…" width="w-36" className="pl-5" />
             </div>
-          </div>
+            <AppSelect
+              value={filters.status}
+              onChange={(v) => setFilters({ ...filters, status: v ?? '' })}
+              options={[{ value: 'Active', label: 'Active' }, { value: 'Archived', label: 'Archived' }]}
+              placeholder="All Status"
+              compact
+              clearable
+            />
+            <AppSelect
+              value={filters.paymentStatus}
+              onChange={(v) => setFilters({ ...filters, paymentStatus: v ?? '' })}
+              options={[{ value: 'owed', label: 'Balance Owed' }, { value: 'clear', label: 'Fully Paid' }]}
+              placeholder="All Payment Status"
+              compact
+              clearable
+            />
+            <ListToolbar.Divider />
+            <span className="shrink-0 border border-slate-200 bg-white px-1 py-0.5 text-[8px] font-bold text-slate-600">{stats.totalLandlords} landlords</span>
+            <span className="shrink-0 border border-green-200 bg-green-50 px-1 py-0.5 text-[8px] font-bold text-green-700">Paid: Ksh {stats.totalPaid.toLocaleString()}</span>
+            <span className="shrink-0 border border-orange-200 bg-orange-50 px-1 py-0.5 text-[8px] font-bold text-orange-700">Balance: Ksh {stats.totalOwed.toLocaleString()}</span>
+            <ListToolbar.Divider />
+            <ListToolbar.Button
+              icon={FaSms}
+              className="!bg-teal-600 hover:!bg-teal-700"
+              disabled={selectedLandlords.length === 0}
+              onClick={() => setShowSmsModal(true)}
+              title={selectedLandlords.length > 0 ? `SMS ${selectedLandlords.length} landlord${selectedLandlords.length !== 1 ? "s" : ""}` : "Select landlords to SMS"}
+            >
+              SMS{selectedLandlords.length > 0 && <span> ({selectedLandlords.length})</span>}
+            </ListToolbar.Button>
+            <ListToolbar.Button icon={FaRedoAlt} onClick={() => dispatch(getLandlords({ business: currentCompany._id }))}>Refresh</ListToolbar.Button>
+          </ListToolbar>
 
           {/* Table */}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full min-w-[1400px] text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className={`${MILIK_GREEN} text-white`}>
-                    <th className="px-3 py-2 text-center border-r border-white/10">
-                      <input
-                        type="checkbox"
-                        checked={
-                          currentPageData.length > 0 &&
-                          selectedLandlords.length === currentPageData.length
-                        }
-                        onChange={toggleSelectAll}
-                        className="cursor-pointer"
-                      />
-                    </th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Code</th>
-                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Landlord Name</th>
-                    <th className="px-3 py-2 text-center font-bold border-r border-white/10">Properties</th>
-                    <th className="px-3 py-2 text-center font-bold border-r border-white/10">Tenants</th>
-                    <th className="px-3 py-2 text-right font-bold border-r border-white/10">Paid Out</th>
-                    <th className="px-3 py-2 text-right font-bold border-r border-white/10">Balance</th>
-                    <th className="px-3 py-2 text-center font-bold border-r border-white/10">Status</th>
-                    <th className="px-3 py-2 text-center font-bold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isFetching ? (
-                    <tr>
-                      <td colSpan="10" className="px-3 py-8 text-center text-slate-500">
-                        Loading...
-                      </td>
-                    </tr>
-                  ) : currentPageData.length === 0 ? (
-                    <tr>
-                      <td colSpan="10" className="px-3 py-8 text-center text-slate-500">
-                        No landlords found
-                      </td>
-                    </tr>
-                  ) : (
-                    currentPageData.map((landlord, idx) => (
-                      <tr
-                        key={landlord._id}
-                        className={`border-b border-gray-100 transition-colors ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}
-                      >
-                        <td className="px-3 py-1 border-r border-gray-100 text-center">
-                          <input
-                            type="checkbox"
-                            checked={selectedLandlords.includes(landlord._id)}
-                            onChange={() => toggleSelection(landlord._id)}
-                            className="cursor-pointer"
-                          />
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-700">
-                          {landlord.landlordCode}
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">
-                          {landlord.landlordName}
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">
-                          {landlord.propertiesCount}
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">
-                          {landlord.tenantsCount}
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-green-700">
-                          Ksh {landlord.paymentsMade.toLocaleString()}
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right font-bold">
-                          <span className={landlord.balance > 0 ? "text-orange-700" : "text-green-700"}>
-                            Ksh {landlord.balance.toLocaleString()}
-                          </span>
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-center">
-                          <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${landlord.status === "Active" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-600 border-slate-200"}`}>
-                            {landlord.status}
-                          </span>
-                        </td>
-                        <td className="px-3 py-1">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => handleViewDetails(landlord)}
-                              className="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white"
-                              title="View Details"
-                            >
-                              <FaEye size={11} />
-                            </button>
-                            <button
-                              onClick={() => navigate(`/landlord-payment-history?landlordId=${landlord._id}`)}
-                              className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-800 text-white"
-                              title="View Payments"
-                            >
-                              <FaFileInvoiceDollar size={11} />
-                            </button>
-                            {canExportPayment && (
-                            <button
-                              onClick={() => handlePrintLandlordStatement(landlord)}
-                              className="px-2 py-1 rounded bg-purple-600 hover:bg-purple-700 text-white"
-                              title="Print Statement"
-                            >
-                              <FaPrint size={11} />
-                            </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+            <MilikTable
+              columns={[
+                { label: "Code" },
+                { label: "Landlord Name" },
+                { label: "Properties", align: "center" },
+                { label: "Tenants", align: "center" },
+                { label: "Paid Out", align: "right" },
+                { label: "Balance", align: "right" },
+                { label: "Status", align: "center" },
+              ]}
+              rows={currentPageData}
+              rowKey="_id"
+              loading={isFetching}
+              empty="No landlords found"
+              minWidth="1400px"
+              checkboxes
+              allChecked={currentPageData.length > 0 && selectedLandlords.length === currentPageData.length}
+              someChecked={selectedLandlords.length > 0 && selectedLandlords.length < currentPageData.length}
+              onCheckAll={toggleSelectAll}
+              isChecked={(landlord) => selectedLandlords.includes(landlord._id)}
+              isSelected={(landlord) => selectedLandlords.includes(landlord._id)}
+              onCheckRow={(landlord) => toggleSelection(landlord._id)}
+              renderRow={(landlord) => (
+                <>
+                  <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-700">
+                    {landlord.landlordCode}
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">
+                    {landlord.landlordName}
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">
+                    {landlord.propertiesCount}
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">
+                    {landlord.tenantsCount}
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-green-700">
+                    Ksh {landlord.paymentsMade.toLocaleString()}
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-right font-bold">
+                    <span className={landlord.balance > 0 ? "text-orange-700" : "text-green-700"}>
+                      Ksh {landlord.balance.toLocaleString()}
+                    </span>
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-center">
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${landlord.status === "Active" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-600 border-slate-200"}`}>
+                      {landlord.status}
+                    </span>
+                  </td>
+                </>
+              )}
+              renderActions={(landlord) => (
+                <div className="flex items-center justify-center gap-1">
+                  <button
+                    onClick={() => handleViewDetails(landlord)}
+                    className="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white"
+                    title="View Details"
+                  >
+                    <FaEye size={11} />
+                  </button>
+                  <button
+                    onClick={() => navigate(`/landlord-payment-history?landlordId=${landlord._id}`)}
+                    className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-800 text-white"
+                    title="View Payments"
+                  >
+                    <FaFileInvoiceDollar size={11} />
+                  </button>
+                  {canExportPayment && (
+                  <button
+                    onClick={() => handlePrintLandlordStatement(landlord)}
+                    className="px-2 py-1 rounded bg-purple-600 hover:bg-purple-700 text-white"
+                    title="Print Statement"
+                  >
+                    <FaPrint size={11} />
+                  </button>
                   )}
-                </tbody>
-              </table>
-            </div>
+                </div>
+              )}
+            />
 
             <PaginationBar
               page={currentPage}
