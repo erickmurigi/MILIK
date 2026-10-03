@@ -6,8 +6,6 @@ import {
   FaArrowLeft,
   FaBook,
   FaCheckCircle,
-  FaChevronDown,
-  FaChevronUp,
   FaDownload,
   FaEnvelope,
   FaHourglass,
@@ -36,6 +34,7 @@ import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
+import ListToolbar from '../../components/common/ListToolbar';
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -88,7 +87,6 @@ const ProcessedStatements = () => {
   const [glStatement, setGlStatement] = useState(null);
 
   const [activeTab, setActiveTab] = useTabState("/landlord/processed-statements:activeTab", "outstanding");
-  const [expandedRow, setExpandedRow] = useState(null);
   const [searchText, setSearchText] = useTabState("/landlord/processed-statements:searchText", fromLedger ? (location.state?.propertyName || "") : "");
   const [sortBy, setSortBy] = useTabState("/landlord/processed-statements:sortBy", "date-desc");
   const [currentPage, setCurrentPage] = useTabState("/landlord/processed-statements:currentPage", 1);
@@ -151,7 +149,6 @@ const ProcessedStatements = () => {
   }, [businessId]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Server handles all filtering/sorting — statements is the current page
-  const filteredStatements = statements; // alias for JSX references
   const paginatedStatements = statements;
   const totalPages = Math.max(1, pagination.pages);
   const safeCurrentPage = Math.min(currentPage, totalPages);
@@ -160,7 +157,6 @@ const ProcessedStatements = () => {
     tabRef.current = tab;
     setActiveTab(tab);
     setCurrentPage(1);
-    setExpandedRow(null);
     loadStatements(1);
   };
 
@@ -171,7 +167,6 @@ const ProcessedStatements = () => {
 
   const applySearch = () => {
     setCurrentPage(1);
-    setExpandedRow(null);
     loadStatements(1);
   };
 
@@ -480,97 +475,96 @@ const ProcessedStatements = () => {
       <DashboardLayout lockContentScroll>
         <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
           <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden gap-2">
-            <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
-              <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
-                {fromLedger && (
-                  <button onClick={() => navigate(`/properties/${location.state.propertyId}/ledger`)} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-[#0B3B2E] hover:bg-[#EDF5F1]">
-                    <FaArrowLeft size={7} /> {location.state.propertyName} Ledger
-                  </button>
-                )}
-                <button onClick={() => handleTabChange("outstanding")} className={`h-[20px] shrink-0 inline-flex items-center gap-0.5 px-1.5 text-[9px] font-bold ${activeTab === "outstanding" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass size={7} /> Outstanding {activeTab === "outstanding" ? `(${pagination.total})` : ""}</button>
-                <button onClick={() => handleTabChange("recoveries")} className={`h-[20px] shrink-0 inline-flex items-center gap-0.5 px-1.5 text-[9px] font-bold ${activeTab === "recoveries" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass size={7} /> Recoveries {activeTab === "recoveries" ? `(${pagination.total})` : ""}</button>
-                <button onClick={() => handleTabChange("paid")} className={`h-[20px] shrink-0 inline-flex items-center gap-0.5 px-1.5 text-[9px] font-bold ${activeTab === "paid" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaCheckCircle size={7} /> Paid {activeTab === "paid" ? `(${pagination.total})` : ""}</button>
-                <button onClick={() => handleTabChange("processed")} title="Statements with zero net payable — nothing was ever owed to the landlord" className={`h-[20px] shrink-0 inline-flex items-center gap-0.5 px-1.5 text-[9px] font-bold ${activeTab === "processed" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaMinusCircle size={7} /> Processed {activeTab === "processed" ? `(${pagination.total})` : ""}</button>
-                <button onClick={() => handleTabChange("management_fees")} className={`h-[20px] shrink-0 inline-flex items-center gap-0.5 px-1.5 text-[9px] font-bold ${activeTab === "management_fees" ? "bg-[#FF8C00] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaDownload size={7} /> Mgmt Fees {activeTab === "management_fees" ? `(${pagination.total})` : ""}</button>
-                <input type="text" placeholder="Search landlord, property…" value={searchText} onChange={(e) => handleSearchChange(e.target.value)} onBlur={applySearch} onKeyDown={(e) => e.key === "Enter" && applySearch()} className="h-[20px] w-36 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                <AppSelect
-                  value={sortBy || null}
-                  onChange={(v) => handleSortChange(v ?? "date-desc")}
-                  options={[
-                    { value: "date-desc", label: "Newest First" },
-                    { value: "date-asc", label: "Oldest First" },
-                  ]}
-                  compact
-                />
-                <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-                <span className="shrink-0 border border-yellow-200 bg-yellow-50 px-1 py-0.5 text-[8px] font-bold text-yellow-700">Outstanding: {activeTab === "outstanding" ? pagination.total : "—"} • {activeTab === "outstanding" ? money(stats.totalAmountUnpaid) : "—"}</span>
-                <span className="shrink-0 border border-red-200 bg-red-50 px-1 py-0.5 text-[8px] font-bold text-red-700">Recoveries: {activeTab === "recoveries" ? pagination.total : "—"} • {activeTab === "recoveries" ? money(stats.totalRecoveryAmount) : "—"}</span>
-                <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1 py-0.5 text-[8px] font-bold text-emerald-700">Paid: {activeTab === "paid" ? pagination.total : "—"} • {activeTab === "paid" ? money(stats.totalAmountPaid) : "—"}</span>
-                <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-                <button onClick={() => navigate(-1)} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white bg-slate-600 hover:bg-slate-700"><FaArrowLeft size={7} /> Back</button>
-
-              </div>
-            </div>
+            <ListToolbar>
+              {fromLedger && (
+                <ListToolbar.Button icon={FaArrowLeft} variant="outline" onClick={() => navigate(`/properties/${location.state.propertyId}/ledger`)}>
+                  {location.state.propertyName} Ledger
+                </ListToolbar.Button>
+              )}
+              <ListToolbar.Button icon={FaHourglass} variant={activeTab === "outstanding" ? "primary" : "outline"} onClick={() => handleTabChange("outstanding")}>
+                Outstanding {activeTab === "outstanding" ? `(${pagination.total})` : ""}
+              </ListToolbar.Button>
+              <ListToolbar.Button icon={FaHourglass} variant={activeTab === "recoveries" ? "primary" : "outline"} onClick={() => handleTabChange("recoveries")}>
+                Recoveries {activeTab === "recoveries" ? `(${pagination.total})` : ""}
+              </ListToolbar.Button>
+              <ListToolbar.Button icon={FaCheckCircle} variant={activeTab === "paid" ? "primary" : "outline"} onClick={() => handleTabChange("paid")}>
+                Paid {activeTab === "paid" ? `(${pagination.total})` : ""}
+              </ListToolbar.Button>
+              <ListToolbar.Button
+                icon={FaMinusCircle}
+                variant={activeTab === "processed" ? "primary" : "outline"}
+                onClick={() => handleTabChange("processed")}
+                title="Statements with zero net payable — nothing was ever owed to the landlord"
+              >
+                Processed {activeTab === "processed" ? `(${pagination.total})` : ""}
+              </ListToolbar.Button>
+              <ListToolbar.Button icon={FaDownload} variant={activeTab === "management_fees" ? "accent" : "outline"} onClick={() => handleTabChange("management_fees")}>
+                Mgmt Fees {activeTab === "management_fees" ? `(${pagination.total})` : ""}
+              </ListToolbar.Button>
+              <ListToolbar.Input type="text" placeholder="Search landlord, property…" value={searchText} onChange={(e) => handleSearchChange(e.target.value)} onBlur={applySearch} onKeyDown={(e) => e.key === "Enter" && applySearch()} width="w-36" />
+              <AppSelect
+                value={sortBy || null}
+                onChange={(v) => handleSortChange(v ?? "date-desc")}
+                options={[
+                  { value: "date-desc", label: "Newest First" },
+                  { value: "date-asc", label: "Oldest First" },
+                ]}
+                compact
+              />
+              <ListToolbar.Divider />
+              <span className="shrink-0 border border-yellow-200 bg-yellow-50 px-1 py-0.5 text-[8px] font-bold text-yellow-700">Outstanding: {activeTab === "outstanding" ? pagination.total : "—"} • {activeTab === "outstanding" ? money(stats.totalAmountUnpaid) : "—"}</span>
+              <span className="shrink-0 border border-red-200 bg-red-50 px-1 py-0.5 text-[8px] font-bold text-red-700">Recoveries: {activeTab === "recoveries" ? pagination.total : "—"} • {activeTab === "recoveries" ? money(stats.totalRecoveryAmount) : "—"}</span>
+              <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1 py-0.5 text-[8px] font-bold text-emerald-700">Paid: {activeTab === "paid" ? pagination.total : "—"} • {activeTab === "paid" ? money(stats.totalAmountPaid) : "—"}</span>
+              <ListToolbar.Divider />
+              <ListToolbar.Button icon={FaArrowLeft} variant="dark" onClick={() => navigate(-1)}>Back</ListToolbar.Button>
+            </ListToolbar>
 
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-              {loading ? (
-                <div className="flex flex-1 items-center justify-center p-12 text-center"><p className="text-gray-500">Loading statements...</p></div>
-              ) : filteredStatements.length === 0 ? (
-                <div className="flex flex-1 items-center justify-center p-12 text-center"><p className="text-lg text-gray-500">No {activeTab} statements found</p></div>
-              ) : (
-                <div className="flex-1 min-h-0 overflow-auto">
-                  <table className="w-full min-w-[1160px] text-[11px] border-collapse">
-                    <thead className="sticky top-0 z-10 shadow-sm">
-                      <tr className="bg-[#0B3B2E] text-white">
-                        <th className="px-3 py-2 text-left font-bold border-r border-white/10">STMT #</th>
-                        <th className="px-3 py-2 text-left font-bold border-r border-white/10">LANDLORD</th>
-                        <th className="px-3 py-2 text-left font-bold border-r border-white/10">PROPERTY</th>
-                        <th className="px-3 py-2 text-left font-bold border-r border-white/10">PERIOD</th>
-                        <th className="px-3 py-2 text-right font-bold border-r border-white/10">NET POSITION</th>
-                        <th className="px-3 py-2 text-right font-bold border-r border-white/10">SETTLED</th>
-                        <th className="px-3 py-2 text-center font-bold border-r border-white/10">STATUS</th>
-                        <th className="px-3 py-2 text-center font-bold">ACTIONS</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedStatements.map((statement, stmtIdx) => {
-                        const isNegative = isNegativeProcessedStatement(statement);
-                        const outstandingRecovery = getOutstandingRecoveryBalance(statement);
-                        return (
-                          <React.Fragment key={statement._id}>
-                            <tr className={`border-b border-gray-100 transition-colors ${stmtIdx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
-                              <td className="px-3 py-1 border-r border-gray-100">
-                                <div className="font-mono text-slate-500">{statement.sourceStatementNumber || '—'}</div>
-                                {statement.managementFeeInvoiceNumber && (
-                                  <div className="font-mono text-[10px] text-orange-600 font-semibold">{statement.managementFeeInvoiceNumber}</div>
-                                )}
-                              </td>
-                              <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{statement.landlord?.landlordName || "N/A"}</td>
-                              <td className="px-3 py-1 border-r border-gray-100">
-                                <div>
-                                  <p className="font-semibold text-slate-900">{statement.property?.propertyCode}</p>
-                                  <p className="text-[10px] text-gray-500">{statement.property?.propertyName || statement.property?.name}</p>
-                                </div>
-                              </td>
-                              <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{formatPeriodRange(statement)}</td>
-                              <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{displayMoney(getStatementDisplayAmount(statement))}</td>
-                              <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">
-                                {displayMoney(isNegative ? statement.amountRecovered || 0 : statement.amountPaid || 0)}
-                              </td>
-                              <td className="px-3 py-1 border-r border-gray-100 text-center">{getStatusBadge(statement)}</td>
-                              <td className="px-3 py-1 text-center">
-                                <button
-                                  onClick={() => setExpandedRow(expandedRow === statement._id ? null : statement._id)}
-                                  className="text-gray-600 transition hover:text-gray-900"
-                                >
-                                  {expandedRow === statement._id ? <FaChevronUp /> : <FaChevronDown />}
-                                </button>
-                              </td>
-                            </tr>
-
-                            {expandedRow === statement._id && (
-                              <tr className="border-b bg-gray-50">
-                                <td colSpan="8" className="px-4 py-4">
+              <MilikTable
+                columns={[
+                  { label: "Stmt #" },
+                  { label: "Landlord" },
+                  { label: "Property" },
+                  { label: "Period" },
+                  { label: "Net Position", align: "right" },
+                  { label: "Settled", align: "right" },
+                  { label: "Status", align: "center" },
+                ]}
+                rows={paginatedStatements}
+                rowKey="_id"
+                loading={loading}
+                empty={`No ${activeTab} statements found`}
+                minWidth="1160px"
+                renderRow={(statement) => {
+                  const isNegative = isNegativeProcessedStatement(statement);
+                  return (
+                    <>
+                      <td className="px-3 py-1 border-r border-gray-100">
+                        <div className="font-mono text-slate-500">{statement.sourceStatementNumber || '—'}</div>
+                        {statement.managementFeeInvoiceNumber && (
+                          <div className="font-mono text-[10px] text-orange-600 font-semibold">{statement.managementFeeInvoiceNumber}</div>
+                        )}
+                      </td>
+                      <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{statement.landlord?.landlordName || "N/A"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100">
+                        <div>
+                          <p className="font-semibold text-slate-900">{statement.property?.propertyCode}</p>
+                          <p className="text-[10px] text-gray-500">{statement.property?.propertyName || statement.property?.name}</p>
+                        </div>
+                      </td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{formatPeriodRange(statement)}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{displayMoney(getStatementDisplayAmount(statement))}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">
+                        {displayMoney(isNegative ? statement.amountRecovered || 0 : statement.amountPaid || 0)}
+                      </td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-center">{getStatusBadge(statement)}</td>
+                    </>
+                  );
+                }}
+                renderExpanded={(statement) => {
+                  const isNegative = isNegativeProcessedStatement(statement);
+                  const outstandingRecovery = getOutstandingRecoveryBalance(statement);
+                  return (
                                   <div className="space-y-4">
                                     <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                                       <div>
@@ -818,16 +812,9 @@ const ProcessedStatements = () => {
 
                                     </div>
                                   </div>
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                  );
+                }}
+              />
               <PaginationBar
                 page={safeCurrentPage}
                 pages={totalPages}
