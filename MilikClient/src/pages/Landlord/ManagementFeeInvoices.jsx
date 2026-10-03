@@ -15,6 +15,7 @@ import { hasCompanyPermission } from "../../utils/permissions";
 import { useTabState } from "../../hooks/useTabState";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
+import ListToolbar from '../../components/common/ListToolbar';
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -193,14 +194,14 @@ const ManagementFeeInvoices = () => {
               )}
             </div>
 
-            <div className="flex items-center gap-0.5 overflow-x-auto px-2 py-1">
-              <input
+            <ListToolbar>
+              <ListToolbar.Input
                 type="text"
                 placeholder="Search landlord / invoice no..."
                 value={draftFilters.search}
                 onChange={setFilter("search")}
                 onKeyDown={(e) => e.key === "Enter" && applyFilters()}
-                className="h-[20px] w-40 border border-slate-200 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                width="w-40"
               />
               <AppSelect
                 value={draftFilters.propertyId || null}
@@ -227,134 +228,97 @@ const ManagementFeeInvoices = () => {
                 clearable
                 compact
               />
-              <button onClick={applyFilters} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white bg-[#FF8C00] hover:bg-[#e67e00]">
-                <FaSearch size={7} /> Search
-              </button>
-              <button onClick={resetFilters} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white bg-slate-500 hover:bg-slate-600">
-                <FaRedoAlt size={7} /> Reset
-              </button>
-              <span className="ml-auto text-xs text-slate-500">
+              <ListToolbar.Button icon={FaSearch} variant="accent" onClick={applyFilters}>Search</ListToolbar.Button>
+              <ListToolbar.Button icon={FaRedoAlt} variant="dark" onClick={resetFilters}>Reset</ListToolbar.Button>
+              <span className="ml-auto shrink-0 pl-2 text-[9px] text-slate-500">
                 {pagination.total} invoice{pagination.total !== 1 ? "s" : ""}
               </span>
-            </div>
+            </ListToolbar>
           </div>
 
           {/* Table */}
-          <div className="min-h-0 flex-1 overflow-auto">
-            <table className="w-full min-w-[900px] border-collapse text-xs">
-              <thead className="sticky top-0 z-10">
-                <tr className="bg-[#0B3B2E] text-white">
-                  <th className="w-8 px-3 py-2 text-center">
-                    <input
-                      type="checkbox"
-                      checked={allSelected}
-                      onChange={toggleSelectAll}
-                      className="accent-[#FF8C00]"
-                    />
-                  </th>
-                  <th className="px-3 py-2 text-left font-semibold">FEE INV #</th>
-                  <th className="px-3 py-2 text-left font-semibold">STMT REF</th>
-                  <th className="px-3 py-2 text-left font-semibold">LANDLORD</th>
-                  <th className="px-3 py-2 text-left font-semibold">PROPERTY</th>
-                  <th className="px-3 py-2 text-left font-semibold">PERIOD</th>
-                  <th className="px-3 py-2 text-right font-semibold">COMMISSION</th>
-                  <th className="px-3 py-2 text-right font-semibold">VAT</th>
-                  <th className="px-3 py-2 text-right font-semibold">TOTAL</th>
-                  <th className="px-3 py-2 text-center font-semibold">ACTIONS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={10} className="py-12 text-center text-sm text-slate-400">
-                      Loading…
-                    </td>
-                  </tr>
-                ) : rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={10} className="py-12 text-center text-sm text-slate-400">
-                      No management fee invoices found.
-                    </td>
-                  </tr>
-                ) : (
-                  rows.map((row, idx) => {
-                    const id = String(row._id);
-                    const isSelected = selectedIds.includes(id);
-                    const commissionNet = Number(row.commissionAmount || 0);
-                    const commissionTax = Number(row.commissionTaxAmount || 0);
-                    const commissionGross = Number(row.commissionGrossAmount || commissionNet + commissionTax);
-                    const landlordName =
-                      String(row.landlord?.landlordName || "").trim() ||
-                      `${row.landlord?.firstName || ""} ${row.landlord?.lastName || ""}`.trim() ||
-                      "—";
-                    const propertyName = row.property?.propertyName || row.property?.name || "—";
-                    const invoiceNo = row.managementFeeInvoiceNumber || "—";
-                    const stmtRef = row.sourceStatementNumber || "—";
-
-                    return (
-                      <tr
-                        key={id}
-                        onClick={() => toggleSelect(id)}
-                        className={`cursor-pointer border-b border-gray-100 transition-colors ${
-                          isSelected
-                            ? "bg-emerald-50 shadow-[inset_4px_0_0_0_#0B3B2E]"
-                            : idx % 2 === 0
-                            ? "bg-white hover:bg-blue-50/40"
-                            : "bg-slate-50/60 hover:bg-blue-50/40"
-                        }`}
-                      >
-                        <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleSelect(id)}
-                            className="accent-[#FF8C00]"
-                          />
-                        </td>
-                        <td className="px-3 py-2 font-mono font-bold text-[#FF8C00]">{invoiceNo}</td>
-                        <td className="px-3 py-2 text-slate-600">{stmtRef}</td>
-                        <td className="px-3 py-2 font-semibold text-slate-800">{landlordName}</td>
-                        <td className="px-3 py-2 text-slate-700">{propertyName}</td>
-                        <td className="px-3 py-2 text-slate-600 whitespace-nowrap">
-                          {fmtPeriod(row.periodStart, row.periodEnd)}
-                        </td>
-                        <td className="px-3 py-2 text-right font-semibold text-slate-800">
-                          {fmtMoney(commissionNet)}
-                        </td>
-                        <td className="px-3 py-2 text-right text-slate-600">
-                          {commissionTax > 0 ? fmtMoney(commissionTax) : <span className="text-slate-300">—</span>}
-                        </td>
-                        <td className="px-3 py-2 text-right font-bold text-[#0B3B2E]">
-                          {fmtMoney(commissionGross)}
-                        </td>
-                        <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              title="Print PDF"
-                              disabled={printingId === id}
-                              onClick={() => handlePrintPdf(id, invoiceNo)}
-                              className="rounded p-1.5 text-purple-600 hover:bg-purple-50 hover:text-purple-800 disabled:opacity-40"
-                            >
-                              <FaPrint size={12} />
-                            </button>
-                            {canEmail && (
-                              <button
-                                title="Send Email"
-                                onClick={() => setCommModal({ ids: [id] })}
-                                className="rounded p-1.5 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-900"
-                              >
-                                <FaEnvelope size={12} />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+          <MilikTable
+            columns={[
+              { label: "Fee Inv #" },
+              { label: "Stmt Ref" },
+              { label: "Landlord" },
+              { label: "Property" },
+              { label: "Period" },
+              { label: "Commission", align: "right" },
+              { label: "VAT", align: "right" },
+              { label: "Total", align: "right" },
+            ]}
+            rows={rows}
+            rowKey="_id"
+            loading={loading}
+            empty="No management fee invoices found."
+            minWidth="900px"
+            checkboxes
+            allChecked={allSelected}
+            someChecked={selectedIds.length > 0 && !allSelected}
+            onCheckAll={toggleSelectAll}
+            isChecked={(row) => selectedIds.includes(String(row._id))}
+            isSelected={(row) => selectedIds.includes(String(row._id))}
+            onCheckRow={(row) => toggleSelect(String(row._id))}
+            onRowClick={(row) => toggleSelect(String(row._id))}
+            renderRow={(row) => {
+              const commissionNet = Number(row.commissionAmount || 0);
+              const commissionTax = Number(row.commissionTaxAmount || 0);
+              const commissionGross = Number(row.commissionGrossAmount || commissionNet + commissionTax);
+              const landlordName =
+                String(row.landlord?.landlordName || "").trim() ||
+                `${row.landlord?.firstName || ""} ${row.landlord?.lastName || ""}`.trim() ||
+                "—";
+              const propertyName = row.property?.propertyName || row.property?.name || "—";
+              const invoiceNo = row.managementFeeInvoiceNumber || "—";
+              const stmtRef = row.sourceStatementNumber || "—";
+              return (
+                <>
+                  <td className="px-3 py-2 font-mono font-bold text-[#FF8C00]">{invoiceNo}</td>
+                  <td className="px-3 py-2 text-slate-600">{stmtRef}</td>
+                  <td className="px-3 py-2 font-semibold text-slate-800">{landlordName}</td>
+                  <td className="px-3 py-2 text-slate-700">{propertyName}</td>
+                  <td className="px-3 py-2 text-slate-600 whitespace-nowrap">
+                    {fmtPeriod(row.periodStart, row.periodEnd)}
+                  </td>
+                  <td className="px-3 py-2 text-right font-semibold text-slate-800">
+                    {fmtMoney(commissionNet)}
+                  </td>
+                  <td className="px-3 py-2 text-right text-slate-600">
+                    {commissionTax > 0 ? fmtMoney(commissionTax) : <span className="text-slate-300">—</span>}
+                  </td>
+                  <td className="px-3 py-2 text-right font-bold text-[#0B3B2E]">
+                    {fmtMoney(commissionGross)}
+                  </td>
+                </>
+              );
+            }}
+            renderActions={(row) => {
+              const id = String(row._id);
+              const invoiceNo = row.managementFeeInvoiceNumber || "—";
+              return (
+                <div className="flex items-center justify-center gap-1.5">
+                  <button
+                    title="Print PDF"
+                    disabled={printingId === id}
+                    onClick={() => handlePrintPdf(id, invoiceNo)}
+                    className="rounded p-1.5 text-purple-600 hover:bg-purple-50 hover:text-purple-800 disabled:opacity-40"
+                  >
+                    <FaPrint size={12} />
+                  </button>
+                  {canEmail && (
+                    <button
+                      title="Send Email"
+                      onClick={() => setCommModal({ ids: [id] })}
+                      className="rounded p-1.5 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-900"
+                    >
+                      <FaEnvelope size={12} />
+                    </button>
+                  )}
+                </div>
+              );
+            }}
+          />
 
           {/* Pagination — always visible */}
           <PaginationBar
