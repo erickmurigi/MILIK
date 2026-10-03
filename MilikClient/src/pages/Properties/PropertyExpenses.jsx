@@ -25,6 +25,7 @@ import {
 import AppSelect from '../../components/common/AppSelect';
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
+import ListToolbar from '../../components/common/ListToolbar';
 import { useTerm } from '../../hooks/useTerm';
 
 // ─── constants ────────────────────────────────────────────────────────────────
@@ -440,13 +441,11 @@ const PropertyExpenses = () => {
         </div>
 
         {/* ─── Filter bar ─────────────────────────────────────────────────── */}
-        <div className="shrink-0 flex flex-wrap items-center gap-0.5 border-b border-slate-200 bg-white px-3 py-1">
-          <input type="date" value={filters.startDate} onChange={setFilter('startDate')}
-            className="h-[20px] w-[5.5rem] border border-slate-200 px-1 text-[9px] focus:border-[#0B3B2E] focus:outline-none" />
-          <span className="text-[10px] text-slate-400">—</span>
-          <input type="date" value={filters.endDate} onChange={setFilter('endDate')}
-            className="h-[20px] w-[5.5rem] border border-slate-200 px-1 text-[9px] focus:border-[#0B3B2E] focus:outline-none" />
-          <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
+        <ListToolbar>
+          <ListToolbar.Input type="date" value={filters.startDate} onChange={setFilter('startDate')} />
+          <span className="shrink-0 text-[9px] text-slate-400">—</span>
+          <ListToolbar.Input type="date" value={filters.endDate} onChange={setFilter('endDate')} />
+          <ListToolbar.Divider />
           <AppSelect
             value={filters.propertyId || null}
             onChange={(v) => { setFilters((f) => ({ ...f, propertyId: v ?? '' })); setPage(1); }}
@@ -462,34 +461,38 @@ const PropertyExpenses = () => {
             clearable compact
           />
           <div className="relative shrink-0">
-            <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
-            <input type="text" value={filters.search} onChange={setFilter('search')} placeholder="Search description, property…"
-              className="h-[20px] w-36 border border-slate-200 bg-white pl-6 pr-1.5 text-[9px] outline-none focus:border-[#0B3B2E]" />
+            <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
+            <ListToolbar.Input type="text" value={filters.search} onChange={setFilter('search')} placeholder="Search description, property…" width="w-36" className="pl-5" />
           </div>
-          <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-          <button onClick={load} title="Refresh"
-            className="inline-flex h-[20px] items-center gap-0.5 border border-slate-200 bg-white px-1.5 text-[9px] text-slate-600 hover:bg-slate-50">
-            <FaSync size={7} className={loading ? 'animate-spin' : ''} /> Refresh
-          </button>
-          <button onClick={handleExport}
-            className="inline-flex h-[20px] items-center gap-0.5 border border-slate-200 bg-white px-1.5 text-[9px] font-semibold text-slate-700 hover:bg-slate-50">
-            <FaDownload size={7} /> Export
-          </button>
+          <ListToolbar.Divider />
+          <ListToolbar.Button icon={FaSync} variant="outline" onClick={load} title="Refresh">Refresh</ListToolbar.Button>
+          <ListToolbar.Button icon={FaDownload} variant="outline" onClick={handleExport}>Export</ListToolbar.Button>
           {canCreateExpense && (
-            <button onClick={() => { setEditing(null); setModalOpen(true); }}
-              className="inline-flex h-[20px] items-center gap-0.5 bg-[#0B3B2E] px-2.5 text-[9px] font-black text-white hover:bg-[#0A3127]">
-              <FaPlus size={7} /> Record Expense
-            </button>
+            <ListToolbar.Button icon={FaPlus} onClick={() => { setEditing(null); setModalOpen(true); }}>
+              Record Expense
+            </ListToolbar.Button>
           )}
-        </div>
+        </ListToolbar>
 
         {/* ─── Table ──────────────────────────────────────────────────────── */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white m-2 rounded-lg shadow-sm">
-          <div className="min-h-0 flex-1 overflow-auto">
-            {loading && expenses.length === 0 ? (
-              <div className="flex items-center justify-center py-16 text-xs text-slate-400">Loading expenses…</div>
-            ) : filtered.length === 0 ? (
-              <div className="flex flex-col items-center gap-3 py-16">
+          <MilikTable
+            columns={[
+              { label: 'Date' },
+              { label: `${termProperty} / ${termUnit}` },
+              { label: 'Category' },
+              { label: 'Description' },
+              { label: 'Amount' },
+              { label: 'Payment' },
+              { label: 'Cashbook' },
+              { label: 'Ref / By' },
+            ]}
+            rows={paginated}
+            rowKey="_id"
+            loading={loading && expenses.length === 0}
+            minWidth="900px"
+            empty={
+              <div className="flex flex-col items-center gap-3 py-4">
                 <FaReceipt size={28} className="text-slate-200" />
                 <p className="text-xs font-semibold text-slate-400">No expenses found for this period</p>
                 {canCreateExpense && (
@@ -499,81 +502,69 @@ const PropertyExpenses = () => {
                   </button>
                 )}
               </div>
-            ) : (
-              <table className="w-full min-w-[900px] text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className="bg-[#0B3B2E] text-white">
-                    {['Date', `${termProperty} / ${termUnit}`, 'Category', 'Description', 'Amount', 'Payment', 'Cashbook', 'Ref / By', ''].map((h, i, arr) => (
-                      <th key={h || i} className={`px-3 py-1.5 text-left font-bold ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginated.map((exp, idx) => {
-                    const propName = propertyMap.get(normalizeId(exp.property)) || '—';
-                    const unitNum  = unitMap.get(normalizeId(exp.unit)) || null;
-                    return (
-                      <tr key={exp._id} className={`border-b border-gray-100 hover:bg-blue-50/40 align-top ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
-                        <td className="whitespace-nowrap px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-700">
-                          <div className="flex items-center gap-1.5">
-                            <FaCalendarAlt size={9} className="text-slate-400 shrink-0" />
-                            {toInput(exp.date)}
-                          </div>
-                        </td>
-                        <td className="px-3 py-1.5 border-r border-gray-100">
-                          <div className="font-semibold text-slate-800 truncate max-w-[160px]">{propName}</div>
-                          {unitNum && <div className="text-[10px] text-slate-500">{termUnit} {unitNum}</div>}
-                        </td>
-                        <td className="px-3 py-1.5 border-r border-gray-100">
-                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${CATEGORY_COLORS[exp.category] || CATEGORY_COLORS.other}`}>
-                            {humanize(exp.category)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-1.5 border-r border-gray-100 max-w-[220px]">
-                          <div className="truncate font-medium text-slate-700" title={exp.description}>{exp.description}</div>
-                        </td>
-                        <td className="px-3 py-1.5 border-r border-gray-100 font-bold text-slate-900 whitespace-nowrap">
-                          {formatMoney(exp.amount)}
-                        </td>
-                        <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">{humanize(exp.paymentMethod)}</td>
-                        <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500 whitespace-nowrap">{exp.cashbook || '—'}</td>
-                        <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">
-                          {exp.receiptNumber && <div className="font-medium text-slate-600">{exp.receiptNumber}</div>}
-                          {exp.paidBy && <div className="text-[10px] text-slate-400">{exp.paidBy}</div>}
-                        </td>
-                        <td className="px-3 py-1.5">
-                          <div className="flex items-center gap-1">
-                            {canUpdateExpense && (
-                              <button onClick={() => { setEditing(exp); setModalOpen(true); }}
-                                className="rounded p-1.5 text-[#0B3B2E] hover:bg-[#ECF6F1]" title="Edit">
-                                <FaEdit size={11} />
-                              </button>
-                            )}
-                            {canDeleteExpense && (
-                              <button onClick={() => handleDelete(exp)} disabled={deleting === exp._id}
-                                className="rounded p-1.5 text-red-500 hover:bg-red-50 disabled:opacity-40" title="Delete">
-                                <FaTrash size={11} />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-slate-200 bg-slate-50">
-                    <td colSpan={4} className="px-3 py-2 text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e]">
-                      Total ({filtered.length} expense{filtered.length !== 1 ? 's' : ''})
-                    </td>
-                    <td className="px-3 py-2 font-extrabold text-[#0B3B2E]" colSpan={5}>
-                      {formatMoney(summary.total)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+            }
+            renderFooter={() => (
+              <>
+                <td colSpan={4} className="px-3 py-2 text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e]">
+                  Total ({filtered.length} expense{filtered.length !== 1 ? 's' : ''})
+                </td>
+                <td className="px-3 py-2 font-extrabold text-[#0B3B2E]" colSpan={4}>
+                  {formatMoney(summary.total)}
+                </td>
+              </>
             )}
-          </div>
+            renderRow={(exp) => {
+              const propName = propertyMap.get(normalizeId(exp.property)) || '—';
+              const unitNum  = unitMap.get(normalizeId(exp.unit)) || null;
+              return (
+                <>
+                  <td className="whitespace-nowrap px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-700">
+                    <div className="flex items-center gap-1.5">
+                      <FaCalendarAlt size={9} className="text-slate-400 shrink-0" />
+                      {toInput(exp.date)}
+                    </div>
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100">
+                    <div className="font-semibold text-slate-800 truncate max-w-[160px]">{propName}</div>
+                    {unitNum && <div className="text-[10px] text-slate-500">{termUnit} {unitNum}</div>}
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100">
+                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${CATEGORY_COLORS[exp.category] || CATEGORY_COLORS.other}`}>
+                      {humanize(exp.category)}
+                    </span>
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 max-w-[220px]">
+                    <div className="truncate font-medium text-slate-700" title={exp.description}>{exp.description}</div>
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-bold text-slate-900 whitespace-nowrap">
+                    {formatMoney(exp.amount)}
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">{humanize(exp.paymentMethod)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500 whitespace-nowrap">{exp.cashbook || '—'}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">
+                    {exp.receiptNumber && <div className="font-medium text-slate-600">{exp.receiptNumber}</div>}
+                    {exp.paidBy && <div className="text-[10px] text-slate-400">{exp.paidBy}</div>}
+                  </td>
+                </>
+              );
+            }}
+            renderActions={(exp) => (
+              <div className="flex items-center gap-1">
+                {canUpdateExpense && (
+                  <button onClick={() => { setEditing(exp); setModalOpen(true); }}
+                    className="rounded p-1.5 text-[#0B3B2E] hover:bg-[#ECF6F1]" title="Edit">
+                    <FaEdit size={11} />
+                  </button>
+                )}
+                {canDeleteExpense && (
+                  <button onClick={() => handleDelete(exp)} disabled={deleting === exp._id}
+                    className="rounded p-1.5 text-red-500 hover:bg-red-50 disabled:opacity-40" title="Delete">
+                    <FaTrash size={11} />
+                  </button>
+                )}
+              </div>
+            )}
+          />
 
           {/* Pagination */}
           <PaginationBar
