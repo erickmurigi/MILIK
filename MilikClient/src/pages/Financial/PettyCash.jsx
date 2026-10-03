@@ -24,6 +24,7 @@ import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
+import ListToolbar from '../../components/common/ListToolbar';
 import { fmtDate } from "../../utils/dates";
 import Modal from "../../components/common/Modal";
 import { inputClass, labelClass } from "../../utils/formStyles";
@@ -43,8 +44,6 @@ import {
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
-const MILIK_ORANGE = "bg-[#FF8C00]";
-const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
 
 const DEFAULT_PAGE_SIZE = 25;
 
@@ -452,126 +451,109 @@ const PettyCash = () => {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
 
             {/* ── Sticky toolbar ───────────────────────────────────────────── */}
-            <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-              <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-                <span className="shrink-0 text-xs font-black text-slate-800">Petty Cash</span>
-                {accounts.length > 0 && (
-                  <AppSelect
-                    value={selectedAccountId}
-                    onChange={(v) => setSelectedAccountId(v ?? "")}
-                    options={accounts.map((a) => ({ value: String(a._id), label: a.name }))}
-                    searchable
-                    clearable
-                    size="sm"
-                  />
-                )}
-                {selectedAccount && <BalancePill account={selectedAccount} />}
-                {selectedAccount && (
-                  <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
-                    Float: KES {fmt(selectedAccount.floatAmount)}
-                  </span>
-                )}
-                {selectedAccount?.custodianName && (
-                  <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
-                    Custodian: <span className="font-semibold text-slate-700">{selectedAccount.custodianName}</span>
-                  </span>
-                )}
-                {activeTab === "disbursements" && filteredDisbursements.length > 0 && (
-                  <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
-                    {filteredDisbursements.length} voucher{filteredDisbursements.length !== 1 ? "s" : ""} · KES {fmt(activeDisbTotal)}
-                  </span>
-                )}
-                {activeTab === "replenishments" && pendingRepCount > 0 && (
-                  <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                    {pendingRepCount} pending · KES {fmt(pendingRepTotal)}
-                  </span>
-                )}
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                {[
-                  { id: "disbursements", label: "Disbursements" },
-                  { id: "replenishments", label: "Replenishments", badge: pendingRepCount },
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => { setActiveTab(tab.id); resetFilters(); setDisbPage(1); setRepPage(1); }}
-                    className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold ${
-                      activeTab === tab.id
-                        ? "bg-[#0B3B2E] text-white"
-                        : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                    }`}
-                  >
-                    {tab.label}
-                    {tab.badge > 0 && (
-                      <span className="rounded-full bg-amber-500 px-1 text-[9px] font-bold text-white">{tab.badge}</span>
-                    )}
-                  </button>
-                ))}
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <input
-                  type="text"
-                  placeholder={activeTab === "disbursements" ? "Search voucher, description…" : "Search ref no…"}
-                  value={draftSearch}
-                  onChange={(e) => setDraftSearch(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && applySearch()}
-                  className="h-7 w-40 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                />
-                {activeTab === "disbursements" && (
-                  <AppSelect
-                    value={draftCategory !== "any" ? draftCategory : ""}
-                    onChange={(v) => setDraftCategory(v ?? "any")}
-                    options={Object.entries(CATEGORY_LABELS).map(([v, l]) => ({ value: v, label: l }))}
-                    placeholder="Category"
-                    searchable
-                    clearable
-                    size="sm"
-                  />
-                )}
+            <ListToolbar>
+              <span className="shrink-0 text-[9px] font-black text-slate-800">Petty Cash</span>
+              {accounts.length > 0 && (
                 <AppSelect
-                  value={draftStatus !== "any" ? draftStatus : ""}
-                  onChange={(v) => setDraftStatus(v ?? "any")}
-                  options={activeTab === "disbursements"
-                    ? [{ value: "active", label: "Active" }, { value: "void", label: "Void" }]
-                    : [{ value: "pending", label: "Pending" }, { value: "approved", label: "Approved" }, { value: "posted", label: "Posted" }, { value: "rejected", label: "Rejected" }]}
-                  placeholder="Status"
+                  value={selectedAccountId}
+                  onChange={(v) => setSelectedAccountId(v ?? "")}
+                  options={accounts.map((a) => ({ value: String(a._id), label: a.name }))}
+                  searchable
                   clearable
-                  size="sm"
+                  compact
                 />
-                <input type="date" value={draftFrom} onChange={(e) => setDraftFrom(e.target.value)} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" title="From date" />
-                <input type="date" value={draftTo} onChange={(e) => setDraftTo(e.target.value)} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" title="To date" />
-                <button onClick={applySearch} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}>
-                  <FaSearch size={9} /> Search
-                </button>
-                <button onClick={resetFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}>
-                  <FaRedoAlt size={9} /> Reset
-                </button>
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <button
-                  onClick={() => setShowNewAccount(true)}
-                  disabled={!canCreate}
-                  className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              )}
+              {selectedAccount && <BalancePill account={selectedAccount} />}
+              {selectedAccount && (
+                <span className="shrink-0 border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-semibold text-slate-600">
+                  Float: KES {fmt(selectedAccount.floatAmount)}
+                </span>
+              )}
+              {selectedAccount?.custodianName && (
+                <span className="shrink-0 border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] text-slate-500">
+                  Custodian: <span className="font-semibold text-slate-700">{selectedAccount.custodianName}</span>
+                </span>
+              )}
+              {activeTab === "disbursements" && filteredDisbursements.length > 0 && (
+                <span className="shrink-0 border border-blue-200 bg-blue-50 px-2 py-0.5 text-[9px] font-semibold text-blue-700">
+                  {filteredDisbursements.length} voucher{filteredDisbursements.length !== 1 ? "s" : ""} · KES {fmt(activeDisbTotal)}
+                </span>
+              )}
+              {activeTab === "replenishments" && pendingRepCount > 0 && (
+                <span className="shrink-0 border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-semibold text-amber-700">
+                  {pendingRepCount} pending · KES {fmt(pendingRepTotal)}
+                </span>
+              )}
+              <ListToolbar.Divider />
+              {[
+                { id: "disbursements", label: "Disbursements" },
+                { id: "replenishments", label: "Replenishments", badge: pendingRepCount },
+              ].map((tab) => (
+                <ListToolbar.Button
+                  key={tab.id}
+                  variant={activeTab === tab.id ? "primary" : "outline"}
+                  onClick={() => { setActiveTab(tab.id); resetFilters(); setDisbPage(1); setRepPage(1); }}
                 >
-                  <FaPlus size={9} /> New Account
-                </button>
-                {selectedAccountId && (
-                  <>
-                    <button
-                      onClick={() => setShowReplenishment(true)}
-                      disabled={!canCreate}
-                      className="h-7 shrink-0 flex items-center gap-1 rounded border border-amber-300 bg-amber-50 px-2.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <FaMoneyBillWave size={9} /> Replenish
-                    </button>
-                    <button
-                      onClick={() => setShowNewDisbursement(true)}
-                      disabled={!canCreate}
-                      className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                    >
-                      <FaPlus size={9} /> Record Disbursement
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
+                  {tab.label}
+                  {tab.badge > 0 && (
+                    <span className="rounded-full bg-amber-500 px-1 text-[8px] font-bold text-white">{tab.badge}</span>
+                  )}
+                </ListToolbar.Button>
+              ))}
+              <ListToolbar.Divider />
+              <ListToolbar.Input
+                type="text"
+                placeholder={activeTab === "disbursements" ? "Search voucher, description…" : "Search ref no…"}
+                value={draftSearch}
+                onChange={(e) => setDraftSearch(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && applySearch()}
+                width="w-40"
+              />
+              {activeTab === "disbursements" && (
+                <AppSelect
+                  value={draftCategory !== "any" ? draftCategory : ""}
+                  onChange={(v) => setDraftCategory(v ?? "any")}
+                  options={Object.entries(CATEGORY_LABELS).map(([v, l]) => ({ value: v, label: l }))}
+                  placeholder="Category"
+                  searchable
+                  clearable
+                  compact
+                />
+              )}
+              <AppSelect
+                value={draftStatus !== "any" ? draftStatus : ""}
+                onChange={(v) => setDraftStatus(v ?? "any")}
+                options={activeTab === "disbursements"
+                  ? [{ value: "active", label: "Active" }, { value: "void", label: "Void" }]
+                  : [{ value: "pending", label: "Pending" }, { value: "approved", label: "Approved" }, { value: "posted", label: "Posted" }, { value: "rejected", label: "Rejected" }]}
+                placeholder="Status"
+                clearable
+                compact
+              />
+              <ListToolbar.Input type="date" value={draftFrom} onChange={(e) => setDraftFrom(e.target.value)} title="From date" />
+              <ListToolbar.Input type="date" value={draftTo} onChange={(e) => setDraftTo(e.target.value)} title="To date" />
+              <ListToolbar.Button icon={FaSearch} variant="accent" onClick={applySearch}>Search</ListToolbar.Button>
+              <ListToolbar.Button icon={FaRedoAlt} onClick={resetFilters}>Reset</ListToolbar.Button>
+              <ListToolbar.Divider />
+              <ListToolbar.Button icon={FaPlus} variant="outline" disabled={!canCreate} onClick={() => setShowNewAccount(true)}>
+                New Account
+              </ListToolbar.Button>
+              {selectedAccountId && (
+                <>
+                  <ListToolbar.Button
+                    icon={FaMoneyBillWave}
+                    className="!border !border-amber-300 !bg-amber-50 !text-amber-800 hover:!bg-amber-100"
+                    disabled={!canCreate}
+                    onClick={() => setShowReplenishment(true)}
+                  >
+                    Replenish
+                  </ListToolbar.Button>
+                  <ListToolbar.Button icon={FaPlus} disabled={!canCreate} onClick={() => setShowNewDisbursement(true)}>
+                    Record Disbursement
+                  </ListToolbar.Button>
+                </>
+              )}
+            </ListToolbar>
 
             {/* ── Scrollable body ───────────────────────────────────────────── */}
             <div className="min-h-0 flex-1 overflow-y-auto">
@@ -592,194 +574,170 @@ const PettyCash = () => {
               ) : activeTab === "disbursements" ? (
 
                 /* ── Disbursements table */
-                <table className="min-w-full text-[11px] border-collapse">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="bg-[#0B3B2E] text-white">
-                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Voucher No.</th>
-                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
-                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Description</th>
-                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Category</th>
-                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
-                      <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount (KES)</th>
-                      <th className="px-3 py-1 text-center font-bold border-r border-white/10">Receipt</th>
-                      <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
-                      <th className="px-3 py-1 text-center font-bold">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading ? (
-                      <tr><td colSpan={9} className="py-16 text-center text-xs text-slate-400">Loading…</td></tr>
-                    ) : filteredDisbursements.length === 0 ? (
-                      <tr>
-                        <td colSpan={9} className="py-20 text-center">
-                          <FaBoxOpen className="mx-auto mb-2 text-3xl text-slate-300" />
-                          <p className="text-xs text-slate-400">No disbursements found</p>
-                        </td>
-                      </tr>
-                    ) : pagedDisbursements.map((row, idx) => (
-                      <tr
-                        key={row._id}
-                        className={`border-b border-gray-100 transition-colors hover:bg-blue-50/40 ${row.status === "void" ? "opacity-40" : idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"}`}
-                      >
-                        <td className="px-3 py-1 border-r border-gray-100 font-mono font-semibold text-slate-700">{row.voucherNumber}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{fmtDate(row.date)}</td>
-                        <td className="max-w-[220px] px-3 py-1 border-r border-gray-100 text-slate-700">
-                          <span className="line-clamp-2">{row.description}</span>
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100">
-                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${CATEGORY_COLORS[row.category] || "bg-gray-100 text-gray-700 border-gray-200"}`}>
-                            {CATEGORY_LABELS[row.category] || row.category}
-                          </span>
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.property?.propertyName || "—"}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold text-slate-800">{fmt(row.amount)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-center">
-                          {row.receiptAttached
-                            ? <FaCheck className="mx-auto text-emerald-600" size={10} />
-                            : <span className="text-[10px] text-slate-400">{row.receiptNote ? "Noted" : "—"}</span>
-                          }
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-center">
-                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[row.status] || "bg-gray-100 text-gray-600 border-gray-200"}`}>
-                            {row.status}
-                          </span>
-                        </td>
-                        <td className="px-3 py-1 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => printPettyCashVoucher({ disbursement: row, account: selectedAccount, company: currentCompany, user: currentUser })}
-                              className="rounded px-2 py-0.5 text-[10px] font-semibold text-slate-500 hover:bg-slate-100"
-                              title="Print voucher"
-                            >
-                              <FaPrint size={9} />
-                            </button>
-                            <button
-                              onClick={() => setGlEntry({ data: row, sourceType: "petty_cash_disbursement" })}
-                              className="rounded p-1 text-teal-600 hover:bg-teal-50 hover:text-teal-800"
-                              title="View GL Entries"
-                            >
-                              <FaBook size={10} />
-                            </button>
-                            {row.status === "active" && canApprove && (
-                              <button
-                                onClick={() => setShowVoidModal(row)}
-                                className="rounded px-2 py-0.5 text-[10px] font-semibold text-red-600 hover:bg-red-50"
-                              >
-                                Void
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  {filteredDisbursements.length > 0 && (
-                    <tfoot>
-                      <tr className="border-t-2 border-slate-200 bg-slate-50">
-                        <td colSpan={5} className="px-4 py-2.5 font-semibold text-slate-600">
-                          {filteredDisbursements.length} voucher{filteredDisbursements.length !== 1 ? "s" : ""}
-                        </td>
-                        <td className="px-4 py-2.5 text-right font-mono font-bold text-slate-800">
-                          {fmt(activeDisbTotal)}
-                        </td>
-                        <td colSpan={3} />
-                      </tr>
-                    </tfoot>
+                <MilikTable
+                  columns={[
+                    { label: "Voucher No." },
+                    { label: "Date" },
+                    { label: "Description" },
+                    { label: "Category" },
+                    { label: "Property" },
+                    { label: "Amount (KES)", align: "right" },
+                    { label: "Receipt", align: "center" },
+                    { label: "Status", align: "center" },
+                  ]}
+                  rows={pagedDisbursements}
+                  rowKey="_id"
+                  loading={loading}
+                  empty="No disbursements found"
+                  rowClassName={(row) => row.status === "void" ? "opacity-40" : ""}
+                  renderFooter={() => (
+                    <>
+                      <td colSpan={5} className="px-3 py-1 font-semibold text-slate-600">
+                        {filteredDisbursements.length} voucher{filteredDisbursements.length !== 1 ? "s" : ""}
+                      </td>
+                      <td className="px-3 py-1 text-right font-mono font-bold text-slate-800">
+                        {fmt(activeDisbTotal)}
+                      </td>
+                      <td colSpan={2} />
+                    </>
                   )}
-                </table>
+                  renderRow={(row) => (
+                    <>
+                      <td className="px-3 py-1 border-r border-gray-100 font-mono font-semibold text-slate-700">{row.voucherNumber}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{fmtDate(row.date)}</td>
+                      <td className="max-w-[220px] px-3 py-1 border-r border-gray-100 text-slate-700">
+                        <span className="line-clamp-2">{row.description}</span>
+                      </td>
+                      <td className="px-3 py-1 border-r border-gray-100">
+                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${CATEGORY_COLORS[row.category] || "bg-gray-100 text-gray-700 border-gray-200"}`}>
+                          {CATEGORY_LABELS[row.category] || row.category}
+                        </span>
+                      </td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.property?.propertyName || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold text-slate-800">{fmt(row.amount)}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-center">
+                        {row.receiptAttached
+                          ? <FaCheck className="mx-auto text-emerald-600" size={10} />
+                          : <span className="text-[10px] text-slate-400">{row.receiptNote ? "Noted" : "—"}</span>
+                        }
+                      </td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-center">
+                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[row.status] || "bg-gray-100 text-gray-600 border-gray-200"}`}>
+                          {row.status}
+                        </span>
+                      </td>
+                    </>
+                  )}
+                  renderActions={(row) => (
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        onClick={() => printPettyCashVoucher({ disbursement: row, account: selectedAccount, company: currentCompany, user: currentUser })}
+                        className="rounded px-2 py-0.5 text-[10px] font-semibold text-slate-500 hover:bg-slate-100"
+                        title="Print voucher"
+                      >
+                        <FaPrint size={9} />
+                      </button>
+                      <button
+                        onClick={() => setGlEntry({ data: row, sourceType: "petty_cash_disbursement" })}
+                        className="rounded p-1 text-teal-600 hover:bg-teal-50 hover:text-teal-800"
+                        title="View GL Entries"
+                      >
+                        <FaBook size={10} />
+                      </button>
+                      {row.status === "active" && canApprove && (
+                        <button
+                          onClick={() => setShowVoidModal(row)}
+                          className="rounded px-2 py-0.5 text-[10px] font-semibold text-red-600 hover:bg-red-50"
+                        >
+                          Void
+                        </button>
+                      )}
+                    </div>
+                  )}
+                />
 
               ) : (
 
                 /* ── Replenishments table */
-                <table className="min-w-full text-[11px] border-collapse">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="bg-[#0B3B2E] text-white">
-                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Ref No.</th>
-                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Request Date</th>
-                      <th className="px-3 py-1 text-right font-bold border-r border-white/10">Balance Before</th>
-                      <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount (KES)</th>
-                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Bank Account</th>
-                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Requested By</th>
-                      <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
-                      <th className="px-3 py-1 text-center font-bold">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading ? (
-                      <tr><td colSpan={8} className="py-16 text-center text-xs text-slate-400">Loading…</td></tr>
-                    ) : replenishments.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="py-20 text-center">
-                          <FaBoxOpen className="mx-auto mb-2 text-3xl text-slate-300" />
-                          <p className="text-xs text-slate-400">No replenishments yet</p>
-                        </td>
-                      </tr>
-                    ) : pagedReplenishments.map((row, idx) => (
-                      <tr key={row._id} className={`border-b border-gray-100 transition-colors hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"}`}>
-                        <td className="px-3 py-1 border-r border-gray-100 font-mono font-semibold text-slate-700">{row.replenishmentNumber}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{fmtDate(row.requestDate)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-600">{fmt(row.balanceBeforeReplenishment)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold text-slate-800">{fmt(row.amount)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-600">
-                          {row.bankAccountId
-                            ? `${row.bankAccountId.code ? row.bankAccountId.code + " — " : ""}${row.bankAccountId.name}`
-                            : "—"}
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.requestedBy?.name || "—"}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-center">
-                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[row.status] || "bg-gray-100 text-gray-600 border-gray-200"}`}>
-                            {row.status}
-                          </span>
-                        </td>
-                        <td className="px-3 py-1">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => printReplenishmentSummary({ replenishment: row, disbursements, account: selectedAccount, company: currentCompany, user: currentUser })}
-                              className="rounded px-2 py-0.5 text-[10px] font-semibold text-slate-500 hover:bg-slate-100"
-                              title="Print reimbursement form"
-                            >
-                              <FaPrint size={9} />
-                            </button>
-                            <button
-                              onClick={() => setGlEntry({ data: row, sourceType: "petty_cash_replenishment" })}
-                              className="rounded p-1 text-teal-600 hover:bg-teal-50 hover:text-teal-800"
-                              title="View GL Entries"
-                            >
-                              <FaBook size={10} />
-                            </button>
-                            {row.status === "pending" && canApprove && (
-                              <button
-                                disabled={submitting}
-                                onClick={() => handleApproveReplenishment(row._id)}
-                                className="rounded px-2 py-0.5 text-[10px] font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"
-                              >
-                                Approve
-                              </button>
-                            )}
-                            {row.status === "approved" && canApprove && (
-                              <button
-                                disabled={submitting}
-                                onClick={() => handlePostReplenishment(row._id)}
-                                className="rounded px-2 py-0.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
-                              >
-                                Post
-                              </button>
-                            )}
-                            {row.status === "pending" && canApprove && (
-                              <button
-                                disabled={submitting}
-                                onClick={() => setShowRejectModal(row)}
-                                className="rounded px-2 py-0.5 text-[10px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
-                              >
-                                Reject
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <MilikTable
+                  columns={[
+                    { label: "Ref No." },
+                    { label: "Request Date" },
+                    { label: "Balance Before", align: "right" },
+                    { label: "Amount (KES)", align: "right" },
+                    { label: "Bank Account" },
+                    { label: "Requested By" },
+                    { label: "Status", align: "center" },
+                  ]}
+                  rows={pagedReplenishments}
+                  rowKey="_id"
+                  loading={loading}
+                  empty="No replenishments yet"
+                  renderRow={(row) => (
+                    <>
+                      <td className="px-3 py-1 border-r border-gray-100 font-mono font-semibold text-slate-700">{row.replenishmentNumber}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{fmtDate(row.requestDate)}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-600">{fmt(row.balanceBeforeReplenishment)}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold text-slate-800">{fmt(row.amount)}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-600">
+                        {row.bankAccountId
+                          ? `${row.bankAccountId.code ? row.bankAccountId.code + " — " : ""}${row.bankAccountId.name}`
+                          : "—"}
+                      </td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.requestedBy?.name || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-center">
+                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[row.status] || "bg-gray-100 text-gray-600 border-gray-200"}`}>
+                          {row.status}
+                        </span>
+                      </td>
+                    </>
+                  )}
+                  renderActions={(row) => (
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        onClick={() => printReplenishmentSummary({ replenishment: row, disbursements, account: selectedAccount, company: currentCompany, user: currentUser })}
+                        className="rounded px-2 py-0.5 text-[10px] font-semibold text-slate-500 hover:bg-slate-100"
+                        title="Print reimbursement form"
+                      >
+                        <FaPrint size={9} />
+                      </button>
+                      <button
+                        onClick={() => setGlEntry({ data: row, sourceType: "petty_cash_replenishment" })}
+                        className="rounded p-1 text-teal-600 hover:bg-teal-50 hover:text-teal-800"
+                        title="View GL Entries"
+                      >
+                        <FaBook size={10} />
+                      </button>
+                      {row.status === "pending" && canApprove && (
+                        <button
+                          disabled={submitting}
+                          onClick={() => handleApproveReplenishment(row._id)}
+                          className="rounded px-2 py-0.5 text-[10px] font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                        >
+                          Approve
+                        </button>
+                      )}
+                      {row.status === "approved" && canApprove && (
+                        <button
+                          disabled={submitting}
+                          onClick={() => handlePostReplenishment(row._id)}
+                          className="rounded px-2 py-0.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                        >
+                          Post
+                        </button>
+                      )}
+                      {row.status === "pending" && canApprove && (
+                        <button
+                          disabled={submitting}
+                          onClick={() => setShowRejectModal(row)}
+                          className="rounded px-2 py-0.5 text-[10px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        >
+                          Reject
+                        </button>
+                      )}
+                    </div>
+                  )}
+                />
               )}
             </div>
 
