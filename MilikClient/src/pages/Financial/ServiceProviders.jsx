@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useCallback, useEffect, useRef, useState } from "react";
 import { FaEdit, FaPlus, FaSave, FaSearch, FaTimes, FaTrash } from "react-icons/fa";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
@@ -17,6 +17,7 @@ import useDebounce from "../../hooks/useDebounce";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
+import ListToolbar from '../../components/common/ListToolbar';
 
 const blankForm = {
   name: "",
@@ -58,6 +59,7 @@ const ServiceProviders = () => {
   const [search, setSearch] = useTabState("/accounts/service-providers:search", "");
   const debouncedSearch = useDebounce(search, 400);
   const [nameFilter, setNameFilter] = useTabState("/accounts/service-providers:nameFilter", "");
+  const debouncedNameFilter = useDebounce(nameFilter, 400);
   const [categoryFilter, setCategoryFilter] = useTabState("/accounts/service-providers:categoryFilter", "");
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -105,6 +107,8 @@ const ServiceProviders = () => {
         business: currentCompany._id,
         company: currentCompany._id,
         search: debouncedSearch,
+        name: debouncedNameFilter,
+        category: categoryFilter && categoryFilter !== "all" ? categoryFilter : undefined,
         page: currentPage,
         limit: pageSize,
       });
@@ -116,37 +120,13 @@ const ServiceProviders = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentCompany?._id, debouncedSearch, currentPage, pageSize]);
+  }, [currentCompany?._id, debouncedSearch, debouncedNameFilter, categoryFilter, currentPage, pageSize]);
 
   useEffect(() => {
     loadRows();
   }, [loadRows]);
 
-  const filtered = useMemo(() => {
-    return rows.filter((row) => {
-      if (nameFilter.trim()) {
-        const providerName = String(row?.name || "").toLowerCase();
-        if (!providerName.includes(nameFilter.trim().toLowerCase())) return false;
-      }
-
-      if (categoryFilter) {
-        if (String(row?.category || "").toLowerCase() !== categoryFilter.toLowerCase()) {
-          return false;
-        }
-      }
-
-      if (search.trim()) {
-        const haystack = `${row.providerCode} ${row.name} ${row.contactPerson} ${row.phone} ${row.email} ${row.category}`.toLowerCase();
-        if (!haystack.includes(search.trim().toLowerCase())) return false;
-      }
-
-      return true;
-    });
-  }, [rows, search, nameFilter, categoryFilter]);
-
-
   const totalPages = Math.max(1, serverPages);
-  const currentPageRows = rows; // server already paginates
 
   useEffect(() => {
     setCurrentPage(1);
@@ -239,47 +219,54 @@ const ServiceProviders = () => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="flex min-h-0 w-full max-w-full flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
-            <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-              <div className="relative shrink-0">
-                <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Provider code, contact, phone, email" className="h-7 w-52 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              </div>
-              <input value={nameFilter} onChange={(e) => setNameFilter(e.target.value)} placeholder="Provider name" className="h-7 w-36 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              <AppSelect
-                value={categoryFilter}
-                onChange={(v) => setCategoryFilter(v ?? "")}
-                options={CATEGORY_OPTIONS}
-                placeholder="All categories"
-                size="sm"
-                clearable
-              />
-              <button onClick={clearFilters} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Clear</button>
-              <button onClick={openCreate} disabled={!canCreate} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2.5 text-xs font-semibold text-white hover:bg-[#e67e00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus size={10} /> Add Provider</button>
+          <ListToolbar>
+            <div className="relative shrink-0">
+              <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
+              <ListToolbar.Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Provider code, contact, phone, email" width="w-52" className="pl-5" />
             </div>
-          </div>
-          <div className="min-h-0 flex-1 overflow-auto">
-            <table className="min-w-full text-[11px] border-collapse">
-              <thead className="sticky top-0 z-10 shadow-sm">
-                <tr className="bg-[#0B3B2E] text-white">
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Code</th><th className="px-3 py-1 text-left font-bold border-r border-white/10">Name</th><th className="px-3 py-1 text-left font-bold border-r border-white/10">Contact</th><th className="px-3 py-1 text-left font-bold border-r border-white/10">Category</th><th className="px-3 py-1 text-left font-bold border-r border-white/10">Settlement</th><th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th><th className="px-3 py-1 text-right font-bold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (<tr><td colSpan="7" className="px-3 py-8 text-center text-slate-500">Loading service providers...</td></tr>) : filtered.length === 0 ? (<tr><td colSpan="7" className="px-3 py-8 text-center text-slate-500">No service providers found.</td></tr>) : (currentPageRows.map((row, index) => (
-                  <tr key={row._id} className={`border-b border-gray-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-blue-50/40`}>
-                    <td className="px-3 py-1 border-r border-gray-100 font-mono font-bold text-slate-900">{row.providerCode}</td>
-                    <td className="px-3 py-1 border-r border-gray-100"><div className="font-bold text-slate-900">{row.name}</div><div className="text-[10px] text-slate-500">{row.notes || "No notes"}</div></td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700"><div>{row.contactPerson || "-"}</div><div className="text-[10px] text-slate-500">{row.phone || row.email || "No contact"}</div></td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.category || "general"}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.bankName || row.paybillNumber || row.accountNumber || "-"}</td>
-                    <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${row.isActive !== false ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-600 border-slate-200"}`}>{row.isActive !== false ? "Active" : "Inactive"}</span></td>
-                    <td className="px-3 py-1 text-right"><div className="inline-flex gap-1.5"><button onClick={() => openEdit(row)} disabled={!canUpdate} className="inline-flex items-center gap-1 rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-black text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><FaEdit /> Edit</button><button onClick={() => handleDelete(row)} disabled={!canDelete} className="inline-flex items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"><FaTrash /> Delete</button></div></td>
-                  </tr>
-                )))}
-              </tbody>
-            </table>
-          </div>
+            <ListToolbar.Input value={nameFilter} onChange={(e) => setNameFilter(e.target.value)} placeholder="Provider name" width="w-36" />
+            <AppSelect
+              value={categoryFilter}
+              onChange={(v) => setCategoryFilter(v ?? "")}
+              options={CATEGORY_OPTIONS}
+              placeholder="All categories"
+              compact
+              clearable
+            />
+            <ListToolbar.Button variant="outline" onClick={clearFilters}>Clear</ListToolbar.Button>
+            <ListToolbar.Button icon={FaPlus} variant="accent" disabled={!canCreate} onClick={openCreate}>Add Provider</ListToolbar.Button>
+          </ListToolbar>
+          <MilikTable
+            columns={[
+              { label: "Code" },
+              { label: "Name" },
+              { label: "Contact" },
+              { label: "Category" },
+              { label: "Settlement" },
+              { label: "Status" },
+            ]}
+            rows={rows}
+            rowKey="_id"
+            loading={loading}
+            empty="No service providers found."
+            minWidth="900px"
+            renderRow={(row) => (
+              <>
+                <td className="px-3 py-1 border-r border-gray-100 font-mono font-bold text-slate-900">{row.providerCode}</td>
+                <td className="px-3 py-1 border-r border-gray-100"><div className="font-bold text-slate-900">{row.name}</div><div className="text-[10px] text-slate-500">{row.notes || "No notes"}</div></td>
+                <td className="px-3 py-1 border-r border-gray-100 text-slate-700"><div>{row.contactPerson || "-"}</div><div className="text-[10px] text-slate-500">{row.phone || row.email || "No contact"}</div></td>
+                <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.category || "general"}</td>
+                <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.bankName || row.paybillNumber || row.accountNumber || "-"}</td>
+                <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${row.isActive !== false ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-600 border-slate-200"}`}>{row.isActive !== false ? "Active" : "Inactive"}</span></td>
+              </>
+            )}
+            renderActions={(row) => (
+              <div className="inline-flex gap-1.5">
+                <button onClick={() => openEdit(row)} disabled={!canUpdate} className="inline-flex items-center gap-1 rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-black text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><FaEdit /> Edit</button>
+                <button onClick={() => handleDelete(row)} disabled={!canDelete} className="inline-flex items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"><FaTrash /> Delete</button>
+              </div>
+            )}
+          />
           <PaginationBar
             page={currentPage}
             pages={totalPages}

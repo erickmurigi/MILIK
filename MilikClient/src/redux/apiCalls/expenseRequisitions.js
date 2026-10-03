@@ -51,6 +51,8 @@ export const getServiceProviders = async (filters = {}) => {
   if (filters.company) params.append("company", filters.company);
   if (typeof filters.active === 'boolean') params.append("active", String(filters.active));
   if (filters.search) params.append("search", filters.search);
+  if (filters.name) params.append("name", filters.name);
+  if (filters.category) params.append("category", filters.category);
   if (filters.page) params.append("page", filters.page);
   if (filters.limit) params.append("limit", filters.limit);
   const res = await adminRequests.get(`/service-providers${params.toString() ? `?${params.toString()}` : ""}`);
