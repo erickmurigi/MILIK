@@ -16,6 +16,7 @@ import {
   getTakeOnBalances,
   updateTakeOnBalance,
   bulkImportInvoiceNotes,
+  bulkImportTakeOnBalances,
 } from "../../controllers/propertyController/tenantInvoices.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
 import { generateInvoicePdf } from "../../services/invoicePdfService.js";
@@ -24,6 +25,7 @@ const router = express.Router();
 
 const canViewTakeOnBalances = requireCompanyPermission("takeOnBalances", "view", "propertyManagement");
 const canUpdateTakeOnBalance = requireCompanyPermission("takeOnBalances", "update", "propertyManagement");
+const canCreateTakeOnBalance = requireCompanyPermission("takeOnBalances", "create", "propertyManagement");
 
 // Static / collection routes — must come before any /:id patterns
 router.get("/", verifyUser, getTenantInvoicesList);
@@ -37,6 +39,7 @@ router.post("/batch", verifyUser, createTenantInvoicesBatch);
 router.post("/batch-delete", verifyUser, deleteTenantInvoicesBatch);
 router.post("/notes", verifyUser, createTenantInvoiceNote);
 router.post("/notes/bulk-import", verifyUser, bulkImportInvoiceNotes);
+router.post("/take-on/bulk-import", verifyUser, canCreateTakeOnBalance, bulkImportTakeOnBalances);
 router.post("/notes/:id/reverse", verifyUser, reverseTenantInvoiceNote);
 
 // Parameterised routes

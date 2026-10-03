@@ -22,6 +22,7 @@ import {
   FaTimes,
   FaSave,
   FaWrench,
+  FaUpload,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
@@ -32,7 +33,10 @@ import {
   deleteTenantInvoice,
   getTakeOnBalances,
   updateTakeOnBalance,
+  bulkImportTakeOnBalances,
 } from "../../redux/invoiceApi";
+import ImportModal from "../../components/Modals/ImportModal";
+import { parseTakeOnBalancesExcel, downloadTakeOnBalancesTemplate } from "../../utils/takeOnBalanceImport";
 import { createRentPayment, reverseRentPayment, getChartOfAccounts } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
 import { useTabState } from "../../hooks/useTabState";
@@ -71,7 +75,6 @@ const emptyForm = {
   description: "",
   openingBalanceAccountId: "",
   propertyId: "",
-  tenantSearch: "",
 };
 
 const normalizeId = (value) => {
@@ -110,11 +113,33 @@ const formatCurrency = (value) =>
   }).format(Number(value || 0));
 
 
-const statusMeta = {
-  unallocated: { label: "Unallocated", classes: "bg-amber-100 text-amber-800" },
-  partially_allocated: { label: "Partially Allocated", classes: "bg-blue-100 text-blue-800" },
-  fully_allocated: { label: "Fully Allocated", classes: "bg-emerald-100 text-emerald-800" },
+// Debits are amounts owed, so they read as outstanding / part paid / settled. Credits
+// (prepayments) read as available / part applied / applied.
+const debitStatusMeta = {
+  unallocated: { label: "Outstanding", classes: "bg-red-100 text-red-800" },
+  partially_allocated: { label: "Part Paid", classes: "bg-blue-100 text-blue-800" },
+  fully_allocated: { label: "Settled", classes: "bg-emerald-100 text-emerald-800" },
 };
+
+const creditStatusMeta = {
+  unallocated: { label: "Available", classes: "bg-amber-100 text-amber-800" },
+  partially_allocated: { label: "Part Applied", classes: "bg-blue-100 text-blue-800" },
+  fully_allocated: { label: "Applied", classes: "bg-emerald-100 text-emerald-800" },
+};
+
+const isTakeOnDebit = (row) => String(row?.type || "").toLowerCase() === "debit";
+
+const getTakeOnStatusMeta = (row) => {
+  const table = isTakeOnDebit(row) ? debitStatusMeta : creditStatusMeta;
+  return table[row?.status] || table.unallocated;
+};
+
+const getTakeOnTypeLabel = (row) => (isTakeOnDebit(row) ? "Opening Debit" : "Prepayment");
+
+// Credits (prepayments) are shown negative, so a tenant's column of balances adds up to what
+// they owe (debits) less what they have prepaid (credits).
+const formatTakeOnSigned = (row, value) =>
+  formatCurrency(isTakeOnDebit(row) ? Math.abs(Number(value || 0)) : -Math.abs(Number(value || 0)));
 
 function TakeOnBalanceModal({
   open,
@@ -169,32 +194,14 @@ function TakeOnBalanceModal({
     return getTenantPropertyRecord(selectedTenant);
   }, [propertyOptions, selectedPropertyId, selectedTenant]);
 
+  // `tenants` is already the selected property's list (loaded by the page), so only the
+  // property match is needed here.
   const filteredTenants = useMemo(() => {
-    const searchTerm = String(form.tenantSearch || "").trim().toLowerCase();
-
-    if (!selectedPropertyId && mode !== "edit") {
-      return [];
-    }
-
-    return (Array.isArray(tenants) ? tenants : []).filter((tenant) => {
-      const tenantPropertyId = getTenantPropertyId(tenant);
-      if (selectedPropertyId && tenantPropertyId !== selectedPropertyId) {
-        return false;
-      }
-
-      if (!searchTerm) return true;
-
-      const haystack = [
-        getTenantDisplayName(tenant),
-        getUnitDisplay(tenant?.unit),
-        getPropertyDisplay(getTenantPropertyRecord(tenant)),
-      ]
-        .join(" ")
-        .toLowerCase();
-
-      return haystack.includes(searchTerm);
-    });
-  }, [tenants, selectedPropertyId, form.tenantSearch, mode]);
+    if (!selectedPropertyId) return [];
+    return (Array.isArray(tenants) ? tenants : []).filter(
+      (tenant) => getTenantPropertyId(tenant) === selectedPropertyId
+    );
+  }, [tenants, selectedPropertyId]);
 
   const propertySelectOptions = useMemo(
     () => propertyOptions.map((property) => ({ value: normalizeId(property?._id || property?.id), label: getPropertyDisplay(property) })),
@@ -219,7 +226,7 @@ function TakeOnBalanceModal({
   }, [form.billItem, form.utilityLabel, open, setForm]);
 
   useEffect(() => {
-    if (!open || !form.propertyId || !form.tenantId) return;
+    if (!open || !form.propertyId || !form.tenantId || !selectedTenant) return;
     const matchesSelectedProperty = getTenantPropertyId(selectedTenant) === normalizeId(form.propertyId);
     if (!matchesSelectedProperty) {
       setForm((prev) => ({ ...prev, tenantId: "" }));
@@ -261,19 +268,6 @@ function TakeOnBalanceModal({
                   disabled={mode === "edit"}
                   size="md"
                 />
-              </div>
-
-              <div>
-                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Find {termTenant}</label>
-                <div className="relative">
-                  <FaSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={10} />
-                  <input
-                    value={form.tenantSearch}
-                    onChange={(e) => setForm((prev) => ({ ...prev, tenantSearch: e.target.value }))}
-                    placeholder={`Type ${termTenant.toLowerCase()} name, ${termUnit.toLowerCase()}, or ${termProperty.toLowerCase()}`}
-                    className="w-full border border-slate-300 py-2 pl-8 pr-3 text-xs shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
-                  />
-                </div>
               </div>
 
               <div>
@@ -533,7 +527,11 @@ const TakeOnBalances = () => {
   const [expandedBalanceId, setExpandedBalanceId] = useState(null);
   const [chartAccounts, setChartAccounts] = useState([]);
   const [fixingDeposits, setFixingDeposits] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [utilityTypeOptions, setUtilityTypeOptions] = useState([]);
+  // The global tenant list is one server page (100, newest first), so tenants of older
+  // properties never reach the modal. The modal loads the selected property's tenants instead.
+  const [modalTenants, setModalTenants] = useState([]);
   const propertyOptions = useMemo(() => {
     const map = new Map();
 
@@ -579,6 +577,25 @@ const TakeOnBalances = () => {
     const propertyRecord = propertyLookup.get(propertyId);
     return getPropertyDisplay(propertyRecord || row?.property || getTenantPropertyRecord(row?.tenant));
   };
+
+  useEffect(() => {
+    if (!showModal || !currentCompany?._id || !form.propertyId) {
+      setModalTenants([]);
+      return;
+    }
+    let cancelled = false;
+    adminRequests
+      .get(`/tenants?business=${currentCompany._id}&property=${form.propertyId}&limit=500`)
+      .then((res) => {
+        if (!cancelled) setModalTenants(Array.isArray(res?.data?.data) ? res.data.data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setModalTenants([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showModal, currentCompany?._id, form.propertyId]);
 
   const loadRows = useCallback(async () => {
     if (!currentCompany?._id) return;
@@ -728,13 +745,12 @@ const TakeOnBalances = () => {
       description: row.description || "",
       openingBalanceAccountId: row?.metadata?.openingBalanceAccountId || "",
       propertyId: normalizeId(row.property?._id || row.property || getTenantPropertyId(row.tenant) || ""),
-      tenantSearch: "",
     });
     setShowModal(true);
   };
 
   const buildPayloadFromForm = () => {
-    const selectedTenant = tenants.find(
+    const selectedTenant = modalTenants.find(
       (tenant) => normalizeId(tenant._id) === normalizeId(form.tenantId)
     );
 
@@ -1043,6 +1059,7 @@ const TakeOnBalances = () => {
               <ListToolbar.Button variant="outline" onClick={() => { setDraftFilters(emptyFilters); setAppliedFilters(emptyFilters); }}>Reset</ListToolbar.Button>
               <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={loadRows}>Refresh</ListToolbar.Button>
               <ListToolbar.Button icon={FaPlus} onClick={openCreateModal}>Add Take-On</ListToolbar.Button>
+              <ListToolbar.Button icon={FaUpload} onClick={() => setShowImportModal(true)}>Import</ListToolbar.Button>
               <ListToolbar.Button
                 icon={FaWrench}
                 variant="outline"
@@ -1071,7 +1088,7 @@ const TakeOnBalances = () => {
               empty="No take-on balances found for the selected filters."
               minWidth={1120}
               renderRow={(row) => {
-                const meta = statusMeta[row.status] || statusMeta.unallocated;
+                const meta = getTakeOnStatusMeta(row);
                 return (
                   <>
                     <td className="px-3 py-1.5 border-r border-gray-100">
@@ -1083,11 +1100,11 @@ const TakeOnBalances = () => {
                       <div className="font-semibold text-slate-900">{row.billItemLabel}</div>
                       <div className="text-[10px] text-slate-500">{row.invoiceNumber || "No invoice number"}</div>
                     </td>
-                    <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-slate-700">{row.type}</td>
-                    <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-right font-semibold text-slate-900">{formatCurrency(row.amount)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-slate-700">{getTakeOnTypeLabel(row)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-right font-semibold text-slate-900">{formatTakeOnSigned(row, row.amount)}</td>
                     <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-right text-slate-700">{formatCurrency(row.allocated)}</td>
                     <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-right">
-                      <div className="font-semibold text-slate-900">{formatCurrency(row.balance)}</div>
+                      <div className="font-semibold text-slate-900">{formatTakeOnSigned(row, row.balance)}</div>
                       <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${meta.classes}`}>{meta.label}</span>
                     </td>
                     <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-slate-700">{fmtDate(row.effectiveDate)}</td>
@@ -1095,13 +1112,13 @@ const TakeOnBalances = () => {
                 );
               }}
               renderExpanded={(row) => {
-                const meta = statusMeta[row.status] || statusMeta.unallocated;
+                const meta = getTakeOnStatusMeta(row);
                 return (
                   <div className="grid gap-2 text-[10px] md:grid-cols-4">
                     <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">{termTenant}</span><p className="font-semibold text-slate-900">{getTenantDisplayName(row.tenant)}</p></div>
                     <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">{termProperty} / {termUnit}</span><p className="font-semibold text-slate-900">{getRowPropertyName(row)} · {getUnitDisplay(row.unit)}</p></div>
-                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Bill item</span><p className="font-semibold text-slate-900">{row.billItemLabel} · {row.type}</p></div>
-                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Posting position</span><p className="font-semibold text-slate-900">{meta.label} · Balance {formatCurrency(row.balance)}</p></div>
+                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Bill item</span><p className="font-semibold text-slate-900">{row.billItemLabel} · {getTakeOnTypeLabel(row)}</p></div>
+                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Posting position</span><p className="font-semibold text-slate-900">{meta.label} · Balance {formatTakeOnSigned(row, row.balance)}</p></div>
                   </div>
                 );
               }}
@@ -1132,7 +1149,7 @@ const TakeOnBalances = () => {
         mode={modalMode}
         form={form}
         setForm={setForm}
-        tenants={tenants}
+        tenants={modalTenants}
         properties={propertyOptions}
         filterBillItemOptions={filterBillItemOptions}
         chartAccounts={chartAccounts}
@@ -1150,6 +1167,32 @@ const TakeOnBalances = () => {
         open={Boolean(selectedRow && !showModal)}
         row={selectedRow}
         onClose={() => setSelectedRow(null)}
+      />
+
+      <ImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        title="Import Take-On Balances from Excel"
+        entityName="take-on balance"
+        parseFile={parseTakeOnBalancesExcel}
+        downloadTemplate={downloadTakeOnBalancesTemplate}
+        submitColorClass="bg-[#FF8C00] hover:bg-[#e67e00]"
+        getErrorRowLabel={(e) => e.data?.tenantName || e.data?.tenantCode}
+        getFailureRowLabel={(f) => f.data?.tenantName || f.data?.tenantCode}
+        previewCols={[
+          { header: termTenant, render: (r) => r.tenantName || r.tenantCode || "—" },
+          { header: termProperty, render: (r) => r.propertyName || "—" },
+          { header: "Bill Item", render: (r) => (r.billItem === "utility" ? r.utilityType : r.billItem) },
+          { header: "Amount", render: (r) => formatCurrency(r.amount) },
+          { header: "Effective", render: (r) => fmtDate(r.effectiveDate) },
+        ]}
+        onImport={async (rows) => {
+          const res = await bulkImportTakeOnBalances({ rows, business: currentCompany?._id });
+          const successful = Array.isArray(res?.data?.successful) ? res.data.successful : [];
+          const failed = Array.isArray(res?.data?.failed) ? res.data.failed : [];
+          if (successful.length > 0) await loadRows();
+          return { successful, failed };
+        }}
       />
 
       <MilikConfirmDialog

@@ -70,6 +70,15 @@ export const bulkImportInvoiceNotes = async ({ notes = [], business = null } = {
   }
 };
 
+export const bulkImportTakeOnBalances = async ({ rows = [], business = null } = {}) => {
+  try {
+    const res = await adminRequests.post("/tenant-invoices/take-on/bulk-import", { rows, business }, { timeout: 0 });
+    return res;
+  } catch (err) {
+    throw extractApiError(err);
+  }
+};
+
 export const reverseTenantInvoiceNote = async (noteId, payload = {}) => {
   try {
     const res = await adminRequests.post(`/tenant-invoices/notes/${noteId}/reverse`, payload);

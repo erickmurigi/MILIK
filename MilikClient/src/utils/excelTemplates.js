@@ -2338,7 +2338,7 @@ export const parseSaleBuyersExcel = (file) =>
 
 export const generateInvoiceNotesTemplate = () => {
   const dataSheet = XLSX.utils.aoa_to_sheet([
-    ['Note Type *', 'Tenant Code', 'Tenant Name *', 'Category *', 'Amount *', 'Note Date *', 'Source Invoice No', 'Narration'],
+    ['Note Type *', 'Tenant Code *', 'Tenant Name', 'Category *', 'Amount *', 'Note Date *', 'Source Invoice No', 'Narration'],
   ]);
 
   dataSheet['!cols'] = [
@@ -2350,7 +2350,8 @@ export const generateInvoiceNotesTemplate = () => {
     [''],
     ['REQUIRED FIELDS (marked with *)'],
     ['• Note Type: DEBIT_NOTE or CREDIT_NOTE'],
-    ['• Tenant Name (or Tenant Code): must match an existing tenant in MILIK'],
+    ['• Tenant Code: must match an existing tenant in MILIK'],
+    ['• Tenant Name: optional, for reference only (matching uses Tenant Code)'],
     ['• Category: must be a valid invoice charge category (see Valid Values sheet)'],
     ['• Amount: positive number (KES)'],
     ['• Note Date: YYYY-MM-DD format'],
@@ -2507,8 +2508,8 @@ export const parseInvoiceNotesExcel = (file) => {
           if (!validNoteTypes.includes(record.noteType)) {
             rowErrors.push(`Note Type must be DEBIT_NOTE or CREDIT_NOTE (got "${record.noteType || '(blank)'}")`);
           }
-          if (!record.tenantCode && !record.tenantName) {
-            rowErrors.push('Either Tenant Code or Tenant Name is required');
+          if (!record.tenantCode) {
+            rowErrors.push('Tenant Code is required');
           }
           if (!record.category) {
             rowErrors.push('Category is required');

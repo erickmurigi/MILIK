@@ -167,6 +167,12 @@ const resolveSameDayRecognitionDate = (datedValue = null, auditValue = null) => 
   return null;
 };
 
+// Charges that carry forward as Bal B/F when unpaid. Late penalties carry only when the
+// income rule makes them landlord income — shouldInclude*InLandlordStatement already gates
+// that via incomeRules.latePenaltyBeneficiary. Deposits never carry: they settle in the
+// period they are invoiced and show in the Deposit column for that period.
+const CARRY_FORWARD_CATEGORIES = new Set(["RENT_CHARGE", "UTILITY_CHARGE", "LATE_PENALTY_CHARGE"]);
+
 const getNoteStatementDate = (note = {}) => {
   if (note?.bookingDate) return new Date(note.bookingDate);
   return resolveSameDayRecognitionDate(note?.noteDate || null, note?.createdAt || note?.updatedAt || null);
@@ -3110,11 +3116,7 @@ export const generateLandlordStatement = async ({
     const row = accumulator.ensureRow(invoice.tenant, invoice.unit);
     const amount = Number(invoice.amount || 0);
 
-    if (invoice.category === "RENT_CHARGE") {
-      row.balanceBF += amount;
-    } else if (invoice.category === "UTILITY_CHARGE") {
-      row.balanceBF += amount;
-    }
+    if (CARRY_FORWARD_CATEGORIES.has(invoice.category)) row.balanceBF += amount;
   }
 
   for (const note of notesBefore) {
@@ -3123,11 +3125,7 @@ export const generateLandlordStatement = async ({
     const row = accumulator.ensureRow(note.tenant, note.unit);
     const amount = getSignedNoteAmount(note);
 
-    if (note.category === "RENT_CHARGE") {
-      row.balanceBF += amount;
-    } else if (note.category === "UTILITY_CHARGE") {
-      row.balanceBF += amount;
-    }
+    if (CARRY_FORWARD_CATEGORIES.has(note.category)) row.balanceBF += amount;
   }
 
   for (const receipt of allDepositReceiptsBefore) {
@@ -3782,13 +3780,13 @@ export const generateLandlordStatement = async ({
   // paidRent figure.
   for (const invoice of invoicesBefore) {
     if (!accumulator.shouldIncludeInvoiceInLandlordStatement(invoice)) continue;
-    if (invoice.category !== "RENT_CHARGE" && invoice.category !== "UTILITY_CHARGE") continue;
+    if (!CARRY_FORWARD_CATEGORIES.has(invoice.category)) continue;
     const row = accumulator.ensureRow(invoice.tenant, invoice.unit);
     row.rawBalanceBF = round2(Number(row.rawBalanceBF || 0) + Number(invoice.amount || 0));
   }
   for (const note of notesBefore) {
     if (!accumulator.shouldIncludeNoteInLandlordStatement(note)) continue;
-    if (note.category !== "RENT_CHARGE" && note.category !== "UTILITY_CHARGE") continue;
+    if (!CARRY_FORWARD_CATEGORIES.has(note.category)) continue;
     const row = accumulator.ensureRow(note.tenant, note.unit);
     row.rawBalanceBF = round2(Number(row.rawBalanceBF || 0) + Number(getSignedNoteAmount(note) || 0));
   }

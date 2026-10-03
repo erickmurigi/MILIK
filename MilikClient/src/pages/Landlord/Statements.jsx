@@ -2312,7 +2312,7 @@ const Statements = () => {
                           // Bal C/F: positive = tenant owes (arrears = red),
                           //          negative = tenant has credit (green),
                           //          zero = settled (muted).
-                          const balCls = (isVacant || isNoBill) ? "text-slate-300"
+                          const balCls = isVacant ? "text-slate-300"
                             : closingBal > 0.005  ? "text-red-600 font-semibold"
                             : closingBal < -0.005 ? "text-emerald-700 font-semibold"
                             : "text-slate-400";
@@ -2362,7 +2362,7 @@ const Statements = () => {
                               </td>
                               {/* Bal B/F — muted, context only */}
                               <td className="px-2 py-0.5 text-right text-slate-400 text-[10px]">
-                                {(isVacant || isNoBill) ? "—" : compactAmount(row.openingBalance ?? row.balanceBF ?? 0)}
+                                {isVacant ? "—" : compactAmount(row.openingBalance ?? row.balanceBF ?? 0)}
                               </td>
                               {/* ── INVOICED block ── */}
                               <td className={`border-l border-slate-100 px-2 py-0.5 text-right text-[10.5px] ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-700"}`}>
@@ -2396,7 +2396,7 @@ const Statements = () => {
                               <td className={`border-l border-slate-100 px-2 py-0.5 text-right text-[10.5px] font-semibold ${totalPaidCell.cls}`}>{totalPaidCell.text}</td>
                               {/* Bal C/F — positive = arrears (red), negative = credit (green) */}
                               <td className={`px-2 py-0.5 text-right text-[10.5px] ${balCls}`}>
-                                {(isVacant || isNoBill) ? "—" : compactAmount(closingBal)}
+                                {isVacant ? "—" : compactAmount(closingBal)}
                               </td>
                             </tr>
                           );

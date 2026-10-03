@@ -420,10 +420,31 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
     setInvoiceItemSelection("standalone-lease-fee");
   }, [isLocked, tenantId]);
 
+  // The global tenant list is one server page (100, newest first), so tenants of older
+  // properties never appear here. The selected property's tenants are loaded directly;
+  // null means "still loading for the current property".
+  const [propertyTenantsState, setPropertyTenantsState] = useState({ propertyId: "", list: [] });
+  useEffect(() => {
+    if (!currentCompany?._id || !propertyId) return;
+    let cancelled = false;
+    adminRequests
+      .get(`/tenants?business=${currentCompany._id}&property=${propertyId}&limit=500`)
+      .then((res) => {
+        if (!cancelled) setPropertyTenantsState({ propertyId, list: Array.isArray(res?.data?.data) ? res.data.data : [] });
+      })
+      .catch(() => {
+        if (!cancelled) setPropertyTenantsState({ propertyId, list: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentCompany?._id, propertyId]);
+  const propertyTenants = propertyId && propertyTenantsState.propertyId === propertyId ? propertyTenantsState.list : null;
+
   const propertyScopedTenants = useMemo(() => {
-    const scoped = !propertyId ? tenants : tenants.filter((tenant) => resolvePropertyId(tenant) === String(propertyId));
-    return scoped.filter((tenant) => tenantMatchesScope(tenant, tenantScope));
-  }, [tenants, propertyId, tenantScope]);
+    if (!propertyTenants) return [];
+    return propertyTenants.filter((tenant) => tenantMatchesScope(tenant, tenantScope));
+  }, [propertyTenants, tenantScope]);
 
   const filterScopedTenants = useMemo(() => {
     const scoped = !filters.propertyId ? tenants : tenants.filter((tenant) => resolvePropertyId(tenant) === String(filters.propertyId));
@@ -457,14 +478,14 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
   );
 
   useEffect(() => {
-    if (!tenantId) return;
+    if (!tenantId || propertyTenants === null) return;
     const stillSelectable = propertyScopedTenants.some((tenant) => String(tenant?._id || "") === String(tenantId));
     if (!stillSelectable) {
       setTenantId("");
       setSourceInvoiceId("");
       setInvoiceItemSelection("");
     }
-  }, [propertyScopedTenants, tenantId]);
+  }, [propertyScopedTenants, propertyTenants, tenantId]);
 
   const debitInvoiceItemOptions = useMemo(() => {
     if (!tenantId) return [];

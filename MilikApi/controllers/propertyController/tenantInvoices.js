@@ -4756,13 +4756,11 @@ export const bulkImportInvoiceNotes = async (req, res, next) => {
       .limit(5000)
       .lean();
 
+    // Tenant Code is the only key for note imports — names are not unique enough to post against.
     const tenantByCode = new Map();
-    const tenantByName = new Map();
     allTenants.forEach((t) => {
       const code = String(t.tenantCode || "").toLowerCase().trim();
       if (code) tenantByCode.set(code, t);
-      const name = String(t.name || "").toLowerCase().trim();
-      if (name && !tenantByName.has(name)) tenantByName.set(name, t);
     });
 
     const uniquePropertyIds = [
@@ -4831,13 +4829,14 @@ export const bulkImportInvoiceNotes = async (req, res, next) => {
           continue;
         }
 
-        let tenant = null;
         const codeKey = String(row.tenantCode || "").toLowerCase().trim();
-        const nameKey = String(row.tenantName || "").toLowerCase().trim();
-        if (codeKey) tenant = tenantByCode.get(codeKey) || null;
-        if (!tenant && nameKey) tenant = tenantByName.get(nameKey) || null;
+        if (!codeKey) {
+          failed.push({ row: rowNum, data: row, error: "Tenant Code is required." });
+          continue;
+        }
+        const tenant = tenantByCode.get(codeKey) || null;
         if (!tenant) {
-          failed.push({ row: rowNum, data: row, error: `Tenant not found: "${row.tenantCode || row.tenantName || "(blank)"}"` });
+          failed.push({ row: rowNum, data: row, error: `Tenant not found: "${row.tenantCode}"` });
           continue;
         }
 
@@ -5025,6 +5024,289 @@ export const bulkImportInvoiceNotes = async (req, res, next) => {
     const successfulRows = createdNoteIds.map((id) => noteRowById.get(String(id))).filter(Boolean);
 
     return res.status(200).json({ successful: successfulRows, failed, total: rows.length });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+// Take-on balance bill items. Keys match the Take-On Balances modal's bill item values.
+const TAKE_ON_BILL_ITEMS = {
+  rent: { category: "RENT_CHARGE", label: "Rent" },
+  utility: { category: "UTILITY_CHARGE", label: "Utility" },
+  deposit: { category: "DEPOSIT_CHARGE", label: "Deposit" },
+  late_penalty: { category: "LATE_PENALTY_CHARGE", label: "Late Penalty" },
+};
+const TAKE_ON_PAYMENT_TYPES = { rent: "rent", utility: "utility", deposit: "deposit", late_penalty: "late_fee" };
+const TAKE_ON_INACTIVE_TENANT_STATUSES = ["inactive", "moved_out", "evicted", "terminated"];
+const TAKE_ON_MAX_AMOUNT = 10_000_000;
+
+// Imports opening debit take-on balances. Each row is validated against the same rules as
+// the single Add Take-On form, then created through createTenantInvoicesBatch so the
+// invoice numbering, journal posting and tenant recompute match the one-by-one path.
+export const bulkImportTakeOnBalances = async (req, res, next) => {
+  try {
+    const rows = Array.isArray(req.body.rows) ? req.body.rows : [];
+    if (rows.length === 0) return next(createError(400, "No take-on rows provided."));
+    if (rows.length > 500) return next(createError(400, "Maximum 500 take-on balances per import."));
+
+    const businessId = resolveAuthorizedBusinessId(req, req.body.business);
+    if (!businessId) {
+      return next(createError(400, "A business context is required to import take-on balances."));
+    }
+
+    const tenants = await Tenant.find({ business: businessId })
+      .select("_id name tenantCode unit status")
+      .populate({ path: "unit", select: "property unitNumber _id" })
+      .limit(5000)
+      .lean();
+
+    const tenantByCode = new Map();
+    tenants.forEach((tenant) => {
+      const code = String(tenant.tenantCode || "").toLowerCase().trim();
+      if (code) tenantByCode.set(code, tenant);
+    });
+
+    const propertyIds = [...new Set(tenants.map((t) => String(t.unit?.property || "")).filter(Boolean))];
+    const properties = await Property.find({ _id: { $in: propertyIds }, business: businessId })
+      .select("_id propertyName")
+      .lean();
+    const propertyById = new Map(properties.map((p) => [String(p._id), p]));
+
+    // Existing debit take-ons, so a re-import or a duplicate in the sheet is rejected.
+    const existingTakeOns = await TenantInvoice.find({
+      business: businessId,
+      "metadata.isTakeOnBalance": true,
+      status: { $nin: ["cancelled", "reversed"] },
+    })
+      .select("tenant metadata")
+      .lean();
+    const takenKeys = new Set(
+      existingTakeOns
+        .filter((inv) => String(inv.metadata?.takeOnType || "debit") !== "credit")
+        .map((inv) => `${String(inv.tenant)}|${inv.metadata?.billItemKey}`)
+    );
+
+    // Negative amounts are prepayments (take-on credits), posted to the account named in the row.
+    const accountDocs = await ChartOfAccount.find({ business: businessId }).select("_id code").lean();
+    const accountByCode = new Map(accountDocs.map((a) => [String(a.code || "").toLowerCase().trim(), a]));
+
+    const failed = [];
+    const items = [];
+    const itemMeta = [];
+    const creditItems = [];
+
+    for (const [i, row] of rows.entries()) {
+      const rowNum = Number(row.rowNumber) || i + 2;
+      const fail = (error) => failed.push({ row: rowNum, data: row, error });
+      try {
+        const billItemKey = String(row.billItem || "").toLowerCase().trim();
+        const option = TAKE_ON_BILL_ITEMS[billItemKey];
+        if (!option) {
+          fail("Bill Item must be rent, utility, deposit or late_penalty.");
+          continue;
+        }
+
+        const utilityType = String(row.utilityType || "").trim();
+        if (billItemKey === "utility" && !utilityType) {
+          fail("Utility Type is required for utility take-on balances.");
+          continue;
+        }
+
+        const signedAmount = Number(row.amount);
+        if (!Number.isFinite(signedAmount) || signedAmount === 0) {
+          fail("Amount must be a non-zero number. Negative amounts are prepayments (credits).");
+          continue;
+        }
+        const isCredit = signedAmount < 0;
+        const amount = Math.abs(signedAmount);
+        if (amount > TAKE_ON_MAX_AMOUNT) {
+          fail(`Amount exceeds KES ${TAKE_ON_MAX_AMOUNT.toLocaleString("en-KE")} — please verify for any typos.`);
+          continue;
+        }
+
+        const effectiveRaw = String(row.effectiveDate || "").trim();
+        const effectiveDate = /^\d{4}-\d{2}-\d{2}$/.test(effectiveRaw) ? new Date(`${effectiveRaw}T00:00:00Z`) : null;
+        if (!effectiveDate || Number.isNaN(effectiveDate.getTime())) {
+          fail("Effective Date must be a valid date (YYYY-MM-DD).");
+          continue;
+        }
+        if (effectiveDate.getTime() > Date.now()) {
+          fail("Effective date cannot be in the future. Take-on balances are historical migration entries.");
+          continue;
+        }
+
+        const codeKey = String(row.tenantCode || "").toLowerCase().trim();
+        if (!codeKey) {
+          fail("Tenant Code is required.");
+          continue;
+        }
+        const tenant = tenantByCode.get(codeKey) || null;
+        if (!tenant) {
+          fail(`Tenant not found: "${row.tenantCode}"`);
+          continue;
+        }
+        if (TAKE_ON_INACTIVE_TENANT_STATUSES.includes(String(tenant.status || "").toLowerCase())) {
+          fail(`Tenant "${tenant.name}" is not active.`);
+          continue;
+        }
+
+        const propertyId = String(tenant.unit?.property || "");
+        const property = propertyById.get(propertyId) || null;
+        if (!property || !tenant.unit?._id) {
+          fail(`Tenant "${tenant.name}" has no valid unit or property.`);
+          continue;
+        }
+
+        const propertyName = String(row.propertyName || "").trim();
+        if (propertyName && propertyName.toLowerCase() !== String(property.propertyName || "").toLowerCase()) {
+          fail(`Tenant "${tenant.name}" is in ${property.propertyName}, not ${propertyName}.`);
+          continue;
+        }
+
+        const billItemLabel = billItemKey === "utility" ? utilityType : option.label;
+        const takeOnKey = billItemKey === "utility" ? `utility:${utilityType.toLowerCase().replace(/\s+/g, "_")}` : billItemKey;
+        if (isCredit) {
+          const accountCodeKey = String(row.postingAccountCode || "").toLowerCase().trim();
+          if (!accountCodeKey) {
+            fail("Posting Account Code is required for negative (prepayment) amounts.");
+            continue;
+          }
+          const account = accountByCode.get(accountCodeKey);
+          if (!account) {
+            fail(`Posting account not found: "${row.postingAccountCode}"`);
+            continue;
+          }
+          const narrationText = String(row.narration || "").trim();
+          creditItems.push({
+            rowNum,
+            row,
+            payload: {
+              business: businessId,
+              property: property._id,
+              tenant: tenant._id,
+              unit: tenant.unit._id,
+              amount,
+              paymentType: TAKE_ON_PAYMENT_TYPES[billItemKey],
+              paymentDate: effectiveRaw,
+              bankingDate: effectiveRaw,
+              recordDate: effectiveRaw,
+              dueDate: effectiveRaw,
+              month: effectiveDate.getUTCMonth() + 1,
+              year: effectiveDate.getUTCFullYear(),
+              referenceNumber: `TOB-CR-${rowNum}-${Date.now()}`,
+              description: narrationText || `Opening ${billItemLabel.toLowerCase()} take-on credit for ${tenant.name}`,
+              isConfirmed: true,
+              paymentMethod: "bank_transfer",
+              cashbook: "",
+              paidDirectToLandlord: false,
+              metadata: {
+                isTakeOnBalance: true,
+                sourceTransactionType: "tenant_take_on_balance",
+                takeOnType: "credit",
+                takeOnBillItemKey: takeOnKey,
+                takeOnBillItemLabel: billItemLabel,
+                paymentType: TAKE_ON_PAYMENT_TYPES[billItemKey],
+                openingBalanceAccountId: String(account._id),
+                ...(billItemKey === "utility" ? { utilityType: billItemLabel, utilityName: billItemLabel } : {}),
+              },
+            },
+          });
+          continue;
+        }
+
+        const duplicateKey = `${String(tenant._id)}|${takeOnKey}`;
+        if (takenKeys.has(duplicateKey)) {
+          fail(`A debit take-on for "${billItemLabel}" already exists for "${tenant.name}". Edit or delete the existing entry.`);
+          continue;
+        }
+        takenKeys.add(duplicateKey);
+
+        const narration = String(row.narration || "").trim();
+        items.push({
+          business: businessId,
+          property: property._id,
+          landlord: null,
+          tenant: tenant._id,
+          unit: tenant.unit._id,
+          category: option.category,
+          amount,
+          description: narration || `Opening ${billItemLabel.toLowerCase()} take-on balance for ${tenant.name}`,
+          invoiceDate: effectiveRaw,
+          dueDate: effectiveRaw,
+          metadata: {
+            isTakeOnBalance: true,
+            sourceTransactionType: "tenant_take_on_balance",
+            billItemKey: takeOnKey,
+            billItemLabel,
+            takeOnType: "debit",
+            ...(billItemKey === "utility" ? { utilityType } : {}),
+          },
+        });
+        itemMeta.push({ rowNum, row });
+      } catch (rowError) {
+        console.error(`Take-on import row ${rowNum} error:`, rowError);
+        fail(rowError.message || "Unexpected error.");
+      }
+    }
+
+    const successful = [];
+    if (items.length > 0) {
+      // createTenantInvoicesBatch writes its own JSON response; capture it instead of sending.
+      let batchPayload = null;
+      const batchRes = {
+        status() {
+          return this;
+        },
+        json(payload) {
+          batchPayload = payload;
+          return this;
+        },
+      };
+      await createTenantInvoicesBatch({ ...req, body: { business: businessId, items } }, batchRes, next);
+      // createTenantInvoicesBatch already called next(error) on failure.
+      if (!batchPayload) return;
+
+      (batchPayload.results || []).forEach((result, idx) => {
+        const { rowNum, row } = itemMeta[idx];
+        if (result?.success) {
+          successful.push({ row: rowNum, invoiceId: result.invoiceId, invoiceNumber: result.invoiceNumber, tenant: result.tenant, category: result.category });
+        } else {
+          failed.push({ row: rowNum, data: row, error: result?.error || "Failed to create take-on balance." });
+        }
+      });
+    }
+
+    // Credits go through the same receipt path as the single Add Take-On form, one at a time,
+    // so their posting, allocation and tenant balance match exactly.
+    if (creditItems.length > 0) {
+      const { createPayment } = await import("./rentPayment.js");
+      for (const { rowNum, row, payload } of creditItems) {
+        let result = null;
+        let creditError = null;
+        await createPayment(
+          { ...req, body: payload },
+          {
+            status() {
+              return this;
+            },
+            json(body) {
+              result = body;
+              return this;
+            },
+          },
+          (err) => {
+            creditError = err || new Error("Failed to create take-on credit.");
+          }
+        );
+        if (!creditError && result?._id) {
+          successful.push({ row: rowNum, receiptId: result._id, receiptNumber: result.receiptNumber, tenant: payload.tenant, category: "CREDIT" });
+        } else {
+          failed.push({ row: rowNum, data: row, error: creditError?.message || result?.message || "Failed to create take-on credit." });
+        }
+      }
+    }
+
+    return res.status(200).json({ successful, failed, total: rows.length });
   } catch (error) {
     return next(error);
   }
