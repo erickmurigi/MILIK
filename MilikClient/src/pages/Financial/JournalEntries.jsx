@@ -37,6 +37,7 @@ import { useConfirm } from "../../context/ConfirmContext";
 import { useTabState } from "../../hooks/useTabState";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
+import ListToolbar from '../../components/common/ListToolbar';
 import { useTerms } from "../../hooks/useTerm";
 
 const JOURNAL_TYPES = [
@@ -268,7 +269,6 @@ const JournalEntries = () => {
 
 
   const totalPages = Math.max(1, serverPages);
-  const currentPageRows = journals;
 
   const accountOptions = useMemo(
     () =>
@@ -582,123 +582,126 @@ const JournalEntries = () => {
         <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-            <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-              <div className="filter-bar flex items-center gap-1 overflow-x-auto px-2 py-1.5">
-                <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Journals: {serverTotal}</span>
-                <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Total: KES {totals.total.toLocaleString()}</span>
-                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Posted: KES {totals.posted.toLocaleString()}</span>
-                <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">Draft: {totals.draftCount}</span>
-                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-                <div className="relative shrink-0">
-                  <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
-                  <input
-                    value={filters.search}
-                    onChange={(e) => { setFilter("search")(e); setCurrentPage(1); }}
-                    placeholder="Journal no, reference, narration"
-                    className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  />
-                </div>
-                <AppSelect
-                  value={filters.status !== "all" ? filters.status : ""}
-                  onChange={(v) => { setFilters((p) => ({ ...p, status: v ?? "all" })); setCurrentPage(1); }}
-                  options={[
-                    { value: "draft", label: "Draft" },
-                    { value: "posted", label: "Posted" },
-                    { value: "reversed", label: "Reversed" },
-                  ]}
-                  placeholder="All Statuses"
-                  size="sm"
-                  clearable
+            <ListToolbar>
+              <span className="shrink-0 border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Journals: {serverTotal}</span>
+              <span className="shrink-0 border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Total: KES {totals.total.toLocaleString()}</span>
+              <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Posted: KES {totals.posted.toLocaleString()}</span>
+              <span className="shrink-0 border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">Draft: {totals.draftCount}</span>
+              <ListToolbar.Divider />
+              <div className="relative shrink-0">
+                <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
+                <ListToolbar.Input
+                  value={filters.search}
+                  onChange={(e) => { setFilter("search")(e); setCurrentPage(1); }}
+                  placeholder="Journal no, reference, narration"
+                  width="w-44"
+                  className="pl-5"
                 />
-                <AppSelect
-                  value={filters.journalType !== "all" ? filters.journalType : ""}
-                  onChange={(v) => { setFilters((p) => ({ ...p, journalType: v ?? "all" })); setCurrentPage(1); }}
-                  options={journalTypeFilterOptions}
-                  placeholder="All Journal Types"
-                  size="sm"
-                  clearable
-                />
-                <AppSelect
-                  value={filters.propertyId !== "all" ? filters.propertyId : ""}
-                  onChange={(v) => { setFilters((p) => ({ ...p, propertyId: v ?? "all" })); setCurrentPage(1); }}
-                  options={propertyOptions}
-                  placeholder={`All ${termProperties}`}
-                  size="sm"
-                  clearable
-                  searchable
-                />
-                <button onClick={() => { setFilters({ search: "", status: "all", journalType: "all", propertyId: "all" }); setCurrentPage(1); }} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                  <FaFilter size={9} /> Reset
-                </button>
-                <button onClick={loadJournals} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
-                {hasOwnerJournals && canCreateJournal && (
-                  <button onClick={openCreateModal} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" title="Two-line journal for owner / property statements">Owner journal</button>
-                )}
-                <button onClick={() => (canCreateJournal ? openJournalPage() : toast.warning("You do not have permission to create journals"))} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]"><FaPlus size={9} /> New Journal</button>
               </div>
-            </div>
+              <AppSelect
+                value={filters.status !== "all" ? filters.status : ""}
+                onChange={(v) => { setFilters((p) => ({ ...p, status: v ?? "all" })); setCurrentPage(1); }}
+                options={[
+                  { value: "draft", label: "Draft" },
+                  { value: "posted", label: "Posted" },
+                  { value: "reversed", label: "Reversed" },
+                ]}
+                placeholder="All Statuses"
+                compact
+                clearable
+              />
+              <AppSelect
+                value={filters.journalType !== "all" ? filters.journalType : ""}
+                onChange={(v) => { setFilters((p) => ({ ...p, journalType: v ?? "all" })); setCurrentPage(1); }}
+                options={journalTypeFilterOptions}
+                placeholder="All Journal Types"
+                compact
+                clearable
+              />
+              <AppSelect
+                value={filters.propertyId !== "all" ? filters.propertyId : ""}
+                onChange={(v) => { setFilters((p) => ({ ...p, propertyId: v ?? "all" })); setCurrentPage(1); }}
+                options={propertyOptions}
+                placeholder={`All ${termProperties}`}
+                compact
+                clearable
+                searchable
+              />
+              <ListToolbar.Button
+                icon={FaFilter}
+                variant="outline"
+                onClick={() => { setFilters({ search: "", status: "all", journalType: "all", propertyId: "all" }); setCurrentPage(1); }}
+              >
+                Reset
+              </ListToolbar.Button>
+              <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={loadJournals} />
+              {hasOwnerJournals && canCreateJournal && (
+                <ListToolbar.Button variant="outline" onClick={openCreateModal} title="Two-line journal for owner / property statements">
+                  Owner journal
+                </ListToolbar.Button>
+              )}
+              <ListToolbar.Button
+                icon={FaPlus}
+                onClick={() => (canCreateJournal ? openJournalPage() : toast.warning("You do not have permission to create journals"))}
+              >
+                New Journal
+              </ListToolbar.Button>
+            </ListToolbar>
 
-            <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
-              <table className="w-full min-w-[1100px] text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-                  <tr>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Journal #</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Debit Account / Lines</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Credit Account / Narration</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount (KES)</th>
-                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
-                    <th className="px-3 py-1 text-right font-bold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-500">Loading journals...</td></tr>
-                  ) : journals.length === 0 ? (
-                    <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-500">No journals found.</td></tr>
-                  ) : (
-                    currentPageRows.map((journal, index) => {
-                      const busyPost = rowActionKey === `${journal._id}:post`;
-                      const busyReverse = rowActionKey === `${journal._id}:reverse`;
-                      const busyDelete = rowActionKey === `${journal._id}:delete`;
-                      return (
-                        <tr key={journal._id} onClick={() => openJournalPage(journal)} className={`cursor-pointer border-b border-gray-100 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
-                          <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900 whitespace-nowrap" title={buildJournalTitle(journal)}>{journal.journalNo}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700 whitespace-nowrap">{journal.date ? new Date(journal.date).toLocaleDateString("en-GB") : "—"}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[130px] truncate">{getJournalTypePresentation(journal.journalType)?.label || journal.journalType}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[200px] truncate" title={journal.debitAccount?.name}>{journal.lines?.length ? <span className="font-semibold text-slate-600">{journal.lines.length} lines</span> : <><span className="font-mono font-bold text-slate-400 mr-1">{journal.debitAccount?.code}</span>{journal.debitAccount?.name || "—"}</>}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[200px] truncate" title={journal.creditAccount?.name}>{journal.lines?.length ? <span className="text-slate-400">{journal.narration || journal.reference || "—"}</span> : <><span className="font-mono font-bold text-slate-400 mr-1">{journal.creditAccount?.code}</span>{journal.creditAccount?.name || "—"}</>}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{Number(journal.amount || 0).toLocaleString()}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-center" title={journal.approvalStatus && journal.approvalStatus !== "not_required" ? (APPROVAL_LABELS[journal.approvalStatus] || journal.approvalStatus) : undefined}>
-                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${STATUS_STYLES[journal.status] || STATUS_STYLES.draft}`}>{journal.status}</span>
-                          </td>
-                          <td className="px-3 py-1 text-right">
-                            <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                              {journal.status === "posted" && (
-                                <button onClick={() => setGlJournal(journal)} className="rounded p-1 text-teal-600 hover:bg-teal-50 hover:text-teal-800" title="View GL Entries"><FaBook size={12} /></button>
-                              )}
-                              {journal.status === "draft" && canUpdateJournal && (
-                                <button onClick={() => (journal.lines?.length ? openJournalPage(journal) : openEditModal(journal))} disabled={!canUpdateJournal || !!rowActionKey} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800 disabled:opacity-40" title="Edit"><FaEdit size={12} /></button>
-                              )}
-                              {journal.status === "draft" && canPostJournal && (
-                                <button onClick={() => handlePostJournal(journal)} disabled={!canPostJournal || !!rowActionKey} className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-40" title={busyPost ? "Posting…" : "Post Journal"}><FaCheck size={12} /></button>
-                              )}
-                              {journal.status === "posted" && canReverseJournal && (
-                                <button onClick={() => handleReverseJournal(journal)} disabled={!canReverseJournal || !!rowActionKey} className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800 disabled:opacity-40" title={busyReverse ? "Reversing…" : "Reverse"}><FaUndo size={12} /></button>
-                              )}
-                              {journal.status === "draft" && canDeleteJournal && (
-                                <button onClick={() => handleDeleteJournal(journal)} disabled={!canDeleteJournal || !!rowActionKey} className="rounded p-1 text-rose-600 hover:bg-rose-50 hover:text-rose-800 disabled:opacity-40" title={busyDelete ? "Deleting…" : "Delete"}><FaTrash size={12} /></button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <MilikTable
+              columns={[
+                { label: "Journal #" },
+                { label: "Date" },
+                { label: "Type" },
+                { label: "Debit Account / Lines" },
+                { label: "Credit Account / Narration" },
+                { label: "Amount (KES)", align: "right" },
+                { label: "Status", align: "center" },
+              ]}
+              rows={journals}
+              rowKey="_id"
+              loading={loading}
+              empty="No journals found."
+              minWidth="1100px"
+              onRowClick={(journal) => openJournalPage(journal)}
+              renderRow={(journal) => (
+                <>
+                  <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900 whitespace-nowrap" title={buildJournalTitle(journal)}>{journal.journalNo}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700 whitespace-nowrap">{journal.date ? new Date(journal.date).toLocaleDateString("en-GB") : "—"}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[130px] truncate">{getJournalTypePresentation(journal.journalType)?.label || journal.journalType}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[200px] truncate" title={journal.debitAccount?.name}>{journal.lines?.length ? <span className="font-semibold text-slate-600">{journal.lines.length} lines</span> : <><span className="font-mono font-bold text-slate-400 mr-1">{journal.debitAccount?.code}</span>{journal.debitAccount?.name || "—"}</>}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[200px] truncate" title={journal.creditAccount?.name}>{journal.lines?.length ? <span className="text-slate-400">{journal.narration || journal.reference || "—"}</span> : <><span className="font-mono font-bold text-slate-400 mr-1">{journal.creditAccount?.code}</span>{journal.creditAccount?.name || "—"}</>}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{Number(journal.amount || 0).toLocaleString()}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-center" title={journal.approvalStatus && journal.approvalStatus !== "not_required" ? (APPROVAL_LABELS[journal.approvalStatus] || journal.approvalStatus) : undefined}>
+                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${STATUS_STYLES[journal.status] || STATUS_STYLES.draft}`}>{journal.status}</span>
+                  </td>
+                </>
+              )}
+              renderActions={(journal) => {
+                const busyPost = rowActionKey === `${journal._id}:post`;
+                const busyReverse = rowActionKey === `${journal._id}:reverse`;
+                const busyDelete = rowActionKey === `${journal._id}:delete`;
+                return (
+                  <div className="flex justify-end gap-1">
+                    {journal.status === "posted" && (
+                      <button onClick={() => setGlJournal(journal)} className="rounded p-1 text-teal-600 hover:bg-teal-50 hover:text-teal-800" title="View GL Entries"><FaBook size={12} /></button>
+                    )}
+                    {journal.status === "draft" && canUpdateJournal && (
+                      <button onClick={() => (journal.lines?.length ? openJournalPage(journal) : openEditModal(journal))} disabled={!canUpdateJournal || !!rowActionKey} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800 disabled:opacity-40" title="Edit"><FaEdit size={12} /></button>
+                    )}
+                    {journal.status === "draft" && canPostJournal && (
+                      <button onClick={() => handlePostJournal(journal)} disabled={!canPostJournal || !!rowActionKey} className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-40" title={busyPost ? "Posting…" : "Post Journal"}><FaCheck size={12} /></button>
+                    )}
+                    {journal.status === "posted" && canReverseJournal && (
+                      <button onClick={() => handleReverseJournal(journal)} disabled={!canReverseJournal || !!rowActionKey} className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800 disabled:opacity-40" title={busyReverse ? "Reversing…" : "Reverse"}><FaUndo size={12} /></button>
+                    )}
+                    {journal.status === "draft" && canDeleteJournal && (
+                      <button onClick={() => handleDeleteJournal(journal)} disabled={!canDeleteJournal || !!rowActionKey} className="rounded p-1 text-rose-600 hover:bg-rose-50 hover:text-rose-800 disabled:opacity-40" title={busyDelete ? "Deleting…" : "Delete"}><FaTrash size={12} /></button>
+                    )}
+                  </div>
+                );
+              }}
+            />
             <PaginationBar
               page={currentPage}
               pages={totalPages}
