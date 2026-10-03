@@ -8,7 +8,6 @@ import {
   FaPlus,
   FaSave,
   FaSearch,
-  FaSquare,
   FaTrash,
   FaTimes,
   FaUndo,
@@ -35,6 +34,7 @@ import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
+import ListToolbar from '../../components/common/ListToolbar';
 import { useTerms } from "../../hooks/useTerm";
 
 const DEFAULT_PAGE_SIZE = 50;
@@ -155,7 +155,6 @@ const ExpenseRequisition = () => {
   }, [currentCompany?._id]);
 
   const totalPages = Math.max(1, serverPages);
-  const currentPageRows = rows; // server returns the correct page slice
 
   const stats = useMemo(
     () => ({
@@ -466,84 +465,80 @@ const ExpenseRequisition = () => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
-              <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-                <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600">Selected: {selectedIds.length}</span>
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <div className="relative shrink-0">
-                  <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
-                  <input
-                    value={filters.search}
-                    onChange={setFilter("search")}
-                    placeholder="Requisition no, title, category"
-                    className="h-7 w-48 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                  />
-                </div>
-                <AppSelect
-                  value={filters.propertyId !== "all" ? filters.propertyId : ""}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "all" }))}
-                  options={properties.map((p) => ({ value: p._id, label: `${p.propertyCode ? `[${p.propertyCode}] ` : ""}${p.propertyName || p.name}` }))}
-                  placeholder="All properties"
-                  size="sm"
-                  clearable
-                  searchable
+            <ListToolbar>
+              <span className="shrink-0 border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-bold text-slate-600">Selected: {selectedIds.length}</span>
+              <ListToolbar.Divider />
+              <div className="relative shrink-0">
+                <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
+                <ListToolbar.Input
+                  value={filters.search}
+                  onChange={setFilter("search")}
+                  placeholder="Requisition no, title, category"
+                  width="w-48"
+                  className="pl-5"
                 />
-                <AppSelect
-                  value={filters.status !== "all" ? filters.status : ""}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))}
-                  options={[
-                    { value: "draft", label: "Draft" },
-                    { value: "submitted", label: "Submitted" },
-                    { value: "approved", label: "Approved" },
-                    { value: "converted", label: "Converted" },
-                    { value: "rejected", label: "Rejected" },
-                    { value: "cancelled", label: "Cancelled" },
-                  ]}
-                  placeholder="All statuses"
-                  size="sm"
-                  clearable
-                />
-                <button onClick={() => setFilters({ search: "", status: "all", propertyId: "all" })} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaUndo size={9} /> Reset</button>
-                <button onClick={loadRows} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
-                <button onClick={handleBulkDelete} disabled={!canDelete} className="h-7 shrink-0 flex items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"><FaTrash size={9} /> Delete</button>
-                <button onClick={openCreate} disabled={!canCreate} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2.5 text-xs font-semibold text-white hover:bg-[#e67e00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus size={9} /> New Requisition</button>
               </div>
-            </div>
+              <AppSelect
+                value={filters.propertyId !== "all" ? filters.propertyId : ""}
+                onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "all" }))}
+                options={properties.map((p) => ({ value: p._id, label: `${p.propertyCode ? `[${p.propertyCode}] ` : ""}${p.propertyName || p.name}` }))}
+                placeholder="All properties"
+                compact
+                clearable
+                searchable
+              />
+              <AppSelect
+                value={filters.status !== "all" ? filters.status : ""}
+                onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))}
+                options={[
+                  { value: "draft", label: "Draft" },
+                  { value: "submitted", label: "Submitted" },
+                  { value: "approved", label: "Approved" },
+                  { value: "converted", label: "Converted" },
+                  { value: "rejected", label: "Rejected" },
+                  { value: "cancelled", label: "Cancelled" },
+                ]}
+                placeholder="All statuses"
+                compact
+                clearable
+              />
+              <ListToolbar.Button icon={FaUndo} variant="outline" onClick={() => setFilters({ search: "", status: "all", propertyId: "all" })}>Reset</ListToolbar.Button>
+              <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={loadRows} />
+              <ListToolbar.Button icon={FaTrash} variant="danger" disabled={!canDelete} onClick={handleBulkDelete}>Delete</ListToolbar.Button>
+              <ListToolbar.Button icon={FaPlus} variant="accent" disabled={!canCreate} onClick={openCreate}>New Requisition</ListToolbar.Button>
+            </ListToolbar>
 
-            <div className="flex-1 min-h-0 overflow-auto">
-              <table className="w-full min-w-[1120px] text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className="bg-[#0B3B2E] text-white">
-                    <th className="px-3 py-1 text-left font-black border-r border-white/10"><button type="button" onClick={toggleSelectAll}>{selectedIds.length === rows.length && rows.length > 0 ? <FaCheck className="text-white" /> : <FaSquare className="text-white/80" />}</button></th>
-                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Requisition</th>
-                    <th className="px-3 py-1 text-left font-black border-r border-white/10">{termProperty} / Provider</th>
-                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Needed By</th>
-                    <th className="px-3 py-1 text-right font-black border-r border-white/10">Amount</th>
-                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Status</th>
-                    <th className="px-3 py-1 text-right font-black">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr><td colSpan="7" className="px-4 py-10 text-center text-slate-500">Loading requisitions...</td></tr>
-                  ) : rows.length === 0 ? (
-                    <tr><td colSpan="7" className="px-4 py-10 text-center text-slate-500">No expense requisitions found.</td></tr>
-                  ) : (
-                    currentPageRows.map((row, index) => (
-                      <tr key={row._id} className={`border-b border-gray-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-blue-50/40`}>
-                        <td className="px-3 py-1 border-r border-gray-100"><button type="button" onClick={() => toggleSelect(row._id)}>{selectedIds.includes(row._id) ? <FaCheck className="text-[#0B3B2E]" /> : <FaSquare className="text-slate-400" />}</button></td>
-                        <td className="px-3 py-1 border-r border-gray-100"><div className="font-black text-slate-900">{row.requisitionNo}</div><div className="text-[10px] text-slate-500">{row.title}</div>{row.linkedVoucher?.voucherNo ? <div className="mt-1 text-[10px] font-bold text-violet-600">Voucher: {row.linkedVoucher.voucherNo}</div> : null}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700"><div className="font-medium text-slate-900">{row.property?.propertyName || row.property?.name || `No ${termProperty.toLowerCase()}`}</div><div className="text-[10px] text-slate-500">{row.serviceProvider?.name || row.vendorName || "No provider"}</div></td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.neededBy ? new Date(row.neededBy).toLocaleDateString() : "-"}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">KES {Number(row.amount || 0).toLocaleString()}</td>
-                        <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${statusPill[row.status] || statusPill.draft}`}>{row.status}</span></td>
-                        <td className="px-3 py-1 text-right">{renderActions(row)}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <MilikTable
+              columns={[
+                { label: "Requisition" },
+                { label: `${termProperty} / Provider` },
+                { label: "Needed By" },
+                { label: "Amount", align: "right" },
+                { label: "Status" },
+              ]}
+              rows={rows}
+              rowKey="_id"
+              loading={loading}
+              empty="No expense requisitions found."
+              minWidth="1120px"
+              checkboxes
+              allChecked={selectedIds.length === rows.length && rows.length > 0}
+              someChecked={selectedIds.length > 0 && selectedIds.length < rows.length}
+              onCheckAll={toggleSelectAll}
+              isChecked={(row) => selectedIds.includes(row._id)}
+              isSelected={(row) => selectedIds.includes(row._id)}
+              onCheckRow={(row) => toggleSelect(row._id)}
+              renderRow={(row) => (
+                <>
+                  <td className="px-3 py-1 border-r border-gray-100"><div className="font-black text-slate-900">{row.requisitionNo}</div><div className="text-[10px] text-slate-500">{row.title}</div>{row.linkedVoucher?.voucherNo ? <div className="mt-1 text-[10px] font-bold text-violet-600">Voucher: {row.linkedVoucher.voucherNo}</div> : null}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700"><div className="font-medium text-slate-900">{row.property?.propertyName || row.property?.name || `No ${termProperty.toLowerCase()}`}</div><div className="text-[10px] text-slate-500">{row.serviceProvider?.name || row.vendorName || "No provider"}</div></td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.neededBy ? new Date(row.neededBy).toLocaleDateString() : "-"}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">KES {Number(row.amount || 0).toLocaleString()}</td>
+                  <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${statusPill[row.status] || statusPill.draft}`}>{row.status}</span></td>
+                </>
+              )}
+              renderActions={renderActions}
+            />
             <PaginationBar
               page={currentPage}
               pages={totalPages}
