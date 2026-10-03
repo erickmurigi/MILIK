@@ -19,6 +19,7 @@ import { hasCompanyPermission } from "../../utils/permissions";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
+import ListToolbar from '../../components/common/ListToolbar';
 import { fmtDate } from "../../utils/dates";
 import { formatMoney } from "../../utils/money";
 
@@ -346,7 +347,6 @@ const LedgerAccountActivity = () => {
     });
   }, [account, rows, openingBalance, closingBalance, filters, currentCompany]);
 
-  const inputCls  = "h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
   const labelCls  = "block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1";
   const panelInputCls = "w-full border border-slate-300 px-2.5 py-1.5 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 
@@ -402,20 +402,18 @@ const LedgerAccountActivity = () => {
         </div>
 
         {/* ── Filter bar ── */}
-        <div className="shrink-0 border-b border-slate-200 bg-white px-3 py-1.5 flex items-center gap-2 flex-wrap">
-          <input
+        <ListToolbar>
+          <ListToolbar.Input
             type="date"
             value={filters.startDate}
             onChange={(e) => setFilters((p) => ({ ...p, startDate: e.target.value }))}
-            className={inputCls}
             title="From date"
           />
-          <span className="text-[10px] text-slate-400 font-semibold">to</span>
-          <input
+          <span className="shrink-0 text-[9px] text-slate-400 font-semibold">to</span>
+          <ListToolbar.Input
             type="date"
             value={filters.endDate}
             onChange={(e) => setFilters((p) => ({ ...p, endDate: e.target.value }))}
-            className={inputCls}
             title="To date"
           />
           <AppSelect
@@ -426,7 +424,7 @@ const LedgerAccountActivity = () => {
               { value: "credit", label: "Credits only" },
             ]}
             placeholder="All directions"
-            size="sm"
+            compact
             clearable
           />
           {hasPM && (
@@ -437,10 +435,10 @@ const LedgerAccountActivity = () => {
               placeholder="All properties"
               searchable
               clearable
-              size="sm"
+              compact
             />
           )}
-          <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer select-none">
+          <label className="flex shrink-0 items-center gap-1.5 text-[9px] font-semibold text-slate-600 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={filters.includeReversed}
@@ -449,171 +447,146 @@ const LedgerAccountActivity = () => {
             />
             Show reversals
           </label>
-          <button
-            onClick={resetFilters}
-            className="h-7 px-3 bg-[#0B3B2E] hover:bg-[#0A3127] text-white text-xs font-bold flex items-center gap-1"
-          >
-            <FaRedoAlt size={9} /> Reset
-          </button>
-        </div>
+          <ListToolbar.Button icon={FaRedoAlt} onClick={resetFilters}>Reset</ListToolbar.Button>
+        </ListToolbar>
 
         {/* ── Table + pagination ── */}
         <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
 
-          {loading ? (
-            <div className="flex-1 flex items-center justify-center text-xs text-slate-500">
-              Loading ledger entries…
-            </div>
-          ) : (
-            <div className="flex-1 overflow-auto">
-              <table className="w-full min-w-[1200px] text-[11px] border-collapse">
-                <thead>
-                  <tr className="bg-[#0B3B2E] text-white">
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10 whitespace-nowrap">Date</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Ref</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Transaction</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Narration</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Debit</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Credit</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Running Balance</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Done By</th>
-                    <th className="px-3 py-1 text-right font-bold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={10} className="px-4 py-10 text-center text-slate-400 italic text-xs">
-                        No ledger entries for the selected period and filters.
-                      </td>
-                    </tr>
-                  ) : paginatedRows.map((entry) => {
-                    const badge       = auditBadge(entry);
-                    const isDebit     = String(entry.direction) === "debit";
-                    const isCredit    = String(entry.direction) === "credit";
-                    const balance     = Number(entry.runningBalance || 0);
-                    const canReverse  =
-                      canManage &&
-                      !entry?.isReversalEntry &&
-                      !entry?.isReversedOriginal &&
-                      !entry?.reversedByEntry &&
-                      ["rent_payment", "tenant_invoice"].includes(
-                        String(entry?.sourceTransactionType || "").toLowerCase()
-                      );
+          <MilikTable
+            columns={[
+              { label: "Date" },
+              { label: "Ref" },
+              { label: "Transaction" },
+              { label: "Narration" },
+              { label: "Debit", align: "right" },
+              { label: "Credit", align: "right" },
+              { label: "Running Balance", align: "right" },
+              { label: "Status" },
+              { label: "Done By" },
+            ]}
+            rows={paginatedRows}
+            rowKey="_id"
+            loading={loading}
+            empty="No ledger entries for the selected period and filters."
+            minWidth="1200px"
+            rowClassName={(entry) => entry?.isReversalEntry ? "!bg-blue-50/40" : entry?.isReversedOriginal ? "!bg-amber-50/40" : ""}
+            renderRow={(entry) => {
+              const badge    = auditBadge(entry);
+              const isDebit  = String(entry.direction) === "debit";
+              const isCredit = String(entry.direction) === "credit";
+              const balance  = Number(entry.runningBalance || 0);
+              return (
+                <>
+                  {/* Date */}
+                  <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap text-slate-700 font-medium">
+                    {fmtDate(entry.transactionDate)}
+                  </td>
 
-                    return (
-                      <tr
-                        key={entry._id}
-                        className={`border-b border-gray-100 hover:bg-blue-50/40 ${
-                          entry?.isReversalEntry   ? "bg-blue-50/40" :
-                          entry?.isReversedOriginal ? "bg-amber-50/40" : ""
-                        }`}
-                      >
-                        {/* Date */}
-                        <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap text-slate-700 font-medium">
-                          {fmtDate(entry.transactionDate)}
-                        </td>
+                  {/* Ref */}
+                  <td className="px-3 py-1 border-r border-gray-100">
+                    <span className="font-mono text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5">
+                      {shortRef(entry.sourceTransactionId || entry._id)}
+                    </span>
+                  </td>
 
-                        {/* Ref */}
-                        <td className="px-3 py-1 border-r border-gray-100">
-                          <span className="font-mono text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5">
-                            {shortRef(entry.sourceTransactionId || entry._id)}
-                          </span>
-                        </td>
+                  {/* Transaction type */}
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700 whitespace-nowrap">
+                    {sourceLabel(entry)}
+                  </td>
 
-                        {/* Transaction type */}
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700 whitespace-nowrap">
-                          {sourceLabel(entry)}
-                        </td>
+                  {/* Narration */}
+                  <td className="px-3 py-1 border-r border-gray-100 max-w-xs text-slate-600">
+                    <p className="truncate">{entry.displayNarration || entry.notes || entry.category || "—"}</p>
+                    {(entry?.reversalOf || entry?.reversedByEntry) && (
+                      <p className="text-[10px] text-slate-400 font-mono truncate">
+                        {entry?.reversalOf ? `↩ reversal of ${shortRef(entry.reversalOf)}` : `↩ reversed by ${entry?.reversedByUserName || shortRef(entry.reversedByEntry)}`}
+                      </p>
+                    )}
+                  </td>
 
-                        {/* Narration */}
-                        <td className="px-3 py-1 border-r border-gray-100 max-w-xs text-slate-600">
-                          <p className="truncate">{entry.displayNarration || entry.notes || entry.category || "—"}</p>
-                          {(entry?.reversalOf || entry?.reversedByEntry) && (
-                            <p className="text-[10px] text-slate-400 font-mono truncate">
-                              {entry?.reversalOf ? `↩ reversal of ${shortRef(entry.reversalOf)}` : `↩ reversed by ${entry?.reversedByUserName || shortRef(entry.reversedByEntry)}`}
-                            </p>
-                          )}
-                        </td>
+                  {/* Debit */}
+                  <td className="px-3 py-1 border-r border-gray-100 text-right tabular-nums font-semibold">
+                    {isDebit
+                      ? <span className="text-emerald-700">{formatMoney(entry.amount)}</span>
+                      : <span className="text-slate-300">—</span>
+                    }
+                  </td>
 
-                        {/* Debit */}
-                        <td className="px-3 py-1 border-r border-gray-100 text-right tabular-nums font-semibold">
-                          {isDebit
-                            ? <span className="text-emerald-700">{formatMoney(entry.amount)}</span>
-                            : <span className="text-slate-300">—</span>
-                          }
-                        </td>
+                  {/* Credit */}
+                  <td className="px-3 py-1 border-r border-gray-100 text-right tabular-nums font-semibold">
+                    {isCredit
+                      ? <span className="text-rose-600">{formatMoney(entry.amount)}</span>
+                      : <span className="text-slate-300">—</span>
+                    }
+                  </td>
 
-                        {/* Credit */}
-                        <td className="px-3 py-1 border-r border-gray-100 text-right tabular-nums font-semibold">
-                          {isCredit
-                            ? <span className="text-rose-600">{formatMoney(entry.amount)}</span>
-                            : <span className="text-slate-300">—</span>
-                          }
-                        </td>
+                  {/* Running balance */}
+                  <td className={`px-3 py-1 border-r border-gray-100 text-right tabular-nums font-bold ${
+                    balance < 0 ? "text-rose-600" : "text-slate-800"
+                  }`}>
+                    {formatMoney(balance)}
+                  </td>
 
-                        {/* Running balance */}
-                        <td className={`px-3 py-1 border-r border-gray-100 text-right tabular-nums font-bold ${
-                          balance < 0 ? "text-rose-600" : "text-slate-800"
-                        }`}>
-                          {formatMoney(balance)}
-                        </td>
+                  {/* Status badge */}
+                  <td className="px-3 py-1 border-r border-gray-100">
+                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${badge.cls}`}>
+                      {badge.label}
+                    </span>
+                  </td>
 
-                        {/* Status badge */}
-                        <td className="px-3 py-1 border-r border-gray-100">
-                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${badge.cls}`}>
-                            {badge.label}
-                          </span>
-                        </td>
-
-                        {/* Done By */}
-                        <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap text-slate-600 text-[10px]">
-                          {entry.createdByName || ""}
-                        </td>
-
-                        {/* Actions */}
-                        <td className="px-3 py-1">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {entry.sourceTransactionId && (
-                              <button
-                                onClick={() => openSource(entry)}
-                                title={`Source: ${entry.sourceTransactionType}`}
-                                className="h-6 px-2 border border-slate-200 bg-white text-[10px] font-semibold text-slate-600 hover:bg-slate-50"
-                              >
-                                {sourcePageLabel(entry)}
-                              </button>
-                            )}
-                            {canManage && !entry?.isReversalEntry && (
-                              <button
-                                onClick={() => setMoveModal({
-                                  open: true, entry, newAccountId: "",
-                                  reason: `Move from ${account?.code} ${account?.name}`,
-                                })}
-                                className="h-6 px-2 bg-[#0B3B2E] hover:bg-[#0A3127] text-[10px] font-bold text-white flex items-center gap-1"
-                              >
-                                <FaExchangeAlt size={8} /> Move
-                              </button>
-                            )}
-                            {canReverse && (
-                              <button
-                                onClick={() => handleReverseOrDelete(entry)}
-                                disabled={actingKey === `${entry._id}:reverse`}
-                                className="h-6 px-2 bg-rose-600 hover:bg-rose-700 text-[10px] font-bold text-white flex items-center gap-1 disabled:opacity-60"
-                              >
-                                <FaTrashAlt size={8} />
-                                {String(entry.sourceTransactionType).toLowerCase() === "tenant_invoice" ? "Delete" : "Reverse"}
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  {/* Done By */}
+                  <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap text-slate-600 text-[10px]">
+                    {entry.createdByName || ""}
+                  </td>
+                </>
+              );
+            }}
+            renderActions={(entry) => {
+              const canReverse =
+                canManage &&
+                !entry?.isReversalEntry &&
+                !entry?.isReversedOriginal &&
+                !entry?.reversedByEntry &&
+                ["rent_payment", "tenant_invoice"].includes(
+                  String(entry?.sourceTransactionType || "").toLowerCase()
+                );
+              return (
+                <div className="flex items-center justify-end gap-1.5">
+                  {entry.sourceTransactionId && (
+                    <button
+                      onClick={() => openSource(entry)}
+                      title={`Source: ${entry.sourceTransactionType}`}
+                      className="h-6 px-2 border border-slate-200 bg-white text-[10px] font-semibold text-slate-600 hover:bg-slate-50"
+                    >
+                      {sourcePageLabel(entry)}
+                    </button>
+                  )}
+                  {canManage && !entry?.isReversalEntry && (
+                    <button
+                      onClick={() => setMoveModal({
+                        open: true, entry, newAccountId: "",
+                        reason: `Move from ${account?.code} ${account?.name}`,
+                      })}
+                      className="h-6 px-2 bg-[#0B3B2E] hover:bg-[#0A3127] text-[10px] font-bold text-white flex items-center gap-1"
+                    >
+                      <FaExchangeAlt size={8} /> Move
+                    </button>
+                  )}
+                  {canReverse && (
+                    <button
+                      onClick={() => handleReverseOrDelete(entry)}
+                      disabled={actingKey === `${entry._id}:reverse`}
+                      className="h-6 px-2 bg-rose-600 hover:bg-rose-700 text-[10px] font-bold text-white flex items-center gap-1 disabled:opacity-60"
+                    >
+                      <FaTrashAlt size={8} />
+                      {String(entry.sourceTransactionType).toLowerCase() === "tenant_invoice" ? "Delete" : "Reverse"}
+                    </button>
+                  )}
+                </div>
+              );
+            }}
+          />
 
           {/* ── Pagination footer ── */}
           <PaginationBar
