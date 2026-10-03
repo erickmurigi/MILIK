@@ -10,7 +10,6 @@ import {
   FaClock,
   FaEdit,
   FaExclamationTriangle,
-  FaEye,
   FaMoneyBillWave,
   FaPaperPlane,
   FaPause,
@@ -117,6 +116,7 @@ const STATUS_STYLES = {
 
 import PaginationBar from "../../components/PaginationBar";
 import MilikTable from "../../components/common/MilikTable";
+import ListToolbar from "../../components/common/ListToolbar";
 
 
 const TYPE_OPTIONS = [
@@ -233,7 +233,6 @@ const LandlordAdvancements = () => {
   const [glAdvancement, setGlAdvancement] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState("");
-  const [expandedId, setExpandedId] = useState("");
   const [currentPage, setCurrentPage] = useTabState("/landlords/advancement:currentPage", 1);
   const [filters, setFilters] = useTabState("/landlords/advancement:filters", { search: "", status: "all", landlordId: "all", advanceType: "all" });
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
@@ -674,98 +673,84 @@ const LandlordAdvancements = () => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
-        <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
-          <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
-            <div className="relative shrink-0">
-              <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
-              <input value={filters.search} onChange={setFilter("search")} placeholder="Reference, title…" className="h-[20px] w-32 border border-slate-200 bg-white pl-6 pr-1 text-[9px] outline-none focus:border-[#0B3B2E]" />
-            </div>
-            <AppSelect
-              value={filters.status}
-              onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))}
-              options={STATUS_FILTER_OPTIONS}
-              placeholder="All statuses"
-              searchable
-              clearable
-              compact
-            />
-            <AppSelect
-              value={filters.landlordId}
-              onChange={(v) => setFilters((prev) => ({ ...prev, landlordId: v ?? "all" }))}
-              options={activeLandlordOptions}
-              placeholder="All landlords"
-              searchable
-              clearable
-              compact
-            />
-            <AppSelect
-              value={filters.advanceType}
-              onChange={(v) => setFilters((prev) => ({ ...prev, advanceType: v ?? "all" }))}
-              options={TYPE_OPTIONS}
-              placeholder="All types"
-              clearable
-              compact
-            />
-            <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-            <button onClick={openCreate} disabled={!canWrite} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white bg-[#FF8C00] hover:bg-[#e67e00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus size={7} /> New Advance</button>
+        <ListToolbar>
+          <div className="relative shrink-0">
+            <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
+            <ListToolbar.Input value={filters.search} onChange={setFilter("search")} placeholder="Reference, title…" width="w-32" className="pl-5" />
           </div>
-        </div>
+          <AppSelect
+            value={filters.status}
+            onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))}
+            options={STATUS_FILTER_OPTIONS}
+            placeholder="All statuses"
+            searchable
+            clearable
+            compact
+          />
+          <AppSelect
+            value={filters.landlordId}
+            onChange={(v) => setFilters((prev) => ({ ...prev, landlordId: v ?? "all" }))}
+            options={activeLandlordOptions}
+            placeholder="All landlords"
+            searchable
+            clearable
+            compact
+          />
+          <AppSelect
+            value={filters.advanceType}
+            onChange={(v) => setFilters((prev) => ({ ...prev, advanceType: v ?? "all" }))}
+            options={TYPE_OPTIONS}
+            placeholder="All types"
+            clearable
+            compact
+          />
+          <ListToolbar.Divider />
+          <ListToolbar.Button icon={FaPlus} variant="accent" disabled={!canWrite} onClick={openCreate}>New Advance</ListToolbar.Button>
+        </ListToolbar>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="min-h-0 flex-1 overflow-auto">
-            <table className="min-w-full text-[11px] border-collapse">
-              <thead className="sticky top-0 z-10 shadow-sm">
-                <tr className="bg-[#0B3B2E] text-white">
-                  <th className="px-3 py-2 text-left font-bold border-r border-white/10">Reference</th>
-                  <th className="px-3 py-2 text-left font-bold border-r border-white/10">Landlord / Property</th>
-                  <th className="px-3 py-2 text-left font-bold border-r border-white/10">Type</th>
-                  <th className="px-3 py-2 text-right font-bold border-r border-white/10">Amount</th>
-                  <th className="px-3 py-2 text-left font-bold border-r border-white/10">Date</th>
-                  <th className="px-3 py-2 text-left font-bold border-r border-white/10">Status</th>
-                  <th className="px-3 py-2 text-right font-bold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-500">Loading landlord advances...</td></tr>
-                ) : rows.length === 0 ? (
-                  <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-500">No landlord advances found.</td></tr>
-                ) : (
-                  rows.map((row, index) => {
-                    const expanded = expandedId === row._id;
-                    const landlordLabel = row?.landlord?.landlordName || [row?.landlord?.firstName, row?.landlord?.lastName].filter(Boolean).join(" ") || row?.landlord?.email || "Landlord";
-                    const propertyLabel = row?.property?.propertyName || row?.property?.name || row?.property?.propertyCode || "Property";
-                    return (
-                      <React.Fragment key={row._id}>
-                        <tr className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
-                          <td className="px-3 py-1 border-r border-gray-100"><div className="font-black text-slate-900">{row.referenceNo}</div><button type="button" onClick={() => setExpandedId((prev) => (prev === row._id ? "" : row._id))} className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold text-[#0B3B2E]"><FaEye /> {expanded ? "Hide details" : "View details"}<FaChevronDown className={`transition ${expanded ? "rotate-180" : ""}`} /></button></td>
-                          <td className="px-3 py-1 border-r border-gray-100"><div className="font-semibold text-slate-900">{landlordLabel}</div><div className="text-[10px] text-slate-500">{propertyLabel}</div></td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{TYPE_OPTIONS.find((item) => item.value === row.advanceType)?.label || statusLabel(row.advanceType)}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">{money(row.amount)}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{fmtDate(row.disbursementDate)}</td>
-                          <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${STATUS_STYLES[row.status] || STATUS_STYLES.draft}`}>{statusLabel(row.status)}</span></td>
-                          <td className="px-3 py-1 text-right"><div className="inline-flex flex-wrap justify-end gap-1">{renderActions(row)}</div></td>
-                        </tr>
-                        {expanded && (
-                          <tr className="border-b border-gray-100 bg-slate-50/80">
-                            <td colSpan={7} className="px-3 py-2">
-                              <div className="grid gap-2 md:grid-cols-4">
-                                <div className="rounded-lg border border-slate-200 bg-white p-2"><div className="text-[11px] font-black uppercase text-slate-500">Cashbook</div><div className="mt-1 font-semibold text-slate-900">{row?.cashbook?.name || row?.cashbook?.accountName || "System default"}</div></div>
-                                <div className="rounded-lg border border-slate-200 bg-white p-2"><div className="text-[11px] font-black uppercase text-slate-500">Already paid</div><div className="mt-1 font-semibold text-emerald-700">{money(row.alreadyPaidToLandlord)}</div></div>
-                                <div className="rounded-lg border border-slate-200 bg-white p-2"><div className="text-[11px] font-black uppercase text-slate-500">Outstanding recoverable</div><div className="mt-1 font-semibold text-amber-700">{money(row.outstandingRecoverableAmount)}</div></div>
-                                <div className="rounded-lg border border-slate-200 bg-white p-2"><div className="text-[11px] font-black uppercase text-slate-500">Recovered</div><div className="mt-1 font-semibold text-slate-900">{money(row.totalRecoveredAmount)}</div></div>
-                              </div>
-                              <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2 text-xs text-slate-700"><span className="font-black text-slate-900">Narration:</span> {row.narration || "—"} <span className="ml-3 font-black text-slate-900">Notes:</span> {row.notes || "—"}</div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+          <MilikTable
+            columns={[
+              { label: "Reference" },
+              { label: "Landlord / Property" },
+              { label: "Type" },
+              { label: "Amount", align: "right" },
+              { label: "Date" },
+              { label: "Status" },
+            ]}
+            rows={rows}
+            rowKey="_id"
+            loading={loading}
+            empty="No landlord advances found."
+            renderExpanded={(row) => (
+              <>
+                <div className="grid gap-2 md:grid-cols-4">
+                  <div className="rounded-lg border border-slate-200 bg-white p-2"><div className="text-[11px] font-black uppercase text-slate-500">Cashbook</div><div className="mt-1 font-semibold text-slate-900">{row?.cashbook?.name || row?.cashbook?.accountName || "System default"}</div></div>
+                  <div className="rounded-lg border border-slate-200 bg-white p-2"><div className="text-[11px] font-black uppercase text-slate-500">Already paid</div><div className="mt-1 font-semibold text-emerald-700">{money(row.alreadyPaidToLandlord)}</div></div>
+                  <div className="rounded-lg border border-slate-200 bg-white p-2"><div className="text-[11px] font-black uppercase text-slate-500">Outstanding recoverable</div><div className="mt-1 font-semibold text-amber-700">{money(row.outstandingRecoverableAmount)}</div></div>
+                  <div className="rounded-lg border border-slate-200 bg-white p-2"><div className="text-[11px] font-black uppercase text-slate-500">Recovered</div><div className="mt-1 font-semibold text-slate-900">{money(row.totalRecoveredAmount)}</div></div>
+                </div>
+                <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2 text-xs text-slate-700"><span className="font-black text-slate-900">Narration:</span> {row.narration || "—"} <span className="ml-3 font-black text-slate-900">Notes:</span> {row.notes || "—"}</div>
+              </>
+            )}
+            renderRow={(row) => {
+              const landlordLabel = row?.landlord?.landlordName || [row?.landlord?.firstName, row?.landlord?.lastName].filter(Boolean).join(" ") || row?.landlord?.email || "Landlord";
+              const propertyLabel = row?.property?.propertyName || row?.property?.name || row?.property?.propertyCode || "Property";
+              return (
+                <>
+                  <td className="px-3 py-1 border-r border-gray-100 font-black text-slate-900">{row.referenceNo}</td>
+                  <td className="px-3 py-1 border-r border-gray-100"><div className="font-semibold text-slate-900">{landlordLabel}</div><div className="text-[10px] text-slate-500">{propertyLabel}</div></td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{TYPE_OPTIONS.find((item) => item.value === row.advanceType)?.label || statusLabel(row.advanceType)}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">{money(row.amount)}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{fmtDate(row.disbursementDate)}</td>
+                  <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${STATUS_STYLES[row.status] || STATUS_STYLES.draft}`}>{statusLabel(row.status)}</span></td>
+                </>
+              );
+            }}
+            renderActions={(row) => (
+              <div className="inline-flex flex-wrap justify-end gap-1">{renderActions(row)}</div>
+            )}
+          />
           <PaginationBar
             page={safeCurrentPage}
             pages={serverPages}
