@@ -9,7 +9,6 @@ import {
   FaSearch,
   FaFileExport,
   FaEllipsisH,
-  FaGripVertical,
   FaTimes,
   FaSave,
   FaPaperclip,
@@ -41,6 +40,7 @@ import { hasCompanyPermission } from "../../utils/permissions";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
+import ListToolbar from '../../components/common/ListToolbar';
 
 const STORAGE_KEY = "milik_landlords_v1";
 const DEFAULT_PAGE_SIZE = 50;
@@ -94,7 +94,6 @@ const Landlords = () => {
   const [selectAll, setSelectAll] = useState(false);
   const [pageSize, setPageSize] = useTabState("/landlords:pageSize", DEFAULT_PAGE_SIZE);
   const [currentPage, setCurrentPage] = useTabState("/landlords:currentPage", 1);
-  const [isResizing, setIsResizing] = useState(false);
 
   // Modals
   const [showImportModal, setShowImportModal] = useState(false);
@@ -119,24 +118,6 @@ const Landlords = () => {
   const [actionMenuPos, setActionMenuPos] = useState({ top: 0, right: 0 });
   const actionMenuRef = useRef(null);
   const actionMenuBtnRef = useRef(null);
-
-  // Column widths (FIXED KEYS)
-  const [columnWidths, setColumnWidths] = useState({
-    code: 120,
-    name: 220,
-    status: 110,
-    regId: 150,
-    address: 220,
-    location: 160,
-    email: 220,
-    phone: 160,
-    active: 140,
-    archived: 160,
-    portal: 140,
-  });
-
-  const resizingRef = useRef(null);
-  const tableRef = useRef(null);
 
   const columns = useMemo(
     () => [
@@ -275,50 +256,6 @@ const Landlords = () => {
       setSelectAll(true);
     }
   }, [selectAll, currentLandlords]);
-
-  const handleCheckboxClick = useCallback((e) => e.stopPropagation(), []);
-
-  // Zebra + selection styling
-  const getRowClass = useCallback((index, landlordId) => {
-    if (selectedLandlords.includes(landlordId)) return "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50";
-    return index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50 hover:bg-blue-50/40";
-  }, [selectedLandlords]);
-
-  // Column resizing
-  const startResizing = (columnKey, e) => {
-    e.preventDefault();
-    setIsResizing(true);
-
-    const startWidth = columnWidths[columnKey] ?? 140;
-
-    resizingRef.current = {
-      columnKey,
-      startX: e.clientX,
-      startWidth,
-    };
-
-    const handleMouseMove = (evt) => {
-      if (!resizingRef.current) return;
-      const { columnKey: ck, startX, startWidth } = resizingRef.current;
-      const diff = evt.clientX - startX;
-      const newWidth = Math.max(80, startWidth + diff);
-
-      setColumnWidths((prev) => ({
-        ...prev,
-        [ck]: newWidth,
-      }));
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-      resizingRef.current = null;
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-    };
-
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-  };
 
   const goToPage = useCallback((page) => {
     if (page >= 1 && page <= totalPages) {
@@ -573,288 +510,176 @@ const Landlords = () => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white p-0">
         {/* Toolbar — single scrollable row */}
-        <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-          <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
-            <AppSelect
-              value={draftFilters.status === "any" ? null : draftFilters.status}
-              onChange={(v) => setDraftFilters((p) => ({ ...p, status: v ?? "any" }))}
-              options={[
-                { value: "Active", label: "Active" },
-                { value: "Archived", label: "Archived" },
-              ]}
-              placeholder="All Status"
-              clearable
-              compact
-            />
+        <ListToolbar>
+          <AppSelect
+            value={draftFilters.status === "any" ? null : draftFilters.status}
+            onChange={(v) => setDraftFilters((p) => ({ ...p, status: v ?? "any" }))}
+            options={[
+              { value: "Active", label: "Active" },
+              { value: "Archived", label: "Archived" },
+            ]}
+            placeholder="All Status"
+            clearable
+            compact
+          />
 
-            <AppSelect
-              value={draftFilters.portal === "any" ? null : draftFilters.portal}
-              onChange={(v) => setDraftFilters((p) => ({ ...p, portal: v ?? "any" }))}
-              options={[
-                { value: "Enabled", label: "Enabled" },
-                { value: "Disabled", label: "Disabled" },
-              ]}
-              placeholder="Portal"
-              clearable
-              compact
-            />
+          <AppSelect
+            value={draftFilters.portal === "any" ? null : draftFilters.portal}
+            onChange={(v) => setDraftFilters((p) => ({ ...p, portal: v ?? "any" }))}
+            options={[
+              { value: "Enabled", label: "Enabled" },
+              { value: "Disabled", label: "Disabled" },
+            ]}
+            placeholder="Portal"
+            clearable
+            compact
+          />
 
-            <input
-              value={draftFilters.location}
-              onChange={(e) => setDraftFilters((p) => ({ ...p, location: e.target.value }))}
-              onKeyDown={onFilterEnter}
-              placeholder="Location"
-              className="h-[20px] w-24 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-            />
+          <ListToolbar.Input value={draftFilters.location} onChange={(e) => setDraftFilters((p) => ({ ...p, location: e.target.value }))} onKeyDown={onFilterEnter} placeholder="Location" width="w-24" />
 
-            <div className="h-3 w-px shrink-0 bg-slate-200" />
+          <ListToolbar.Divider />
 
-            <input
-              value={draftFilters.code}
-              onChange={(e) => setDraftFilters((p) => ({ ...p, code: normalizeUppercaseInput(e.target.value) }))}
-              onKeyDown={onFilterEnter}
-              placeholder="Code"
-              className="h-[20px] w-20 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-            />
-            <input
-              value={draftFilters.name}
-              onChange={(e) => setDraftFilters((p) => ({ ...p, name: normalizeUppercaseInput(e.target.value) }))}
-              onKeyDown={onFilterEnter}
-              placeholder="Name"
-              className="h-[20px] w-28 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-            />
-            <input
-              value={draftFilters.regId}
-              onChange={(e) => setDraftFilters((p) => ({ ...p, regId: normalizeUppercaseInput(e.target.value) }))}
-              onKeyDown={onFilterEnter}
-              placeholder="Reg/ID"
-              className="h-[20px] w-20 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-            />
-            <input
-              value={draftFilters.email}
-              onChange={(e) => setDraftFilters((p) => ({ ...p, email: e.target.value }))}
-              onKeyDown={onFilterEnter}
-              placeholder="Email"
-              className="h-[20px] w-28 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-            />
-            <input
-              value={draftFilters.phone}
-              onChange={(e) => setDraftFilters((p) => ({ ...p, phone: normalizeUppercaseInput(e.target.value) }))}
-              onKeyDown={onFilterEnter}
-              placeholder="Phone"
-              className="h-[20px] w-24 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-            />
+          <ListToolbar.Input value={draftFilters.code} onChange={(e) => setDraftFilters((p) => ({ ...p, code: normalizeUppercaseInput(e.target.value) }))} onKeyDown={onFilterEnter} placeholder="Code" width="w-20" />
+          <ListToolbar.Input value={draftFilters.name} onChange={(e) => setDraftFilters((p) => ({ ...p, name: normalizeUppercaseInput(e.target.value) }))} onKeyDown={onFilterEnter} placeholder="Name" width="w-28" />
+          <ListToolbar.Input value={draftFilters.regId} onChange={(e) => setDraftFilters((p) => ({ ...p, regId: normalizeUppercaseInput(e.target.value) }))} onKeyDown={onFilterEnter} placeholder="Reg/ID" width="w-20" />
+          <ListToolbar.Input value={draftFilters.email} onChange={(e) => setDraftFilters((p) => ({ ...p, email: e.target.value }))} onKeyDown={onFilterEnter} placeholder="Email" width="w-28" />
+          <ListToolbar.Input value={draftFilters.phone} onChange={(e) => setDraftFilters((p) => ({ ...p, phone: normalizeUppercaseInput(e.target.value) }))} onKeyDown={onFilterEnter} placeholder="Phone" width="w-24" />
 
-            <div className="h-3 w-px shrink-0 bg-slate-200" />
+          <ListToolbar.Divider />
 
-            <button onClick={applySearch} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#FF8C00] px-2.5 text-[9px] font-semibold text-white hover:bg-[#e67e00]">
-              <FaSearch size={7} /> Search
-            </button>
-            <button onClick={resetFilters} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-2.5 text-[9px] font-semibold text-white hover:bg-[#0A3127]">
-              <FaRedoAlt size={7} /> Reset
-            </button>
-            <button onClick={openEditModal} disabled={!canEdit}
-              className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${canEdit ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
-              <FaEdit size={7} /> Edit
-            </button>
+          <ListToolbar.Button icon={FaSearch} variant="accent" onClick={applySearch}>Search</ListToolbar.Button>
+          <ListToolbar.Button icon={FaRedoAlt} onClick={resetFilters}>Reset</ListToolbar.Button>
+          <ListToolbar.Button icon={FaEdit} disabled={!canEdit} onClick={openEditModal}>Edit</ListToolbar.Button>
 
-            <div className="shrink-0">
-              <button
-                ref={actionMenuBtnRef}
-                onClick={() => {
-                  if (!actionMenuOpen) {
-                    const rect = actionMenuBtnRef.current?.getBoundingClientRect();
-                    if (rect) setActionMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-                  }
-                  setActionMenuOpen((v) => !v);
-                }}
-                disabled={selectedCount === 0}
-                className={`h-[20px] flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${selectedCount > 0 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
-                <FaArchive size={7} /> Actions <FaChevronDown size={8} />
-              </button>
-              {actionMenuOpen && selectedCount > 0 && (
-                <div
-                  ref={actionMenuRef}
-                  style={{ position: "fixed", top: actionMenuPos.top, right: actionMenuPos.right, zIndex: 9999 }}
-                  className="w-40 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden">
-                  <button onClick={archiveSelected} disabled={selectedArchivableLandlords.length === 0}
-                    className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedArchivableLandlords.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
-                    <FaArchive className="text-xs text-gray-700" /> Archive
-                  </button>
-                  <button onClick={restoreSelected} disabled={selectedRestorableLandlords.length === 0}
-                    className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedRestorableLandlords.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
-                    <FaUndo className="text-xs text-gray-700" /> Restore
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <button onClick={() => setShowCommunicationModal(true)} disabled={selectedCount === 0}
-              className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${selectedCount > 0 ? "bg-[#FF8C00] hover:bg-[#e67e00]" : "bg-gray-400 cursor-not-allowed"}`}>
-              <FaSms size={7} /> SMS
+          <div className="shrink-0">
+            <button
+              ref={actionMenuBtnRef}
+              onClick={() => {
+                if (!actionMenuOpen) {
+                  const rect = actionMenuBtnRef.current?.getBoundingClientRect();
+                  if (rect) setActionMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                }
+                setActionMenuOpen((v) => !v);
+              }}
+              disabled={selectedCount === 0}
+              className={`h-[20px] flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${selectedCount > 0 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+              <FaArchive size={7} /> Actions <FaChevronDown size={8} />
             </button>
-            <button onClick={deleteSelected} disabled={!canDelete || selectedCount === 0 || selectedDeletableLandlords.length === 0}
-              className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${canDelete && selectedCount > 0 && selectedDeletableLandlords.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}>
-              <FaTrash size={7} /> Delete
-            </button>
-            <button onClick={openAddModal} disabled={!canCreate}
-              className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${canCreate ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
-              <FaPlus size={7} /> Add
-            </button>
-            <button onClick={() => navigate("/landlord-payments")} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#FF8C00] px-2.5 text-[9px] font-semibold text-white hover:bg-[#e67e00]">
-              <FaMoneyBillWave size={7} /> Payments
-            </button>
-            <button onClick={() => setShowImportModal(true)} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-green-300 bg-green-50 px-2.5 text-[9px] font-semibold text-green-700 hover:bg-green-100">
-              <FaFileImport size={7} /> Import
-            </button>
-            <button onClick={handlePrintList} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-slate-700 px-2.5 text-[9px] font-semibold text-white hover:bg-slate-800">
-              <FaPrint size={7} /> Print
-            </button>
-            <button onClick={handleExport} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-gray-300 px-2.5 text-[9px] font-semibold text-gray-600 hover:bg-gray-50">
-              <FaFileExport size={7} /> Export
-            </button>
+            {actionMenuOpen && selectedCount > 0 && (
+              <div
+                ref={actionMenuRef}
+                style={{ position: "fixed", top: actionMenuPos.top, right: actionMenuPos.right, zIndex: 9999 }}
+                className="w-40 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden">
+                <button onClick={archiveSelected} disabled={selectedArchivableLandlords.length === 0}
+                  className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedArchivableLandlords.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
+                  <FaArchive className="text-xs text-gray-700" /> Archive
+                </button>
+                <button onClick={restoreSelected} disabled={selectedRestorableLandlords.length === 0}
+                  className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedRestorableLandlords.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
+                  <FaUndo className="text-xs text-gray-700" /> Restore
+                </button>
+              </div>
+            )}
           </div>
-        </div>
+
+          <ListToolbar.Button icon={FaSms} variant="accent" disabled={selectedCount === 0} onClick={() => setShowCommunicationModal(true)}>SMS</ListToolbar.Button>
+          <ListToolbar.Button icon={FaTrash} variant="danger" disabled={!canDelete || selectedCount === 0 || selectedDeletableLandlords.length === 0} onClick={deleteSelected}>Delete</ListToolbar.Button>
+          <ListToolbar.Button icon={FaPlus} disabled={!canCreate} onClick={openAddModal}>Add</ListToolbar.Button>
+          <ListToolbar.Button icon={FaMoneyBillWave} variant="accent" onClick={() => navigate("/landlord-payments")}>Payments</ListToolbar.Button>
+          <ListToolbar.Button icon={FaFileImport} variant="outlineOk" onClick={() => setShowImportModal(true)}>Import</ListToolbar.Button>
+          <ListToolbar.Button icon={FaPrint} variant="dark" onClick={handlePrintList}>Print</ListToolbar.Button>
+          <ListToolbar.Button icon={FaFileExport} variant="outline" onClick={handleExport}>Export</ListToolbar.Button>
+        </ListToolbar>
 
         {/* Table */}
         <div className="flex w-full max-w-none min-h-0 flex-1 flex-col px-2 pb-2">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-            {/* Make THIS the scroll area so the footer stays visible */}
-            <div className="min-h-0 flex-1 overflow-auto">
-              <table
-                className="min-w-[1100px] w-full text-[11px] bg-white"
-                ref={tableRef}
-                style={{ tableLayout: "fixed", borderCollapse: "collapse" }}
-              >
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className="bg-[#0B3B2E] text-white">
-                    <th
-                      className="px-3 py-2 text-center font-bold border-r border-white/10"
-                      style={{ width: "44px" }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectAll && currentLandlords.length > 0}
-                        onChange={handleSelectAll}
-                        onClick={handleCheckboxClick}
-                        className="rounded border-gray-300 text-emerald-600 focus:ring-[#0B3B2E]/20"
-                      />
-                    </th>
-
-                    {columns.map((column) => {
-                      const width = columnWidths[column.key] ?? 140;
-                      return (
-                        <th
-                          key={column.key}
-                          className="relative px-3 py-2 text-left font-bold border-r border-white/10"
-                          style={{ width: `${width}px`, minWidth: "80px" }}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="truncate">{column.label}</span>
-                            <div
-                              className="w-2 h-4 ml-1 cursor-col-resize hover:bg-white/20 flex items-center justify-center rounded shrink-0"
-                              onMouseDown={(e) => startResizing(column.key, e)}
-                            >
-                              <FaGripVertical className="text-white/50 text-[9px]" />
-                            </div>
-                          </div>
-                        </th>
-                      );
-                    })}
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {isFetching ? (
-                    <tr>
-                      <td colSpan={columns.length + 1} className="px-3 py-8 text-center text-gray-400 bg-white">
-                        <div className="flex flex-col items-center justify-center gap-1">
-                          <div className="text-sm font-bold">Loading {termLandlords.toLowerCase()}...</div>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : currentLandlords.length > 0 ? (
-                    currentLandlords.map((landlord, index) => (
-                      <tr
-                        key={landlord._id}
-                        className={`border-b cursor-pointer transition-colors ${getRowClass(index, landlord._id)}`}
-                        onClick={() => handleSelectLandlord(landlord._id)}
-                      >
-                        <td className="px-3 py-1.5 text-center border-r border-gray-100" onClick={handleCheckboxClick}>
-                          <input
-                            type="checkbox"
-                            checked={selectedLandlords.includes(landlord._id)}
-                            onChange={() => handleSelectLandlord(landlord._id)}
-                            onClick={handleCheckboxClick}
-                            className="rounded border-gray-300 text-emerald-600 focus:ring-[#0B3B2E]/20"
-                          />
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                          <span className="font-mono text-[10px] text-slate-500 tracking-wide truncate block">{toListingCaps(landlord.landlordCode || landlord.code)}</span>
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                          <span className="font-semibold text-slate-900 truncate block">{toListingCaps(landlord.fullName || landlord.landlordName || landlord.name || landlord.firstName || "-")}</span>
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                            String(landlord.status || "Active") === "Active"
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : "bg-slate-100 text-slate-600 border-slate-200"
-                          }`}>
-                            {landlord.status || "Active"}
-                          </span>
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                          <span className="text-slate-600 truncate block">{toListingCaps(landlord.location || "—")}</span>
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                          <span className="text-slate-600 truncate block">{landlord.email || "—"}</span>
-                        </td>
-                        <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                          <span className="font-medium text-slate-700 truncate block">{landlord.phoneNumber || landlord.phone || "—"}</span>
-                        </td>
-                        <td className="px-3 py-1.5 text-center border-r border-gray-100">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-50 text-emerald-700 border-emerald-200">
-                            {landlord.activeProperties ?? "0"}
-                          </span>
-                        </td>
-                        <td className="px-3 py-1.5 text-center border-r border-gray-100">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border bg-slate-100 text-slate-500 border-slate-200">
-                            {landlord.archivedProperties ?? "0"}
-                          </span>
-                        </td>
-                        <td className="px-3 py-1.5">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                            landlord.portalAccess === "Enabled"
-                              ? "bg-blue-50 text-blue-700 border-blue-200"
-                              : "bg-slate-100 text-slate-500 border-slate-200"
-                          }`}>
-                            {landlord.portalAccess || "Disabled"}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={columns.length + 1} className="px-3 py-8 text-center text-gray-400 bg-white">
-                        <div className="flex flex-col items-center justify-center gap-2">
-                          <div className="text-sm font-bold">No {termLandlords.toLowerCase()} found</div>
-                          <div className="text-xs text-gray-400">Use the filter fields above, then click Search</div>
-                          <button
-                            onClick={openAddModal}
-                            className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                            title={`Add your first ${termLandlord.toLowerCase()}`}
-                          >
-                            <FaPlus className="text-xs" />
-                            <span>Add New {termLandlord}</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <MilikTable
+              columns={[
+                { label: columns[0].label, width: "120px" },
+                { label: columns[1].label, width: "220px" },
+                { label: columns[2].label, width: "110px" },
+                { label: columns[3].label, width: "160px" },
+                { label: columns[4].label, width: "220px" },
+                { label: columns[5].label, width: "160px" },
+                { label: columns[6].label, width: "140px", align: "center" },
+                { label: columns[7].label, width: "160px", align: "center" },
+                { label: columns[8].label, width: "140px" },
+              ]}
+              rows={currentLandlords}
+              rowKey="_id"
+              loading={isFetching}
+              empty={
+                <div className="flex flex-col items-center justify-center gap-2">
+                  <div className="text-sm font-bold text-gray-500">No {termLandlords.toLowerCase()} found</div>
+                  <div className="text-xs text-gray-400">Use the filter fields above, then click Search</div>
+                  <button
+                    onClick={openAddModal}
+                    className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                    title={`Add your first ${termLandlord.toLowerCase()}`}
+                  >
+                    <FaPlus className="text-xs" />
+                    <span>Add New {termLandlord}</span>
+                  </button>
+                </div>
+              }
+              minWidth="1100px"
+              checkboxes
+              allChecked={selectAll && currentLandlords.length > 0}
+              someChecked={selectedCount > 0 && !(selectAll && currentLandlords.length > 0)}
+              onCheckAll={handleSelectAll}
+              isChecked={(landlord) => selectedLandlords.includes(landlord._id)}
+              isSelected={(landlord) => selectedLandlords.includes(landlord._id)}
+              onCheckRow={(landlord) => handleSelectLandlord(landlord._id)}
+              onRowClick={(landlord) => handleSelectLandlord(landlord._id)}
+              renderRow={(landlord) => (
+                <>
+                  <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                    <span className="font-mono text-[10px] text-slate-500 tracking-wide truncate block">{toListingCaps(landlord.landlordCode || landlord.code)}</span>
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                    <span className="font-semibold text-slate-900 truncate block">{toListingCaps(landlord.fullName || landlord.landlordName || landlord.name || landlord.firstName || "-")}</span>
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                      String(landlord.status || "Active") === "Active"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : "bg-slate-100 text-slate-600 border-slate-200"
+                    }`}>
+                      {landlord.status || "Active"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                    <span className="text-slate-600 truncate block">{toListingCaps(landlord.location || "—")}</span>
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                    <span className="text-slate-600 truncate block">{landlord.email || "—"}</span>
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                    <span className="font-medium text-slate-700 truncate block">{landlord.phoneNumber || landlord.phone || "—"}</span>
+                  </td>
+                  <td className="px-3 py-1.5 text-center border-r border-gray-100">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-50 text-emerald-700 border-emerald-200">
+                      {landlord.activeProperties ?? "0"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-1.5 text-center border-r border-gray-100">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border bg-slate-100 text-slate-500 border-slate-200">
+                      {landlord.archivedProperties ?? "0"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                      landlord.portalAccess === "Enabled"
+                        ? "bg-blue-50 text-blue-700 border-blue-200"
+                        : "bg-slate-100 text-slate-500 border-slate-200"
+                    }`}>
+                      {landlord.portalAccess || "Disabled"}
+                    </span>
+                  </td>
+                </>
+              )}
+            />
 
             <PaginationBar
               page={currentPage}
@@ -868,9 +693,6 @@ const Landlords = () => {
             />
           </div>
         </div>
-
-        {/* Resizing overlay */}
-        {isResizing && <div className="fixed inset-0 z-50 cursor-col-resize" style={{ cursor: "col-resize" }} />}
 
         {/* TODO: Edit Landlord Modal (will be converted to separate page later) */}
         {/* Temporarily disabled - edit functionality will use a dedicated page like Add */}
