@@ -36,6 +36,7 @@ const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
 import PaginationBar from "../../components/PaginationBar";
 import MilikTable from "../../components/common/MilikTable";
+import ListToolbar from "../../components/common/ListToolbar";
 
 const CATEGORY_OPTIONS = [
   { value: "owner_float", label: "Owner Float / Expense Funding", accountHint: "Cr 2150 Landlord Funds Held" },
@@ -402,107 +403,101 @@ const LandlordReceipts = () => {
     <DashboardLayout lockContentScroll>
       <div className="no-print flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
         <div className="mx-auto flex h-full w-full max-w-none min-h-0 flex-1 flex-col gap-2">
-          <div className="flex-none sticky top-0 z-20 border-b border-gray-200 bg-white shadow-sm">
-            <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
-              <label className="relative shrink-0">
-                <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"><FaSearch /></span>
-                <input value={filters.search} onChange={(e) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, search: e.target.value })); }} placeholder="Search receipt, landlord…" className="h-[20px] w-36 border border-slate-200 bg-white pl-6 pr-1 text-[9px] outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-              </label>
-              <AppSelect
-                value={filters.status}
-                onChange={(v) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, status: v ?? "" })); }}
-                options={[
-                  { value: "draft", label: "Draft" },
-                  { value: "posted", label: "Posted" },
-                  { value: "reversed", label: "Reversed" },
-                ]}
-                placeholder="All Statuses"
-                clearable
-                compact
-              />
-              <AppSelect
-                value={filters.category}
-                onChange={(v) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, category: v ?? "" })); }}
-                options={CATEGORY_OPTIONS}
-                placeholder="All Categories"
-                clearable
-                compact
-              />
-              <AppSelect
-                value={filters.landlord}
-                onChange={(v) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, landlord: v ?? "" })); }}
-                options={activeLandlordOptions}
-                placeholder="All Landlords"
-                searchable
-                clearable
-                compact
-              />
-
-              <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-              <span className="shrink-0 border border-slate-200 bg-white px-1 py-0.5 text-[8px] font-bold text-slate-600">{totalReceipts} receipts</span>
-              <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1 py-0.5 text-[8px] font-bold text-emerald-700">Posted: {formatMoney(stats.posted)}</span>
-              <span className="shrink-0 border border-amber-200 bg-amber-50 px-1 py-0.5 text-[8px] font-bold text-amber-700">Draft: {formatMoney(stats.draft)}</span>
-              <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-              <button type="button" onClick={loadData} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaRedoAlt size={7} /> Refresh</button>
-              <button type="button" onClick={openCreateModal} disabled={!canCreate} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaPlus size={7} /> Add Receipt</button>
+          <ListToolbar>
+            <div className="relative shrink-0">
+              <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
+              <ListToolbar.Input value={filters.search} onChange={(e) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, search: e.target.value })); }} placeholder="Search receipt, landlord…" width="w-36" className="pl-5" />
             </div>
-          </div>
+            <AppSelect
+              value={filters.status}
+              onChange={(v) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, status: v ?? "" })); }}
+              options={[
+                { value: "draft", label: "Draft" },
+                { value: "posted", label: "Posted" },
+                { value: "reversed", label: "Reversed" },
+              ]}
+              placeholder="All Statuses"
+              clearable
+              compact
+            />
+            <AppSelect
+              value={filters.category}
+              onChange={(v) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, category: v ?? "" })); }}
+              options={CATEGORY_OPTIONS}
+              placeholder="All Categories"
+              clearable
+              compact
+            />
+            <AppSelect
+              value={filters.landlord}
+              onChange={(v) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, landlord: v ?? "" })); }}
+              options={activeLandlordOptions}
+              placeholder="All Landlords"
+              searchable
+              clearable
+              compact
+            />
+
+            <ListToolbar.Divider />
+            <span className="shrink-0 border border-slate-200 bg-white px-1 py-0.5 text-[8px] font-bold text-slate-600">{totalReceipts} receipts</span>
+            <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1 py-0.5 text-[8px] font-bold text-emerald-700">Posted: {formatMoney(stats.posted)}</span>
+            <span className="shrink-0 border border-amber-200 bg-amber-50 px-1 py-0.5 text-[8px] font-bold text-amber-700">Draft: {formatMoney(stats.draft)}</span>
+            <ListToolbar.Divider />
+            <ListToolbar.Button icon={FaRedoAlt} variant="accent" onClick={loadData}>Refresh</ListToolbar.Button>
+            <ListToolbar.Button icon={FaPlus} disabled={!canCreate} onClick={openCreateModal}>Add Receipt</ListToolbar.Button>
+          </ListToolbar>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-            <div className="min-h-0 flex-1 overflow-auto">
-              <table className="min-w-[1180px] w-full text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className={`${MILIK_GREEN} text-white`}>
-                    {["Date", "Receipt No", "Landlord", "Property", "Category", "Amount", "Status", "Actions"].map((label) => (
-                      <th key={label} className={`px-3 py-2 font-bold ${label === "Amount" || label === "Actions" ? "text-right" : "text-left"} ${label !== "Actions" ? "border-r border-white/10" : ""}`}>{label}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {receipts.map((row, index) => (
-                    <tr key={row._id} className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
-                      <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-700">{fmtDate(row.receiptDate)}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 font-bold text-blue-700">{row.receiptNumber || "-"}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-slate-700">
-                        <div className="font-bold text-slate-900">{row?.landlord?.landlordName || "-"}</div>
-                        <div className="text-[10px] text-slate-500">{row?.landlord?.landlordCode || ""}</div>
-                      </td>
-                      <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row?.property?.propertyName || "-"}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{CATEGORY_OPTIONS.find((item) => item.value === row?.category)?.label || row?.category || "-"}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{formatMoney(row?.amount || 0)}</td>
-                      <td className="px-3 py-1 border-r border-gray-100">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase border ${row?.status === "posted" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : row?.status === "reversed" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-orange-50 text-orange-700 border-orange-200"}`}>
-                          {row?.status || "draft"}
-                        </span>
-                      </td>
-                      <td className="px-3 py-1 text-right">
-                        <div className="inline-flex flex-wrap justify-end gap-1">
-                          <button type="button" onClick={() => { setActiveReceipt(row); setShowDetailModal(true); }} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800" title="View"><FaEye size={12} /></button>
-                          <button type="button" onClick={() => handlePrint(row)} className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800" title="Print"><FaPrint size={12} /></button>
-                          {row?.status === "draft" && (
-                            <>
-                              {canCreate && <button type="button" onClick={() => openEditModal(row)} className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800" title="Edit"><FaEdit size={12} /></button>}
-                              {canCreate && <button type="button" onClick={() => handlePost(row)} className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800" title="Post"><FaCheck size={12} /></button>}
-                              {canCreate && <button type="button" onClick={() => handleDelete(row)} className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800" title="Delete"><FaTrash size={12} /></button>}
-                            </>
-                          )}
-                          {row?.status === "posted" && (
-                            canReverse && <button type="button" onClick={() => handleReverse(row)} className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800" title="Reverse"><FaUndo size={12} /></button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {!isLoading && receipts.length === 0 && (
-                    <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
-                        No landlord receipts found for the selected filters.
-                      </td>
-                    </tr>
+            <MilikTable
+              columns={[
+                { label: "Date" },
+                { label: "Receipt No" },
+                { label: "Landlord" },
+                { label: "Property" },
+                { label: "Category" },
+                { label: "Amount", align: "right" },
+                { label: "Status" },
+              ]}
+              rows={receipts}
+              rowKey="_id"
+              loading={isLoading}
+              empty="No landlord receipts found for the selected filters."
+              minWidth="1180px"
+              renderRow={(row) => (
+                <>
+                  <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-700">{fmtDate(row.receiptDate)}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 font-bold text-blue-700">{row.receiptNumber || "-"}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700">
+                    <div className="font-bold text-slate-900">{row?.landlord?.landlordName || "-"}</div>
+                    <div className="text-[10px] text-slate-500">{row?.landlord?.landlordCode || ""}</div>
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row?.property?.propertyName || "-"}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{CATEGORY_OPTIONS.find((item) => item.value === row?.category)?.label || row?.category || "-"}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{formatMoney(row?.amount || 0)}</td>
+                  <td className="px-3 py-1 border-r border-gray-100">
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase border ${row?.status === "posted" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : row?.status === "reversed" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-orange-50 text-orange-700 border-orange-200"}`}>
+                      {row?.status || "draft"}
+                    </span>
+                  </td>
+                </>
+              )}
+              renderActions={(row) => (
+                <div className="inline-flex flex-wrap justify-end gap-1">
+                  <button type="button" onClick={() => { setActiveReceipt(row); setShowDetailModal(true); }} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800" title="View"><FaEye size={12} /></button>
+                  <button type="button" onClick={() => handlePrint(row)} className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800" title="Print"><FaPrint size={12} /></button>
+                  {row?.status === "draft" && (
+                    <>
+                      {canCreate && <button type="button" onClick={() => openEditModal(row)} className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800" title="Edit"><FaEdit size={12} /></button>}
+                      {canCreate && <button type="button" onClick={() => handlePost(row)} className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800" title="Post"><FaCheck size={12} /></button>}
+                      {canCreate && <button type="button" onClick={() => handleDelete(row)} className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800" title="Delete"><FaTrash size={12} /></button>}
+                    </>
                   )}
-                </tbody>
-              </table>
-            </div>
+                  {row?.status === "posted" && (
+                    canReverse && <button type="button" onClick={() => handleReverse(row)} className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800" title="Reverse"><FaUndo size={12} /></button>
+                  )}
+                </div>
+              )}
+            />
 
             <PaginationBar
               page={currentPage}
