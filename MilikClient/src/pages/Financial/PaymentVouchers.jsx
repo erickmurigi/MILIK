@@ -15,7 +15,6 @@ import {
   FaPrint,
   FaSave,
   FaSearch,
-  FaSquare,
   FaTrash,
   FaUndo,
 } from "react-icons/fa";
@@ -43,6 +42,7 @@ import { getProperties } from "../../redux/propertyRedux";
 import { useTabState } from "../../hooks/useTabState";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
+import ListToolbar from '../../components/common/ListToolbar';
 
 const DEFAULT_PAGE_SIZE = 50;
 const isRawObjectId = (s) => /^[a-f\d]{24}$/i.test(String(s || ""));
@@ -374,7 +374,6 @@ const PaymentVouchers = () => {
   const selectedRows = useMemo(() => filtered.filter((voucher) => selectedIds.includes(voucher._id)), [filtered, selectedIds]);
 
   const totalPages = Math.max(1, serverPages);
-  const currentPageRows = vouchers;
 
   useEffect(() => {
     setCurrentPage(1);
@@ -1049,120 +1048,120 @@ const PaymentVouchers = () => {
         <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-            <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-              <div className="filter-bar flex items-center gap-1 overflow-x-auto px-2 py-1.5">
-                <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Vouchers: {serverTotal}</span>
-                <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Total: KES {stats.total.toLocaleString()}</span>
-                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Paid: KES {stats.paid.toLocaleString()}</span>
-                <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">Draft: {stats.draft}</span>
-                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-                <div className="relative shrink-0">
-                  <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
-                  <input
-                    value={filters.search}
-                    onChange={setFilter("search")}
-                    placeholder={isLandlordWorkspace ? "Voucher, narration, owner, property" : "Voucher, narration, landlord, property"}
-                    className="h-7 w-48 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  />
-                </div>
-                <AppSelect
-                  value={filters.category !== "all" ? filters.category : ""}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, category: v ?? "all" }))}
-                  options={categoryOptions}
-                  placeholder="All categories"
-                  size="sm"
-                  clearable
+            <ListToolbar>
+              <span className="shrink-0 border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Vouchers: {serverTotal}</span>
+              <span className="shrink-0 border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Total: KES {stats.total.toLocaleString()}</span>
+              <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Paid: KES {stats.paid.toLocaleString()}</span>
+              <span className="shrink-0 border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">Draft: {stats.draft}</span>
+              <ListToolbar.Divider />
+              <div className="relative shrink-0">
+                <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
+                <ListToolbar.Input
+                  value={filters.search}
+                  onChange={setFilter("search")}
+                  placeholder={isLandlordWorkspace ? "Voucher, narration, owner, property" : "Voucher, narration, landlord, property"}
+                  width="w-48"
+                  className="pl-5"
                 />
-                <AppSelect
-                  value={filters.status !== "all" ? filters.status : ""}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))}
-                  options={[
-                    { value: "draft", label: "Draft" },
-                    { value: "approved", label: "Approved" },
-                    { value: "paid", label: "Paid" },
-                    { value: "reversed", label: "Reversed" },
-                    { value: "everything", label: "All (incl. reversed)" },
-                  ]}
-                  placeholder="Active"
-                  size="sm"
-                  clearable
-                />
-                {hasPMS && (
-                  <AppSelect
-                    value={filters.propertyId !== "all" ? filters.propertyId : ""}
-                    onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "all" }))}
-                    options={propertyOptions}
-                    placeholder="All properties"
-                    size="sm"
-                    clearable
-                    searchable
-                  />
-                )}
-                <button onClick={() => setFilters({ search: "", category: "all", status: "all", propertyId: "all" })} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                  <FaFilter size={9} /> Reset
-                </button>
-                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-                <button onClick={bulkDeleteSelected} className="h-7 shrink-0 flex items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2.5 text-xs font-semibold text-rose-700 hover:bg-rose-100">Delete Selected</button>
-                <button onClick={openCreate} disabled={!canCreateVoucher} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127] disabled:opacity-60"><FaPlus size={9} /> New Voucher</button>
               </div>
-            </div>
-            <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
-              <table className="w-full min-w-[1200px] text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-                  <tr>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10 w-8"><button type="button" onClick={toggleSelectAll}>{selectedIds.length === filtered.length && filtered.length > 0 ? <FaCheck /> : <FaSquare />}</button></th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Voucher #</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Ref #</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Category</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{isLandlordWorkspace ? "Owner" : "Payee"}</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount (KES)</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Due Date</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Paid Date</th>
-                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
-                    <th className="px-3 py-1 text-right font-bold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr><td colSpan="11" className="px-4 py-10 text-center text-slate-500">Loading vouchers...</td></tr>
-                  ) : filtered.length === 0 ? (
-                    <tr><td colSpan="11" className="px-4 py-10 text-center text-slate-500">No payment vouchers found.</td></tr>
-                  ) : currentPageRows.map((voucher, index) => {
-                    const isBusy = (action) => rowActionKey === `${voucher._id}:${action}`;
-                    const isOverdue = voucher.dueDate && voucher.status !== "paid" && voucher.status !== "reversed" && new Date(voucher.dueDate) < new Date();
-                    return (
-                      <tr key={voucher._id} className={`cursor-pointer border-b border-gray-100 transition-colors ${selectedIds.includes(voucher._id) ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50" : index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
-                        <td className="px-3 py-1 border-r border-gray-100"><button type="button" onClick={() => toggleSelect(voucher._id)}>{selectedIds.includes(voucher._id) ? <FaCheck className="text-[#0B3B2E]" /> : <FaSquare className="text-slate-400" />}</button></td>
-                        <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900 whitespace-nowrap" title={voucher.narration || ""}>{voucher.voucherNo}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-600 max-w-[110px] truncate">{isRawObjectId(voucher.reference) ? "—" : voucher.reference || "—"}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[160px] truncate">{categories.find((c) => c.value === voucher.category)?.label || voucher.category}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900 max-w-[160px] truncate">{voucher.payeeDisplay || "—"}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[140px] truncate">{voucher.propertyName || "—"}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{Number(voucher.amount || 0).toLocaleString()}</td>
-                        <td className={`px-3 py-1 border-r border-gray-100 whitespace-nowrap ${isOverdue ? "text-red-600 font-semibold" : "text-slate-700"}`}>{voucher.dueDate ? new Date(voucher.dueDate).toLocaleDateString("en-GB") : "—"}{isOverdue && <span className="ml-1 text-[9px] font-bold">OVERDUE</span>}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700 whitespace-nowrap">{voucher.paidDate ? new Date(voucher.paidDate).toLocaleDateString("en-GB") : "—"}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-center">
-                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusColors[voucher.status] || statusColors.draft}`}>{voucher.status}</span>
-                        </td>
-                        <td className="px-3 py-1 text-right">
-                          <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                            <button onClick={() => setGlVoucher(voucher)} className="rounded p-1 text-teal-600 hover:bg-teal-50 hover:text-teal-800" title="View GL Entries"><FaBook size={12} /></button>
-                            <button onClick={() => handlePrintVoucher(voucher)} className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800" title="Print"><FaPrint size={12} /></button>
-                            <button onClick={() => downloadVoucherPdf(voucher)} className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800" title="Download PDF"><FaFilePdf size={12} /></button>
-                            {voucher.status === "draft" && canUpdateVoucher && <button onClick={() => openEdit(voucher)} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800" title="Edit"><FaEdit size={12} /></button>}
-                            {voucher.status === "draft" && canApproveVoucher && <button onClick={() => updateStatus(voucher, "approved")} disabled={!!rowActionKey} className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800 disabled:opacity-40" title={isBusy("approved") ? "Working…" : "Approve"}><FaCheck size={12} /></button>}
-                            {(voucher.status === "draft" || voucher.status === "approved") && canUpdateVoucher && <button onClick={() => updateStatus(voucher, "paid")} disabled={!!rowActionKey} className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-40" title={isBusy("paid") ? "Working…" : "Mark Paid"}><FaSave size={12} /></button>}
-                            {voucher.status !== "reversed" && canReverseVoucher && <button onClick={() => updateStatus(voucher, "reversed")} disabled={!!rowActionKey} className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800 disabled:opacity-40" title={isBusy("reversed") ? "Working…" : "Reverse"}><FaUndo size={12} /></button>}
-                            {canDeleteVoucher && <button onClick={() => removeVoucher(voucher)} disabled={!!rowActionKey} className="rounded p-1 text-rose-600 hover:bg-rose-50 hover:text-rose-800 disabled:opacity-40" title={isBusy("delete") ? "Working…" : "Delete"}><FaTrash size={12} /></button>}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+              <AppSelect
+                value={filters.category !== "all" ? filters.category : ""}
+                onChange={(v) => setFilters((prev) => ({ ...prev, category: v ?? "all" }))}
+                options={categoryOptions}
+                placeholder="All categories"
+                compact
+                clearable
+              />
+              <AppSelect
+                value={filters.status !== "all" ? filters.status : ""}
+                onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))}
+                options={[
+                  { value: "draft", label: "Draft" },
+                  { value: "approved", label: "Approved" },
+                  { value: "paid", label: "Paid" },
+                  { value: "reversed", label: "Reversed" },
+                  { value: "everything", label: "All (incl. reversed)" },
+                ]}
+                placeholder="Active"
+                compact
+                clearable
+              />
+              {hasPMS && (
+                <AppSelect
+                  value={filters.propertyId !== "all" ? filters.propertyId : ""}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "all" }))}
+                  options={propertyOptions}
+                  placeholder="All properties"
+                  compact
+                  clearable
+                  searchable
+                />
+              )}
+              <ListToolbar.Button icon={FaFilter} variant="outline" onClick={() => setFilters({ search: "", category: "all", status: "all", propertyId: "all" })}>
+                Reset
+              </ListToolbar.Button>
+              <ListToolbar.Divider />
+              <ListToolbar.Button variant="danger" onClick={bulkDeleteSelected}>Delete Selected</ListToolbar.Button>
+              <ListToolbar.Button icon={FaPlus} disabled={!canCreateVoucher} onClick={openCreate}>New Voucher</ListToolbar.Button>
+            </ListToolbar>
+            <MilikTable
+              columns={[
+                { label: "Voucher #" },
+                { label: "Ref #" },
+                { label: "Category" },
+                { label: isLandlordWorkspace ? "Owner" : "Payee" },
+                { label: "Property" },
+                { label: "Amount (KES)", align: "right" },
+                { label: "Due Date" },
+                { label: "Paid Date" },
+                { label: "Status", align: "center" },
+              ]}
+              rows={filtered}
+              rowKey="_id"
+              loading={loading}
+              empty="No payment vouchers found."
+              minWidth="1200px"
+              checkboxes
+              allChecked={selectedIds.length === filtered.length && filtered.length > 0}
+              someChecked={selectedIds.length > 0 && selectedIds.length < filtered.length}
+              onCheckAll={toggleSelectAll}
+              isChecked={(voucher) => selectedIds.includes(voucher._id)}
+              isSelected={(voucher) => selectedIds.includes(voucher._id)}
+              onCheckRow={(voucher) => toggleSelect(voucher._id)}
+              renderRow={(voucher) => {
+                const isOverdue = voucher.dueDate && voucher.status !== "paid" && voucher.status !== "reversed" && new Date(voucher.dueDate) < new Date();
+                return (
+                  <>
+                    <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900 whitespace-nowrap" title={voucher.narration || ""}>{voucher.voucherNo}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-600 max-w-[110px] truncate">{isRawObjectId(voucher.reference) ? "—" : voucher.reference || "—"}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[160px] truncate">{categories.find((c) => c.value === voucher.category)?.label || voucher.category}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900 max-w-[160px] truncate">{voucher.payeeDisplay || "—"}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[140px] truncate">{voucher.propertyName || "—"}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{Number(voucher.amount || 0).toLocaleString()}</td>
+                    <td className={`px-3 py-1 border-r border-gray-100 whitespace-nowrap ${isOverdue ? "text-red-600 font-semibold" : "text-slate-700"}`}>{voucher.dueDate ? new Date(voucher.dueDate).toLocaleDateString("en-GB") : "—"}{isOverdue && <span className="ml-1 text-[9px] font-bold">OVERDUE</span>}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700 whitespace-nowrap">{voucher.paidDate ? new Date(voucher.paidDate).toLocaleDateString("en-GB") : "—"}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-center">
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusColors[voucher.status] || statusColors.draft}`}>{voucher.status}</span>
+                    </td>
+                  </>
+                );
+              }}
+              renderActions={(voucher) => {
+                const isBusy = (action) => rowActionKey === `${voucher._id}:${action}`;
+                return (
+                  <div className="flex justify-end gap-1">
+                    <button onClick={() => setGlVoucher(voucher)} className="rounded p-1 text-teal-600 hover:bg-teal-50 hover:text-teal-800" title="View GL Entries"><FaBook size={12} /></button>
+                    <button onClick={() => handlePrintVoucher(voucher)} className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800" title="Print"><FaPrint size={12} /></button>
+                    <button onClick={() => downloadVoucherPdf(voucher)} className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800" title="Download PDF"><FaFilePdf size={12} /></button>
+                    {voucher.status === "draft" && canUpdateVoucher && <button onClick={() => openEdit(voucher)} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800" title="Edit"><FaEdit size={12} /></button>}
+                    {voucher.status === "draft" && canApproveVoucher && <button onClick={() => updateStatus(voucher, "approved")} disabled={!!rowActionKey} className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800 disabled:opacity-40" title={isBusy("approved") ? "Working…" : "Approve"}><FaCheck size={12} /></button>}
+                    {(voucher.status === "draft" || voucher.status === "approved") && canUpdateVoucher && <button onClick={() => updateStatus(voucher, "paid")} disabled={!!rowActionKey} className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-40" title={isBusy("paid") ? "Working…" : "Mark Paid"}><FaSave size={12} /></button>}
+                    {voucher.status !== "reversed" && canReverseVoucher && <button onClick={() => updateStatus(voucher, "reversed")} disabled={!!rowActionKey} className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800 disabled:opacity-40" title={isBusy("reversed") ? "Working…" : "Reverse"}><FaUndo size={12} /></button>}
+                    {canDeleteVoucher && <button onClick={() => removeVoucher(voucher)} disabled={!!rowActionKey} className="rounded p-1 text-rose-600 hover:bg-rose-50 hover:text-rose-800 disabled:opacity-40" title={isBusy("delete") ? "Working…" : "Delete"}><FaTrash size={12} /></button>}
+                  </div>
+                );
+              }}
+            />
             <PaginationBar
               page={currentPage}
               pages={totalPages}
